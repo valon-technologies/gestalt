@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
@@ -209,17 +210,14 @@ func (l *Lifecycle) gitSourceManifestPath(ctx context.Context, paths lifecyclePa
 	return manifestPath, nil
 }
 
-func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) (LockEntry, error) {
 	destDir := providerDestDir(paths, name)
 	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app)
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app, mode)
 		if err != nil {
 			return LockEntry{}, err
 		}
-		if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindApp, configMap); err != nil {
-			return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
-		}
-		return finalizeGitInstalledLockEntry(paths, name, app, entry, installed, providermanifestv1.KindApp, false)
+		return finalizeGitSnapshotLockEntry(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), app, entry, installed, configMap, false)
 	}
 
 	install, err := l.prepareGitSourceInstall(ctx, paths, providermanifestv1.KindApp, name, destDir, app)
@@ -232,17 +230,14 @@ func (l *Lifecycle) lockGitProviderEntryForSource(ctx context.Context, cfg *conf
 	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install, false)
 }
 
-func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) (LockEntry, error) {
 	subject := fmt.Sprintf("%s %q", kind, name)
 	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, kind, name, subject, destDir, app)
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, kind, name, subject, destDir, app, mode)
 		if err != nil {
 			return LockEntry{}, err
 		}
-		if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
-			return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
-		}
-		return finalizeGitInstalledLockEntry(paths, name, app, entry, installed, kind, false)
+		return finalizeGitSnapshotLockEntry(paths, kind, name, subject, app, entry, installed, configMap, false)
 	}
 
 	install, err := l.prepareGitSourceInstall(ctx, paths, kind, name, destDir, app)
@@ -255,16 +250,13 @@ func (l *Lifecycle) lockGitComponentEntryForSource(ctx context.Context, cfg *con
 	return gitLocalLockEntryFromPreparedInstall(paths, kind, name, app, install, false)
 }
 
-func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir, subject string, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir, subject string, configMap map[string]any, mode artifactMode) (LockEntry, error) {
 	if gitSourceMaterialization(gitSourceDef(app)) == gitMaterializationSnapshot {
-		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, app)
+		entry, installed, err := l.lockGitSnapshotSource(ctx, cfg, paths, providermanifestv1.KindUI, name, subject, destDir, app, mode)
 		if err != nil {
 			return LockEntry{}, err
 		}
-		if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindUI, configMap); err != nil {
-			return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
-		}
-		return finalizeGitInstalledLockEntry(paths, "ui:"+name, app, entry, installed, providermanifestv1.KindUI, true)
+		return finalizeGitSnapshotLockEntry(paths, providermanifestv1.KindUI, "ui:"+name, subject, app, entry, installed, configMap, true)
 	}
 
 	install, err := l.prepareGitSourceInstall(ctx, paths, providermanifestv1.KindUI, name, destDir, app)
@@ -277,7 +269,7 @@ func (l *Lifecycle) lockGitUIEntryForSource(ctx context.Context, cfg *config.Con
 	return gitLocalLockEntryFromPreparedInstall(paths, providermanifestv1.KindUI, "ui:"+name, app, install, true)
 }
 
-func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, app *config.ProviderEntry) (LockEntry, *installedPackage, error) {
+func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, expectedKind, name, subject, destDir string, app *config.ProviderEntry, mode artifactMode) (LockEntry, *installedPackage, error) {
 	if cfg == nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot resolution requires loaded config", subject)
 	}
@@ -288,7 +280,7 @@ func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Confi
 	metadataProvider := *app
 	metadataProvider.Source = config.NewMetadataSource(snapshot.MetadataURL)
 	metadataProvider.Source.Auth = app.Source.Auth
-	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir, artifactModeMaterialize)
+	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir, mode)
 	if err != nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)
 	}
@@ -335,12 +327,27 @@ func gitLocalLockEntryFromPreparedInstall(paths lifecyclePaths, kind, fingerprin
 	entry.SourceRef = gitSourceLockRef(app, "")
 	entry.Package = install.manifest.Source
 	entry.Kind = install.manifest.Kind
-	entry.Runtime = releaseRuntimeForManifest(install.manifest, archivePolicyKind(kind))
+	entry.Runtime = providerrelease.RuntimeForManifest(archivePolicyKind(kind), install.manifest)
 	entry.Version = install.manifest.Version
 	return entry, nil
 }
 
-func finalizeGitInstalledLockEntry(paths lifecyclePaths, fingerprintName string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, kind string, ui bool) (LockEntry, error) {
+func finalizeGitSnapshotLockEntry(paths lifecyclePaths, kind, fingerprintName, subject string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, configMap map[string]any, ui bool) (LockEntry, error) {
+	manifestPath, manifest := gitSnapshotLockManifest(entry, installed)
+	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, kind, configMap); err != nil {
+		return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
+	}
+	return finalizeGitLockEntry(paths, fingerprintName, app, entry, installed, kind, ui)
+}
+
+func gitSnapshotLockManifest(entry LockEntry, installed *installedPackage) (string, *providermanifestv1.Manifest) {
+	if installed != nil {
+		return installed.ManifestPath, installed.Manifest
+	}
+	return "", entry.ValidationManifest
+}
+
+func finalizeGitLockEntry(paths lifecyclePaths, fingerprintName string, app *config.ProviderEntry, entry LockEntry, installed *installedPackage, kind string, ui bool) (LockEntry, error) {
 	var fingerprint string
 	var err error
 	if ui {
@@ -351,12 +358,17 @@ func finalizeGitInstalledLockEntry(paths lifecyclePaths, fingerprintName string,
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting %s provider: %w", kind, err)
 	}
-	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
+	entry.InputDigest = fingerprint
+	manifestPath, manifest := gitSnapshotLockManifest(entry, installed)
+	bindGitSnapshotResolvedMetadata(app, entry, manifestPath, manifest)
+	if installed == nil {
+		return entry, nil
+	}
+	manifestRel, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("compute manifest path for %s provider: %w", kind, err)
 	}
-	entry.InputDigest = fingerprint
-	entry.ArtifactManifest = filepath.ToSlash(manifestPath)
+	entry.ArtifactManifest = filepath.ToSlash(manifestRel)
 	if ui {
 		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
 		if err != nil {
@@ -374,6 +386,21 @@ func finalizeGitInstalledLockEntry(paths lifecyclePaths, fingerprintName string,
 	}
 	entry.Executable = filepath.ToSlash(executableRel)
 	return entry, nil
+}
+
+func bindGitSnapshotResolvedMetadata(app *config.ProviderEntry, entry LockEntry, manifestPath string, manifest *providermanifestv1.Manifest) {
+	if app == nil {
+		return
+	}
+	if manifestPath != "" && manifest != nil {
+		manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+		resolveProviderIcon(manifest, manifestPath, app)
+	}
+	app.ResolvedManifest = manifest
+	app.ResolvedManifestPath = manifestPath
+	app.ResolvedCatalog = catalogFromValidationManifest(entry.ValidationManifest, entry.CatalogAvailable)
+	app.ResolvedCatalogAvailable = entry.CatalogAvailable
+	app.ResolvedCatalogSessionOnly = entry.CatalogSessionOnly
 }
 
 func ensureGitCheckout(ctx context.Context, checkoutDir, repo, ref string) error {

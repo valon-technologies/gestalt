@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 )
 
 func TestRun_ProviderPublishDryRunPlansSourceRefUploads(t *testing.T) {
@@ -121,14 +123,17 @@ providerSnapshotRepositories:
 	if plan.Metadata.PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/provider-release.yaml" {
 		t.Fatalf("metadata public URL = %q", plan.Metadata.PublicURL)
 	}
-	if plan.Checksums.PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/checksums.txt" {
-		t.Fatalf("checksums public URL = %q", plan.Checksums.PublicURL)
+	if len(plan.Validation) != 1 {
+		t.Fatalf("validation len = %d, want 1: %#v", len(plan.Validation), plan.Validation)
+	}
+	if plan.Validation[0].PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/"+providerrelease.ValidationManifestFile {
+		t.Fatalf("validation manifest public URL = %q", plan.Validation[0].PublicURL)
 	}
 	if len(plan.Artifacts) != 1 {
 		t.Fatalf("artifacts len = %d, want 1: %#v", len(plan.Artifacts), plan.Artifacts)
 	}
 	artifact := plan.Artifacts[0]
-	if artifact.Kind != providerPublishFileKindArchive || artifact.Target != providerReleaseGenericTarget {
+	if artifact.Kind != providerPublishFileKindArchive || artifact.Target != providerrelease.GenericTarget {
 		t.Fatalf("unexpected artifact identity: %#v", artifact)
 	}
 	if artifact.PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/gestalt-app-ui-test_v"+version+".tar.gz" {
@@ -212,7 +217,7 @@ printf '%s\n' "$*" >> "${GCLOUD_CALLS}"
 if [ "$1" = "storage" ] && [ "$2" = "objects" ] && [ "$3" = "describe" ]; then
   case "$4" in
     *provider-release.yaml)
-      printf '{"metadata":{"sha256":"stale"}}\n'
+      printf '{"metadata":{"sha256":"stale","source-ref":"651a5c30feb995c9364c38f63d0d5c3880bc2055"}}\n'
       exit 0
       ;;
     *)
@@ -244,7 +249,7 @@ exit 1
 	if err == nil {
 		t.Fatalf("expected provider publish to reject stale metadata before upload\n%s", out)
 	}
-	if !strings.Contains(string(out), "provider-release.yaml already exists with different sha256 metadata") {
+	if !strings.Contains(string(out), "provider-release.yaml already exists; delete the object or entire snapshot SHA prefix and republish") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 	calls, err := os.ReadFile(callsPath)
@@ -393,13 +398,13 @@ exit 1
 	}
 	got := string(calls)
 	archiveUpload := strings.Index(got, "gestalt-app-ui-test_v"+version+".tar.gz gs://provider-snapshots")
-	checksumUpload := strings.Index(got, "checksums.txt gs://provider-snapshots")
+	validationUpload := strings.Index(got, providerrelease.ValidationManifestFile+" gs://provider-snapshots")
 	metadataUpload := strings.Index(got, "provider-release.yaml gs://provider-snapshots")
-	if archiveUpload < 0 || checksumUpload < 0 || metadataUpload < 0 {
+	if archiveUpload < 0 || validationUpload < 0 || metadataUpload < 0 {
 		t.Fatalf("missing expected upload calls:\n%s", got)
 	}
-	if archiveUpload >= checksumUpload || checksumUpload >= metadataUpload {
-		t.Fatalf("uploads are not phased archive -> checksums -> metadata:\n%s", got)
+	if archiveUpload >= validationUpload || validationUpload >= metadataUpload {
+		t.Fatalf("uploads are not phased archive -> validation -> metadata:\n%s", got)
 	}
 }
 

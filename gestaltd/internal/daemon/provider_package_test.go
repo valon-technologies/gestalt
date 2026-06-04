@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -186,15 +187,6 @@ func TestE2EProviderPackageAndReleaseBigquery(t *testing.T) {
 		t.Fatalf("binary sha256 = %s, manifest says %s", digest, artifact.SHA256)
 	}
 
-	checksumPath := filepath.Join(outputDir, "checksums.txt")
-	checksumData, err := os.ReadFile(checksumPath)
-	if err != nil {
-		t.Fatalf("read checksums.txt: %v", err)
-	}
-	if !strings.Contains(string(checksumData), archiveName) {
-		t.Fatalf("checksums.txt does not reference %s: %s", archiveName, checksumData)
-	}
-
 	iconPath := filepath.Join(extractDir, "assets", "icon.svg")
 	if _, err := os.Stat(iconPath); err != nil {
 		t.Fatalf("expected assets/icon.svg in archive: %v", err)
@@ -358,13 +350,7 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceWorkflowProvider(t *testing.
 	if metadata.Kind != providermanifestv1.KindWorkflow {
 		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindWorkflow)
 	}
-	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
-		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
-	}
-	workflowArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
-	if !ok {
-		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
-	}
+	workflowArtifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
 	workflowDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
 	if err != nil {
 		t.Fatalf("hash workflow archive: %v", err)
@@ -577,13 +563,7 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 			if metadata.Kind != providermanifestv1.KindAuthentication {
 				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthentication)
 			}
-			if metadata.Runtime != providerReleaseRuntimeKindExecutable {
-				t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
-			}
-			authArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
-			if !ok {
-				t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
-			}
+			authArtifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
 			authDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
 			if err != nil {
 				t.Fatalf("hash auth archive: %v", err)
@@ -659,13 +639,7 @@ func TestRun_ProviderPackageAndReleaseCopiesUISupportFiles(t *testing.T) {
 	if metadata.Kind != providermanifestv1.KindUI {
 		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindUI)
 	}
-	if metadata.Runtime != providerReleaseRuntimeKindUI {
-		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindUI)
-	}
-	uiArtifact, ok := metadata.Artifacts[providerReleaseGenericTarget]
-	if !ok {
-		t.Fatalf("release metadata artifacts missing generic key: %+v", metadata.Artifacts)
-	}
+	uiArtifact := providerReleaseArtifactForTarget(t, metadata, providerrelease.GenericTarget)
 	uiDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
 	if err != nil {
 		t.Fatalf("hash ui archive: %v", err)

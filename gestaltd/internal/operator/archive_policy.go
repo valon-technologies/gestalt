@@ -45,7 +45,7 @@ func allowsStaticGenericArchive(kind string, entry LockEntry) bool {
 	case providermanifestv1.KindUI:
 		return true
 	case providermanifestv1.KindApp:
-		return lockEntryRuntime(entry, kind) == providerReleaseRuntimeDeclarative
+		return lockEntryRuntime(entry, kind) == providerLockRuntimeDeclarative
 	default:
 		return false
 	}

@@ -518,10 +518,11 @@ Then finalize those archives:
 gestaltd provider release --dist-dir dist --version 0.0.1-alpha.1
 ```
 
-The release step validates the packaged archives, writes `checksums.txt`, and
-writes `provider-release.yaml` next to the archives. It does not run source
-build commands and can run after multiple platform-specific package jobs have
-collected their archives into one dist directory.
+The release step validates the packaged archives, writes `provider-release.yaml`
+plus validation sidecars next to the archives, and records archive hashes in the
+release metadata. It does not run source build commands and can run after
+multiple platform-specific package jobs have collected their archives into one
+dist directory.
 
 For source manifests that declare object-form `build.command`, package runs
 that command, verifies that the declared output exists, strips `build` and

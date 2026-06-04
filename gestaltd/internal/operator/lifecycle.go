@@ -22,9 +22,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
 )
@@ -44,7 +46,7 @@ const (
 	PreparedRuntimeDir             = ".gestaltd/runtime"
 	PreparedUIDir                  = ".gestaltd/ui"
 
-	platformKeyGeneric = "generic"
+	platformKeyGeneric = providerrelease.GenericTarget
 )
 
 type Lockfile struct {
@@ -2071,7 +2073,7 @@ func expectedPreparedLockMetadata(paths lifecyclePaths, install *preparedInstall
 	if install.manifest != nil {
 		metadata.ManifestSource = strings.TrimSpace(install.manifest.Source)
 		metadata.ManifestVersion = strings.TrimSpace(install.manifest.Version)
-		metadata.Runtime = releaseRuntimeForManifest(install.manifest, archivePolicyKind(kind))
+		metadata.Runtime = providerrelease.RuntimeForManifest(archivePolicyKind(kind), install.manifest)
 	}
 	if includeSource {
 		fingerprint, err := ProviderFingerprint(localPreparedFingerprintName(kind, name), provider, paths.configDir)
@@ -2695,11 +2697,11 @@ func dirEntryFromFileInfo(info os.FileInfo) os.DirEntry {
 }
 
 func fingerprintLocalReleaseMetadataDigest(sourcePath string) (string, error) {
-	payload, err := normalizedLocalReleaseMetadataFingerprintPayloadFromFile(sourcePath)
+	data, err := providerrelease.ReadLocalFile(sourcePath)
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(payload)
+	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
 }
 
@@ -3006,7 +3008,7 @@ func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, 
 		InputDigest:      fingerprint,
 		Package:          strings.TrimSpace(install.manifest.Source),
 		Kind:             providermanifestv1.NormalizeKind(install.manifest.Kind),
-		Runtime:          releaseRuntimeForManifest(install.manifest, archivePolicyKind(kind)),
+		Runtime:          providerrelease.RuntimeForManifest(archivePolicyKind(kind), install.manifest),
 		Version:          strings.TrimSpace(install.manifest.Version),
 		ArtifactManifest: manifestPath,
 		Executable:       executablePath,
@@ -3036,7 +3038,7 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, app 
 		InputDigest:      fingerprint,
 		Package:          strings.TrimSpace(install.manifest.Source),
 		Kind:             providermanifestv1.NormalizeKind(install.manifest.Kind),
-		Runtime:          releaseRuntimeForManifest(install.manifest, providermanifestv1.KindUI),
+		Runtime:          providerrelease.RuntimeForManifest(providermanifestv1.KindUI, install.manifest),
 		Version:          strings.TrimSpace(install.manifest.Version),
 		ArtifactManifest: manifestPath,
 		AssetRoot:        assetRoot,
@@ -3051,10 +3053,11 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, app 
 
 func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string, mode artifactMode) (*installedPackage, LockEntry, error) {
 	sourceLocation := app.SourceReleaseLocation()
-	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(app))
+	bundle, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseBundle(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(app))
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
 	}
+	metadata := bundle.Metadata
 	expectedManifestKind := archivePolicyKind(expectedKind)
 	if metadata.Kind != expectedManifestKind {
 		return nil, LockEntry{}, fmt.Errorf("%s metadata kind %q does not match expected kind %q", subject, metadata.Kind, expectedManifestKind)
@@ -3066,21 +3069,26 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	entry := LockEntry{
 		Package:  metadata.Package,
 		Kind:     metadata.Kind,
-		Runtime:  metadata.Runtime,
+		Runtime:  providerrelease.RuntimeForManifest(metadata.Kind, bundle.Manifest),
 		Source:   providerSourceLockLocation(app, configDir),
 		Version:  metadata.Version,
 		Archives: archives,
 	}
-	if err := applyProviderReleaseStaticValidationMetadata(&entry, metadata); err != nil {
-		return nil, LockEntry{}, fmt.Errorf("%s static validation metadata: %w", subject, err)
+	staticManifest, err := portableStaticValidationManifest(bundle.Manifest, "", true)
+	if err != nil {
+		return nil, LockEntry{}, fmt.Errorf("%s validation metadata: %w", subject, err)
 	}
+	addCatalogOperationIDsToManifest(staticManifest, bundle.Catalog)
+	entry.ValidationManifest = staticManifest
+	entry.CatalogAvailable = bundle.Catalog != nil
+	entry.CatalogSessionOnly = bundle.Catalog == nil && providerrelease.CatalogSessionModeAllowed(metadata.Kind, bundle.Manifest)
 
 	currentPlatform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, currentPlatform)
 	if !ok || archive.URL == "" {
 		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", currentPlatform, subject, currentPlatform)
 	}
-	if mode == artifactModeCheck && lockEntryHasCompleteStaticValidation(expectedManifestKind, entry) {
+	if mode == artifactModeCheck {
 		if err := validateStaticLockedArchivePolicy(subject, expectedManifestKind, entry, currentPlatform, resolvedKey); err != nil {
 			return nil, LockEntry{}, err
 		}
@@ -3112,9 +3120,12 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if installed.Manifest.Version != metadata.Version {
 		return nil, LockEntry{}, fmt.Errorf("%s manifest version %q does not match metadata version %q", subject, installed.Manifest.Version, metadata.Version)
 	}
-	installedRuntime := releaseRuntimeForManifest(installed.Manifest, expectedManifestKind)
-	if metadata.Runtime != installedRuntime {
-		return nil, LockEntry{}, fmt.Errorf("%s manifest runtime %q does not match metadata runtime %q", subject, installedRuntime, metadata.Runtime)
+	installedRuntime := providerrelease.RuntimeForManifest(expectedManifestKind, installed.Manifest)
+	if entry.Runtime != installedRuntime {
+		return nil, LockEntry{}, fmt.Errorf("%s manifest runtime %q does not match metadata runtime %q", subject, installedRuntime, entry.Runtime)
+	}
+	if err := validateInstalledPackageMatchesReleaseBundle(subject, installed, entry, bundle); err != nil {
+		return nil, LockEntry{}, err
 	}
 	entry.Package = installed.Manifest.Source
 	entry.Kind = installed.Manifest.Kind
@@ -3126,24 +3137,38 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	return installed, entry, nil
 }
 
-func applyProviderReleaseStaticValidationMetadata(entry *LockEntry, metadata *providerReleaseMetadata) error {
-	if entry == nil || metadata == nil || metadata.StaticValidation == nil {
+func validateInstalledPackageMatchesReleaseBundle(subject string, installed *installedPackage, entry LockEntry, bundle providerReleaseValidationBundle) error {
+	manifest, err := staticvalidation.ProjectManifest(installed.Manifest, "", true)
+	if err != nil {
+		return fmt.Errorf("%s project installed validation manifest: %w", subject, err)
+	}
+	addCatalogOperationIDsToManifest(manifest, bundle.Catalog)
+	if !providerManifestsEqual(manifest, entry.ValidationManifest) {
+		return fmt.Errorf("%s installed package manifest does not match provider release validation manifest", subject)
+	}
+	if entry.CatalogSessionOnly {
 		return nil
 	}
-	static := metadata.StaticValidation
-	if static.Manifest != nil {
-		manifest, err := portableStaticValidationManifest(static.Manifest, "", true)
-		if err != nil {
-			return err
-		}
-		addCatalogOperationIDsToManifest(manifest, static.Catalog)
-		entry.ValidationManifest = manifest
+	installedCatalog, err := packageio.ReadStaticCatalog(installed.Root, installed.Manifest.Source)
+	if err != nil {
+		return fmt.Errorf("%s read installed validation catalog: %w", subject, err)
 	}
-	if static.Catalog != nil {
-		entry.CatalogAvailable = true
+	if !catalogsEqual(installedCatalog, bundle.Catalog) {
+		return fmt.Errorf("%s installed package catalog does not match provider release validation catalog", subject)
 	}
-	entry.CatalogSessionOnly = static.CatalogSessionOnly
 	return nil
+}
+
+func providerManifestsEqual(a, b *providermanifestv1.Manifest) bool {
+	aData, aErr := json.Marshal(a)
+	bData, bErr := json.Marshal(b)
+	return aErr == nil && bErr == nil && bytes.Equal(aData, bData)
+}
+
+func catalogsEqual(a, b *catalog.Catalog) bool {
+	aData, aErr := json.Marshal(a)
+	bData, bErr := json.Marshal(b)
+	return aErr == nil && bErr == nil && bytes.Equal(aData, bData)
 }
 
 func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, subject, destDir string, provider *config.ProviderEntry, configMap map[string]any, mode artifactMode) (LockEntry, error) {
@@ -3170,11 +3195,11 @@ func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Confi
 	if provider.HasGitSource() {
 		switch {
 		case kind == providermanifestv1.KindUI:
-			return l.lockGitUIEntryForSource(ctx, cfg, paths, name, provider, destDir, subject, configMap)
+			return l.lockGitUIEntryForSource(ctx, cfg, paths, name, provider, destDir, subject, configMap, mode)
 		case isAppProvider:
-			return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, provider, configMap)
+			return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, provider, configMap, mode)
 		default:
-			return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, provider, configMap)
+			return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, provider, configMap, mode)
 		}
 	}
 
@@ -3264,20 +3289,13 @@ func lockEntryStaticValidationOnly(entry LockEntry) bool {
 }
 
 func lockEntryHasCompleteStaticValidation(kind string, entry LockEntry) bool {
-	if entry.ValidationManifest == nil || staticManifestReferencesPackageFiles(entry.ValidationManifest) {
+	if entry.ValidationManifest == nil || providerrelease.ManifestReferencesPackageFiles(entry.ValidationManifest) {
 		return false
 	}
-	if staticValidationCatalogRequired(kind, entry.ValidationManifest) {
+	if providerrelease.CatalogRequired(kind, entry.ValidationManifest) {
 		return entry.CatalogAvailable || entry.CatalogSessionOnly
 	}
 	return true
-}
-
-func staticValidationCatalogRequired(kind string, manifest *providermanifestv1.Manifest) bool {
-	if providermanifestv1.NormalizeKind(kind) != providermanifestv1.KindApp {
-		return false
-	}
-	return manifest != nil && manifest.Spec != nil && !manifest.Spec.IsManifestBacked()
 }
 
 func bindResolvedInstall(paths lifecyclePaths, kind, name, subject, destDir string, provider *config.ProviderEntry, configMap map[string]any, install *installedPackage, isAppProvider bool) error {
@@ -3634,18 +3652,24 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if !ok {
 			continue
 		}
-		resolved := catalogs[name]
-		addCatalogOperationIDsToManifest(lockEntry.ValidationManifest, resolved.Catalog)
+		if !lockEntryStaticValidationOnly(lockEntry) {
+			resolved := catalogs[name]
+			if resolved.SessionOnly {
+				lockEntry.CatalogSessionOnly = true
+				lockEntry.CatalogAvailable = false
+			} else {
+				addCatalogOperationIDsToManifest(lockEntry.ValidationManifest, resolved.Catalog)
+				if resolved.Available {
+					lockEntry.CatalogAvailable = true
+				}
+			}
+		}
 		fingerprint, err := staticCatalogInputFingerprint(entry)
 		if err != nil {
 			return err
 		}
 		if lockEntry.CatalogFingerprint == "" {
 			lockEntry.CatalogFingerprint = fingerprint
-		}
-		if !lockEntry.CatalogAvailable && !lockEntry.CatalogSessionOnly {
-			lockEntry.CatalogAvailable = resolved.Available
-			lockEntry.CatalogSessionOnly = resolved.SessionOnly
 		}
 		lock.Providers.App[name] = lockEntry
 		entry.ResolvedCatalog = catalogFromValidationManifest(lockEntry.ValidationManifest, lockEntry.CatalogAvailable)
@@ -3840,48 +3864,6 @@ func staticCatalogInputFingerprint(entry *config.ProviderEntry) (string, error) 
 	}
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:]), nil
-}
-
-func staticManifestReferencesPackageFiles(manifest *providermanifestv1.Manifest) bool {
-	if manifest == nil {
-		return false
-	}
-	if strings.TrimSpace(manifest.IconFile) != "" {
-		return true
-	}
-	spec := manifest.Spec
-	if spec == nil {
-		return false
-	}
-	if strings.TrimSpace(spec.ConfigSchemaPath) != "" {
-		return true
-	}
-	if spec.UI != nil && strings.TrimSpace(spec.UI.Path) != "" {
-		return true
-	}
-	if spec.Surfaces != nil {
-		if spec.Surfaces.OpenAPI != nil && staticManifestFileReference(spec.Surfaces.OpenAPI.Document) {
-			return true
-		}
-		if spec.Surfaces.GraphQL != nil && staticManifestFileReference(spec.Surfaces.GraphQL.URL) {
-			return true
-		}
-		if spec.Surfaces.MCP != nil && staticManifestFileReference(spec.Surfaces.MCP.URL) {
-			return true
-		}
-	}
-	return false
-}
-
-func staticManifestFileReference(raw string) bool {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return false
-	}
-	if strings.HasPrefix(value, "file://") {
-		return true
-	}
-	return !strings.Contains(value, "://")
 }
 
 func configRequiresStaticLock(cfg *config.Config) bool {
@@ -4094,28 +4076,6 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 			return bind("", entry.ValidationManifest)
 		}
 	}
-	if provider.HasGitSource() && found && len(entry.Archives) == 0 {
-		install, cleanup, _, err := l.stageGitSourceInstall(ctx, paths, kind, name, destDir, provider, providerpkg.StageSourcePreparedInstallOptions{})
-		if err != nil {
-			if cleanup != nil {
-				_ = cleanup()
-			}
-			return err
-		}
-		if !preparedManifestMatchesLock(entry, install.manifest) {
-			if cleanup != nil {
-				_ = cleanup()
-			}
-			return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
-		}
-		if err := bind(install.manifestPath, install.manifest); err != nil {
-			if cleanup != nil {
-				_ = cleanup()
-			}
-			return err
-		}
-		return nil
-	}
 	if !found {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", kind, name)
 	}
@@ -4201,7 +4161,7 @@ func staticValidationEntryNeedsSourceAuthSecret(paths lifecyclePaths, lockEntrie
 	} else if !lockEntryMetadataMatches(paths, kind, name, provider, entry, true) {
 		return false, nil
 	}
-	if entry.ValidationManifest != nil && !staticManifestReferencesPackageFiles(entry.ValidationManifest) {
+	if entry.ValidationManifest != nil && !providerrelease.ManifestReferencesPackageFiles(entry.ValidationManifest) {
 		return false, nil
 	}
 	if provider.HasGitSource() && len(entry.Archives) == 0 {
@@ -5244,12 +5204,12 @@ func (l *Lifecycle) resolveLockedArchiveDownload(paths lifecyclePaths, entry Loc
 	if err != nil {
 		return "", "", "", fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
 	}
-	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return "", "", "", fmt.Errorf("no verified hash for platform %s for %s; publish release metadata with a sha256 for that archive before locking", platform, subject)
-	}
-	expectedSHA, err := expectedSHAForLockedArchive(paths, entry, resolvedKey, archiveLocation, archive)
+	expectedSHA, hasSHA, err := normalizeArchiveSHA256(archive.SHA256)
 	if err != nil {
-		return "", "", "", fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
+		return "", "", "", fmt.Errorf("lock archive sha256 for %s: %w", subject, err)
+	}
+	if !hasSHA {
+		return "", "", "", fmt.Errorf("lock archive sha256 is required for platform %s for %s; run `gestaltd lock` with published release metadata that includes archive hashes", platform, subject)
 	}
 	return archiveLocation, resolvedKey, expectedSHA, nil
 }
@@ -5265,32 +5225,6 @@ func validateLockedInstalledManifest(kind, name, subject string, manifest *provi
 		return fmt.Errorf("locked source manifest version mismatch for %s: got %q, want %q", subject, manifest.Version, entry.Version)
 	}
 	return validateLockedArchivePolicy(subject, archivePolicyKind(kind), manifest, entry, platform, resolvedKey)
-}
-
-func expectedSHAForLockedArchive(paths lifecyclePaths, entry LockEntry, resolvedKey, archiveLocation string, archive LockArchive) (string, error) {
-	if strings.TrimSpace(archive.SHA256) != "" {
-		sha, _, err := normalizeArchiveSHA256(archive.SHA256)
-		if err != nil {
-			return "", fmt.Errorf("lock archive sha256: %w", err)
-		}
-		return sha, nil
-	}
-	sourceLocation := entry.Source
-	if !isRemoteReleaseMetadataLocation(sourceLocation) {
-		sourceLocation = resolveLockPath(paths.configDir, sourceLocation)
-	}
-	expectedSHA, err := localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation)
-	if err != nil {
-		return "", fmt.Errorf("load local archive metadata: %w", err)
-	}
-	sha, hasSHA, err := normalizeArchiveSHA256(expectedSHA)
-	if err != nil {
-		return "", fmt.Errorf("local archive metadata sha256: %w", err)
-	}
-	if !hasSHA {
-		return "", nil
-	}
-	return sha, nil
 }
 
 func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath string, app *config.ProviderEntry) {

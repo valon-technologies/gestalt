@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -21,9 +22,12 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
 )
@@ -245,7 +249,7 @@ type managedMetadataRelease struct {
 	packageSource   string
 	version         string
 	kind            string
-	runtime         string
+	allowInvalid    bool
 	token           string
 }
 
@@ -265,27 +269,35 @@ func newManagedMetadataServer(t *testing.T, releases []managedMetadataRelease) *
 			t.Fatalf("ReadFile(%s): %v", release.archiveFilePath, err)
 		}
 		archiveSum := sha256.Sum256(archiveData)
-		metadataBytes, err := yaml.Marshal(providerReleaseMetadata{
-			Schema:        providerReleaseSchemaName,
-			SchemaVersion: providerReleaseSchemaVersion,
-			Package:       release.packageSource,
-			Kind:          release.kind,
-			Version:       release.version,
-			Runtime:       release.runtime,
-			Artifacts: map[string]providerReleaseArtifact{
+		fixture := newProviderReleaseFixtureFiles(t, providerReleaseMetadataFixture{
+			Package:      release.packageSource,
+			Kind:         release.kind,
+			Version:      release.version,
+			ArchivePath:  release.archiveFilePath,
+			AllowInvalid: release.allowInvalid,
+			Artifacts: map[string]providerrelease.Artifact{
 				providerpkg.CurrentPlatformString(): {
 					Path:   filepath.Base(release.archiveURLPath),
 					SHA256: hex.EncodeToString(archiveSum[:]),
 				},
 			},
 		})
-		if err != nil {
-			t.Fatalf("yaml.Marshal(metadata %s): %v", release.metadataPath, err)
-		}
 		routes[release.metadataPath] = response{
 			contentType: "application/yaml",
 			token:       release.token,
-			body:        metadataBytes,
+			body:        fixture.Metadata,
+		}
+		routes[path.Dir(release.metadataPath)+"/"+providerrelease.ValidationManifestFile] = response{
+			contentType: "application/yaml",
+			token:       release.token,
+			body:        fixture.Manifest,
+		}
+		if len(fixture.Catalog) != 0 {
+			routes[path.Dir(release.metadataPath)+"/"+providerrelease.ValidationCatalogFile] = response{
+				contentType: "application/yaml",
+				token:       release.token,
+				body:        fixture.Catalog,
+			}
 		}
 		routes[release.archiveURLPath] = response{
 			contentType: "application/octet-stream",
@@ -1094,7 +1106,6 @@ func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 			packageSource:   callerRef,
 			version:         version,
 			kind:            providermanifestv1.KindApp,
-			runtime:         providerReleaseRuntimeExecutable,
 		},
 		{
 			metadataPath:    "/providers/target/v" + version + "/provider-release.yaml",
@@ -1103,7 +1114,6 @@ func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 			packageSource:   targetRef,
 			version:         version,
 			kind:            providermanifestv1.KindApp,
-			runtime:         providerReleaseRuntimeExecutable,
 		},
 	})
 	defer srv.Close()
@@ -1814,7 +1824,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		packageSource:   pluginRef,
 		version:         version,
 		kind:            providermanifestv1.KindApp,
-		runtime:         providerReleaseRuntimeExecutable,
+		allowInvalid:    true,
 	}})
 	defer srv.Close()
 
@@ -1907,7 +1917,7 @@ func TestLoadForExecutionAtPath_RefreshesManagedPluginWhenGenericArchiveLockIsSt
 		packageSource:   pluginRef,
 		version:         version,
 		kind:            providermanifestv1.KindApp,
-		runtime:         providerReleaseRuntimeExecutable,
+		allowInvalid:    true,
 	}})
 	defer srv.Close()
 
@@ -2039,7 +2049,6 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 			packageSource:   pluginRef,
 			version:         oldVersion,
 			kind:            providermanifestv1.KindApp,
-			runtime:         providerReleaseRuntimeExecutable,
 		},
 		{
 			metadataPath:    "/providers/roadmap-plugin/v" + newVersion + "/provider-release.yaml",
@@ -2048,7 +2057,6 @@ func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBefore
 			packageSource:   pluginRef,
 			version:         newVersion,
 			kind:            providermanifestv1.KindApp,
-			runtime:         providerReleaseRuntimeDeclarative,
 		},
 	})
 	defer srv.Close()
@@ -2085,9 +2093,7 @@ server:
 			InputDigest: mustFingerprint(t, "roadmap", loadedCfg.Apps["roadmap"], paths.configDir),
 			Source:      srv.URL + "/providers/roadmap-plugin/v" + newVersion + "/provider-release.yaml",
 			Package:     pluginRef,
-			Kind:        providermanifestv1.KindApp,
-			Runtime:     providerReleaseRuntimeDeclarative,
-			Version:     newVersion,
+			Kind:        providermanifestv1.KindApp, Version: newVersion,
 			Archives: map[string]LockArchive{
 				"generic": {URL: archiveServer.URL, SHA256: hex.EncodeToString(newPluginArchiveSum[:])},
 			},
@@ -2312,7 +2318,7 @@ func TestPrepareAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.
 		packageSource:   pluginRef,
 		version:         version,
 		kind:            providermanifestv1.KindApp,
-		runtime:         providerReleaseRuntimeExecutable,
+		allowInvalid:    true,
 	}})
 	defer srv.Close()
 
@@ -2381,7 +2387,7 @@ func TestPrepareAtPath_RejectsPolicyBoundManagedMountedUIWithoutExplicitRouteCov
 				packageSource:   "github.com/testowner/web/sample-portal",
 				version:         "0.0.1-alpha.1",
 				kind:            providermanifestv1.KindUI,
-				runtime:         providerReleaseRuntimeUI,
+				allowInvalid:    true,
 			}})
 			defer srv.Close()
 
@@ -2430,7 +2436,7 @@ func TestPrepareAtPath_RejectsMetadataPackageManifestKindMismatch(t *testing.T) 
 		packageSource:   source,
 		version:         version,
 		kind:            providermanifestv1.KindApp,
-		runtime:         providerReleaseRuntimeExecutable,
+		allowInvalid:    true,
 	}})
 	defer srv.Close()
 	lc := NewLifecycle().WithHTTPClient(srv.Client())
@@ -2451,7 +2457,7 @@ server:
 		t.Fatal("expected provider kind validation error")
 		return
 	}
-	if !strings.Contains(err.Error(), `manifest has kind "authentication", want "app"`) {
+	if !strings.Contains(err.Error(), `provider release validation manifest kind "authentication" does not match "app"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -3436,6 +3442,16 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 	appManifest := func(binary string) *providermanifestv1.Manifest {
 		return manifest(providermanifestv1.KindApp, binary, runtime.GOOS, runtime.GOARCH)
 	}
+	sessionManifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  "github.com/acme/provider/session",
+		Version: "1.2.3",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				MCP: &providermanifestv1.MCPSurface{URL: "https://mcp.example.test"},
+			},
+		},
+	}
 	gitSnapshotSource := config.NewGitSource(config.GitSourceDef{
 		Repo:               "https://github.com/acme/provider.git",
 		Ref:                "main",
@@ -3484,6 +3500,9 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 				Source:           gitSnapshotSource,
 				ResolvedManifest: appManifest("git-snapshot-wrong-source-ref-type-provider"),
 			},
+			"session": {
+				ResolvedManifest: sessionManifest,
+			},
 		},
 		Providers: config.ProvidersConfig{
 			Agent: map[string]*config.ProviderEntry{
@@ -3507,13 +3526,14 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 		Providers: providerLockBuckets{
 			App: map[string]LockEntry{
 				"release":                          {},
-				"local":                            {},
+				"local":                            {ArtifactManifest: "local/manifest.yaml"},
 				"gitSource":                        {},
 				"gitSnapshot":                      {SourceRef: gitSnapshotLockRef, Archives: archives},
 				"gitSnapshotMissingSourceRef":      {Archives: archives},
 				"gitSnapshotSourceMaterialization": {SourceRef: &gitSnapshotSourceMaterializationRef, Archives: archives},
 				"gitSnapshotNoArchives":            {SourceRef: gitSourceLockRef(cfg.Apps["gitSnapshotNoArchives"], "gestalt-ref")},
 				"gitSnapshotWrongSourceRefType":    {SourceRef: &gitSnapshotWrongTypeRef, Archives: archives},
+				"session":                          {CatalogSessionOnly: true},
 			},
 			Agent: map[string]LockEntry{
 				"agentSnapshot": {SourceRef: gitSourceLockRef(cfg.Providers.Agent["agentSnapshot"], "gestalt-ref"), Archives: archives},
@@ -3521,11 +3541,25 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 		},
 	}
 
-	if err := attachStaticValidationMetadata(lock, cfg, nil); err != nil {
+	catalogs := map[string]appservice.EffectiveCatalogResult{
+		"local": {
+			Catalog: &catalog.Catalog{
+				Operations: []catalog.CatalogOperation{{ID: "local_echo"}},
+			},
+			Available: true,
+		},
+		"session": {
+			Catalog: &catalog.Catalog{
+				Operations: []catalog.CatalogOperation{{ID: "should_not_attach"}},
+			},
+			Available: true,
+		},
+	}
+	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
 		t.Fatalf("attachStaticValidationMetadata: %v", err)
 	}
 
-	for _, name := range []string{"release", "local", "gitSource", "gitSnapshot", "gitSnapshotMissingSourceRef", "gitSnapshotSourceMaterialization", "gitSnapshotNoArchives", "gitSnapshotWrongSourceRefType"} {
+	for _, name := range []string{"release", "local", "gitSource", "gitSnapshot", "gitSnapshotMissingSourceRef", "gitSnapshotSourceMaterialization", "gitSnapshotNoArchives", "gitSnapshotWrongSourceRefType", "session"} {
 		staticManifest := lock.Providers.App[name].ValidationManifest
 		if len(staticManifest.Artifacts) != 0 {
 			t.Fatalf("%s artifacts = %+v, want nil", name, staticManifest.Artifacts)
@@ -3540,6 +3574,26 @@ func TestAttachStaticValidationMetadataProjectsPortableArchiveBackedSources(t *t
 	}
 	if agentManifest.Entrypoint != nil {
 		t.Fatalf("agentSnapshot entrypoint = %+v, want nil", agentManifest.Entrypoint)
+	}
+	localEntry := lock.Providers.App["local"]
+	if !localEntry.CatalogAvailable {
+		t.Fatal("local catalogAvailable = false, want true")
+	}
+	if localEntry.ValidationManifest.Spec == nil || localEntry.ValidationManifest.Spec.AllowedOperations["local_echo"] == nil {
+		t.Fatalf("local static manifest spec = %+v, want local_echo operation", localEntry.ValidationManifest.Spec)
+	}
+	if !cfg.Apps["local"].ResolvedCatalogAvailable || cfg.Apps["local"].ResolvedCatalog == nil {
+		t.Fatalf("local resolved catalog available = %v catalog = %+v, want available catalog", cfg.Apps["local"].ResolvedCatalogAvailable, cfg.Apps["local"].ResolvedCatalog)
+	}
+	sessionEntry := lock.Providers.App["session"]
+	if sessionEntry.CatalogAvailable || !sessionEntry.CatalogSessionOnly {
+		t.Fatalf("session catalog flags = available:%v sessionOnly:%v, want exclusive session-only", sessionEntry.CatalogAvailable, sessionEntry.CatalogSessionOnly)
+	}
+	if sessionEntry.ValidationManifest.Spec != nil && sessionEntry.ValidationManifest.Spec.AllowedOperations["should_not_attach"] != nil {
+		t.Fatalf("session-only validation manifest unexpectedly included static catalog operation: %+v", sessionEntry.ValidationManifest.Spec.AllowedOperations)
+	}
+	if cfg.Apps["session"].ResolvedCatalogAvailable || !cfg.Apps["session"].ResolvedCatalogSessionOnly || cfg.Apps["session"].ResolvedCatalog != nil {
+		t.Fatalf("session resolved catalog = available:%v sessionOnly:%v catalog:%+v, want exclusive session-only", cfg.Apps["session"].ResolvedCatalogAvailable, cfg.Apps["session"].ResolvedCatalogSessionOnly, cfg.Apps["session"].ResolvedCatalog)
 	}
 }
 
@@ -3589,11 +3643,9 @@ func TestArchiveBackedGitSnapshotStaticProjectionAvoidsAgentPlatformDrift(t *tes
 					"deep": {
 						InputDigest: "same-input-digest",
 						Package:     "github.com/acme/provider/agent",
-						Kind:        providermanifestv1.KindAgent,
-						Runtime:     providerReleaseRuntimeExecutable,
-						SourceRef:   gitSourceLockRef(cfg.Providers.Agent["deep"], "gestalt-ref"),
-						Version:     "1.2.3",
-						Archives:    archives,
+						Kind:        providermanifestv1.KindAgent, SourceRef: gitSourceLockRef(cfg.Providers.Agent["deep"], "gestalt-ref"),
+						Version:  "1.2.3",
+						Archives: archives,
 					},
 				},
 			},
@@ -4075,9 +4127,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				"default": {
 					InputDigest: "telemetry-fp",
 					Source:      "github.com/test-org/test-repo/telemetry-declarative",
-					Kind:        providermanifestv1.KindApp,
-					Runtime:     providerReleaseRuntimeDeclarative,
-					Version:     "1.4.0",
+					Kind:        providermanifestv1.KindApp, Version: "1.4.0",
 					Archives: map[string]LockArchive{
 						"generic": {URL: "https://example.com/telemetry.tar.gz", SHA256: "telemetry123"},
 					},
@@ -4087,9 +4137,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				"default": {
 					InputDigest: "audit-fp",
 					Source:      "github.com/test-org/test-repo/audit-declarative",
-					Kind:        providermanifestv1.KindApp,
-					Runtime:     providerReleaseRuntimeDeclarative,
-					Version:     "1.5.0",
+					Kind:        providermanifestv1.KindApp, Version: "1.5.0",
 					Archives: map[string]LockArchive{
 						"generic": {URL: "https://example.com/audit.tar.gz", SHA256: "audit123"},
 					},
@@ -4181,8 +4229,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if telemetryEntry.Kind != providermanifestv1.KindApp {
 		t.Fatalf("telemetry kind = %q, want %q", telemetryEntry.Kind, providermanifestv1.KindApp)
 	}
-	if telemetryEntry.Runtime != providerReleaseRuntimeDeclarative {
-		t.Fatalf("telemetry runtime = %q, want %q", telemetryEntry.Runtime, providerReleaseRuntimeDeclarative)
+	if telemetryEntry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("telemetry runtime = %q, want %q", telemetryEntry.Runtime, providerLockRuntimeExecutable)
 	}
 	auditEntry, ok := diskLock.Providers.Audit["default"]
 	if !ok {
@@ -4194,8 +4242,8 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if auditEntry.Kind != providermanifestv1.KindApp {
 		t.Fatalf("audit kind = %q, want %q", auditEntry.Kind, providermanifestv1.KindApp)
 	}
-	if auditEntry.Runtime != providerReleaseRuntimeDeclarative {
-		t.Fatalf("audit runtime = %q, want %q", auditEntry.Runtime, providerReleaseRuntimeDeclarative)
+	if auditEntry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("audit runtime = %q, want %q", auditEntry.Runtime, providerLockRuntimeExecutable)
 	}
 	uiEntry, ok := diskLock.Providers.UI["roadmap"]
 	if !ok {
@@ -4239,11 +4287,11 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.Providers.Workflow["temporal"].Executable != "" {
 		t.Fatal("workflow executable should not round-trip from portable lock schema")
 	}
-	if got.Providers.Telemetry["default"].Runtime != providerReleaseRuntimeDeclarative {
-		t.Fatalf("telemetry runtime = %q, want %q", got.Providers.Telemetry["default"].Runtime, providerReleaseRuntimeDeclarative)
+	if got.Providers.Telemetry["default"].Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("telemetry runtime = %q, want %q", got.Providers.Telemetry["default"].Runtime, providerLockRuntimeExecutable)
 	}
-	if got.Providers.Audit["default"].Runtime != providerReleaseRuntimeDeclarative {
-		t.Fatalf("audit runtime = %q, want %q", got.Providers.Audit["default"].Runtime, providerReleaseRuntimeDeclarative)
+	if got.Providers.Audit["default"].Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("audit runtime = %q, want %q", got.Providers.Audit["default"].Runtime, providerLockRuntimeExecutable)
 	}
 	if got.Providers.UI["roadmap"].Source != want.Providers.UI["roadmap"].Source || got.Providers.UI["roadmap"].Version != want.Providers.UI["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")

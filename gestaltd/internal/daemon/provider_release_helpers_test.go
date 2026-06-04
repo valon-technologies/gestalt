@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -701,18 +702,28 @@ func readReleasedManifest(t *testing.T, outputDir, archiveName string) *provider
 	return manifest
 }
 
-func readProviderReleaseMetadata(t *testing.T, outputDir string) *providerReleaseMetadata {
+func readProviderReleaseMetadata(t *testing.T, outputDir string) *providerrelease.Metadata {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(outputDir, providerReleaseMetadataFile))
+	data, err := os.ReadFile(filepath.Join(outputDir, providerrelease.MetadataFile))
 	if err != nil {
-		t.Fatalf("read %s: %v", providerReleaseMetadataFile, err)
+		t.Fatalf("read %s: %v", providerrelease.MetadataFile, err)
 	}
-	var metadata providerReleaseMetadata
+	var metadata providerrelease.Metadata
 	if err := yaml.Unmarshal(data, &metadata); err != nil {
-		t.Fatalf("decode %s: %v", providerReleaseMetadataFile, err)
+		t.Fatalf("decode %s: %v", providerrelease.MetadataFile, err)
 	}
 	return &metadata
+}
+
+func providerReleaseArtifactForTarget(t *testing.T, metadata *providerrelease.Metadata, target string) providerrelease.Artifact {
+	t.Helper()
+
+	if artifact, ok := metadata.Artifacts[target]; ok {
+		return artifact
+	}
+	t.Fatalf("release metadata artifacts missing target %q: %+v", target, metadata.Artifacts)
+	return providerrelease.Artifact{}
 }
 
 func writeProviderReleaseArchiveForTest(t *testing.T, outputDir, archiveName string, manifest *providermanifestv1.Manifest) string {

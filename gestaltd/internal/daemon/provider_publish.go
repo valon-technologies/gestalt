@@ -19,6 +19,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
@@ -26,10 +27,11 @@ import (
 
 const providerPublishPlanSchema = "gestaltd.provider.publish.plan.v1"
 const providerPublishFileKindArchive = "archive"
-const providerPublishFileKindChecksums = "checksums"
+const providerPublishFileKindValidation = "validation"
 const providerPublishFileKindMetadata = "metadata"
 const providerPublishFormatText = "text"
 const providerPublishFormatJSON = "json"
+const republishCorruptObjectGuidance = "delete the object or entire snapshot SHA prefix and republish"
 
 var fullGitSHARe = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
@@ -68,7 +70,7 @@ type providerPublishPlan struct {
 	ManifestPath      string                `json:"manifestPath"`
 	Version           string                `json:"version"`
 	Metadata          providerPublishFile   `json:"metadata"`
-	Checksums         providerPublishFile   `json:"checksums"`
+	Validation        []providerPublishFile `json:"validation"`
 	Artifacts         []providerPublishFile `json:"artifacts"`
 	Files             []providerPublishFile `json:"files"`
 }
@@ -140,10 +142,7 @@ func runProviderPublish(args []string) (err error) {
 		return fmt.Errorf("create publish temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
-	if err := writeChecksumsQuiet(tmpDir, releaseArchives); err != nil {
-		return fmt.Errorf("write checksums: %w", err)
-	}
-	if err := writeProviderReleaseMetadataQuiet(tmpDir, releaseManifest, releaseVersion, releaseArchives); err != nil {
+	if err := writeProviderReleaseMetadata(tmpDir, releaseManifest, releaseVersion, releaseArchives, false); err != nil {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 
@@ -158,11 +157,10 @@ func runProviderPublish(args []string) (err error) {
 		printProviderPublishPlan(files)
 		return nil
 	}
-	existingFiles, err := preflightProviderPublishFiles(files)
-	if err != nil {
+	if err := preflightProviderPublishFiles(files); err != nil {
 		return err
 	}
-	return uploadProviderPublishFiles(files, sourceRef, existingFiles)
+	return uploadProviderPublishFiles(files, sourceRef)
 }
 
 func validateProviderPublishFormat(format string, dryRun bool) error {
@@ -228,7 +226,7 @@ func providerPublishFiles(repo config.ProviderSnapshotRepositoryConfig, manifest
 	sort.Slice(sortedArchives, func(i, j int) bool {
 		return filepath.Base(sortedArchives[i].Path) < filepath.Base(sortedArchives[j].Path)
 	})
-	files := make([]providerPublishFile, 0, len(sortedArchives)+2)
+	files := make([]providerPublishFile, 0, len(sortedArchives)+3)
 	for _, archive := range sortedArchives {
 		file, err := newProviderPublishFile(providerPublishFileKindArchive, archive.Target, archive.Path, storageRoot, publicRoot, sourceInfo.RelRoot, filepath.Base(archive.Path))
 		if err != nil {
@@ -236,19 +234,24 @@ func providerPublishFiles(repo config.ProviderSnapshotRepositoryConfig, manifest
 		}
 		files = append(files, file)
 	}
-	for _, item := range []struct {
-		kind string
-		name string
-	}{
-		{kind: providerPublishFileKindChecksums, name: "checksums.txt"},
-		{kind: providerPublishFileKindMetadata, name: providerReleaseMetadataFile},
-	} {
-		file, err := newProviderPublishFile(item.kind, "", filepath.Join(metadataDir, item.name), storageRoot, publicRoot, sourceInfo.RelRoot, item.name)
+	for _, name := range []string{providerrelease.ValidationManifestFile, providerrelease.ValidationCatalogFile} {
+		localPath := filepath.Join(metadataDir, name)
+		if _, err := os.Stat(localPath); os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			return nil, providerPublishSourceRefInfo{}, fmt.Errorf("stat %s: %w", localPath, err)
+		}
+		file, err := newProviderPublishFile(providerPublishFileKindValidation, "", localPath, storageRoot, publicRoot, sourceInfo.RelRoot, name)
 		if err != nil {
 			return nil, providerPublishSourceRefInfo{}, err
 		}
 		files = append(files, file)
 	}
+	file, err := newProviderPublishFile(providerPublishFileKindMetadata, "", filepath.Join(metadataDir, providerrelease.MetadataFile), storageRoot, publicRoot, sourceInfo.RelRoot, providerrelease.MetadataFile)
+	if err != nil {
+		return nil, providerPublishSourceRefInfo{}, err
+	}
+	files = append(files, file)
 	return files, sourceInfo, nil
 }
 
@@ -355,6 +358,7 @@ func newProviderPublishPlan(publishRepository string, sourceInfo providerPublish
 		ManifestPath:      sourceInfo.ManifestPath,
 		Version:           version,
 		Artifacts:         []providerPublishFile{},
+		Validation:        []providerPublishFile{},
 		Files:             make([]providerPublishFile, 0, len(files)),
 	}
 	for _, file := range files {
@@ -362,54 +366,63 @@ func newProviderPublishPlan(publishRepository string, sourceInfo providerPublish
 		switch file.Kind {
 		case providerPublishFileKindArchive:
 			plan.Artifacts = append(plan.Artifacts, file)
-		case providerPublishFileKindChecksums:
-			plan.Checksums = file
+		case providerPublishFileKindValidation:
+			plan.Validation = append(plan.Validation, file)
 		case providerPublishFileKindMetadata:
 			plan.Metadata = file
 		}
 	}
 	if plan.Metadata.PublicURL == "" {
-		return providerPublishPlan{}, fmt.Errorf("provider publish plan is missing %s", providerReleaseMetadataFile)
+		return providerPublishPlan{}, fmt.Errorf("provider publish plan is missing %s", providerrelease.MetadataFile)
 	}
-	if plan.Checksums.PublicURL == "" {
-		return providerPublishPlan{}, fmt.Errorf("provider publish plan is missing checksums.txt")
+	if !providerPublishPlanHasFile(plan.Validation, providerrelease.ValidationManifestFile) {
+		return providerPublishPlan{}, fmt.Errorf("provider publish plan is missing %s", providerrelease.ValidationManifestFile)
 	}
 	return plan, nil
 }
 
-func preflightProviderPublishFiles(files []providerPublishFile) (map[string]bool, error) {
-	existingFiles := make(map[string]bool, len(files))
+func providerPublishPlanHasFile(files []providerPublishFile, name string) bool {
 	for _, file := range files {
-		existingSHA, exists, err := providerPublishObjectSHA256(file.StorageURL)
-		if err != nil {
-			return nil, err
+		if filepath.Base(file.LocalPath) == name {
+			return true
 		}
-		if !exists {
-			continue
-		}
-		if existingSHA != file.SHA256 {
-			return nil, fmt.Errorf("%s already exists with different sha256 metadata", file.StorageURL)
-		}
-		existingFiles[file.StorageURL] = true
 	}
-	return existingFiles, nil
+	return false
 }
 
-func uploadProviderPublishFile(file providerPublishFile, sourceRef string, alreadyExists bool) error {
-	if alreadyExists {
-		_, _ = fmt.Fprintf(os.Stdout, "exists byte-identical %s\n", file.StorageURL)
+func preflightProviderPublishFiles(files []providerPublishFile) error {
+	for _, file := range files {
+		if err := validateProviderPublishMetadataFile(file); err != nil {
+			return err
+		}
+		exists, err := providerPublishObjectExists(file.StorageURL)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("%s already exists; %s", file.StorageURL, republishCorruptObjectGuidance)
+		}
+	}
+	return nil
+}
+
+func validateProviderPublishMetadataFile(file providerPublishFile) error {
+	if file.Kind != providerPublishFileKindMetadata {
 		return nil
 	}
-	return uploadProviderPublishFileCreateOnly(file, sourceRef)
+	if err := providerrelease.ValidateLocalBundle(file.LocalPath); err != nil {
+		return fmt.Errorf("provider release metadata %s: %w", file.LocalPath, err)
+	}
+	return nil
 }
 
-func uploadProviderPublishFiles(files []providerPublishFile, sourceRef string, existingFiles map[string]bool) error {
-	for _, kind := range []string{providerPublishFileKindArchive, providerPublishFileKindChecksums, providerPublishFileKindMetadata} {
+func uploadProviderPublishFiles(files []providerPublishFile, sourceRef string) error {
+	for _, kind := range []string{providerPublishFileKindArchive, providerPublishFileKindValidation, providerPublishFileKindMetadata} {
 		for _, file := range files {
 			if file.Kind != kind {
 				continue
 			}
-			if err := uploadProviderPublishFile(file, sourceRef, existingFiles[file.StorageURL]); err != nil {
+			if err := uploadProviderPublishFile(file, sourceRef); err != nil {
 				return err
 			}
 		}
@@ -417,49 +430,24 @@ func uploadProviderPublishFiles(files []providerPublishFile, sourceRef string, e
 	return nil
 }
 
-func uploadProviderPublishFileCreateOnly(file providerPublishFile, sourceRef string) error {
+func uploadProviderPublishFile(file providerPublishFile, sourceRef string) error {
 	metadata := fmt.Sprintf("source-ref=%s,sha256=%s", sourceRef, file.SHA256)
 	if _, err := runProviderPublishCommand("gcloud", "storage", "cp", "--if-generation-match=0", "--custom-metadata="+metadata, file.LocalPath, file.StorageURL); err != nil {
-		return acceptProviderPublishUploadRace(file, err)
+		return err
 	}
 	_, _ = fmt.Fprintf(os.Stdout, "uploaded %s\n", file.StorageURL)
 	return nil
 }
 
-func acceptProviderPublishUploadRace(file providerPublishFile, uploadErr error) error {
-	existingSHA, exists, err := providerPublishObjectSHA256(file.StorageURL)
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return uploadErr
-	}
-	if existingSHA == file.SHA256 {
-		_, _ = fmt.Fprintf(os.Stdout, "exists byte-identical %s\n", file.StorageURL)
-		return nil
-	}
-	return fmt.Errorf("%s already exists with different sha256 metadata", file.StorageURL)
-}
-
-func providerPublishObjectSHA256(storageURL string) (string, bool, error) {
-	out, err := runProviderPublishCommand("gcloud", "storage", "objects", "describe", storageURL, "--format=json")
+func providerPublishObjectExists(storageURL string) (bool, error) {
+	_, err := runProviderPublishCommand("gcloud", "storage", "objects", "describe", storageURL)
 	if err != nil {
 		if providerPublishObjectNotFound(err) {
-			return "", false, nil
+			return false, nil
 		}
-		return "", false, err
+		return false, err
 	}
-	var describe struct {
-		Metadata map[string]string `json:"metadata"`
-	}
-	if err := json.Unmarshal([]byte(out), &describe); err != nil {
-		return "", false, fmt.Errorf("parse gcloud describe %s: %w", storageURL, err)
-	}
-	sha := strings.TrimSpace(describe.Metadata["sha256"])
-	if sha == "" {
-		return "", true, fmt.Errorf("%s exists without sha256 custom metadata", storageURL)
-	}
-	return sha, true, nil
+	return true, nil
 }
 
 func providerPublishObjectNotFound(err error) bool {
@@ -512,8 +500,8 @@ func printProviderPublishUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Publish finalized provider release artifacts to a configured artifact repository.")
 	writeUsageLine(w, "Reads .tar.gz archives from each --dist-dir, validates one release bundle,")
-	writeUsageLine(w, "generates checksums.txt and provider-release.yaml, then uploads archives first")
-	writeUsageLine(w, "and provider-release.yaml last. Destination paths use the configured repository")
+	writeUsageLine(w, "generates provider-release.yaml and validation sidecars, then uploads archives")
+	writeUsageLine(w, "and sidecars before provider-release.yaml. Destination paths use the configured repository")
 	writeUsageLine(w, "publish.pathLayout and the manifest source plus --ref.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")

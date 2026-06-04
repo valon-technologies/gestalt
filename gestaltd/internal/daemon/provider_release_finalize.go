@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
@@ -41,46 +42,10 @@ func runProviderRelease(args []string) (err error) {
 	if err != nil {
 		return err
 	}
-	if err := writeChecksums(*distDir, releaseArchives); err != nil {
-		return fmt.Errorf("write checksums: %w", err)
-	}
-	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives); err != nil {
+	if err := writeProviderReleaseMetadata(*distDir, releaseManifest, releaseVersion, releaseArchives, true); err != nil {
 		return fmt.Errorf("write release metadata: %w", err)
 	}
 
-	return nil
-}
-
-func writeChecksums(dir string, archives []releaseArchive) error {
-	return writeChecksumsWithOutput(dir, archives, true)
-}
-
-func writeChecksumsQuiet(dir string, archives []releaseArchive) error {
-	return writeChecksumsWithOutput(dir, archives, false)
-}
-
-func writeChecksumsWithOutput(dir string, archives []releaseArchive, verbose bool) error {
-	sortedArchives := append([]releaseArchive(nil), archives...)
-	sort.Slice(sortedArchives, func(i, j int) bool {
-		return filepath.Base(sortedArchives[i].Path) < filepath.Base(sortedArchives[j].Path)
-	})
-	var lines []string
-	for _, archive := range sortedArchives {
-		lines = append(lines, fmt.Sprintf("%s  %s", archive.SHA256, filepath.Base(archive.Path)))
-	}
-
-	if len(lines) == 0 {
-		return nil
-	}
-
-	checksumPath := filepath.Join(dir, "checksums.txt")
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(checksumPath, []byte(content), 0644); err != nil {
-		return err
-	}
-	if verbose {
-		_, _ = fmt.Fprintf(os.Stdout, "created %s\n", checksumPath)
-	}
 	return nil
 }
 
@@ -181,7 +146,7 @@ func collectReleaseArchivePaths(archivePaths []string, versionGuard string) (*pr
 			}
 		}
 		seenTargets[target] = archivePath
-		if target == providerReleaseGenericTarget {
+		if target == providerrelease.GenericTarget {
 			hasGeneric = true
 		} else {
 			hasPlatform = true
@@ -242,29 +207,29 @@ func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest) (st
 		target = candidate
 	}
 	if target == "" {
-		return providerReleaseGenericTarget, nil
+		return providerrelease.GenericTarget, nil
 	}
 	return target, nil
 }
 
-func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) error {
-	return writeProviderReleaseMetadataWithOutput(dir, manifest, version, archives, true)
-}
-
-func writeProviderReleaseMetadataQuiet(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) error {
-	return writeProviderReleaseMetadataWithOutput(dir, manifest, version, archives, false)
-}
-
-func writeProviderReleaseMetadataWithOutput(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, verbose bool) error {
-	metadata, err := buildProviderReleaseMetadata(manifest, version, archives)
+func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, verbose bool) error {
+	metadata, manifestData, catalogData, err := buildProviderReleaseMetadataAndSidecars(manifest, version, archives)
 	if err != nil {
 		return err
 	}
+	if err := writeProviderReleaseSidecar(dir, providerrelease.ValidationManifestFile, manifestData, verbose); err != nil {
+		return err
+	}
+	if len(catalogData) != 0 {
+		if err := writeProviderReleaseSidecar(dir, providerrelease.ValidationCatalogFile, catalogData, verbose); err != nil {
+			return err
+		}
+	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {
-		return fmt.Errorf("encode %s: %w", providerReleaseMetadataFile, err)
+		return fmt.Errorf("encode %s: %w", providerrelease.MetadataFile, err)
 	}
-	path := filepath.Join(dir, providerReleaseMetadataFile)
+	path := filepath.Join(dir, providerrelease.MetadataFile)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return err
 	}
@@ -274,57 +239,81 @@ func writeProviderReleaseMetadataWithOutput(dir string, manifest *providermanife
 	return nil
 }
 
-func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) (*providerReleaseMetadata, error) {
-	if manifest == nil {
-		return nil, fmt.Errorf("manifest is required")
+func writeProviderReleaseSidecar(dir, name string, data []byte, verbose bool) error {
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
 	}
+	if verbose {
+		_, _ = fmt.Fprintf(os.Stdout, "created %s\n", path)
+	}
+	return nil
+}
 
-	runtime, err := releaseRuntimeMetadata(manifest, archives)
-	if err != nil {
-		return nil, err
+func buildProviderReleaseMetadataAndSidecars(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) (*providerrelease.Metadata, []byte, []byte, error) {
+	if manifest == nil {
+		return nil, nil, nil, fmt.Errorf("manifest is required")
 	}
 	staticManifest, err := staticvalidation.ProjectManifest(manifest, "", true)
 	if err != nil {
-		return nil, fmt.Errorf("project static validation manifest: %w", err)
+		return nil, nil, nil, fmt.Errorf("project static validation manifest: %w", err)
 	}
 	staticCatalog, err := staticValidationCatalogForRelease(manifest, archives)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
+	}
+	manifestData, err := yaml.Marshal(staticManifest)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("encode %s: %w", providerrelease.ValidationManifestFile, err)
+	}
+	var catalogData []byte
+	var catalogSHA string
+	if staticCatalog != nil {
+		catalogData, err = yaml.Marshal(staticCatalog)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("encode %s: %w", providerrelease.ValidationCatalogFile, err)
+		}
+		catalogSHA = providerrelease.SHA256Hex(catalogData)
 	}
 
-	metadata := &providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       manifest.Source,
-		Kind:          manifest.Kind,
-		Version:       version,
-		Runtime:       runtime,
-		Artifacts:     make(map[string]providerReleaseArtifact, len(archives)),
-		StaticValidation: &providerReleaseStaticValidationData{
-			Manifest: staticManifest,
-			Catalog:  staticCatalog,
-		},
+	metadata := &providerrelease.Metadata{
+		Package:                  manifest.Source,
+		Kind:                     manifest.Kind,
+		Version:                  version,
+		Artifacts:                providerrelease.Artifacts{},
+		ValidationManifestSHA256: providerrelease.SHA256Hex(manifestData),
+		ValidationCatalogSHA256:  catalogSHA,
 	}
 	for _, archive := range archives {
-		target := providerReleaseArtifactTarget(manifest, archive)
-		metadata.Artifacts[target] = providerReleaseArtifact{
-			Path:   filepath.Base(archive.Path),
-			SHA256: archive.SHA256,
+		target := strings.TrimSpace(archive.Target)
+		if target == "" {
+			target = providerrelease.GenericTarget
 		}
+		metadata.Artifacts[target] = providerrelease.Artifact{Path: filepath.Base(archive.Path), SHA256: archive.SHA256}
 	}
-	return metadata, nil
+	if err := providerrelease.ValidateBundle(metadata, staticManifest, staticCatalog); err != nil {
+		return nil, nil, nil, fmt.Errorf("validate provider release metadata: %w", err)
+	}
+	return metadata, manifestData, catalogData, nil
 }
 
 func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, archives []releaseArchive) (*catalog.Catalog, error) {
 	if manifest == nil || len(archives) == 0 {
 		return nil, nil
 	}
+	if providerrelease.CatalogSessionModeAllowed(manifest.Kind, manifest) {
+		return nil, nil
+	}
 	var firstCatalog *catalog.Catalog
 	var firstData []byte
 	for i, archive := range archives {
-		data, cat, err := staticValidationCatalogFromArchive(manifest, archive)
+		cat, err := staticValidationCatalogFromArchive(manifest, archive)
 		if err != nil {
 			return nil, err
+		}
+		data, err := yaml.Marshal(cat)
+		if err != nil {
+			return nil, fmt.Errorf("encode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 		}
 		if i == 0 {
 			firstData = data
@@ -338,60 +327,27 @@ func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, ar
 	return firstCatalog, nil
 }
 
-func staticValidationCatalogFromArchive(manifest *providermanifestv1.Manifest, archive releaseArchive) ([]byte, *catalog.Catalog, error) {
+func staticValidationCatalogFromArchive(manifest *providermanifestv1.Manifest, archive releaseArchive) (*catalog.Catalog, error) {
 	data, err := packageio.ReadArchiveEntry(archive.Path, packageio.StaticCatalogFile)
 	if err != nil {
 		if !packageio.StaticCatalogRequired(manifest) && strings.Contains(err.Error(), "does not contain") {
-			return nil, nil, nil
+			return nil, nil
 		}
-		return nil, nil, fmt.Errorf("read static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+		return nil, fmt.Errorf("read static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 	}
 	var cat catalog.Catalog
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&cat); err != nil {
-		return nil, nil, fmt.Errorf("decode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+		return nil, fmt.Errorf("decode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 	}
 	if strings.TrimSpace(cat.Name) == "" {
 		cat.Name = manifest.Source
 	}
 	if err := cat.Validate(); err != nil {
-		return nil, nil, fmt.Errorf("validate static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+		return nil, fmt.Errorf("validate static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 	}
-	return data, &cat, nil
-}
-
-func providerReleaseArtifactTarget(manifest *providermanifestv1.Manifest, archive releaseArchive) string {
-	if archive.Target != "" {
-		return archive.Target
-	}
-	return providerReleaseGenericTarget
-}
-
-func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest, archives []releaseArchive) (string, error) {
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return "", err
-	}
-
-	switch kind {
-	case providermanifestv1.KindUI:
-		return providerReleaseRuntimeKindUI, nil
-	case providermanifestv1.KindApp:
-		if manifest.IsDeclarativeOnlyProvider() && !releaseIncludesBuiltAppArtifact(archives) {
-			return providerReleaseRuntimeKindDeclarative, nil
-		}
-	}
-	return providerReleaseRuntimeKindExecutable, nil
-}
-
-func releaseIncludesBuiltAppArtifact(archives []releaseArchive) bool {
-	for _, archive := range archives {
-		if archive.Target != "" && archive.Target != providerReleaseGenericTarget {
-			return true
-		}
-	}
-	return false
+	return &cat, nil
 }
 
 func printProviderReleaseUsage(w io.Writer) {
@@ -399,8 +355,8 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider release [--dist-dir DIR] [--version VERSION]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Finalize provider release metadata from already-built archives.")
-	writeUsageLine(w, "Reads all .tar.gz archives in --dist-dir, validates package contents, writes")
-	writeUsageLine(w, "checksums.txt, and writes provider-release.yaml in the same directory.")
+	writeUsageLine(w, "Reads all .tar.gz archives in --dist-dir, validates package contents, and")
+	writeUsageLine(w, "writes provider-release.yaml plus validation sidecars in the same directory.")
 	writeUsageLine(w, "Run this after one or more provider package jobs have produced archives.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")

@@ -16,6 +16,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
+	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
@@ -475,7 +477,8 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
 	writeProviderLifecycleTestFile(t, filepath.Join(packageDir, "manifest.yaml"), string(manifestData))
-	writeProviderLifecycleTestFile(t, filepath.Join(packageDir, providerpkg.StaticCatalogFile), "name: alpha\noperations:\n  - id: echo\n    method: POST\n")
+	catalogData := []byte("name: alpha\noperations:\n  - id: echo\n    method: POST\n")
+	writeProviderLifecycleTestFile(t, filepath.Join(packageDir, providerpkg.StaticCatalogFile), string(catalogData))
 
 	archiveName := "alpha-" + version + ".tar.gz"
 	archivePath := filepath.Join(releaseDir, archiveName)
@@ -486,33 +489,26 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 	if err != nil {
 		t.Fatalf("ArchiveDigest: %v", err)
 	}
+	staticManifest, err := staticvalidation.ProjectManifest(manifest, "", true)
+	if err != nil {
+		t.Fatalf("ProjectManifest: %v", err)
+	}
+	manifestData, err = yaml.Marshal(staticManifest)
+	if err != nil {
+		t.Fatalf("Marshal validation manifest: %v", err)
+	}
+	manifestSHA := sha256.Sum256(manifestData)
+	catalogSHA := sha256.Sum256(catalogData)
 	metadata := map[string]any{
-		"schema":        "gestaltd-provider-release",
-		"schemaVersion": 1,
-		"package":       pkg,
-		"kind":          providermanifestv1.KindApp,
-		"version":       version,
-		"runtime":       "executable",
+		"package":                  pkg,
+		"kind":                     providermanifestv1.KindApp,
+		"version":                  version,
+		"validationManifestSHA256": fmt.Sprintf("%x", manifestSHA[:]),
+		"validationCatalogSHA256":  fmt.Sprintf("%x", catalogSHA[:]),
 		"artifacts": map[string]any{
 			providerpkg.CurrentPlatformString(): map[string]any{
 				"path":   archiveName,
 				"sha256": archiveDigest,
-			},
-		},
-		"staticValidation": map[string]any{
-			"manifest": map[string]any{
-				"kind":    providermanifestv1.KindApp,
-				"source":  pkg,
-				"version": version,
-				"spec":    map[string]any{},
-			},
-			"catalog": map[string]any{
-				"name": "alpha",
-				"operations": []map[string]any{{
-					"id":     "echo",
-					"method": "POST",
-					"path":   "/echo",
-				}},
 			},
 		},
 	}
@@ -521,7 +517,10 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 		t.Fatalf("Marshal release metadata: %v", err)
 	}
 	metadataRel := filepath.ToSlash(filepath.Join("releases", version, "provider-release.yaml"))
-	writeProviderLifecycleTestFile(t, filepath.Join(dir, filepath.FromSlash(metadataRel)), string(metadataData))
+	metadataPath := filepath.Join(dir, filepath.FromSlash(metadataRel))
+	writeProviderLifecycleTestFile(t, metadataPath, string(metadataData))
+	writeProviderLifecycleTestFile(t, filepath.Join(filepath.Dir(metadataPath), providerrelease.ValidationManifestFile), string(manifestData))
+	writeProviderLifecycleTestFile(t, filepath.Join(filepath.Dir(metadataPath), providerrelease.ValidationCatalogFile), string(catalogData))
 	return metadataRel
 }
 
