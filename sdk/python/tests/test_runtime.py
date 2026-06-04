@@ -1,6 +1,7 @@
 import datetime as dt
 import importlib
 import json
+import os
 import pathlib
 import socket
 import sys
@@ -318,6 +319,15 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.workflow, {})
         self.assertEqual(request.idempotency_key, "")
         self.assertEqual(request.invocation_token, "")
+
+    def test_authorization_requires_host_service_socket(self) -> None:
+        request = Request()
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesRegex(
+                RuntimeError, "authorization: GESTALT_HOST_SERVICE_SOCKET is not set"
+            ):
+                request.authorization()
 
 
 class MainEntrypointTests(unittest.TestCase):
