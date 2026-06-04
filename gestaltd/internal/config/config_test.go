@@ -1310,12 +1310,14 @@ server:
   providers:
     authentication: sample
     indexeddb: sqlite
+    authorization: indexeddb
   management:
     host: 127.0.0.1
     port: 9090
     baseUrl: https://gestalt.example.test:9090
   admin:
     authorizationPolicy: admin_policy
+    allowedRoles: [admin]
 providers:
   authentication:
     sample:
@@ -1325,6 +1327,10 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
+  authorization:
+    indexeddb:
+      source:
+        path: ./providers/authorization/indexeddb
 `)
 
 		_, err := Load(path)
@@ -1346,12 +1352,14 @@ server:
   providers:
     authentication: sample
     indexeddb: sqlite
+    authorization: indexeddb
   management:
     host: 127.0.0.1
     port: 9090
     baseUrl: not a url
   admin:
     authorizationPolicy: admin_policy
+    allowedRoles: [admin]
 providers:
   authentication:
     sample:
@@ -1361,6 +1369,10 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
+  authorization:
+    indexeddb:
+      source:
+        path: ./providers/authorization/indexeddb
 `)
 
 		_, err := Load(path)
@@ -1382,10 +1394,12 @@ server:
   providers:
     authentication: sample
     indexeddb: sqlite
+    authorization: indexeddb
   management:
     baseUrl: https://gestalt.example.test:9090
   admin:
     authorizationPolicy: admin_policy
+    allowedRoles: [admin]
 providers:
   authentication:
     sample:
@@ -1395,6 +1409,10 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
+  authorization:
+    indexeddb:
+      source:
+        path: ./providers/authorization/indexeddb
 `)
 
 		_, err := Load(path)
@@ -1438,6 +1456,7 @@ providers:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
 }
 
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {

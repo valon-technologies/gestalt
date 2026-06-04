@@ -87,6 +87,7 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	t.Parallel()
 
 	hostServices, invTokens, err := buildProviderHostServices("metadata", Deps{
+		Authorization: &recordingAuthorizationProvider{},
 		Services: &coredata.Services{
 			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
 		},
@@ -99,7 +100,7 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	}
 
 	names := hostServiceNames(hostServices)
-	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials"} {
+	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials", "authorization"} {
 		if !hasHostServiceName(names, want) {
 			t.Fatalf("provider host services missing %q: %v", want, names)
 		}

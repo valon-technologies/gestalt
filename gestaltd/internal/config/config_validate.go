@@ -1840,19 +1840,22 @@ func validateAdminConfig(cfg *Config) error {
 			return fmt.Errorf("config validation: server.admin.ui references unknown ui %q", adminUI)
 		}
 	}
-	if policy == "" {
-		if len(admin.AllowedRoles) > 0 {
-			return fmt.Errorf("config validation: server.admin.allowedRoles requires server.admin.authorizationPolicy")
-		}
-	} else {
+	if policy != "" || len(admin.AllowedRoles) > 0 {
 		_, authProvider, err := cfg.SelectedAuthenticationProvider()
 		if err != nil {
 			return err
 		}
 		if authProvider == nil {
-			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
+			return fmt.Errorf("config validation: server.admin authorization requires providers.authentication to be configured")
 		}
-		if len(admin.AllowedRoles) == 0 {
+		_, authorizationProvider, err := cfg.SelectedAuthorizationProvider()
+		if err != nil {
+			return err
+		}
+		if authorizationProvider == nil {
+			return fmt.Errorf("config validation: server.admin authorization requires providers.authorization to be configured")
+		}
+		if policy != "" && len(admin.AllowedRoles) == 0 {
 			return fmt.Errorf("config validation: server.admin.allowedRoles must not be empty when server.admin.authorizationPolicy is set")
 		}
 	}

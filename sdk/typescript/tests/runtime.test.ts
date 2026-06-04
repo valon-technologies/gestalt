@@ -773,6 +773,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
       id: "system:http_binding:agent:command",
       credentialSubjectId: "",
       email: "",
+      kind: "system",
     },
     credential: {
       mode: "none",

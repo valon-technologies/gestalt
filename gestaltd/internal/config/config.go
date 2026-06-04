@@ -3775,9 +3775,6 @@ func normalizeAdminConfig(cfg *Config) error {
 
 	roles, err := packageio.NormalizeUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
 	if err != nil {
-		if admin.AuthorizationPolicy == "" {
-			return fmt.Errorf("normalize admin config: server.admin.allowedRoles requires server.admin.authorizationPolicy")
-		}
 		return fmt.Errorf("normalize admin config: %w", err)
 	}
 	admin.AllowedRoles = roles

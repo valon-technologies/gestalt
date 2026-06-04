@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -23,6 +24,7 @@ import (
 
 const browserLoginPath = "/api/v1/auth/login"
 const adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
+const defaultAdminAuthorizationResource = "gestaltAdmin"
 
 type mountedUINavigationPathResolver interface {
 	NavigationPathForRequest(string) (string, bool)
@@ -30,8 +32,11 @@ type mountedUINavigationPathResolver interface {
 
 type protectedUILoginRedirect func(http.ResponseWriter, *http.Request) error
 
-func normalizeAdminRouteConfig(admin AdminRouteConfig) (AdminRouteConfig, error) {
+func normalizeAdminRouteConfig(admin AdminRouteConfig, defaultAuthorizationResource string) (AdminRouteConfig, error) {
 	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
+	if admin.AuthorizationPolicy == "" {
+		admin.AuthorizationPolicy = strings.TrimSpace(defaultAuthorizationResource)
+	}
 	if admin.AuthorizationPolicy == "" {
 		if len(admin.AllowedRoles) > 0 {
 			return AdminRouteConfig{}, fmt.Errorf("admin allowedRoles requires AuthorizationPolicy")
@@ -296,11 +301,11 @@ func normalizeMountedUIRoutes(routes []MountedUIRoute) ([]MountedUIRoute, error)
 }
 
 func validatePolicyBoundMountedUIRoutes(mounted MountedUI) error {
-	if mounted.AuthorizationPolicy == "" {
+	if !mountedUIRequiresAuthorization(mounted) {
 		return nil
 	}
 	if len(mounted.Routes) == 0 {
-		return fmt.Errorf("policy-bound UIs must declare at least one route")
+		return fmt.Errorf("authorization-bound UIs must declare at least one route")
 	}
 	coversRoot := false
 	for i := range mounted.Routes {
@@ -312,7 +317,7 @@ func validatePolicyBoundMountedUIRoutes(mounted MountedUI) error {
 		}
 	}
 	if !coversRoot {
-		return fmt.Errorf("policy-bound UIs must declare a route covering /")
+		return fmt.Errorf("authorization-bound UIs must declare a route covering /")
 	}
 	return nil
 }
@@ -352,7 +357,7 @@ func (s *Server) adminMountedUI() MountedUI {
 }
 
 func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redirectLogin protectedUILoginRedirect) http.Handler {
-	if mounted.AuthorizationPolicy == "" {
+	if !mountedUIRequiresAuthorization(mounted) {
 		return inner
 	}
 
@@ -394,9 +399,13 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 
-	access := invocation.AccessContext{}
 	route, matched := mounted.routeForRequestPath(r.URL.Path)
-	if !matched || len(route.AllowedRoles) == 0 || !mountedUIRoleAllowed(access.Role, route.AllowedRoles) {
+	access, allowed, err := s.authorizeMountedUIRoute(r.Context(), p, mounted, route, matched)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to authorize app access")
+		return nil, false
+	}
+	if !allowed {
 		writeError(w, http.StatusForbidden, "app access denied")
 		return nil, false
 	}
@@ -409,6 +418,114 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		ctx = invocation.WithAccessContext(ctx, access)
 	}
 	return ctx, true
+}
+
+func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Principal, mounted MountedUI, route MountedUIRoute, matched bool) (invocation.AccessContext, bool, error) {
+	if !matched || len(route.AllowedRoles) == 0 {
+		return invocation.AccessContext{}, false, nil
+	}
+	if !mountedUIRequiresAuthorization(mounted) {
+		return invocation.AccessContext{}, true, nil
+	}
+	if s.authorization == nil {
+		return invocation.AccessContext{}, false, nil
+	}
+	resourceName := mountedUIAuthorizationResourceName(mounted)
+	if resourceName == "" {
+		return invocation.AccessContext{}, false, nil
+	}
+	subjectID := principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))
+	if strings.TrimSpace(subjectID) == "" {
+		return invocation.AccessContext{}, false, nil
+	}
+
+	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, resourceName)
+	if err != nil {
+		return invocation.AccessContext{}, false, err
+	}
+	for _, allowedRole := range route.AllowedRoles {
+		if _, ok := roles[strings.TrimSpace(allowedRole)]; ok {
+			return invocation.AccessContext{Policy: resourceName, Role: strings.TrimSpace(allowedRole)}, true, nil
+		}
+	}
+
+	defaultAllow, err := s.mountedUIResourceDefaultAllows(ctx, resourceName)
+	if err != nil {
+		return invocation.AccessContext{}, false, err
+	}
+	if defaultAllow && mountedUIRoleAllowed("viewer", route.AllowedRoles) {
+		return invocation.AccessContext{Policy: resourceName, Role: "viewer"}, true, nil
+	}
+	return invocation.AccessContext{}, false, nil
+}
+
+func mountedUIAuthorizationResourceName(mounted MountedUI) string {
+	if name := strings.TrimSpace(mounted.AuthorizationPolicy); name != "" {
+		return name
+	}
+	return strings.TrimSpace(mounted.AppName)
+}
+
+func mountedUIRequiresAuthorization(mounted MountedUI) bool {
+	if strings.TrimSpace(mounted.AuthorizationPolicy) != "" {
+		return true
+	}
+	if mounted.builtInAdmin {
+		return false
+	}
+	return strings.TrimSpace(mounted.AppName) != "" && len(mounted.Routes) > 0
+}
+
+func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
+	roles := map[string]struct{}{}
+	pageToken := ""
+	for {
+		resp, err := s.authorization.ListRelationships(ctx, &proto.ListRelationshipsRequest{
+			Filter: &proto.RelationshipFilter{
+				Target: &proto.RelationshipTarget{
+					Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+						Type: "subject",
+						Id:   strings.TrimSpace(subjectID),
+					}},
+				},
+				Resource: &proto.Resource{
+					Type: strings.TrimSpace(resourceName),
+					Id:   strings.TrimSpace(resourceName),
+				},
+			},
+			PageSize:  500,
+			PageToken: pageToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, relationship := range resp.GetRelationships() {
+			relation := strings.TrimSpace(relationship.GetTuple().GetRelation())
+			if relation != "" {
+				roles[relation] = struct{}{}
+			}
+		}
+		pageToken = strings.TrimSpace(resp.GetNextPageToken())
+		if pageToken == "" {
+			return roles, nil
+		}
+	}
+}
+
+func (s *Server) mountedUIResourceDefaultAllows(ctx context.Context, resourceName string) (bool, error) {
+	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
+		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(resourceName)},
+		PageSize: 1,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, resourceType := range resp.GetResourceTypes() {
+		if strings.TrimSpace(resourceType.GetName()) == strings.TrimSpace(resourceName) {
+			return resourceType.GetDefaultAccessPolicy() == proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW, nil
+		}
+	}
+	return false, nil
 }
 
 func (s *Server) resolveMountedUIPrincipal(r *http.Request, mounted MountedUI) (*principal.Principal, bool, error) {
