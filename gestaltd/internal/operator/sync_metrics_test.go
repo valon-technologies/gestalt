@@ -61,6 +61,32 @@ func TestSyncMetricsRecorderKeepsAllArtifactItemsSorted(t *testing.T) {
 	}
 }
 
+func TestSyncMetricsRecorderCountsCacheLookupAndPutSeparately(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewSyncMetricsRecorder()
+	recorder.RecordCacheEntry(syncCacheMetricsEvent{
+		Subject:    `provider "alpha"`,
+		SourceKind: syncArtifactSourceRemoteArchive,
+		Result:     syncCacheResultMiss,
+		Lookup:     true,
+	})
+	recorder.RecordCacheEntry(syncCacheMetricsEvent{
+		Subject:    `provider "alpha"`,
+		SourceKind: syncArtifactSourceRemoteArchive,
+		Result:     syncCacheResultMiss,
+		Put:        true,
+	})
+
+	cache := recorder.Snapshot().Cache
+	if cache.Eligible != 1 || cache.Misses != 1 || cache.Put.Successes != 1 {
+		t.Fatalf("cache counts = eligible %d, misses %d, put successes %d; want 1, 1, 1", cache.Eligible, cache.Misses, cache.Put.Successes)
+	}
+	if len(cache.Entries) != 2 {
+		t.Fatalf("cache entries len = %d, want 2", len(cache.Entries))
+	}
+}
+
 func TestRecordOutputStatsRecordsAllRoots(t *testing.T) {
 	t.Parallel()
 

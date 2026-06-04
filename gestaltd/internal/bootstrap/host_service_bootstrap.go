@@ -18,7 +18,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -59,11 +58,57 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 	if deps.Services != nil && !core.ExternalCredentialProviderMissing(deps.Services.ExternalCredentials) {
 		hostServices = append(hostServices, buildPluginExternalCredentialsHostService(deps.Services.ExternalCredentials))
 	}
-	if deps.AuthorizationProvider != nil {
-		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
-	}
 	hostServices = append(hostServices, extraHostServices...)
 	return hostServices, invTokens, nil
+}
+
+func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
+	if entry == nil {
+		return deps
+	}
+	deps.Caches = scopedCacheBindings(entry.Cache, deps.Caches)
+	deps.S3 = scopedS3Bindings(entry.S3, deps.S3)
+	return deps
+}
+
+func scopedCacheBindings(names []string, bindings map[string]corecache.Cache) map[string]corecache.Cache {
+	if len(names) == 0 || len(bindings) == 0 {
+		return nil
+	}
+	scoped := map[string]corecache.Cache{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if binding := bindings[name]; binding != nil {
+			scoped[name] = binding
+		}
+	}
+	if len(scoped) == 0 {
+		return nil
+	}
+	return scoped
+}
+
+func scopedS3Bindings(names []string, bindings map[string]s3sdk.S3) map[string]s3sdk.S3 {
+	if len(names) == 0 || len(bindings) == 0 {
+		return nil
+	}
+	scoped := map[string]s3sdk.S3{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if binding := bindings[name]; binding != nil {
+			scoped[name] = binding
+		}
+	}
+	if len(scoped) == 0 {
+		return nil
+	}
+	return scoped
 }
 
 func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtimeConfig config.EffectiveRuntimePlacement, deps Deps, runtimePlan RuntimePlacementPlan) []runtimehost.HostService {
@@ -423,16 +468,6 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *a
 				tokens,
 				agentservice.WithWorkflowRunResolver(workflowRuns),
 			))
-		},
-	}
-}
-
-func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) runtimehost.HostService {
-	return runtimehost.HostService{
-		Name:           "authorization",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(provider))
 		},
 	}
 }

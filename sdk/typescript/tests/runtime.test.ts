@@ -33,14 +33,6 @@ import {
   ValidateExternalTokenRequestSchema,
 } from "../src/internal/gen/v1/authentication_pb.ts";
 import {
-  AccessEvaluationRequestSchema,
-  AccessEvaluationsRequestSchema,
-  AuthorizationProvider as AuthorizationProviderService,
-  ExpandRequestSchema,
-  ResourceSearchRequestSchema,
-  WriteModelRequestSchema,
-} from "../src/internal/gen/v1/authorization_pb.ts";
-import {
   CacheDeleteManyRequestSchema,
   CacheDeleteRequestSchema,
   CacheGetManyRequestSchema,
@@ -83,14 +75,13 @@ import {
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
 import {
-  PublishWorkflowProviderEventRequestSchema,
+  ApplyWorkflowProviderDefinitionRequestSchema,
+  DeliverWorkflowProviderEventRequestSchema,
   StartWorkflowProviderRunRequestSchema,
-  UpsertWorkflowProviderScheduleRequestSchema,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   createAgentProviderService,
-  createAuthorizationProviderService,
   createCacheService,
   ENV_WRITE_CATALOG,
   ENV_PROVIDER_SOCKET,
@@ -110,7 +101,6 @@ import {
   S3,
   WorkflowRunStatus,
   boundWorkflowTargetToProto,
-  defineAuthorizationProvider,
   defineCacheProvider,
   defineApp,
   defineRuntimeProvider,
@@ -494,98 +484,6 @@ test("runtime serves a secrets provider over unix gRPC", async () => {
   }
 }, 15_000);
 
-test("runtime serves an authorization provider over unix gRPC", async () => {
-  const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
-  const root = fixturePath("authorization-provider");
-  const tempDir = makeTempDir("gestalt-typescript-runtime-authz-");
-  const socketPath = join(tempDir, "provider.sock");
-  let child: ChildProcess | undefined;
-
-  try {
-    child = spawn(
-      process.execPath,
-      [runtimeEntry, root, "authorization:./authorization.ts#provider"],
-      {
-        env: {
-          ...process.env,
-          [ENV_PROVIDER_SOCKET]: socketPath,
-        },
-        stdio: ["ignore", "ignore", "pipe"],
-      },
-    );
-    const stderrText = captureChildStderr(child);
-
-    try {
-      await waitForPath(socketPath);
-    } catch (error) {
-      throw new Error(
-        `${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`,
-      );
-    }
-
-    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
-    const authz = createUnixGrpcClient(
-      AuthorizationProviderService,
-      socketPath,
-    );
-
-    const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(identity.kind).toBe(ProtoProviderKind.AUTHORIZATION);
-    expect(identity.name).toBe("authorization-provider");
-
-    await runtime.configureProvider(
-      create(ConfigureProviderRequestSchema, {
-        name: "fixture-authorization",
-        config: {
-          prefix: "wire",
-        },
-        protocolVersion: CURRENT_PROTOCOL_VERSION,
-      }),
-    );
-
-    const decision = await authz.evaluate(
-      create(AccessEvaluationRequestSchema, {
-        subject: { type: "subject", id: "user:1" },
-        action: { name: "view" },
-        resource: { type: "doc", id: "wire-doc-1" },
-      }),
-    );
-    expect(decision.allowed).toBe(true);
-
-    const batch = await authz.evaluateMany(
-      create(AccessEvaluationsRequestSchema, {
-        requests: [
-          {
-            subject: { type: "subject", id: "user:1" },
-            action: { name: "view" },
-            resource: { type: "doc", id: "wire-doc-1" },
-          },
-        ],
-      }),
-    );
-    expect(batch.decisions[0]?.allowed).toBe(true);
-
-    const model = await authz.writeModel(
-      create(WriteModelRequestSchema, {
-        model: {
-          version: 3,
-        },
-      }),
-    );
-    expect(model.version).toBe("3");
-
-    await expectConnectCode(
-      authz.expand(create(ExpandRequestSchema, {})),
-      Code.Unimplemented,
-    );
-  } finally {
-    if (child) {
-      await stopProcess(child);
-    }
-    removeTempDir(tempDir);
-  }
-}, 15_000);
-
 test("integration provider service exposes metadata, configure, execute, and session catalog", async () => {
   const app = await loadProviderFromTarget(fixturePath("basic-provider"));
   const service = createProviderService(app);
@@ -666,14 +564,10 @@ test("integration provider service exposes metadata, configure, execute, and ses
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "user:user-123",
-          kind: "user",
-          authSource: "api_token",
           email: "ada@example.com",
         }),
         agentSubject: create(SubjectContextSchema, {
           id: "user:agent-456",
-          kind: "user",
-          authSource: "delegated",
           email: "grace@example.com",
         }),
         credential: create(CredentialContextSchema, {
@@ -713,7 +607,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "user:user-123",
-          kind: "user",
         }),
         credential: create(CredentialContextSchema, {
           mode: "subject",
@@ -830,8 +723,6 @@ test("integration provider service resolves hosted HTTP subjects through the app
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "system:http_binding:agent:command",
-          kind: "system",
-          authSource: "http_binding",
         }),
         credential: create(CredentialContextSchema, {
           mode: "none",
@@ -853,9 +744,6 @@ test("integration provider service resolves hosted HTTP subjects through the app
   );
   expect(resolved.subject).toMatchObject({
     id: "user:user-456",
-    kind: "user",
-    displayName: "Slack User",
-    authSource: "slack",
     email: "",
   });
   expect(seenRequest).toEqual({
@@ -883,10 +771,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
   expect(seenContext).toEqual({
     subject: {
       id: "system:http_binding:agent:command",
-      kind: "system",
       credentialSubjectId: "",
-      displayName: "",
-      authSource: "http_binding",
       email: "",
     },
     credential: {
@@ -1184,129 +1069,6 @@ test("authentication provider supports runtime metadata, login flows, and token 
     }),
   );
   expect(validated.email).toBe("api-token@example.com");
-});
-
-test("authorization provider target resolves and serves runtime metadata plus authorization operations", async () => {
-  const provider = await loadProviderFromTarget(
-    fixturePath("authorization-provider"),
-  );
-  const runtime = createRuntimeService(provider);
-  const authz = createAuthorizationProviderService(provider as any);
-
-  await (runtime.configureProvider as any)(
-    create(ConfigureProviderRequestSchema, {
-      name: "fixture-authorization",
-      config: {
-        prefix: "runtime",
-      },
-      protocolVersion: CURRENT_PROTOCOL_VERSION,
-    }),
-  );
-
-  const identity = await (runtime.getProviderIdentity as any)(
-    create(EmptySchema, {}),
-  );
-  expect(identity.kind).toBe(ProtoProviderKind.AUTHORIZATION);
-  expect(identity.displayName).toBe("Fixture Authorization");
-
-  const decision = await (authz.evaluate as any)(
-    create(AccessEvaluationRequestSchema, {
-      subject: { type: "subject", id: "user:1" },
-      action: { name: "view" },
-      resource: { type: "doc", id: "runtime-doc-1" },
-    }),
-  );
-  expect(decision.allowed).toBe(true);
-
-  const batch = await (authz.evaluateMany as any)(
-    create(AccessEvaluationsRequestSchema, {
-      requests: [
-        {
-          subject: { type: "subject", id: "user:1" },
-          action: { name: "view" },
-          resource: { type: "doc", id: "runtime-doc-1" },
-        },
-      ],
-    }),
-  );
-  expect(batch.decisions[0]?.allowed).toBe(true);
-
-  const metadata = await (authz.getMetadata as any)(create(EmptySchema, {}));
-  expect(metadata.capabilities).toEqual(["evaluate"]);
-
-  const model = await (authz.writeModel as any)(
-    create(WriteModelRequestSchema, {
-      model: {
-        version: 2,
-      },
-    }),
-  );
-  expect(model.version).toBe("2");
-
-  await expectConnectCode(
-    (authz.expand as any)(create(ExpandRequestSchema, {})),
-    Code.Unimplemented,
-  );
-});
-
-test("authorization provider service rejects missing required responses", async () => {
-  const provider = defineAuthorizationProvider({
-    evaluate: (() => undefined) as any,
-    evaluateMany: () => ({ decisions: [] }),
-    searchResources: () => ({ resources: [], modelId: "model-1" }),
-    searchSubjects: () => ({ subjects: [], modelId: "model-1" }),
-    searchActions: () => ({ actions: [], modelId: "model-1" }),
-    getMetadata: () => ({ activeModelId: "model-1" }),
-    readRelationships: () => ({ relationships: [], modelId: "model-1" }),
-    writeRelationships: () => {},
-    getActiveModel: () => ({ model: { id: "model-1", version: "1" } }),
-    listModels: () => ({ models: [{ id: "model-1", version: "1" }] }),
-    writeModel: () => ({ id: "model-1", version: "1" }),
-  });
-  const authz = createAuthorizationProviderService(provider);
-
-  await expectConnectCode(
-    (authz.evaluate as any)(
-      create(AccessEvaluationRequestSchema, {
-        subject: { type: "subject", id: "user:1" },
-        action: { name: "view" },
-        resource: { type: "doc", id: "doc-1" },
-      }),
-    ),
-    Code.Internal,
-  );
-});
-
-test("authorization provider service treats effective search as paired", async () => {
-  const provider = defineAuthorizationProvider({
-    evaluate: () => ({ allowed: true, modelId: "model-1" }),
-    evaluateMany: () => ({ decisions: [] }),
-    searchResources: () => ({ resources: [], modelId: "model-1" }),
-    searchSubjects: () => ({ subjects: [], modelId: "model-1" }),
-    effectiveSearchResources: () => ({ resources: [], modelId: "model-1" }),
-    searchActions: () => ({ actions: [], modelId: "model-1" }),
-    getMetadata: () => ({ activeModelId: "model-1" }),
-    readRelationships: () => ({ relationships: [], modelId: "model-1" }),
-    writeRelationships: () => {},
-    getActiveModel: () => ({ model: { id: "model-1", version: "1" } }),
-    listModels: () => ({ models: [{ id: "model-1", version: "1" }] }),
-    writeModel: () => ({ id: "model-1", version: "1" }),
-  });
-  const authz = createAuthorizationProviderService(provider);
-
-  const metadata = await (authz.getMetadata as any)(create(EmptySchema, {}));
-  expect(metadata.capabilities).not.toContain("effective_search_resources");
-  expect(metadata.capabilities).not.toContain("effective_search_subjects");
-  await expectConnectCode(
-    (authz.effectiveSearchResources as any)(
-      create(ResourceSearchRequestSchema, {
-        subject: { type: "subject", id: "user:1" },
-        action: { name: "view" },
-        resourceType: "doc",
-      }),
-    ),
-    Code.Unimplemented,
-  );
 });
 
 test("runtime lifecycle labels provider identity failures", async () => {
@@ -1805,18 +1567,33 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(metadata.kind).toBe(ProtoProviderKind.WORKFLOW);
   expect(metadata.displayName).toBe("Fixture Workflow");
 
+  const definition = await (workflow.applyDefinition as any)(
+    create(ApplyWorkflowProviderDefinitionRequestSchema, {
+      idempotencyKey: "def-1",
+      requestedBySubjectId: "service_account:planner",
+      spec: {
+        id: "roadmap_sync",
+        target: workflowAppStepTarget("roadmap", "sync", {
+          input: { object: { project: { literal: "alpha" } } },
+        }),
+        activations: [{
+          id: "nightly",
+          trigger: {
+            case: "schedule",
+            value: { cron: "*/5 * * * *", timezone: "UTC" },
+          },
+        }],
+      },
+    }),
+  );
+  expect(definition.id).toBe("roadmap_sync");
+  expect(definition.createdBySubjectId).toBe("service_account:planner");
+
   const run = await (workflow.startRun as any)(
     create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "req-1",
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
-      target: workflowAppStepTarget("roadmap", "sync", {
-        input: { object: { project: { literal: "alpha" } } },
-      }),
+      definitionId: "roadmap_sync",
+      createdBySubjectId: "user:user-123",
     }),
   );
   const runApp = run.target?.steps[0]?.action.case === "app"
@@ -1828,50 +1605,17 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(runApp.name).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
-  expect(run.createdBy?.subjectId).toBe("user:user-123");
+  expect(run.createdBySubjectId).toBe("user:user-123");
 
-  const schedule = await (workflow.upsertSchedule as any)(
-    create(UpsertWorkflowProviderScheduleRequestSchema, {
-      scheduleId: "nightly",
-      cron: "*/5 * * * *",
-      timezone: "UTC",
-      requestedBy: {
-        subjectId: "service_account:planner",
-        subjectKind: "service_account",
-        displayName: "Planner",
-        authSource: "api_token",
-      },
-      target: workflowAppStepTarget("roadmap", "sync"),
-    }),
-  );
-  expect(schedule.id).toBe("nightly");
-  const scheduleApp = schedule.target?.steps[0]?.action.case === "app"
-    ? schedule.target.steps[0].action.value
-    : undefined;
-  if (scheduleApp === undefined) {
-    throw new Error("workflow schedule target does not have an app step");
-  }
-  expect(scheduleApp.name).toBe("roadmap");
-  expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
+  const pausedDefinition = await (workflow.setActivationPaused as any)({
+    definitionId: "roadmap_sync",
+    activationId: "nightly",
+    paused: true,
+  });
+  expect(pausedDefinition.activations[0]?.paused).toBe(true);
 
-  const updatedSchedule = await (workflow.upsertSchedule as any)(
-    create(UpsertWorkflowProviderScheduleRequestSchema, {
-      scheduleId: "nightly",
-      cron: "0 * * * *",
-      timezone: "UTC",
-      requestedBy: {
-        subjectId: "user:user-999",
-        subjectKind: "user",
-        displayName: "Grace",
-        authSource: "api_token",
-      },
-      target: workflowAppStepTarget("roadmap", "sync"),
-    }),
-  );
-  expect(updatedSchedule.createdBy?.subjectId).toBe("service_account:planner");
-
-  await (workflow.publishEvent as any)(
-    create(PublishWorkflowProviderEventRequestSchema, {
+  await (workflow.deliverEvent as any)(
+    create(DeliverWorkflowProviderEventRequestSchema, {
       appName: "roadmap",
       event: {
         id: "evt-1",
@@ -1885,7 +1629,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   const refreshedMetadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
-  expect(refreshedMetadata.warnings).toEqual(["published-events:1"]);
+  expect(refreshedMetadata.warnings).toEqual(["delivered-events:1"]);
 });
 
 test("agent provider target resolves and serves runtime metadata plus agent operations", async () => {
@@ -1918,12 +1662,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       metadata: {
         source: "runtime-test",
       },
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
     }),
   );
   expect(session.id).toBe("session-canonical-1");
@@ -1965,6 +1704,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       sessionId: session.id,
       idempotencyKey: "turn-req-1",
       model: "gpt-test",
+      timeoutSeconds: 120,
       messages: [
         {
           role: "user",
@@ -2070,6 +1810,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       sessionId: session.id,
       idempotencyKey: "turn-req-2",
       model: "gpt-test",
+      timeoutSeconds: 120,
       messages: [
         {
           role: "user",
@@ -2085,12 +1826,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
           },
         },
       ],
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
       output: { kind: { case: "text", value: {} } },
       executionRef: "exec-turn-2",
     }),
@@ -2101,7 +1837,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
   expect(completedTurn.status).toBe(AgentExecutionStatus.SUCCEEDED);
   expect(completedTurn.output.case).toBe("text");
   expect(completedTurn.output.value?.text).toBe("echo:Summarize deployment status");
-  expect(completedTurn.createdBy?.subjectId).toBe("user:user-123");
+  expect(completedTurn.createdBySubjectId).toBe("user:user-123");
   expect(completedTurn.messages[0]?.parts[0]?.type).toBe(
     AgentMessagePartType.TEXT,
   );
@@ -2189,12 +1925,7 @@ test("integration provider request context includes workflow metadata", async ()
           runId: "run-123",
           provider: "temporal",
           executionRef: "exec-ref-123",
-          createdBy: {
-            subjectId: "user:user-123",
-            subjectKind: "user",
-            displayName: "Ada",
-            authSource: "api_token",
-          },
+          createdBySubjectId: "user:user-123",
           target: {
             kind: "steps",
             steps: [
@@ -2208,7 +1939,7 @@ test("integration provider request context includes workflow metadata", async ()
           },
           trigger: {
             kind: "event",
-            triggerId: "trigger-1",
+            activationId: "activation-1",
             event: {
               id: "evt-1",
               source: "urn:test",
@@ -2230,10 +1961,7 @@ test("integration provider request context includes workflow metadata", async ()
             operation: "bot.getPullRequest",
             runAs: create(SubjectContextSchema, {
               id: "service_account:github-review",
-              kind: "service_account",
               credentialSubjectId: "service_account:github-review",
-              displayName: "GitHub Review",
-              authSource: "managed_subject",
             }),
           }),
         ],
@@ -2250,12 +1978,7 @@ test("integration provider request context includes workflow metadata", async ()
       runId: "run-123",
       provider: "temporal",
       executionRef: "exec-ref-123",
-      createdBy: {
-        subjectId: "user:user-123",
-        subjectKind: "user",
-        displayName: "Ada",
-        authSource: "api_token",
-      },
+      createdBySubjectId: "user:user-123",
       target: {
         kind: "steps",
         steps: [
@@ -2269,7 +1992,7 @@ test("integration provider request context includes workflow metadata", async ()
       },
       trigger: {
         kind: "event",
-        triggerId: "trigger-1",
+        activationId: "activation-1",
         event: {
           id: "evt-1",
           source: "urn:test",
@@ -2297,10 +2020,7 @@ test("integration provider request context includes workflow metadata", async ()
         system: "",
         runAs: {
           id: "service_account:github-review",
-          kind: "service_account",
           credentialSubjectId: "service_account:github-review",
-          displayName: "GitHub Review",
-          authSource: "managed_subject",
           email: "",
         },
       },

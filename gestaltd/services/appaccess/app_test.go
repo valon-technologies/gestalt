@@ -37,6 +37,7 @@ type recordingAppInvocation struct {
 	instance              string
 	operation             string
 	credentialMode        core.ConnectionMode
+	tokenPermissions      principal.PermissionSet
 	params                map[string]any
 	graphQLIdempotencyKey string
 	graphQLProviderName   string
@@ -53,6 +54,7 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 	if p != nil {
 		i.subjectID = p.SubjectID
 		i.credentialSubjectID = p.CredentialSubjectID
+		i.tokenPermissions = principal.ClonePermissionSet(p.TokenPermissions)
 	}
 	if runAsAudit.AgentSubject != nil {
 		i.agentSubjectID = runAsAudit.AgentSubject.SubjectID
@@ -219,10 +221,7 @@ func TestAppServerInvokeUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
 			}}},
 			RunAs: &core.RunAsSubject{
 				SubjectID:           "user:workflow-runner",
-				SubjectKind:         "user",
 				CredentialSubjectID: "user:workflow-runner",
-				DisplayName:         "Workflow runner",
-				AuthSource:          "config",
 			},
 		},
 	}))
@@ -263,6 +262,9 @@ func TestAppServerInvokeUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
 	if got := invocation.WorkflowContextString(runAs, "id"); got != "user:workflow-runner" {
 		t.Fatalf("workflow runAs id = %q, want persisted runAs", got)
 	}
+	if invoker.tokenPermissions != nil {
+		t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", invoker.tokenPermissions)
+	}
 }
 
 func TestAppServerInvokeRequiresPersistedWorkflowRunAsWithoutInvocationToken(t *testing.T) {
@@ -296,16 +298,6 @@ func TestAppServerInvokeRequiresPersistedWorkflowRunAsWithoutInvocationToken(t *
 				Target: coreworkflow.Target{Steps: []coreworkflow.Step{{ID: "review", App: &coreworkflow.AppCall{Name: "codeReview", Operation: "pullRequests.reviewWorkflow"}}}},
 			},
 			wantCode: codes.FailedPrecondition,
-		},
-		{
-			name:     "operation outside persisted target",
-			workflow: map[string]any{"providerName": "indexeddb", "runId": "run-123"},
-			run: &coreworkflow.Run{
-				ID:     "run-123",
-				Target: coreworkflow.Target{Steps: []coreworkflow.Step{{ID: "other", App: &coreworkflow.AppCall{Name: "codeReview", Operation: "pullRequests.other"}}}},
-				RunAs:  &core.RunAsSubject{SubjectID: "user:workflow-runner"},
-			},
-			wantCode: codes.PermissionDenied,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -428,7 +420,6 @@ func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:           "user:test-user",
 		CredentialSubjectID: "user:test-user",
-		DisplayName:         "Test User",
 		Kind:                principal.KindUser,
 		Source:              principal.SourceSession,
 	})
@@ -442,10 +433,7 @@ func TestAppServerInvokeAppliesConfiguredDelegationMetadata(t *testing.T) {
 				"vds.schemaVersions": {
 					RunAs: &core.RunAsSubject{
 						SubjectID:           "service_account:data-schema-explorer",
-						SubjectKind:         "service_account",
 						CredentialSubjectID: "service_account:data-schema-explorer",
-						DisplayName:         "Data Schema Explorer",
-						AuthSource:          "app_invocation",
 					},
 				},
 			},

@@ -406,14 +406,6 @@ pub struct AgentMessagePart {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct AgentActor {
-    pub subject_id: String,
-    pub subject_kind: String,
-    pub display_name: String,
-    pub auth_source: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentPreparedWorkspace {
     pub root: String,
     pub cwd: String,
@@ -538,7 +530,7 @@ pub struct AgentSession {
     pub client_ref: String,
     pub state: AgentSessionState,
     pub metadata: Option<AgentJson>,
-    pub created_by: Option<AgentActor>,
+    pub created_by_subject_id: Option<String>,
     pub created_at: Option<SystemTime>,
     pub updated_at: Option<SystemTime>,
     pub last_turn_at: Option<SystemTime>,
@@ -551,7 +543,7 @@ pub struct CreateAgentProviderSessionRequest {
     pub model: String,
     pub client_ref: String,
     pub metadata: Option<AgentJson>,
-    pub created_by: Option<AgentActor>,
+    pub created_by_subject_id: Option<String>,
     pub subject: Option<Subject>,
     pub session_start: Option<AgentSessionStartConfig>,
     pub prepared_workspace: Option<AgentPreparedWorkspace>,
@@ -622,7 +614,7 @@ pub struct AgentTurn {
     pub messages: Vec<AgentMessage>,
     pub output: Option<AgentTurnOutput>,
     pub status_message: String,
-    pub created_by: Option<AgentActor>,
+    pub created_by_subject_id: Option<String>,
     pub created_at: Option<SystemTime>,
     pub started_at: Option<SystemTime>,
     pub completed_at: Option<SystemTime>,
@@ -672,7 +664,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub tools: Vec<ResolvedAgentTool>,
     pub output: AgentOutput,
     pub metadata: Option<AgentJson>,
-    pub created_by: Option<AgentActor>,
+    pub created_by_subject_id: Option<String>,
     pub execution_ref: String,
     pub tool_refs: Vec<AgentToolRef>,
     pub tool_source: AgentToolSourceMode,
@@ -1269,31 +1261,10 @@ fn timestamp_from_time(value: Option<SystemTime>) -> Option<Timestamp> {
     value.map(protocol::timestamp_from_system_time)
 }
 
-fn agent_actor_from_proto(value: Option<pb::AgentActor>) -> Option<AgentActor> {
-    value.map(|value| AgentActor {
-        subject_id: value.subject_id,
-        subject_kind: value.subject_kind,
-        display_name: value.display_name,
-        auth_source: value.auth_source,
-    })
-}
-
-fn agent_actor_to_proto(value: Option<AgentActor>) -> Option<pb::AgentActor> {
-    value.map(|value| pb::AgentActor {
-        subject_id: value.subject_id,
-        subject_kind: value.subject_kind,
-        display_name: value.display_name,
-        auth_source: value.auth_source,
-    })
-}
-
 fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
     value.map(|value| Subject {
         id: value.id,
-        kind: value.kind,
         credential_subject_id: value.credential_subject_id,
-        display_name: value.display_name,
-        auth_source: value.auth_source,
         email: value.email,
     })
 }
@@ -1327,10 +1298,7 @@ pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
 fn agent_run_as_context_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
     value.map(|value| Subject {
         id: value.id,
-        kind: value.kind,
         credential_subject_id: value.credential_subject_id,
-        display_name: value.display_name,
-        auth_source: value.auth_source,
         email: value.email,
     })
 }
@@ -1338,10 +1306,7 @@ fn agent_run_as_context_from_proto(value: Option<pb::SubjectContext>) -> Option<
 fn agent_run_as_context_to_proto(value: Option<Subject>) -> Option<pb::SubjectContext> {
     value.map(|value| pb::SubjectContext {
         id: value.id,
-        kind: value.kind,
         credential_subject_id: value.credential_subject_id,
-        display_name: value.display_name,
-        auth_source: value.auth_source,
         email: value.email,
     })
 }
@@ -1436,7 +1401,7 @@ fn session_to_proto(value: AgentSession) -> ProviderResult<pb::AgentSession> {
         client_ref: value.client_ref,
         state: value.state.as_i32(),
         metadata: struct_from_json(value.metadata)?,
-        created_by: agent_actor_to_proto(value.created_by),
+        created_by_subject_id: value.created_by_subject_id.clone().unwrap_or_default(),
         created_at: timestamp_from_time(value.created_at),
         updated_at: timestamp_from_time(value.updated_at),
         last_turn_at: timestamp_from_time(value.last_turn_at),
@@ -1451,7 +1416,9 @@ pub(crate) fn session_from_proto(value: pb::AgentSession) -> ProviderResult<Agen
         client_ref: value.client_ref,
         state: AgentSessionState::try_from(value.state)?,
         metadata: json_from_struct(value.metadata),
-        created_by: agent_actor_from_proto(value.created_by),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         created_at: time_from_timestamp(value.created_at)?,
         updated_at: time_from_timestamp(value.updated_at)?,
         last_turn_at: time_from_timestamp(value.last_turn_at)?,
@@ -1472,7 +1439,7 @@ fn turn_to_proto(value: AgentTurn) -> ProviderResult<pb::AgentTurn> {
             .collect::<ProviderResult<Vec<_>>>()?,
         output: agent_turn_output_to_proto(value.output)?,
         status_message: value.status_message,
-        created_by: agent_actor_to_proto(value.created_by),
+        created_by_subject_id: value.created_by_subject_id.clone().unwrap_or_default(),
         created_at: timestamp_from_time(value.created_at),
         started_at: timestamp_from_time(value.started_at),
         completed_at: timestamp_from_time(value.completed_at),
@@ -1490,7 +1457,9 @@ pub(crate) fn turn_from_proto(value: pb::AgentTurn) -> ProviderResult<AgentTurn>
         messages: value.messages.into_iter().map(message_from_proto).collect(),
         output: agent_turn_output_from_proto(value.output)?,
         status_message: value.status_message,
-        created_by: agent_actor_from_proto(value.created_by),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         created_at: time_from_timestamp(value.created_at)?,
         started_at: time_from_timestamp(value.started_at)?,
         completed_at: time_from_timestamp(value.completed_at)?,
@@ -1695,7 +1664,9 @@ fn create_session_request_from_proto(
         model: value.model,
         client_ref: value.client_ref,
         metadata: json_from_struct(value.metadata),
-        created_by: agent_actor_from_proto(value.created_by),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         subject: agent_subject_from_proto(value.subject),
         session_start: value.session_start.map(|value| AgentSessionStartConfig {
             hooks: value
@@ -1728,6 +1699,11 @@ fn create_session_request_from_proto(
 fn create_turn_request_from_proto(
     value: pb::CreateAgentProviderTurnRequest,
 ) -> ProviderResult<CreateAgentProviderTurnRequest> {
+    if value.timeout_seconds < 0 {
+        return Err(crate::Error::bad_request(
+            "agent create turn timeout_seconds must not be negative",
+        ));
+    }
     Ok(CreateAgentProviderTurnRequest {
         turn_id: value.turn_id,
         session_id: value.session_id,
@@ -1746,7 +1722,9 @@ fn create_turn_request_from_proto(
             .collect(),
         output: required_agent_output_from_proto(value.output)?,
         metadata: json_from_struct(value.metadata),
-        created_by: agent_actor_from_proto(value.created_by),
+        created_by_subject_id: Some(value.created_by_subject_id)
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| value.to_string()),
         execution_ref: value.execution_ref,
         tool_refs: value
             .tool_refs

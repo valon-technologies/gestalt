@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
@@ -134,7 +133,6 @@ type Config struct {
 	WorkflowTools     WorkflowSystemTools
 	RunGrants         *agentgrant.Manager
 	Invoker           invocation.Invoker
-	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	AgentConnections  map[string][]string
@@ -152,7 +150,6 @@ type Manager struct {
 	workflowTools                 WorkflowSystemTools
 	runGrants                     *agentgrant.Manager
 	invoker                       invocation.Invoker
-	authorizer                    authorization.RuntimeAuthorizer
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
 	agentConnections              map[string][]string
@@ -167,7 +164,6 @@ func New(cfg Config) *Manager {
 		workflowTools:     cfg.WorkflowTools,
 		runGrants:         cfg.RunGrants,
 		invoker:           cfg.Invoker,
-		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
@@ -265,29 +261,8 @@ func agentCallerAppName(ctx context.Context) string {
 	return callerAppNameFromContext(ctx)
 }
 
-func agentActorToProto(actor coreagent.Actor) *proto.AgentActor {
-	if actor == (coreagent.Actor{}) {
-		return nil
-	}
-	return &proto.AgentActor{
-		SubjectId:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
-}
-
 func agentSubjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
-	if subject == (core.RunAsSubject{}) {
-		return nil
-	}
-	return &proto.SubjectContext{
-		Id:                  subject.SubjectID,
-		Kind:                subject.SubjectKind,
-		CredentialSubjectId: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
-	}
+	return agentwire.RunAsSubjectToProto(&subject)
 }
 
 func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
@@ -506,7 +481,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.Model = strings.TrimSpace(req.GetModel())
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
 	providerReq.Metadata = req.GetMetadata()
-	providerReq.CreatedBy = agentActorToProto(agentActorFromPrincipal(p))
+	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
@@ -517,14 +492,10 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		if sessionStart != nil || workspace != nil {
 			return nil, err
 		}
-		fallback, getErr := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-			SessionId: sessionID,
-			Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		})
-		if getErr != nil {
+		session, err = m.getCreatedSessionAfterCreateError(ctx, p, provider, sessionID)
+		if err != nil {
 			return nil, err
 		}
-		session = fallback
 	}
 	normalized, err := normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey, session)
 	if err != nil {
@@ -537,6 +508,13 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, core.ErrNotFound
 	}
 	return normalized, nil
+}
+
+func (m *Manager) getCreatedSessionAfterCreateError(ctx context.Context, p *principal.Principal, provider coreagent.Provider, sessionID string) (*coreagent.Session, error) {
+	return provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		SessionId: sessionID,
+		Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+	})
 }
 
 func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, req *proto.GetAgentProviderSessionRequest) (session *coreagent.Session, err error) {
@@ -770,6 +748,9 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err := validateAgentOutput(requestedOutput); err != nil {
 		return nil, err
 	}
+	if req.GetTimeoutSeconds() < 0 {
+		return nil, fmt.Errorf("%w: timeout_seconds must not be negative", invocation.ErrInvalidInvocation)
+	}
 	var tools []coreagent.Tool
 	switch toolSource {
 	case coreagent.ToolSourceModeMCPCatalog:
@@ -812,22 +793,14 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ToolRefsSet = toolRefsSet
 	providerReq.ToolSource = agentwire.ToolSourceModeToProto(toolSource)
 	providerReq.Tools = nil
-	providerReq.CreatedBy = agentActorToProto(agentActorFromPrincipal(p))
+	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.RunGrant = runGrant
 	providerReq.InvocationToken = ""
 	turn, err = ownedSession.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
-		fallback, getErr := ownedSession.provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-			TurnId:  turnID,
-			Subject: agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		})
-		if getErr == nil {
-			turn = fallback
-		} else {
-			return nil, err
-		}
+		return nil, err
 	}
 	normalized, err := normalizeProviderTurnForCreate(ownedSession.providerName, ownedSession.session.ID, turnID, idempotencyKey, turn)
 	if err != nil {
@@ -1484,10 +1457,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		TurnID:              turnID,
 		CallerAppName:       strings.TrimSpace(callerAppName),
 		SubjectID:           subject.SubjectID,
-		SubjectKind:         subject.SubjectKind,
 		CredentialSubjectID: subject.CredentialSubjectID,
-		DisplayName:         subject.DisplayName,
-		AuthSource:          subject.AuthSource,
 		Permissions:         permissions,
 		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
 		ToolRefsSet:         toolRefsSet,
@@ -1761,7 +1731,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
-	if m.authorizer != nil && principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
+	if principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
 		return coreagent.Tool{}, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
@@ -1777,9 +1747,6 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		return coreagent.Tool{}, err
 	}
 	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
-		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
-	}
-	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, opMeta) {
 		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
@@ -2011,9 +1978,6 @@ func (m *Manager) visitToolSearchCandidates(
 					if !m.allowOperation(ctx, p, appName, operation) || !principal.AllowsOperationPermission(p, appName, operation) {
 						continue
 					}
-					if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, op) {
-						continue
-					}
 					ref := searchCatalog.ref
 					if strings.TrimSpace(ref.Operation) == "" {
 						ref.Title = ""
@@ -2144,7 +2108,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
-	if m.authorizer != nil && principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
+	if principal.IsNonUserPrincipal(p) && (connection != "" || instance != "") {
 		return nil, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 	var resolver invocation.TokenResolver
@@ -2375,10 +2339,7 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowProvider(ctx, p, provider)
+	return true
 }
 
 func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principal, provider string) bool {
@@ -2386,18 +2347,11 @@ func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principa
 }
 
 func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowOperation(ctx, p, provider, operation)
+	return true
 }
 
 func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
-	if m == nil || m.authorizer == nil {
-		return invocation.AccessContext{}
-	}
-	access, _ := m.authorizer.ResolveAccess(ctx, p, provider)
-	return access
+	return invocation.AccessContext{}
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -2413,7 +2367,7 @@ func providerSessionOwnedBy(session *coreagent.Session, p *principal.Principal) 
 		return false
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(session.CreatedBy.SubjectID) == subjectID
+	return subjectID != "" && strings.TrimSpace(session.CreatedBySubjectID) == subjectID
 }
 
 func providerTurnOwnedBy(turn *coreagent.Turn, p *principal.Principal) bool {
@@ -2421,7 +2375,7 @@ func providerTurnOwnedBy(turn *coreagent.Turn, p *principal.Principal) bool {
 		return false
 	}
 	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	return subjectID != "" && strings.TrimSpace(turn.CreatedBy.SubjectID) == subjectID
+	return subjectID != "" && strings.TrimSpace(turn.CreatedBySubjectID) == subjectID
 }
 
 func normalizeProviderSession(providerName, sessionID string, session *coreagent.Session) (*coreagent.Session, error) {
@@ -3739,7 +3693,6 @@ func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {
 	}
 	return core.RunAsSubject{
 		SubjectID:           normalized.SubjectID,
-		SubjectKind:         normalized.SubjectKind,
 		CredentialSubjectID: normalized.CredentialSubjectID,
 	}
 }
@@ -3750,7 +3703,6 @@ func agentToolRunAsKeyString(subject core.RunAsSubject) string {
 	}
 	return strings.Join([]string{
 		subject.SubjectID,
-		subject.SubjectKind,
 		subject.CredentialSubjectID,
 	}, "\x00")
 }
@@ -3924,17 +3876,12 @@ func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.Connection
 	}
 }
 
-func agentActorFromPrincipal(p *principal.Principal) coreagent.Actor {
+func agentSubjectIDFromPrincipal(p *principal.Principal) string {
 	p = principal.Canonicalized(p)
 	if p == nil {
-		return coreagent.Actor{}
+		return ""
 	}
-	return coreagent.Actor{
-		SubjectID:   strings.TrimSpace(p.SubjectID),
-		SubjectKind: string(p.Kind),
-		DisplayName: agentActorDisplayName(p),
-		AuthSource:  p.AuthSource(),
-	}
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {
@@ -3944,24 +3891,8 @@ func agentSubjectFromPrincipal(p *principal.Principal) core.RunAsSubject {
 	}
 	return core.RunAsSubject{
 		SubjectID:           strings.TrimSpace(p.SubjectID),
-		SubjectKind:         string(p.Kind),
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		DisplayName:         agentActorDisplayName(p),
-		AuthSource:          p.AuthSource(),
 	}
-}
-
-func agentActorDisplayName(p *principal.Principal) string {
-	if p == nil {
-		return ""
-	}
-	if value := strings.TrimSpace(p.DisplayName); value != "" {
-		return value
-	}
-	if p.Identity != nil {
-		return strings.TrimSpace(p.Identity.DisplayName)
-	}
-	return ""
 }
 
 func principalSubjectID(p *principal.Principal) string {

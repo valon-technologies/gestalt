@@ -23,44 +23,26 @@ func (m *Manager) resolveProvider(ctx context.Context, providerName string) (str
 	return m.workflow.ResolveProvider(ctx, strings.TrimSpace(providerName))
 }
 
-func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, target coreworkflow.Target, definitionID, callerAppName string) (string, coreworkflow.Provider, coreworkflow.Target, error) {
+func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, definitionID, callerAppName string) (string, coreworkflow.Provider, coreworkflow.Target, int64, error) {
 	definitionID = strings.TrimSpace(definitionID)
 	if definitionID == "" {
-		providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(providerSelection))
-		if err != nil {
-			return "", nil, coreworkflow.Target{}, err
-		}
-		resolvedTarget, err := m.resolveTarget(ctx, p, target, callerAppName)
-		if err != nil {
-			return "", nil, coreworkflow.Target{}, err
-		}
-		if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget, callerAppName); !decision.allowed {
-			return providerName, provider, coreworkflow.Target{}, workflowTargetAuthorizationError{failure: decision.failure}
-		}
-		return providerName, provider, resolvedTarget, nil
-	}
-	if workflowTargetIsSet(target) {
-		return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow request must set either target or definition_id, not both", invocation.ErrInvalidInvocation)
+		return "", nil, coreworkflow.Target{}, 0, fmt.Errorf("%w: workflow definition_id is required", invocation.ErrInvalidInvocation)
 	}
 	definition, err := m.requireOwnedDefinition(WithCallerAppName(ctx, callerAppName), p, definitionID, providerSelection)
 	if err != nil {
-		return "", nil, coreworkflow.Target{}, err
+		return "", nil, coreworkflow.Target{}, 0, err
 	}
 	if definition == nil || definition.Definition == nil {
-		return "", nil, coreworkflow.Target{}, core.ErrNotFound
+		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
 	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerAppName)
 	if err != nil {
-		return "", nil, coreworkflow.Target{}, err
+		return "", nil, coreworkflow.Target{}, 0, err
 	}
 	if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget, callerAppName); !decision.allowed {
-		return definition.ProviderName, definition.provider, coreworkflow.Target{}, workflowTargetAuthorizationError{failure: decision.failure}
+		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, workflowTargetAuthorizationError{failure: decision.failure}
 	}
-	return definition.ProviderName, definition.provider, resolvedTarget, nil
-}
-
-func workflowTargetIsSet(target coreworkflow.Target) bool {
-	return len(target.Steps) > 0
+	return definition.ProviderName, definition.provider, resolvedTarget, definition.Definition.Generation, nil
 }
 
 func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) (coreworkflow.Target, error) {
@@ -172,9 +154,6 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) && !callerAppCanInvoke(callerAppName, appName, opMeta.ID) {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
-	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, opMeta) {
-		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
-	}
 	if connection == "" {
 		connection = resolvedConnection
 	}
@@ -270,25 +249,15 @@ func isWorkflowProviderNotFound(err error) bool {
 }
 
 func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowProvider(ctx, p, provider)
+	return true
 }
 
 func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	if m == nil || m.authorizer == nil {
-		return true
-	}
-	return m.authorizer.AllowOperation(ctx, p, provider, operation)
+	return true
 }
 
 func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
-	if m == nil || m.authorizer == nil {
-		return invocation.AccessContext{}
-	}
-	access, _ := m.authorizer.ResolveAccess(ctx, p, provider)
-	return access
+	return invocation.AccessContext{}
 }
 
 const (

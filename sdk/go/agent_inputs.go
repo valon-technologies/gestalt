@@ -137,6 +137,9 @@ func newAgentUpdateSessionRequest(input AgentUpdateSession) (*proto.UpdateAgentP
 }
 
 func newAgentCreateTurnRequest(input AgentCreateTurn) (*proto.CreateAgentProviderTurnRequest, error) {
+	if input.TimeoutSeconds < 0 {
+		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
+	}
 	messages, err := agentMessagesToProto(input.Messages)
 	if err != nil {
 		return nil, err

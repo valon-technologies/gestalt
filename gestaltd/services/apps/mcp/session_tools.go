@@ -143,18 +143,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 }
 
 func withSessionAccessContext(ctx context.Context, cfg Config, provName string) context.Context {
-	if cfg.Authorizer == nil {
-		return ctx
-	}
-	p := principal.FromContext(ctx)
-	if p == nil {
-		return ctx
-	}
-	access, allowed := cfg.Authorizer.ResolveAccess(ctx, p, provName)
-	if !allowed || (access.Policy == "" && access.Role == "") {
-		return ctx
-	}
-	return invocation.WithAccessContext(ctx, access)
+	return ctx
 }
 
 func sessionProviderHydrated(tools map[string]mcpserver.ServerTool, provider, instance string) bool {

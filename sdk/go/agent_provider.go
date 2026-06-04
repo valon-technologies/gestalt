@@ -140,13 +140,6 @@ type AgentMessagePart struct {
 	ImageRef   *AgentMessagePartImageRef
 }
 
-type AgentActor struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
-}
-
 type AgentPreparedWorkspace struct {
 	Root string
 	Cwd  string
@@ -206,7 +199,7 @@ type AgentSession struct {
 	ClientRef    string
 	State        AgentSessionState
 	Metadata     map[string]any
-	CreatedBy    *AgentActor
+	CreatedBySubjectID string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	LastTurnAt   *time.Time
@@ -219,7 +212,7 @@ type CreateAgentProviderSessionRequest struct {
 	Model             string
 	ClientRef         string
 	Metadata          map[string]any
-	CreatedBy         *AgentActor
+	CreatedBySubjectID string
 	Subject           *Subject
 	SessionStart      *AgentSessionStartConfig
 	PreparedWorkspace *AgentPreparedWorkspace
@@ -280,7 +273,7 @@ type AgentTurn struct {
 	Messages      []AgentMessage
 	Output        *AgentTurnOutput
 	StatusMessage string
-	CreatedBy     *AgentActor
+	CreatedBySubjectID string
 	CreatedAt     time.Time
 	StartedAt     *time.Time
 	CompletedAt   *time.Time
@@ -325,7 +318,7 @@ type CreateAgentProviderTurnRequest struct {
 	Tools          []ResolvedAgentTool
 	Output         *AgentOutput
 	Metadata       map[string]any
-	CreatedBy      *AgentActor
+	CreatedBySubjectID string
 	ExecutionRef   string
 	ToolRefs       []AgentToolRef
 	ToolSource     AgentToolSourceMode

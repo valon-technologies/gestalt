@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -83,7 +84,7 @@ apps:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	entry := lock.Providers["alpha"]
+	entry := lock.Providers.App["alpha"]
 	if entry.SourceRef == nil {
 		t.Fatal("sourceRef missing")
 	}
@@ -162,7 +163,7 @@ server:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	entry := lock.UIs["roadmap"]
+	entry := lock.Providers.UI["roadmap"]
 	if entry.SourceRef == nil {
 		t.Fatal("sourceRef missing")
 	}
@@ -281,8 +282,8 @@ printf '<html>beta</html>\n' > dist/index.html
 				"beta":  filepath.Join(betaDir, "manifest.yaml"),
 			})
 			for _, name := range []string{"alpha", "beta"} {
-				if _, ok := lock.UIs[name]; ok {
-					t.Fatalf("local ui %q should not be serialized in committed lockfile: %#v", name, lock.UIs)
+				if _, ok := lock.Providers.UI[name]; ok {
+					t.Fatalf("local ui %q should not be serialized in committed lockfile: %#v", name, lock.Providers.UI)
 				}
 			}
 			loaded, err := config.Load(configPath)
@@ -293,6 +294,7 @@ printf '<html>beta</html>\n' > dist/index.html
 				entry := loaded.Providers.UI[name]
 				if entry == nil {
 					t.Fatalf("loaded ui %q = nil", name)
+					return
 				}
 				if got := entry.OwnerApp; tc.bound {
 					if got != name {
@@ -641,11 +643,11 @@ apps:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	if _, ok := lock.Providers["alpha"]; ok {
+	if _, ok := lock.Providers.App["alpha"]; ok {
 		t.Fatalf("local source provider lock entry should be omitted: %#v", lock.Providers)
 	}
-	if _, ok := lock.UIs["roadmap"]; ok {
-		t.Fatalf("local source ui lock entry should be omitted: %#v", lock.UIs)
+	if _, ok := lock.Providers.UI["roadmap"]; ok {
+		t.Fatalf("local source ui lock entry should be omitted: %#v", lock.Providers.UI)
 	}
 	if _, err := os.Stat(filepath.Join(artifactsDir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("lock should not create prepared artifact dirs for local source entries, stat err=%v", err)
@@ -654,11 +656,11 @@ apps:
 	if err != nil {
 		t.Fatalf("restore canonical LockAtPathsWithStatePaths: %v", err)
 	}
-	if _, ok := lock.Providers["alpha"]; ok {
+	if _, ok := lock.Providers.App["alpha"]; ok {
 		t.Fatalf("restored local source provider lock entry should be omitted: %#v", lock.Providers)
 	}
-	if _, ok := lock.UIs["roadmap"]; ok {
-		t.Fatalf("restored local source ui lock entry should be omitted: %#v", lock.UIs)
+	if _, ok := lock.Providers.UI["roadmap"]; ok {
+		t.Fatalf("restored local source ui lock entry should be omitted: %#v", lock.Providers.UI)
 	}
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
@@ -826,11 +828,11 @@ apps:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	if _, ok := lock.Providers["missing"]; ok {
+	if _, ok := lock.Providers.App["missing"]; ok {
 		t.Fatalf("local source provider lock entry should be omitted: %#v", lock.Providers)
 	}
-	if _, ok := lock.UIs["missing"]; ok {
-		t.Fatalf("local source ui lock entry should be omitted: %#v", lock.UIs)
+	if _, ok := lock.Providers.UI["missing"]; ok {
+		t.Fatalf("local source ui lock entry should be omitted: %#v", lock.Providers.UI)
 	}
 	if _, err := os.Stat(filepath.Join(artifactsDir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("lock should not create prepared artifact dirs for missing local sources, stat err=%v", err)
@@ -905,9 +907,9 @@ server:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	callerStatic := lock.Providers["caller"].StaticManifest
-	if callerStatic == nil || callerStatic.Entrypoint == nil || callerStatic.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-		t.Fatalf("caller static manifest entrypoint = %+v, want placeholder", callerStatic)
+	callerStatic := lock.Providers.App["caller"].ValidationManifest
+	if callerStatic == nil || callerStatic.Entrypoint != nil {
+		t.Fatalf("caller static manifest entrypoint = %+v, want nil", callerStatic)
 	}
 
 	writeConfig(`
@@ -980,7 +982,7 @@ server:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	delete(lock.Providers, "target")
+	delete(lock.Providers.App, "target")
 	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("write stale lockfile: %v", err)
 	}
@@ -991,330 +993,6 @@ server:
 	}
 	if got := err.Error(); !strings.Contains(got, "lockfile is out of date; run `gestaltd lock") || !strings.Contains(got, "missing providers.app.target") {
 		t.Fatalf("CheckLockAtPathsWithStatePaths error = %v, want lock command and missing provider drift", err)
-	}
-}
-
-func TestLoadForExecutionAppScopeIgnoresUnrelatedLocalSources(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
-	externalCredentialsManifestPath := writeExecutableSourceManifest(t, dir, "external-credentials-local", "github.com/acme/tools/external-credentials/local", "0.1.0", providermanifestv1.KindExternalCredentials, []localExecutableManifestArtifact{{
-		goos:       runtime.GOOS,
-		goarch:     runtime.GOARCH,
-		binaryName: "external-credentials-local",
-		data:       []byte("external-credentials-local-binary"),
-	}})
-
-	artifactsDir := filepath.Join(dir, "artifacts")
-	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v6
-connections:
-  orphan:
-    mode: none
-    auth:
-      type: none
-      token: ${GESTALT_SCOPED_APP_UNUSED_CONNECTION_MISSING_ENV}
-workflows:
-  schedules:
-    noisy:
-      target:
-        steps:
-          - id: ping
-            app:
-              name: beta
-              operation: ping
-      cron: "* * * * *"
-      paused: ${GESTALT_SCOPED_APP_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
-      runAs:
-        subject:
-          id: test
-          kind: test
-%s
-  externalCredentials:
-    local:
-      source:
-        path: %s
-  secrets:
-    runtime_env:
-      source: env
-    unused:
-      source:
-        path: ${GESTALT_SCOPED_APP_UNUSED_PROVIDER_MISSING_ENV}
-  cache:
-    unused:
-      source:
-        path: providers/cache/unused/manifest.yaml
-  workflow:
-    unused:
-      source:
-        path: ${GESTALT_SCOPED_APP_UNUSED_WORKFLOW_PROVIDER_MISSING_ENV}
-  ui:
-    noisy:
-      source:
-        path: ui/noisy/manifest.yaml
-      path: /noisy
-server:
-  providers:
-    indexeddb: sqlite
-    externalCredentials: local
-    secrets: runtime_env
-  artifactsDir: %s
-  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  alpha:
-    source:
-      path: apps/alpha/manifest.yaml
-  beta:
-    default: ${GESTALT_SCOPED_APP_DROPPED_BOOL_MISSING_ENV}
-    source:
-      path: apps/beta/manifest.yaml
-    env:
-      UNRELATED_TOKEN: ${GESTALT_SCOPED_APP_TEST_MISSING_ENV}
-    connections:
-      default:
-        ref: ${GESTALT_SCOPED_APP_TEST_MISSING_CONNECTION_REF}
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), externalCredentialsManifestPath, filepath.ToSlash(artifactsDir))
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	lc := NewLifecycle()
-	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, false); err == nil {
-		t.Fatal("unscoped load unexpectedly succeeded with unrelated missing sources")
-	}
-
-	loaded, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
-	if err != nil {
-		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths: %v", err)
-	}
-	if got, want := len(loaded.Apps), 1; got != want {
-		t.Fatalf("loaded apps = %d, want %d", got, want)
-	}
-	if loaded.Apps["alpha"] == nil {
-		t.Fatal("apps.alpha missing from scoped config")
-	}
-	if _, ok := loaded.Apps["beta"]; ok {
-		t.Fatal("apps.beta should be dropped from scoped config")
-	}
-	if _, ok := loaded.Providers.UI["noisy"]; ok {
-		t.Fatal("providers.ui.noisy should be dropped from scoped config")
-	}
-	if _, ok := loaded.Providers.Secrets["unused"]; ok {
-		t.Fatal("providers.secrets.unused should be dropped from scoped config")
-	}
-	if _, ok := loaded.Providers.Cache["unused"]; ok {
-		t.Fatal("providers.cache.unused should be dropped from scoped config")
-	}
-	if _, ok := loaded.Providers.Workflow["unused"]; ok {
-		t.Fatal("providers.workflow.unused should be dropped from scoped config")
-	}
-	if _, err := os.Stat(filepath.Join(dir, LockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("production lockfile should not be written, stat err=%v", err)
-	}
-	scopedLockPath := filepath.Join(artifactsDir, ".gestaltd", "scopes", "apps", "alpha", LockfileName)
-	lock, err := ReadLockfile(scopedLockPath)
-	if err != nil {
-		t.Fatalf("read scoped lockfile: %v", err)
-	}
-	if len(lock.Providers) != 0 {
-		t.Fatalf("scoped local-source lock should not include providers: %+v", lock.Providers)
-	}
-	if _, ok := lock.Providers["beta"]; ok {
-		t.Fatalf("scoped lock should not include beta provider: %+v", lock.Providers)
-	}
-	if err := os.Remove(scopedLockPath); err != nil {
-		t.Fatalf("remove empty scoped lockfile: %v", err)
-	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}); err != nil {
-		t.Fatalf("CheckLockAtPathsWithStatePaths should allow missing local-only scoped lockfile: %v", err)
-	}
-
-	explicitArtifactsDir := filepath.Join(dir, "explicit-artifacts")
-	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
-		ArtifactsDir: explicitArtifactsDir,
-		AppScope:     []string{"alpha"},
-	}, false); err != nil {
-		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with explicit artifacts dir: %v", err)
-	}
-	explicitScopedLockPath := filepath.Join(explicitArtifactsDir, ".gestaltd", "scopes", "apps", "alpha", LockfileName)
-	if _, err := os.Stat(explicitScopedLockPath); err != nil {
-		t.Fatalf("explicit artifacts scoped lockfile missing: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(explicitArtifactsDir, LockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("explicit artifacts root lockfile should not be written, stat err=%v", err)
-	}
-	relativeArtifactsRoot := filepath.Join(dir, "relative-artifacts")
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("get cwd: %v", err)
-	}
-	relativeArtifactsDir, err := filepath.Rel(cwd, relativeArtifactsRoot)
-	if err != nil {
-		t.Fatalf("relative artifacts dir: %v", err)
-	}
-	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
-		ArtifactsDir: relativeArtifactsDir,
-		AppScope:     []string{"alpha"},
-	}, false); err != nil {
-		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with relative artifacts dir: %v", err)
-	}
-	relativeScopedLockPath := filepath.Join(relativeArtifactsRoot, ".gestaltd", "scopes", "apps", "alpha", LockfileName)
-	if _, err := os.Stat(relativeScopedLockPath); err != nil {
-		t.Fatalf("relative artifacts scoped lockfile missing: %v", err)
-	}
-}
-
-func TestLoadForExecutionAppScopeKeepsReferencedSecretsProvider(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("GESTALT_SCOPED_APP_REPO_TOKEN", "repo-token")
-	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
-
-	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v6
-%s
-  secrets:
-    runtime_env:
-      source: env
-    repo_auth:
-      source: env
-    unused:
-      source:
-        path: ${GESTALT_SCOPED_APP_UNUSED_SECRET_PROVIDER_MISSING_ENV}
-server:
-  providers:
-    indexeddb: sqlite
-    secrets: runtime_env
-  artifactsDir: %s
-  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  alpha:
-    source:
-      path: apps/alpha/manifest.yaml
-    env:
-      TARGET_TOKEN:
-        secret:
-          provider: repo_auth
-          name: GESTALT_SCOPED_APP_REPO_TOKEN
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	loaded, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
-	if err != nil {
-		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths: %v", err)
-	}
-	if _, ok := loaded.Providers.Secrets["repo_auth"]; !ok {
-		t.Fatal("providers.secrets.repo_auth should be kept for selected app secret ref")
-	}
-	if _, ok := loaded.Providers.Secrets["unused"]; ok {
-		t.Fatal("providers.secrets.unused should be dropped")
-	}
-}
-
-func TestLoadForExecutionAppScopeLockedMissingStateUsesScopedError(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
-
-	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v6
-%s
-server:
-  providers:
-    indexeddb: sqlite
-  artifactsDir: %s
-  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  alpha:
-    source:
-      path: apps/alpha/manifest.yaml
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, true)
-	if err == nil {
-		t.Fatal("locked scoped load unexpectedly succeeded without scoped state")
-	}
-	if !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) ||
-		!strings.Contains(err.Error(), `scoped local state for app "alpha"`) {
-		t.Fatalf("error = %v, want scoped prepared artifact guidance", err)
-	}
-}
-
-func TestLoadForExecutionAppScopeRejectsMissingEnvInSelectedClosure(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
-
-	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v6
-%s
-server:
-  providers:
-    indexeddb: sqlite
-  artifactsDir: %s
-  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  alpha:
-    source:
-      path: apps/alpha/manifest.yaml
-    env:
-      TARGET_TOKEN: ${GESTALT_SCOPED_APP_SELECTED_MISSING_ENV}
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
-	if err == nil {
-		t.Fatal("scoped load unexpectedly succeeded with missing selected app env")
-	}
-	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_APP_SELECTED_MISSING_ENV" not set`) {
-		t.Fatalf("error = %v, want selected missing env", err)
-	}
-}
-
-func TestLoadForExecutionAppScopeRejectsMissingEnvInSelectedNonStringField(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
-
-	configPath := filepath.Join(dir, "gestaltd.yaml")
-	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v6
-%s
-server:
-  providers:
-    indexeddb: sqlite
-  artifactsDir: %s
-  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  alpha:
-    default: ${GESTALT_SCOPED_APP_SELECTED_BOOL_MISSING_ENV}
-    source:
-      path: apps/alpha/manifest.yaml
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
-	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
-	if err == nil {
-		t.Fatal("scoped load unexpectedly succeeded with selected non-string missing env")
-	}
-	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_APP_SELECTED_BOOL_MISSING_ENV" not set`) {
-		t.Fatalf("error = %v, want selected non-string missing env", err)
 	}
 }
 
@@ -1403,7 +1081,7 @@ apps:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	entry := lock.Providers["alpha"]
+	entry := lock.Providers.App["alpha"]
 	if entry.SourceRef == nil {
 		t.Fatal("sourceRef missing")
 	}
@@ -1522,7 +1200,7 @@ providers:
 	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 	}
-	entry := lock.Secrets["secrets"]
+	entry := lock.Providers.Secrets["secrets"]
 	if entry.SourceRef == nil {
 		t.Fatal("secrets sourceRef missing")
 	}
@@ -1954,6 +1632,194 @@ func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) 
 	}
 	if third == first {
 		t.Fatalf("local release metadata digest did not change after metadata edit: %q", third)
+	}
+}
+
+func TestLockAtPathsUsesProviderReleaseStaticValidationWithoutUnpackingArchive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/static-lock"
+	version := "1.2.3"
+	metadataPath := filepath.Join(dir, "provider-release.yaml")
+	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       packageSource,
+		Kind:          providermanifestv1.KindApp,
+		Version:       version,
+		Runtime:       providerReleaseRuntimeExecutable,
+		Artifacts: map[string]providerReleaseArtifact{
+			providerpkg.CurrentPlatformString(): {
+				Path:   "missing-archive.tar.gz",
+				SHA256: strings.Repeat("a", 64),
+			},
+		},
+		StaticValidation: &providerReleaseStaticValidationData{
+			Manifest: &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindApp,
+				Source:  packageSource,
+				Version: version,
+				Spec:    &providermanifestv1.Spec{},
+			},
+			Catalog: &catalog.Catalog{
+				Name: "static-lock",
+				Operations: []catalog.CatalogOperation{
+					{ID: "echo", Method: "POST"},
+				},
+			},
+		},
+	})
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: %s
+%sapps:
+  static-lock:
+    source: %s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, config.ConfigAPIVersion, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(metadataPath), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	entry := lock.Providers.App["static-lock"]
+	if entry.ValidationManifest == nil {
+		t.Fatal("lock validation manifest is nil")
+	}
+	if entry.ArtifactManifest != "" || entry.Executable != "" {
+		t.Fatalf("runtime paths = (%q, %q), want omitted for static validation fast path", entry.ArtifactManifest, entry.Executable)
+	}
+}
+
+func TestLockAtPathsUnpacksProviderReleaseWhenStaticValidationCatalogMissing(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/static-lock"
+	version := "1.2.3"
+	archivePath := buildExecutableArchive(t, dir, "static-lock-src", packageSource, version, providermanifestv1.KindApp, "static-lock", "static-lock-binary")
+	archiveDigest, err := providerpkg.ArchiveDigest(archivePath)
+	if err != nil {
+		t.Fatalf("ArchiveDigest: %v", err)
+	}
+	metadataPath := filepath.Join(dir, "provider-release.yaml")
+	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       packageSource,
+		Kind:          providermanifestv1.KindApp,
+		Version:       version,
+		Runtime:       providerReleaseRuntimeExecutable,
+		Artifacts: map[string]providerReleaseArtifact{
+			providerpkg.CurrentPlatformString(): {
+				Path:   filepath.Base(archivePath),
+				SHA256: archiveDigest,
+			},
+		},
+		StaticValidation: &providerReleaseStaticValidationData{
+			Manifest: &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindApp,
+				Source:  packageSource,
+				Version: version,
+				Spec:    &providermanifestv1.Spec{},
+			},
+		},
+	})
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: %s
+%sapps:
+  static-lock:
+    source: %s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, config.ConfigAPIVersion, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(metadataPath), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	entry := lock.Providers.App["static-lock"]
+	if !entry.CatalogAvailable {
+		t.Fatal("CatalogAvailable = false, want archive catalog projected into lock")
+	}
+	if entry.ValidationManifest == nil || entry.ValidationManifest.Spec == nil || entry.ValidationManifest.Spec.AllowedOperations["echo"] == nil {
+		t.Fatalf("allowed operations = %+v, want echo from archive catalog", entry.ValidationManifest)
+	}
+}
+
+func TestLockAtPathsRejectsPackageLocalStaticValidationSurfaceAsSelfContained(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/static-openapi"
+	version := "1.2.3"
+	metadataPath := filepath.Join(dir, "provider-release.yaml")
+	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       packageSource,
+		Kind:          providermanifestv1.KindApp,
+		Version:       version,
+		Runtime:       providerReleaseRuntimeExecutable,
+		Artifacts: map[string]providerReleaseArtifact{
+			providerpkg.CurrentPlatformString(): {
+				Path:   "missing-archive.tar.gz",
+				SHA256: strings.Repeat("a", 64),
+			},
+		},
+		StaticValidation: &providerReleaseStaticValidationData{
+			Manifest: &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindApp,
+				Source:  packageSource,
+				Version: version,
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
+					},
+				},
+			},
+		},
+	})
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: %s
+%sapps:
+  static-openapi:
+    source: %s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, config.ConfigAPIVersion, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(metadataPath), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err == nil {
+		t.Fatal("LockAtPathsWithStatePaths unexpectedly succeeded")
+	}
+	if strings.Contains(err.Error(), "openapi catalog") {
+		t.Fatalf("LockAtPathsWithStatePaths error = %v, want archive resolution before static OpenAPI validation", err)
 	}
 }
 
@@ -2530,9 +2396,9 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				t.Fatal(handlerErr)
 			}
 
-			entry, ok := lock.Providers["alpha"]
+			entry, ok := lock.Providers.App["alpha"]
 			if !ok {
-				t.Fatal(`lock.Providers["alpha"] not found`)
+				t.Fatal(`lock.Providers.App["alpha"] not found`)
 			}
 			if entry.Source != wantSource {
 				t.Fatalf("entry.Source = %q, want %q", entry.Source, wantSource)
@@ -2576,7 +2442,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadFile lockfile: %v", err)
 			}
-			var diskLock providerLockfile
+			var diskLock Lockfile
 			if err := json.Unmarshal(lockData, &diskLock); err != nil {
 				t.Fatalf("Unmarshal lockfile: %v", err)
 			}
@@ -2649,8 +2515,8 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				}
 			}
 			if tc.localSource && tc.remoteArchives {
-				cacheDir := filepath.Join(dir, "archive-cache-local-metadata")
-				assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
+				cacheDir := filepath.Join(dir, "materialized-cache-local-metadata")
+				assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, wantCurrentSHA, &currentArchiveCount, func() error {
 					return os.RemoveAll(appRoot)
 				}, func() {
 					if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -2855,9 +2721,9 @@ packages:
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
-	entry, ok := lock.Providers["alpha"]
+	entry, ok := lock.Providers.App["alpha"]
 	if !ok {
-		t.Fatal(`lock.Providers["alpha"] not found`)
+		t.Fatal(`lock.Providers.App["alpha"] not found`)
 	}
 	if entry.Source != srv.URL+metadataPath {
 		t.Fatalf("lock source = %q, want %q", entry.Source, srv.URL+metadataPath)
@@ -2882,7 +2748,7 @@ packages:
 	}
 
 	entry.Source = srv.URL + metadataPath + "?mirror=1"
-	lock.Providers["alpha"] = entry
+	lock.Providers.App["alpha"] = entry
 	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
@@ -2913,16 +2779,16 @@ packages:
 		t.Fatalf("archive request count after sync = %d, want %d", got, archiveBefore+1)
 	}
 
-	cacheDir := filepath.Join(dir, "archive-cache")
+	cacheDir := filepath.Join(dir, "materialized-cache")
 	resetAppRoot := func() error { return os.RemoveAll(appRoot) }
 	drainHandlerErr := func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
 		}
 	}
-	assertCheckSyncDoesNotPopulateArchiveCache(t, lc, configPath, cacheDir, resetAppRoot)
-	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
-	assertRemoteArchiveCacheRepair(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertCheckSyncDoesNotPopulateMaterializedCache(t, lc, configPath, cacheDir, resetAppRoot)
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
+	assertRemoteMaterializedCacheRepair(t, lc, configPath, cacheDir, currentArchiveSHAHex, &archiveCount, resetAppRoot, drainHandlerErr)
 
 	archiveBeforeLoad := archiveCount.Load()
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -3098,9 +2964,9 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 		t.Fatal(handlerErr)
 	}
 
-	indexedDBEntry, ok := lock.IndexedDBs["main"]
+	indexedDBEntry, ok := lock.Providers.IndexedDB["main"]
 	if !ok {
-		t.Fatal(`lock.IndexedDBs["main"] not found`)
+		t.Fatal(`lock.Providers.IndexedDB["main"] not found`)
 	}
 	if indexedDBEntry.Source != srv.URL+indexedDBRelease.metadataPath {
 		t.Fatalf("indexeddb source = %q, want %q", indexedDBEntry.Source, srv.URL+indexedDBRelease.metadataPath)
@@ -3108,9 +2974,9 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 	if indexedDBEntry.Package != indexedDBRelease.source {
 		t.Fatalf("indexeddb package = %q, want %q", indexedDBEntry.Package, indexedDBRelease.source)
 	}
-	s3Entry, ok := lock.S3["objects"]
+	s3Entry, ok := lock.Providers.S3["objects"]
 	if !ok {
-		t.Fatal(`lock.S3["objects"] not found`)
+		t.Fatal(`lock.Providers.S3["objects"] not found`)
 	}
 	if s3Entry.Source != srv.URL+s3Release.metadataPath {
 		t.Fatalf("s3 source = %q, want %q", s3Entry.Source, srv.URL+s3Release.metadataPath)
@@ -3237,9 +3103,9 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 		t.Fatal(handlerErr)
 	}
 
-	entry, ok := lock.Workflows["runner"]
+	entry, ok := lock.Providers.Workflow["runner"]
 	if !ok {
-		t.Fatal(`lock.Workflows["runner"] not found`)
+		t.Fatal(`lock.Providers.Workflow["runner"] not found`)
 	}
 	if entry.Package != packageSource {
 		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
@@ -3280,8 +3146,8 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
-	cacheDir := filepath.Join(dir, "archive-cache")
-	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+	cacheDir := filepath.Join(dir, "materialized-cache")
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
 		return os.RemoveAll(workflowRoot)
 	}, func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -3413,9 +3279,9 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 		t.Fatal(handlerErr)
 	}
 
-	entry, ok := lock.ExternalCredentials["runner"]
+	entry, ok := lock.Providers.ExternalCredentials["runner"]
 	if !ok {
-		t.Fatal(`lock.ExternalCredentials["runner"] not found`)
+		t.Fatal(`lock.Providers.ExternalCredentials["runner"] not found`)
 	}
 	if entry.Package != packageSource {
 		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
@@ -3592,9 +3458,9 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 		t.Fatal(handlerErr)
 	}
 
-	entry, ok := lock.UIs["roadmap"]
+	entry, ok := lock.Providers.UI["roadmap"]
 	if !ok {
-		t.Fatal(`lock.UIs["roadmap"] not found`)
+		t.Fatal(`lock.Providers.UI["roadmap"] not found`)
 	}
 	if entry.Source != srv.URL+metadataPath+"?download=1" {
 		t.Fatalf("entry.Source = %q, want %q", entry.Source, srv.URL+metadataPath+"?download=1")
@@ -3638,8 +3504,8 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if got := archiveCount.Load() - archiveBefore; got != 1 {
 		t.Fatalf("archive request count during sync = %d, want 1", got)
 	}
-	cacheDir := filepath.Join(dir, "archive-cache")
-	assertRemoteArchiveCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
+	cacheDir := filepath.Join(dir, "materialized-cache")
+	assertRemoteMaterializedCacheRoundTrip(t, lc, configPath, cacheDir, archiveSHAHex, &archiveCount, func() error {
 		return os.RemoveAll(uiRoot)
 	}, func() {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -3874,9 +3740,9 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 		t.Fatal(handlerErr)
 	}
 
-	entry, ok := lock.Providers["alpha"]
+	entry, ok := lock.Providers.App["alpha"]
 	if !ok {
-		t.Fatal(`lock.Providers["alpha"] not found`)
+		t.Fatal(`lock.Providers.App["alpha"] not found`)
 	}
 	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != archiveURL {
 		t.Fatalf("current archive URL = %q, want %q", got, archiveURL)
@@ -4068,9 +3934,9 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	entry, ok := lock.Providers["alpha"]
+	entry, ok := lock.Providers.App["alpha"]
 	if !ok {
-		t.Fatal(`lock.Providers["alpha"] not found`)
+		t.Fatal(`lock.Providers.App["alpha"] not found`)
 	}
 	if entry.Source != logicalSource {
 		t.Fatalf("lock source = %q, want %q", entry.Source, logicalSource)
@@ -4408,7 +4274,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
-	if got := lock.Providers["alpha"].Version; got != initialVersion {
+	if got := lock.Providers.App["alpha"].Version; got != initialVersion {
 		t.Fatalf("initial lock version = %q, want %q", got, initialVersion)
 	}
 
@@ -4450,7 +4316,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if got := updatedLock.Providers["alpha"].Version; got != updatedVersion {
+	if got := updatedLock.Providers.App["alpha"].Version; got != updatedVersion {
 		t.Fatalf("updated lock version = %q, want %q", got, updatedVersion)
 	}
 }
@@ -4603,8 +4469,8 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if _, ok := lock.Providers["gadget"]; !ok {
-		t.Fatal(`lock.Providers["gadget"] not found`)
+	if _, ok := lock.Providers.App["gadget"]; !ok {
+		t.Fatal(`lock.Providers.App["gadget"] not found`)
 	}
 	install, err := inspectPreparedInstall(filepath.Join(artifactsDir, ".gestaltd", "providers", "gadget"))
 	if err != nil {
@@ -4765,12 +4631,12 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
+	authLockEntry := mustLockEntryByName(t, lock.Providers.Authentication, "auth")
 	if authLockEntry.Source != srv.URL+metadataPath {
-		t.Fatalf("lock.Authentication[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
+		t.Fatalf("lock.Providers.Authentication[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
 	}
 	if authLockEntry.Executable == "" {
-		t.Fatal("lock.Authentication.Executable is empty")
+		t.Fatal("lock.Providers.Authentication.Executable is empty")
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
@@ -4946,12 +4812,12 @@ func TestSourceAuthAppPrepareAllowsMissingEnvPlaceholderInNonStringField(t *test
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
 
-	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
+	authLockEntry := mustLockEntryByName(t, lock.Providers.Authentication, "auth")
 	if authLockEntry.Source != srv.URL+metadataPath {
-		t.Fatalf("lock.Authentication[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
+		t.Fatalf("lock.Providers.Authentication[auth].Source = %q, want %q", authLockEntry.Source, srv.URL+metadataPath)
 	}
 	if authLockEntry.Executable == "" {
-		t.Fatal("lock.Authentication.Executable is empty")
+		t.Fatal("lock.Providers.Authentication.Executable is empty")
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
@@ -5548,8 +5414,8 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	if len(lock.IndexedDBs) != 0 {
-		t.Fatalf("lock.IndexedDBs = %#v, want no local source entries", lock.IndexedDBs)
+	if len(lock.Providers.IndexedDB) != 0 {
+		t.Fatalf("lock.Providers.IndexedDB = %#v, want no local source entries", lock.Providers.IndexedDB)
 	}
 
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -5651,15 +5517,15 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	if len(lock.Caches) != 0 {
-		t.Fatalf("lock.Caches = %#v, want no local source entries", lock.Caches)
+	if len(lock.Providers.Cache) != 0 {
+		t.Fatalf("lock.Providers.Cache = %#v, want no local source entries", lock.Providers.Cache)
 	}
 	lockPath := filepath.Join(dir, LockfileName)
 	lockData, err := os.ReadFile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadFile lockfile: %v", err)
 	}
-	var diskLock providerLockfile
+	var diskLock Lockfile
 	if err := json.Unmarshal(lockData, &diskLock); err != nil {
 		t.Fatalf("Unmarshal lockfile: %v", err)
 	}
@@ -5861,21 +5727,21 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 				t.Fatalf("LockAtPathsWithStatePaths: %v", err)
 			}
 
-			entry, ok := lock.Caches["session"]
+			entry, ok := lock.Providers.Cache["session"]
 			if !ok {
-				t.Fatal(`lock.Caches["session"] not found`)
+				t.Fatal(`lock.Providers.Cache["session"] not found`)
 			}
 			if entry.Source != wantSource {
 				t.Fatalf("lock source = %q, want %q", entry.Source, wantSource)
 			}
-			if entry.StaticManifest == nil {
+			if entry.ValidationManifest == nil {
 				t.Fatal("lock static manifest is nil")
 			}
-			if len(entry.StaticManifest.Artifacts) != 0 {
-				t.Fatalf("lock static manifest artifacts = %+v, want nil", entry.StaticManifest.Artifacts)
+			if len(entry.ValidationManifest.Artifacts) != 0 {
+				t.Fatalf("lock static manifest artifacts = %+v, want nil", entry.ValidationManifest.Artifacts)
 			}
-			if entry.StaticManifest.Entrypoint == nil || entry.StaticManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-				t.Fatalf("lock static manifest entrypoint = %+v, want placeholder", entry.StaticManifest.Entrypoint)
+			if entry.ValidationManifest.Entrypoint != nil {
+				t.Fatalf("lock static manifest entrypoint = %+v, want nil", entry.ValidationManifest.Entrypoint)
 			}
 			wantCurrentSHA := hex.EncodeToString(currentArchiveSum[:])
 			wantExtraSHA := hex.EncodeToString(extraArchiveSum[:])
@@ -5893,26 +5759,27 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ReadLockfile: %v", err)
 			}
-			if got := readBack.Caches["session"].Source; got != wantSource {
+			if got := readBack.Providers.Cache["session"].Source; got != wantSource {
 				t.Fatalf("readBack source = %q, want %q", got, wantSource)
 			}
-			readBackManifest := readBack.Caches["session"].StaticManifest
+			readBackManifest := readBack.Providers.Cache["session"].ValidationManifest
 			if readBackManifest == nil {
 				t.Fatal("readBack static manifest is nil")
+				return
 			}
 			if len(readBackManifest.Artifacts) != 0 {
 				t.Fatalf("readBack static manifest artifacts = %+v, want nil", readBackManifest.Artifacts)
 			}
-			if readBackManifest.Entrypoint == nil || readBackManifest.Entrypoint.ArtifactPath != staticValidationEntrypointPlaceholder {
-				t.Fatalf("readBack static manifest entrypoint = %+v, want placeholder", readBackManifest.Entrypoint)
+			if readBackManifest.Entrypoint != nil {
+				t.Fatalf("readBack static manifest entrypoint = %+v, want nil", readBackManifest.Entrypoint)
 			}
-			if got := readBack.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
+			if got := readBack.Providers.Cache["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
 				t.Fatalf("readBack current-platform SHA256 = %q, want %q", got, wantCurrentSHA)
 			}
-			if got := readBack.Caches["session"].Archives[extraPlatformKey].SHA256; got != wantExtraSHA {
+			if got := readBack.Providers.Cache["session"].Archives[extraPlatformKey].SHA256; got != wantExtraSHA {
 				t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, wantExtraSHA)
 			}
-			if got := readBack.Caches["session"].Archives[extraPlatformKey].URL; got != wantExtraArchiveURL {
+			if got := readBack.Providers.Cache["session"].Archives[extraPlatformKey].URL; got != wantExtraArchiveURL {
 				t.Fatalf("readBack extra-platform URL = %q, want %q", got, wantExtraArchiveURL)
 			}
 		})
@@ -6131,8 +5998,8 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	secretsLockEntry := mustLockEntryByName(t, lock.Secrets, "secrets")
-	authLockEntry := mustLockEntryByName(t, lock.Authentication, "auth")
+	secretsLockEntry := mustLockEntryByName(t, lock.Providers.Secrets, "secrets")
+	authLockEntry := mustLockEntryByName(t, lock.Providers.Authentication, "auth")
 	if got := secretsMetadataCount.Load(); got != 1 {
 		t.Fatalf("secrets metadata request count = %d, want 1", got)
 	}

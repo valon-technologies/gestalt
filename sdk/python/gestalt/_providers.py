@@ -19,32 +19,6 @@ from typing import (
     runtime_checkable,
 )
 
-from ._authorization import (
-    AccessDecision,
-    AccessEvaluationRequest,
-    AccessEvaluationsRequest,
-    AccessEvaluationsResponse,
-    ActionSearchRequest,
-    ActionSearchResponse,
-    AuthorizationMetadata,
-    AuthorizationModelRef,
-    EffectiveSubjectSearchRequest,
-    EffectiveSubjectSearchResponse,
-    ExpandRequest,
-    ExpandResponse,
-    GetActiveModelResponse,
-    ListModelsRequest,
-    ListModelsResponse,
-    ReadRelationshipsRequest,
-    ReadRelationshipsResponse,
-    ResourceSearchRequest,
-    ResourceSearchResponse,
-    SubjectSearchRequest,
-    SubjectSearchResponse,
-    WriteModelRequest,
-    WriteRelationshipsRequest,
-)
-
 if TYPE_CHECKING:
     from ._agent import (
         AgentInteraction,
@@ -76,6 +50,25 @@ if TYPE_CHECKING:
         BeginLoginResponse,
         CompleteLoginRequest,
     )
+    from ._authorization import (
+        AddRelationshipRequest,
+        AddRelationshipResponse,
+        CheckAccessManyRequest,
+        CheckAccessManyResponse,
+        CheckAccessRequest,
+        CheckAccessResponse,
+        DeleteRelationshipRequest,
+        DeleteRelationshipResponse,
+        GetActiveModelRefResponse,
+        ListActiveModelResourceTypesRequest,
+        ListActiveModelResourceTypesResponse,
+        ListRelationshipsRequest,
+        ListRelationshipsResponse,
+        SetActiveModelRequest,
+        SetActiveModelResponse,
+        SetAuthorizationStateRequest,
+        SetAuthorizationStateResponse,
+    )
     from ._cache import CacheEntry
     from ._runtime_provider import (
         GetRuntimeSessionRequest,
@@ -105,38 +98,29 @@ if TYPE_CHECKING:
         WriteOptions,
     )
     from ._workflow import (
-        BoundWorkflowDefinition,
-        BoundWorkflowEventTrigger,
-        BoundWorkflowRun,
-        BoundWorkflowSchedule,
+        ApplyWorkflowProviderDefinitionRequest,
         CancelWorkflowProviderRunRequest,
-        CreateWorkflowProviderDefinitionRequest,
         DeleteWorkflowProviderDefinitionRequest,
-        DeleteWorkflowProviderEventTriggerRequest,
-        DeleteWorkflowProviderScheduleRequest,
+        DeliverWorkflowProviderEventRequest,
         GetWorkflowProviderDefinitionRequest,
-        GetWorkflowProviderEventTriggerRequest,
+        GetWorkflowProviderRunEventsRequest,
+        GetWorkflowProviderRunEventsResponse,
+        GetWorkflowProviderRunOutputRequest,
+        GetWorkflowProviderRunOutputResponse,
         GetWorkflowProviderRunRequest,
-        GetWorkflowProviderScheduleRequest,
-        ListWorkflowProviderEventTriggersRequest,
-        ListWorkflowProviderEventTriggersResponse,
+        ListWorkflowProviderDefinitionsRequest,
+        ListWorkflowProviderDefinitionsResponse,
         ListWorkflowProviderRunsRequest,
         ListWorkflowProviderRunsResponse,
-        ListWorkflowProviderSchedulesRequest,
-        ListWorkflowProviderSchedulesResponse,
-        PauseWorkflowProviderEventTriggerRequest,
-        PauseWorkflowProviderScheduleRequest,
-        PublishWorkflowProviderEventRequest,
-        ResumeWorkflowProviderEventTriggerRequest,
-        ResumeWorkflowProviderScheduleRequest,
+        SetWorkflowProviderActivationPausedRequest,
+        SetWorkflowProviderDefinitionPausedRequest,
         SignalOrStartWorkflowProviderRunRequest,
         SignalWorkflowProviderRunRequest,
         SignalWorkflowRunResponse,
         StartWorkflowProviderRunRequest,
-        UpdateWorkflowProviderDefinitionRequest,
-        UpsertWorkflowProviderEventTriggerRequest,
-        UpsertWorkflowProviderScheduleRequest,
+        WorkflowDefinition,
         WorkflowEvent,
+        WorkflowRun,
     )
 
 else:
@@ -147,8 +131,8 @@ class ProviderKind(str, Enum):
     """Runtime kinds supported by the Python SDK."""
 
     INTEGRATION = "integration"
-    AUTHENTICATION = "authentication"
     AUTHORIZATION = "authorization"
+    AUTHENTICATION = "authentication"
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
@@ -287,59 +271,64 @@ class AuthenticationProvider(AppProvider):
 
 
 class AuthorizationProvider(AppProvider):
-    """Base class for authorization-provider runtimes."""
+    """Base class for authorization providers."""
 
-    def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
-        self._unimplemented("evaluate")
+    def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
+        """Return whether a single access request is allowed."""
 
-    def evaluate_many(
-        self, request: AccessEvaluationsRequest
-    ) -> AccessEvaluationsResponse:
-        self._unimplemented("evaluate_many")
+        raise NotImplementedError
 
-    def search_resources(
-        self, request: ResourceSearchRequest
-    ) -> ResourceSearchResponse:
-        self._unimplemented("search_resources")
+    def check_access_many(
+        self, request: CheckAccessManyRequest
+    ) -> CheckAccessManyResponse:
+        """Return decisions for a batch of access requests."""
 
-    def search_subjects(self, request: SubjectSearchRequest) -> SubjectSearchResponse:
-        self._unimplemented("search_subjects")
+        raise NotImplementedError
 
-    def effective_search_resources(
-        self, request: ResourceSearchRequest
-    ) -> ResourceSearchResponse:
-        self._unimplemented("effective_search_resources")
+    def list_relationships(
+        self, request: ListRelationshipsRequest
+    ) -> ListRelationshipsResponse:
+        """List relationships matching the supplied filter."""
 
-    def effective_search_subjects(
-        self, request: EffectiveSubjectSearchRequest
-    ) -> EffectiveSubjectSearchResponse:
-        self._unimplemented("effective_search_subjects")
+        raise NotImplementedError
 
-    def search_actions(self, request: ActionSearchRequest) -> ActionSearchResponse:
-        self._unimplemented("search_actions")
+    def add_relationship(
+        self, request: AddRelationshipRequest
+    ) -> AddRelationshipResponse:
+        """Add a relationship and return the stored relationship."""
 
-    def expand(self, request: ExpandRequest) -> ExpandResponse:
-        self._unimplemented("expand")
+        raise NotImplementedError
 
-    def get_metadata(self) -> AuthorizationMetadata:
-        self._unimplemented("get_metadata")
+    def delete_relationship(
+        self, request: DeleteRelationshipRequest
+    ) -> DeleteRelationshipResponse | None:
+        """Delete a relationship tuple."""
 
-    def read_relationships(
-        self, request: ReadRelationshipsRequest
-    ) -> ReadRelationshipsResponse:
-        self._unimplemented("read_relationships")
+        raise NotImplementedError
 
-    def write_relationships(self, request: WriteRelationshipsRequest) -> None:
-        self._unimplemented("write_relationships")
+    def set_authorization_state(
+        self, request: SetAuthorizationStateRequest
+    ) -> SetAuthorizationStateResponse:
+        """Atomically replace the model and relationships."""
 
-    def get_active_model(self) -> GetActiveModelResponse:
-        self._unimplemented("get_active_model")
+        raise NotImplementedError
 
-    def list_models(self, request: ListModelsRequest) -> ListModelsResponse:
-        self._unimplemented("list_models")
+    def get_active_model_ref(self) -> GetActiveModelRefResponse:
+        """Return the active authorization model reference."""
 
-    def write_model(self, request: WriteModelRequest) -> AuthorizationModelRef:
-        self._unimplemented("write_model")
+        raise NotImplementedError
+
+    def set_active_model(self, request: SetActiveModelRequest) -> SetActiveModelResponse:
+        """Set the active authorization model."""
+
+        raise NotImplementedError
+
+    def list_active_model_resource_types(
+        self, request: ListActiveModelResourceTypesRequest
+    ) -> ListActiveModelResourceTypesResponse:
+        """List resource types in the active authorization model."""
+
+        raise NotImplementedError
 
     def serve(self) -> None:
         """Start the authorization runtime."""
@@ -646,26 +635,38 @@ class WorkflowProvider(AppProvider):
 
     Subclasses implement snake_case handler methods such as
     ``start_run(request)``, ``signal_run(request)``, and
-    ``publish_event(request)``.
+    ``deliver_event(request)``.
     """
 
-    def create_definition(
+    def apply_definition(
         self,
-        request: CreateWorkflowProviderDefinitionRequest,
-    ) -> BoundWorkflowDefinition:
-        self._unimplemented("create_definition")
+        request: ApplyWorkflowProviderDefinitionRequest,
+    ) -> WorkflowDefinition:
+        self._unimplemented("apply_definition")
 
     def get_definition(
         self,
         request: GetWorkflowProviderDefinitionRequest,
-    ) -> BoundWorkflowDefinition:
+    ) -> WorkflowDefinition:
         self._unimplemented("get_definition")
 
-    def update_definition(
+    def list_definitions(
         self,
-        request: UpdateWorkflowProviderDefinitionRequest,
-    ) -> BoundWorkflowDefinition:
-        self._unimplemented("update_definition")
+        request: ListWorkflowProviderDefinitionsRequest,
+    ) -> ListWorkflowProviderDefinitionsResponse:
+        self._unimplemented("list_definitions")
+
+    def set_definition_paused(
+        self,
+        request: SetWorkflowProviderDefinitionPausedRequest,
+    ) -> WorkflowDefinition:
+        self._unimplemented("set_definition_paused")
+
+    def set_activation_paused(
+        self,
+        request: SetWorkflowProviderActivationPausedRequest,
+    ) -> WorkflowDefinition:
+        self._unimplemented("set_activation_paused")
 
     def delete_definition(
         self,
@@ -676,10 +677,10 @@ class WorkflowProvider(AppProvider):
     def start_run(
         self,
         request: StartWorkflowProviderRunRequest,
-    ) -> BoundWorkflowRun:
+    ) -> WorkflowRun:
         self._unimplemented("start_run")
 
-    def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRun:
+    def get_run(self, request: GetWorkflowProviderRunRequest) -> WorkflowRun:
         self._unimplemented("get_run")
 
     def list_runs(
@@ -691,8 +692,20 @@ class WorkflowProvider(AppProvider):
     def cancel_run(
         self,
         request: CancelWorkflowProviderRunRequest,
-    ) -> BoundWorkflowRun:
+    ) -> WorkflowRun:
         self._unimplemented("cancel_run")
+
+    def get_run_events(
+        self,
+        request: GetWorkflowProviderRunEventsRequest,
+    ) -> GetWorkflowProviderRunEventsResponse:
+        self._unimplemented("get_run_events")
+
+    def get_run_output(
+        self,
+        request: GetWorkflowProviderRunOutputRequest,
+    ) -> GetWorkflowProviderRunOutputResponse:
+        self._unimplemented("get_run_output")
 
     def signal_run(
         self,
@@ -706,80 +719,11 @@ class WorkflowProvider(AppProvider):
     ) -> SignalWorkflowRunResponse:
         self._unimplemented("signal_or_start_run")
 
-    def upsert_schedule(
+    def deliver_event(
         self,
-        request: UpsertWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("upsert_schedule")
-
-    def get_schedule(
-        self,
-        request: GetWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("get_schedule")
-
-    def list_schedules(
-        self,
-        request: ListWorkflowProviderSchedulesRequest,
-    ) -> ListWorkflowProviderSchedulesResponse:
-        self._unimplemented("list_schedules")
-
-    def delete_schedule(self, request: DeleteWorkflowProviderScheduleRequest) -> None:
-        self._unimplemented("delete_schedule")
-
-    def pause_schedule(
-        self,
-        request: PauseWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("pause_schedule")
-
-    def resume_schedule(
-        self,
-        request: ResumeWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("resume_schedule")
-
-    def upsert_event_trigger(
-        self,
-        request: UpsertWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("upsert_event_trigger")
-
-    def get_event_trigger(
-        self,
-        request: GetWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("get_event_trigger")
-
-    def list_event_triggers(
-        self,
-        request: ListWorkflowProviderEventTriggersRequest,
-    ) -> ListWorkflowProviderEventTriggersResponse:
-        self._unimplemented("list_event_triggers")
-
-    def delete_event_trigger(
-        self,
-        request: DeleteWorkflowProviderEventTriggerRequest,
-    ) -> None:
-        self._unimplemented("delete_event_trigger")
-
-    def pause_event_trigger(
-        self,
-        request: PauseWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("pause_event_trigger")
-
-    def resume_event_trigger(
-        self,
-        request: ResumeWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("resume_event_trigger")
-
-    def publish_event(
-        self,
-        request: PublishWorkflowProviderEventRequest,
+        request: DeliverWorkflowProviderEventRequest,
     ) -> WorkflowEvent:
-        self._unimplemented("publish_event")
+        self._unimplemented("deliver_event")
 
     def serve(self) -> None:
         """Start the workflow runtime."""

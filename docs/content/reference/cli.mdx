@@ -28,7 +28,7 @@ the platform where they run.
 | `gestaltd lock --config PATH` | Resolve published provider sources and write canonical lock metadata. Repeat `--config` to layer overrides. |
 | `gestaltd lock --check --config PATH` | Verify that the checked-in lockfile matches the current config without rewriting it. |
 | `gestaltd sync --locked --config PATH` | Materialize prepared provider artifacts from an existing lockfile. Local source UI preparation uses bounded parallelism by default. |
-| `gestaltd sync --locked --cache-dir DIR --config PATH` | Reuse verified remote release archives across sync runs. `DIR` resolves like a normal CLI path. |
+| `gestaltd sync --locked --cache-dir DIR --config PATH` | Reuse materialized prepared artifacts across sync runs. `DIR` resolves like a normal CLI path. |
 | `gestaltd sync --locked --verbose --config PATH` | Emit detailed cache, archive download, timing, and output-size diagnostics while syncing. |
 | `gestaltd sync --locked --output-format=json --config PATH` | Emit one compact JSON metrics document to stdout on successful sync. |
 | `gestaltd sync --locked --check --config PATH` | Verify that prepared artifacts exist and match the lockfile without rewriting them. |
@@ -83,15 +83,17 @@ update the lockfile by default. `provider add` and `provider remove` accept
 `GOMAXPROCS`; `--parallelism 1` forces sequential preparation. Other provider
 types and `sync --locked --check` remain sequential.
 
-`gestaltd sync --locked --cache-dir DIR` enables an opt-in cache for verified
-remote release archives. The cache key is the locked archive SHA-256, and
-cached archives are rehashed before use. The cache does not store prepared
-artifact directories, local source builds, local archive paths, or metadata
-responses. `sync --locked --check` remains read-only and does not populate the
-cache.
+`gestaltd sync --locked --cache-dir DIR` enables an opt-in cache for
+materialized prepared artifacts. The cache key is the locked archive identity,
+including the archive SHA-256, resolved archive key, platform, and materializer
+version. Cache hits restore prepared outputs directly; misses download and
+install the package, then populate the cache after a successful install.
+`sync --locked --check` remains read-only and does not populate the cache.
+Treat this cache as trusted deployment state: only principals that are allowed
+to influence deployed prepared artifacts should be able to write to it.
 
 `gestaltd sync --locked -v` and `gestaltd sync --locked --verbose` add
-human-readable diagnostics for archive cache behavior, archive downloads,
+human-readable diagnostics for cache behavior, archive downloads,
 phase timings, prepared output size, and archive fetches. There is
 one verbosity level; `-vv` is not supported. The top-level `gestaltd -v` still
 prints the server version. Without `-v` or `--output-format=json`, successful
@@ -114,7 +116,7 @@ gestaltd sync \
   --verbose \
   --config ./deploy/config.yaml \
   --artifacts-dir ./deploy \
-  --cache-dir ./.gestaltd-archive-cache
+  --cache-dir ./.gestaltd-cache
 
 gestaltd sync \
   --locked \
@@ -129,27 +131,34 @@ gestaltd sync \
   --output-format=json \
   --config ./deploy/config.yaml \
   --artifacts-dir ./deploy \
-  --cache-dir ./.gestaltd-archive-cache \
+  --cache-dir ./.gestaltd-cache \
   > gestaltd-sync.json
 ```
 
-The JSON schema starts at version `1` and reports the sync action, inputs,
-artifact count and decisions, archive cache counters, archive download counters,
-archive fetches, phase timings, and prepared output size. In
-`--check` mode, the action is `check`, archive cache writes remain zero, and
-`output.measured` is `false`.
+The JSON schema version is `2` and reports the sync action, inputs, artifact
+count and decisions, materialized cache counters, archive download counters,
+archive fetches, phase timings, and prepared output size. In `--check` mode,
+the action is `check`, cache writes remain zero, and `output.measured` is
+`false`.
 
 | JSON field | Meaning |
 | --- | --- |
-| `schema.version` | Metrics schema version. Starts at `1`. |
+| `schema.version` | Metrics schema version. Current version is `2`. |
 | `sync.action` | `materialize` for normal sync or `check` for `--check`. |
 | `sync.duration_seconds` | Total successful sync duration. |
 | `inputs.config_paths` | Config files passed to sync after CLI path resolution. |
 | `artifacts.considered` | Prepared artifact entries in the effective config. |
 | `artifacts.items` | All prepared artifact decisions recorded by the run, sorted by duration descending. |
+| `cache.configured` | Whether `--cache-dir` was passed. |
+| `cache.enabled` | Whether this sync mode can read and write the materialized cache. |
+| `cache.dir` | Resolved cache directory. |
+| `cache.mode` | Cache mode. Currently `materialized`. |
+| `cache.bucket_version` | Cache bucket version. Currently `materialized/v1`. |
+| `cache.hits`, `cache.misses`, `cache.invalid` | Materialized cache lookup counters. |
+| `cache.put.successes`, `cache.put.failures` | Materialized cache write counters. Write failures do not fail sync. |
+| `cache.entries` | Cache events recorded by the run. |
 | `archives.requests` | Current-platform archive acquisition attempts made by this run. |
 | `archives.unique_sha256` | Unique canonical expected SHA-256 values among archive requests. |
-| `archives.cache.*` | Cache configuration, eligibility, hit/miss, invalid, rejected, put, and put-failure counters. |
 | `archives.downloads.*` | Successful remote archive download count, bytes, and cumulative download time. |
 | `archives.fetches` | All archive acquisitions recorded by the run, sorted by duration descending. |
 | `phases.*_seconds` | Major lifecycle phase timings. Download time is cumulative and may not sum to wall-clock time under parallelism. |
@@ -164,14 +173,14 @@ layered config points at local provider source paths or local
 server after local file changes settle. If reload preparation fails, the current
 server keeps running and the failure is logged.
 
-For faster iteration on one configured plugin, combine `--watch` with
-`--app NAME` so unrelated configured apps are not validated or prepared:
+For faster iteration on one local plugin, either use `gestaltd serve --path`
+for a standalone source tree or layer a small local config that includes only
+the app under test:
 
 ```sh
 gestaltd serve \
-  --app support \
   --config ./config.yaml \
-  --config ./local.yaml \
+  --config ./support-local.yaml \
   --watch
 ```
 
@@ -184,7 +193,7 @@ Watch mode applies only to config-based serve. It cannot be combined with
 gestaltd
 gestaltd lock --config ./config.yaml
 gestaltd sync --locked --config ./config.yaml
-gestaltd sync --locked --config ./config.yaml --cache-dir ./.gestaltd-archive-cache
+gestaltd sync --locked --config ./config.yaml --cache-dir ./.gestaltd-cache
 gestaltd sync --locked --config ./config.yaml --verbose
 gestaltd sync --locked --config ./config.yaml --output-format=json > gestaltd-sync.json
 gestaltd sync --locked --config ./config.yaml --parallelism 2
@@ -194,7 +203,7 @@ gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --watch
-gestaltd serve --app support --config ./config.yaml --config ./local.yaml --watch
+gestaltd serve --path ./apps/support/manifest.yaml
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml

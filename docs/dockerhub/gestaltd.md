@@ -107,7 +107,7 @@ gestaltd sync \
   --output-format=json \
   --config deploy/config.yaml \
   --artifacts-dir deploy \
-  --cache-dir /cache/gestaltd-archives \
+  --cache-dir /cache/gestaltd \
   > gestaltd-sync.json
 ```
 
@@ -115,8 +115,11 @@ gestaltd sync \
 successful sync, while source-build output and errors go to stderr. Without
 `--verbose` or `--output-format=json`, successful `gestaltd sync --locked`
 stays quiet.
-`--cache-dir` enables a content-addressed cache for verified remote release
-archives keyed by their locked SHA-256.
+`--cache-dir` enables a content-addressed cache for materialized prepared
+artifacts keyed by locked archive identity. Cache hits restore prepared outputs
+without re-downloading or reinstalling the package.
+Use a private cache location because cache writers can influence restored
+prepared artifacts.
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest-alpine

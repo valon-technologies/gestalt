@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -68,18 +67,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
-	if _, _, err := cfg.SelectedAuthorizationProvider(); err != nil {
-		failPendingStartupProviders(prepared.Deps, err)
-		return warnings, err
-	}
-	authz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
-	if err != nil {
-		failPendingStartupProviders(prepared.Deps, err)
-		return warnings, err
-	}
-	defer func() { _ = authz.Close() }()
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
-		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
@@ -93,7 +81,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      prepared.AgentManager,
 		Invoker:           sharedInvoker,
-		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 	}))
@@ -103,7 +90,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		WorkflowTools:                 workflowTools,
 		RunGrants:                     prepared.Deps.AgentRunGrants,
 		Invoker:                       sharedInvoker,
-		Authorizer:                    authz,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
 		AgentConnections:              agentConnectionBindings(cfg),

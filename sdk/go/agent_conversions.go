@@ -223,40 +223,13 @@ func agentMessagePartImageRefToProto(value *AgentMessagePartImageRef) *proto.Age
 	}
 }
 
-func agentActorFromProto(value *proto.AgentActor) *AgentActor {
-	if value == nil {
-		return nil
-	}
-	return &AgentActor{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
-}
-
-func agentActorToProto(value *AgentActor) *proto.AgentActor {
-	if value == nil {
-		return nil
-	}
-	return &proto.AgentActor{
-		SubjectId:   value.SubjectID,
-		SubjectKind: value.SubjectKind,
-		DisplayName: value.DisplayName,
-		AuthSource:  value.AuthSource,
-	}
-}
-
 func subjectFromProto(value *proto.SubjectContext) *Subject {
 	if value == nil {
 		return nil
 	}
 	return &Subject{
 		ID:                  value.GetId(),
-		Kind:                value.GetKind(),
 		CredentialSubjectID: value.GetCredentialSubjectId(),
-		DisplayName:         value.GetDisplayName(),
-		AuthSource:          value.GetAuthSource(),
 		Email:               value.GetEmail(),
 	}
 }
@@ -267,10 +240,7 @@ func subjectToProto(value *Subject) *proto.SubjectContext {
 	}
 	return &proto.SubjectContext{
 		Id:                  value.ID,
-		Kind:                value.Kind,
 		CredentialSubjectId: value.CredentialSubjectID,
-		DisplayName:         value.DisplayName,
-		AuthSource:          value.AuthSource,
 		Email:               value.Email,
 	}
 }
@@ -482,7 +452,7 @@ func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
 		ClientRef:    value.ClientRef,
 		State:        proto.AgentSessionState(value.State),
 		Metadata:     metadata,
-		CreatedBy:    agentActorToProto(value.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
 		CreatedAt:    timestampFromNonZeroTime(value.CreatedAt),
 		UpdatedAt:    timestampFromNonZeroTime(value.UpdatedAt),
 		LastTurnAt:   timestampFromOptionalTime(value.LastTurnAt),
@@ -515,7 +485,7 @@ func agentSessionFromProto(value *proto.AgentSession) *AgentSession {
 		ClientRef:    value.GetClientRef(),
 		State:        AgentSessionState(value.GetState()),
 		Metadata:     mapFromStruct(value.GetMetadata()),
-		CreatedBy:    agentActorFromProto(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		LastTurnAt:   timePtrFromTimestampUnchecked(value.GetLastTurnAt()),
@@ -555,7 +525,7 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		Model:             req.GetModel(),
 		ClientRef:         req.GetClientRef(),
 		Metadata:          mapFromStruct(req.GetMetadata()),
-		CreatedBy:         agentActorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		Subject:           subjectFromProto(req.GetSubject()),
 		SessionStart:      agentSessionStartConfigFromProto(req.GetSessionStart()),
 		PreparedWorkspace: agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
@@ -663,7 +633,7 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 		Status:        proto.AgentExecutionStatus(value.Status),
 		Messages:      messages,
 		StatusMessage: value.StatusMessage,
-		CreatedBy:     agentActorToProto(value.CreatedBy),
+		CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
 		CreatedAt:     timestampFromNonZeroTime(value.CreatedAt),
 		StartedAt:     timestampFromOptionalTime(value.StartedAt),
 		CompletedAt:   timestampFromOptionalTime(value.CompletedAt),
@@ -703,7 +673,7 @@ func agentTurnFromProto(value *proto.AgentTurn) *AgentTurn {
 		Messages:      agentMessagesFromProto(value.GetMessages()),
 		Output:        agentTurnOutputFromProto(value),
 		StatusMessage: value.GetStatusMessage(),
-		CreatedBy:     agentActorFromProto(value.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
 		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
 		StartedAt:     timePtrFromTimestampUnchecked(value.GetStartedAt()),
 		CompletedAt:   timePtrFromTimestampUnchecked(value.GetCompletedAt()),
@@ -733,9 +703,12 @@ func listAgentTurnsResponseFromProto(value *proto.ListAgentProviderTurnsResponse
 	return &ListAgentTurnsResponse{Turns: agentTurnsFromProto(value.GetTurns())}
 }
 
-func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
+func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) (*CreateAgentProviderTurnRequest, error) {
 	if req == nil {
-		return &CreateAgentProviderTurnRequest{}
+		return nil, InvalidArgument("agent create turn request is required")
+	}
+	if req.GetTimeoutSeconds() < 0 {
+		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
 	}
 	return &CreateAgentProviderTurnRequest{
 		TurnID:         req.GetTurnId(),
@@ -746,7 +719,7 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		Tools:          resolvedAgentToolsFromProto(req.GetTools()),
 		Output:         agentOutputFromProto(req.GetOutput()),
 		Metadata:       mapFromStruct(req.GetMetadata()),
-		CreatedBy:      agentActorFromProto(req.GetCreatedBy()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		ExecutionRef:   req.GetExecutionRef(),
 		ToolRefs:       agentToolRefsFromProto(req.GetToolRefs()),
 		ToolSource:     AgentToolSourceMode(req.GetToolSource()),
@@ -754,7 +727,7 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		ModelOptions:   mapFromStruct(req.GetModelOptions()),
 		RunGrant:       req.GetRunGrant(),
 		TimeoutSeconds: req.GetTimeoutSeconds(),
-	}
+	}, nil
 }
 
 func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest) *GetAgentProviderTurnRequest {

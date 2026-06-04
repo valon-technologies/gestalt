@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -361,6 +360,22 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 		return err
 	}
 
+	staticValidation := map[string]any{
+		"manifest": map[string]any{
+			"kind":    manifest.Kind,
+			"source":  manifest.Source,
+			"version": manifest.Version,
+			"spec":    map[string]any{},
+		},
+	}
+	if catalogData, err := os.ReadFile(filepath.Join(dir, providerpkg.StaticCatalogFile)); err == nil {
+		var catalogDoc map[string]any
+		if err := yaml.Unmarshal(catalogData, &catalogDoc); err != nil {
+			return err
+		}
+		staticValidation["catalog"] = catalogDoc
+	}
+
 	metadata := map[string]any{
 		"schema":        "gestaltd-provider-release",
 		"schemaVersion": 1,
@@ -374,17 +389,7 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 				"sha256": digest,
 			},
 		},
-		"staticValidation": map[string]any{
-			"manifest": map[string]any{
-				"kind":    manifest.Kind,
-				"source":  manifest.Source,
-				"version": manifest.Version,
-				"entrypoint": map[string]any{
-					"artifactPath": staticvalidation.EntrypointPlaceholder,
-				},
-				"spec": map[string]any{},
-			},
-		},
+		"staticValidation": staticValidation,
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {

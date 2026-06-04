@@ -7,14 +7,23 @@ import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-nod
 import { expect, test } from "bun:test";
 
 import {
-  PublishWorkflowProviderEventRequestSchema,
+  ApplyWorkflowProviderDefinitionRequestSchema,
+  DeliverWorkflowProviderEventRequestSchema,
+  GetWorkflowProviderRunEventsRequestSchema,
+  GetWorkflowProviderRunOutputRequestSchema,
   StartWorkflowProviderRunRequestSchema,
   WorkflowProvider as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
+import { jsonObjectFromStruct, structFromObject } from "../src/protocol.ts";
 import {
   WorkflowRunStatus,
+  WorkflowStepStatus,
   createWorkflowProviderService,
   defineWorkflowProvider,
+  workflowDefinition,
+  workflowEvent,
+  workflowRun,
+  workflowRunEvent,
 } from "../src/index.ts";
 
 async function reserveTCPAddress(): Promise<string> {
@@ -45,69 +54,78 @@ test("WorkflowProvider service converts transport messages to native callbacks",
   const calls: Array<{ method: string; detail: string }> = [];
   const provider = defineWorkflowProvider({
     displayName: "Workflow transport fixture",
-    async createDefinition(request) {
-      calls.push({ method: "create-definition", detail: request.createdBy?.subjectId ?? "" });
-      return {
-        id: request.idempotencyKey,
-        target: request.target,
-        createdBy: request.createdBy,
-      };
+    async applyDefinition(request) {
+      calls.push({ method: "apply-definition", detail: request.requestedBySubjectId ?? "" });
+      return workflowDefinition({
+        id: request.spec?.id,
+        generation: 7n,
+        target: request.spec?.target,
+        activations: request.spec?.activations,
+        createdBySubjectId: request.requestedBySubjectId,
+      });
     },
     async getDefinition(request) {
-      return { id: request.definitionId };
+      return workflowDefinition({ id: request.definitionId, generation: 7n });
     },
-    async updateDefinition(request) {
-      return {
+    async listDefinitions() {
+      return [workflowDefinition({ id: "definition-native-ts", generation: 7n })];
+    },
+    async setDefinitionPaused(request) {
+      return workflowDefinition({ id: request.definitionId, paused: request.paused });
+    },
+    async setActivationPaused(request) {
+      return workflowDefinition({
         id: request.definitionId,
-        target: request.target,
-      };
+        activations: [{ id: request.activationId, paused: request.paused }],
+      });
     },
     async deleteDefinition() {},
     async startRun(request) {
-      const firstStep = request.target?.steps?.[0];
-      const detail = firstStep?.app?.operation ?? "";
-      calls.push({ method: "start-run", detail });
-      return {
+      const input = request.input as { operation?: unknown } | undefined;
+      calls.push({ method: "start-run", detail: typeof input?.operation === "string" ? input.operation : "" });
+      return workflowRun({
         id: request.idempotencyKey,
         status: WorkflowRunStatus.PENDING,
-        target: request.target,
-        statusMessage: "",
-        resultBody: "",
-        createdBy: request.createdBy,
-        workflowKey: request.workflowKey,
         definitionId: request.definitionId,
-      };
+        definitionGeneration: request.expectedDefinitionGeneration,
+        workflowKey: request.workflowKey,
+        input: request.input,
+        createdBySubjectId: request.createdBySubjectId,
+        currentStepId: "sync",
+        steps: [{
+          stepId: "sync",
+          status: WorkflowStepStatus.PENDING,
+          input: request.input,
+        }],
+      });
     },
     async getRun(request) {
-      return {
-        id: request.runId,
-        status: WorkflowRunStatus.RUNNING,
-        statusMessage: "",
-        resultBody: "",
-        workflowKey: "",
-      };
+      return workflowRun({ id: request.runId, status: WorkflowRunStatus.RUNNING });
     },
     async listRuns() {
       return [];
     },
+    async getRunEvents(request) {
+      return [workflowRunEvent({
+        id: `${request.runId}:started`,
+        runId: request.runId,
+        stepId: "sync",
+        type: "run.started",
+      })];
+    },
+    async getRunOutput(request) {
+      return { output: { runId: request.runId, ok: true } };
+    },
     async cancelRun(request) {
-      return {
+      return workflowRun({
         id: request.runId,
         status: WorkflowRunStatus.CANCELED,
         statusMessage: request.reason,
-        resultBody: "",
-        workflowKey: "",
-      };
+      });
     },
     async signalRun(request) {
       return {
-        run: {
-          id: request.runId,
-          status: WorkflowRunStatus.RUNNING,
-          statusMessage: "",
-          resultBody: "",
-          workflowKey: "",
-        },
+        run: workflowRun({ id: request.runId, status: WorkflowRunStatus.RUNNING }),
         signal: request.signal,
         startedRun: false,
         workflowKey: "",
@@ -115,71 +133,21 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     },
     async signalOrStartRun(request) {
       return {
-        run: {
+        run: workflowRun({
           id: request.workflowKey,
           status: WorkflowRunStatus.PENDING,
-          target: request.target,
-          statusMessage: "",
-          resultBody: "",
-          createdBy: request.createdBy,
-          workflowKey: request.workflowKey,
           definitionId: request.definitionId,
-        },
+          workflowKey: request.workflowKey,
+          input: request.input,
+        }),
         signal: request.signal,
         startedRun: true,
         workflowKey: request.workflowKey,
       };
     },
-    async upsertSchedule(request) {
-      return {
-        id: request.scheduleId,
-        cron: request.cron,
-        timezone: request.timezone,
-        target: request.target,
-        paused: request.paused,
-        createdBy: request.requestedBy,
-        definitionId: request.definitionId,
-      };
-    },
-    async getSchedule(request) {
-      return { id: request.scheduleId, cron: "", timezone: "", paused: false };
-    },
-    async listSchedules() {
-      return [];
-    },
-    async deleteSchedule() {},
-    async pauseSchedule(request) {
-      return { id: request.scheduleId, cron: "", timezone: "", paused: true };
-    },
-    async resumeSchedule(request) {
-      return { id: request.scheduleId, cron: "", timezone: "", paused: false };
-    },
-    async upsertEventTrigger(request) {
-      return {
-        id: request.triggerId,
-        match: request.match,
-        target: request.target,
-        paused: request.paused,
-        createdBy: request.requestedBy,
-        definitionId: request.definitionId,
-      };
-    },
-    async getEventTrigger(request) {
-      return { id: request.triggerId, paused: false };
-    },
-    async listEventTriggers() {
-      return [];
-    },
-    async deleteEventTrigger() {},
-    async pauseEventTrigger(request) {
-      return { id: request.triggerId, paused: true };
-    },
-    async resumeEventTrigger(request) {
-      return { id: request.triggerId, paused: false };
-    },
-    async publishEvent(request) {
-      calls.push({ method: "publish-event", detail: request.event?.type ?? "" });
-      return { id: "published-ts", type: request.event?.type ?? "" };
+    async deliverEvent(request) {
+      calls.push({ method: "deliver-event", detail: request.event?.type ?? "" });
+      return workflowEvent({ id: "delivered-ts", type: request.event?.type ?? "", source: request.appName });
     },
   });
 
@@ -206,46 +174,56 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       WorkflowProviderService,
       createGrpcTransport({ baseUrl: `http://${address}` }),
     );
+    const definition = await client.applyDefinition(create(ApplyWorkflowProviderDefinitionRequestSchema, {
+      idempotencyKey: "definition-native-ts",
+      requestedBySubjectId: "user:ada",
+      spec: {
+        id: "definition-native-ts",
+        target: {
+          steps: [{
+            id: "sync",
+            action: {
+              case: "app",
+              value: { name: "demo", operation: "sync" },
+            },
+          }],
+        },
+      },
+    }));
+    expect(definition.id).toBe("definition-native-ts");
+    expect(definition.createdBySubjectId).toBe("user:ada");
+
     const run = await client.startRun(create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "run-native-ts",
-      target: {
-        steps: [{
-          id: "sync",
-          action: {
-            case: "app",
-            value: { name: "demo", operation: "sync" },
-          },
-        }],
-      },
+      definitionId: "definition-native-ts",
+      expectedDefinitionGeneration: 7n,
+      workflowKey: "demo:1",
+      input: structFromObject({ operation: "sync" }),
     }));
     expect(run.id).toBe("run-native-ts");
     expect(run.status).toBe(WorkflowRunStatus.PENDING);
+    expect(jsonObjectFromStruct(run.input).operation).toBe("sync");
+    expect(run.steps[0]?.stepId).toBe("sync");
 
-    const definition = await client.createDefinition({
-      idempotencyKey: "definition-native-ts",
-      createdBy: { subjectId: "user:ada" },
-      target: {
-        steps: [{
-          id: "define",
-          action: {
-            case: "app",
-            value: { name: "demo", operation: "define" },
-          },
-        }],
-      },
-    });
-    expect(definition.id).toBe("definition-native-ts");
-    expect(definition.createdBy?.subjectId).toBe("user:ada");
+    const events = await client.getRunEvents(create(GetWorkflowProviderRunEventsRequestSchema, {
+      runId: "run-native-ts",
+    }));
+    expect(events.events[0]?.type).toBe("run.started");
 
-    const published = await client.publishEvent(create(PublishWorkflowProviderEventRequestSchema, {
+    const output = await client.getRunOutput(create(GetWorkflowProviderRunOutputRequestSchema, {
+      runId: "run-native-ts",
+    }));
+    expect(output.output?.kind.case).toBe("structValue");
+
+    const delivered = await client.deliverEvent(create(DeliverWorkflowProviderEventRequestSchema, {
       appName: "demo",
       event: { type: "demo.synced" },
     }));
-    expect(published.id).toBe("published-ts");
+    expect(delivered.id).toBe("delivered-ts");
     expect(calls).toEqual([
+      { method: "apply-definition", detail: "user:ada" },
       { method: "start-run", detail: "sync" },
-      { method: "create-definition", detail: "user:ada" },
-      { method: "publish-event", detail: "demo.synced" },
+      { method: "deliver-event", detail: "demo.synced" },
     ]);
   } finally {
     if (server.listening) {

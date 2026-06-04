@@ -127,27 +127,28 @@ non-aliased message copies.
    WorkflowStepAppCall
    WorkflowStepAgentTurn
    WorkflowValue
-   BoundWorkflowRun
-   BoundWorkflowSchedule
-   BoundWorkflowEventTrigger
+   WorkflowActivation
+   WorkflowDefinitionSpec
+   WorkflowDefinition
+   WorkflowRun
+   WorkflowStepExecution
+   WorkflowRunEvent
    bound_workflow_target
    bound_workflow_target_from_target
    workflow_step
    workflow_step_app_call
    workflow_step_agent_turn
    workflow_value
+   workflow_definition_spec
+   workflow_definition
    workflow_event
    workflow_event_from_event
    workflow_signal
    workflow_signal_from_signal
    workflow_run_trigger
    workflow_run_trigger_from_trigger
-   bound_workflow_run
-   bound_workflow_run_from_run
-   bound_workflow_schedule
-   bound_workflow_schedule_from_schedule
-   bound_workflow_event_trigger
-   bound_workflow_event_trigger_from_trigger
+   workflow_run
+   workflow_run_from_run
 
 .. autoclass:: BoundWorkflowTarget
 
@@ -159,11 +160,17 @@ non-aliased message copies.
 
 .. autoclass:: WorkflowValue
 
-.. autoclass:: BoundWorkflowRun
+.. autoclass:: WorkflowActivation
 
-.. autoclass:: BoundWorkflowSchedule
+.. autoclass:: WorkflowDefinitionSpec
 
-.. autoclass:: BoundWorkflowEventTrigger
+.. autoclass:: WorkflowDefinition
+
+.. autoclass:: WorkflowRun
+
+.. autoclass:: WorkflowStepExecution
+
+.. autoclass:: WorkflowRunEvent
 
 .. autofunction:: bound_workflow_target
 
@@ -189,17 +196,17 @@ non-aliased message copies.
 
 .. autofunction:: workflow_run_trigger_from_trigger
 
-.. autofunction:: bound_workflow_run
+.. autofunction:: workflow_definition_spec
 
-.. autofunction:: bound_workflow_run_from_run
+.. autofunction:: workflow_definition
 
-.. autofunction:: bound_workflow_schedule
+.. autofunction:: workflow_definition_from_definition
 
-.. autofunction:: bound_workflow_schedule_from_schedule
+.. autofunction:: workflow_run
 
-.. autofunction:: bound_workflow_event_trigger
+.. autofunction:: workflow_run_from_run
 
-.. autofunction:: bound_workflow_event_trigger_from_trigger
+.. autofunction:: workflow_run_event
 
 .. _python-agent-provider-models:
 
@@ -214,7 +221,6 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
 .. autosummary::
    :nosignatures:
 
-   AgentActor
    AgentPreparedWorkspace
    AgentToolRef
    ResolvedAgentTool
@@ -239,8 +245,6 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
    ListAgentToolsResponse
    ListedAgentTool
    ResolvedAgentConnection
-
-.. autoclass:: AgentActor
 
 .. autoclass:: AgentPreparedWorkspace
 
@@ -301,8 +305,6 @@ lower-snake-case dictionaries.
 .. autosummary::
    :nosignatures:
 
-   agent_actor_to_dict
-   agent_actor_from_dict
    subject_to_dict
    subject_from_dict
    prepared_workspace_to_dict
@@ -315,10 +317,6 @@ lower-snake-case dictionaries.
    agent_message_from_dict
    agent_messages_to_dicts
    agent_messages_from_dicts
-
-.. autofunction:: agent_actor_to_dict
-
-.. autofunction:: agent_actor_from_dict
 
 .. autofunction:: subject_to_dict
 
@@ -735,7 +733,6 @@ These clients connect to host services made available to a provider process by
    ENV_RUNTIME_SESSION_ID
    AgentHost
    Agent
-   Authorization
    AppProtocol
    RuntimeLogHost
    RuntimeLogWriter
@@ -753,8 +750,6 @@ These clients connect to host services made available to a provider process by
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
-
-.. autofunction:: Authorization
 
 .. autoclass:: AppProtocol
    :members:

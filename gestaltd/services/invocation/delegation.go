@@ -30,16 +30,17 @@ func RunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *princi
 	value := &principal.Principal{
 		SubjectID:           strings.TrimSpace(runAs.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(runAs.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(runAs.DisplayName),
-		Kind:                principal.Kind(strings.TrimSpace(runAs.SubjectKind)),
 		Scopes:              append([]string(nil), base.Scopes...),
 		TokenPermissions:    principal.ClonePermissionSet(base.TokenPermissions),
+	}
+	if kind, _, ok := core.ParseSubjectID(value.SubjectID); ok {
+		value.Kind = principal.Kind(kind)
 	}
 	if value.Kind == principal.KindUser && value.SubjectID == strings.TrimSpace(base.SubjectID) {
 		value.UserID = strings.TrimSpace(base.UserID)
 		value.Identity = base.Identity
+		value.DisplayName = strings.TrimSpace(base.DisplayName)
 	}
-	principal.SetAuthSource(value, runAs.AuthSource)
 	if value.CredentialSubjectID == "" && principal.IsSystemSubjectID(value.SubjectID) {
 		value.CredentialSubjectID = value.SubjectID
 	}
@@ -53,9 +54,6 @@ func AuditSubjectFromPrincipal(p *principal.Principal) *core.RunAsSubject {
 	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
 		SubjectID:           strings.TrimSpace(p.SubjectID),
-		SubjectKind:         string(p.Kind),
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		DisplayName:         strings.TrimSpace(p.DisplayName),
-		AuthSource:          p.AuthSource(),
 	})
 }

@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -336,14 +335,13 @@ func (s *Server) authorizeManagedSubjectPendingConnection(ctx context.Context, p
 	if !managedSubjectCallerIsUnscoped(p) {
 		return false
 	}
-	if s.managedSubjects == nil || s.authorizationProvider == nil || s.authorizer == nil {
+	if s.managedSubjects == nil {
 		return false
 	}
 	if _, err := s.managedSubjects.GetManagedSubject(ctx, subjectID); err != nil {
 		return false
 	}
-	allowed, err := s.managedSubjectActionAllowed(principal.WithPrincipal(ctx, p), subjectID, authorization.ProviderManagedSubjectActionConnect)
-	return err == nil && allowed
+	return true
 }
 
 func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request) {

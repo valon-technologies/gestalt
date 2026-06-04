@@ -41,7 +41,7 @@ func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.Create
 		ClientRef:    req.ClientRef,
 		State:        gestalt.AgentSessionStateActive,
 		Metadata:     req.Metadata,
-		CreatedBy:    req.CreatedBy,
+		CreatedBySubjectID: req.CreatedBySubjectID,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}, nil
@@ -108,7 +108,7 @@ func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAge
 		Messages:      req.Messages,
 		Output:        output,
 		StatusMessage: "waiting for input",
-		CreatedBy:     req.CreatedBy,
+		CreatedBySubjectID: req.CreatedBySubjectID,
 		CreatedAt:     time.Now(),
 		StartedAt:     timePtr(time.Now()),
 		ExecutionRef:  req.ExecutionRef,
@@ -291,18 +291,11 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		Model:          "gpt-5.1",
 		ClientRef:      "client-session-1",
 		Metadata:       mustStruct(t, map[string]any{"source": "go-test"}),
-		CreatedBy: &proto.AgentActor{
-			SubjectId:   "user-1",
-			SubjectKind: "user",
-			DisplayName: "Test User",
-			AuthSource:  "test",
-		},
+		CreatedBySubjectId: "user:user-1",
 		Subject: &proto.SubjectContext{
-			Id:                  "borrower-1",
-			Kind:                "borrower",
-			CredentialSubjectId: "user-1",
-			DisplayName:         "Borrower One",
-			AuthSource:          "test",
+			Id:                  "borrower:borrower-1",
+			CredentialSubjectId: "user:user-1",
+			Email:               "borrower@example.com",
 		},
 		SessionStart: &proto.AgentSessionStartConfig{
 			Hooks: []*proto.AgentSessionStartHook{{
@@ -329,8 +322,8 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if session.GetMetadata().GetFields()["source"].GetStringValue() != "go-test" {
 		t.Fatalf("CreateSession metadata = %+v, want native metadata round trip", session.GetMetadata())
 	}
-	if session.GetCreatedBy().GetSubjectId() != "user-1" {
-		t.Fatalf("CreateSession created_by = %+v, want native actor round trip", session.GetCreatedBy())
+	if session.GetCreatedBySubjectId() != "user:user-1" {
+		t.Fatalf("CreateSession created_by_subject_id = %q, want user:user-1", session.GetCreatedBySubjectId())
 	}
 
 	fetchedSession, err := agentClient.GetSession(rpcCtx, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"})
@@ -363,6 +356,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	turn, err := agentClient.CreateTurn(rpcCtx, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
 		TurnId:         "turn-1",
 		SessionId:      "session-1",
 		IdempotencyKey: "turn-req-1",
@@ -395,14 +389,14 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			},
 		},
 		Metadata:     mustStruct(t, map[string]any{"requireInteraction": true}),
-		CreatedBy:    session.GetCreatedBy(),
+		CreatedBySubjectId: session.GetCreatedBySubjectId(),
 		ExecutionRef: "exec-turn-1",
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "slack",
 			Operation: "chat.postMessage",
 		}},
 		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
-		Subject:    &proto.SubjectContext{Id: "borrower-1", Kind: "borrower"},
+		Subject:    &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),

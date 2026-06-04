@@ -35,168 +35,105 @@ class AuthorizationProviderStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Evaluate = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/Evaluate',
-                request_serializer=v1_dot_authorization__pb2.AccessEvaluationRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.AccessDecision.FromString,
+        self.CheckAccess = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/CheckAccess',
+                request_serializer=v1_dot_authorization__pb2.CheckAccessRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.CheckAccessResponse.FromString,
                 _registered_method=True)
-        self.EvaluateMany = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/EvaluateMany',
-                request_serializer=v1_dot_authorization__pb2.AccessEvaluationsRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.AccessEvaluationsResponse.FromString,
+        self.CheckAccessMany = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany',
+                request_serializer=v1_dot_authorization__pb2.CheckAccessManyRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.CheckAccessManyResponse.FromString,
                 _registered_method=True)
-        self.SearchResources = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/SearchResources',
-                request_serializer=v1_dot_authorization__pb2.ResourceSearchRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.ResourceSearchResponse.FromString,
+        self.ListRelationships = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/ListRelationships',
+                request_serializer=v1_dot_authorization__pb2.ListRelationshipsRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.ListRelationshipsResponse.FromString,
                 _registered_method=True)
-        self.SearchSubjects = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/SearchSubjects',
-                request_serializer=v1_dot_authorization__pb2.SubjectSearchRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.SubjectSearchResponse.FromString,
+        self.AddRelationship = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/AddRelationship',
+                request_serializer=v1_dot_authorization__pb2.AddRelationshipRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.AddRelationshipResponse.FromString,
                 _registered_method=True)
-        self.EffectiveSearchResources = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources',
-                request_serializer=v1_dot_authorization__pb2.ResourceSearchRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.ResourceSearchResponse.FromString,
+        self.DeleteRelationship = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship',
+                request_serializer=v1_dot_authorization__pb2.DeleteRelationshipRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.DeleteRelationshipResponse.FromString,
                 _registered_method=True)
-        self.EffectiveSearchSubjects = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects',
-                request_serializer=v1_dot_authorization__pb2.EffectiveSubjectSearchRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.EffectiveSubjectSearchResponse.FromString,
+        self.SetAuthorizationState = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState',
+                request_serializer=v1_dot_authorization__pb2.SetAuthorizationStateRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.SetAuthorizationStateResponse.FromString,
                 _registered_method=True)
-        self.SearchActions = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/SearchActions',
-                request_serializer=v1_dot_authorization__pb2.ActionSearchRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.ActionSearchResponse.FromString,
-                _registered_method=True)
-        self.Expand = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/Expand',
-                request_serializer=v1_dot_authorization__pb2.ExpandRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.ExpandResponse.FromString,
-                _registered_method=True)
-        self.GetMetadata = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/GetMetadata',
+        self.GetActiveModelRef = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.AuthorizationMetadata.FromString,
+                response_deserializer=v1_dot_authorization__pb2.GetActiveModelRefResponse.FromString,
                 _registered_method=True)
-        self.ReadRelationships = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/ReadRelationships',
-                request_serializer=v1_dot_authorization__pb2.ReadRelationshipsRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.ReadRelationshipsResponse.FromString,
+        self.SetActiveModel = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/SetActiveModel',
+                request_serializer=v1_dot_authorization__pb2.SetActiveModelRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.SetActiveModelResponse.FromString,
                 _registered_method=True)
-        self.WriteRelationships = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/WriteRelationships',
-                request_serializer=v1_dot_authorization__pb2.WriteRelationshipsRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
-        self.GetActiveModel = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/GetActiveModel',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.GetActiveModelResponse.FromString,
-                _registered_method=True)
-        self.ListModels = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/ListModels',
-                request_serializer=v1_dot_authorization__pb2.ListModelsRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.ListModelsResponse.FromString,
-                _registered_method=True)
-        self.WriteModel = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/WriteModel',
-                request_serializer=v1_dot_authorization__pb2.WriteModelRequest.SerializeToString,
-                response_deserializer=v1_dot_authorization__pb2.AuthorizationModelRef.FromString,
+        self.ListActiveModelResourceTypes = channel.unary_unary(
+                '/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes',
+                request_serializer=v1_dot_authorization__pb2.ListActiveModelResourceTypesRequest.SerializeToString,
+                response_deserializer=v1_dot_authorization__pb2.ListActiveModelResourceTypesResponse.FromString,
                 _registered_method=True)
 
 
 class AuthorizationProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Evaluate(self, request, context):
+    def CheckAccess(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def EvaluateMany(self, request, context):
+    def CheckAccessMany(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SearchResources(self, request, context):
-        """Direct search over stored relationships. Implementations must not expand
-        inherited or computed permissions here.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SearchSubjects(self, request, context):
-        """Direct search over stored relationships. Implementations must not expand
-        inherited or computed permissions here.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def EffectiveSearchResources(self, request, context):
-        """Effective search that evaluates rewrites and inherited relations.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def EffectiveSearchSubjects(self, request, context):
-        """Effective search that evaluates rewrites and inherited relations.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SearchActions(self, request, context):
+    def ListRelationships(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def Expand(self, request, context):
-        """Expands one resource relation into the relationship targets that contribute
-        to it. Responses may be partial when truncated or max_depth_reached is true.
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetMetadata(self, request, context):
+    def AddRelationship(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ReadRelationships(self, request, context):
+    def DeleteRelationship(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def WriteRelationships(self, request, context):
+    def SetAuthorizationState(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetActiveModel(self, request, context):
+    def GetActiveModelRef(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ListModels(self, request, context):
+    def SetActiveModel(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def WriteModel(self, request, context):
+    def ListActiveModelResourceTypes(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -205,75 +142,50 @@ class AuthorizationProviderServicer(object):
 
 def add_AuthorizationProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Evaluate': grpc.unary_unary_rpc_method_handler(
-                    servicer.Evaluate,
-                    request_deserializer=v1_dot_authorization__pb2.AccessEvaluationRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.AccessDecision.SerializeToString,
+            'CheckAccess': grpc.unary_unary_rpc_method_handler(
+                    servicer.CheckAccess,
+                    request_deserializer=v1_dot_authorization__pb2.CheckAccessRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.CheckAccessResponse.SerializeToString,
             ),
-            'EvaluateMany': grpc.unary_unary_rpc_method_handler(
-                    servicer.EvaluateMany,
-                    request_deserializer=v1_dot_authorization__pb2.AccessEvaluationsRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.AccessEvaluationsResponse.SerializeToString,
+            'CheckAccessMany': grpc.unary_unary_rpc_method_handler(
+                    servicer.CheckAccessMany,
+                    request_deserializer=v1_dot_authorization__pb2.CheckAccessManyRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.CheckAccessManyResponse.SerializeToString,
             ),
-            'SearchResources': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchResources,
-                    request_deserializer=v1_dot_authorization__pb2.ResourceSearchRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.ResourceSearchResponse.SerializeToString,
+            'ListRelationships': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListRelationships,
+                    request_deserializer=v1_dot_authorization__pb2.ListRelationshipsRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.ListRelationshipsResponse.SerializeToString,
             ),
-            'SearchSubjects': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchSubjects,
-                    request_deserializer=v1_dot_authorization__pb2.SubjectSearchRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.SubjectSearchResponse.SerializeToString,
+            'AddRelationship': grpc.unary_unary_rpc_method_handler(
+                    servicer.AddRelationship,
+                    request_deserializer=v1_dot_authorization__pb2.AddRelationshipRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.AddRelationshipResponse.SerializeToString,
             ),
-            'EffectiveSearchResources': grpc.unary_unary_rpc_method_handler(
-                    servicer.EffectiveSearchResources,
-                    request_deserializer=v1_dot_authorization__pb2.ResourceSearchRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.ResourceSearchResponse.SerializeToString,
+            'DeleteRelationship': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteRelationship,
+                    request_deserializer=v1_dot_authorization__pb2.DeleteRelationshipRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.DeleteRelationshipResponse.SerializeToString,
             ),
-            'EffectiveSearchSubjects': grpc.unary_unary_rpc_method_handler(
-                    servicer.EffectiveSearchSubjects,
-                    request_deserializer=v1_dot_authorization__pb2.EffectiveSubjectSearchRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.EffectiveSubjectSearchResponse.SerializeToString,
+            'SetAuthorizationState': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetAuthorizationState,
+                    request_deserializer=v1_dot_authorization__pb2.SetAuthorizationStateRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.SetAuthorizationStateResponse.SerializeToString,
             ),
-            'SearchActions': grpc.unary_unary_rpc_method_handler(
-                    servicer.SearchActions,
-                    request_deserializer=v1_dot_authorization__pb2.ActionSearchRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.ActionSearchResponse.SerializeToString,
-            ),
-            'Expand': grpc.unary_unary_rpc_method_handler(
-                    servicer.Expand,
-                    request_deserializer=v1_dot_authorization__pb2.ExpandRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.ExpandResponse.SerializeToString,
-            ),
-            'GetMetadata': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetMetadata,
+            'GetActiveModelRef': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetActiveModelRef,
                     request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=v1_dot_authorization__pb2.AuthorizationMetadata.SerializeToString,
+                    response_serializer=v1_dot_authorization__pb2.GetActiveModelRefResponse.SerializeToString,
             ),
-            'ReadRelationships': grpc.unary_unary_rpc_method_handler(
-                    servicer.ReadRelationships,
-                    request_deserializer=v1_dot_authorization__pb2.ReadRelationshipsRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.ReadRelationshipsResponse.SerializeToString,
+            'SetActiveModel': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetActiveModel,
+                    request_deserializer=v1_dot_authorization__pb2.SetActiveModelRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.SetActiveModelResponse.SerializeToString,
             ),
-            'WriteRelationships': grpc.unary_unary_rpc_method_handler(
-                    servicer.WriteRelationships,
-                    request_deserializer=v1_dot_authorization__pb2.WriteRelationshipsRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'GetActiveModel': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetActiveModel,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=v1_dot_authorization__pb2.GetActiveModelResponse.SerializeToString,
-            ),
-            'ListModels': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListModels,
-                    request_deserializer=v1_dot_authorization__pb2.ListModelsRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.ListModelsResponse.SerializeToString,
-            ),
-            'WriteModel': grpc.unary_unary_rpc_method_handler(
-                    servicer.WriteModel,
-                    request_deserializer=v1_dot_authorization__pb2.WriteModelRequest.FromString,
-                    response_serializer=v1_dot_authorization__pb2.AuthorizationModelRef.SerializeToString,
+            'ListActiveModelResourceTypes': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListActiveModelResourceTypes,
+                    request_deserializer=v1_dot_authorization__pb2.ListActiveModelResourceTypesRequest.FromString,
+                    response_serializer=v1_dot_authorization__pb2.ListActiveModelResourceTypesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -287,7 +199,7 @@ class AuthorizationProvider(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Evaluate(request,
+    def CheckAccess(request,
             target,
             options=(),
             channel_credentials=None,
@@ -300,9 +212,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/Evaluate',
-            v1_dot_authorization__pb2.AccessEvaluationRequest.SerializeToString,
-            v1_dot_authorization__pb2.AccessDecision.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/CheckAccess',
+            v1_dot_authorization__pb2.CheckAccessRequest.SerializeToString,
+            v1_dot_authorization__pb2.CheckAccessResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -314,7 +226,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def EvaluateMany(request,
+    def CheckAccessMany(request,
             target,
             options=(),
             channel_credentials=None,
@@ -327,9 +239,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/EvaluateMany',
-            v1_dot_authorization__pb2.AccessEvaluationsRequest.SerializeToString,
-            v1_dot_authorization__pb2.AccessEvaluationsResponse.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany',
+            v1_dot_authorization__pb2.CheckAccessManyRequest.SerializeToString,
+            v1_dot_authorization__pb2.CheckAccessManyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -341,7 +253,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def SearchResources(request,
+    def ListRelationships(request,
             target,
             options=(),
             channel_credentials=None,
@@ -354,9 +266,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/SearchResources',
-            v1_dot_authorization__pb2.ResourceSearchRequest.SerializeToString,
-            v1_dot_authorization__pb2.ResourceSearchResponse.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/ListRelationships',
+            v1_dot_authorization__pb2.ListRelationshipsRequest.SerializeToString,
+            v1_dot_authorization__pb2.ListRelationshipsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -368,7 +280,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def SearchSubjects(request,
+    def AddRelationship(request,
             target,
             options=(),
             channel_credentials=None,
@@ -381,9 +293,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/SearchSubjects',
-            v1_dot_authorization__pb2.SubjectSearchRequest.SerializeToString,
-            v1_dot_authorization__pb2.SubjectSearchResponse.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/AddRelationship',
+            v1_dot_authorization__pb2.AddRelationshipRequest.SerializeToString,
+            v1_dot_authorization__pb2.AddRelationshipResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -395,7 +307,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def EffectiveSearchResources(request,
+    def DeleteRelationship(request,
             target,
             options=(),
             channel_credentials=None,
@@ -408,9 +320,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources',
-            v1_dot_authorization__pb2.ResourceSearchRequest.SerializeToString,
-            v1_dot_authorization__pb2.ResourceSearchResponse.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship',
+            v1_dot_authorization__pb2.DeleteRelationshipRequest.SerializeToString,
+            v1_dot_authorization__pb2.DeleteRelationshipResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -422,7 +334,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def EffectiveSearchSubjects(request,
+    def SetAuthorizationState(request,
             target,
             options=(),
             channel_credentials=None,
@@ -435,9 +347,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects',
-            v1_dot_authorization__pb2.EffectiveSubjectSearchRequest.SerializeToString,
-            v1_dot_authorization__pb2.EffectiveSubjectSearchResponse.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState',
+            v1_dot_authorization__pb2.SetAuthorizationStateRequest.SerializeToString,
+            v1_dot_authorization__pb2.SetAuthorizationStateResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -449,7 +361,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def SearchActions(request,
+    def GetActiveModelRef(request,
             target,
             options=(),
             channel_credentials=None,
@@ -462,63 +374,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/SearchActions',
-            v1_dot_authorization__pb2.ActionSearchRequest.SerializeToString,
-            v1_dot_authorization__pb2.ActionSearchResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def Expand(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AuthorizationProvider/Expand',
-            v1_dot_authorization__pb2.ExpandRequest.SerializeToString,
-            v1_dot_authorization__pb2.ExpandResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetMetadata(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AuthorizationProvider/GetMetadata',
+            '/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            v1_dot_authorization__pb2.AuthorizationMetadata.FromString,
+            v1_dot_authorization__pb2.GetActiveModelRefResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -530,7 +388,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def ReadRelationships(request,
+    def SetActiveModel(request,
             target,
             options=(),
             channel_credentials=None,
@@ -543,9 +401,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/ReadRelationships',
-            v1_dot_authorization__pb2.ReadRelationshipsRequest.SerializeToString,
-            v1_dot_authorization__pb2.ReadRelationshipsResponse.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/SetActiveModel',
+            v1_dot_authorization__pb2.SetActiveModelRequest.SerializeToString,
+            v1_dot_authorization__pb2.SetActiveModelResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -557,7 +415,7 @@ class AuthorizationProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def WriteRelationships(request,
+    def ListActiveModelResourceTypes(request,
             target,
             options=(),
             channel_credentials=None,
@@ -570,90 +428,9 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/WriteRelationships',
-            v1_dot_authorization__pb2.WriteRelationshipsRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetActiveModel(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AuthorizationProvider/GetActiveModel',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            v1_dot_authorization__pb2.GetActiveModelResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ListModels(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AuthorizationProvider/ListModels',
-            v1_dot_authorization__pb2.ListModelsRequest.SerializeToString,
-            v1_dot_authorization__pb2.ListModelsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def WriteModel(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.AuthorizationProvider/WriteModel',
-            v1_dot_authorization__pb2.WriteModelRequest.SerializeToString,
-            v1_dot_authorization__pb2.AuthorizationModelRef.FromString,
+            '/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes',
+            v1_dot_authorization__pb2.ListActiveModelResourceTypesRequest.SerializeToString,
+            v1_dot_authorization__pb2.ListActiveModelResourceTypesResponse.FromString,
             options,
             channel_credentials,
             insecure,

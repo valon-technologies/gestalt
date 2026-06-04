@@ -33,7 +33,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "validate",
 			args:      []string{"validate", "--help"},
-			wantParts: []string{"gestaltd validate", "scoped validation of one app closure", "--app NAME", "--lockfile PATH", "--platform os/arch"},
+			wantParts: []string{"gestaltd validate", "--lockfile PATH", "--platform os/arch"},
 		},
 		{
 			name:      "lock",
@@ -55,7 +55,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "--app NAME", "--port PORT", "--watch"},
+			wantParts: []string{"gestaltd serve --path PATH", "--port PORT", "--watch"},
 		},
 		{
 			name:      "provider repo",
@@ -276,8 +276,8 @@ func TestE2ESyncJSONStdoutCleanWithSourceBuildOutput(t *testing.T) {
 	if doc.Output.Measured {
 		t.Fatalf("sync check JSON output.measured = true, want false")
 	}
-	if doc.Archives.Cache.Puts != 0 || doc.Archives.Cache.PutFailures != 0 {
-		t.Fatalf("sync check JSON cache puts/failures = %d/%d, want 0/0", doc.Archives.Cache.Puts, doc.Archives.Cache.PutFailures)
+	if doc.Cache.Put.Successes != 0 || doc.Cache.Put.Failures != 0 {
+		t.Fatalf("sync check JSON cache put successes/failures = %d/%d, want 0/0", doc.Cache.Put.Successes, doc.Cache.Put.Failures)
 	}
 }
 
@@ -427,6 +427,7 @@ packages:
 	entry := cfg.Apps["alpha"]
 	if entry == nil {
 		t.Fatal(`Apps["alpha"] = nil`)
+		return
 	}
 	if got := entry.Source.PackageRepo(); got != "local" {
 		t.Fatalf("Source.PackageRepo = %q, want local", got)
@@ -453,11 +454,6 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			name:     "top level trailing args",
 			args:     []string{"--config", "foo.yaml", "extra"},
 			wantPart: "unexpected arguments: extra",
-		},
-		{
-			name:     "top level app flag",
-			args:     []string{"--app", "alpha"},
-			wantPart: "flag provided but not defined: -app",
 		},
 		{
 			name:     "serve trailing args",

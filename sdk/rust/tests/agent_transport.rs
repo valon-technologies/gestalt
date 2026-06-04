@@ -129,7 +129,7 @@ impl AgentProvider for TestAgentProvider {
             client_ref: request.client_ref,
             state: AgentSessionState::Active,
             metadata: request.metadata,
-            created_by: request.created_by,
+            created_by_subject_id: request.created_by_subject_id.clone(),
             created_at: Some(SystemTime::now()),
             updated_at: Some(SystemTime::now()),
             ..Default::default()
@@ -207,7 +207,7 @@ impl AgentProvider for TestAgentProvider {
                 text: "echo:Plan it".to_string(),
             })),
             status_message: "waiting for input".to_string(),
-            created_by: request.created_by,
+            created_by_subject_id: request.created_by_subject_id.clone(),
             created_at: Some(SystemTime::now()),
             started_at: Some(SystemTime::now()),
             execution_ref: request.execution_ref,
@@ -592,6 +592,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             session_id: "session-1".to_string(),
             model: "gpt-5.1".to_string(),
+            timeout_seconds: 120,
             messages: vec![pb::AgentMessage {
                 role: "user".to_string(),
                 text: "Plan it".to_string(),

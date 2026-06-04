@@ -222,18 +222,12 @@ class AppInvokeGraphQLRequest(_message.Message):
 class SubjectContext(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
-    KIND_FIELD_NUMBER: _ClassVar[int]
-    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
-    EMAIL_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    EMAIL_FIELD_NUMBER: _ClassVar[int]
     id: str
-    kind: str
-    display_name: str
-    auth_source: str
-    email: str
     credential_subject_id: str
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., email: _Optional[str] = ..., credential_subject_id: _Optional[str] = ...) -> None: ...
+    email: str
+    def __init__(self, id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
 
 class AgentToolRef(_message.Message):
     __slots__ = ()

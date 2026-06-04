@@ -29,10 +29,10 @@ func parseValue(value any, path string) (coreworkflow.Value, error) {
 						return coreworkflow.Value{}, err
 					}
 					return coreworkflow.Value{Template: &text}, nil
-				case "runInput":
-					return coreworkflow.Value{RunInput: stringValue(raw)}, nil
-				case "signalPayload":
-					return coreworkflow.Value{SignalPayload: stringValue(raw)}, nil
+				case "input":
+					return coreworkflow.Value{Input: stringValue(raw)}, nil
+				case "signal":
+					return coreworkflow.Value{Signal: stringValue(raw)}, nil
 				case "stepOutput":
 					stepOutputMap, ok := asMap(raw)
 					if !ok {
@@ -44,6 +44,18 @@ func parseValue(value any, path string) (coreworkflow.Value, error) {
 					return coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{
 						StepID: stringArg(stepOutputMap, "stepId"),
 						Path:   stringArg(stepOutputMap, "path"),
+					}}, nil
+				case "stepInput":
+					stepInputMap, ok := asMap(raw)
+					if !ok {
+						return coreworkflow.Value{}, fmt.Errorf("%w: %s.stepInput must be an object", ErrInvalid, path)
+					}
+					if err := rejectUnknownKeys(stepInputMap, path+".stepInput", "stepId", "path"); err != nil {
+						return coreworkflow.Value{}, err
+					}
+					return coreworkflow.Value{StepInput: &coreworkflow.StepInputSource{
+						StepID: stringArg(stepInputMap, "stepId"),
+						Path:   stringArg(stepInputMap, "path"),
 					}}, nil
 				}
 			}
@@ -132,14 +144,19 @@ func EncodeValue(value coreworkflow.Value) any {
 		return map[string]any{"array": items}
 	case value.Template != nil:
 		return encodeText(*value.Template)
-	case strings.TrimSpace(value.RunInput) != "":
-		return map[string]any{"runInput": value.RunInput}
-	case strings.TrimSpace(value.SignalPayload) != "":
-		return map[string]any{"signalPayload": value.SignalPayload}
+	case strings.TrimSpace(value.Input) != "":
+		return map[string]any{"input": value.Input}
+	case strings.TrimSpace(value.Signal) != "":
+		return map[string]any{"signal": value.Signal}
 	case value.StepOutput != nil:
 		return map[string]any{"stepOutput": map[string]any{
 			"stepId": value.StepOutput.StepID,
 			"path":   value.StepOutput.Path,
+		}}
+	case value.StepInput != nil:
+		return map[string]any{"stepInput": map[string]any{
+			"stepId": value.StepInput.StepID,
+			"path":   value.StepInput.Path,
 		}}
 	default:
 		return nil

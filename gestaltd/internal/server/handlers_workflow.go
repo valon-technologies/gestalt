@@ -2,59 +2,15 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
-
-type workflowScheduleTargetRequest struct {
-	Steps []workflowStepTargetRequest `json:"steps,omitempty"`
-}
-
-type workflowAppStepRequest struct {
-	Name           string               `json:"name,omitempty"`
-	Operation      string               `json:"operation"`
-	Connection     string               `json:"connection,omitempty"`
-	Instance       string               `json:"instance,omitempty"`
-	CredentialMode string               `json:"credentialMode,omitempty"`
-	Input          workflowValueRequest `json:"input,omitempty"`
-}
-
-type workflowAgentStepRequest struct {
-	ProviderName string                   `json:"provider,omitempty"`
-	Model        string                   `json:"model,omitempty"`
-	SessionKey   string                   `json:"sessionKey,omitempty"`
-	Prompt       workflowTextRequest      `json:"prompt,omitempty"`
-	Messages     []workflowMessageRequest `json:"messages,omitempty"`
-	ToolRefs     []agentToolRefRequest    `json:"tools,omitempty"`
-	Output       *agentOutputRequest      `json:"output,omitempty"`
-	ModelOptions map[string]any           `json:"modelOptions,omitempty"`
-}
-
-type workflowStepTargetRequest struct {
-	ID             string                          `json:"id,omitempty"`
-	Inputs         map[string]workflowValueRequest `json:"inputs,omitempty"`
-	App            *workflowAppStepRequest         `json:"app,omitempty"`
-	Agent          *workflowAgentStepRequest       `json:"agent,omitempty"`
-	Metadata       map[string]any                  `json:"metadata,omitempty"`
-	TimeoutSeconds int                             `json:"timeoutSeconds,omitempty"`
-	When           *workflowStepWhenRequest        `json:"when,omitempty"`
-}
 
 type workflowTextRequest struct {
 	Template string `json:"template,omitempty"`
@@ -75,53 +31,23 @@ func (r *workflowTextRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type workflowMessageRequest struct {
-	Role     string              `json:"role,omitempty"`
-	Text     workflowTextRequest `json:"text,omitempty"`
-	Metadata map[string]any      `json:"metadata,omitempty"`
-}
-
-type workflowStepWhenRequest struct {
-	Value     workflowValueRequest `json:"value,omitempty"`
-	Equals    any                  `json:"equals,omitempty"`
-	EqualsSet bool                 `json:"-"`
-}
-
-func (r *workflowStepWhenRequest) UnmarshalJSON(data []byte) error {
-	type alias struct {
-		Value  workflowValueRequest `json:"value,omitempty"`
-		Equals any                  `json:"equals,omitempty"`
-	}
-	var out alias
-	if err := json.Unmarshal(data, &out); err != nil {
-		return err
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	r.Value = out.Value
-	r.Equals = out.Equals
-	_, r.EqualsSet = raw["equals"]
-	return nil
-}
-
 type workflowStepOutputSourceRequest struct {
 	StepID string `json:"stepId,omitempty"`
 	Path   string `json:"path,omitempty"`
 }
 
 type workflowValueRequest struct {
-	Literal       any
-	LiteralSet    bool
-	Object        map[string]workflowValueRequest
-	ObjectSet     bool
-	Array         []workflowValueRequest
-	ArraySet      bool
-	Template      *workflowTextRequest
-	RunInput      string
-	SignalPayload string
-	StepOutput    *workflowStepOutputSourceRequest
+	Literal    any
+	LiteralSet bool
+	Object     map[string]workflowValueRequest
+	ObjectSet  bool
+	Array      []workflowValueRequest
+	ArraySet   bool
+	Template   *workflowTextRequest
+	Input      string
+	Signal     string
+	StepOutput *workflowStepOutputSourceRequest
+	StepInput  *workflowStepOutputSourceRequest
 }
 
 func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
@@ -160,16 +86,23 @@ func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
 					}
 					r.Template = &text
 					return nil
-				case "runInput":
-					return json.Unmarshal(raw, &r.RunInput)
-				case "signalPayload":
-					return json.Unmarshal(raw, &r.SignalPayload)
+				case "input":
+					return json.Unmarshal(raw, &r.Input)
+				case "signal":
+					return json.Unmarshal(raw, &r.Signal)
 				case "stepOutput":
 					var source workflowStepOutputSourceRequest
 					if err := json.Unmarshal(raw, &source); err != nil {
 						return err
 					}
 					r.StepOutput = &source
+					return nil
+				case "stepInput":
+					var source workflowStepOutputSourceRequest
+					if err := json.Unmarshal(raw, &source); err != nil {
+						return err
+					}
+					r.StepInput = &source
 					return nil
 				}
 			}
@@ -199,14 +132,6 @@ func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
 	r.Literal = literal
 	r.LiteralSet = true
 	return nil
-}
-
-type workflowScheduleUpsertRequest struct {
-	Provider string                        `json:"provider,omitempty"`
-	Cron     string                        `json:"cron"`
-	Timezone string                        `json:"timezone,omitempty"`
-	Target   workflowScheduleTargetRequest `json:"target"`
-	Paused   bool                          `json:"paused,omitempty"`
 }
 
 type workflowScheduleTargetInfo struct {
@@ -270,167 +195,7 @@ func (i workflowStepWhenInfo) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-type workflowScheduleInfo struct {
-	ID        string                     `json:"id"`
-	Provider  string                     `json:"provider"`
-	Cron      string                     `json:"cron"`
-	Timezone  string                     `json:"timezone,omitempty"`
-	Target    workflowScheduleTargetInfo `json:"target"`
-	Paused    bool                       `json:"paused"`
-	CreatedAt *time.Time                 `json:"createdAt,omitempty"`
-	UpdatedAt *time.Time                 `json:"updatedAt,omitempty"`
-	NextRunAt *time.Time                 `json:"nextRunAt,omitempty"`
-}
-
-func (s *Server) listGlobalWorkflowSchedules(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	schedules, err := s.workflowSchedules.ListSchedules(r.Context(), p)
-	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, "", "", "", err)
-		return
-	}
-	out := make([]workflowScheduleInfo, 0, len(schedules))
-	for _, managed := range schedules {
-		out = append(out, workflowScheduleInfoFromManaged(managed))
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-
-	var req workflowScheduleUpsertRequest
-	if err := decodeWorkflowJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if len(req.Target.Steps) == 0 {
-		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
-		return
-	}
-	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	target, err := workflowScheduleTargetFromRequest(req.Target)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	managed, err := s.workflowSchedules.CreateSchedule(r.Context(), p, workflowmanager.ScheduleUpsert{
-		ProviderName: strings.TrimSpace(req.Provider),
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       target,
-		Paused:       req.Paused,
-	})
-	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, workflowScheduleTargetErrorApp(req.Target), workflowScheduleTargetErrorOperation(req.Target), "", err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, workflowScheduleInfoFromManaged(managed))
-}
-
-func (s *Server) getGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	managed, err := s.workflowSchedules.GetSchedule(r.Context(), p, chi.URLParam(r, "scheduleID"))
-	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, "", "", chi.URLParam(r, "scheduleID"), err)
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromManaged(managed))
-}
-
-func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	scheduleID := chi.URLParam(r, "scheduleID")
-
-	var req workflowScheduleUpsertRequest
-	if err := decodeWorkflowJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if len(req.Target.Steps) == 0 {
-		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
-		return
-	}
-	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	target, err := workflowScheduleTargetFromRequest(req.Target)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	managed, err := s.workflowSchedules.UpdateSchedule(r.Context(), p, scheduleID, workflowmanager.ScheduleUpsert{
-		ProviderName: strings.TrimSpace(req.Provider),
-		Cron:         strings.TrimSpace(req.Cron),
-		Timezone:     strings.TrimSpace(req.Timezone),
-		Target:       target,
-		Paused:       req.Paused,
-	})
-	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, workflowScheduleTargetErrorApp(req.Target), workflowScheduleTargetErrorOperation(req.Target), scheduleID, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromManaged(managed))
-}
-
-func (s *Server) deleteGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	scheduleID := chi.URLParam(r, "scheduleID")
-	if err := s.workflowSchedules.DeleteSchedule(r.Context(), p, scheduleID); err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, "", "", scheduleID, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
-}
-
-func (s *Server) pauseGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	scheduleID := chi.URLParam(r, "scheduleID")
-	managed, err := s.workflowSchedules.PauseSchedule(r.Context(), p, scheduleID)
-	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, "", "", scheduleID, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromManaged(managed))
-}
-
-func (s *Server) resumeGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
-	if !ok {
-		return
-	}
-	scheduleID := chi.URLParam(r, "scheduleID")
-	managed, err := s.workflowSchedules.ResumeSchedule(r.Context(), p, scheduleID)
-	if err != nil {
-		s.writeWorkflowScheduleManagerError(w, r, "", "", scheduleID, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, workflowScheduleInfoFromManaged(managed))
-}
-
-func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
+func (s *Server) resolveWorkflowActor(w http.ResponseWriter, r *http.Request) (*principal.Principal, bool) {
 	p := principal.Canonicalized(PrincipalFromContext(r.Context()))
 	if p == nil {
 		writeError(w, http.StatusUnauthorized, "missing authorization")
@@ -443,121 +208,8 @@ func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Req
 	return p, true
 }
 
-func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) (coreworkflow.Target, error) {
-	steps := make([]coreworkflow.Step, 0, len(target.Steps))
-	for i := range target.Steps {
-		step := target.Steps[i]
-		agent, err := workflowAgentTurnFromRequest(step.Agent)
-		if err != nil {
-			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].agent output: %w", i, err)
-		}
-		steps = append(steps, coreworkflow.Step{
-			ID:             strings.TrimSpace(step.ID),
-			Inputs:         workflowValueMapFromRequest(step.Inputs),
-			App:            workflowAppCallFromRequest(step.App),
-			Agent:          agent,
-			Metadata:       maps.Clone(step.Metadata),
-			TimeoutSeconds: step.TimeoutSeconds,
-			When:           workflowStepWhenFromRequest(step.When),
-		})
-	}
-	return coreworkflow.Target{Steps: steps}, nil
-}
-
-func decodeWorkflowJSONBody(r *http.Request, dst any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(dst); err != nil {
-		return err
-	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return fmt.Errorf("invalid trailing JSON body")
-		}
-		return err
-	}
-	return nil
-}
-
-func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) error {
-	for i := range target.Steps {
-		step := target.Steps[i]
-		if step.App != nil && strings.TrimSpace(step.App.CredentialMode) != "" {
-			return fmt.Errorf("workflow target.steps[%d].app.credentialMode is not supported on public requests", i)
-		}
-	}
-	return nil
-}
-
-func workflowAppCallFromRequest(target *workflowAppStepRequest) *coreworkflow.AppCall {
-	if target == nil {
-		return nil
-	}
-	return &coreworkflow.AppCall{
-		Name:           strings.TrimSpace(target.Name),
-		Operation:      strings.TrimSpace(target.Operation),
-		Connection:     strings.TrimSpace(target.Connection),
-		Instance:       strings.TrimSpace(target.Instance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(target.CredentialMode)),
-		Input:          workflowValueFromRequest(target.Input),
-	}
-}
-
-func workflowAgentTurnFromRequest(target *workflowAgentStepRequest) (*coreworkflow.AgentTurn, error) {
-	if target == nil {
-		return nil, nil
-	}
-	output, err := agentOutputFromRequest(target.Output, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &coreworkflow.AgentTurn{
-		ProviderName: strings.TrimSpace(target.ProviderName),
-		Model:        strings.TrimSpace(target.Model),
-		SessionKey:   strings.TrimSpace(target.SessionKey),
-		Prompt:       workflowTextFromRequest(target.Prompt),
-		Messages:     workflowMessagesFromRequest(target.Messages),
-		ToolRefs:     agentToolRefsFromRequest(target.ToolRefs),
-		Output:       output,
-		ModelOptions: maps.Clone(target.ModelOptions),
-	}, nil
-}
-
-func workflowStepWhenFromRequest(when *workflowStepWhenRequest) *coreworkflow.StepWhen {
-	if when == nil {
-		return nil
-	}
-	return &coreworkflow.StepWhen{
-		Value:     workflowValueFromRequest(when.Value),
-		Equals:    when.Equals,
-		EqualsSet: when.EqualsSet,
-	}
-}
-
 func workflowTextFromRequest(text workflowTextRequest) coreworkflow.Text {
 	return coreworkflow.Text{Template: strings.TrimSpace(text.Template)}
-}
-
-func workflowMessagesFromRequest(messages []workflowMessageRequest) []coreworkflow.AgentMessage {
-	if len(messages) == 0 {
-		return nil
-	}
-	out := make([]coreworkflow.AgentMessage, 0, len(messages))
-	for i := range messages {
-		out = append(out, coreworkflow.AgentMessage{
-			Role:     strings.TrimSpace(messages[i].Role),
-			Text:     workflowTextFromRequest(messages[i].Text),
-			Metadata: maps.Clone(messages[i].Metadata),
-		})
-	}
-	return out
-}
-
-func workflowValueMapFromRequest(values map[string]workflowValueRequest) map[string]coreworkflow.Value {
-	if len(values) == 0 {
-		return nil
-	}
-	return workflowValueObjectMapFromRequest(values)
 }
 
 func workflowValueObjectMapFromRequest(values map[string]workflowValueRequest) map[string]coreworkflow.Value {
@@ -578,10 +230,10 @@ func workflowValueListFromRequest(values []workflowValueRequest) []coreworkflow.
 
 func workflowValueFromRequest(value workflowValueRequest) coreworkflow.Value {
 	out := coreworkflow.Value{
-		Literal:       value.Literal,
-		LiteralSet:    value.LiteralSet,
-		RunInput:      strings.TrimSpace(value.RunInput),
-		SignalPayload: strings.TrimSpace(value.SignalPayload),
+		Literal:    value.Literal,
+		LiteralSet: value.LiteralSet,
+		Input:      strings.TrimSpace(value.Input),
+		Signal:     strings.TrimSpace(value.Signal),
 	}
 	if value.ObjectSet {
 		out.Object = workflowValueObjectMapFromRequest(value.Object)
@@ -596,60 +248,10 @@ func workflowValueFromRequest(value workflowValueRequest) coreworkflow.Value {
 	if value.StepOutput != nil {
 		out.StepOutput = &coreworkflow.StepOutputSource{StepID: strings.TrimSpace(value.StepOutput.StepID), Path: strings.TrimSpace(value.StepOutput.Path)}
 	}
+	if value.StepInput != nil {
+		out.StepInput = &coreworkflow.StepInputSource{StepID: strings.TrimSpace(value.StepInput.StepID), Path: strings.TrimSpace(value.StepInput.Path)}
+	}
 	return out
-}
-
-func workflowScheduleTargetErrorApp(target workflowScheduleTargetRequest) string {
-	if len(target.Steps) == 0 {
-		return ""
-	}
-	step := target.Steps[0]
-	if step.App != nil {
-		return strings.TrimSpace(step.App.Name)
-	}
-	if step.Agent != nil {
-		return "agent"
-	}
-	return ""
-}
-
-func workflowScheduleTargetErrorOperation(target workflowScheduleTargetRequest) string {
-	if len(target.Steps) == 0 {
-		return ""
-	}
-	step := target.Steps[0]
-	if step.App != nil {
-		return strings.TrimSpace(step.App.Operation)
-	}
-	if step.Agent != nil {
-		return "turn"
-	}
-	return ""
-}
-
-func workflowScheduleInfoFromManaged(managed *workflowmanager.ManagedSchedule) workflowScheduleInfo {
-	if managed == nil {
-		return workflowScheduleInfo{}
-	}
-	return workflowScheduleInfoFromCore(managed.Schedule, strings.TrimSpace(managed.ProviderName))
-}
-
-func workflowScheduleInfoFromCore(schedule *coreworkflow.Schedule, providerName string) workflowScheduleInfo {
-	info := workflowScheduleInfo{
-		Provider: providerName,
-	}
-	if schedule == nil {
-		return info
-	}
-	info.ID = schedule.ID
-	info.Cron = schedule.Cron
-	info.Timezone = schedule.Timezone
-	info.Paused = schedule.Paused
-	info.CreatedAt = schedule.CreatedAt
-	info.UpdatedAt = schedule.UpdatedAt
-	info.NextRunAt = schedule.NextRunAt
-	info.Target = workflowScheduleTargetInfoFromCore(schedule.Target)
-	return info
 }
 
 func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowScheduleTargetInfo {
@@ -765,82 +367,21 @@ func workflowValueInfoFromCore(value coreworkflow.Value) any {
 		return map[string]any{"array": items}
 	case value.Template != nil:
 		return map[string]any{"template": workflowTextInfoFromCore(*value.Template)}
-	case strings.TrimSpace(value.RunInput) != "":
-		return map[string]any{"runInput": value.RunInput}
-	case strings.TrimSpace(value.SignalPayload) != "":
-		return map[string]any{"signalPayload": value.SignalPayload}
+	case strings.TrimSpace(value.Input) != "":
+		return map[string]any{"input": value.Input}
+	case strings.TrimSpace(value.Signal) != "":
+		return map[string]any{"signal": value.Signal}
 	case value.StepOutput != nil:
 		return map[string]any{"stepOutput": map[string]any{
 			"stepId": value.StepOutput.StepID,
 			"path":   value.StepOutput.Path,
 		}}
+	case value.StepInput != nil:
+		return map[string]any{"stepInput": map[string]any{
+			"stepId": value.StepInput.StepID,
+			"path":   value.StepInput.Path,
+		}}
 	default:
 		return nil
-	}
-}
-
-func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.ResponseWriter, appName, scheduleID string, err error) {
-	switch {
-	case errors.Is(err, core.ErrNotFound):
-		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
-	default:
-		slog.ErrorContext(ctx, "workflow schedule provider error",
-			"app", appName,
-			"schedule_id", scheduleID,
-			"error", err,
-		)
-		if strings.TrimSpace(appName) == "" {
-			writeError(w, http.StatusInternalServerError, "workflow schedule request failed")
-			return
-		}
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow schedule request failed for integration %q", appName))
-	}
-}
-
-func (s *Server) writeWorkflowScheduleManagerError(w http.ResponseWriter, r *http.Request, appName, operation, scheduleID string, err error) {
-	switch {
-	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
-		writeError(w, http.StatusPreconditionFailed, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):
-		writeError(w, http.StatusUnauthorized, err.Error())
-	case errors.Is(err, workflowmanager.ErrDuplicateWorkflowObjects):
-		writeError(w, http.StatusInternalServerError, err.Error())
-	case errors.Is(err, invocation.ErrProviderNotFound),
-		errors.Is(err, invocation.ErrOperationNotFound),
-		errors.Is(err, invocation.ErrNotAuthenticated),
-		errors.Is(err, invocation.ErrAuthorizationDenied),
-		errors.Is(err, invocation.ErrScopeDenied),
-		errors.Is(err, invocation.ErrNoCredential),
-		errors.Is(err, invocation.ErrReconnectRequired),
-		errors.Is(err, invocation.ErrAmbiguousInstance),
-		errors.Is(err, invocation.ErrUserResolution),
-		errors.Is(err, invocation.ErrInvalidInvocation),
-		errors.Is(err, invocation.ErrInternal),
-		errors.Is(err, core.ErrMCPOnly):
-		s.writeWorkflowScheduleTargetError(w, r, appName, operation, err)
-	case errors.Is(err, core.ErrNotFound):
-		s.writeWorkflowScheduleProviderError(r.Context(), w, appName, scheduleID, err)
-	default:
-		s.writeWorkflowScheduleProviderError(r.Context(), w, appName, scheduleID, err)
-	}
-}
-
-func (s *Server) writeWorkflowScheduleTargetError(w http.ResponseWriter, r *http.Request, appName, operation string, err error) {
-	switch {
-	case errors.Is(err, invocation.ErrProviderNotFound),
-		errors.Is(err, invocation.ErrOperationNotFound),
-		errors.Is(err, invocation.ErrNotAuthenticated),
-		errors.Is(err, invocation.ErrAuthorizationDenied),
-		errors.Is(err, invocation.ErrScopeDenied),
-		errors.Is(err, invocation.ErrNoCredential),
-		errors.Is(err, invocation.ErrReconnectRequired),
-		errors.Is(err, invocation.ErrAmbiguousInstance),
-		errors.Is(err, invocation.ErrUserResolution),
-		errors.Is(err, invocation.ErrInvalidInvocation),
-		errors.Is(err, invocation.ErrInternal),
-		errors.Is(err, core.ErrMCPOnly):
-		s.writeInvocationError(w, r, appName, operation, err)
-	default:
-		writeError(w, http.StatusBadRequest, err.Error())
 	}
 }

@@ -82,10 +82,11 @@ func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) 
 }
 
 func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Request) (gestalt.Response[stubOutput], error) {
+	subjectKind, _, _ := gestalt.ParseSubjectID(req.Subject.ID)
 	out := stubOutput{
 		Operation:           "test_op",
 		SubjectID:           req.Subject.ID,
-		SubjectKind:         req.Subject.Kind,
+		SubjectKind:         subjectKind,
 		SubjectEmail:        req.Subject.Email,
 		AgentSubjectID:      req.AgentSubject.ID,
 		AgentSubjectEmail:   req.AgentSubject.Email,
@@ -313,8 +314,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 			Token: "tok",
 			Context: &proto.RequestContext{
 				Subject: &proto.SubjectContext{
-					Id:   "user:user-123",
-					Kind: "user",
+					Id: "user:user-123",
 				},
 				Credential: &proto.CredentialContext{
 					Mode: "subject",
@@ -415,12 +415,10 @@ func TestProviderServerExecute(t *testing.T) {
 				Context: &proto.RequestContext{
 					Subject: &proto.SubjectContext{
 						Id:    "user:user-123",
-						Kind:  "user",
 						Email: "ada@example.com",
 					},
 					AgentSubject: &proto.SubjectContext{
 						Id:    "user:user-456",
-						Kind:  "user",
 						Email: "grace@example.com",
 					},
 					Credential: &proto.CredentialContext{

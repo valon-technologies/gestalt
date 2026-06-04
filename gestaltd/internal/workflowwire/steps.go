@@ -347,13 +347,16 @@ func workflowValueToProto(value coreworkflow.Value) (*proto.WorkflowValue, error
 	if value.Template != nil {
 		set++
 	}
-	if strings.TrimSpace(value.RunInput) != "" {
+	if strings.TrimSpace(value.Input) != "" {
 		set++
 	}
-	if strings.TrimSpace(value.SignalPayload) != "" {
+	if strings.TrimSpace(value.Signal) != "" {
 		set++
 	}
 	if value.StepOutput != nil {
+		set++
+	}
+	if value.StepInput != nil {
 		set++
 	}
 	if set == 0 {
@@ -387,14 +390,19 @@ func workflowValueToProto(value coreworkflow.Value) (*proto.WorkflowValue, error
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Array{Array: &proto.WorkflowArray{Values: items}}}, nil
 	case value.Template != nil:
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Template{Template: workflowTextToProto(*value.Template)}}, nil
-	case strings.TrimSpace(value.RunInput) != "":
-		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_RunInput{RunInput: &proto.WorkflowPathSource{Path: value.RunInput}}}, nil
-	case strings.TrimSpace(value.SignalPayload) != "":
-		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_SignalPayload{SignalPayload: &proto.WorkflowPathSource{Path: value.SignalPayload}}}, nil
+	case strings.TrimSpace(value.Input) != "":
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Input{Input: &proto.WorkflowPathSource{Path: value.Input}}}, nil
+	case strings.TrimSpace(value.Signal) != "":
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Signal{Signal: &proto.WorkflowPathSource{Path: value.Signal}}}, nil
 	case value.StepOutput != nil:
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_StepOutput{StepOutput: &proto.WorkflowStepOutputSource{
 			StepId: value.StepOutput.StepID,
 			Path:   value.StepOutput.Path,
+		}}}, nil
+	case value.StepInput != nil:
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_StepInput{StepInput: &proto.WorkflowStepInputSource{
+			StepId: value.StepInput.StepID,
+			Path:   value.StepInput.Path,
 		}}}, nil
 	default:
 		return nil, nil
@@ -425,14 +433,19 @@ func workflowValueFromProto(value *proto.WorkflowValue) coreworkflow.Value {
 	case *proto.WorkflowValue_Template:
 		text := workflowTextFromProto(typed.Template)
 		return coreworkflow.Value{Template: &text}
-	case *proto.WorkflowValue_RunInput:
-		return coreworkflow.Value{RunInput: strings.TrimSpace(typed.RunInput.GetPath())}
-	case *proto.WorkflowValue_SignalPayload:
-		return coreworkflow.Value{SignalPayload: strings.TrimSpace(typed.SignalPayload.GetPath())}
+	case *proto.WorkflowValue_Input:
+		return coreworkflow.Value{Input: strings.TrimSpace(typed.Input.GetPath())}
+	case *proto.WorkflowValue_Signal:
+		return coreworkflow.Value{Signal: strings.TrimSpace(typed.Signal.GetPath())}
 	case *proto.WorkflowValue_StepOutput:
 		return coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{
 			StepID: strings.TrimSpace(typed.StepOutput.GetStepId()),
 			Path:   strings.TrimSpace(typed.StepOutput.GetPath()),
+		}}
+	case *proto.WorkflowValue_StepInput:
+		return coreworkflow.Value{StepInput: &coreworkflow.StepInputSource{
+			StepID: strings.TrimSpace(typed.StepInput.GetStepId()),
+			Path:   strings.TrimSpace(typed.StepInput.GetPath()),
 		}}
 	default:
 		return coreworkflow.Value{}

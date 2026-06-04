@@ -18,26 +18,29 @@ import (
 type workflowTransportHarness struct {
 	proto.UnimplementedWorkflowProviderServer
 
-	mu       sync.Mutex
-	requests []*proto.UpsertWorkflowProviderScheduleRequest
-	signals  []*proto.SignalOrStartWorkflowProviderRunRequest
-	tokens   []string
+	mu          sync.Mutex
+	definitions []*proto.ApplyWorkflowProviderDefinitionRequest
+	signals     []*proto.SignalOrStartWorkflowProviderRunRequest
+	tokens      []string
 }
 
-func (h *workflowTransportHarness) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+func (h *workflowTransportHarness) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.requests = append(h.requests, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
+	h.definitions = append(h.definitions, gproto.Clone(req).(*proto.ApplyWorkflowProviderDefinitionRequest))
 	h.mu.Unlock()
 
-	return &proto.BoundWorkflowSchedule{
+	spec := req.GetSpec()
+	return &proto.WorkflowDefinition{
 		ProviderName: req.GetProviderName(),
-		Id:           "sched-1",
-		Cron:         req.GetCron(),
+		Id:           spec.GetId(),
+		Generation:   3,
+		Target:       spec.GetTarget(),
+		Activations:  spec.GetActivations(),
 	}, nil
 }
 
@@ -52,10 +55,12 @@ func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *pr
 	h.mu.Unlock()
 
 	return &proto.SignalWorkflowRunResponse{
-		Run: &proto.BoundWorkflowRun{
-			ProviderName: req.GetProviderName(),
-			Id:           "run-1",
-			WorkflowKey:  req.GetWorkflowKey(),
+		Run: &proto.WorkflowRun{
+			ProviderName:         req.GetProviderName(),
+			Id:                   "run-1",
+			WorkflowKey:          req.GetWorkflowKey(),
+			DefinitionId:         req.GetDefinitionId(),
+			DefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		},
 		Signal:      req.GetSignal(),
 		StartedRun:  true,
@@ -63,7 +68,7 @@ func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *pr
 	}, nil
 }
 
-func TestTransport_WorkflowTCPTargetTokenEnv(t *testing.T) {
+func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -88,19 +93,32 @@ func TestTransport_WorkflowTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	created, err := client.CreateSchedule(context.Background(), gestalt.WorkflowCreateSchedule{
+	applied, err := client.ApplyDefinition(context.Background(), gestalt.WorkflowApplyDefinition{
 		ProviderName:   "managed",
-		Cron:           "*/5 * * * *",
-		IdempotencyKey: "workflow-schedule-key-go",
+		IdempotencyKey: "workflow-definition-key-go",
+		Spec: &gestalt.WorkflowDefinitionSpec{
+			ID: "definition-1",
+			Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
+				ID: "review",
+				App: &gestalt.WorkflowStepAppCall{
+					Name:      "github",
+					Operation: "pullRequests.review",
+				},
+			}}},
+			Activations: []gestalt.WorkflowActivation{{
+				ID: "github_pr",
+				Event: &gestalt.WorkflowEventActivation{Match: &gestalt.WorkflowEventMatch{
+					Type:   "github.pull_request",
+					Source: "github",
+				}},
+			}},
+		},
 	})
 	if err != nil {
-		t.Fatalf("CreateSchedule: %v", err)
+		t.Fatalf("ApplyDefinition: %v", err)
 	}
-	if created.ProviderName != "managed" {
-		t.Fatalf("provider_name = %q, want %q", created.ProviderName, "managed")
-	}
-	if created.Schedule == nil || created.Schedule.ID != "sched-1" {
-		t.Fatalf("schedule = %#v, want id sched-1", created.Schedule)
+	if applied.ProviderName != "managed" || applied.ID != "definition-1" || applied.Generation != 3 {
+		t.Fatalf("definition = %#v", applied)
 	}
 
 	harness.mu.Lock()
@@ -108,17 +126,17 @@ func TestTransport_WorkflowTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.tokens) != 1 || harness.tokens[0] != "relay-token-go" {
 		t.Fatalf("relay tokens = %#v, want [relay-token-go]", harness.tokens)
 	}
-	if len(harness.requests) != 1 {
-		t.Fatalf("create schedule requests len = %d, want 1", len(harness.requests))
+	if len(harness.definitions) != 1 {
+		t.Fatalf("definition requests len = %d, want 1", len(harness.definitions))
 	}
-	if harness.requests[0].GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want %q", harness.requests[0].GetInvocationToken(), "parent-token")
+	if harness.definitions[0].GetInvocationToken() != "parent-token" {
+		t.Fatalf("invocation token = %q, want parent-token", harness.definitions[0].GetInvocationToken())
 	}
-	if harness.requests[0].GetProviderName() != "managed" || harness.requests[0].GetCron() != "*/5 * * * *" {
-		t.Fatalf("create schedule request = %+v, want provider_name=managed cron=*/5 * * * *", harness.requests[0])
+	if harness.definitions[0].GetProviderName() != "managed" || harness.definitions[0].GetSpec().GetId() != "definition-1" {
+		t.Fatalf("apply definition request = %+v", harness.definitions[0])
 	}
-	if harness.requests[0].GetIdempotencyKey() != "workflow-schedule-key-go" {
-		t.Fatalf("idempotency key = %q, want workflow-schedule-key-go", harness.requests[0].GetIdempotencyKey())
+	if harness.definitions[0].GetIdempotencyKey() != "workflow-definition-key-go" {
+		t.Fatalf("idempotency key = %q, want workflow-definition-key-go", harness.definitions[0].GetIdempotencyKey())
 	}
 }
 
@@ -149,17 +167,12 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
 	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowSignalOrStartRun{
-		ProviderName: "local",
-		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "respond",
-			Agent: &gestalt.WorkflowStepAgentTurn{
-				Provider: "simple",
-				Model:    "gpt-5.5",
-				Prompt:   gestalt.WorkflowText{Template: "Respond in thread."},
-			},
-		}}},
-		IdempotencyKey: "slack-event-123",
+		ProviderName:                 "local",
+		WorkflowKey:                  "slack:T123:C123:1700000000.000001",
+		DefinitionID:                 "definition-1",
+		ExpectedDefinitionGeneration: 9,
+		Input:                        map[string]any{"thread_ts": "1700000000.000001"},
+		IdempotencyKey:               "slack-event-123",
 		Signal: &gestalt.WorkflowSignal{
 			Name:           "slack.message",
 			IdempotencyKey: "slack-event-123",
@@ -170,7 +183,7 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if resp.ProviderName != "local" || resp.Run == nil || resp.Run.ID != "run-1" || !resp.StartedRun {
+	if resp.Run == nil || resp.Run.ProviderName != "local" || resp.Run.ID != "run-1" || !resp.StartedRun {
 		t.Fatalf("response = %#v", resp)
 	}
 
@@ -184,13 +197,19 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 	}
 	got := harness.signals[0]
 	if got.GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want %q", got.GetInvocationToken(), "parent-token")
+		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
+	}
+	if got.GetDefinitionId() != "definition-1" || got.GetExpectedDefinitionGeneration() != 9 {
+		t.Fatalf("definition pin = %q/%d", got.GetDefinitionId(), got.GetExpectedDefinitionGeneration())
 	}
 	if got.GetWorkflowKey() != "slack:T123:C123:1700000000.000001" || got.GetSignal().GetName() != "slack.message" {
 		t.Fatalf("signal request = %+v", got)
 	}
 	if payload := got.GetSignal().GetPayload().AsMap(); payload["ok"] != true {
 		t.Fatalf("signal payload = %#v", payload)
+	}
+	if input := got.GetInput().AsMap(); input["thread_ts"] != "1700000000.000001" {
+		t.Fatalf("run input = %#v", input)
 	}
 	roundTripCreatedAt := got.GetSignal().GetCreatedAt()
 	if roundTripCreatedAt == nil {
@@ -204,80 +223,5 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 	}
 	if err := (&timestamppb.Timestamp{Nanos: -1}).CheckValid(); err == nil {
 		t.Fatal("invalid timestamp CheckValid() = nil, want error")
-	}
-}
-
-func TestTransport_WorkflowSignalOrStartRunNativeValues(t *testing.T) {
-	address := reserveTCPAddress()
-	lis, err := net.Listen("tcp", address)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	harness := &workflowTransportHarness{}
-	srv := grpc.NewServer()
-	proto.RegisterWorkflowProviderServer(srv, harness)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(srv.Stop)
-
-	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
-
-	client, err := gestalt.NewWorkflow("parent-token")
-	if err != nil {
-		t.Fatalf("Workflow: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-
-	createdAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
-	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowSignalOrStartRun{
-		ProviderName: "local",
-		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "respond",
-			Agent: &gestalt.WorkflowStepAgentTurn{
-				Provider: "simple",
-				Model:    "gpt-5.5",
-				Messages: []gestalt.WorkflowAgentMessage{{
-					Role: "user",
-					Text: gestalt.WorkflowText{Template: "Respond in thread."},
-				}},
-			},
-		}}},
-		IdempotencyKey: "slack-event-123",
-		Signal: &gestalt.WorkflowSignal{
-			Name:           "slack.message",
-			IdempotencyKey: "slack-event-123",
-			Payload:        map[string]any{"ok": true},
-			CreatedAt:      createdAt,
-		},
-	})
-	if err != nil {
-		t.Fatalf("SignalOrStartRun: %v", err)
-	}
-	if resp.ProviderName != "local" || resp.Run == nil || resp.Run.ID != "run-1" || !resp.StartedRun {
-		t.Fatalf("response = %#v", resp)
-	}
-
-	harness.mu.Lock()
-	defer harness.mu.Unlock()
-	if len(harness.signals) != 1 {
-		t.Fatalf("signal requests len = %d, want 1", len(harness.signals))
-	}
-	got := harness.signals[0]
-	if got.GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
-	}
-	if got.GetTarget().GetSteps()[0].GetAgent().GetMessages()[0].GetText().GetTemplate() != "Respond in thread." {
-		t.Fatalf("agent messages = %#v", got.GetTarget().GetSteps()[0].GetAgent().GetMessages())
-	}
-	if payload := got.GetSignal().GetPayload().AsMap(); payload["ok"] != true {
-		t.Fatalf("signal payload = %#v", payload)
-	}
-	if !got.GetSignal().GetCreatedAt().AsTime().Equal(createdAt) {
-		t.Fatalf("created_at = %v, want %v", got.GetSignal().GetCreatedAt().AsTime(), createdAt)
 	}
 }

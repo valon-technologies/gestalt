@@ -29,11 +29,24 @@ else:
 if TYPE_CHECKING:
     from ._agent import Agent, AgentToolRef
     from ._app_access import AppProtocol
-    from ._authorization import Authorization
     from ._workflow import Workflow, WorkflowRunContext
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
+
+
+def parse_subject_id(subject_id: str) -> tuple[str, str] | None:
+    """Split a canonical subject ID such as user:ada into kind and id."""
+    trimmed = subject_id.strip()
+    if ":" not in trimmed:
+        return None
+    kind, _, id_part = trimmed.partition(":")
+    kind = kind.strip()
+    id_part = id_part.strip()
+    if not kind or not id_part:
+        return None
+    return kind, id_part
+
 
 T = TypeVar("T")
 ResponseHeaderValue = str | list[str] | tuple[str, ...]
@@ -45,11 +58,9 @@ class Subject:
     """Identity information attached to an incoming provider request."""
 
     id: str = ""
-    kind: str = ""
     credential_subject_id: str = ""
-    display_name: str = ""
-    auth_source: str = ""
     email: str = ""
+
 
 
 @dataclasses.dataclass(slots=True)
@@ -88,7 +99,7 @@ class Request:
     access: Access = dataclasses.field(default_factory=Access)
     invocation_token: str = ""
     # Workflow callback metadata uses a JSON-style lowerCamelCase object such
-    # as runId, target.steps, trigger.scheduleId, and trigger.event.specVersion.
+    # as runId, target.steps, trigger.activationId, and trigger.event.specVersion.
     workflow: JsonObject = dataclasses.field(default_factory=dict)
     tool_refs: list[AgentToolRef] = dataclasses.field(default_factory=list)
     tool_refs_set: bool = False
@@ -104,12 +115,12 @@ class Request:
     def app(self) -> "AppProtocol":
         from ._app_access import _AppClient
 
-        return _AppClient(self.invocation_token)
+        return _AppClient(self.invocation_token, workflow=self.workflow)
 
     def agent(self) -> "Agent":
         from ._agent import Agent
 
-        return Agent(self.invocation_token)
+        return Agent(self.invocation_token, workflow=self.workflow)
 
     def workflows(self) -> "Workflow":
         from ._workflow import Workflow
@@ -123,11 +134,6 @@ class Request:
         from ._workflow import parse_workflow_run_context
 
         return parse_workflow_run_context(self.workflow)
-
-    def authorization(self) -> "Authorization":
-        from ._authorization import _shared_authorization_client
-
-        return _shared_authorization_client()
 
 
 @dataclasses.dataclass(slots=True)

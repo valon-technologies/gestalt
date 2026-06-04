@@ -17,44 +17,48 @@ from google.protobuf import struct_pb2 as _struct_pb2
 
 from gestalt import (
     App,
+    ApplyWorkflowProviderDefinitionRequest,
     AppProviderAdapter,
     AuthenticationProvider,
     BeginLoginRequest,
-    BoundWorkflowDefinition,
-    BoundWorkflowEventTrigger,
-    BoundWorkflowRun,
-    BoundWorkflowSchedule,
     CacheEntry,
     CacheProvider,
     Catalog,
     CatalogOperation,
     CompleteLoginRequest,
-    CreateWorkflowProviderDefinitionRequest,
+    DeliverWorkflowProviderEventRequest,
     ExternalTokenValidator,
     GetRuntimeSupportRequest,
     GetWorkflowProviderDefinitionRequest,
+    GetWorkflowProviderRunEventsRequest,
+    GetWorkflowProviderRunEventsResponse,
+    GetWorkflowProviderRunOutputRequest,
+    GetWorkflowProviderRunOutputResponse,
     HealthChecker,
+    ListWorkflowProviderDefinitionsRequest,
+    ListWorkflowProviderDefinitionsResponse,
     ListWorkflowProviderRunsRequest,
     ListWorkflowProviderRunsResponse,
     MetadataProvider,
-    PauseWorkflowProviderEventTriggerRequest,
-    PauseWorkflowProviderScheduleRequest,
     ProviderKind,
     ProviderMetadata,
     Request,
-    ResumeWorkflowProviderEventTriggerRequest,
-    ResumeWorkflowProviderScheduleRequest,
     RuntimeProvider,
     RuntimeSupport,
     S3Provider,
     SessionTTLProvider,
+    SetWorkflowProviderActivationPausedRequest,
+    SetWorkflowProviderDefinitionPausedRequest,
     StartWorkflowProviderRunRequest,
-    UpdateWorkflowProviderDefinitionRequest,
     WarningsProvider,
+    WorkflowDefinition,
     WorkflowEvent,
     WorkflowProvider,
+    WorkflowRun,
+    WorkflowRunEvent,
     _bootstrap,
     _runtime,
+    parse_subject_id,
 )
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
@@ -362,7 +366,7 @@ class MainEntrypointTests(unittest.TestCase):
             return {
                 "token": request.token,
                 "subject_id": request.subject.id,
-                "subject_kind": request.subject.kind,
+                "subject_kind": (parse_subject_id(request.subject.id) or ("", ""))[0],
                 "subject_email": request.subject.email,
                 "agent_subject_id": request.agent_subject.id,
                 "agent_subject_email": request.agent_subject.email,
@@ -417,7 +421,7 @@ class MainEntrypointTests(unittest.TestCase):
                 },
                 "trigger": {
                     "kind": "event",
-                    "triggerId": "trigger-1",
+                    "activationId": "activation-1",
                     "event": {
                         "id": "evt-1",
                         "source": "urn:test",
@@ -467,15 +471,10 @@ class MainEntrypointTests(unittest.TestCase):
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(
                         id="user:user-123",
-                        kind="user",
-                        auth_source="api_token",
                         email="ada@example.com",
                     ),
                     agent_subject=app_pb2.SubjectContext(
                         id="user:user-456",
-                        kind="user",
-                        display_name="Grace Hopper",
-                        auth_source="slack",
                         email="grace@example.com",
                     ),
                     credential=app_pb2.CredentialContext(
@@ -496,10 +495,7 @@ class MainEntrypointTests(unittest.TestCase):
                             operation="bot.getPullRequest",
                             run_as=app_pb2.SubjectContext(
                                 id="service_account:github-review",
-                                kind="service_account",
                                 credential_subject_id="service_account:github-review",
-                                display_name="GitHub Review",
-                                auth_source="managed_subject",
                             ),
                         )
                     ],
@@ -513,7 +509,7 @@ class MainEntrypointTests(unittest.TestCase):
                 token="secret-token",
                 connection_params={"tenant": "acme"},
                 context=app_pb2.RequestContext(
-                    subject=app_pb2.SubjectContext(id="user:user-123", kind="user"),
+                    subject=app_pb2.SubjectContext(id="user:user-123"),
                     credential=app_pb2.CredentialContext(mode="subject"),
                     access=app_pb2.AccessContext(
                         policy="sample_policy",
@@ -571,7 +567,7 @@ class MainEntrypointTests(unittest.TestCase):
                     },
                     "trigger": {
                         "kind": "event",
-                        "triggerId": "trigger-1",
+                        "activationId": "activation-1",
                         "event": {
                             "id": "evt-1",
                             "source": "urn:test",
@@ -1313,7 +1309,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         class Provider(WorkflowProvider):
             def start_run(self, request: Any) -> Any:
                 self.request = request
-                return BoundWorkflowRun(id="run-native")
+                return WorkflowRun(id="run-native")
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
@@ -1326,24 +1322,40 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertEqual(provider.request.workflow_key, "sync")
         self.assertEqual(response.id, "run-native")
 
-    def test_workflow_wrapper_maps_definition_crud(self) -> None:
+    def test_workflow_wrapper_maps_definition_contract(self) -> None:
         class Provider(WorkflowProvider):
-            def create_definition(self, request: Any) -> Any:
-                self.create_request = request
-                return BoundWorkflowDefinition(
-                    id=request.idempotency_key,
-                    target=request.target,
+            def apply_definition(self, request: Any) -> Any:
+                self.apply_request = request
+                assert request.spec is not None
+                return WorkflowDefinition(
+                    id=request.spec.id,
+                    target=request.spec.target,
+                    generation=3,
                 )
 
             def get_definition(self, request: Any) -> Any:
                 self.get_request = request
-                return BoundWorkflowDefinition(id=request.definition_id)
+                return WorkflowDefinition(id=request.definition_id)
 
-            def update_definition(self, request: Any) -> Any:
-                self.update_request = request
-                return BoundWorkflowDefinition(
+            def list_definitions(self, request: Any) -> Any:
+                self.list_request = request
+                return ListWorkflowProviderDefinitionsResponse(
+                    definitions=[WorkflowDefinition(id="definition-1")]
+                )
+
+            def set_definition_paused(self, request: Any) -> Any:
+                self.definition_pause_request = request
+                return WorkflowDefinition(
                     id=request.definition_id,
-                    target=request.target,
+                    paused=request.paused,
+                )
+
+            def set_activation_paused(self, request: Any) -> Any:
+                self.activation_pause_request = request
+                return WorkflowDefinition(
+                    id=request.definition_id,
+                    activations=[],
+                    paused=False,
                 )
 
             def delete_definition(self, request: Any) -> None:
@@ -1363,10 +1375,13 @@ class WorkflowRuntimeTests(unittest.TestCase):
             ]
         )
 
-        created = wrapped.CreateDefinition(
-            workflow_pb2.CreateWorkflowProviderDefinitionRequest(
+        applied = wrapped.ApplyDefinition(
+            workflow_pb2.ApplyWorkflowProviderDefinitionRequest(
                 idempotency_key="definition-1",
-                target=target,
+                spec=workflow_pb2.WorkflowDefinitionSpec(
+                    id="definition-1",
+                    target=target,
+                ),
             ),
             object(),
         )
@@ -1376,10 +1391,22 @@ class WorkflowRuntimeTests(unittest.TestCase):
             ),
             object(),
         )
-        updated = wrapped.UpdateDefinition(
-            workflow_pb2.UpdateWorkflowProviderDefinitionRequest(
+        listed = wrapped.ListDefinitions(
+            workflow_pb2.ListWorkflowProviderDefinitionsRequest(),
+            object(),
+        )
+        definition_paused = wrapped.SetDefinitionPaused(
+            workflow_pb2.SetWorkflowProviderDefinitionPausedRequest(
                 definition_id="definition-1",
-                target=target,
+                paused=True,
+            ),
+            object(),
+        )
+        activation_paused = wrapped.SetActivationPaused(
+            workflow_pb2.SetWorkflowProviderActivationPausedRequest(
+                definition_id="definition-1",
+                activation_id="github",
+                paused=True,
             ),
             object(),
         )
@@ -1391,25 +1418,36 @@ class WorkflowRuntimeTests(unittest.TestCase):
         )
 
         self.assertIsInstance(
-            provider.create_request,
-            CreateWorkflowProviderDefinitionRequest,
+            provider.apply_request,
+            ApplyWorkflowProviderDefinitionRequest,
         )
         self.assertIsInstance(
             provider.get_request, GetWorkflowProviderDefinitionRequest
         )
         self.assertIsInstance(
-            provider.update_request,
-            UpdateWorkflowProviderDefinitionRequest,
+            provider.list_request,
+            ListWorkflowProviderDefinitionsRequest,
+        )
+        self.assertIsInstance(
+            provider.definition_pause_request,
+            SetWorkflowProviderDefinitionPausedRequest,
+        )
+        self.assertIsInstance(
+            provider.activation_pause_request,
+            SetWorkflowProviderActivationPausedRequest,
         )
         self.assertEqual(provider.delete_request.definition_id, "definition-1")
-        self.assertEqual(created.id, "definition-1")
+        self.assertEqual(applied.id, "definition-1")
         self.assertEqual(fetched.id, "definition-1")
-        self.assertEqual(updated.id, "definition-1")
+        self.assertEqual([definition.id for definition in listed.definitions], ["definition-1"])
+        self.assertEqual(definition_paused.id, "definition-1")
+        self.assertTrue(definition_paused.paused)
+        self.assertEqual(activation_paused.id, "definition-1")
         self.assertIsInstance(deleted, empty_pb2.Empty)
 
-    def test_workflow_wrapper_returns_published_event(self) -> None:
+    def test_workflow_wrapper_returns_delivered_event(self) -> None:
         class Provider(WorkflowProvider):
-            def publish_event(self, request: Any) -> Any:
+            def deliver_event(self, request: Any) -> Any:
                 self.request = request
                 return WorkflowEvent(
                     id="published-py",
@@ -1420,8 +1458,8 @@ class WorkflowRuntimeTests(unittest.TestCase):
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
 
-        response = wrapped.PublishEvent(
-            workflow_pb2.PublishWorkflowProviderEventRequest(
+        response = wrapped.DeliverEvent(
+            workflow_pb2.DeliverWorkflowProviderEventRequest(
                 app_name="github",
                 event=workflow_pb2.WorkflowEvent(
                     source="github",
@@ -1431,6 +1469,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
             object(),
         )
 
+        self.assertIsInstance(provider.request, DeliverWorkflowProviderEventRequest)
         self.assertEqual(provider.request.app_name, "github")
         self.assertEqual(response.id, "published-py")
         self.assertEqual(response.source, "github")
@@ -1440,7 +1479,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
             def list_runs(self, request: Any) -> Any:
                 self.request = request
                 return ListWorkflowProviderRunsResponse(
-                    runs=[BoundWorkflowRun(id="run-page")],
+                    runs=[WorkflowRun(id="run-page")],
                     next_page_token="next-page",
                 )
 
@@ -1465,74 +1504,51 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertEqual([run.id for run in response.runs], ["run-page"])
         self.assertEqual(response.next_page_token, "next-page")
 
-    def test_workflow_wrapper_returns_pause_resume_schedule_and_trigger(self) -> None:
+    def test_workflow_wrapper_returns_run_events_and_output(self) -> None:
         class Provider(WorkflowProvider):
-            def pause_schedule(self, request: Any) -> Any:
-                self.pause_schedule_request = request
-                return BoundWorkflowSchedule(id=request.schedule_id, paused=True)
+            def get_run_events(self, request: Any) -> Any:
+                self.events_request = request
+                return GetWorkflowProviderRunEventsResponse(
+                    events=[
+                        WorkflowRunEvent(
+                            id="event-1",
+                            run_id=request.run_id,
+                            step_id="review",
+                            type="step.succeeded",
+                            data={"ok": True},
+                        )
+                    ]
+                )
 
-            def resume_schedule(self, request: Any) -> Any:
-                self.resume_schedule_request = request
-                return BoundWorkflowSchedule(id=request.schedule_id, paused=False)
-
-            def pause_event_trigger(self, request: Any) -> Any:
-                self.pause_trigger_request = request
-                return BoundWorkflowEventTrigger(id=request.trigger_id, paused=True)
-
-            def resume_event_trigger(self, request: Any) -> Any:
-                self.resume_trigger_request = request
-                return BoundWorkflowEventTrigger(id=request.trigger_id, paused=False)
+            def get_run_output(self, request: Any) -> Any:
+                self.output_request = request
+                return GetWorkflowProviderRunOutputResponse(output={"ok": True})
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
 
-        paused_schedule = wrapped.PauseSchedule(
-            workflow_pb2.PauseWorkflowProviderScheduleRequest(schedule_id="schedule-1"),
+        events = wrapped.GetRunEvents(
+            workflow_pb2.GetWorkflowProviderRunEventsRequest(run_id="run-1"),
             object(),
         )
-        resumed_schedule = wrapped.ResumeSchedule(
-            workflow_pb2.ResumeWorkflowProviderScheduleRequest(
-                schedule_id="schedule-1"
-            ),
-            object(),
-        )
-        paused_trigger = wrapped.PauseEventTrigger(
-            workflow_pb2.PauseWorkflowProviderEventTriggerRequest(
-                trigger_id="trigger-1"
-            ),
-            object(),
-        )
-        resumed_trigger = wrapped.ResumeEventTrigger(
-            workflow_pb2.ResumeWorkflowProviderEventTriggerRequest(
-                trigger_id="trigger-1"
-            ),
+        output = wrapped.GetRunOutput(
+            workflow_pb2.GetWorkflowProviderRunOutputRequest(run_id="run-1"),
             object(),
         )
 
         self.assertIsInstance(
-            provider.pause_schedule_request,
-            PauseWorkflowProviderScheduleRequest,
+            provider.events_request,
+            GetWorkflowProviderRunEventsRequest,
         )
         self.assertIsInstance(
-            provider.resume_schedule_request,
-            ResumeWorkflowProviderScheduleRequest,
+            provider.output_request,
+            GetWorkflowProviderRunOutputRequest,
         )
-        self.assertIsInstance(
-            provider.pause_trigger_request,
-            PauseWorkflowProviderEventTriggerRequest,
-        )
-        self.assertIsInstance(
-            provider.resume_trigger_request,
-            ResumeWorkflowProviderEventTriggerRequest,
-        )
-        self.assertEqual(paused_schedule.id, "schedule-1")
-        self.assertTrue(paused_schedule.paused)
-        self.assertEqual(resumed_schedule.id, "schedule-1")
-        self.assertFalse(resumed_schedule.paused)
-        self.assertEqual(paused_trigger.id, "trigger-1")
-        self.assertTrue(paused_trigger.paused)
-        self.assertEqual(resumed_trigger.id, "trigger-1")
-        self.assertFalse(resumed_trigger.paused)
+        self.assertEqual(provider.events_request.run_id, "run-1")
+        self.assertEqual(provider.output_request.run_id, "run-1")
+        self.assertEqual([event.id for event in events.events], ["event-1"])
+        self.assertEqual(events.events[0].data.fields["ok"].bool_value, True)
+        self.assertEqual(output.output.struct_value.fields["ok"].bool_value, True)
 
     def test_workflow_wrapper_keeps_pascal_case_rpc_handlers(self) -> None:
         context = object()
@@ -1540,7 +1556,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         class Provider(WorkflowProvider):
             def StartRun(self, request: Any, rpc_context: Any) -> Any:
                 self.called = (request, rpc_context)
-                return workflow_pb2.BoundWorkflowRun(id="run-raw")
+                return workflow_pb2.WorkflowRun(id="run-raw")
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)

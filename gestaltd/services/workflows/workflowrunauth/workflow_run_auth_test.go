@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -37,8 +36,7 @@ func TestResolveInvocationFromWorkflowRunUsesPersistedRunAs(t *testing.T) {
 	}
 	resolver := &recordingResolver{run: &coreworkflow.Run{
 		RunAs: &core.RunAsSubject{
-			SubjectID:   "service_account:persisted",
-			DisplayName: "Persisted Workflow",
+			SubjectID: "service_account:persisted",
 		},
 		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
 			App: &coreworkflow.AppCall{Name: "ledger", Operation: "post"},
@@ -61,47 +59,5 @@ func TestResolveInvocationFromWorkflowRunUsesPersistedRunAs(t *testing.T) {
 	}
 	if got := runAs["id"]; got != "service_account:persisted" {
 		t.Fatalf("workflow runAs id = %#v, want persisted subject", got)
-	}
-	if _, ok := resolved.Auth.Operations["ledger"]["post"]; !ok {
-		t.Fatalf("resolved auth operations = %#v, want ledger.post", resolved.Auth.Operations)
-	}
-}
-
-func TestTargetInvocationAuthIncludesAppAndAgentToolRefs(t *testing.T) {
-	t.Parallel()
-
-	auth := TargetInvocationAuth(coreworkflow.Target{Steps: []coreworkflow.Step{
-		{
-			App: &coreworkflow.AppCall{
-				Name:           "ledger",
-				Operation:      "post",
-				CredentialMode: core.ConnectionModeNone,
-			},
-		},
-		{
-			Agent: &coreworkflow.AgentTurn{
-				ProviderName: "assistant",
-				ToolRefs: []coreagent.ToolRef{{
-					App:       "docs",
-					Operation: "search",
-				}},
-			},
-		},
-	}})
-
-	if got := auth.Operations["ledger"]["post"]; got != core.ConnectionModeNone {
-		t.Fatalf("ledger.post credential mode = %q, want %q", got, core.ConnectionModeNone)
-	}
-	if _, ok := auth.Operations["docs"]["search"]; !ok {
-		t.Fatalf("auth operations = %#v, want docs.search", auth.Operations)
-	}
-	if _, ok := auth.Permissions["ledger"]["post"]; !ok {
-		t.Fatalf("auth permissions = %#v, want ledger.post", auth.Permissions)
-	}
-	if auth.Permissions["assistant"] != nil {
-		t.Fatalf("assistant permissions = %#v, want provider-wide grant", auth.Permissions["assistant"])
-	}
-	if _, ok := auth.Permissions["docs"]["search"]; !ok {
-		t.Fatalf("auth permissions = %#v, want docs.search", auth.Permissions)
 	}
 }

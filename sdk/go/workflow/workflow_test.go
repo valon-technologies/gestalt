@@ -21,18 +21,22 @@ func TestEvaluateWorkflowTemplateAndPaths(t *testing.T) {
 		}},
 	}
 	ctx := EvalContext{
-		Request:     req,
-		Inputs:      map[string]any{"thread": "123.456"},
-		AllowInputs: true,
+		Request: req,
+		Outputs: map[string]any{
+			"collect": map[string]any{"body": map[string]any{"summary": "context"}},
+		},
+		StepInputs: map[string]any{
+			"collect": map[string]any{"thread": "123.456"},
+		},
 	}
-	rendered, err := ctx.RenderTemplate("customer=${runInput.customer.id}; thread=${signalPayload.thread.ts}; input=${inputs.thread}; literal=$${x}")
+	rendered, err := ctx.RenderTemplate("customer=${{ input.customer.id }}; thread=${{ signal.thread.ts }}; step_input=${{ steps.collect.inputs.thread }}; step_output=${{ steps.collect.outputs.body.summary }}; literal=$${{ x }}")
 	if err != nil {
 		t.Fatalf("RenderTemplate: %v", err)
 	}
-	if want := "customer=cust_1; thread=123.456; input=123.456; literal=${x}"; rendered != want {
+	if want := "customer=cust_1; thread=123.456; step_input=123.456; step_output=context; literal=${{ x }}"; rendered != want {
 		t.Fatalf("rendered = %q, want %q", rendered, want)
 	}
-	value, ok, err := ctx.EvaluateValue(gestalt.WorkflowValue{RunInput: "customer.id"})
+	value, ok, err := ctx.EvaluateValue(gestalt.WorkflowValue{Input: "customer.id"})
 	if err != nil {
 		t.Fatalf("EvaluateValue: %v", err)
 	}
@@ -51,10 +55,7 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 		RunID:        "run-1",
 		RunAs: &gestalt.Subject{
 			ID:                  "service_account:workflow-runner",
-			Kind:                "service_account",
 			CredentialSubjectID: "service_account:workflow-runner",
-			DisplayName:         "Workflow runner",
-			AuthSource:          "config",
 		},
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
 			ID: "send",
@@ -62,7 +63,7 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 				Name:      "slack",
 				Operation: "chat.postMessage",
 				Input: gestalt.WorkflowValue{Object: map[string]gestalt.WorkflowValue{
-					"text": {Template: &gestalt.WorkflowText{Template: "hello ${runInput.name}"}},
+					"text": {Template: &gestalt.WorkflowText{Template: "hello ${{ input.name }}"}},
 				}},
 			},
 		}}},
@@ -116,17 +117,15 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 		RunID:        "run-1",
 		RunAs: &gestalt.Subject{
 			ID:                  "service_account:workflow-runner",
-			Kind:                "service_account",
 			CredentialSubjectID: "service_account:workflow-runner",
-			DisplayName:         "Workflow runner",
-			AuthSource:          "config",
 		},
 		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-			ID: "review",
+			ID:             "review",
+			TimeoutSeconds: 45,
 			Agent: &gestalt.WorkflowStepAgentTurn{
 				Provider: "claude",
 				Model:    "default",
-				Prompt:   gestalt.WorkflowText{Template: "review ${runInput.name}"},
+				Prompt:   gestalt.WorkflowText{Template: "review ${{ input.name }}"},
 			},
 		}}},
 		Input: map[string]any{"name": "Ada"},
@@ -145,6 +144,9 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	}
 	if agent.turn.SessionID != "session-1" || agent.turn.Messages[0].Text != "review Ada" {
 		t.Fatalf("turn = %#v", agent.turn)
+	}
+	if agent.turn.TimeoutSeconds != 45 {
+		t.Fatalf("turn timeout = %d, want 45", agent.turn.TimeoutSeconds)
 	}
 	runAs := agent.turnWorkflow["runAs"].(map[string]any)
 	if runAs["id"] != "service_account:workflow-runner" {

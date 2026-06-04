@@ -115,12 +115,13 @@ func (p *execProvider) Configure(context.Context, string, map[string]any) error 
 
 func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request) (gestalt.Response[execOutput], error) {
 	region, ok := req.ConnectionParam("region")
+	subjectKind, _, _ := gestalt.ParseSubjectID(req.Subject.ID)
 	resp := gestalt.OK(execOutput{
 		Echo:                in.Value,
 		Region:              region,
 		RegionPresent:       ok,
 		SubjectID:           req.Subject.ID,
-		SubjectKind:         req.Subject.Kind,
+		SubjectKind:         subjectKind,
 		CredentialMode:      req.Credential.Mode,
 		CredentialSubjectID: req.Credential.SubjectID,
 	})
@@ -192,9 +193,7 @@ func TestRouterOperationExecution(t *testing.T) {
 
 	ctxWithRequest := gestalt.WithConnectionParams(ctx, map[string]string{"region": "iad"})
 	ctxWithRequest = gestalt.WithSubject(ctxWithRequest, gestalt.Subject{
-		ID:         "user:user-123",
-		Kind:       "user",
-		AuthSource: "api_token",
+		ID: "user:user-123",
 	})
 	ctxWithRequest = gestalt.WithCredential(ctxWithRequest, gestalt.Credential{
 		Mode:      "subject",

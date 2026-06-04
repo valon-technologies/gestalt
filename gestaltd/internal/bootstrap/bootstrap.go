@@ -27,10 +27,10 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -151,39 +151,39 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey         []byte
-	BaseURL               string
-	RuntimeRelayBaseURL   string
-	SecretManager         core.SecretManager
-	Services              *coredata.Services
-	SelectedIndexedDBName string
-	IndexedDBs            map[string]indexeddb.IndexedDB
-	IndexedDBDefs         map[string]*config.ProviderEntry
-	IndexedDBFactory      IndexedDBFactory
-	Caches                map[string]corecache.Cache
-	CacheDefs             map[string]*config.ProviderEntry
-	CacheFactory          CacheFactory
-	S3                    map[string]s3sdk.S3
-	WorkflowRuntime       *workflowRuntime
-	AgentRuntime          *agentRuntime
-	AgentRunGrants        *agentgrant.Manager
-	WorkflowManager       workflowmanager.Service
-	AgentManager          agentmanager.Service
-	Egress                EgressDeps
-	AuthorizationProvider core.AuthorizationProvider
-	AppInvocation         invocation.Invoker
-	Runtime               runtimeprovider.Provider
-	RuntimeRegistry       *runtimeRegistry
-	PublicHostServices    *runtimehost.PublicHostServiceRegistry
-	HostServiceTLSCAFile  string
-	HostServiceTLSCAPEM   string
-	Telemetry             core.TelemetryProvider
+	EncryptionKey               []byte
+	BaseURL                     string
+	RuntimeRelayBaseURL         string
+	SecretManager               core.SecretManager
+	Services                    *coredata.Services
+	SelectedIndexedDBName       string
+	IndexedDBs                  map[string]indexeddb.IndexedDB
+	IndexedDBDefs               map[string]*config.ProviderEntry
+	IndexedDBFactory            IndexedDBFactory
+	Caches                      map[string]corecache.Cache
+	CacheDefs                   map[string]*config.ProviderEntry
+	CacheFactory                CacheFactory
+	S3                          map[string]s3sdk.S3
+	WorkflowRuntime             *workflowRuntime
+	AgentRuntime                *agentRuntime
+	AgentRunGrants              *agentgrant.Manager
+	WorkflowManager             workflowmanager.Service
+	AgentManager                agentmanager.Service
+	Egress                      EgressDeps
+	AppInvocation               invocation.Invoker
+	WorkflowAppInvocationGrants map[string]appaccessservice.InvocationGrants
+	Runtime                     runtimeprovider.Provider
+	RuntimeRegistry             *runtimeRegistry
+	PublicHostServices          *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile        string
+	HostServiceTLSCAPEM         string
+	Telemetry                   core.TelemetryProvider
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
-type AuthorizationFactory func(node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.AuthorizationProvider, error)
+type AuthorizationFactory func(node yaml.Node) (core.AuthorizationProvider, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -220,33 +220,32 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth                  core.AuthenticationProvider
-	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthenticationProvider
-	AuthorizationProvider core.AuthorizationProvider
-	Services              *coredata.Services
-	ExtraIndexedDBs       []indexeddb.IndexedDB
-	ExtraCaches           []corecache.Cache
-	S3                    map[string]s3sdk.S3
-	ExtraS3s              []s3sdk.S3
-	ExtraWorkflows        []coreworkflow.Provider
-	ExtraAgents           []coreagent.Provider
-	Providers             *registry.ProviderMap[core.Provider]
-	WorkflowControl       WorkflowControl
-	AgentControl          AgentControl
-	AgentManager          agentmanager.Service
-	ProvidersReady        <-chan struct{}
-	Authorizer            authorization.RuntimeAuthorizer
-	ConnectionAuth        func() map[string]map[string]OAuthHandler
-	ManualConnectionAuth  func() map[string]map[string]ManualTokenExchanger
-	Invoker               invocation.Invoker
-	AppInvocation         invocation.Invoker
-	CapabilityLister      invocation.CapabilityLister
-	AuditSink             core.AuditSink
-	SecretManager         core.SecretManager
-	Telemetry             core.TelemetryProvider
-	Runtimes              RuntimeInspector
-	PublicHostServices    *runtimehost.PublicHostServiceRegistry
+	Auth                 core.AuthenticationProvider
+	SelectedAuthProvider string
+	AuthProviders        map[string]core.AuthenticationProvider
+	Authorization        map[string]core.AuthorizationProvider
+	Services             *coredata.Services
+	ExtraIndexedDBs      []indexeddb.IndexedDB
+	ExtraCaches          []corecache.Cache
+	S3                   map[string]s3sdk.S3
+	ExtraS3s             []s3sdk.S3
+	ExtraWorkflows       []coreworkflow.Provider
+	ExtraAgents          []coreagent.Provider
+	Providers            *registry.ProviderMap[core.Provider]
+	WorkflowControl      WorkflowControl
+	AgentControl         AgentControl
+	AgentManager         agentmanager.Service
+	ProvidersReady       <-chan struct{}
+	ConnectionAuth       func() map[string]map[string]OAuthHandler
+	ManualConnectionAuth func() map[string]map[string]ManualTokenExchanger
+	Invoker              invocation.Invoker
+	AppInvocation        invocation.Invoker
+	CapabilityLister     invocation.CapabilityLister
+	AuditSink            core.AuditSink
+	SecretManager        core.SecretManager
+	Telemetry            core.TelemetryProvider
+	Runtimes             RuntimeInspector
+	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -270,13 +269,6 @@ func (r *Result) Start(ctx context.Context) error {
 	defer r.mu.Unlock()
 	if r.closed {
 		return fmt.Errorf("bootstrap result already closed")
-	}
-	if r.Authorizer != nil {
-		started := time.Now()
-		if err := r.Authorizer.Start(ctx); err != nil {
-			return err
-		}
-		slog.InfoContext(ctx, "authorization provider state loaded", "duration", time.Since(started).String())
 	}
 	return nil
 }
@@ -373,11 +365,11 @@ func (r *Result) Close(ctx context.Context) error {
 	if len(r.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(r.AuthProviders)
 	}
+	authorizationCloseErr := closeAuthorizationProviders(r.Authorization)
 	externalCredentialsCloseErr := closeExternalCredentialProviderCandidate(r.Services)
 	errs = append(errs,
-		closeAuthorizer(r.Authorizer),
 		authCloseErr,
-		closeAuthorizationProvider(r.AuthorizationProvider),
+		authorizationCloseErr,
 		externalCredentialsCloseErr,
 		CloseProviders(r.Providers),
 		r.Services.Close(),
@@ -665,21 +657,21 @@ func (p *agentProviderWithTracking) SupportsWorkspaceRequests() bool {
 }
 
 type preparedCore struct {
-	Auth                  core.AuthenticationProvider
-	SelectedAuthProvider  string
-	AuthProviders         map[string]core.AuthenticationProvider
-	AuthorizationProvider core.AuthorizationProvider
-	Services              *coredata.Services
-	ExtraIndexedDBs       []indexeddb.IndexedDB
-	ExtraCaches           []corecache.Cache
-	ExtraS3s              []s3sdk.S3
-	SecretManager         core.SecretManager
-	Telemetry             core.TelemetryProvider
-	Deps                  Deps
-	AppInvocation         *lazyInvoker
-	WorkflowManager       *lazyWorkflowManager
-	AgentManager          *lazyAgentManager
-	PublicHostServices    *runtimehost.PublicHostServiceRegistry
+	Auth                 core.AuthenticationProvider
+	SelectedAuthProvider string
+	AuthProviders        map[string]core.AuthenticationProvider
+	Authorization        map[string]core.AuthorizationProvider
+	Services             *coredata.Services
+	ExtraIndexedDBs      []indexeddb.IndexedDB
+	ExtraCaches          []corecache.Cache
+	ExtraS3s             []s3sdk.S3
+	SecretManager        core.SecretManager
+	Telemetry            core.TelemetryProvider
+	Deps                 Deps
+	AppInvocation        *lazyInvoker
+	WorkflowManager      *lazyWorkflowManager
+	AgentManager         *lazyAgentManager
+	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -881,13 +873,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	auth := authProviders[selectedAuthName]
-	var authzProvider core.AuthorizationProvider
-	closeAuthorizationOnError := true
-	defer func() {
-		if closeAuthorizationOnError {
-			_ = closeAuthorizationProvider(authzProvider)
-		}
-	}()
 
 	selectedIndexedDBName, def, err := cfg.SelectedIndexedDBProvider()
 	if err != nil {
@@ -981,6 +966,21 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
+	authorizationProviders, err := buildAuthorizationProviders(cfg, factories)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	closeAuthorizationOnError := true
+	defer func() {
+		if closeAuthorizationOnError {
+			_ = closeAuthorizationProviders(authorizationProviders)
+		}
+	}()
+	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {
@@ -994,12 +994,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	svc.ExternalCredentials = externalCredentials
 
-	authzProvider, err = buildAuthorization(cfg, factories, deps)
-	if err != nil {
-		_ = closeAuthProviders(authProviders)
-		return nil, err
-	}
-	deps.AuthorizationProvider = authzProvider
 	runtimeRegistry := newRuntimeRegistry(cfg, factories.Runtime, deps)
 	deps.RuntimeRegistry = runtimeRegistry
 
@@ -1009,25 +1003,25 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeExtraStores = false
 	closeExtraCaches = false
 	closeExtraS3s = false
-	closeExternalCredentialsOnError = false
 	closeAuthorizationOnError = false
+	closeExternalCredentialsOnError = false
 	return &preparedCore{
-		Auth:                  auth,
-		SelectedAuthProvider:  selectedAuthName,
-		AuthProviders:         authProviders,
-		AuthorizationProvider: authzProvider,
-		Services:              svc,
-		ExtraIndexedDBs:       extraIndexedDBs,
-		ExtraCaches:           extraCaches,
-		ExtraS3s:              extraS3s,
-		SecretManager:         sm,
-		Telemetry:             tp,
-		Deps:                  deps,
-		AppInvocation:         pluginInvoker,
-		WorkflowManager:       workflowManager,
-		AgentManager:          agentManager,
-		PublicHostServices:    publicHostServices,
-		runtimeRegistry:       runtimeRegistry,
+		Auth:                 auth,
+		SelectedAuthProvider: selectedAuthName,
+		AuthProviders:        authProviders,
+		Authorization:        authorizationProviders,
+		Services:             svc,
+		ExtraIndexedDBs:      extraIndexedDBs,
+		ExtraCaches:          extraCaches,
+		ExtraS3s:             extraS3s,
+		SecretManager:        sm,
+		Telemetry:            tp,
+		Deps:                 deps,
+		AppInvocation:        pluginInvoker,
+		WorkflowManager:      workflowManager,
+		AgentManager:         agentManager,
+		PublicHostServices:   publicHostServices,
+		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
 
@@ -1059,10 +1053,11 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	if len(p.AuthProviders) != 0 {
 		authCloseErr = closeAuthProviders(p.AuthProviders)
 	}
+	authorizationCloseErr := closeAuthorizationProviders(p.Authorization)
 	externalCredentialsCloseErr := closeExternalCredentialProviderCandidate(p.Services)
 	errs = append(errs,
 		authCloseErr,
-		closeAuthorizationProvider(p.AuthorizationProvider),
+		authorizationCloseErr,
 		externalCredentialsCloseErr,
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
@@ -1130,32 +1125,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
-	baseAuthz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
+	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, prepared.Authorization)
 	if err != nil {
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
-	closeAuthz := true
-	defer func() {
-		if closeAuthz {
-			_ = baseAuthz.Close()
-		}
-	}()
-	var authz authorization.RuntimeAuthorizer = baseAuthz
-	if prepared.AuthorizationProvider != nil {
-		authz, err = authorization.NewProviderBacked(baseAuthz, prepared.AuthorizationProvider,
-			authorization.WithDynamicFragmentSource(prepared.Services.AuthzFragments),
-		)
-		if err != nil {
-			failPendingStartupProviders(prepared.Deps, err)
-			return nil, err
-		}
-	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
-		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
+		invocation.WithAuthorizationProvider(authorizationProvider),
 	)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
@@ -1177,7 +1156,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
 		Audit:             audit,
-		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 	}))
@@ -1187,7 +1165,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		WorkflowTools:                 workflowTools,
 		RunGrants:                     prepared.Deps.AgentRunGrants,
 		Invoker:                       sharedInvoker,
-		Authorizer:                    authz,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
 		AgentConnections:              agentConnectionBindings(cfg),
@@ -1219,10 +1196,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
-		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
-			return err
-		}
-		if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
+		if err := reconcileWorkflowConfigDefinitions(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
 			return err
 		}
 		return nil
@@ -1245,14 +1219,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeProviders = false
 	closeCore = false
 	closeAudit = false
-	closeAuthz = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
 	return &Result{
 		Auth:                         prepared.Auth,
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
-		AuthorizationProvider:        prepared.AuthorizationProvider,
+		Authorization:                prepared.Authorization,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		ExtraCaches:                  prepared.ExtraCaches,
@@ -1265,7 +1238,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AgentControl:                 prepared.Deps.AgentRuntime,
 		AgentManager:                 prepared.Deps.AgentManager,
 		ProvidersReady:               providersReady,
-		Authorizer:                   authz,
 		ConnectionAuth:               connAuthResolver,
 		ManualConnectionAuth:         manualConnAuthResolver,
 		Invoker:                      sharedInvoker,
@@ -1766,19 +1738,18 @@ func closeAuthProviders(providers map[string]core.AuthenticationProvider) error 
 	return errors.Join(errs...)
 }
 
-func closeAuthorizer(authorizer authorization.RuntimeAuthorizer) error {
-	if authorizer == nil {
+func closeAuthorizationProviders(providers map[string]core.AuthorizationProvider) error {
+	if len(providers) == 0 {
 		return nil
 	}
-	return authorizer.Close()
-}
-
-func closeAuthorizationProvider(provider core.AuthorizationProvider) error {
-	closer, ok := provider.(interface{ Close() error })
-	if !ok {
-		return nil
+	var errs []error
+	for _, provider := range providers {
+		if provider == nil {
+			continue
+		}
+		errs = append(errs, provider.Close())
 	}
-	return closer.Close()
+	return errors.Join(errs...)
 }
 
 func closeExternalCredentialProviderCandidate(services *coredata.Services) error {
@@ -1849,34 +1820,48 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 	return auth, nil
 }
 
-func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.AuthorizationProvider, error) {
-	authzName, authzEntry, err := cfg.SelectedAuthorizationProvider()
-	if err != nil {
-		return nil, err
-	}
-	if authzEntry == nil {
+func buildAuthorizationProviders(cfg *config.Config, factories *FactoryRegistry) (map[string]core.AuthorizationProvider, error) {
+	if len(cfg.Providers.Authorization) == 0 {
 		return nil, nil
 	}
 	if factories.Authorization == nil {
 		return nil, fmt.Errorf("bootstrap: authorization factory is not registered")
 	}
-	node := authzEntry.Config
+	name, entry, err := cfg.SelectedAuthorizationProvider()
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, nil
+	}
+	provider, err := buildNamedAuthorizationProvider(name, entry, factories)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]core.AuthorizationProvider{name: provider}, nil
+}
+
+func buildNamedAuthorizationProvider(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (core.AuthorizationProvider, error) {
+	logicalName := strings.TrimSpace(name)
+	if logicalName == "" {
+		logicalName = "authorization"
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
+	}
+	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode("authorization", "authorization", authzEntry, authzEntry.Config)
+		node, err = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindAuthorization, entry, entry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
+			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices("authorization", deps)
+	provider, err := factories.Authorization(node)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
+		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
-	provider, err := factories.Authorization(node, hostServices, deps)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
-	}
-	return observability.InstrumentAuthorizationProvider(authzName, provider), nil
+	return provider, nil
 }
 
 func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {

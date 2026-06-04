@@ -38,6 +38,7 @@ _socket_path: str = ""
 _previous_socket_env: str | None = None
 _exchange_requests: list[dict[str, Any]] = []
 _graphql_requests: list[dict[str, Any]] = []
+_invoke_workflows: list[dict[str, Any]] = []
 _relay_tokens: list[str] = []
 
 
@@ -80,6 +81,14 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                 preserving_proto_field_name=True,
             )
             if request.HasField("params")
+            else {}
+        )
+        _invoke_workflows.append(
+            json_format.MessageToDict(
+                request.workflow,
+                preserving_proto_field_name=True,
+            )
+            if request.HasField("workflow")
             else {}
         )
         return app_pb2.OperationResult(
@@ -175,6 +184,7 @@ class AppTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _exchange_requests.clear()
         _graphql_requests.clear()
+        _invoke_workflows.clear()
         _relay_tokens.clear()
 
     def test_request_helper_roundtrip(self) -> None:
@@ -346,11 +356,28 @@ class AppTransportTests(unittest.TestCase):
             },
         )
 
-    def test_whitespace_only_invocation_token_is_rejected(self) -> None:
-        with self.assertRaisesRegex(
-            RuntimeError, "app: invocation token is not available"
-        ):
-            _AppClient("   ")
+    def test_request_app_forwards_workflow_without_invocation_token(self) -> None:
+        request = Request(
+            workflow={
+                "runId": "run-python-app",
+                "runAs": {"id": "service_account:workflow-test"},
+            }
+        )
+
+        with request.app() as client:
+            response = client.invoke("github", "get_issue", {})
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(json.loads(response.body)["invocation_token"], "")
+        self.assertEqual(
+            _invoke_workflows,
+            [
+                {
+                    "runId": "run-python-app",
+                    "runAs": {"id": "service_account:workflow-test"},
+                }
+            ],
+        )
 
     def test_tcp_target_token_env_is_forwarded(self) -> None:
         tcp_server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))

@@ -201,6 +201,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	_, err = server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds:  1,
 		SessionId:       "session-1",
 		InvocationToken: token,
 		Workflow:        workflow,
@@ -214,7 +215,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
-func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testing.T) {
+func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationTokenFromAppStep(t *testing.T) {
 	t.Parallel()
 
 	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-workflow-runas-secret"))
@@ -237,6 +238,9 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 			if p == nil || p.SubjectID != "user:workflow-runner" {
 				t.Fatalf("principal = %#v, want workflow runner", p)
 			}
+			if p.TokenPermissions != nil {
+				t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", p.TokenPermissions)
+			}
 			if got := invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "runId"); got != "run-123" {
 				t.Fatalf("workflow run id = %q, want run-123", got)
 			}
@@ -252,6 +256,9 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 		createTurn: func(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
 			if p == nil || p.SubjectID != "user:workflow-runner" {
 				t.Fatalf("principal = %#v, want workflow runner", p)
+			}
+			if p.TokenPermissions != nil {
+				t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", p.TokenPermissions)
 			}
 			if p.CredentialSubjectID != "user:workflow-runner" {
 				t.Fatalf("credential subject = %q, want workflow runner", p.CredentialSubjectID)
@@ -272,17 +279,15 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 		run: &coreworkflow.Run{
 			ID: "run-123",
 			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
-				ID: "agent",
-				Agent: &coreworkflow.AgentTurn{
-					ProviderName: "managed",
+				ID: "app",
+				App: &coreworkflow.AppCall{
+					Name:      "reviewer",
+					Operation: "run",
 				},
 			}}},
 			RunAs: &core.RunAsSubject{
 				SubjectID:           "user:workflow-runner",
-				SubjectKind:         "user",
 				CredentialSubjectID: "user:workflow-runner",
-				DisplayName:         "Workflow runner",
-				AuthSource:          "config",
 			},
 		},
 	}))
@@ -294,8 +299,9 @@ func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationToken(t *testi
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		SessionId: "session-1",
-		Workflow:  workflow,
+		TimeoutSeconds: 1,
+		SessionId:      "session-1",
+		Workflow:       workflow,
 	}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
@@ -332,8 +338,9 @@ func TestManagerServerCreateTurnRequiresTokenOrPersistedWorkflowRunAs(t *testing
 				}
 			}
 			_, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-				SessionId: "session-1",
-				Workflow:  workflow,
+				TimeoutSeconds: 1,
+				SessionId:      "session-1",
+				Workflow:       workflow,
 			})
 			if status.Code(err) != codes.FailedPrecondition {
 				t.Fatalf("CreateTurn code = %v, want %v (err=%v)", status.Code(err), codes.FailedPrecondition, err)
@@ -368,6 +375,7 @@ func TestManagerServerCreateTurnRequiresInvocationTokenCallerApp(t *testing.T) {
 	}, tokens)
 
 	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds:  1,
 		SessionId:       "session-1",
 		InvocationToken: token,
 	}); status.Code(err) != codes.FailedPrecondition {

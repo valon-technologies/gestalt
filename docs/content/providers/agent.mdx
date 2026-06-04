@@ -162,6 +162,40 @@ Each `messages[]` entry accepts `role`, optional `text`, optional `parts`, and
 optional `metadata`. `parts[]` supports `type: text | json | tool_call |
 tool_result | image_ref`.
 
+### Turn timeouts (optional)
+
+`timeoutSeconds` is an optional positive execution budget for a provider-owned
+turn. When omitted or zero, the provider chooses its own execution timeout,
+usually by delegating to the upstream model SDK default. The field does not
+extend the `CreateTurn` HTTP or RPC deadline: `CreateTurn` still returns quickly
+while model and tool work continues in the background.
+
+You can set the budget on these surfaces:
+
+- **HTTP/JSON:** `timeoutSeconds` on `POST /api/v1/agent/sessions/{sessionID}/turns`
+- **SDK:** `TimeoutSeconds` (Go), `timeout_seconds` (Python), `timeout_seconds`
+  (Rust), or `timeoutSeconds` (TypeScript) on `AgentCreateTurn`
+- **CLI:** `--timeout-seconds` on `gestalt agent`, `gestalt agent resume`, and
+  `gestalt agent turns create` for server-backed sessions (`--cloud`). Local
+  `gestalt agent` does not accept `--timeout-seconds`; use `--cloud` when you need
+  an explicit turn budget from the CLI.
+- **Workflow steps:** optional per-step `timeout` in YAML (for example `120s`) or
+  `timeoutSeconds` in programmatic targets. See [Workflow](/providers/workflow)
+  and [Config File — `workflows`](/reference/config-file#workflows).
+
+`timeoutSeconds` under `providers.agent.<name>.config` in the example above is
+provider-specific configuration passed into the agent provider, not the Gestalt
+turn API field on `CreateTurn`.
+
+```json
+{
+  "model": "fast",
+  "timeoutSeconds": 120,
+  "messages": [{ "role": "user", "text": "Summarize the roadmap risk." }],
+  "output": { "text": {} }
+}
+```
+
 ## Invoking agents
 
 Use `gestalt agent` for an interactive session:
@@ -328,63 +362,39 @@ Provider code can invoke agents through the SDK `Agent` capability:
 
 ## Agent workflow steps
 
-Workflow schedules and triggers can include agent turns directly as
-`target.steps[].agent`:
+Workflow definitions can include agent turns directly in `steps[].agent`:
 
 ```yaml
 workflows:
-  eventTriggers:
+  definitions:
     summarize_roadmap_item:
       provider: local
-      match:
-        type: roadmap.item.updated
-        source: roadmap
-        subject: item
-      target:
-        steps:
-          - id: summarize
-            agent:
-              provider: simple
-              model: fast
-              prompt: "Summarize the updated roadmap item."
-              tools:
-                - app: roadmap
-                  operation: items.get
+      steps:
+        - id: summarize
+          agent:
+            provider: simple
+            model: fast
+            prompt: "Summarize the updated roadmap item."
+            tools:
+              - app: roadmap
+                operation: items.get
       invokes:
         - app: roadmap
           operation: items.get
+      on:
+        roadmap_item:
+          event:
+            type: roadmap.item.updated
+            source: roadmap
+            subject: item
+          input:
+            item: "${{ signal.data.item }}"
 ```
 
-For user-owned triggers, pass the full target object to the workflow CLI:
+After the definition is applied, deliver matching events to start runs:
 
 ```sh
-gestalt workflow triggers create \
-  --provider local \
-  --type roadmap.item.updated \
-  --source roadmap \
-  --subject item \
-  --target-file - <<'JSON'
-{
-  "steps": [
-    {
-      "id": "summarize",
-      "agent": {
-        "provider": "simple",
-        "model": "fast",
-        "prompt": "Summarize the updated roadmap item.",
-        "tools": [
-          {
-            "app": "roadmap",
-            "operation": "items.get"
-          }
-        ]
-      }
-    }
-  ]
-}
-JSON
-
-gestalt workflow events publish \
+gestalt workflow events deliver \
   --type roadmap.item.updated \
   --source roadmap \
   --subject item \
@@ -456,6 +466,7 @@ provider.
 
 `CreateTurn` should persist the turn and return quickly, usually in `RUNNING` or
 `PENDING`. Long-running model and tool work should continue in the background.
+For an optional per-turn execution budget, see [Turn timeouts (optional)](#turn-timeouts-optional).
 Callers use `GetTurn`, `ListTurnEvents`, and `ListInteractions` to observe
 progress or resolve pending human input.
 
@@ -471,5 +482,5 @@ raw event `type` and `data` remain the source of truth.
 - [HTTP API](/reference/http-api): session, turn, interaction, and event routes
 - [CLI](/client/cli): `gestalt agent`, `gestalt agent sessions`, and `gestalt agent turns`
 - [Runtime](/providers/runtime): sandboxing hosted agent providers
-- [Workflow](/providers/workflow): schedules, triggers, and workflow steps
+- [Workflow](/providers/workflow): definitions, activations, and workflow steps
 - [SDK](/reference/sdk): provider and host-service helpers by language

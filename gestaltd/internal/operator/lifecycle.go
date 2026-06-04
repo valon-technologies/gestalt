@@ -44,25 +44,14 @@ const (
 	PreparedRuntimeDir             = ".gestaltd/runtime"
 	PreparedUIDir                  = ".gestaltd/ui"
 
-	platformKeyGeneric                    = "generic"
-	staticValidationEntrypointPlaceholder = staticvalidation.EntrypointPlaceholder
+	platformKeyGeneric = "generic"
 )
 
 type Lockfile struct {
-	Providers           map[string]LockEntry `json:"providers"`
-	Authentication      map[string]LockEntry `json:"authentication,omitempty"`
-	Authorization       map[string]LockEntry `json:"authorization,omitempty"`
-	ExternalCredentials map[string]LockEntry `json:"externalCredentials,omitempty"`
-	IndexedDBs          map[string]LockEntry `json:"indexeddbs,omitempty"`
-	Caches              map[string]LockEntry `json:"cache,omitempty"`
-	S3                  map[string]LockEntry `json:"s3,omitempty"`
-	Workflows           map[string]LockEntry `json:"workflow,omitempty"`
-	Agents              map[string]LockEntry `json:"agent,omitempty"`
-	Runtimes            map[string]LockEntry `json:"runtime,omitempty"`
-	Secrets             map[string]LockEntry `json:"secrets,omitempty"`
-	Telemetry           map[string]LockEntry `json:"telemetry,omitempty"`
-	Audit               map[string]LockEntry `json:"audit,omitempty"`
-	UIs                 map[string]LockEntry `json:"ui,omitempty"`
+	Schema        string              `json:"schema"`
+	SchemaVersion int                 `json:"schemaVersion"`
+	Revision      int                 `json:"revision"`
+	Providers     providerLockBuckets `json:"providers"`
 }
 
 // LockArchive records a platform-specific archive URL and optional integrity hash.
@@ -82,22 +71,21 @@ type LockSourceRef struct {
 }
 
 type LockEntry struct {
-	Fingerprint              string                       `json:"fingerprint"`
-	Package                  string                       `json:"package,omitempty"`
-	Kind                     string                       `json:"kind,omitempty"`
-	Runtime                  string                       `json:"runtime,omitempty"`
-	Source                   string                       `json:"source,omitempty"`
-	SourceRef                *LockSourceRef               `json:"sourceRef,omitempty"`
-	Version                  string                       `json:"version,omitempty"`
-	Archives                 map[string]LockArchive       `json:"archives,omitempty"`
-	Manifest                 string                       `json:"manifest"`
-	Executable               string                       `json:"executable,omitempty"`
-	AssetRoot                string                       `json:"assetRoot,omitempty"`
-	StaticManifest           *providermanifestv1.Manifest `json:"-"`
-	StaticCatalogAvailable   bool                         `json:"-"`
-	StaticCatalogFingerprint string                       `json:"-"`
-	StaticCatalogOperations  []string                     `json:"-"`
-	StaticCatalogSessionOnly bool                         `json:"-"`
+	InputDigest        string                       `json:"inputDigest,omitempty"`
+	Package            string                       `json:"package,omitempty"`
+	Kind               string                       `json:"kind,omitempty"`
+	Runtime            string                       `json:"runtime,omitempty"`
+	Source             string                       `json:"source,omitempty"`
+	SourceRef          *LockSourceRef               `json:"sourceRef,omitempty"`
+	Version            string                       `json:"version,omitempty"`
+	Archives           map[string]LockArchive       `json:"archives,omitempty"`
+	ValidationManifest *providermanifestv1.Manifest `json:"manifest,omitempty"`
+	CatalogAvailable   bool                         `json:"catalogAvailable,omitempty"`
+	CatalogFingerprint string                       `json:"catalogFingerprint,omitempty"`
+	CatalogSessionOnly bool                         `json:"catalogSessionOnly,omitempty"`
+	ArtifactManifest   string                       `json:"-"`
+	Executable         string                       `json:"-"`
+	AssetRoot          string                       `json:"-"`
 }
 
 type StaticValidationOptions struct {
@@ -114,13 +102,12 @@ type Lifecycle struct {
 type StatePaths struct {
 	ArtifactsDir string
 	LockfilePath string
-	AppScope     []string
 }
 
 type SyncOptions struct {
-	Parallelism     int
-	ArchiveCacheDir string
-	Observability   SyncObservability
+	Parallelism   int
+	CacheDir      string
+	Observability SyncObservability
 }
 
 func DefaultSyncParallelism() int {
@@ -228,7 +215,7 @@ func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StateP
 		return nil, err
 	}
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
-	return providerLockfileFromLockfile(lock).toLockfile(), nil
+	return normalizeLockfile(lock), nil
 }
 
 func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
@@ -289,7 +276,7 @@ func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, state State
 		return nil, nil, lifecyclePaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "agent", len(lock.Agents), "runtime", len(lock.Runtimes), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers.App), "authentication", len(lock.Providers.Authentication), "authorization", len(lock.Providers.Authorization), "indexeddbs", len(lock.Providers.IndexedDB), "cache", len(lock.Providers.Cache), "s3", len(lock.Providers.S3), "workflow", len(lock.Providers.Workflow), "agent", len(lock.Providers.Agent), "runtime", len(lock.Providers.Runtime), "secrets", len(lock.Providers.Secrets), "telemetry", len(lock.Providers.Telemetry), "audit", len(lock.Providers.Audit), "uis", len(lock.Providers.UI))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
@@ -338,9 +325,6 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyAppScope(cfg, state); err != nil {
-		return nil, nil, lifecyclePaths{}, err
-	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	if len(displayState) > 0 {
 		paths.configFlags = formatConfigStateFlags(configPaths, displayState[0])
@@ -377,9 +361,6 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
-	}
-	if err := applyAppScope(cfg, state); err != nil {
-		return nil, nil, lifecyclePaths{}, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	if len(displayState) > 0 {
@@ -433,13 +414,15 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if err != nil {
 			return nil, fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
-		lockEntry, err := l.lockCommittedProviderEntryForSource(ctx, cfg, paths, name, entry, configMap)
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), providerDestDir(paths, name), entry, configMap, artifactModeCheck)
 		if err != nil {
 			return nil, err
 		}
-		lock.Providers[name] = lockEntry
-		if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, artifactModeCheck); err != nil {
-			return nil, err
+		lock.Providers.App[name] = lockEntry
+		if !lockEntryStaticValidationOnly(lockEntry) {
+			if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, artifactModeCheck); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -452,7 +435,7 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 	}
 	for name := range secretsEntries {
 		if providerRequiresCommittedLock(cfg.Providers.Secrets[name]) {
-			lock.Secrets[name] = secretsEntries[name]
+			lock.Providers.Secrets[name] = secretsEntries[name]
 		}
 	}
 	for _, collection := range hostProviderCollections(cfg) {
@@ -471,13 +454,15 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 			if err != nil {
 				return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 			}
-			lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, entry, configMap)
+			lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, entry, configMap, artifactModeCheck)
 			if err != nil {
 				return nil, err
 			}
 			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
-			if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, entry, configMap, destDir, artifactModeCheck); err != nil {
-				return nil, err
+			if !lockEntryStaticValidationOnly(lockEntry) {
+				if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, entry, configMap, destDir, artifactModeCheck); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -491,13 +476,15 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if err != nil {
 			return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 		}
-		lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, &entry.ProviderEntry, configMap)
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, &entry.ProviderEntry, configMap, artifactModeCheck)
 		if err != nil {
 			return nil, err
 		}
-		lock.Runtimes[name] = lockEntry
-		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, &entry.ProviderEntry, configMap, destDir, artifactModeCheck); err != nil {
-			return nil, err
+		lock.Providers.Runtime[name] = lockEntry
+		if !lockEntryStaticValidationOnly(lockEntry) {
+			if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, &entry.ProviderEntry, configMap, destDir, artifactModeCheck); err != nil {
+				return nil, err
+			}
 		}
 	}
 	for name, def := range cfg.Providers.IndexedDB {
@@ -510,13 +497,15 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if err != nil {
 			return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 		}
-		lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, def, configMap)
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, def, configMap, artifactModeCheck)
 		if err != nil {
 			return nil, err
 		}
-		lock.IndexedDBs[name] = lockEntry
-		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, def, configMap, destDir, artifactModeCheck); err != nil {
-			return nil, err
+		lock.Providers.IndexedDB[name] = lockEntry
+		if !lockEntryStaticValidationOnly(lockEntry) {
+			if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, def, configMap, destDir, artifactModeCheck); err != nil {
+				return nil, err
+			}
 		}
 	}
 	for name, def := range cfg.Providers.S3 {
@@ -529,13 +518,15 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if err != nil {
 			return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 		}
-		lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, def, configMap)
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, def, configMap, artifactModeCheck)
 		if err != nil {
 			return nil, err
 		}
-		lock.S3[name] = lockEntry
-		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, def, configMap, destDir, artifactModeCheck); err != nil {
-			return nil, err
+		lock.Providers.S3[name] = lockEntry
+		if !lockEntryStaticValidationOnly(lockEntry) {
+			if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, def, configMap, destDir, artifactModeCheck); err != nil {
+				return nil, err
+			}
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
@@ -551,13 +542,19 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if !providerRequiresCommittedLock(&entry.ProviderEntry) {
 			continue
 		}
-		lockEntry, err := l.lockCommittedNamedUIProviderArtifact(ctx, cfg, paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode ui %q config: %w", name, err)
+		}
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindUI, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), &entry.ProviderEntry, configMap, artifactModeCheck)
 		if err != nil {
 			return nil, err
 		}
-		lock.UIs[name] = lockEntry
-		if _, err := l.applyConfiguredUIProvider(paths, &lockEntry, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
-			return nil, err
+		lock.Providers.UI[name] = lockEntry
+		if !lockEntryStaticValidationOnly(lockEntry) {
+			if _, err := l.applyConfiguredUIProvider(paths, &lockEntry, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return lock, nil
@@ -596,13 +593,20 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 	}
 
 	lock := newLockfile()
-	resolvedProviders, err := l.writeProviderArtifacts(ctx, cfg, paths)
-	if err != nil {
-		return nil, err
-	}
-	for name := range resolvedProviders {
-		if providerRequiresCommittedLock(cfg.Apps[name]) {
-			lock.Providers[name] = resolvedProviders[name]
+	for name, entry := range cfg.Apps {
+		if entry == nil || !sourceBacked(entry) {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode provider config for provider %q: %w", name, err)
+		}
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), providerDestDir(paths, name), entry, configMap, artifactModeMaterialize)
+		if err != nil {
+			return nil, err
+		}
+		if providerRequiresCommittedLock(entry) {
+			lock.Providers.App[name] = lockEntry
 		}
 	}
 	for _, collection := range hostProviderCollections(cfg) {
@@ -616,7 +620,11 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 				}
 			}
 			destDir := componentDestDir(paths, collection.kind, name)
-			lockEntry, err := l.writeComponentArtifact(ctx, cfg, paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return nil, fmt.Errorf("decode provider config for %s %q: %w", providerManifestKind(collection.kind), name, err)
+			}
+			lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, providerManifestKind(collection.kind), name, fmt.Sprintf("%s %q", providerManifestKind(collection.kind), name), destDir, entry, configMap, artifactModeMaterialize)
 			if err != nil {
 				return nil, err
 			}
@@ -630,12 +638,16 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 			continue
 		}
 		destDir := componentDestDir(paths, config.HostProviderKindRuntime, name)
-		lockEntry, err := l.writeComponentArtifact(ctx, cfg, paths, providerManifestKind(config.HostProviderKindRuntime), name, destDir, &entry.ProviderEntry, entry.Config)
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode provider config for %s %q: %w", providerManifestKind(config.HostProviderKindRuntime), name, err)
+		}
+		lockEntry, err := l.resolveLockedProvider(ctx, cfg, paths, providerManifestKind(config.HostProviderKindRuntime), name, fmt.Sprintf("%s %q", providerManifestKind(config.HostProviderKindRuntime), name), destDir, &entry.ProviderEntry, configMap, artifactModeMaterialize)
 		if err != nil {
 			return nil, err
 		}
 		if runtimeRequiresCommittedLock(entry) {
-			lock.Runtimes[name] = lockEntry
+			lock.Providers.Runtime[name] = lockEntry
 		}
 	}
 	if err := l.resolveConfiguredPlugins(paths, lock, cfg, artifactModeMaterialize); err != nil {
@@ -650,28 +662,36 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 	}
 	for name := range secretsEntries {
 		if providerRequiresCommittedLock(cfg.Providers.Secrets[name]) {
-			lock.Secrets[name] = secretsEntries[name]
+			lock.Providers.Secrets[name] = secretsEntries[name]
 		}
 	}
 	for name, def := range cfg.Providers.IndexedDB {
 		if sourceBacked(def) {
-			entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
+			configMap, err := config.NodeToMap(def.Config)
+			if err != nil {
+				return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindIndexedDB, name, err)
+			}
+			entry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindIndexedDB, name, fmt.Sprintf("%s %q", providermanifestv1.KindIndexedDB, name), indexeddbDestDir(paths, name), def, configMap, artifactModeMaterialize)
 			if err != nil {
 				return nil, err
 			}
 			if providerRequiresCommittedLock(def) {
-				lock.IndexedDBs[name] = entry
+				lock.Providers.IndexedDB[name] = entry
 			}
 		}
 	}
 	for name, def := range cfg.Providers.S3 {
 		if sourceBacked(def) {
-			entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
+			configMap, err := config.NodeToMap(def.Config)
+			if err != nil {
+				return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindS3, name, err)
+			}
+			entry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindS3, name, fmt.Sprintf("%s %q", providermanifestv1.KindS3, name), s3DestDir(paths, name), def, configMap, artifactModeMaterialize)
 			if err != nil {
 				return nil, err
 			}
 			if providerRequiresCommittedLock(def) {
-				lock.S3[name] = entry
+				lock.Providers.S3[name] = entry
 			}
 		}
 	}
@@ -682,12 +702,16 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 					continue
 				}
 			}
-			uiEntry, err := l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return nil, fmt.Errorf("decode ui %q config: %w", name, err)
+			}
+			uiEntry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindUI, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), &entry.ProviderEntry, configMap, artifactModeMaterialize)
 			if err != nil {
 				return nil, err
 			}
 			if providerRequiresCommittedLock(&entry.ProviderEntry) {
-				lock.UIs[name] = uiEntry
+				lock.Providers.UI[name] = uiEntry
 			}
 		}
 	}
@@ -869,44 +893,7 @@ func defaultLockfilePath(configPath string) string {
 	return filepath.Join(dir, LockfileName)
 }
 
-func pluginScopeNames(scope []string) []string {
-	names := config.NormalizeAppScopeNames(scope)
-	slices.Sort(names)
-	return names
-}
-
-func pluginScopeLabel(scope []string) string {
-	names := pluginScopeNames(scope)
-	if len(names) == 0 {
-		return ""
-	}
-	if len(names) == 1 {
-		return names[0]
-	}
-	return strings.Join(names, ",")
-}
-
-func applyAppScope(cfg *config.Config, state StatePaths) error {
-	names := pluginScopeNames(state.AppScope)
-	if len(names) == 0 {
-		return nil
-	}
-	if err := config.ApplyAppScope(cfg, names); err != nil {
-		return err
-	}
-	if err := config.ValidateNoMissingEnvRefsForAppScope(cfg); err != nil {
-		return err
-	}
-	if err := config.ValidateStructure(cfg); err != nil {
-		return err
-	}
-	return nil
-}
-
-func loadConfigForLifecycle(configPaths []string, state StatePaths, allowMissingEnv bool) (*config.Config, error) {
-	if pluginScopeLabel(state.AppScope) != "" {
-		return config.LoadAppScopePreserveMissingEnvPaths(configPaths, state.AppScope)
-	}
+func loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
 	if allowMissingEnv {
 		return config.LoadAllowMissingEnvPaths(configPaths)
 	}
@@ -925,9 +912,6 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	cfg, err := loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
-	}
-	if err := applyAppScope(cfg, state); err != nil {
-		return nil, nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	mode := artifactModeMaterialize
@@ -968,9 +952,6 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyAppScope(cfg, state); err != nil {
-		return nil, err
-	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	lock, err := l.prepareRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
 	if err != nil {
@@ -999,9 +980,6 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyAppScope(cfg, state); err != nil {
-		return nil, err
-	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	platform := strings.TrimSpace(opts.Platform)
 	if platform == "" {
@@ -1015,11 +993,8 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 		if lockErr != nil && configRequiresStaticLock(cfg) {
 			canPrepareScratchLock := os.IsNotExist(lockErr) &&
 				platform == providerpkg.CurrentPlatformString() &&
-				(paths.pluginScope != "" || !configRequiresRemoteStaticLock(cfg))
+				!configRequiresRemoteStaticLock(cfg)
 			if !canPrepareScratchLock {
-				if paths.pluginScope != "" {
-					return nil, fmt.Errorf("scoped validation for app %q requires an existing scoped lockfile for platform %q; pass --lockfile with that metadata or validate on the current platform without --platform: %w", paths.pluginScope, platform, lockErr)
-				}
 				return nil, fmt.Errorf("lockfile is missing or unreadable; run `%s`: %w", formatLockCommand(paths), lockErr)
 			}
 			_, scratchCfg, _, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, state)
@@ -1069,33 +1044,24 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyAppScope(cfg, state); err != nil {
-		return err
-	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
-	if mode == artifactModeMaterialize && opts.ArchiveCacheDir != "" {
-		paths.archiveCacheDir = resolveCLIArtifactsDir(opts.ArchiveCacheDir)
+	if mode == artifactModeMaterialize && opts.CacheDir != "" {
+		paths.syncCacheDir = resolveCLIArtifactsDir(opts.CacheDir)
 	}
 	paths.syncMetrics = recorder
 	paths.syncBuildOutput = opts.Observability.BuildOutput
 	if recorder != nil {
-		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.archiveCacheDir, opts.ArchiveCacheDir != "", mode == artifactModeMaterialize && paths.archiveCacheDir != "")
+		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.syncCacheDir, opts.CacheDir != "", mode == artifactModeMaterialize && paths.syncCacheDir != "")
 	}
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
 		if os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
 			lock = newLockfile()
 		} else {
-			if paths.pluginScope != "" {
-				return fmt.Errorf("scoped local app lock metadata is missing or unreadable for app %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
-			}
 			return fmt.Errorf("source-backed providers require lock metadata; run `%s`: %w", formatLockCommand(paths), err)
 		}
 	}
-	if !lockMetadataMatchesConfigForSync(cfg, paths, lock) {
-		if paths.pluginScope != "" {
-			return fmt.Errorf("scoped local app lockfile is out of date for app %q; rerun without --locked to prepare it", paths.pluginScope)
-		}
+	if !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{}) {
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
 	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, mode, configSecretResolutionSourceAuth); err != nil {
@@ -1153,6 +1119,20 @@ func recordSyncArtifact(paths lifecyclePaths, kind, name, subject, destDir, sour
 		PrepareDuration:  prepareDuration,
 		ActivateDuration: activateDuration,
 	})
+}
+
+func recordSyncArchiveDownload(paths lifecyclePaths, event syncArchiveMetricsEvent) {
+	if paths.syncMetrics == nil {
+		return
+	}
+	paths.syncMetrics.RecordArchiveFetch(event)
+}
+
+func recordSyncCacheEntry(paths lifecyclePaths, event syncCacheMetricsEvent) {
+	if paths.syncMetrics == nil {
+		return
+	}
+	paths.syncMetrics.RecordCacheEntry(event)
 }
 
 func syncArtifactArchiveSourceKind(paths lifecyclePaths, entry LockEntry) string {
@@ -1381,18 +1361,12 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 		lock = newLockfile()
 		err = nil
 	}
-	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock) || configHasLocalProviderSources(cfg) || configHasMetadataProviderSources(cfg)) {
+	if !locked && (err != nil || !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{RequireArtifacts: true}) || configHasLocalProviderSources(cfg) || configHasMetadataProviderSources(cfg)) {
 		lock, err = l.PrepareAtPathsWithStatePaths(configPaths, state)
 		validatedDuringPrepare = err == nil
 	}
 	if err != nil {
-		if paths.pluginScope != "" {
-			if locked {
-				return nil, false, fmt.Errorf("scoped local app state is missing or stale for app %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
-			}
-			return nil, false, fmt.Errorf("preparing scoped local app state for app %q failed: %w", paths.pluginScope, err)
-		}
-		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --app NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	return lock, validatedDuringPrepare, nil
 }
@@ -1483,7 +1457,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 				switch {
 				case provider.HasLocalSource():
 					if lock == nil {
-						entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
+						entry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindSecrets, name, fmt.Sprintf("%s %q", providermanifestv1.KindSecrets, name), secretsDestDir(paths, name), provider, configMap, artifactModeMaterialize)
 						if err != nil {
 							return nil, err
 						}
@@ -1493,7 +1467,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 						return nil, err
 					}
 				case lock != nil:
-					lockEntry, ok := lock.Secrets[name]
+					lockEntry, ok := lock.Providers.Secrets[name]
 					if !ok {
 						return nil, lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", providermanifestv1.KindSecrets, name)
 					}
@@ -1501,7 +1475,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 						return nil, err
 					}
 				default:
-					entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
+					entry, err := l.resolveLockedProvider(ctx, cfg, paths, providermanifestv1.KindSecrets, name, fmt.Sprintf("%s %q", providermanifestv1.KindSecrets, name), secretsDestDir(paths, name), provider, configMap, artifactModeMaterialize)
 					if err != nil {
 						return nil, err
 					}
@@ -1546,7 +1520,6 @@ type lifecyclePaths struct {
 	configPaths            []string
 	configFlags            string
 	lockFlags              string
-	pluginScope            string
 	configPath             string
 	configDir              string
 	artifactsDir           string
@@ -1563,7 +1536,7 @@ type lifecyclePaths struct {
 	agentDir               string
 	runtimeDir             string
 	uiDir                  string
-	archiveCacheDir        string
+	syncCacheDir           string
 	syncMetrics            *SyncMetricsRecorder
 	syncBuildOutput        providerpkg.CommandOutput
 }
@@ -1588,9 +1561,6 @@ func formatConfigStateFlags(paths []string, state StatePaths) string {
 	}
 	if state.LockfilePath != "" {
 		args = append(args, "--lockfile", state.LockfilePath)
-	}
-	for _, appName := range pluginScopeNames(state.AppScope) {
-		args = append(args, "--app", appName)
 	}
 	return strings.Join(args, " ")
 }
@@ -1626,16 +1596,10 @@ func formatSyncLockedCommand(paths lifecyclePaths) string {
 }
 
 func preparedArtifactStaleError(paths lifecyclePaths, format string, args ...any) error {
-	if paths.pluginScope != "" {
-		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for app %q", append(args, paths.pluginScope)...)
-	}
 	return fmt.Errorf(format+"; run `%s`", append(args, formatSyncLockedCommand(paths))...)
 }
 
 func lockMetadataStaleError(paths lifecyclePaths, format string, args ...any) error {
-	if paths.pluginScope != "" {
-		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for app %q", append(args, paths.pluginScope)...)
-	}
 	return fmt.Errorf(format+"; run `%s`", append(args, formatLockCommand(paths))...)
 }
 
@@ -1688,27 +1652,27 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 	}
 	switch kind {
 	case config.HostProviderKindAuthentication:
-		return lock.Authentication
+		return lock.Providers.Authentication
 	case config.HostProviderKindAuthorization:
-		return lock.Authorization
+		return lock.Providers.Authorization
 	case config.HostProviderKindExternalCredentials:
-		return lock.ExternalCredentials
+		return lock.Providers.ExternalCredentials
 	case config.HostProviderKindSecrets:
-		return lock.Secrets
+		return lock.Providers.Secrets
 	case config.HostProviderKindTelemetry:
-		return lock.Telemetry
+		return lock.Providers.Telemetry
 	case config.HostProviderKindAudit:
-		return lock.Audit
+		return lock.Providers.Audit
 	case config.HostProviderKindCache:
-		return lock.Caches
+		return lock.Providers.Cache
 	case config.HostProviderKindIndexedDB:
-		return lock.IndexedDBs
+		return lock.Providers.IndexedDB
 	case config.HostProviderKindWorkflow:
-		return lock.Workflows
+		return lock.Providers.Workflow
 	case config.HostProviderKindAgent:
-		return lock.Agents
+		return lock.Providers.Agent
 	case config.HostProviderKindRuntime:
-		return lock.Runtimes
+		return lock.Providers.Runtime
 	default:
 		return nil
 	}
@@ -1851,29 +1815,15 @@ func resolveLockfilePath(configPath, override string) string {
 	return override
 }
 
-func scopedLifecycleStatePaths(configPath string, cfg *config.Config, state StatePaths) (string, string) {
-	artifactsRoot := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
-	if pluginScopeLabel(state.AppScope) == "" {
-		return artifactsRoot, resolveLockfilePath(configPath, state.LockfilePath)
-	}
-
-	scopeDir := filepath.Join(artifactsRoot, ".gestaltd", "scopes", "apps", pluginScopeLabel(state.AppScope))
-	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
-	if state.LockfilePath == "" {
-		lockfilePath = filepath.Join(scopeDir, LockfileName)
-	}
-	return filepath.Join(scopeDir, "artifacts"), lockfilePath
-}
-
 func resolveLifecyclePaths(configPaths []string, cfg *config.Config, state StatePaths) lifecyclePaths {
 	configPath := primaryConfigPath(configPaths)
 	configDir := filepath.Dir(configPath)
-	artifactsDir, lockfilePath := scopedLifecycleStatePaths(configPath, cfg, state)
+	artifactsDir := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
+	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
 	return lifecyclePaths{
 		configPaths:            append([]string(nil), configPaths...),
 		configFlags:            formatConfigStateFlags(configPaths, state),
 		lockFlags:              formatLockFlags(configPaths, state),
-		pluginScope:            pluginScopeLabel(state.AppScope),
 		configPath:             configPath,
 		configDir:              configDir,
 		artifactsDir:           artifactsDir,
@@ -2240,7 +2190,7 @@ func writeJSONFile(path string, v any) error {
 }
 
 func canonicalLockfileJSON(lock *Lockfile) ([]byte, error) {
-	data, err := json.MarshalIndent(providerLockfileFromLockfile(lock), "", "  ")
+	data, err := json.MarshalIndent(canonicalLockfile(lock), "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -2252,107 +2202,32 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	var lock providerLockfile
+	var lock Lockfile
 	if err := json.Unmarshal(data, &lock); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
 	if err := validateProviderLockfile(&lock); err != nil {
 		return nil, err
 	}
-	return lock.toLockfile(), nil
+	return normalizeLockfile(&lock), nil
 }
 
 func WriteLockfile(path string, lock *Lockfile) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create lockfile parent directory: %w", err)
 	}
-	if err := writeJSONFile(path, providerLockfileFromLockfile(lock)); err != nil {
+	if err := writeJSONFile(path, canonicalLockfile(lock)); err != nil {
 		return fmt.Errorf("writing lockfile: %w", err)
 	}
 	return nil
 }
 
-func lockMatchesConfig(cfg *config.Config, paths lifecyclePaths, lock *Lockfile) bool {
-	if lock == nil {
-		return false
-	}
-	for name, entry := range cfg.Apps {
-		if !providerRequiresCommittedLock(entry) {
-			continue
-		}
-		lockEntry, found := lock.Providers[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindApp, name, entry, lockEntry, found, providerDestDir(paths, name)) {
-			return false
-		}
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		lockEntries := lockEntriesForKind(lock, collection.kind)
-		for name, entry := range collection.entries {
-			if entry == nil || !providerRequiresCommittedLock(entry) {
-				continue
-			}
-			lockEntry, found := lockEntries[name]
-			if !lockEntryMatches(paths, providerManifestKind(collection.kind), name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
-				return false
-			}
-		}
-	}
-	for name, entry := range cfg.Runtime.Providers {
-		if !runtimeRequiresCommittedLock(entry) {
-			continue
-		}
-		lockEntry, found := lock.Runtimes[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindRuntime, name, &entry.ProviderEntry, lockEntry, found, runtimeDestDir(paths, name)) {
-			return false
-		}
-	}
-	for name, entry := range cfg.Providers.IndexedDB {
-		if !providerRequiresCommittedLock(entry) {
-			continue
-		}
-		lockEntry, found := lock.IndexedDBs[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindIndexedDB, name, entry, lockEntry, found, indexeddbDestDir(paths, name)) {
-			return false
-		}
-	}
-	for name, entry := range cfg.Providers.S3 {
-		if !providerRequiresCommittedLock(entry) {
-			continue
-		}
-		lockEntry, found := lock.S3[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindS3, name, entry, lockEntry, found, s3DestDir(paths, name)) {
-			return false
-		}
-	}
-	for name, entry := range cfg.Providers.UI {
-		if entry == nil || !providerRequiresCommittedLock(&entry.ProviderEntry) {
-			continue
-		}
-		lockEntry, ok := lock.UIs[name]
-		if !ok {
-			return false
-		}
-		if !uiLockEntryMetadataMatches(paths, name, &entry.ProviderEntry, lockEntry, true) {
-			return false
-		}
-		install, err := inspectPreparedInstall(uiDestDir(paths, name))
-		if err != nil {
-			return false
-		}
-		if !preparedManifestMatchesLock(lockEntry, install.manifest) {
-			return false
-		}
-		if install.assetRootPath == "" {
-			return false
-		}
-		if _, err := os.Stat(install.assetRootPath); err != nil {
-			return false
-		}
-	}
-	return true
+type lockFreshnessOptions struct {
+	RequireArtifacts bool
+	UI               bool
 }
 
-func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, lock *Lockfile) bool {
+func lockFreshForConfig(cfg *config.Config, paths lifecyclePaths, lock *Lockfile, opts lockFreshnessOptions) bool {
 	if lock == nil {
 		return false
 	}
@@ -2360,8 +2235,8 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
-		lockEntry, found := lock.Providers[name]
-		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindApp, name, entry, lockEntry, found, providerDestDir(paths, name), false) {
+		lockEntry, found := lock.Providers.App[name]
+		if !lockEntryFresh(paths, providermanifestv1.KindApp, name, entry, lockEntry, found, providerDestDir(paths, name), opts) {
 			return false
 		}
 	}
@@ -2373,7 +2248,7 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 			}
 			kind := providerManifestKind(collection.kind)
 			lockEntry, found := lockEntries[name]
-			if !lockEntryMetadataMatchesForMode(paths, kind, name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name), false) {
+			if !lockEntryFresh(paths, kind, name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name), opts) {
 				return false
 			}
 		}
@@ -2382,8 +2257,8 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 		if !runtimeRequiresCommittedLock(entry) {
 			continue
 		}
-		lockEntry, found := lock.Runtimes[name]
-		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindRuntime, name, &entry.ProviderEntry, lockEntry, found, runtimeDestDir(paths, name), false) {
+		lockEntry, found := lock.Providers.Runtime[name]
+		if !lockEntryFresh(paths, providermanifestv1.KindRuntime, name, &entry.ProviderEntry, lockEntry, found, runtimeDestDir(paths, name), opts) {
 			return false
 		}
 	}
@@ -2391,8 +2266,8 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
-		lockEntry, found := lock.IndexedDBs[name]
-		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindIndexedDB, name, entry, lockEntry, found, indexeddbDestDir(paths, name), false) {
+		lockEntry, found := lock.Providers.IndexedDB[name]
+		if !lockEntryFresh(paths, providermanifestv1.KindIndexedDB, name, entry, lockEntry, found, indexeddbDestDir(paths, name), opts) {
 			return false
 		}
 	}
@@ -2400,8 +2275,8 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
-		lockEntry, found := lock.S3[name]
-		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindS3, name, entry, lockEntry, found, s3DestDir(paths, name), false) {
+		lockEntry, found := lock.Providers.S3[name]
+		if !lockEntryFresh(paths, providermanifestv1.KindS3, name, entry, lockEntry, found, s3DestDir(paths, name), opts) {
 			return false
 		}
 	}
@@ -2409,35 +2284,43 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 		if entry == nil || !providerRequiresCommittedLock(&entry.ProviderEntry) {
 			continue
 		}
-		lockEntry, found := lock.UIs[name]
-		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindUI, name, &entry.ProviderEntry, lockEntry, found, uiDestDir(paths, name), true) {
+		lockEntry, found := lock.Providers.UI[name]
+		uiOpts := opts
+		uiOpts.UI = true
+		if !lockEntryFresh(paths, providermanifestv1.KindUI, name, &entry.ProviderEntry, lockEntry, found, uiDestDir(paths, name), uiOpts) {
 			return false
 		}
 	}
 	return true
 }
 
-func lockEntryMetadataMatchesForMode(paths lifecyclePaths, kind, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool, destDir string, ui bool) bool {
-	if !found {
-		return false
-	}
-	if providerHasReadOnlyLocalSource(providerEntry) && localSourcePathMissing(providerEntry) {
-		if !lockEntrySourceMatchesProvider(paths, providerEntry, entry) {
-			return false
+func lockEntryFresh(paths lifecyclePaths, kind, name string, provider *config.ProviderEntry, entry LockEntry, found bool, destDir string, opts lockFreshnessOptions) bool {
+	if opts.RequireArtifacts {
+		if opts.UI {
+			if !uiLockEntryMetadataMatches(paths, name, provider, entry, found) {
+				return false
+			}
+			install, err := inspectPreparedInstall(destDir)
+			if err != nil {
+				return false
+			}
+			if !preparedManifestMatchesLock(entry, install.manifest) {
+				return false
+			}
+			if install.assetRootPath == "" {
+				return false
+			}
+			if _, err := os.Stat(install.assetRootPath); err != nil {
+				return false
+			}
+			return true
 		}
-		if entry.Kind != "" && entry.Kind != kind {
-			return false
-		}
-		install, err := inspectPreparedInstall(destDir)
-		if err != nil {
-			return false
-		}
-		return preparedInstallMatchesLockForMode(kind, name, providerEntry, entry, install, artifactModeCheck)
+		return lockEntryMatches(paths, kind, name, provider, entry, found, destDir)
 	}
-	if ui {
-		return uiLockEntryMetadataMatches(paths, name, providerEntry, entry, found)
+	if opts.UI {
+		return uiLockEntryMetadataMatches(paths, name, provider, entry, found)
 	}
-	return lockEntryMetadataMatches(paths, kind, name, providerEntry, entry, found)
+	return lockEntryMetadataMatches(paths, kind, name, provider, entry, found)
 }
 
 func localSourcePathMissing(provider *config.ProviderEntry) bool {
@@ -2559,7 +2442,7 @@ func lockEntryFingerprintMatchesProvider(name string, provider *config.ProviderE
 	if err != nil {
 		return false, err
 	}
-	return entry.Fingerprint == fingerprint, nil
+	return entry.InputDigest == fingerprint, nil
 }
 
 func lockEntryFingerprintMatchesProviderForMode(name string, provider *config.ProviderEntry, configDir string, entry LockEntry, mode artifactMode) (bool, error) {
@@ -2841,8 +2724,8 @@ func archivePolicySubject(kind, name string) string {
 }
 
 func readLockEntryManifest(paths lifecyclePaths, entry LockEntry, destDir string) (*providermanifestv1.Manifest, error) {
-	if strings.TrimSpace(entry.Manifest) != "" {
-		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
+	if strings.TrimSpace(entry.ArtifactManifest) != "" {
+		manifestPath := resolveLockPath(paths.artifactsDir, entry.ArtifactManifest)
 		if _, manifest, err := providerpkg.ReadManifestFile(manifestPath); err == nil {
 			return manifest, nil
 		}
@@ -2883,8 +2766,8 @@ func lockEntryMatches(paths lifecyclePaths, kind, name string, providerEntry *co
 			return false
 		}
 	}
-	if strings.TrimSpace(entry.Manifest) != "" {
-		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
+	if strings.TrimSpace(entry.ArtifactManifest) != "" {
+		manifestPath := resolveLockPath(paths.artifactsDir, entry.ArtifactManifest)
 		if _, err := os.Stat(manifestPath); err == nil {
 			if entry.Executable != "" {
 				executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
@@ -3120,13 +3003,13 @@ func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, 
 		return LockEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
 	}
 	entry := LockEntry{
-		Fingerprint: fingerprint,
-		Package:     strings.TrimSpace(install.manifest.Source),
-		Kind:        providermanifestv1.NormalizeKind(install.manifest.Kind),
-		Runtime:     releaseRuntimeForManifest(install.manifest, archivePolicyKind(kind)),
-		Version:     strings.TrimSpace(install.manifest.Version),
-		Manifest:    manifestPath,
-		Executable:  executablePath,
+		InputDigest:      fingerprint,
+		Package:          strings.TrimSpace(install.manifest.Source),
+		Kind:             providermanifestv1.NormalizeKind(install.manifest.Kind),
+		Runtime:          releaseRuntimeForManifest(install.manifest, archivePolicyKind(kind)),
+		Version:          strings.TrimSpace(install.manifest.Version),
+		ArtifactManifest: manifestPath,
+		Executable:       executablePath,
 	}
 	if app != nil && app.HasLocalSource() {
 		if err := writePreparedLockMetadata(paths, install, kind, name, app); err != nil {
@@ -3150,13 +3033,13 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, app 
 		return LockEntry{}, fmt.Errorf("compute asset root path for ui %q: %w", name, err)
 	}
 	entry := LockEntry{
-		Fingerprint: fingerprint,
-		Package:     strings.TrimSpace(install.manifest.Source),
-		Kind:        providermanifestv1.NormalizeKind(install.manifest.Kind),
-		Runtime:     releaseRuntimeForManifest(install.manifest, providermanifestv1.KindUI),
-		Version:     strings.TrimSpace(install.manifest.Version),
-		Manifest:    manifestPath,
-		AssetRoot:   assetRoot,
+		InputDigest:      fingerprint,
+		Package:          strings.TrimSpace(install.manifest.Source),
+		Kind:             providermanifestv1.NormalizeKind(install.manifest.Kind),
+		Runtime:          releaseRuntimeForManifest(install.manifest, providermanifestv1.KindUI),
+		Version:          strings.TrimSpace(install.manifest.Version),
+		ArtifactManifest: manifestPath,
+		AssetRoot:        assetRoot,
 	}
 	if app != nil && app.HasLocalSource() {
 		if err := writePreparedLockMetadata(paths, install, providermanifestv1.KindUI, name, app); err != nil {
@@ -3166,7 +3049,7 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, app 
 	return entry, nil
 }
 
-func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string) (*installedPackage, LockEntry, error) {
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string, mode artifactMode) (*installedPackage, LockEntry, error) {
 	sourceLocation := app.SourceReleaseLocation()
 	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(app))
 	if err != nil {
@@ -3188,22 +3071,33 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		Version:  metadata.Version,
 		Archives: archives,
 	}
-	applyProviderReleaseStaticValidationMetadata(&entry, metadata)
+	if err := applyProviderReleaseStaticValidationMetadata(&entry, metadata); err != nil {
+		return nil, LockEntry{}, fmt.Errorf("%s static validation metadata: %w", subject, err)
+	}
 
 	currentPlatform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, currentPlatform)
 	if !ok || archive.URL == "" {
 		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", currentPlatform, subject, currentPlatform)
 	}
+	if mode == artifactModeCheck && lockEntryHasCompleteStaticValidation(expectedManifestKind, entry) {
+		if err := validateStaticLockedArchivePolicy(subject, expectedManifestKind, entry, currentPlatform, resolvedKey); err != nil {
+			return nil, LockEntry{}, err
+		}
+		return nil, entry, nil
+	}
 	archiveLocation, err := resolveLockedArchiveLocation(configDir, entry.Source, archive.URL)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, archive.SHA256, "", nil)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
 	defer download.Cleanup()
+	if err := verifyArchiveSHA256(download.SHA256Hex, archive.SHA256); err != nil {
+		return nil, LockEntry{}, fmt.Errorf("verify metadata source package for %s: %w", subject, err)
+	}
 
 	installed, err := installPackage(download.LocalPath, destDir)
 	if err != nil {
@@ -3232,67 +3126,33 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	return installed, entry, nil
 }
 
-func applyProviderReleaseStaticValidationMetadata(entry *LockEntry, metadata *providerReleaseMetadata) {
+func applyProviderReleaseStaticValidationMetadata(entry *LockEntry, metadata *providerReleaseMetadata) error {
 	if entry == nil || metadata == nil || metadata.StaticValidation == nil {
-		return
+		return nil
 	}
 	static := metadata.StaticValidation
-	entry.StaticManifest = static.Manifest
+	if static.Manifest != nil {
+		manifest, err := portableStaticValidationManifest(static.Manifest, "", true)
+		if err != nil {
+			return err
+		}
+		addCatalogOperationIDsToManifest(manifest, static.Catalog)
+		entry.ValidationManifest = manifest
+	}
 	if static.Catalog != nil {
-		entry.StaticCatalogAvailable = true
-		entry.StaticCatalogOperations = staticCatalogOperationIDs(static.Catalog)
+		entry.CatalogAvailable = true
 	}
-	entry.StaticCatalogSessionOnly = static.CatalogSessionOnly
+	entry.CatalogSessionOnly = static.CatalogSessionOnly
+	return nil
 }
 
-func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths lifecyclePaths) (map[string]LockEntry, error) {
-	written := make(map[string]LockEntry)
-	for name, entry := range cfg.Apps {
-		if entry == nil {
-			continue
-		}
-		configMap, err := config.NodeToMap(entry.Config)
-		if err != nil {
-			return nil, fmt.Errorf("decode provider config for provider %q: %w", name, err)
-		}
-		if !sourceBacked(entry) {
-			continue
-		}
-		lockEntry, err := l.lockProviderEntryForSource(ctx, cfg, paths, name, entry, configMap)
-		if err != nil {
-			return nil, err
-		}
-		written[name] = lockEntry
+func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, subject, destDir string, provider *config.ProviderEntry, configMap map[string]any, mode artifactMode) (LockEntry, error) {
+	if provider == nil || !sourceBacked(provider) {
+		return LockEntry{}, fmt.Errorf("%s requires source configuration", subject)
 	}
-
-	return written, nil
-}
-
-func (l *Lifecycle) lockCommittedProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if !providerRequiresCommittedLock(app) {
-		return LockEntry{}, fmt.Errorf("provider %q does not require committed lock metadata", name)
-	}
-	return l.lockProviderEntryForSource(ctx, cfg, paths, name, app, configMap)
-}
-
-func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
-	configMap, err := config.NodeToMap(configNode)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
-	}
-	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
-}
-
-func (l *Lifecycle) lockCommittedComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if !providerRequiresCommittedLock(app) {
-		return LockEntry{}, fmt.Errorf("%s %q does not require committed lock metadata", kind, name)
-	}
-	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
-}
-
-func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if app != nil && app.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(kind, name, app.SourcePath(), destDir)
+	isAppProvider := kind == providermanifestv1.KindApp && destDir == providerDestDir(paths, name)
+	if provider.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(kind, name, provider.SourcePath(), destDir)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -3300,180 +3160,171 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 			return LockEntry{}, err
 		}
 		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, kind, configMap); err != nil {
-			return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
-		}
-		return localLockEntryFromPreparedInstall(paths, kind, name, app, install)
-	}
-	if app != nil && app.HasGitSource() {
-		return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
-	}
-
-	sourceLocation := app.SourceReleaseLocation()
-	var (
-		installed *installedPackage
-		entry     LockEntry
-		err       error
-	)
-	subject := fmt.Sprintf("%s %q", kind, name)
-	if !app.HasReleaseMetadataSource() {
-		return LockEntry{}, fmt.Errorf("%s %q source %q: only provider-release metadata sources and local manifest paths are supported", kind, name, sourceLocation)
-	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, app, paths.configDir)
-	if err != nil {
-		return LockEntry{}, err
-	}
-	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
-		return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
-	}
-
-	entrypoint := providerpkg.EntrypointForKind(installed.Manifest, kind)
-	if entrypoint == nil {
-		return LockEntry{}, fmt.Errorf("%s %q manifest does not define a %s entrypoint", kind, name, kind)
-	}
-	fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
-	}
-	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
-	}
-	executablePath, err := filepath.Rel(paths.artifactsDir, filepath.Join(installed.Root, filepath.FromSlash(entrypoint.ArtifactPath)))
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
-	}
-	entry.Fingerprint = fingerprint
-	entry.Manifest = filepath.ToSlash(manifestPath)
-	entry.Executable = filepath.ToSlash(executablePath)
-	return entry, nil
-}
-
-func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if app != nil && app.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), providerDestDir(paths, name))
-		if err != nil {
-			return LockEntry{}, err
-		}
-		if err := validateInstalledManifestKind(providermanifestv1.KindApp, name, install.manifest); err != nil {
-			return LockEntry{}, err
-		}
-		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindApp, configMap); err != nil {
-			return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
-		}
-		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install)
-	}
-	if app != nil && app.HasGitSource() {
-		return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, app, configMap)
-	}
-
-	sourceLocation := app.SourceReleaseLocation()
-	destDir := providerDestDir(paths, name)
-	var (
-		installed *installedPackage
-		entry     LockEntry
-		err       error
-	)
-	if !app.HasReleaseMetadataSource() {
-		return LockEntry{}, fmt.Errorf("provider %q source %q: only provider-release metadata sources and local manifest paths are supported", name, sourceLocation)
-	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app, paths.configDir)
-	if err != nil {
-		return LockEntry{}, err
-	}
-
-	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindApp, configMap); err != nil {
-		return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
-	}
-	fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("fingerprinting provider %q: %w", name, err)
-	}
-	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("compute manifest path for provider %q: %w", name, err)
-	}
-	executableRel := ""
-	if installed.ExecutablePath != "" {
-		executableRel, err = filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
-		if err != nil {
-			return LockEntry{}, fmt.Errorf("compute executable path for provider %q: %w", name, err)
-		}
-	}
-	entry.Fingerprint = fingerprint
-	entry.Manifest = filepath.ToSlash(manifestPath)
-	entry.Executable = filepath.ToSlash(executableRel)
-	return entry, nil
-}
-
-func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
-	if app == nil || !sourceBacked(app) {
-		return LockEntry{}, fmt.Errorf("%s requires source configuration", subject)
-	}
-	configMap, err := config.NodeToMap(app.Config)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("decode %s config: %w", subject, err)
-	}
-	fingerprint, err := NamedUIProviderFingerprint(name, app, paths.configDir)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
-	}
-	if app.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(providermanifestv1.KindUI, name, app.SourcePath(), destDir)
-		if err != nil {
-			return LockEntry{}, err
-		}
-		if err := validateInstalledManifestKind(providermanifestv1.KindUI, subject, install.manifest); err != nil {
-			return LockEntry{}, err
-		}
-		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindUI, configMap); err != nil {
 			return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
 		}
-		entry, err := localUILockEntryFromPreparedInstall(paths, name, app, install)
-		if err != nil {
-			return LockEntry{}, err
+		if kind == providermanifestv1.KindUI {
+			return localUILockEntryFromPreparedInstall(paths, name, provider, install)
 		}
-		entry.Fingerprint = fingerprint
+		return localLockEntryFromPreparedInstall(paths, kind, name, provider, install)
+	}
+	if provider.HasGitSource() {
+		switch {
+		case kind == providermanifestv1.KindUI:
+			return l.lockGitUIEntryForSource(ctx, cfg, paths, name, provider, destDir, subject, configMap)
+		case isAppProvider:
+			return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, provider, configMap)
+		default:
+			return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, provider, configMap)
+		}
+	}
+
+	sourceLocation := provider.SourceReleaseLocation()
+	if !provider.HasReleaseMetadataSource() {
+		return LockEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, sourceLocation)
+	}
+	installed, entry, err := l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, provider, paths.configDir, mode)
+	if err != nil {
+		return LockEntry{}, err
+	}
+	if installed == nil {
+		if err := providerpkg.ValidateConfigForManifest("", entry.ValidationManifest, kind, configMap); err != nil {
+			return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
+		}
+		fingerprintName := name
+		if kind == providermanifestv1.KindUI {
+			fingerprintName = "ui:" + name
+		}
+		fingerprint, err := ProviderFingerprint(fingerprintName, provider, paths.configDir)
+		if err != nil {
+			return LockEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
+		}
+		entry.InputDigest = fingerprint
+		provider.ResolvedManifest = entry.ValidationManifest
+		provider.ResolvedManifestPath = ""
+		provider.ResolvedCatalog = catalogFromValidationManifest(entry.ValidationManifest, entry.CatalogAvailable)
+		provider.ResolvedCatalogAvailable = entry.CatalogAvailable
+		provider.ResolvedCatalogSessionOnly = entry.CatalogSessionOnly
 		return entry, nil
 	}
-	if app.HasGitSource() {
-		return l.lockGitUIEntryForSource(ctx, cfg, paths, name, app, destDir, subject, configMap)
-	}
-	expectedPackage := app.SourceReleaseLocation()
-
-	var (
-		installed *installedPackage
-		entry     LockEntry
-		opErr     error
-	)
-	if !app.HasReleaseMetadataSource() {
-		return LockEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, expectedPackage)
-	}
-	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindUI, name, subject, destDir, app, paths.configDir)
-	if opErr != nil {
-		return LockEntry{}, opErr
-	}
-	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindUI, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
+	}
+	fingerprintName := name
+	if kind == providermanifestv1.KindUI {
+		fingerprintName = "ui:" + name
+	}
+	fingerprint, err := ProviderFingerprint(fingerprintName, provider, paths.configDir)
+	if err != nil {
+		return LockEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
 	}
 	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("compute manifest path for %s: %w", subject, err)
 	}
-	assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("compute asset root path for %s: %w", subject, err)
+	entry.InputDigest = fingerprint
+	entry.ArtifactManifest = filepath.ToSlash(manifestPath)
+	switch {
+	case kind == providermanifestv1.KindUI:
+		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
+		if err != nil {
+			return LockEntry{}, fmt.Errorf("compute asset root path for %s: %w", subject, err)
+		}
+		entry.AssetRoot = filepath.ToSlash(assetRoot)
+	case isAppProvider:
+		executableRel := ""
+		if installed.ExecutablePath != "" {
+			executableRel, err = filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
+			if err != nil {
+				return LockEntry{}, fmt.Errorf("compute executable path for %s: %w", subject, err)
+			}
+		}
+		entry.Executable = filepath.ToSlash(executableRel)
+	default:
+		entrypoint := providerpkg.EntrypointForKind(installed.Manifest, kind)
+		if entrypoint == nil {
+			return LockEntry{}, fmt.Errorf("%s manifest does not define a %s entrypoint", subject, kind)
+		}
+		executablePath, err := filepath.Rel(paths.artifactsDir, filepath.Join(installed.Root, filepath.FromSlash(entrypoint.ArtifactPath)))
+		if err != nil {
+			return LockEntry{}, fmt.Errorf("compute executable path for %s: %w", subject, err)
+		}
+		entry.Executable = filepath.ToSlash(executablePath)
 	}
-	entry.Fingerprint = fingerprint
-	entry.Manifest = filepath.ToSlash(manifestPath)
-	entry.AssetRoot = filepath.ToSlash(assetRoot)
+	if err := bindResolvedInstall(paths, kind, name, subject, destDir, provider, configMap, installed, isAppProvider); err != nil {
+		return LockEntry{}, err
+	}
 	return entry, nil
 }
 
-func (l *Lifecycle) lockCommittedNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
-	if !providerRequiresCommittedLock(app) {
-		return LockEntry{}, fmt.Errorf("%s does not require committed lock metadata", subject)
+func lockEntryStaticValidationOnly(entry LockEntry) bool {
+	return entry.ValidationManifest != nil &&
+		entry.ArtifactManifest == "" &&
+		entry.Executable == "" &&
+		entry.AssetRoot == ""
+}
+
+func lockEntryHasCompleteStaticValidation(kind string, entry LockEntry) bool {
+	if entry.ValidationManifest == nil || staticManifestReferencesPackageFiles(entry.ValidationManifest) {
+		return false
 	}
-	return l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, app, destDir, subject)
+	if staticValidationCatalogRequired(kind, entry.ValidationManifest) {
+		return entry.CatalogAvailable || entry.CatalogSessionOnly
+	}
+	return true
+}
+
+func staticValidationCatalogRequired(kind string, manifest *providermanifestv1.Manifest) bool {
+	if providermanifestv1.NormalizeKind(kind) != providermanifestv1.KindApp {
+		return false
+	}
+	return manifest != nil && manifest.Spec != nil && !manifest.Spec.IsManifestBacked()
+}
+
+func bindResolvedInstall(paths lifecyclePaths, kind, name, subject, destDir string, provider *config.ProviderEntry, configMap map[string]any, install *installedPackage, isAppProvider bool) error {
+	switch {
+	case kind == providermanifestv1.KindUI:
+		if install.AssetRoot == "" {
+			return fmt.Errorf("prepared asset root for %s not found in %s", subject, destDir)
+		}
+		if _, err := os.Stat(install.AssetRoot); err != nil {
+			return fmt.Errorf("prepared asset root for %s not found at %s", subject, install.AssetRoot)
+		}
+		return bindResolvedUIManifest(provider, install.ManifestPath, install.Manifest, configMap)
+	case isAppProvider:
+		if err := bindResolvedProviderManifest(name, provider, install.ManifestPath, install.Manifest, configMap); err != nil {
+			return err
+		}
+		if install.ExecutablePath == "" {
+			return nil
+		}
+		if _, err := os.Stat(install.ExecutablePath); err != nil {
+			return preparedArtifactStaleError(paths, "prepared executable for provider %q not found at %s", name, install.ExecutablePath)
+		}
+		args, err := providerEntrypointArgs(install.Manifest)
+		if err != nil {
+			return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
+		}
+		provider.Command = install.ExecutablePath
+		provider.Args = append([]string(nil), args...)
+		return nil
+	default:
+		if install.ExecutablePath == "" {
+			return preparedArtifactStaleError(paths, "prepared executable for %s %q not found in %s", kind, name, destDir)
+		}
+		if err := bindResolvedComponentManifest(kind, name, provider, install.ManifestPath, install.Manifest, configMap); err != nil {
+			return err
+		}
+		if _, err := os.Stat(install.ExecutablePath); err != nil {
+			return preparedArtifactStaleError(paths, "prepared executable for %s %q not found at %s", kind, name, install.ExecutablePath)
+		}
+		args, err := componentEntrypointArgs(install.Manifest, kind)
+		if err != nil {
+			return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
+		}
+		provider.Command = install.ExecutablePath
+		provider.Args = append([]string(nil), args...)
+		return nil
+	}
 }
 
 func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
@@ -3503,7 +3354,7 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 	}
 	runtimeLocks := map[string]LockEntry(nil)
 	if lock != nil {
-		runtimeLocks = lock.Runtimes
+		runtimeLocks = lock.Providers.Runtime
 	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry == nil {
@@ -3515,7 +3366,7 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 	}
 	indexedDBLocks := map[string]LockEntry(nil)
 	if lock != nil {
-		indexedDBLocks = lock.IndexedDBs
+		indexedDBLocks = lock.Providers.IndexedDB
 	}
 	for name, def := range cfg.Providers.IndexedDB {
 		if def != nil {
@@ -3526,7 +3377,7 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 	}
 	s3Locks := map[string]LockEntry(nil)
 	if lock != nil {
-		s3Locks = lock.S3
+		s3Locks = lock.Providers.S3
 	}
 	for name, def := range cfg.Providers.S3 {
 		if def != nil {
@@ -3562,7 +3413,7 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 		}
 		var lockEntry *LockEntry
 		if lock != nil {
-			if le, ok := lock.UIs[name]; ok {
+			if le, ok := lock.Providers.UI[name]; ok {
 				lockEntry = &le
 			}
 		}
@@ -3704,18 +3555,12 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 			err = nil
 		}
 	}
-	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock) || (bootstrapLock == nil && configHasLocalProviderSources(cfg)) || (bootstrapLock == nil && configHasMetadataProviderSources(cfg))) {
+	if !locked && (err != nil || !lockFreshForConfig(cfg, paths, lock, lockFreshnessOptions{RequireArtifacts: true}) || (bootstrapLock == nil && configHasLocalProviderSources(cfg)) || (bootstrapLock == nil && configHasMetadataProviderSources(cfg))) {
 		lock, err = l.PrepareAtPathsWithStatePaths(configPaths, state)
 		validatedDuringPrepare = err == nil
 	}
 	if err != nil {
-		if paths.pluginScope != "" {
-			if locked {
-				return false, fmt.Errorf("scoped local app state is missing or stale for app %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
-			}
-			return false, fmt.Errorf("preparing scoped local app state for app %q failed: %w", paths.pluginScope, err)
-		}
-		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --app NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
 		return false, err
@@ -3768,42 +3613,44 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		if !ok {
 			return nil
 		}
-		if lockEntry.StaticManifest == nil {
-			staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, lockEntryUsesPortableStaticManifest(entry, lockEntry))
+		if lockEntry.ValidationManifest == nil {
+			staticManifest, err := portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath, true)
 			if err != nil {
 				return fmt.Errorf("project static validation manifest for %s: %w", name, err)
 			}
-			lockEntry.StaticManifest = staticManifest
+			lockEntry.ValidationManifest = staticManifest
 		}
 		entries[name] = lockEntry
 		return nil
 	}
 	for name, entry := range cfg.Apps {
-		if err := attach(lock.Providers, name, entry); err != nil {
+		if err := attach(lock.Providers.App, name, entry); err != nil {
 			return err
 		}
 		if entry == nil || entry.ResolvedManifest == nil {
 			continue
 		}
-		lockEntry, ok := lock.Providers[name]
+		lockEntry, ok := lock.Providers.App[name]
 		if !ok {
 			continue
 		}
 		resolved := catalogs[name]
+		addCatalogOperationIDsToManifest(lockEntry.ValidationManifest, resolved.Catalog)
 		fingerprint, err := staticCatalogInputFingerprint(entry)
 		if err != nil {
 			return err
 		}
-		if !lockEntry.StaticCatalogAvailable && !lockEntry.StaticCatalogSessionOnly && len(lockEntry.StaticCatalogOperations) == 0 {
-			lockEntry.StaticCatalogAvailable = resolved.Available
-			lockEntry.StaticCatalogFingerprint = fingerprint
-			lockEntry.StaticCatalogOperations = staticCatalogOperationIDs(resolved.Catalog)
-			lockEntry.StaticCatalogSessionOnly = resolved.SessionOnly
+		if lockEntry.CatalogFingerprint == "" {
+			lockEntry.CatalogFingerprint = fingerprint
 		}
-		lock.Providers[name] = lockEntry
-		entry.ResolvedCatalog = catalogFromStaticOperationIDs(lockEntry.StaticCatalogOperations, lockEntry.StaticCatalogAvailable)
-		entry.ResolvedCatalogAvailable = lockEntry.StaticCatalogAvailable
-		entry.ResolvedCatalogSessionOnly = lockEntry.StaticCatalogSessionOnly
+		if !lockEntry.CatalogAvailable && !lockEntry.CatalogSessionOnly {
+			lockEntry.CatalogAvailable = resolved.Available
+			lockEntry.CatalogSessionOnly = resolved.SessionOnly
+		}
+		lock.Providers.App[name] = lockEntry
+		entry.ResolvedCatalog = catalogFromValidationManifest(lockEntry.ValidationManifest, lockEntry.CatalogAvailable)
+		entry.ResolvedCatalogAvailable = lockEntry.CatalogAvailable
+		entry.ResolvedCatalogSessionOnly = lockEntry.CatalogSessionOnly
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		entries := lockEntriesForKind(lock, collection.kind)
@@ -3815,24 +3662,24 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry != nil {
-			if err := attach(lock.Runtimes, name, &entry.ProviderEntry); err != nil {
+			if err := attach(lock.Providers.Runtime, name, &entry.ProviderEntry); err != nil {
 				return err
 			}
 		}
 	}
 	for name, entry := range cfg.Providers.IndexedDB {
-		if err := attach(lock.IndexedDBs, name, entry); err != nil {
+		if err := attach(lock.Providers.IndexedDB, name, entry); err != nil {
 			return err
 		}
 	}
 	for name, entry := range cfg.Providers.S3 {
-		if err := attach(lock.S3, name, entry); err != nil {
+		if err := attach(lock.Providers.S3, name, entry); err != nil {
 			return err
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil {
-			if err := attach(lock.UIs, name, &entry.ProviderEntry); err != nil {
+			if err := attach(lock.Providers.UI, name, &entry.ProviderEntry); err != nil {
 				return err
 			}
 		}
@@ -3867,7 +3714,7 @@ func validateResolvedStructureForCommittedLock(paths lifecyclePaths, cfg *config
 }
 
 func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, lock *Lockfile) (map[string]appservice.EffectiveCatalogResult, error) {
-	if cfg == nil || lock == nil || len(lock.Providers) == 0 {
+	if cfg == nil || lock == nil || len(lock.Providers.App) == 0 {
 		return nil, nil
 	}
 	validation := &appservice.ValidationConfig{
@@ -3877,7 +3724,7 @@ func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, 
 		if entry == nil {
 			continue
 		}
-		if _, locked := lock.Providers[name]; locked {
+		if _, locked := lock.Providers.App[name]; locked {
 			validation.Apps[name] = config.AppValidationEntry(entry)
 			continue
 		}
@@ -3893,7 +3740,7 @@ func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, 
 		return nil, err
 	}
 	for _, name := range slices.Sorted(maps.Keys(results)) {
-		if _, locked := lock.Providers[name]; !locked {
+		if _, locked := lock.Providers.App[name]; !locked {
 			delete(results, name)
 		}
 	}
@@ -3918,6 +3765,23 @@ func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, man
 	return staticvalidation.ProjectManifest(manifest, manifestPath, platformNeutral)
 }
 
+func addCatalogOperationIDsToManifest(manifest *providermanifestv1.Manifest, cat *catalog.Catalog) {
+	if manifest == nil || cat == nil || len(cat.Operations) == 0 {
+		return
+	}
+	if manifest.Spec == nil {
+		manifest.Spec = &providermanifestv1.Spec{}
+	}
+	if manifest.Spec.AllowedOperations == nil {
+		manifest.Spec.AllowedOperations = make(map[string]*providermanifestv1.ManifestOperationOverride)
+	}
+	for _, id := range staticCatalogOperationIDs(cat) {
+		if _, ok := manifest.Spec.AllowedOperations[id]; !ok {
+			manifest.Spec.AllowedOperations[id] = &providermanifestv1.ManifestOperationOverride{}
+		}
+	}
+}
+
 func staticCatalogOperationIDs(cat *catalog.Catalog) []string {
 	if cat == nil || len(cat.Operations) == 0 {
 		return nil
@@ -3932,9 +3796,13 @@ func staticCatalogOperationIDs(cat *catalog.Catalog) []string {
 	return ids
 }
 
-func catalogFromStaticOperationIDs(ids []string, available bool) *catalog.Catalog {
+func catalogFromValidationManifest(manifest *providermanifestv1.Manifest, available bool) *catalog.Catalog {
 	if !available {
 		return nil
+	}
+	var ids []string
+	if manifest != nil && manifest.Spec != nil {
+		ids = slices.Sorted(maps.Keys(manifest.Spec.AllowedOperations))
 	}
 	cat := &catalog.Catalog{
 		Operations: make([]catalog.CatalogOperation, 0, len(ids)),
@@ -3988,7 +3856,32 @@ func staticManifestReferencesPackageFiles(manifest *providermanifestv1.Manifest)
 	if strings.TrimSpace(spec.ConfigSchemaPath) != "" {
 		return true
 	}
-	return spec.UI != nil && strings.TrimSpace(spec.UI.Path) != ""
+	if spec.UI != nil && strings.TrimSpace(spec.UI.Path) != "" {
+		return true
+	}
+	if spec.Surfaces != nil {
+		if spec.Surfaces.OpenAPI != nil && staticManifestFileReference(spec.Surfaces.OpenAPI.Document) {
+			return true
+		}
+		if spec.Surfaces.GraphQL != nil && staticManifestFileReference(spec.Surfaces.GraphQL.URL) {
+			return true
+		}
+		if spec.Surfaces.MCP != nil && staticManifestFileReference(spec.Surfaces.MCP.URL) {
+			return true
+		}
+	}
+	return false
+}
+
+func staticManifestFileReference(raw string) bool {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return false
+	}
+	if strings.HasPrefix(value, "file://") {
+		return true
+	}
+	return !strings.Contains(value, "://")
 }
 
 func configRequiresStaticLock(cfg *config.Config) bool {
@@ -4185,20 +4078,20 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 				return err
 			}
 		}
-		if entry.StaticManifest != nil && !staticManifestReferencesPackageFiles(entry.StaticManifest) {
+		if lockEntryHasCompleteStaticValidation(kind, entry) {
 			if kind == providermanifestv1.KindApp {
 				fingerprint, err := staticCatalogInputFingerprint(provider)
 				if err != nil {
 					return err
 				}
-				if entry.StaticCatalogFingerprint != "" && entry.StaticCatalogFingerprint != fingerprint {
+				if entry.CatalogFingerprint != "" && entry.CatalogFingerprint != fingerprint {
 					return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 				}
 			}
-			provider.ResolvedCatalog = catalogFromStaticOperationIDs(entry.StaticCatalogOperations, entry.StaticCatalogAvailable)
-			provider.ResolvedCatalogAvailable = entry.StaticCatalogAvailable
-			provider.ResolvedCatalogSessionOnly = entry.StaticCatalogSessionOnly
-			return bind("", entry.StaticManifest)
+			provider.ResolvedCatalog = catalogFromValidationManifest(entry.ValidationManifest, entry.CatalogAvailable)
+			provider.ResolvedCatalogAvailable = entry.CatalogAvailable
+			provider.ResolvedCatalogSessionOnly = entry.CatalogSessionOnly
+			return bind("", entry.ValidationManifest)
 		}
 	}
 	if provider.HasGitSource() && found && len(entry.Archives) == 0 {
@@ -4308,7 +4201,7 @@ func staticValidationEntryNeedsSourceAuthSecret(paths lifecyclePaths, lockEntrie
 	} else if !lockEntryMetadataMatches(paths, kind, name, provider, entry, true) {
 		return false, nil
 	}
-	if entry.StaticManifest != nil && !staticManifestReferencesPackageFiles(entry.StaticManifest) {
+	if entry.ValidationManifest != nil && !staticManifestReferencesPackageFiles(entry.ValidationManifest) {
 		return false, nil
 	}
 	if provider.HasGitSource() && len(entry.Archives) == 0 {
@@ -4830,7 +4723,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 					if err != nil {
 						return "", fmt.Errorf("fingerprinting %s: %w", subject, err)
 					}
-					if lockEntry.Fingerprint != fingerprint {
+					if lockEntry.InputDigest != fingerprint {
 						return "", lockMetadataStaleError(paths, "lock entry for %s is stale", subject)
 					}
 				}
@@ -4910,7 +4803,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	if lock == nil {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is missing or stale", name)
 	}
-	entry, ok := lock.Providers[name]
+	entry, ok := lock.Providers.App[name]
 	if !ok {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is missing or stale", name)
 	}
@@ -4980,7 +4873,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 				if err != nil {
 					return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 				}
-				if entry.Fingerprint != fingerprint {
+				if entry.InputDigest != fingerprint {
 					return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 				}
 			}
@@ -5088,7 +4981,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 				if err != nil {
 					return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 				}
-				if entry.Fingerprint != fingerprint {
+				if entry.InputDigest != fingerprint {
 					return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 				}
 			}
@@ -5187,134 +5080,191 @@ func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]an
 }
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry, reason string) error {
-	start := time.Now()
-	platform := providerpkg.CurrentPlatformString()
-	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("provider %q", name), paths.archiveCacheDir)
-	if err != nil {
-		return err
-	}
-	defer cleanupDownload()
-
-	destDir := providerDestDir(paths, name)
-	prepareStart := time.Now()
-	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
-	prepareDuration := time.Since(prepareStart)
-	if err != nil {
-		return fmt.Errorf("install locked source provider for provider %q: %w", name, err)
-	}
-	defer func() { _ = cleanupInstall() }()
-	if installed.Manifest.Source != lockEntryPackage(entry) {
-		return fmt.Errorf("locked source provider manifest source mismatch for provider %q: got %q, want %q", name, installed.Manifest.Source, lockEntryPackage(entry))
-	}
-	if installed.Manifest.Version != entry.Version {
-		return fmt.Errorf("locked source provider manifest version mismatch for provider %q: got %q, want %q", name, installed.Manifest.Version, entry.Version)
-	}
-	if err := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindApp, installed.Manifest, entry, platform, resolvedKey); err != nil {
-		return err
-	}
-	activateStart := time.Now()
-	if err := commitInstall(); err != nil {
-		return fmt.Errorf("activate locked source provider for provider %q: %w", name, err)
-	}
-	recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
-	return nil
+	return l.materializeLockedArchive(ctx, paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), app, entry, providerDestDir(paths, name), reason)
 }
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
-	start := time.Now()
-	platform := providerpkg.CurrentPlatformString()
-	download, resolvedKey, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, fmt.Sprintf("%s %q", kind, name), paths.archiveCacheDir)
-	if err != nil {
-		return err
-	}
-	defer cleanupDownload()
-
 	if destDir == "" {
 		return fmt.Errorf("unsupported component %q", name)
 	}
+	return l.materializeLockedArchive(ctx, paths, kind, name, fmt.Sprintf("%s %q", kind, name), app, entry, destDir, reason)
+}
+
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
+	return l.materializeLockedArchive(ctx, paths, providermanifestv1.KindUI, name, subject, app, entry, destDir, reason)
+}
+
+func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecyclePaths, kind, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
+	start := time.Now()
+	platform := providerpkg.CurrentPlatformString()
+	archiveLocation, resolvedKey, expectedSHA, err := l.resolveLockedArchiveDownload(paths, entry, platform, subject)
+	if err != nil {
+		return err
+	}
+	archiveSourceKind := syncArtifactSourceLocalArchive
+	if isRemoteReleaseMetadataLocation(archiveLocation) {
+		archiveSourceKind = syncArtifactSourceRemoteArchive
+	}
+
+	cacheReq := materializedCacheRequest{
+		Subject:        subject,
+		Kind:           kind,
+		Name:           name,
+		SourceKind:     archiveSourceKind,
+		ArchiveSHA256:  expectedSHA,
+		ResolvedKey:    resolvedKey,
+		Platform:       platform,
+		Package:        lockEntryPackage(entry),
+		Version:        entry.Version,
+		DestinationDir: destDir,
+	}
+	cacheResult := syncCacheResultMiss
+	cacheEligible := true
+	if paths.syncCacheDir != "" {
+		cacheStart := time.Now()
+		restore, err := (materializedCache{dir: paths.syncCacheDir}).Restore(cacheReq)
+		if restore != nil {
+			cacheResult = string(restore.Result)
+		}
+		if restore == nil {
+			cacheEligible = false
+			cacheResult = syncCacheResultUncacheable
+			recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+				Subject:    subject,
+				SourceKind: cacheReq.SourceKind,
+				Platform:   platform,
+				Result:     cacheResult,
+				Lookup:     true,
+				Duration:   time.Since(cacheStart),
+			})
+		}
+		if restore != nil {
+			recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+				Subject:    subject,
+				SourceKind: cacheReq.SourceKind,
+				Key:        restore.Key.Display,
+				SHA256:     restore.Key.ArchiveSHA256,
+				Platform:   platform,
+				Result:     string(restore.Result),
+				Lookup:     true,
+				Bytes:      restore.Bytes,
+				Files:      restore.Files,
+				Duration:   time.Since(cacheStart),
+			})
+		}
+		if err != nil {
+			return fmt.Errorf("restore materialized cache for %s: %w", subject, err)
+		}
+		if restore != nil && restore.Result == materializedCacheHit {
+			defer func() { _ = restore.cleanup() }()
+			if err := validateLockedInstalledManifest(kind, name, subject, restore.Install.manifest, entry, platform, resolvedKey); err != nil {
+				return err
+			}
+			activateStart := time.Now()
+			if err := restore.commit(); err != nil {
+				return fmt.Errorf("activate cached locked source for %s: %w", subject, err)
+			}
+			recordSyncArtifact(paths, kind, name, subject, destDir, cacheReq.SourceKind, syncArtifactResultMaterialized, reason, start, 0, time.Since(activateStart))
+			return nil
+		}
+	} else {
+		recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+			Subject:    subject,
+			SourceKind: cacheReq.SourceKind,
+			Platform:   platform,
+			Result:     syncCacheResultDisabled,
+			Lookup:     true,
+		})
+	}
+
+	downloadStart := time.Now()
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
+	if err != nil {
+		return lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	}
+	defer download.Cleanup()
+	if err := verifyArchiveSHA256(download.SHA256Hex, expectedSHA); err != nil {
+		return lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	}
+	archiveFetchSourceKind := syncArchiveSourceLocal
+	if isRemoteReleaseMetadataLocation(archiveLocation) {
+		archiveFetchSourceKind = syncArchiveSourceRemoteReleaseMetadata
+	}
+	recordSyncArchiveDownload(paths, syncArchiveMetricsEvent{
+		Subject:          subject,
+		SourceKind:       archiveFetchSourceKind,
+		SHA256:           expectedSHA,
+		Downloaded:       isRemoteReleaseMetadataLocation(archiveLocation),
+		Bytes:            archiveFileSize(download.LocalPath),
+		Duration:         time.Since(downloadStart),
+		DownloadDuration: time.Since(downloadStart),
+	})
+
 	prepareStart := time.Now()
 	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
 	prepareDuration := time.Since(prepareStart)
 	if err != nil {
-		return fmt.Errorf("install locked source provider for %s %q: %w", kind, name, err)
+		return fmt.Errorf("install locked source for %s: %w", subject, err)
 	}
 	defer func() { _ = cleanupInstall() }()
-	if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
+	if err := validateLockedInstalledManifest(kind, name, subject, installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
-	if installed.Manifest.Source != lockEntryPackage(entry) {
-		return fmt.Errorf("locked source provider manifest source mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Source, lockEntryPackage(entry))
-	}
-	if installed.Manifest.Version != entry.Version {
-		return fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
-	}
-	if err := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), archivePolicyKind(kind), installed.Manifest, entry, platform, resolvedKey); err != nil {
-		return err
+	if paths.syncCacheDir != "" && cacheEligible {
+		cacheStart := time.Now()
+		key, files, bytes, putErr := (materializedCache{dir: paths.syncCacheDir}).Put(cacheReq, installed.Root)
+		recordSyncCacheEntry(paths, syncCacheMetricsEvent{
+			Subject:    subject,
+			SourceKind: cacheReq.SourceKind,
+			Key:        key.Display,
+			SHA256:     key.ArchiveSHA256,
+			Platform:   platform,
+			Result:     cacheResult,
+			Put:        true,
+			PutFailed:  putErr != nil,
+			Bytes:      bytes,
+			Files:      files,
+			Duration:   time.Since(cacheStart),
+		})
 	}
 	activateStart := time.Now()
 	if err := commitInstall(); err != nil {
-		return fmt.Errorf("activate locked source provider for %s %q: %w", kind, name, err)
+		return fmt.Errorf("activate locked source for %s: %w", subject, err)
 	}
-	recordSyncArtifact(paths, kind, name, fmt.Sprintf("%s %q", kind, name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
+	recordSyncArtifact(paths, kind, name, subject, destDir, cacheReq.SourceKind, syncArtifactResultMaterialized, reason, start, prepareDuration, time.Since(activateStart))
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, name, subject string, app *config.ProviderEntry, entry LockEntry, destDir, reason string) error {
-	start := time.Now()
-	platform := providerpkg.CurrentPlatformString()
-	download, _, cleanupDownload, err := l.downloadLockedArchive(ctx, paths, app, entry, platform, subject, paths.archiveCacheDir)
-	if err != nil {
-		return err
-	}
-	defer cleanupDownload()
-
-	if err := os.RemoveAll(destDir); err != nil {
-		return fmt.Errorf("remove stale cache for ui provider: %w", err)
-	}
-	prepareStart := time.Now()
-	installed, err := installPackage(download.LocalPath, destDir)
-	prepareDuration := time.Since(prepareStart)
-	if err != nil {
-		return fmt.Errorf("install locked source for ui provider: %w", err)
-	}
-	if err := validateInstalledManifestKind(providermanifestv1.KindUI, "ui provider", installed.Manifest); err != nil {
-		return err
-	}
-	if installed.Manifest.Source != lockEntryPackage(entry) {
-		return fmt.Errorf("locked source manifest source mismatch for ui provider: got %q, want %q", installed.Manifest.Source, lockEntryPackage(entry))
-	}
-	if installed.Manifest.Version != entry.Version {
-		return fmt.Errorf("locked source manifest version mismatch for ui provider: got %q, want %q", installed.Manifest.Version, entry.Version)
-	}
-	recordSyncArtifact(paths, providermanifestv1.KindUI, name, subject, destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultMaterialized, reason, start, prepareDuration, 0)
-	return nil
-}
-
-func (l *Lifecycle) downloadLockedArchive(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, platform, subject, cacheDir string) (*providerpkg.DownloadResult, string, func(), error) {
+func (l *Lifecycle) resolveLockedArchiveDownload(paths lifecyclePaths, entry LockEntry, platform, subject string) (string, string, string, error) {
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return nil, "", nil, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s archive with `gestaltd provider package --platform %s` or use a generic package where allowed", platform, subject, platform, platform)
+		return "", "", "", fmt.Errorf("no archive for platform %s for %s; publish an explicit %s archive with `gestaltd provider package --platform %s` or use a generic package where allowed", platform, subject, platform, platform)
 	}
 	archiveLocation, err := resolveLockedArchiveLocation(paths.configDir, entry.Source, archive.URL)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
+		return "", "", "", fmt.Errorf("resolve locked source archive for %s: %w", subject, err)
 	}
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return nil, "", nil, fmt.Errorf("no verified hash for platform %s for %s; publish release metadata with a sha256 for that archive before locking", platform, subject)
+		return "", "", "", fmt.Errorf("no verified hash for platform %s for %s; publish release metadata with a sha256 for that archive before locking", platform, subject)
 	}
 	expectedSHA, err := expectedSHAForLockedArchive(paths, entry, resolvedKey, archiveLocation, archive)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
+		return "", "", "", fmt.Errorf("resolve locked archive digest for %s: %w", subject, err)
 	}
-	var observer archiveDownloadObserver
-	if paths.syncMetrics != nil {
-		observer = newSyncArchiveDownloadObserver(paths.syncMetrics, subject)
+	return archiveLocation, resolvedKey, expectedSHA, nil
+}
+
+func validateLockedInstalledManifest(kind, name, subject string, manifest *providermanifestv1.Manifest, entry LockEntry, platform, resolvedKey string) error {
+	if err := validateInstalledManifestKind(kind, name, manifest); err != nil {
+		return err
 	}
-	download, err := downloadArchiveForSourceWithCache(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation, expectedSHA, cacheDir, observer)
-	if err != nil {
-		return nil, "", nil, lockedArchiveDownloadError{err: fmt.Errorf("download locked source archive for %s: %w", subject, err)}
+	if manifest.Source != lockEntryPackage(entry) {
+		return fmt.Errorf("locked source manifest source mismatch for %s: got %q, want %q", subject, manifest.Source, lockEntryPackage(entry))
 	}
-	return download, resolvedKey, download.Cleanup, nil
+	if manifest.Version != entry.Version {
+		return fmt.Errorf("locked source manifest version mismatch for %s: got %q, want %q", subject, manifest.Version, entry.Version)
+	}
+	return validateLockedArchivePolicy(subject, archivePolicyKind(kind), manifest, entry, platform, resolvedKey)
 }
 
 func expectedSHAForLockedArchive(paths lifecyclePaths, entry LockEntry, resolvedKey, archiveLocation string, archive LockArchive) (string, error) {

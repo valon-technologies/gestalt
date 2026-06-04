@@ -90,6 +90,7 @@ _host_list_requests: list[dict[str, Any]] = []
 _host_execute_requests: list[dict[str, Any]] = []
 _host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, Any]] = []
+_manager_workflows: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
@@ -125,7 +126,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             client_ref=request.client_ref,
             state=AGENT_SESSION_STATE_ACTIVE,
             metadata=request.metadata,
-            created_by=request.created_by,
+            created_by_subject_id=request.created_by_subject_id,
         )
 
     def get_session(self, request: Any) -> Any:
@@ -175,7 +176,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
                 text="echo:Plan it",
             ),
             status_message="waiting for input",
-            created_by=request.created_by,
+            created_by_subject_id=request.created_by_subject_id,
             execution_ref=request.execution_ref,
         )
 
@@ -397,6 +398,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def GetSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
+        _record_manager_workflow(request)
         _manager_requests.append(
             {
                 "method": "get_session",
@@ -656,6 +658,14 @@ def _record_relay_tokens(context: grpc.ServicerContext) -> None:
     )
 
 
+def _record_manager_workflow(request: Any) -> None:
+    _manager_workflows.append(
+        json_format.MessageToDict(request.workflow, preserving_proto_field_name=True)
+        if request.HasField("workflow")
+        else {}
+    )
+
+
 def _record_host_relay_tokens(context: grpc.ServicerContext) -> None:
     _host_relay_tokens.extend(
         value
@@ -733,6 +743,7 @@ class AgentTransportTests(unittest.TestCase):
         _host_execute_requests.clear()
         _host_connection_requests.clear()
         _manager_requests.clear()
+        _manager_workflows.clear()
         _manager_relay_tokens.clear()
 
     def test_private_generated_stubs_are_packaged(self) -> None:
@@ -951,6 +962,7 @@ class AgentTransportTests(unittest.TestCase):
                 turn_id="turn-1",
                 session_id="session-1",
                 model="gpt-5.1",
+                timeout_seconds=120,
                 messages=[
                     agent_pb2.AgentMessage(
                         role="user",
@@ -1200,6 +1212,7 @@ class AgentTransportTests(unittest.TestCase):
                 agent_pb2.CreateAgentProviderTurnRequest(
                     session_id="session-managed-1",
                     model="gpt-5.1",
+                    timeout_seconds=120,
                     messages=[
                         agent_pb2.AgentMessage(
                             role="user",
@@ -1314,7 +1327,7 @@ class AgentTransportTests(unittest.TestCase):
                     "reason": "",
                     "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     "tool_ref_count": 0,
-                    "timeout_seconds": 0,
+                    "timeout_seconds": 120,
                     "output_kind": "structured",
                     "has_structured_schema": True,
                 },
@@ -1400,6 +1413,44 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
+    def test_request_agent_forwards_workflow_without_invocation_token(self) -> None:
+        request = Request(
+            workflow={
+                "runId": "run-python-agent",
+                "runAs": {"id": "service_account:workflow-test"},
+            }
+        )
+
+        with request.agent() as manager:
+            fetched = manager.get_session(
+                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
+            )
+
+        self.assertEqual(fetched.id, "session-managed-1")
+        self.assertEqual(
+            _manager_requests,
+            [
+                {
+                    "method": "get_session",
+                    "invocation_token": "",
+                    "provider_name": "",
+                    "session_id": "session-managed-1",
+                    "turn_id": "",
+                    "interaction_id": "",
+                    "reason": "",
+                }
+            ],
+        )
+        self.assertEqual(
+            _manager_workflows,
+            [
+                {
+                    "runId": "run-python-agent",
+                    "runAs": {"id": "service_account:workflow-test"},
+                }
+            ],
+        )
+
     def test_agent_accepts_native_inputs(self) -> None:
         with Agent("token-123") as manager:
             created_turn = manager.create_turn(
@@ -1464,6 +1515,7 @@ class AgentTransportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "agent output is required"):
                 manager.create_turn(
                     AgentCreateTurn(
+                        timeout_seconds=120,
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                     )
@@ -1474,6 +1526,7 @@ class AgentTransportTests(unittest.TestCase):
             ):
                 manager.create_turn(
                     AgentCreateTurn(
+                        timeout_seconds=120,
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                         output=AgentOutput(
@@ -1490,6 +1543,7 @@ class AgentTransportTests(unittest.TestCase):
             ):
                 manager.create_turn(
                     AgentCreateTurn(
+                        timeout_seconds=120,
                         session_id="session-managed-1",
                         messages=[AgentMessage(role="user", text="Summarize this")],
                         output=AgentOutput(

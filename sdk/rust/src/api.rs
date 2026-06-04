@@ -7,19 +7,25 @@ use crate::agent::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 
+/// Split a canonical subject ID such as `user:ada` into kind and id.
+pub fn parse_subject_id(subject_id: &str) -> Option<(&str, &str)> {
+    let trimmed = subject_id.trim();
+    let (kind, id) = trimmed.split_once(':')?;
+    let kind = kind.trim();
+    let id = id.trim();
+    if kind.is_empty() || id.is_empty() {
+        return None;
+    }
+    Some((kind, id))
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Identifies the caller that initiated an operation.
 pub struct Subject {
     /// Stable subject id.
     pub id: String,
-    /// Subject kind, such as user or service account.
-    pub kind: String,
     /// Subject id used for credential lookup, when different from the actor.
     pub credential_subject_id: String,
-    /// Human-readable display name.
-    pub display_name: String,
-    /// Authentication source that produced the subject.
-    pub auth_source: String,
     /// Email address resolved by the Gestalt host for user subjects.
     pub email: String,
 }
@@ -74,7 +80,7 @@ pub struct Request {
     pub idempotency_key: String,
     /// Workflow callback metadata uses a JSON-style lowerCamelCase object
     /// such as `runId`, `target.steps[0].app.name`,
-    /// `trigger.scheduleId`, and `trigger.event.specVersion`.
+    /// `trigger.activationId`, and `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
     /// Agent tool refs granted to the current operation request.
     pub tool_refs: Vec<AgentToolRef>,

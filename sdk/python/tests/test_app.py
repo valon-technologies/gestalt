@@ -122,7 +122,7 @@ class AppOperationTests(unittest.TestCase):
             Request(
                 token="tok-abc",
                 connection_params={"region": "us-east-1"},
-                subject=Subject(id="user:user-123", kind="user"),
+                subject=Subject(id="user:user-123"),
                 credential=Credential(mode="subject"),
                 access=Access(role="admin"),
                 invocation_token="invoke-123",

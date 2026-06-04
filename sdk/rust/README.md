@@ -23,7 +23,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 | Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`Response`], [`ok`] | Executable app providers, typed request handlers, hosted HTTP subject hooks, and operation results. |
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
 | Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`RuntimeProvider`] | Host-service backends implemented as Rust providers. |
-| Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
+| Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_definition`], [`new_workflow_run`], [`new_workflow_signal`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
 | Host-service clients | [`Cache`], [`S3`], [`Workflow`], [`AgentHost`], [`Agent`], [`App`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
 
@@ -85,7 +85,7 @@ a host-service backend.
 | `CacheProvider` | `export_cache_provider!` | App-bound cache storage. |
 | `S3Provider` | `export_s3_provider!` | S3-compatible object storage. |
 | `SecretsProvider` | `export_secrets_provider!` | Secret resolution. |
-| `WorkflowProvider` | `export_workflow_provider!` | Workflow runs, schedules, and event triggers. |
+| `WorkflowProvider` | `export_workflow_provider!` | Workflow definitions, activations, runs, events, and run output. |
 | `AgentProvider` | `export_agent_provider!` | Agent sessions, turns, events, interactions, and capabilities. |
 | `RuntimeProvider` | `export_runtime_provider!` | Hosted app execution backends. |
 
@@ -99,10 +99,9 @@ timestamp fields use `SystemTime`; the SDK runtime owns transport serialization 
 the transport boundary. `AgentHost` includes plain-input helpers for listing
 tools, executing tools, and resolving connections during one turn.
 Workflow builders such as `new_bound_workflow_target`,
-`new_workflow_signal`, and `new_bound_workflow_run` accept SDK-owned input
-structs with `serde::Serialize` payload setters and native `SystemTime` fields. Copy helpers
-such as `new_bound_workflow_target_from_target` preserve request shape without
-asking provider code to assemble transport objects.
+`new_workflow_definition`, `new_workflow_run`, and `new_workflow_signal`
+accept SDK-owned input structs and preserve request shape without asking
+provider code to assemble transport objects.
 
 ## Public surface
 
@@ -122,8 +121,8 @@ The crate exposes higher-level authoring APIs:
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
 - Workflow builder inputs such as `BoundWorkflowTarget`, `WorkflowStep`,
-  `WorkflowSignal`, and `BoundWorkflowRun` model provider-owned workflow
-  state.
+  `WorkflowActivation`, `WorkflowDefinition`, `WorkflowSignal`, and
+  `WorkflowRun` model provider-owned workflow state.
 
 ## Package layout
 

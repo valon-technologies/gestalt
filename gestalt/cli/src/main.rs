@@ -36,10 +36,6 @@ fn run() -> anyhow::Result<()> {
         Commands::App { command } => dispatch_app_command(command, url, format),
         Commands::Invoke(args) => dispatch_app_command(AppCommands::Invoke(args), url, format),
         Commands::Describe(args) => dispatch_app_command(AppCommands::Describe(args), url, format),
-        Commands::Authorization { command } => {
-            let client = ApiClient::from_env(url)?;
-            commands::authorization::dispatch(&client, command, format)
-        }
         Commands::Workflow { command } => {
             let client = ApiClient::from_env(url)?;
             commands::workflows::dispatch(&client, command, format)
@@ -138,6 +134,9 @@ fn reject_agent_doctor_root_options(args: &AgentArgs) -> anyhow::Result<()> {
     if !args.tools.is_empty() {
         anyhow::bail!("--tool is not supported with agent doctor");
     }
+    if args.timeout_seconds.is_some() {
+        anyhow::bail!("--timeout-seconds is not supported with agent doctor");
+    }
     Ok(())
 }
 
@@ -162,6 +161,11 @@ fn reject_local_agent_options(args: &AgentArgs) -> anyhow::Result<()> {
             "--tool is not supported in local agent mode; use --cloud for server-backed agent sessions"
         );
     }
+    if args.timeout_seconds.is_some() {
+        anyhow::bail!(
+            "--timeout-seconds is not supported in local agent mode; use --cloud for server-backed agent sessions"
+        );
+    }
     Ok(())
 }
 
@@ -180,6 +184,9 @@ fn reject_agent_interactive_options(args: &AgentArgs) -> anyhow::Result<()> {
     }
     if !args.tools.is_empty() {
         anyhow::bail!("--tool must be passed before a prompt or after `agent resume`");
+    }
+    if args.timeout_seconds.is_some() {
+        anyhow::bail!("--timeout-seconds must be passed before a prompt or after `agent resume`");
     }
     if args.provider.is_some() {
         anyhow::bail!("--provider must be passed before a prompt or after `agent resume`");

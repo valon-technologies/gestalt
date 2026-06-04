@@ -11,18 +11,23 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  BoundWorkflowDefinitionSchema,
-  BoundWorkflowEventTriggerSchema,
-  BoundWorkflowRunSchema,
-  BoundWorkflowScheduleSchema,
+  GetWorkflowProviderRunEventsResponseSchema,
+  GetWorkflowProviderRunOutputResponseSchema,
+  ListWorkflowProviderDefinitionsResponseSchema,
+  ListWorkflowProviderRunsResponseSchema,
   SignalWorkflowRunResponseSchema,
+  WorkflowDefinitionSchema,
   WorkflowEventSchema,
   WorkflowProvider as WorkflowProviderService,
+  WorkflowRunEventSchema,
+  WorkflowRunSchema,
 } from "../src/internal/gen/v1/workflow_pb.ts";
+import { valueFromJson } from "../src/protocol.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
   Workflow,
+  WorkflowRunStatus,
   request,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -30,12 +35,6 @@ import { removeTempDir } from "./helpers.ts";
 function workflowAppStepTarget(name: string, operation: string) {
   return {
     steps: [{ id: operation, app: { name, operation } }],
-  };
-}
-
-function workflowAgentStepTarget(provider: string, prompt: string) {
-  return {
-    steps: [{ id: "agent", agent: { provider, prompt, output: { text: {} } } }],
   };
 }
 
@@ -47,14 +46,14 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
     method: string;
     invocationToken: string;
     idempotencyKey?: string;
-    scheduleId?: string;
-    triggerId?: string;
-    eventType?: string;
     providerName?: string;
     runId?: string;
     definitionId?: string;
+    activationId?: string;
     signalName?: string | undefined;
     workflowKey?: string;
+    eventType?: string;
+    paused?: boolean;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -63,6 +62,78 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
     connect: false,
     routes(router) {
       router.service(WorkflowProviderService, {
+        async applyDefinition(input) {
+          calls.push({
+            method: "apply-definition",
+            invocationToken: input.invocationToken,
+            idempotencyKey: input.idempotencyKey,
+            providerName: input.providerName,
+            ...(input.spec?.id ? { definitionId: input.spec.id } : {}),
+          });
+          return create(WorkflowDefinitionSchema, {
+            providerName: input.providerName || "basic",
+            id: input.spec?.id || "def-1",
+            generation: 3n,
+            target: input.spec?.target,
+            activations: input.spec?.activations ?? [],
+          });
+        },
+        async getDefinition(input) {
+          calls.push({
+            method: "get-definition",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+          });
+          return create(WorkflowDefinitionSchema, {
+            providerName: "basic",
+            id: input.definitionId,
+            generation: 3n,
+          });
+        },
+        async listDefinitions(input) {
+          calls.push({
+            method: "list-definitions",
+            invocationToken: input.invocationToken,
+          });
+          return create(ListWorkflowProviderDefinitionsResponseSchema, {
+            definitions: [create(WorkflowDefinitionSchema, { id: "def-1", generation: 3n })],
+          });
+        },
+        async setDefinitionPaused(input) {
+          calls.push({
+            method: "set-definition-paused",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+            paused: input.paused,
+          });
+          return create(WorkflowDefinitionSchema, {
+            id: input.definitionId,
+            generation: 3n,
+            paused: input.paused,
+          });
+        },
+        async setActivationPaused(input) {
+          calls.push({
+            method: "set-activation-paused",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+            activationId: input.activationId,
+            paused: input.paused,
+          });
+          return create(WorkflowDefinitionSchema, {
+            id: input.definitionId,
+            generation: 3n,
+            activations: [{ id: input.activationId, paused: input.paused }],
+          });
+        },
+        async deleteDefinition(input) {
+          calls.push({
+            method: "delete-definition",
+            invocationToken: input.invocationToken,
+            definitionId: input.definitionId,
+          });
+          return create(EmptySchema, {});
+        },
         async startRun(input) {
           calls.push({
             method: "start-run",
@@ -70,11 +141,74 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
             idempotencyKey: input.idempotencyKey,
             providerName: input.providerName,
             workflowKey: input.workflowKey,
+            definitionId: input.definitionId,
           });
-          return create(BoundWorkflowRunSchema, {
+          return create(WorkflowRunSchema, {
             providerName: input.providerName || "basic",
             id: "run-1",
-            ...(input.target ? { target: input.target } : {}),
+            status: WorkflowRunStatus.PENDING,
+            definitionId: input.definitionId,
+            workflowKey: input.workflowKey,
+            input: input.input,
+          });
+        },
+        async getRun(input) {
+          calls.push({
+            method: "get-run",
+            invocationToken: input.invocationToken,
+            runId: input.runId,
+          });
+          return create(WorkflowRunSchema, {
+            providerName: "basic",
+            id: input.runId,
+            status: WorkflowRunStatus.RUNNING,
+          });
+        },
+        async listRuns(input) {
+          calls.push({
+            method: "list-runs",
+            invocationToken: input.invocationToken,
+          });
+          return create(ListWorkflowProviderRunsResponseSchema, {
+            runs: [create(WorkflowRunSchema, { id: "run-1", status: WorkflowRunStatus.RUNNING })],
+            nextPageToken: "next",
+          });
+        },
+        async getRunEvents(input) {
+          calls.push({
+            method: "get-run-events",
+            invocationToken: input.invocationToken,
+            runId: input.runId,
+          });
+          return create(GetWorkflowProviderRunEventsResponseSchema, {
+            events: [create(WorkflowRunEventSchema, {
+              id: "evt-1",
+              runId: input.runId,
+              stepId: "sync",
+              type: "run.started",
+            })],
+          });
+        },
+        async getRunOutput(input) {
+          calls.push({
+            method: "get-run-output",
+            invocationToken: input.invocationToken,
+            runId: input.runId,
+          });
+          return create(GetWorkflowProviderRunOutputResponseSchema, {
+            output: valueFromJson({ ok: true, runId: input.runId }),
+          });
+        },
+        async cancelRun(input) {
+          calls.push({
+            method: "cancel-run",
+            invocationToken: input.invocationToken,
+            runId: input.runId,
+          });
+          return create(WorkflowRunSchema, {
+            id: input.runId,
+            status: WorkflowRunStatus.CANCELED,
+            statusMessage: input.reason,
           });
         },
         async signalRun(input) {
@@ -85,7 +219,7 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
             signalName: input.signal?.name,
           });
           return create(SignalWorkflowRunResponseSchema, {
-            run: create(BoundWorkflowRunSchema, {
+            run: create(WorkflowRunSchema, {
               id: input.runId,
               providerName: "basic",
             }),
@@ -100,187 +234,24 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
             providerName: input.providerName,
             signalName: input.signal?.name,
             workflowKey: input.workflowKey,
+            definitionId: input.definitionId,
           });
           return create(SignalWorkflowRunResponseSchema, {
-            run: create(BoundWorkflowRunSchema, {
+            run: create(WorkflowRunSchema, {
               id: "run-2",
               providerName: input.providerName || "basic",
-              ...(input.target ? { target: input.target } : {}),
+              definitionId: input.definitionId,
+              workflowKey: input.workflowKey,
+              input: input.input,
             }),
             signal: input.signal,
             startedRun: true,
             workflowKey: input.workflowKey,
           });
         },
-        async createDefinition(input) {
+        async deliverEvent(input) {
           calls.push({
-            method: "create-definition",
-            invocationToken: input.invocationToken,
-            idempotencyKey: input.idempotencyKey,
-            providerName: input.providerName,
-          });
-          return create(BoundWorkflowDefinitionSchema, {
-            providerName: input.providerName || "basic",
-            id: "def-1",
-            ...(input.target ? { target: input.target } : {}),
-          });
-        },
-        async getDefinition(input) {
-          calls.push({
-            method: "get-definition",
-            invocationToken: input.invocationToken,
-            definitionId: input.definitionId,
-          });
-          return create(BoundWorkflowDefinitionSchema, {
-            providerName: "basic",
-            id: input.definitionId,
-          });
-        },
-        async updateDefinition(input) {
-          calls.push({
-            method: "update-definition",
-            invocationToken: input.invocationToken,
-            definitionId: input.definitionId,
-            providerName: input.providerName,
-          });
-          return create(BoundWorkflowDefinitionSchema, {
-            providerName: input.providerName || "basic",
-            id: input.definitionId,
-            ...(input.target ? { target: input.target } : {}),
-          });
-        },
-        async deleteDefinition(input) {
-          calls.push({
-            method: "delete-definition",
-            invocationToken: input.invocationToken,
-            definitionId: input.definitionId,
-          });
-          return create(EmptySchema, {});
-        },
-        async upsertSchedule(input) {
-          calls.push({
-            method: input.scheduleId ? "update" : "create",
-            invocationToken: input.invocationToken,
-            ...(input.idempotencyKey
-              ? { idempotencyKey: input.idempotencyKey }
-              : {}),
-            ...(input.scheduleId ? { scheduleId: input.scheduleId } : {}),
-          });
-          return create(BoundWorkflowScheduleSchema, {
-            providerName: input.providerName || "basic",
-            id: input.scheduleId || "sched-1",
-            cron: input.cron,
-            timezone: input.timezone,
-            paused: input.paused,
-            ...(input.target ? { target: input.target } : {}),
-          });
-        },
-        async getSchedule(input) {
-          calls.push({
-            method: "get",
-            invocationToken: input.invocationToken,
-            scheduleId: input.scheduleId,
-          });
-          return create(BoundWorkflowScheduleSchema, {
-            providerName: "basic",
-            id: input.scheduleId,
-          });
-        },
-        async deleteSchedule(input) {
-          calls.push({
-            method: "delete",
-            invocationToken: input.invocationToken,
-            scheduleId: input.scheduleId,
-          });
-          return create(EmptySchema, {});
-        },
-        async pauseSchedule(input) {
-          calls.push({
-            method: "pause",
-            invocationToken: input.invocationToken,
-            scheduleId: input.scheduleId,
-          });
-          return create(BoundWorkflowScheduleSchema, {
-            providerName: "basic",
-            id: input.scheduleId,
-            paused: true,
-          });
-        },
-        async resumeSchedule(input) {
-          calls.push({
-            method: "resume",
-            invocationToken: input.invocationToken,
-            scheduleId: input.scheduleId,
-          });
-          return create(BoundWorkflowScheduleSchema, {
-            providerName: "basic",
-            id: input.scheduleId,
-            paused: false,
-          });
-        },
-        async upsertEventTrigger(input) {
-          calls.push({
-            method: input.triggerId ? "update-trigger" : "create-trigger",
-            invocationToken: input.invocationToken,
-            ...(input.idempotencyKey
-              ? { idempotencyKey: input.idempotencyKey }
-              : {}),
-            ...(input.triggerId ? { triggerId: input.triggerId } : {}),
-          });
-          return create(BoundWorkflowEventTriggerSchema, {
-            providerName: input.providerName || "basic",
-            id: input.triggerId || "trg-1",
-            paused: input.paused,
-            ...(input.match ? { match: input.match } : {}),
-            ...(input.target ? { target: input.target } : {}),
-          });
-        },
-        async getEventTrigger(input) {
-          calls.push({
-            method: "get-trigger",
-            invocationToken: input.invocationToken,
-            triggerId: input.triggerId,
-          });
-          return create(BoundWorkflowEventTriggerSchema, {
-            providerName: "basic",
-            id: input.triggerId,
-          });
-        },
-        async deleteEventTrigger(input) {
-          calls.push({
-            method: "delete-trigger",
-            invocationToken: input.invocationToken,
-            triggerId: input.triggerId,
-          });
-          return create(EmptySchema, {});
-        },
-        async pauseEventTrigger(input) {
-          calls.push({
-            method: "pause-trigger",
-            invocationToken: input.invocationToken,
-            triggerId: input.triggerId,
-          });
-          return create(BoundWorkflowEventTriggerSchema, {
-            providerName: "basic",
-            id: input.triggerId,
-            paused: true,
-          });
-        },
-        async resumeEventTrigger(input) {
-          calls.push({
-            method: "resume-trigger",
-            invocationToken: input.invocationToken,
-            triggerId: input.triggerId,
-          });
-          return create(BoundWorkflowEventTriggerSchema, {
-            providerName: "basic",
-            id: input.triggerId,
-            paused: false,
-          });
-        },
-        async publishEvent(input) {
-          calls.push({
-            method: "publish-event",
+            method: "deliver-event",
             invocationToken: input.invocationToken,
             providerName: input.providerName,
             ...(input.event?.type ? { eventType: input.event.type } : {}),
@@ -288,7 +259,7 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
           return create(WorkflowEventSchema, {
             id: input.event?.id || "evt-1",
             type: input.event?.type || "dummy.event",
-            source: input.event?.source || "tests",
+            source: input.event?.source || input.appName || "tests",
             subject: input.event?.subject || "subject",
           });
         },
@@ -309,17 +280,19 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
     const fromHandle = new Workflow("invocation-token-123");
-    const created = await fromHandle.createSchedule({
+    const applied = await fromHandle.applyDefinition({
       providerName: "basic",
-      cron: "*/5 * * * *",
-      timezone: "UTC",
-      target: workflowAppStepTarget("roadmap", "sync"),
-      paused: false,
-      idempotencyKey: "workflow-schedule-key-ts",
+      spec: {
+        id: "def-1",
+        target: workflowAppStepTarget("roadmap", "sync"),
+        activations: [{
+          id: "nightly",
+          schedule: { cron: "*/5 * * * *", timezone: "UTC" },
+        }],
+      },
+      idempotencyKey: "workflow-definition-key-ts",
     });
-
-    expect(created.providerName).toBe("basic");
-    expect(created.schedule?.id).toBe("sched-1");
+    expect(applied.id).toBe("def-1");
 
     const fromRequest = new Workflow(
       request(
@@ -336,7 +309,8 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
     const startedRun = await fromRequest.startRun({
       providerName: "basic",
       workflowKey: "roadmap-summary:item-1",
-      target: workflowAgentStepTarget("simple", "Summarize item 1."),
+      definitionId: "def-1",
+      input: { itemId: "item-1" },
     });
     const signaledRun = await fromRequest.signalRun({
       runId: "run-1",
@@ -347,63 +321,32 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
     const signaledOrStartedRun = await fromRequest.signalOrStartRun({
       providerName: "basic",
       workflowKey: "roadmap-summary:item-1",
-      target: workflowAgentStepTarget("simple", "Summarize item 1."),
+      definitionId: "def-1",
+      input: { itemId: "item-1" },
       signal: {
         name: "roadmap.item.updated",
       },
     });
-    const createdDefinition = await fromRequest.createDefinition({
-      providerName: "basic",
-      target: workflowAppStepTarget("roadmap", "sync"),
-    });
     const fetchedDefinition = await fromRequest.getDefinition({
       definitionId: "def-1",
     });
-    const updatedDefinition = await fromRequest.updateDefinition({
+    const definitions = await fromRequest.listDefinitions();
+    const pausedDefinition = await fromRequest.setDefinitionPaused({
       definitionId: "def-1",
-      providerName: "secondary",
-      target: workflowAppStepTarget("roadmap", "status"),
+      paused: true,
+    });
+    const pausedActivation = await fromRequest.setActivationPaused({
+      definitionId: "def-1",
+      activationId: "nightly",
+      paused: true,
     });
     await fromRequest.deleteDefinition({ definitionId: "def-1" });
-    const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
-    const updated = await fromRequest.updateSchedule({
-      scheduleId: "sched-1",
-      providerName: "secondary",
-      cron: "0 * * * *",
-      timezone: "America/New_York",
-      target: workflowAppStepTarget("roadmap", "status"),
-      paused: true,
-    });
-    const paused = await fromRequest.pauseSchedule({ scheduleId: "sched-1" });
-    const resumed = await fromRequest.resumeSchedule({ scheduleId: "sched-1" });
-    await fromRequest.deleteSchedule({ scheduleId: "sched-1" });
-    const createdTrigger = await fromRequest.createTrigger({
-      providerName: "basic",
-      match: {
-        type: "roadmap.item.updated",
-        source: "roadmap",
-      },
-      target: workflowAppStepTarget("slack", "chat.postMessage"),
-      paused: false,
-    });
-    const fetchedTrigger = await fromRequest.getTrigger({ triggerId: "trg-1" });
-    const updatedTrigger = await fromRequest.updateTrigger({
-      triggerId: "trg-1",
-      providerName: "secondary",
-      match: {
-        type: "roadmap.item.synced",
-      },
-      target: workflowAppStepTarget("slack", "chat.postMessage"),
-      paused: true,
-    });
-    const pausedTrigger = await fromRequest.pauseTrigger({
-      triggerId: "trg-1",
-    });
-    const resumedTrigger = await fromRequest.resumeTrigger({
-      triggerId: "trg-1",
-    });
-    await fromRequest.deleteTrigger({ triggerId: "trg-1" });
-    const publishedEvent = await fromRequest.publishEvent({
+    const fetchedRun = await fromRequest.getRun({ runId: "run-1" });
+    const listedRuns = await fromRequest.listRuns();
+    const events = await fromRequest.getRunEvents({ runId: "run-1" });
+    const output = await fromRequest.getRunOutput({ runId: "run-1" });
+    const canceledRun = await fromRequest.cancelRun({ runId: "run-1", reason: "done" });
+    const deliveredEvent = await fromRequest.deliverEvent({
       providerName: "secondary",
       event: {
         type: "roadmap.item.updated",
@@ -411,30 +354,27 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
       },
     });
 
-    expect(startedRun.run?.id).toBe("run-1");
+    expect(startedRun.id).toBe("run-1");
+    expect(startedRun.input).toEqual({ itemId: "item-1" });
     expect(signaledRun.signal?.name).toBe("roadmap.item.updated");
     expect(signaledOrStartedRun.startedRun).toBe(true);
-    expect(createdDefinition.definition?.id).toBe("def-1");
-    expect(fetchedDefinition.definition?.id).toBe("def-1");
-    expect(updatedDefinition.providerName).toBe("secondary");
-    expect(fetched.schedule?.id).toBe("sched-1");
-    expect(updated.providerName).toBe("secondary");
-    expect(updated.schedule?.paused).toBe(true);
-    expect(paused.schedule?.paused).toBe(true);
-    expect(resumed.schedule?.paused).toBe(false);
-    expect(createdTrigger.providerName).toBe("basic");
-    expect(createdTrigger.trigger?.id).toBe("trg-1");
-    expect(fetchedTrigger.trigger?.id).toBe("trg-1");
-    expect(updatedTrigger.providerName).toBe("secondary");
-    expect(updatedTrigger.trigger?.paused).toBe(true);
-    expect(pausedTrigger.trigger?.paused).toBe(true);
-    expect(resumedTrigger.trigger?.paused).toBe(false);
-    expect(publishedEvent.type).toBe("roadmap.item.updated");
+    expect(fetchedDefinition.id).toBe("def-1");
+    expect(definitions[0]?.id).toBe("def-1");
+    expect(pausedDefinition.paused).toBe(true);
+    expect(pausedActivation.activations?.[0]?.paused).toBe(true);
+    expect(fetchedRun.status).toBe(WorkflowRunStatus.RUNNING);
+    expect(listedRuns.nextPageToken).toBe("next");
+    expect(events[0]?.type).toBe("run.started");
+    expect(output.output).toEqual({ ok: true, runId: "run-1" });
+    expect(canceledRun.status).toBe(WorkflowRunStatus.CANCELED);
+    expect(deliveredEvent.type).toBe("roadmap.item.updated");
     expect(calls).toEqual([
       {
-        method: "create",
+        method: "apply-definition",
         invocationToken: "invocation-token-123",
-        idempotencyKey: "workflow-schedule-key-ts",
+        idempotencyKey: "workflow-definition-key-ts",
+        providerName: "basic",
+        definitionId: "def-1",
       },
       {
         method: "start-run",
@@ -442,6 +382,7 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
         idempotencyKey: "workflow-request-key-ts",
         providerName: "basic",
         workflowKey: "roadmap-summary:item-1",
+        definitionId: "def-1",
       },
       {
         method: "signal-run",
@@ -456,12 +397,7 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
         providerName: "basic",
         signalName: "roadmap.item.updated",
         workflowKey: "roadmap-summary:item-1",
-      },
-      {
-        method: "create-definition",
-        invocationToken: "invocation-token-456",
-        idempotencyKey: "workflow-request-key-ts",
-        providerName: "basic",
+        definitionId: "def-1",
       },
       {
         method: "get-definition",
@@ -469,10 +405,21 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
         definitionId: "def-1",
       },
       {
-        method: "update-definition",
+        method: "list-definitions",
+        invocationToken: "invocation-token-456",
+      },
+      {
+        method: "set-definition-paused",
         invocationToken: "invocation-token-456",
         definitionId: "def-1",
-        providerName: "secondary",
+        paused: true,
+      },
+      {
+        method: "set-activation-paused",
+        invocationToken: "invocation-token-456",
+        definitionId: "def-1",
+        activationId: "nightly",
+        paused: true,
       },
       {
         method: "delete-definition",
@@ -480,62 +427,31 @@ test("Workflow forwards invocation tokens from strings and Request objects", asy
         definitionId: "def-1",
       },
       {
-        method: "get",
+        method: "get-run",
         invocationToken: "invocation-token-456",
-        scheduleId: "sched-1",
+        runId: "run-1",
       },
       {
-        method: "update",
+        method: "list-runs",
         invocationToken: "invocation-token-456",
-        scheduleId: "sched-1",
       },
       {
-        method: "pause",
+        method: "get-run-events",
         invocationToken: "invocation-token-456",
-        scheduleId: "sched-1",
+        runId: "run-1",
       },
       {
-        method: "resume",
+        method: "get-run-output",
         invocationToken: "invocation-token-456",
-        scheduleId: "sched-1",
+        runId: "run-1",
       },
       {
-        method: "delete",
+        method: "cancel-run",
         invocationToken: "invocation-token-456",
-        scheduleId: "sched-1",
+        runId: "run-1",
       },
       {
-        method: "create-trigger",
-        invocationToken: "invocation-token-456",
-        idempotencyKey: "workflow-request-key-ts",
-      },
-      {
-        method: "get-trigger",
-        invocationToken: "invocation-token-456",
-        triggerId: "trg-1",
-      },
-      {
-        method: "update-trigger",
-        invocationToken: "invocation-token-456",
-        triggerId: "trg-1",
-      },
-      {
-        method: "pause-trigger",
-        invocationToken: "invocation-token-456",
-        triggerId: "trg-1",
-      },
-      {
-        method: "resume-trigger",
-        invocationToken: "invocation-token-456",
-        triggerId: "trg-1",
-      },
-      {
-        method: "delete-trigger",
-        invocationToken: "invocation-token-456",
-        triggerId: "trg-1",
-      },
-      {
-        method: "publish-event",
+        method: "deliver-event",
         invocationToken: "invocation-token-456",
         providerName: "secondary",
         eventType: "roadmap.item.updated",
@@ -608,11 +524,11 @@ test("Workflow honors tcp target env and relay token env", async () => {
     connect: false,
     routes(router) {
       router.service(WorkflowProviderService, {
-        async upsertSchedule(input) {
-          return create(BoundWorkflowScheduleSchema, {
+        async applyDefinition(input) {
+          return create(WorkflowDefinitionSchema, {
             providerName: input.providerName || "basic",
-            id: "sched-1",
-            cron: input.cron,
+            id: input.spec?.id || "def-1",
+            generation: 1n,
           });
         },
       } satisfies Partial<ServiceImpl<typeof WorkflowProviderService>>);
@@ -639,13 +555,13 @@ test("Workflow honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const manager = new Workflow("invoke-token");
-    const created = await manager.createSchedule({
+    const applied = await manager.applyDefinition({
       providerName: "basic",
-      cron: "*/5 * * * *",
+      spec: { id: "def-1" },
     });
 
-    expect(created.providerName).toBe("basic");
-    expect(created.schedule?.id).toBe("sched-1");
+    expect(applied.providerName).toBe("basic");
+    expect(applied.id).toBe("def-1");
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {

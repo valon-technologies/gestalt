@@ -28,8 +28,6 @@ use crate::generated::v1::app_provider_server::AppProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::authentication_provider_server::AuthenticationProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::authorization_provider_server::AuthorizationProviderServer;
-#[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
@@ -43,15 +41,14 @@ use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AgentProvider, AuthenticationProvider, AuthorizationProvider, CacheProvider, Provider, Router,
-    RuntimeProvider, S3Provider, SecretsProvider, WorkflowProvider,
+    AgentProvider, AuthenticationProvider, CacheProvider, Provider, Router, RuntimeProvider,
+    S3Provider, SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
-    agent::AgentServer, auth_server::AuthenticationServer, authorization::AuthorizationServer,
-    cache_server::CacheRpcServer, runtime_provider::RuntimeServer as RuntimeProviderRpcServer,
-    runtime_server::RuntimeServer, s3::S3RpcServer, secrets_server::SecretsServer,
-    workflow::WorkflowServer,
+    agent::AgentServer, auth_server::AuthenticationServer, cache_server::CacheRpcServer,
+    runtime_provider::RuntimeServer as RuntimeProviderRpcServer, runtime_server::RuntimeServer,
+    s3::S3RpcServer, secrets_server::SecretsServer, workflow::WorkflowServer,
 };
 
 fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
@@ -74,11 +71,6 @@ pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<
 /// Runs an authentication provider on the Unix socket exposed by `gestaltd`.
 pub fn run_authentication_provider<P: AuthenticationProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_authentication_provider(provider))
-}
-
-/// Runs an authorization provider on the Unix socket exposed by `gestaltd`.
-pub fn run_authorization_provider<P: AuthorizationProvider>(provider: Arc<P>) -> Result<()> {
-    build_runtime_and_block_on(|| serve_authorization_provider(provider))
 }
 
 /// Runs a cache provider on the Unix socket exposed by `gestaltd`.
@@ -180,42 +172,10 @@ where
     .await
 }
 
-#[cfg(unix)]
-/// Serves an authorization provider over the configured Unix socket.
-pub async fn serve_authorization_provider<P>(provider: Arc<P>) -> Result<()>
-where
-    P: AuthorizationProvider,
-{
-    serve_unix_provider(
-        provider,
-        move |incoming, provider| {
-            let authz_server = AuthorizationServer::new(Arc::clone(&provider));
-            Server::builder()
-                .add_service(ProviderLifecycleServer::new(
-                    RuntimeServer::for_authorization(Arc::clone(&provider)),
-                ))
-                .add_service(AuthorizationProviderServer::new(authz_server))
-                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
-        },
-        |provider| async move { provider.close().await },
-    )
-    .await
-}
-
 #[cfg(not(unix))]
 pub async fn serve_authentication_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: AuthenticationProvider,
-{
-    Err(Error::internal(
-        "unix sockets are unsupported on this platform",
-    ))
-}
-
-#[cfg(not(unix))]
-pub async fn serve_authorization_provider<P>(_provider: Arc<P>) -> Result<()>
-where
-    P: AuthorizationProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",

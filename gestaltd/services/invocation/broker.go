@@ -13,8 +13,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel"
@@ -112,10 +112,10 @@ type Broker struct {
 	providers         *registry.ProviderMap[core.Provider]
 	users             UserStore
 	externalCreds     core.ExternalCredentialProvider
-	authorizer        authorization.RuntimeAuthorizer
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
+	authorization     core.AuthorizationProvider
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -134,8 +134,8 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 	return func(b *Broker) { b.connectionRuntime = r }
 }
 
-func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
-	return func(b *Broker) { b.authorizer = a }
+func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
+	return func(b *Broker) { b.authorization = provider }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -262,25 +262,15 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
 	conn := ConnectionFromContext(ctx)
-	if b.authorizer != nil {
-		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
-		if access.Policy != "" || access.Role != "" {
-			ctx = WithAccessContext(ctx, access)
-		}
-		if !allowed {
-			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
-		}
-	}
-
 	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
-	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
-	}
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
+	}
+	if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+		return fail(err)
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -365,11 +355,8 @@ func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p 
 	if binding := HTTPBindingFromContext(ctx); binding != "" {
 		attrs = append(attrs, "http_binding", binding)
 	}
-	if subjectID, subjectKind := resultSubjectFields(p); subjectID != "" {
+	if subjectID := resultSubjectID(p); subjectID != "" {
 		attrs = append(attrs, "subject_id", subjectID)
-		if subjectKind != "" {
-			attrs = append(attrs, "subject_kind", subjectKind)
-		}
 	}
 
 	b.log().WarnContext(ctx, "provider operation returned 5xx result", attrs...)
@@ -382,17 +369,12 @@ func truncateResultBodyForLog(body string) string {
 	return body[:resultBodyLogLimit]
 }
 
-func resultSubjectFields(p *principal.Principal) (string, string) {
+func resultSubjectID(p *principal.Principal) string {
 	p = principal.Canonicalized(p)
 	if p == nil {
-		return "", ""
+		return ""
 	}
-	subjectID := strings.TrimSpace(p.SubjectID)
-	subjectKind := strings.TrimSpace(string(p.Kind))
-	if subjectKind == "" && subjectID != "" {
-		subjectKind = string(principal.KindFromSubjectID(subjectID))
-	}
-	return subjectID, subjectKind
+	return strings.TrimSpace(p.SubjectID)
 }
 
 func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (result *core.OperationResult, err error) {
@@ -476,17 +458,11 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
+	if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
+		return fail(err)
+	}
 
 	conn := ConnectionFromContext(ctx)
-	if b.authorizer != nil {
-		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
-		if access.Policy != "" || access.Role != "" {
-			ctx = WithAccessContext(ctx, access)
-		}
-		if !allowed {
-			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
-		}
-	}
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)
 	}
@@ -540,9 +516,6 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", err
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
-		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -551,6 +524,38 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
 	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
+}
+
+func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
+	if b == nil || b.authorization == nil {
+		return nil
+	}
+	req := authorizationAccessRequest(p, providerName, operationID)
+	resp, err := b.authorization.CheckAccess(ctx, req)
+	if err != nil {
+		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
+	}
+	return nil
+}
+
+func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
+	p = principal.Canonicalized(p)
+	subjectID := principal.EffectiveCredentialSubjectID(p)
+	providerName = strings.TrimSpace(providerName)
+	return &proto.CheckAccessRequest{
+		Subject: &proto.Subject{
+			Type: "subject",
+			Id:   subjectID,
+		},
+		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
+		Resource: &proto.Resource{
+			Type: providerName,
+			Id:   providerName,
+		},
+	}
 }
 
 func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, providerName, connection string) core.ConnectionMode {
@@ -590,9 +595,6 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		return nil, err
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
-		return nil, fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
-	}
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {

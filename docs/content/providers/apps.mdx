@@ -518,8 +518,7 @@ By default, input decode failures return a structured `400` response, and unhand
 Hosted HTTP endpoints let an external product call an app through a stable
 HTTP route, while the app still handles the request as a normal operation.
 They are useful for webhooks and other inbound requests whose path, signature
-verification, body shape, or acknowledgment response needs to match the calling
-product.
+verification, or body shape needs to match the calling product.
 
 The endpoint declaration belongs in the app manifest under `spec.http` and
 `spec.securitySchemes`. Deployment config selects the app and may override
@@ -555,10 +554,6 @@ spec:
         required: true
         content:
           application/x-www-form-urlencoded: {}
-      ack:
-        status: 200
-        body:
-          status: accepted
 ```
 
 Implement the target operation in the app SDK:
@@ -795,9 +790,8 @@ Implement the target operation in the app SDK:
 
 Request query parameters are included in the operation input. JSON object
 bodies merge into the input by field name, form-encoded bodies become string
-parameters, and unsupported body types are passed as `rawBody`. If `ack` is
-configured, Gestalt sends that response immediately and runs the operation
-asynchronously. Without `ack`, the caller receives the operation response.
+parameters, and unsupported body types are passed as `rawBody`. The caller
+receives the operation response when processing completes.
 
 ### Declarative apps
 
@@ -1045,9 +1039,8 @@ release metadata changes:
 
 ```sh
 gestaltd serve \
-  --app slack \
   --config ./base.yaml \
-  --config ./dev/local.yaml \
+  --config ./dev/slack-local.yaml \
   --watch
 ```
 

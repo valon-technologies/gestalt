@@ -40,10 +40,7 @@ type Grant struct {
 	TurnID              string
 	CallerAppName       string
 	SubjectID           string
-	SubjectKind         string
 	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
 	Permissions         []core.AccessPermission
 	ToolRefs            []coreagent.ToolRef
 	ToolRefsSet         bool
@@ -58,10 +55,7 @@ type claims struct {
 	SessionID           string                  `json:"session_id,omitempty"`
 	TurnID              string                  `json:"turn_id,omitempty"`
 	CallerAppName       string                  `json:"caller_app_name,omitempty"`
-	SubjectKind         string                  `json:"subject_kind,omitempty"`
 	CredentialSubjectID string                  `json:"credential_subject_id,omitempty"`
-	DisplayName         string                  `json:"display_name,omitempty"`
-	AuthSource          string                  `json:"auth_source,omitempty"`
 	Permissions         []core.AccessPermission `json:"permissions,omitempty"`
 	ToolScope           string                  `json:"tool_scope,omitempty"`
 }
@@ -111,10 +105,7 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 		SessionID:           strings.TrimSpace(grant.SessionID),
 		TurnID:              strings.TrimSpace(grant.TurnID),
 		CallerAppName:       strings.TrimSpace(grant.CallerAppName),
-		SubjectKind:         strings.TrimSpace(grant.SubjectKind),
 		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(grant.DisplayName),
-		AuthSource:          strings.TrimSpace(grant.AuthSource),
 		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
 	}
 	scope, err := m.sealValue(sealPurposeToolScope, toolScope{
@@ -164,10 +155,7 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		TurnID:              strings.TrimSpace(decoded.TurnID),
 		CallerAppName:       strings.TrimSpace(decoded.CallerAppName),
 		SubjectID:           strings.TrimSpace(decoded.Subject),
-		SubjectKind:         strings.TrimSpace(decoded.SubjectKind),
 		CredentialSubjectID: strings.TrimSpace(decoded.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(decoded.DisplayName),
-		AuthSource:          strings.TrimSpace(decoded.AuthSource),
 		Permissions:         append([]core.AccessPermission(nil), decoded.Permissions...),
 		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
 		ToolRefsSet:         scope.ToolRefsSet || len(scope.ToolRefs) > 0,

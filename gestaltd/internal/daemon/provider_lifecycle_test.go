@@ -16,7 +16,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
@@ -45,6 +44,7 @@ func TestE2EProviderAddDefaultsToPackageSource(t *testing.T) {
 	entry := cfg.Apps["alpha"]
 	if entry == nil {
 		t.Fatal(`Apps["alpha"] = nil`)
+		return
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")
@@ -246,45 +246,45 @@ providers:
 	if err != nil {
 		t.Fatalf("ProviderFingerprint(audit): %v", err)
 	}
-	if err := operator.WriteLockfile(filepath.Join(dir, operator.LockfileName), &operator.Lockfile{
-		Providers: map[string]operator.LockEntry{
-			"alpha": {
-				Fingerprint: fingerprint,
-				Package:     "github.com/acme/providers/alpha",
-				Kind:        "app",
-				Runtime:     "executable",
-				Version:     "1.2.3",
-			},
-			"bravo": {
-				Fingerprint: bravoFingerprint,
-				Package:     "github.com/acme/providers/bravo",
-				Kind:        "app",
-				Runtime:     "executable",
-				Source:      "https://example.com/bravo/provider-release.yaml",
-				Version:     "1.0.0",
-			},
+	lock := &operator.Lockfile{}
+	lock.Providers.App = map[string]operator.LockEntry{
+		"alpha": {
+			InputDigest: fingerprint,
+			Package:     "github.com/acme/providers/alpha",
+			Kind:        "app",
+			Runtime:     "executable",
+			Version:     "1.2.3",
 		},
-		Telemetry: map[string]operator.LockEntry{
-			"traces": {
-				Fingerprint: telemetryFingerprint,
-				Package:     "github.com/acme/providers/telemetry",
-				Kind:        "telemetry",
-				Runtime:     "declarative",
-				Source:      "https://example.com/telemetry/provider-release.yaml",
-				Version:     "1.0.0",
-			},
+		"bravo": {
+			InputDigest: bravoFingerprint,
+			Package:     "github.com/acme/providers/bravo",
+			Kind:        "app",
+			Runtime:     "executable",
+			Source:      "https://example.com/bravo/provider-release.yaml",
+			Version:     "1.0.0",
 		},
-		Audit: map[string]operator.LockEntry{
-			"ledger": {
-				Fingerprint: auditFingerprint,
-				Package:     "github.com/acme/providers/audit",
-				Kind:        "audit",
-				Runtime:     "declarative",
-				Source:      "https://example.com/audit/provider-release.yaml",
-				Version:     "1.0.0",
-			},
+	}
+	lock.Providers.Telemetry = map[string]operator.LockEntry{
+		"traces": {
+			InputDigest: telemetryFingerprint,
+			Package:     "github.com/acme/providers/telemetry",
+			Kind:        "telemetry",
+			Runtime:     "declarative",
+			Source:      "https://example.com/telemetry/provider-release.yaml",
+			Version:     "1.0.0",
 		},
-	}); err != nil {
+	}
+	lock.Providers.Audit = map[string]operator.LockEntry{
+		"ledger": {
+			InputDigest: auditFingerprint,
+			Package:     "github.com/acme/providers/audit",
+			Kind:        "audit",
+			Runtime:     "declarative",
+			Source:      "https://example.com/audit/provider-release.yaml",
+			Version:     "1.0.0",
+		},
+	}
+	if err := operator.WriteLockfile(filepath.Join(dir, operator.LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 	out = runGestaltd(t, "provider", "list", "--config", cfgPath)
@@ -293,46 +293,46 @@ providers:
 		t.Fatalf("alpha status = %q, want drifted when package lock source is missing\n%s", got, out)
 	}
 
-	if err := operator.WriteLockfile(filepath.Join(dir, operator.LockfileName), &operator.Lockfile{
-		Providers: map[string]operator.LockEntry{
-			"alpha": {
-				Fingerprint: fingerprint,
-				Package:     "github.com/acme/providers/alpha",
-				Kind:        "app",
-				Runtime:     "executable",
-				Source:      "https://example.com/provider-release.yaml",
-				Version:     "1.2.3",
-			},
-			"bravo": {
-				Fingerprint: bravoFingerprint,
-				Package:     "github.com/acme/providers/bravo",
-				Kind:        "app",
-				Runtime:     "executable",
-				Source:      "https://example.com/bravo/provider-release.yaml",
-				Version:     "1.0.0",
-			},
+	lock = &operator.Lockfile{}
+	lock.Providers.App = map[string]operator.LockEntry{
+		"alpha": {
+			InputDigest: fingerprint,
+			Package:     "github.com/acme/providers/alpha",
+			Kind:        "app",
+			Runtime:     "executable",
+			Source:      "https://example.com/provider-release.yaml",
+			Version:     "1.2.3",
 		},
-		Telemetry: map[string]operator.LockEntry{
-			"traces": {
-				Fingerprint: telemetryFingerprint,
-				Package:     "github.com/acme/providers/telemetry",
-				Kind:        "telemetry",
-				Runtime:     "declarative",
-				Source:      "https://example.com/telemetry/provider-release.yaml",
-				Version:     "1.0.0",
-			},
+		"bravo": {
+			InputDigest: bravoFingerprint,
+			Package:     "github.com/acme/providers/bravo",
+			Kind:        "app",
+			Runtime:     "executable",
+			Source:      "https://example.com/bravo/provider-release.yaml",
+			Version:     "1.0.0",
 		},
-		Audit: map[string]operator.LockEntry{
-			"ledger": {
-				Fingerprint: auditFingerprint,
-				Package:     "github.com/acme/providers/audit",
-				Kind:        "audit",
-				Runtime:     "declarative",
-				Source:      "https://example.com/audit/provider-release.yaml",
-				Version:     "1.0.0",
-			},
+	}
+	lock.Providers.Telemetry = map[string]operator.LockEntry{
+		"traces": {
+			InputDigest: telemetryFingerprint,
+			Package:     "github.com/acme/providers/telemetry",
+			Kind:        "telemetry",
+			Runtime:     "declarative",
+			Source:      "https://example.com/telemetry/provider-release.yaml",
+			Version:     "1.0.0",
 		},
-	}); err != nil {
+	}
+	lock.Providers.Audit = map[string]operator.LockEntry{
+		"ledger": {
+			InputDigest: auditFingerprint,
+			Package:     "github.com/acme/providers/audit",
+			Kind:        "audit",
+			Runtime:     "declarative",
+			Source:      "https://example.com/audit/provider-release.yaml",
+			Version:     "1.0.0",
+		},
+	}
+	if err := operator.WriteLockfile(filepath.Join(dir, operator.LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 	out = runGestaltd(t, "provider", "list", "--config", cfgPath)
@@ -504,10 +504,7 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 				"kind":    providermanifestv1.KindApp,
 				"source":  pkg,
 				"version": version,
-				"entrypoint": map[string]any{
-					"artifactPath": staticvalidation.EntrypointPlaceholder,
-				},
-				"spec": map[string]any{},
+				"spec":    map[string]any{},
 			},
 			"catalog": map[string]any{
 				"name": "alpha",
@@ -575,9 +572,9 @@ func assertProviderLifecycleLockEntry(t *testing.T, lockPath, version, source st
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry, ok := lock.Providers["alpha"]
+	entry, ok := lock.Providers.App["alpha"]
 	if !ok {
-		t.Fatal(`lock.Providers["alpha"] missing`)
+		t.Fatal(`lock.Providers.App["alpha"] missing`)
 	}
 	if entry.Version != version {
 		t.Fatalf("lock version = %q, want %q", entry.Version, version)

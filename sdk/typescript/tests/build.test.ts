@@ -39,6 +39,7 @@ import {
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
 import {
+  ApplyWorkflowProviderDefinitionRequestSchema,
   StartWorkflowProviderRunRequestSchema,
   WorkflowProvider as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
@@ -320,15 +321,11 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
           context: create(RequestContextSchema, {
             subject: create(SubjectContextSchema, {
               id: "user:user-123",
-              kind: "user",
-              authSource: "api_token",
-              email: "ada@example.com",
+                            email: "ada@example.com",
             }),
             agentSubject: create(SubjectContextSchema, {
               id: "user:agent-456",
-              kind: "user",
-              authSource: "delegated",
-              email: "grace@example.com",
+                            email: "grace@example.com",
             }),
             credential: create(CredentialContextSchema, {
               mode: "subject",
@@ -391,8 +388,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
           context: create(RequestContextSchema, {
             subject: create(SubjectContextSchema, {
               id: "user:user-123",
-              kind: "user",
-            }),
+                          }),
             credential: create(CredentialContextSchema, {
               mode: "subject",
             }),
@@ -892,9 +888,18 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
       }),
     );
 
+    await workflow.applyDefinition(
+      create(ApplyWorkflowProviderDefinitionRequestSchema, {
+        spec: {
+          id: "roadmap_sync",
+          target: workflowAppStepTarget("roadmap", "sync"),
+        },
+      }),
+    );
+
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
-        target: workflowAppStepTarget("roadmap", "sync"),
+        definitionId: "roadmap_sync",
       }),
     );
     const app = run.target?.steps[0]?.action.case === "app"
@@ -904,7 +909,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
       throw new Error("workflow run target does not have an app step");
     }
     expect(app.name).toBe("roadmap");
-    expect(run.id).toBe("roadmap:sync:1");
+    expect(run.id).toBe("roadmap_sync:1");
   } finally {
     if (child) {
       await stopProcess(child);
@@ -974,6 +979,7 @@ test("buildProviderBinary compiles a runnable agent provider executable", async 
         turnId: "turn-1",
         sessionId: session.id,
         model: "gpt-test",
+        timeoutSeconds: 120,
         messages: [
           {
             role: "user",

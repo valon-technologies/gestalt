@@ -21,7 +21,7 @@ type Request struct {
 	Trigger         *gestalt.WorkflowRunTrigger
 	Input           map[string]any
 	Metadata        map[string]any
-	CreatedBy       *gestalt.WorkflowActor
+	CreatedBySubjectID string
 	RunAs           *gestalt.Subject
 	InvocationToken string
 	Signals         []gestalt.WorkflowSignal
@@ -116,6 +116,7 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 		Outputs: map[string]any{},
 	}
 	skipped := map[string]struct{}{}
+	stepInputs := map[string]any{}
 	sessions := map[string]workflowAgentSessionState{}
 	scope := WorkflowStepInvocationScope(req)
 	for i := range req.Target.Steps {
@@ -133,10 +134,11 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 			skipped[stepID] = struct{}{}
 			continue
 		}
-		inputs, err := (EvalContext{Request: req, Outputs: result.Outputs}).EvaluateStepInputs(step.Inputs)
+		inputs, err := (EvalContext{Request: req, Outputs: result.Outputs, StepInputs: stepInputs}).EvaluateStepInputs(step.Inputs)
 		if err != nil {
 			return workflowFailedStepResponse(result, stepID, "invalid_input", WorkflowEvalError(err).Error())
 		}
+		stepInputs[stepID] = inputs
 		stepCtx := ctx
 		cancelStep := func() {}
 		if step.TimeoutSeconds > 0 {
@@ -149,9 +151,9 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 			cancelStep()
 			return workflowFailedStepResponse(result, stepID, "invalid_step", "workflow step cannot set both app and agent")
 		case step.App != nil:
-			output, err = e.invokeAppStep(stepCtx, req, token, step.App, inputs, result.Outputs, scope, stepID)
+			output, err = e.invokeAppStep(stepCtx, req, token, step.App, inputs, result.Outputs, stepInputs, scope, stepID)
 		case step.Agent != nil:
-			output, turnID, err = e.invokeAgentStep(stepCtx, req, token, step.Agent, inputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
+			output, turnID, err = e.invokeAgentStep(stepCtx, req, token, step.Agent, inputs, result.Outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
 		default:
 			err = fmt.Errorf("workflow step must set app or agent")
 		}

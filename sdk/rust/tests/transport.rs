@@ -104,9 +104,13 @@ impl Provider for TestProvider {
                     .unwrap_or_default();
                 Ok(Some(gestalt::Subject {
                     id: format!("test:{team_id}:{user_id}"),
-                    kind: "user".to_string(),
-                    credential_subject_id: String::new(),
-                    display_name: format!(
+                    credential_subject_id: context
+                        .workflow
+                        .get("runId")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    email: format!(
                         "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
                         request.method.as_str(),
                         request.path.as_str(),
@@ -137,13 +141,6 @@ impl Provider for TestProvider {
                         context.access.role.as_str(),
                         context.host.public_base_url.as_str(),
                     ),
-                    auth_source: context
-                        .workflow
-                        .get("runId")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .to_string(),
-                    ..Default::default()
                 }))
             }
             "none" => Ok(None),
@@ -151,11 +148,10 @@ impl Provider for TestProvider {
             "boom" => Err(gestalt::Error::new("boom")),
             "defaults" => Ok(Some(gestalt::Subject {
                 id: format!(
-                    "defaults:{}:{}",
+                    "system:defaults:{}:{}",
                     request.binding.as_str(),
                     context.subject.id.as_str()
                 ),
-                kind: "system".to_string(),
                 ..Default::default()
             })),
             _ => Ok(None),
@@ -185,7 +181,7 @@ struct Output {
     invocation_token: String,
     idempotency_key: String,
     workflow_run_id: String,
-    workflow_trigger_id: String,
+    workflow_activation_id: String,
     workflow_event_spec_version: String,
     workflow_event_data_content_type: String,
     workflow_created_by_subject_id: String,
@@ -229,11 +225,11 @@ async fn serves_provider_requests_over_unix_socket() {
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or_default()
                         .to_string(),
-                    workflow_trigger_id: request
+                    workflow_activation_id: request
                         .workflow
                         .get("trigger")
                         .and_then(serde_json::Value::as_object)
-                        .and_then(|trigger| trigger.get("triggerId"))
+                        .and_then(|trigger| trigger.get("activationId"))
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or_default()
                         .to_string(),
@@ -259,9 +255,7 @@ async fn serves_provider_requests_over_unix_socket() {
                         .to_string(),
                     workflow_created_by_subject_id: request
                         .workflow
-                        .get("createdBy")
-                        .and_then(serde_json::Value::as_object)
-                        .and_then(|created_by| created_by.get("subjectId"))
+                        .get("createdBySubjectId")
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or_default()
                         .to_string(),
@@ -373,13 +367,11 @@ async fn serves_provider_requests_over_unix_socket() {
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
-                    kind: "user".to_string(),
                     email: "ada@example.com".to_string(),
                     ..Default::default()
                 }),
                 agent_subject: Some(SubjectContext {
                     id: "user:user-456".to_string(),
-                    kind: "user".to_string(),
                     email: "grace@example.com".to_string(),
                     ..Default::default()
                 }),
@@ -393,15 +385,10 @@ async fn serves_provider_requests_over_unix_socket() {
                 }),
                 workflow: Some(helpers::struct_from_json(serde_json::json!({
                     "runId": "run-123",
-                    "createdBy": {
-                        "subjectId": "user:user-123",
-                        "subjectKind": "user",
-                        "displayName": "Ada",
-                        "authSource": "api_token"
-                    },
+                    "createdBySubjectId": "user:user-123",
                     "trigger": {
                         "kind": "event",
-                        "triggerId": "trigger-1",
+                        "activationId": "activation-1",
                         "event": {
                             "id": "evt-1",
                             "source": "urn:test",
@@ -419,10 +406,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     operation: "reviews.get".to_string(),
                     run_as: Some(SubjectContext {
                         id: "service_account:review-worker".to_string(),
-                        kind: "service_account".to_string(),
                         credential_subject_id: "service_account:review-worker".to_string(),
-                        display_name: "Review Worker".to_string(),
-                        auth_source: "managed_subject".to_string(),
                         email: String::new(),
                     }),
                     ..Default::default()
@@ -437,7 +421,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_activation_id":"activation-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
     );
 
     let session_catalog = client
@@ -450,7 +434,6 @@ async fn serves_provider_requests_over_unix_socket() {
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
-                    kind: "user".to_string(),
                     email: "ada@example.com".to_string(),
                     ..Default::default()
                 }),
@@ -519,13 +502,11 @@ async fn serves_provider_requests_over_unix_socket() {
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
-                    kind: "user".to_string(),
                     email: "ada@example.com".to_string(),
                     ..Default::default()
                 }),
                 agent_subject: Some(SubjectContext {
                     id: "user:user-456".to_string(),
-                    kind: "user".to_string(),
                     email: "grace@example.com".to_string(),
                     ..Default::default()
                 }),
@@ -551,12 +532,15 @@ async fn serves_provider_requests_over_unix_socket() {
         .into_inner();
     let subject = resolved.subject.expect("resolved subject");
     assert_eq!(subject.id, "test:T123:U456");
-    assert_eq!(subject.kind, "user");
     assert_eq!(
-        subject.display_name,
+        gestalt::parse_subject_id(&subject.id),
+        Some(("test", "T123:U456"))
+    );
+    assert_eq!(
+        subject.email,
         "POST|/api/v1/test/commands/support|application/x-www-form-urlencoded|v0=abc123|trace-123|team_id=T123&user_id=U456|test_signed|test-app|T123|ada@example.com|grace@example.com|subject|admin|https://gestalt.example.test"
     );
-    assert_eq!(subject.auth_source, "run-123");
+    assert_eq!(subject.credential_subject_id, "run-123");
 
     let fallback = client
         .resolve_http_subject(ResolveHttpSubjectRequest {
@@ -612,7 +596,7 @@ async fn serves_provider_requests_over_unix_socket() {
         .into_inner();
     assert_eq!(
         defaults.subject.expect("default subject").id,
-        "defaults:defaults:"
+        "system:defaults:defaults:"
     );
 
     let missing = client

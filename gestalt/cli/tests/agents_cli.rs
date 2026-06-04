@@ -284,6 +284,7 @@ fn test_cli_creates_agent_session() {
 fn test_cli_creates_agent_turn_from_input() {
     let request_json = r#"{
         "model":"gpt-5.4",
+        "timeoutSeconds":120,
         "toolSource":"mcp_catalog",
         "metadata":{"ticket":"TASK-123"},
         "modelOptions":{"temperature":0.2},
@@ -332,6 +333,8 @@ fn test_cli_creates_agent_turn_from_input() {
             "turns",
             "create",
             "session-1",
+            "--timeout-seconds",
+            "120",
             "--input",
             request_path.to_str().unwrap(),
         ])
@@ -354,7 +357,14 @@ fn test_cli_rejects_agent_turn_create_without_messages() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["agent", "turns", "create", "session-1"])
+        .args([
+            "agent",
+            "turns",
+            "create",
+            "session-1",
+            "--timeout-seconds",
+            "120",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -669,7 +679,7 @@ fn test_cli_runs_interactive_agent_session() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"app":"tracker","operation":"searchItems"}],"output":{"text":{}}}"#.to_string(),
+        r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"hello\nthere"}],"toolRefs":[{"app":"tracker","operation":"searchItems"}],"output":{"text":{}}}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
@@ -711,6 +721,8 @@ fn test_cli_runs_interactive_agent_session() {
         .args([
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -756,7 +768,7 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display events"}],"output":{"text":{}}}"#.to_string(),
+        r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"display events"}],"output":{"text":{}}}"#.to_string(),
     ))
     .with_body(TURN_JSON)
     .create();
@@ -808,6 +820,8 @@ fn test_cli_runs_interactive_agent_session_with_display_events() {
         .args([
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -852,7 +866,7 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"hello tui"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"hello tui"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -900,6 +914,8 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -914,7 +930,10 @@ fn test_cli_runs_tty_agent_session_in_isolated_selectable_ui() {
     session.wait_for(&mut output, "hello");
     session.wait_for(&mut output, "Brewed for");
     session.write("\x03");
-    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for(
+        &mut output,
+        "Resume with: gestalt agent resume session-1 --timeout-seconds 120",
+    );
     session.wait_for_exit();
     session.drain_pending(&mut output);
 
@@ -978,6 +997,8 @@ fn test_cli_tty_can_disable_mouse_capture() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -990,7 +1011,10 @@ fn test_cli_tty_can_disable_mouse_capture() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("\x03");
-    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for(
+        &mut output,
+        "Resume with: gestalt agent resume session-1 --timeout-seconds 120",
+    );
     session.wait_for_exit();
     session.drain_pending(&mut output);
 
@@ -1024,7 +1048,7 @@ fn test_cli_tty_resume_model_override_updates_visible_model_and_turn_payload() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"override model"}]}"#,
+            r#"{"model":"gpt-5.5","timeoutSeconds":120,"messages":[{"role":"user","text":"override model"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1063,7 +1087,15 @@ fn test_cli_tty_resume_model_override_updates_visible_model_and_turn_payload() {
     let mut session = spawn_tty_cli(
         home.path(),
         server.url(),
-        &["agent", "resume", "session-1", "--model", "gpt-5.5"],
+        &[
+            "agent",
+            "resume",
+            "session-1",
+            "--timeout-seconds",
+            "120",
+            "--model",
+            "gpt-5.5",
+        ],
     );
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
@@ -1072,7 +1104,10 @@ fn test_cli_tty_resume_model_override_updates_visible_model_and_turn_payload() {
     session.wait_for(&mut output, "override acknowledged");
     session.wait_for(&mut output, "Brewed for");
     session.write("\x03");
-    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for(
+        &mut output,
+        "Resume with: gestalt agent resume session-1 --timeout-seconds 120",
+    );
     session.wait_for_exit();
 
     assert!(
@@ -1097,7 +1132,7 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"display tools"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"display tools"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1148,6 +1183,8 @@ fn test_cli_tty_renders_display_tool_activity_rows() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1237,7 +1274,7 @@ fn test_cli_tty_groups_tool_activity_rows() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"use tools"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"use tools"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1278,6 +1315,8 @@ fn test_cli_tty_groups_tool_activity_rows() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1333,7 +1372,7 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"ambiguous tools"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"ambiguous tools"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1379,6 +1418,8 @@ fn test_cli_tty_reconciles_unmatched_tool_activity_rows() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1417,7 +1458,7 @@ fn test_cli_tty_help_and_prompt_history() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"remember this"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1453,7 +1494,7 @@ fn test_cli_tty_help_and_prompt_history() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"remember this"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"remember this"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1489,7 +1530,7 @@ fn test_cli_tty_help_and_prompt_history() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"draft text"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"draft text"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1531,6 +1572,8 @@ fn test_cli_tty_help_and_prompt_history() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1574,7 +1617,7 @@ fn test_cli_tty_ctrl_j_inserts_multiline_prompt() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"first\nsecond"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"first\nsecond"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1616,6 +1659,8 @@ fn test_cli_tty_ctrl_j_inserts_multiline_prompt() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1651,6 +1696,8 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1702,6 +1749,8 @@ fn test_cli_tty_ctrl_d_exits_empty_prompt() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1711,7 +1760,10 @@ fn test_cli_tty_ctrl_d_exits_empty_prompt() {
     let mut output = String::new();
     session.wait_for(&mut output, "Session");
     session.write("\x04");
-    session.wait_for(&mut output, "Resume with: gestalt agent resume session-1");
+    session.wait_for(
+        &mut output,
+        "Resume with: gestalt agent resume session-1 --timeout-seconds 120",
+    );
     session.wait_for_exit();
 
     server.assert_finished();
@@ -1732,7 +1784,7 @@ fn test_cli_tty_ctrl_l_redraw_preserves_transcript_and_input() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"draft input"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"draft input"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1774,6 +1826,8 @@ fn test_cli_tty_ctrl_l_redraw_preserves_transcript_and_input() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1819,6 +1873,8 @@ fn test_cli_tty_resize_redraws_isolated_session() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1866,7 +1922,7 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"render markdown"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"render markdown"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1908,6 +1964,8 @@ fn test_cli_tty_renders_markdown_like_assistant_content() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -1956,7 +2014,7 @@ fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"wide text"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"wide text"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -1998,6 +2056,8 @@ fn test_cli_tty_wraps_wide_transcript_text_by_display_width() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -2031,7 +2091,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"slow turn"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"slow turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2068,7 +2128,7 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"pending turn"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"pending turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2110,6 +2170,8 @@ fn test_cli_tty_queues_prompt_while_turn_is_running() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -2179,7 +2241,7 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"first turn"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"first turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2214,7 +2276,7 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"second turn"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"second turn"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2256,6 +2318,8 @@ fn test_cli_tty_turn_boundary_stops_stale_streaming_transcript_item() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -2293,7 +2357,7 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"needs secret"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"needs secret"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2389,6 +2453,8 @@ fn test_cli_tty_secret_interaction_masks_and_requires_input() {
         &[
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -2446,7 +2512,7 @@ fn test_cli_resumes_latest_active_agent_session() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-new/turns",
-            r#"{"messages":[{"role":"user","text":"continue plan"}]}"#,
+            r#"{"timeoutSeconds":120,"messages":[{"role":"user","text":"continue plan"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2489,6 +2555,8 @@ fn test_cli_resumes_latest_active_agent_session() {
         .args([
             "agent",
             "resume",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--message",
@@ -2498,7 +2566,7 @@ fn test_cli_resumes_latest_active_agent_session() {
         .success()
         .stdout(predicate::str::contains("assistant> continued"))
         .stdout(predicate::str::contains(
-            "Resume with: gestalt agent resume session-new",
+            "Resume with: gestalt agent resume session-new --timeout-seconds 120",
         ))
         .stderr(predicate::str::contains(
             "Session session-new [managed / gpt-5.4]",
@@ -2522,7 +2590,7 @@ fn test_cli_resume_fails_without_active_agent_session() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "resume"])
+        .args(["agent", "resume", "--timeout-seconds", "120"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -2821,6 +2889,8 @@ fn test_cli_agent_model_slash_lists_configured_providers() {
         .args([
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -2830,7 +2900,7 @@ fn test_cli_agent_model_slash_lists_configured_providers() {
         .assert()
         .success()
         .stdout(predicate::str::contains(
-            "Resume with: gestalt agent resume session-1",
+            "Resume with: gestalt agent resume session-1 --timeout-seconds 120",
         ))
         .stderr(predicate::str::contains("current provider: managed"))
         .stderr(predicate::str::contains("current model: gpt-5.4"))
@@ -2854,7 +2924,7 @@ fn test_cli_agent_model_slash_sets_future_turn_model() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.5","messages":[{"role":"user","text":"hello"}]}"#,
+            r#"{"model":"gpt-5.5","timeoutSeconds":120,"messages":[{"role":"user","text":"hello"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -2897,6 +2967,8 @@ fn test_cli_agent_model_slash_sets_future_turn_model() {
         .args([
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",
@@ -2931,7 +3003,7 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-2/turns",
-            r#"{"messages":[{"role":"user","text":"need incident context"}]}"#,
+            r#"{"timeoutSeconds":120,"messages":[{"role":"user","text":"need incident context"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -3025,7 +3097,7 @@ fn test_cli_resumes_existing_agent_session_and_resolves_input_interaction() {
         .env("GESTALT_API_KEY", TEST_TOKEN)
         .arg("--url")
         .arg(server.url())
-        .args(["agent", "resume", "session-2"])
+        .args(["agent", "resume", "session-2", "--timeout-seconds", "120"])
         .write_stdin("need incident context\n\n")
         .assert()
         .success()
@@ -3064,7 +3136,7 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         ExpectedRequest::json(
             Method::POST,
             "/api/v1/agent/sessions/session-1/turns",
-            r#"{"model":"gpt-5.4","messages":[{"role":"user","text":"approve deployment"}]}"#,
+            r#"{"model":"gpt-5.4","timeoutSeconds":120,"messages":[{"role":"user","text":"approve deployment"}]}"#,
             StatusCode::CREATED,
             http::APPLICATION_JSON,
             r#"{
@@ -3161,6 +3233,8 @@ fn test_cli_resolves_agent_interaction_in_interactive_mode() {
         .args([
             "agent",
             "--cloud",
+            "--timeout-seconds",
+            "120",
             "--provider",
             "managed",
             "--model",

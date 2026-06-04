@@ -19,7 +19,7 @@ A Gestalt config has six top-level areas:
 | `apps` | Tool providers exposed over HTTP, MCP, and CLI, plus optional app-backed UI mounts. |
 | `authorization` | Static subject access policies shared by the host and provider-backed authorization. |
 | `runtime` | Named runtime placement backends for providers that opt into hosted execution. |
-| `workflows` | Config-managed schedules and event triggers. |
+| `workflows` | Config-managed workflow definitions and activations. |
 
 ```yaml
 server:
@@ -52,15 +52,15 @@ apps:
   <name>: ...
 
 authorization:
-  policies: ...
+  models: ...
+  relationships: ...
 
 runtime:
   providers:
     <name>: ...
 
 workflows:
-  schedules: {}
-  eventTriggers: {}
+  definitions: {}
 ```
 
 Provider-backed entries accept `source`, provider-specific `config`,

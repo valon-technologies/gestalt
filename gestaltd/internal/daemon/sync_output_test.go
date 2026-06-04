@@ -41,8 +41,23 @@ func TestWriteSyncJSON(t *testing.T) {
 			Fetches: []operator.SyncMetricsArchiveFetch{{
 				Subject:         "provider \"alpha\"",
 				SourceKind:      "remote_release_metadata",
-				CacheResult:     "hit",
 				DurationSeconds: 0.5,
+			}},
+		},
+		Cache: operator.SyncMetricsCache{
+			Configured:    true,
+			Enabled:       true,
+			Dir:           "/cache",
+			Mode:          "materialized",
+			BucketVersion: "materialized/v1",
+			Hits:          1,
+			Put:           operator.SyncMetricsCachePut{Successes: 1},
+			Entries: []operator.SyncMetricsCacheEntry{{
+				Subject:         "provider \"alpha\"",
+				SourceKind:      "remote_archive",
+				Result:          "hit",
+				Put:             "skipped",
+				DurationSeconds: 0.1,
 			}},
 		},
 		Output: operator.SyncMetricsOutput{
@@ -68,8 +83,8 @@ func TestWriteSyncJSON(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("unmarshal sync JSON: %v\n%s", err, out.String())
 	}
-	if doc.Schema.Version != "1" {
-		t.Fatalf("schema.version = %q, want 1", doc.Schema.Version)
+	if doc.Schema.Version != "2" {
+		t.Fatalf("schema.version = %q, want 2", doc.Schema.Version)
 	}
 	if doc.Command != "sync" {
 		t.Fatalf("command = %q, want sync", doc.Command)
@@ -82,6 +97,9 @@ func TestWriteSyncJSON(t *testing.T) {
 	}
 	if len(doc.Archives.Fetches) != 1 {
 		t.Fatalf("archives.fetches len = %d, want 1", len(doc.Archives.Fetches))
+	}
+	if len(doc.Cache.Entries) != 1 {
+		t.Fatalf("cache.entries len = %d, want 1", len(doc.Cache.Entries))
 	}
 	if len(doc.Artifacts.Items) != 1 {
 		t.Fatalf("artifacts.items len = %d, want 1", len(doc.Artifacts.Items))
@@ -99,6 +117,17 @@ func TestWriteSyncJSON(t *testing.T) {
 	}
 	if _, ok := archives["slowest_fetches"]; ok {
 		t.Fatalf("archives.slowest_fetches should not be serialized: %s", out.String())
+	}
+	if _, ok := archives["cache"]; ok {
+		t.Fatalf("archives.cache should not be serialized: %s", out.String())
+	}
+	cache, ok := raw["cache"].(map[string]any)
+	if !ok {
+		t.Fatalf("cache missing from JSON: %s", out.String())
+	}
+	put, ok := cache["put"].(map[string]any)
+	if !ok || put["successes"] == nil || put["failures"] == nil {
+		t.Fatalf("cache.put missing successes/failures: %#v", cache["put"])
 	}
 }
 
@@ -119,6 +148,7 @@ func TestWriteSyncJSONIncludesEmptyMetricArrays(t *testing.T) {
 	}
 	for parent, keys := range map[string][]string{
 		"archives":  {"fetches"},
+		"cache":     {"entries"},
 		"artifacts": {"items"},
 		"output":    {"roots"},
 	} {
@@ -145,9 +175,15 @@ func TestWriteSyncText(t *testing.T) {
 			ArtifactsDir:    "/prepared",
 		},
 		Artifacts: operator.SyncMetricsArtifacts{Considered: 2},
+		Cache: operator.SyncMetricsCache{
+			Configured: true,
+			Enabled:    true,
+			Dir:        "/cache",
+			Hits:       1,
+			Put:        operator.SyncMetricsCachePut{Successes: 1},
+		},
 		Archives: operator.SyncMetricsArchives{
 			Requests: 3,
-			Cache:    operator.SyncMetricsArchiveCache{Hits: 1},
 			Downloads: operator.SyncMetricsDownloads{
 				Count: 2,
 				Bytes: 4096,
@@ -163,8 +199,8 @@ func TestWriteSyncText(t *testing.T) {
 	got := out.String()
 	for _, want := range []string{
 		"Loaded 2 prepared artifacts from lock/config.",
-		"Fetched 3 archives: 1 cache hits, 2 downloads.",
-		"Archive cache:",
+		"Fetched 3 archives: 2 downloads.",
+		"Cache:",
 		"Downloads: 2 archives",
 		"Prepared output: 4 files",
 		"Prepared artifacts in /prepared in 1.234s.",

@@ -7,7 +7,7 @@ import (
 )
 
 // WorkflowControl exposes the small subset of workflow runtime behavior that
-// gestaltd's user-facing HTTP routes need for user-owned schedules.
+// gestaltd's user-facing HTTP routes need for workflow runs and events.
 type WorkflowControl interface {
 	ResolveProvider(ctx context.Context, name string) (providerName string, provider coreworkflow.Provider, err error)
 	ProviderNames() []string

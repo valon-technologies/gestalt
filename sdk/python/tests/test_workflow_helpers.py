@@ -31,7 +31,7 @@ class WorkflowHelperTests(unittest.TestCase):
             created_at=created_at,
             sequence=0,
         )
-        run = gestalt.bound_workflow_run(
+        run = gestalt.workflow_run(
             id="run-1",
             status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
             target=target,
@@ -86,7 +86,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 "empty_object": gestalt.WorkflowValue(object={}),
                 "empty_array": gestalt.WorkflowValue(array=[]),
                 "null_literal": gestalt.WorkflowValue(literal=None),
-                "thread": gestalt.WorkflowValue(signal_payload="event.thread_ts"),
+                "thread": gestalt.WorkflowValue(signal="event.thread_ts"),
                 "result": gestalt.WorkflowValue(
                     step_output=gestalt.WorkflowStepOutputSource(
                         step_id="diagnosis",
@@ -101,7 +101,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(copied.object["empty_object"].object, {})
         self.assertEqual(copied.object["empty_array"].array, [])
         self.assertIsNone(copied.object["null_literal"].literal)
-        self.assertEqual(copied.object["thread"].signal_payload, "event.thread_ts")
+        self.assertEqual(copied.object["thread"].signal, "event.thread_ts")
         self.assertEqual(copied.object["result"].step_output.step_id, "diagnosis")
 
     def test_workflow_value_objects_accept_raw_nested_json_inputs(self) -> None:
@@ -111,8 +111,8 @@ class WorkflowHelperTests(unittest.TestCase):
                 "object": {"literal": "nested"},
                 "array": [{"template": "still json"}, 2],
                 "template": "${not.rendered}",
-                "run_input": "customer.id",
-                "signal_payload": "event.thread_ts",
+                "input": "customer.id",
+                "signal": "event.thread_ts",
                 "step_output": {"step_id": "diagnosis", "path": "agent.text"},
             }
         )
@@ -123,8 +123,8 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(copied.object["object"].object["literal"].literal, "nested")
         self.assertEqual(copied.object["array"].array[0].object["template"].literal, "still json")
         self.assertEqual(copied.object["template"].literal, "${not.rendered}")
-        self.assertEqual(copied.object["run_input"].literal, "customer.id")
-        self.assertEqual(copied.object["signal_payload"].literal, "event.thread_ts")
+        self.assertEqual(copied.object["input"].literal, "customer.id")
+        self.assertEqual(copied.object["signal"].literal, "event.thread_ts")
         self.assertEqual(
             copied.object["step_output"].object["step_id"].literal,
             "diagnosis",
@@ -166,7 +166,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 gestalt.WorkflowStep(
                     id="diagnosis",
                     inputs={
-                        "thread": gestalt.WorkflowValue(signal_payload="event.thread_ts")
+                        "thread": gestalt.WorkflowValue(signal="event.thread_ts")
                     },
                     agent=gestalt.WorkflowStepAgentTurn(
                         provider="claude",
@@ -207,6 +207,7 @@ class WorkflowHelperTests(unittest.TestCase):
                             )
                         ],
                     ),
+                    timeout_seconds=45,
                     when=gestalt.WorkflowStepWhen(
                         value=gestalt.WorkflowValue(
                             step_output=gestalt.WorkflowStepOutputSource(
@@ -253,7 +254,7 @@ class WorkflowHelperTests(unittest.TestCase):
 
         rendered = gestalt.render_workflow_template(
             ctx,
-            "customer=${runInput.customer.id}; thread=${signalPayload.thread.ts}; input=${inputs.thread}; literal=$${x}",
+            "customer=${input.customer.id}; thread=${signal.thread.ts}; input=${inputs.thread}; literal=$${x}",
         )
 
         self.assertEqual(
@@ -261,7 +262,7 @@ class WorkflowHelperTests(unittest.TestCase):
             "customer=cust_1; thread=123.456; input=123.456; literal=${x}",
         )
         value, ok = gestalt.evaluate_workflow_value(
-            ctx, gestalt.WorkflowValue(run_input="customer.id")
+            ctx, gestalt.WorkflowValue(input="customer.id")
         )
         self.assertTrue(ok)
         self.assertEqual(value, "cust_1")
@@ -280,16 +281,11 @@ class WorkflowHelperTests(unittest.TestCase):
                         output=gestalt.AgentOutput(text=gestalt.AgentTextOutput()),
                         model_options={"temperature": 0},
                     ),
+                    timeout_seconds=45,
                 )
             ]
         )
-        request = gestalt.WorkflowSignalOrStartRun(
-            provider_name="slack",
-            target=target,
-        )
-
-        assert request.target is not None
-        step = request.target.steps[0]
+        step = target.steps[0]
         assert step.agent is not None
         provider: str = step.agent.provider
         model_options: Mapping[str, object] | None = step.agent.model_options
@@ -315,7 +311,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 ]
             ),
             trigger=gestalt.WorkflowRunTrigger(manual=True),
-            created_by=gestalt.WorkflowActor(subject_id="user-1", subject_kind="user"),
+            created_by_subject_id="user:user-1",
             signals=[
                 gestalt.WorkflowSignal(
                     id="sig-1",
@@ -348,7 +344,7 @@ class WorkflowHelperTests(unittest.TestCase):
             },
         )
         self.assertEqual(ctx["trigger"], {"kind": "manual"})
-        self.assertEqual(ctx["createdBy"], {"subjectId": "user-1", "subjectKind": "user"})
+        self.assertEqual(ctx["createdBySubjectId"], "user:user-1")
         self.assertEqual(
             ctx["signals"],
             [
@@ -373,12 +369,12 @@ class WorkflowHelperTests(unittest.TestCase):
                 "target": {"kind": "steps", "steps": [{"id": "review"}]},
                 "trigger": {
                     "kind": "schedule",
-                    "scheduleId": "sched-1",
+                    "activationId": "sched-1",
                     "scheduledFor": "2026-05-08T12:00:00Z",
                 },
                 "input": {"repository": "valon/app"},
                 "metadata": {"definitionId": "def-1"},
-                "createdBy": {"subjectId": "user-1", "subjectKind": "user"},
+                "createdBySubjectId": "user:user-1",
                 "signals": [
                     "ignored",
                     {"id": "sig-1", "name": "queued", "payload": {"state": "queued"}},
@@ -391,7 +387,7 @@ class WorkflowHelperTests(unittest.TestCase):
                             "payloadOmitted": True,
                         },
                         "metadata": {"source": "webhook"},
-                        "createdBy": {"subjectId": "bot-1", "displayName": "GitHub"},
+                        "createdBySubjectId": "bot:github",
                         "createdAt": "2026-05-08T12:01:00Z",
                         "idempotencyKey": "idem-1",
                         "sequence": 2,
@@ -406,20 +402,18 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(ctx.run_id, "run-1")
         self.assertEqual(ctx.target, {"kind": "steps", "steps": [{"id": "review"}]})
         self.assertEqual(ctx.trigger.kind, "schedule")
-        self.assertEqual(ctx.trigger.schedule_id, "sched-1")
+        self.assertEqual(ctx.trigger.activation_id, "sched-1")
         self.assertEqual(ctx.trigger.scheduled_for, "2026-05-08T12:00:00Z")
         self.assertEqual(ctx.input, {"repository": "valon/app"})
         self.assertEqual(ctx.metadata, {"definitionId": "def-1"})
-        assert ctx.created_by is not None
-        self.assertEqual(ctx.created_by.subject_id, "user-1")
+        self.assertEqual(ctx.created_by_subject_id, "user:user-1")
         self.assertEqual(len(ctx.signals), 2)
         latest_signal = ctx.latest_signal
         assert latest_signal is not None
         self.assertEqual(latest_signal.id, "sig-2")
         self.assertEqual(latest_signal.payload["github_event"], "pull_request")
         self.assertEqual(latest_signal.metadata, {"source": "webhook"})
-        assert latest_signal.created_by is not None
-        self.assertEqual(latest_signal.created_by.display_name, "GitHub")
+        self.assertEqual(latest_signal.created_by_subject_id, "bot:github")
         self.assertEqual(latest_signal.sequence, 2)
 
     def test_parse_workflow_run_context_preserves_struct_sequence(self) -> None:
@@ -444,7 +438,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 "target": [],
                 "trigger": {
                     "kind": "event",
-                    "triggerId": "trigger-1",
+                    "activationId": "trigger-1",
                     "event": {
                         "type": "github.pull_request",
                         "specVersion": "1.0",
@@ -464,14 +458,14 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(ctx.run_id, "")
         self.assertIsNone(ctx.target)
         self.assertEqual(ctx.trigger.kind, "event")
-        self.assertEqual(ctx.trigger.trigger_id, "trigger-1")
+        self.assertEqual(ctx.trigger.activation_id, "trigger-1")
         self.assertEqual(
             ctx.trigger.event,
             {"type": "github.pull_request", "specVersion": "1.0"},
         )
         self.assertEqual(ctx.input, {})
         self.assertEqual(ctx.metadata, {})
-        self.assertIsNone(ctx.created_by)
+        self.assertEqual(ctx.created_by_subject_id, "")
         self.assertEqual(len(ctx.signals), 1)
         self.assertEqual(ctx.signals[0].payload, {})
         self.assertEqual(ctx.signals[0].metadata, {"ok": True})

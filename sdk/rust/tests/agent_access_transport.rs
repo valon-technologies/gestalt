@@ -522,7 +522,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             metadata: None,
             idempotency_key: String::new(),
             model_options: None,
-            timeout_seconds: 0,
+            timeout_seconds: 120,
         })
         .await
         .expect("create turn");
@@ -733,10 +733,7 @@ async fn agent_create_turn_accepts_native_values() {
                 connection: "default".to_string(),
                 run_as: Some(Subject {
                     id: "service_account:gestalt-support-github".to_string(),
-                    kind: "service_account".to_string(),
                     credential_subject_id: "service_account:github-credential".to_string(),
-                    display_name: "Gestalt Support GitHub".to_string(),
-                    auth_source: "github_app".to_string(),
                     email: String::new(),
                 }),
                 ..Default::default()
@@ -747,7 +744,7 @@ async fn agent_create_turn_accepts_native_values() {
             metadata: Some(serde_json::json!({ "request": "native" })),
             idempotency_key: String::new(),
             model_options: Some(serde_json::json!({ "temperature": 0 })),
-            timeout_seconds: 0,
+            timeout_seconds: 120,
         })
         .await
         .expect("create turn");
@@ -790,7 +787,10 @@ async fn agent_create_turn_accepts_native_values() {
         .as_ref()
         .expect("tool ref run_as");
     assert_eq!(run_as.id, "service_account:gestalt-support-github");
-    assert_eq!(run_as.display_name, "Gestalt Support GitHub");
+    assert_eq!(
+        run_as.credential_subject_id,
+        "service_account:github-credential"
+    );
     let output = request.output.as_ref().expect("output");
     let generated::v1::agent_output::Kind::Structured(output) =
         output.kind.as_ref().expect("output kind")

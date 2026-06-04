@@ -613,14 +613,6 @@ func validateHTTPBinding(path string, binding *providermanifestv1.HTTPBinding, s
 		}
 		binding.RequestBody.Content = normalizedContent
 	}
-	if binding.Ack != nil {
-		if binding.Ack.Status == 0 {
-			binding.Ack.Status = 200
-		}
-		if binding.Ack.Status < 200 || binding.Ack.Status > 299 {
-			return fmt.Errorf("%s.ack.status must be a 2xx status", path)
-		}
-	}
 	return nil
 }
 

@@ -6,31 +6,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
-func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*proto.BoundWorkflowSchedule, error) {
-	if managed == nil {
-		return nil, nil
-	}
-	schedule, err := workflowwire.ScheduleToProto(managed.Schedule)
-	if err != nil {
-		return nil, err
-	}
-	schedule.ProviderName = managed.ProviderName
-	return schedule, nil
-}
-
-func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
-	if managed == nil {
-		return nil, nil
-	}
-	trigger, err := workflowwire.EventTriggerToProto(managed.Trigger)
-	if err != nil {
-		return nil, err
-	}
-	trigger.ProviderName = managed.ProviderName
-	return trigger, nil
-}
-
-func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition) (*proto.BoundWorkflowDefinition, error) {
+func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition) (*proto.WorkflowDefinition, error) {
 	if managed == nil {
 		return nil, nil
 	}
@@ -42,7 +18,7 @@ func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition
 	return definition, nil
 }
 
-func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.BoundWorkflowRun, error) {
+func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.WorkflowRun, error) {
 	if managed == nil {
 		return nil, nil
 	}

@@ -3,9 +3,6 @@ package operator
 import (
 	"strings"
 	"testing"
-
-	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func TestDecodeProviderReleaseMetadataAcceptsStaticValidation(t *testing.T) {
@@ -27,8 +24,6 @@ staticValidation:
     kind: app
     source: github.com/acme/providers/provider
     version: 1.2.3
-    entrypoint:
-      artifactPath: static-validation-placeholder
     spec: {}
   catalog:
     name: provider
@@ -44,11 +39,11 @@ staticValidation:
 	if metadata.StaticValidation == nil {
 		t.Fatal("StaticValidation = nil, want decoded metadata")
 	}
-	if metadata.StaticValidation.Manifest == nil || metadata.StaticValidation.Manifest.Entrypoint == nil {
-		t.Fatalf("static manifest = %+v, want entrypoint", metadata.StaticValidation.Manifest)
+	if metadata.StaticValidation.Manifest == nil {
+		t.Fatalf("static manifest = %+v, want manifest", metadata.StaticValidation.Manifest)
 	}
-	if got := metadata.StaticValidation.Manifest.Entrypoint.ArtifactPath; got != staticvalidation.EntrypointPlaceholder {
-		t.Fatalf("static entrypoint artifactPath = %q, want %q", got, staticvalidation.EntrypointPlaceholder)
+	if metadata.StaticValidation.Manifest.Entrypoint != nil {
+		t.Fatalf("static manifest entrypoint = %+v, want nil", metadata.StaticValidation.Manifest.Entrypoint)
 	}
 	if metadata.StaticValidation.Catalog == nil || len(metadata.StaticValidation.Catalog.Operations) != 1 {
 		t.Fatalf("static catalog = %+v, want one operation", metadata.StaticValidation.Catalog)
@@ -67,10 +62,6 @@ func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.
 		wantErr string
 	}{
 		{
-			name:    "missing static validation",
-			wantErr: "staticValidation is required",
-		},
-		{
 			name: "platform-specific static manifest",
 			block: ptr(`
   manifest:
@@ -85,6 +76,18 @@ func TestDecodeProviderReleaseMetadataRejectsInvalidStaticValidation(t *testing.
       artifactPath: bin/provider
     spec: {}`),
 			wantErr: "staticValidation.manifest must not include platform artifacts",
+		},
+		{
+			name: "static manifest entrypoint",
+			block: ptr(`
+  manifest:
+    kind: app
+    source: github.com/acme/providers/provider
+    version: 1.2.3
+    entrypoint:
+      artifactPath: bin/provider
+    spec: {}`),
+			wantErr: "staticValidation.manifest must not include entrypoint",
 		},
 		{
 			name: "session-only flag without metadata",
@@ -127,29 +130,4 @@ func staticValidationBlock(block *string) string {
 
 func ptr(value string) *string {
 	return &value
-}
-
-func (metadata providerReleaseMetadata) MarshalYAML() (any, error) {
-	type providerReleaseMetadataYAML providerReleaseMetadata
-	out := providerReleaseMetadataYAML(metadata)
-	if out.StaticValidation == nil {
-		out.StaticValidation = defaultProviderReleaseStaticValidationForTest(&metadata)
-	}
-	return out, nil
-}
-
-func defaultProviderReleaseStaticValidationForTest(metadata *providerReleaseMetadata) *providerReleaseStaticValidationData {
-	if metadata == nil {
-		return nil
-	}
-	manifest := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.NormalizeKind(metadata.Kind),
-		Source:  strings.TrimSpace(metadata.Package),
-		Version: strings.TrimSpace(metadata.Version),
-		Spec:    &providermanifestv1.Spec{},
-	}
-	if metadata.Runtime == providerReleaseRuntimeExecutable {
-		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: staticvalidation.EntrypointPlaceholder}
-	}
-	return &providerReleaseStaticValidationData{Manifest: manifest}
 }

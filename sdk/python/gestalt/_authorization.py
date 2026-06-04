@@ -1,1085 +1,727 @@
-"""Transport client for the host authorization provider."""
-
 from __future__ import annotations
 
-import dataclasses as _dataclasses
-import datetime as _dt
-import os
-import threading
+import datetime as dt
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, cast
-from urllib import parse as _urlparse
+from dataclasses import dataclass, field
+from typing import Any
 
-import grpc
-from google.protobuf import empty_pb2 as _empty_pb2
-from google.protobuf import json_format
+from ._gen.v1 import authorization_pb2 as _pb
+from ._protocol import coerce_model as _coerce
+from ._protocol import copy_message as _copy
+from ._protocol import datetime_from_timestamp as _datetime_from_timestamp
+from ._protocol import has_field as _has_field
+from ._protocol import struct_from_dict as _struct_from_dict
+from ._protocol import struct_to_dict as _struct_to_dict
+from ._protocol import timestamp_from_datetime as _timestamp_from_datetime
+from ._protocol import which_oneof as _which_oneof
 
-from ._gen.v1 import authorization_pb2 as _authorization_pb2
-from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
-from ._grpc_transport import (
-    ENV_HOST_SERVICE_SOCKET,
-    ENV_HOST_SERVICE_TOKEN,
-    insecure_internal_channel,
-    internal_channel_target,
-    secure_internal_channel,
-)
-from ._protocol import JsonObject
-from ._protocol import dataclass_mapping as _dataclass_mapping
+pb: Any = _pb
 
-empty_pb2: Any = _empty_pb2
-authorization_pb2: Any = _authorization_pb2
-authorization_pb2_grpc: Any = _authorization_pb2_grpc
+RELATIONSHIP_TARGET_TYPE_UNSPECIFIED = _pb.RELATIONSHIP_TARGET_TYPE_UNSPECIFIED
+RELATIONSHIP_TARGET_TYPE_SUBJECT = _pb.RELATIONSHIP_TARGET_TYPE_SUBJECT
+RELATIONSHIP_TARGET_TYPE_RESOURCE = _pb.RELATIONSHIP_TARGET_TYPE_RESOURCE
+RELATIONSHIP_TARGET_TYPE_SUBJECT_SET = _pb.RELATIONSHIP_TARGET_TYPE_SUBJECT_SET
 
-_AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
-AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject"
+SOURCE_LAYER_UNSPECIFIED = _pb.SOURCE_LAYER_UNSPECIFIED
+SOURCE_LAYER_STATIC_CONFIG = _pb.SOURCE_LAYER_STATIC_CONFIG
+SOURCE_LAYER_RUNTIME = _pb.SOURCE_LAYER_RUNTIME
 
-_shared_authorization_transport: dict[str, Any] = {
-    "target": "",
-    "token": "",
-    "client": None,
-}
-_shared_authorization_lock = threading.Lock()
+DEFAULT_ACCESS_POLICY_DENY = _pb.DEFAULT_ACCESS_POLICY_DENY
+DEFAULT_ACCESS_POLICY_ALLOW = _pb.DEFAULT_ACCESS_POLICY_ALLOW
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AuthorizationSubject:
     type: str = ""
     id: str = ""
-    properties: JsonObject | None = None
+    properties: Mapping[str, Any] = field(default_factory=dict)
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
+class AuthorizationAction:
+    name: str = ""
+    properties: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class AuthorizationResource:
     type: str = ""
     id: str = ""
-    properties: JsonObject | None = None
+    properties: Mapping[str, Any] = field(default_factory=dict)
 
 
-@_dataclasses.dataclass(slots=True)
-class AuthorizationSubjectSet:
-    resource: AuthorizationResource | None = None
-    relation: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationRelationshipTarget:
-    subject: AuthorizationSubject | None = None
-    resource: AuthorizationResource | None = None
-    subject_set: AuthorizationSubjectSet | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationAction:
-    name: str = ""
-    properties: JsonObject | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class AccessEvaluationRequest:
+@dataclass(slots=True)
+class CheckAccessRequest:
     subject: AuthorizationSubject | None = None
     action: AuthorizationAction | None = None
     resource: AuthorizationResource | None = None
-    context: JsonObject | None = None
 
 
-@_dataclasses.dataclass(slots=True)
-class AccessDecision:
+@dataclass(slots=True)
+class CheckAccessResponse:
     allowed: bool = False
-    context: JsonObject | None = None
     model_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
-class AccessEvaluationsRequest:
-    requests: Sequence[AccessEvaluationRequest] = _dataclasses.field(
-        default_factory=tuple
-    )
+@dataclass(slots=True)
+class CheckAccessManyRequest:
+    requests: list[CheckAccessRequest] = field(default_factory=list)
 
 
-@_dataclasses.dataclass(slots=True)
-class AccessEvaluationsResponse:
-    decisions: Sequence[AccessDecision] = _dataclasses.field(default_factory=tuple)
+@dataclass(slots=True)
+class CheckAccessManyResponse:
+    decisions: list[CheckAccessResponse] = field(default_factory=list)
 
 
-@_dataclasses.dataclass(slots=True)
-class ResourceSearchRequest:
-    subject: AuthorizationSubject | None = None
-    action: AuthorizationAction | None = None
+@dataclass(slots=True)
+class RelationshipFilter:
+    target: "RelationshipTarget | None" = None
+    relation: str = ""
+    resource: AuthorizationResource | None = None
+    target_type: int = RELATIONSHIP_TARGET_TYPE_UNSPECIFIED
+    target_entity_type: str = ""
     resource_type: str = ""
-    context: JsonObject | None = None
+    source_layer: int = SOURCE_LAYER_UNSPECIFIED
+
+
+@dataclass(slots=True)
+class ListRelationshipsRequest:
+    filter: RelationshipFilter | None = None
     page_size: int = 0
     page_token: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
-class ResourceSearchResponse:
-    resources: Sequence[AuthorizationResource] = _dataclasses.field(
-        default_factory=tuple
-    )
+@dataclass(slots=True)
+class ListRelationshipsResponse:
+    relationships: list["Relationship"] = field(default_factory=list)
     next_page_token: str = ""
-    model_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
-class SubjectSearchRequest:
-    resource: AuthorizationResource | None = None
-    action: AuthorizationAction | None = None
-    subject_type: str = ""
-    context: JsonObject | None = None
-    page_size: int = 0
-    page_token: str = ""
+@dataclass(slots=True)
+class AddRelationshipRequest:
+    relationship: "Relationship | None" = None
 
 
-@_dataclasses.dataclass(slots=True)
-class SubjectSearchResponse:
-    subjects: Sequence[AuthorizationSubject] = _dataclasses.field(
-        default_factory=tuple
-    )
-    next_page_token: str = ""
-    model_id: str = ""
+@dataclass(slots=True)
+class AddRelationshipResponse:
+    relationship: "Relationship | None" = None
 
 
-@_dataclasses.dataclass(slots=True)
-class EffectiveSubjectSearchRequest:
-    resource: AuthorizationResource | None = None
-    action: AuthorizationAction | None = None
-    context: JsonObject | None = None
-    page_size: int = 0
-    page_token: str = ""
+@dataclass(slots=True)
+class DeleteRelationshipRequest:
+    relationship_tuple: "RelationshipTuple | None" = None
 
 
-@_dataclasses.dataclass(slots=True)
-class EffectiveSubjectSearchResponse:
-    targets: Sequence[AuthorizationRelationshipTarget] = _dataclasses.field(
-        default_factory=tuple
-    )
-    next_page_token: str = ""
-    model_id: str = ""
-    truncated: bool = False
-
-
-@_dataclasses.dataclass(slots=True)
-class ActionSearchRequest:
-    subject: AuthorizationSubject | None = None
-    resource: AuthorizationResource | None = None
-    context: JsonObject | None = None
-    page_size: int = 0
-    page_token: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class ActionSearchResponse:
-    actions: Sequence[AuthorizationAction] = _dataclasses.field(default_factory=tuple)
-    next_page_token: str = ""
-    model_id: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationMetadata:
-    capabilities: Sequence[str] = _dataclasses.field(default_factory=tuple)
-    active_model_id: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class Relationship:
-    subject: AuthorizationSubject | None = None
-    relation: str = ""
-    resource: AuthorizationResource | None = None
-    properties: JsonObject | None = None
-    target: AuthorizationRelationshipTarget | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class RelationshipKey:
-    subject: AuthorizationSubject | None = None
-    relation: str = ""
-    resource: AuthorizationResource | None = None
-    target: AuthorizationRelationshipTarget | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class ReadRelationshipsRequest:
-    subject: AuthorizationSubject | None = None
-    relation: str = ""
-    resource: AuthorizationResource | None = None
-    page_size: int = 0
-    page_token: str = ""
-    model_id: str = ""
-    target: AuthorizationRelationshipTarget | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class ReadRelationshipsResponse:
-    relationships: Sequence[Relationship] = _dataclasses.field(default_factory=tuple)
-    next_page_token: str = ""
-    model_id: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class WriteRelationshipsRequest:
-    writes: Sequence[Relationship] = _dataclasses.field(default_factory=tuple)
-    deletes: Sequence[RelationshipKey] = _dataclasses.field(default_factory=tuple)
-    model_id: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModel:
-    version: int = 0
-    resource_types: Sequence[AuthorizationModelResourceType] = _dataclasses.field(
-        default_factory=tuple
-    )
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelResourceType:
-    name: str = ""
-    relations: Sequence[AuthorizationModelRelation] = _dataclasses.field(
-        default_factory=tuple
-    )
-    actions: Sequence[AuthorizationModelAction] = _dataclasses.field(
-        default_factory=tuple
-    )
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelRelation:
-    name: str = ""
-    subject_types: Sequence[str] = _dataclasses.field(default_factory=tuple)
-    allowed_targets: Sequence[AuthorizationModelAllowedTarget] = _dataclasses.field(
-        default_factory=tuple
-    )
-    rewrite: AuthorizationModelRewrite | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelAction:
-    name: str = ""
-    relations: Sequence[str] = _dataclasses.field(default_factory=tuple)
-    rewrite: AuthorizationModelRewrite | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelAllowedTarget:
-    subject_type: str = ""
-    resource_type: str = ""
-    subject_set: AuthorizationModelSubjectSetTarget | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelSubjectSetTarget:
-    resource_type: str = ""
-    relation: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelRewrite:
-    this: AuthorizationModelRewriteThis | None = None
-    computed_userset: AuthorizationModelComputedUserset | None = None
-    tuple_to_userset: AuthorizationModelTupleToUserset | None = None
-    union: AuthorizationModelRewriteUnion | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelRewriteThis:
+@dataclass(slots=True)
+class DeleteRelationshipResponse:
     pass
 
 
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelComputedUserset:
+@dataclass(slots=True)
+class SetAuthorizationStateRequest:
+    model: "AuthorizationModel | None" = None
+    relationships: list["Relationship"] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class SetAuthorizationStateResponse:
+    active_model: "AuthorizationModelRef | None" = None
+
+
+@dataclass(slots=True)
+class Relationship:
+    tuple: "RelationshipTuple | None" = None
+    properties: Mapping[str, Any] = field(default_factory=dict)
+    source_layer: int = SOURCE_LAYER_UNSPECIFIED
+
+
+@dataclass(slots=True)
+class RelationshipTuple:
+    target: "RelationshipTarget | None" = None
+    relation: str = ""
+    resource: AuthorizationResource | None = None
+
+
+@dataclass(slots=True)
+class RelationshipTarget:
+    subject: AuthorizationSubject | None = None
+    resource: AuthorizationResource | None = None
+    subject_set: "SubjectSet | None" = None
+
+
+@dataclass(slots=True)
+class SubjectSet:
+    resource: AuthorizationResource | None = None
     relation: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelTupleToUserset:
-    tupleset_relation: str = ""
-    computed_relation: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class AuthorizationModelRewriteUnion:
-    children: Sequence[AuthorizationModelRewrite] = _dataclasses.field(
-        default_factory=tuple
+@dataclass(slots=True)
+class AuthorizationModel:
+    id: str = ""
+    version: str = ""
+    resource_types: list["AuthorizationModelResourceType"] = field(
+        default_factory=list
     )
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
+class AuthorizationModelResourceType:
+    name: str = ""
+    relations: list["ModelRelation"] = field(default_factory=list)
+    actions: list["ModelAction"] = field(default_factory=list)
+    source_layer: int = SOURCE_LAYER_UNSPECIFIED
+    default_access_policy: int = DEFAULT_ACCESS_POLICY_DENY
+
+
+@dataclass(slots=True)
+class ModelRelation:
+    name: str = ""
+    allowed_targets: list["ModelAllowedTarget"] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ModelAction:
+    name: str = ""
+    relations: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ModelAllowedTarget:
+    subject_type: str | None = None
+    resource_type: str | None = None
+    subject_set_type: "SubjectSetType | None" = None
+
+
+@dataclass(slots=True)
+class SubjectSetType:
+    resource_type: str = ""
+    relation: str = ""
+
+
+@dataclass(slots=True)
 class AuthorizationModelRef:
     id: str = ""
     version: str = ""
-    created_at: _dt.datetime | str | None = None
-
-    def __post_init__(self) -> None:
-        if isinstance(self.created_at, str):
-            self.created_at = _datetime_from_proto_json(self.created_at)
+    created_at: dt.datetime | None = None
 
 
-@_dataclasses.dataclass(slots=True)
-class GetActiveModelResponse:
+@dataclass(slots=True)
+class GetActiveModelRefResponse:
     model: AuthorizationModelRef | None = None
 
 
-@_dataclasses.dataclass(slots=True)
-class ListModelsRequest:
+@dataclass(slots=True)
+class SetActiveModelRequest:
+    model: AuthorizationModel | None = None
+
+
+@dataclass(slots=True)
+class SetActiveModelResponse:
+    model: AuthorizationModelRef | None = None
+
+
+@dataclass(slots=True)
+class AuthorizationModelResourceTypeFilter:
+    name: str = ""
+    source_layer: int = SOURCE_LAYER_UNSPECIFIED
+
+
+@dataclass(slots=True)
+class ListActiveModelResourceTypesRequest:
+    filter: AuthorizationModelResourceTypeFilter | None = None
     page_size: int = 0
     page_token: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
-class ListModelsResponse:
-    models: Sequence[AuthorizationModelRef] = _dataclasses.field(default_factory=tuple)
+@dataclass(slots=True)
+class ListActiveModelResourceTypesResponse:
+    resource_types: list[AuthorizationModelResourceType] = field(default_factory=list)
     next_page_token: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class WriteModelRequest:
-    model: AuthorizationModel | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class ExpandRequest:
-    resource: AuthorizationResource | None = None
-    relation: str = ""
-    context: JsonObject | None = None
-    max_depth: int = 0
     model_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
-class ExpandNode:
-    target: AuthorizationRelationshipTarget | None = None
-    relation: str = ""
-    children: Sequence[ExpandNode] = _dataclasses.field(default_factory=tuple)
-
-
-@_dataclasses.dataclass(slots=True)
-class ExpandResponse:
-    root: ExpandNode | None = None
-    truncated: bool = False
-    cycle_detected: bool = False
-    max_depth_reached: bool = False
-    model_id: str = ""
-
-
-_NESTED_FIELD_TYPES: dict[tuple[type[Any], str], type[Any]] = {
-    (AuthorizationSubjectSet, "resource"): AuthorizationResource,
-    (AuthorizationRelationshipTarget, "subject"): AuthorizationSubject,
-    (AuthorizationRelationshipTarget, "resource"): AuthorizationResource,
-    (AuthorizationRelationshipTarget, "subject_set"): AuthorizationSubjectSet,
-    (AccessEvaluationRequest, "subject"): AuthorizationSubject,
-    (AccessEvaluationRequest, "action"): AuthorizationAction,
-    (AccessEvaluationRequest, "resource"): AuthorizationResource,
-    (ResourceSearchRequest, "subject"): AuthorizationSubject,
-    (ResourceSearchRequest, "action"): AuthorizationAction,
-    (SubjectSearchRequest, "resource"): AuthorizationResource,
-    (SubjectSearchRequest, "action"): AuthorizationAction,
-    (EffectiveSubjectSearchRequest, "resource"): AuthorizationResource,
-    (EffectiveSubjectSearchRequest, "action"): AuthorizationAction,
-    (ActionSearchRequest, "subject"): AuthorizationSubject,
-    (ActionSearchRequest, "resource"): AuthorizationResource,
-    (Relationship, "subject"): AuthorizationSubject,
-    (Relationship, "resource"): AuthorizationResource,
-    (Relationship, "target"): AuthorizationRelationshipTarget,
-    (RelationshipKey, "subject"): AuthorizationSubject,
-    (RelationshipKey, "resource"): AuthorizationResource,
-    (RelationshipKey, "target"): AuthorizationRelationshipTarget,
-    (ReadRelationshipsRequest, "subject"): AuthorizationSubject,
-    (ReadRelationshipsRequest, "resource"): AuthorizationResource,
-    (ReadRelationshipsRequest, "target"): AuthorizationRelationshipTarget,
-    (AuthorizationModelRelation, "rewrite"): AuthorizationModelRewrite,
-    (AuthorizationModelAction, "rewrite"): AuthorizationModelRewrite,
-    (AuthorizationModelAllowedTarget, "subject_set"): AuthorizationModelSubjectSetTarget,
-    (AuthorizationModelRewrite, "this"): AuthorizationModelRewriteThis,
-    (AuthorizationModelRewrite, "computed_userset"): AuthorizationModelComputedUserset,
-    (AuthorizationModelRewrite, "tuple_to_userset"): AuthorizationModelTupleToUserset,
-    (AuthorizationModelRewrite, "union"): AuthorizationModelRewriteUnion,
-    (GetActiveModelResponse, "model"): AuthorizationModelRef,
-    (WriteModelRequest, "model"): AuthorizationModel,
-    (ExpandRequest, "resource"): AuthorizationResource,
-    (ExpandNode, "target"): AuthorizationRelationshipTarget,
-    (ExpandResponse, "root"): ExpandNode,
-}
-
-_SEQUENCE_FIELD_TYPES: dict[tuple[type[Any], str], type[Any]] = {
-    (AccessEvaluationsRequest, "requests"): AccessEvaluationRequest,
-    (AccessEvaluationsResponse, "decisions"): AccessDecision,
-    (ResourceSearchResponse, "resources"): AuthorizationResource,
-    (SubjectSearchResponse, "subjects"): AuthorizationSubject,
-    (EffectiveSubjectSearchResponse, "targets"): AuthorizationRelationshipTarget,
-    (ActionSearchResponse, "actions"): AuthorizationAction,
-    (ReadRelationshipsResponse, "relationships"): Relationship,
-    (WriteRelationshipsRequest, "writes"): Relationship,
-    (WriteRelationshipsRequest, "deletes"): RelationshipKey,
-    (AuthorizationModel, "resource_types"): AuthorizationModelResourceType,
-    (AuthorizationModelResourceType, "relations"): AuthorizationModelRelation,
-    (AuthorizationModelResourceType, "actions"): AuthorizationModelAction,
-    (AuthorizationModelRelation, "allowed_targets"): AuthorizationModelAllowedTarget,
-    (AuthorizationModelRewriteUnion, "children"): AuthorizationModelRewrite,
-    (ListModelsResponse, "models"): AuthorizationModelRef,
-    (ExpandNode, "children"): ExpandNode,
-}
-
-_MESSAGE_NATIVE_TYPES: dict[type[Any], type[Any]] = {
-    authorization_pb2.Subject: AuthorizationSubject,
-    authorization_pb2.Resource: AuthorizationResource,
-    authorization_pb2.SubjectSet: AuthorizationSubjectSet,
-    authorization_pb2.RelationshipTarget: AuthorizationRelationshipTarget,
-    authorization_pb2.Action: AuthorizationAction,
-    authorization_pb2.AccessEvaluationRequest: AccessEvaluationRequest,
-    authorization_pb2.AccessDecision: AccessDecision,
-    authorization_pb2.AccessEvaluationsRequest: AccessEvaluationsRequest,
-    authorization_pb2.AccessEvaluationsResponse: AccessEvaluationsResponse,
-    authorization_pb2.ResourceSearchRequest: ResourceSearchRequest,
-    authorization_pb2.ResourceSearchResponse: ResourceSearchResponse,
-    authorization_pb2.SubjectSearchRequest: SubjectSearchRequest,
-    authorization_pb2.SubjectSearchResponse: SubjectSearchResponse,
-    authorization_pb2.EffectiveSubjectSearchRequest: EffectiveSubjectSearchRequest,
-    authorization_pb2.EffectiveSubjectSearchResponse: EffectiveSubjectSearchResponse,
-    authorization_pb2.ActionSearchRequest: ActionSearchRequest,
-    authorization_pb2.ActionSearchResponse: ActionSearchResponse,
-    authorization_pb2.AuthorizationMetadata: AuthorizationMetadata,
-    authorization_pb2.Relationship: Relationship,
-    authorization_pb2.RelationshipKey: RelationshipKey,
-    authorization_pb2.ReadRelationshipsRequest: ReadRelationshipsRequest,
-    authorization_pb2.ReadRelationshipsResponse: ReadRelationshipsResponse,
-    authorization_pb2.WriteRelationshipsRequest: WriteRelationshipsRequest,
-    authorization_pb2.AuthorizationModel: AuthorizationModel,
-    authorization_pb2.AuthorizationModelResourceType: AuthorizationModelResourceType,
-    authorization_pb2.AuthorizationModelRelation: AuthorizationModelRelation,
-    authorization_pb2.AuthorizationModelAction: AuthorizationModelAction,
-    authorization_pb2.AuthorizationModelAllowedTarget: AuthorizationModelAllowedTarget,
-    authorization_pb2.AuthorizationModelSubjectSetTarget: AuthorizationModelSubjectSetTarget,
-    authorization_pb2.AuthorizationModelRewrite: AuthorizationModelRewrite,
-    authorization_pb2.AuthorizationModelRewriteThis: AuthorizationModelRewriteThis,
-    authorization_pb2.AuthorizationModelComputedUserset: AuthorizationModelComputedUserset,
-    authorization_pb2.AuthorizationModelTupleToUserset: AuthorizationModelTupleToUserset,
-    authorization_pb2.AuthorizationModelRewriteUnion: AuthorizationModelRewriteUnion,
-    authorization_pb2.AuthorizationModelRef: AuthorizationModelRef,
-    authorization_pb2.GetActiveModelResponse: GetActiveModelResponse,
-    authorization_pb2.ListModelsRequest: ListModelsRequest,
-    authorization_pb2.ListModelsResponse: ListModelsResponse,
-    authorization_pb2.WriteModelRequest: WriteModelRequest,
-    authorization_pb2.ExpandRequest: ExpandRequest,
-    authorization_pb2.ExpandNode: ExpandNode,
-    authorization_pb2.ExpandResponse: ExpandResponse,
-}
-
-_ONEOF_FIELD_NAMES: dict[type[Any], tuple[str, ...]] = {
-    AuthorizationRelationshipTarget: ("subject", "resource", "subject_set"),
-    AuthorizationModelAllowedTarget: ("subject_type", "resource_type", "subject_set"),
-    AuthorizationModelRewrite: (
-        "this",
-        "computed_userset",
-        "tuple_to_userset",
-        "union",
-    ),
-}
-
-
-def _authorization_native(value: Any, native_type: type[Any]) -> Any:
-    if value is None or isinstance(value, native_type):
-        return value
-    if isinstance(value, authorization_pb2.Subject | authorization_pb2.Resource):
-        data = json_format.MessageToDict(value, preserving_proto_field_name=True)
-        return _authorization_from_dict(data, native_type)
-    if hasattr(value, "DESCRIPTOR"):
-        data = json_format.MessageToDict(value, preserving_proto_field_name=True)
-        return _authorization_from_dict(data, native_type)
-    return _authorization_from_dict(value, native_type)
-
-
-def _authorization_from_dict(value: Any, native_type: type[Any]) -> Any:
-    if value is None or isinstance(value, native_type):
-        return value
-    mapping = _dataclass_mapping(value)
-    if mapping is None:
-        if not isinstance(value, Mapping):
-            raise TypeError(
-                f"authorization: expected {native_type.__name__}, mapping, "
-                f"or protobuf message, got {type(value).__name__}"
-            )
-        mapping = dict(value)
-    kwargs: dict[str, Any] = {}
-    for field in _dataclasses.fields(native_type):
-        if field.name not in mapping:
-            continue
-        raw = mapping[field.name]
-        if raw is None:
-            kwargs[field.name] = None
-            continue
-        if field.name == "created_at" and native_type is AuthorizationModelRef:
-            kwargs[field.name] = _datetime_from_proto_json(raw)
-            continue
-        nested = _NESTED_FIELD_TYPES.get((native_type, field.name))
-        if nested is not None:
-            kwargs[field.name] = _authorization_from_dict(raw, nested)
-            continue
-        sequence = _SEQUENCE_FIELD_TYPES.get((native_type, field.name))
-        if sequence is not None:
-            kwargs[field.name] = [
-                _authorization_from_dict(item, sequence) for item in raw
-            ]
-            continue
-        kwargs[field.name] = raw
-    return native_type(**kwargs)
-
-
-def _authorization_message(value: Any, message_type: Any) -> Any:
-    if isinstance(value, message_type):
-        return value
-    message = message_type()
-    if value is None:
-        return message
-    json_format.ParseDict(_authorization_to_proto_dict(value), message)
-    return message
-
-
-def _authorization_to_proto_dict(value: Any) -> Any:
-    if value is None:
-        return None
-    if isinstance(value, _dt.datetime):
-        return _datetime_to_proto_json(value)
-    if _dataclasses.is_dataclass(value) and not isinstance(value, type):
-        oneof_fields = _ONEOF_FIELD_NAMES.get(type(value))
-        if oneof_fields is not None:
-            return _authorization_oneof_to_proto_dict(value, oneof_fields)
-        output: dict[str, Any] = {}
-        for field in _dataclasses.fields(value):
-            entry = getattr(value, field.name)
-            if entry is None:
-                continue
-            if isinstance(entry, Sequence) and not isinstance(
-                entry, str | bytes | bytearray
-            ):
-                if len(entry) == 0:
-                    continue
-            elif isinstance(entry, Mapping) and len(entry) == 0:
-                continue
-            output[field.name] = _authorization_to_proto_dict(entry)
-        return output
-    if isinstance(value, Mapping):
-        return {key: _authorization_to_proto_dict(entry) for key, entry in value.items()}
-    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
-        return [_authorization_to_proto_dict(entry) for entry in value]
-    return value
-
-
-def _authorization_oneof_to_proto_dict(
-    value: Any,
-    field_names: tuple[str, ...],
-) -> dict[str, Any]:
-    selected: list[tuple[str, Any]] = []
-    for field_name in field_names:
-        entry = getattr(value, field_name)
-        if entry is None:
-            continue
-        if isinstance(entry, str) and entry == "":
-            continue
-        selected.append((field_name, entry))
-    if len(selected) > 1:
-        names = ", ".join(name for name, _ in selected)
-        raise ValueError(
-            f"authorization: {type(value).__name__} sets multiple oneof fields: {names}"
-        )
-    if not selected:
-        return {}
-    field_name, entry = selected[0]
-    return {field_name: _authorization_to_proto_dict(entry)}
-
-
-def _authorization_from_message(message: Any, native_type: type[Any] | None = None) -> Any:
-    if native_type is None:
-        native_type = _MESSAGE_NATIVE_TYPES[type(message)]
-    data = json_format.MessageToDict(message, preserving_proto_field_name=True)
-    return _authorization_from_dict(data, native_type)
-
-
-def _datetime_from_proto_json(value: Any) -> _dt.datetime | None:
-    if value is None or isinstance(value, _dt.datetime):
-        return value
-    if isinstance(value, str):
-        return _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    raise TypeError(f"authorization: expected datetime or timestamp string, got {type(value).__name__}")
-
-
-def _datetime_to_proto_json(value: _dt.datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=_dt.timezone.utc)
-    return value.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
-
-
-class AuthorizationProtocol(Protocol):
-    """Fakeable client contract for host authorization calls."""
-
-    def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
-        """Evaluate one authorization request."""
-
-    def evaluate_many(
-        self, request: AccessEvaluationsRequest
-    ) -> AccessEvaluationsResponse:
-        """Evaluate multiple authorization requests."""
-
-    def search_resources(
-        self, request: ResourceSearchRequest
-    ) -> ResourceSearchResponse:
-        """Search resources visible to a subject for an action."""
-
-    def search_subjects(self, request: SubjectSearchRequest) -> SubjectSearchResponse:
-        """Search subjects related to a resource and action."""
-
-    def effective_search_resources(
-        self, request: ResourceSearchRequest
-    ) -> ResourceSearchResponse:
-        """Search effective resources through inherited relationships."""
-
-    def effective_search_subjects(
-        self, request: EffectiveSubjectSearchRequest
-    ) -> EffectiveSubjectSearchResponse:
-        """Search effective subjects or subject sets."""
-
-    def search_actions(self, request: ActionSearchRequest) -> ActionSearchResponse:
-        """Search actions available between a subject and resource."""
-
-    def expand(self, request: ExpandRequest) -> ExpandResponse:
-        """Expand one resource relation."""
-
-    def read_relationships(
-        self, request: ReadRelationshipsRequest
-    ) -> ReadRelationshipsResponse:
-        """Read authorization relationships."""
-
-    def write_relationships(self, request: WriteRelationshipsRequest) -> None:
-        """Write and delete authorization relationships."""
-
-    def get_metadata(self) -> AuthorizationMetadata:
-        """Return host authorization metadata."""
-
-    def get_active_model(self) -> GetActiveModelResponse:
-        """Return the active authorization model."""
-
-    def list_models(self, request: ListModelsRequest) -> ListModelsResponse:
-        """List authorization model references."""
-
-    def write_model(self, request: WriteModelRequest) -> AuthorizationModelRef:
-        """Write an authorization model."""
-
-
-class Authorization:
-    """Transport client for the host authorization provider."""
-
-    def __new__(
-        cls,
-        socket_target: str | None = None,
-        relay_token: str | None = None,
-        *,
-        _shared: bool = False,
-    ) -> Authorization:
-        if not _shared and socket_target is None and relay_token is None:
-            return _shared_authorization_client()
-        return super().__new__(cls)
-
-    def __init__(
-        self,
-        socket_target: str | None = None,
-        relay_token: str | None = None,
-        *,
-        _shared: bool = False,
-    ) -> None:
-        if getattr(self, "_authorization_initialized", False):
-            return
-        target = _resolve_authorization_socket_target(socket_target)
-        token = (
-            relay_token
-            if relay_token is not None
-            else os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
-        ).strip()
-        self._channel = _authorization_channel(target, token=token)
-        self._stub = authorization_pb2_grpc.AuthorizationProviderStub(self._channel)
-        self._closed = False
-        self._shared = _shared
-        self._authorization_initialized = True
-
-    def close(self) -> None:
-        """Close the underlying gRPC channel."""
-
-        if self._shared:
-            return
-        self._close_channel()
-
-    def _close_channel(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        self._channel.close()
-
-    def evaluate(
-        self,
-        request: AccessEvaluationRequest,
-    ) -> AccessDecision:
-        """Evaluate one authorization request."""
-
-        return cast(
-            AccessDecision,
-            _authorization_from_message(
-                self._stub.Evaluate(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.AccessEvaluationRequest,
-                    )
-                )
-            ),
-        )
-
-    def evaluate_many(
-        self,
-        request: AccessEvaluationsRequest,
-    ) -> AccessEvaluationsResponse:
-        """Evaluate multiple authorization requests."""
-
-        return cast(
-            AccessEvaluationsResponse,
-            _authorization_from_message(
-                self._stub.EvaluateMany(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.AccessEvaluationsRequest,
-                    )
-                )
-            ),
-        )
-
-    def search_resources(
-        self,
-        request: ResourceSearchRequest,
-    ) -> ResourceSearchResponse:
-        """Search resources visible to a subject for an action."""
-
-        return cast(
-            ResourceSearchResponse,
-            _authorization_from_message(
-                self._stub.SearchResources(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.ResourceSearchRequest,
-                    )
-                )
-            ),
-        )
-
-    def search_subjects(
-        self,
-        request: SubjectSearchRequest,
-    ) -> SubjectSearchResponse:
-        """Search subjects related to a resource and action."""
-
-        return cast(
-            SubjectSearchResponse,
-            _authorization_from_message(
-                self._stub.SearchSubjects(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.SubjectSearchRequest,
-                    )
-                )
-            ),
-        )
-
-    def effective_search_resources(
-        self,
-        request: ResourceSearchRequest,
-    ) -> ResourceSearchResponse:
-        """Search effective resources visible through inherited relationships."""
-
-        return cast(
-            ResourceSearchResponse,
-            _authorization_from_message(
-                self._stub.EffectiveSearchResources(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.ResourceSearchRequest,
-                    )
-                )
-            ),
-        )
-
-    def effective_search_subjects(
-        self,
-        request: EffectiveSubjectSearchRequest,
-    ) -> EffectiveSubjectSearchResponse:
-        """Search effective subjects or subject sets for a resource and action."""
-
-        return cast(
-            EffectiveSubjectSearchResponse,
-            _authorization_from_message(
-                self._stub.EffectiveSearchSubjects(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.EffectiveSubjectSearchRequest,
-                    )
-                )
-            ),
-        )
-
-    def search_actions(
-        self,
-        request: ActionSearchRequest,
-    ) -> ActionSearchResponse:
-        """Search actions available between a subject and resource."""
-
-        return cast(
-            ActionSearchResponse,
-            _authorization_from_message(
-                self._stub.SearchActions(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.ActionSearchRequest,
-                    )
-                )
-            ),
-        )
-
-    def expand(self, request: ExpandRequest) -> ExpandResponse:
-        """Expand one resource relation into contributing relationship targets."""
-
-        return cast(
-            ExpandResponse,
-            _authorization_from_message(
-                self._stub.Expand(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.ExpandRequest,
-                    )
-                )
-            ),
-        )
-
-    def read_relationships(
-        self,
-        request: ReadRelationshipsRequest,
-    ) -> ReadRelationshipsResponse:
-        """Read authorization relationships matching a request."""
-
-        return cast(
-            ReadRelationshipsResponse,
-            _authorization_from_message(
-                self._stub.ReadRelationships(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.ReadRelationshipsRequest,
-                    )
-                )
-            ),
-        )
-
-    def write_relationships(
-        self,
-        request: WriteRelationshipsRequest,
-    ) -> None:
-        """Write authorization relationships."""
-
-        self._stub.WriteRelationships(
-            _authorization_message(
-                request,
-                authorization_pb2.WriteRelationshipsRequest,
-            )
-        )
-
-    def get_metadata(self) -> AuthorizationMetadata:
-        """Return host authorization provider metadata."""
-
-        return cast(
-            AuthorizationMetadata,
-            _authorization_from_message(self._stub.GetMetadata(empty_pb2.Empty())),
-        )
-
-    def get_active_model(self) -> GetActiveModelResponse:
-        """Return the active authorization model."""
-
-        return cast(
-            GetActiveModelResponse,
-            _authorization_from_message(self._stub.GetActiveModel(empty_pb2.Empty())),
-        )
-
-    def list_models(
-        self,
-        request: ListModelsRequest,
-    ) -> ListModelsResponse:
-        """List authorization model references."""
-
-        return cast(
-            ListModelsResponse,
-            _authorization_from_message(
-                self._stub.ListModels(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.ListModelsRequest,
-                    )
-                )
-            ),
-        )
-
-    def write_model(
-        self,
-        request: WriteModelRequest,
-    ) -> AuthorizationModelRef:
-        """Write an authorization model."""
-
-        return cast(
-            AuthorizationModelRef,
-            _authorization_from_message(
-                self._stub.WriteModel(
-                    _authorization_message(
-                        request,
-                        authorization_pb2.WriteModelRequest,
-                    )
-                )
-            ),
-        )
-
-    def __enter__(self) -> Authorization:
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        self.close()
-
-
-def _shared_authorization_client() -> Authorization:
-    """Return a cached client for the host authorization provider."""
-
-    target = _resolve_authorization_socket_target()
-    token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
-    shared = _shared_authorization_transport
-    with _shared_authorization_lock:
-        client = shared.get("client")
-        if (
-            client is not None
-            and shared.get("target") == target
-            and shared.get("token") == token
-        ):
-            return client
-
-        client = Authorization(target, token, _shared=True)
-        stale = shared.get("client")
-        shared["target"] = target
-        shared["token"] = token
-        shared["client"] = client
-        if stale is not None:
-            stale._close_channel()
-        return client
-
-def _resolve_authorization_socket_target(
-    socket_target: str | None = None,
-) -> str:
-    target = (
-        socket_target
-        if socket_target is not None
-        else os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
-    ).strip()
-    if not target:
-        raise RuntimeError(f"authorization: {ENV_HOST_SERVICE_SOCKET} is not set")
-    return target
-
-
-def _authorization_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
-    target = raw_target.strip()
-    if not target:
-        raise RuntimeError("authorization: transport target is required")
-    if target.startswith("tcp://"):
-        address = target[len("tcp://") :].strip()
-        if not address:
-            raise RuntimeError(
-                f"authorization: tcp target {raw_target!r} is missing host:port"
-            )
-        return _with_authorization_relay_token(
-            insecure_internal_channel(internal_channel_target("tcp", address)),
-            token,
-        )
-    if target.startswith("tls://"):
-        address = target[len("tls://") :].strip()
-        if not address:
-            raise RuntimeError(
-                f"authorization: tls target {raw_target!r} is missing host:port"
-            )
-        return _with_authorization_relay_token(
-            secure_internal_channel(internal_channel_target("tls", address)),
-            token,
-        )
-    if target.startswith("unix://"):
-        socket_path = target[len("unix://") :].strip()
-        if not socket_path:
-            raise RuntimeError(
-                f"authorization: unix target {raw_target!r} is missing a socket path"
-            )
-        return _with_authorization_relay_token(
-            insecure_internal_channel(internal_channel_target("unix", socket_path)),
-            token,
-        )
-    if "://" in target:
-        parsed = _urlparse.urlparse(target)
-        raise RuntimeError(
-            f"authorization: unsupported target scheme {parsed.scheme!r}"
-        )
-    return _with_authorization_relay_token(
-        insecure_internal_channel(internal_channel_target("unix", target)),
-        token,
+def check_access_request_from_proto(value: Any) -> CheckAccessRequest:
+    return CheckAccessRequest(
+        subject=_subject_from_proto(value.subject) if _has_field(value, "subject") else None,
+        action=_action_from_proto(value.action) if _has_field(value, "action") else None,
+        resource=_resource_from_proto(value.resource) if _has_field(value, "resource") else None,
     )
 
 
-def _with_authorization_relay_token(
-    channel: grpc.Channel,
-    token: str,
-) -> grpc.Channel:
-    token = token.strip()
-    if not token:
-        return channel
-    return grpc.intercept_channel(channel, _RelayTokenInterceptor(token))
+def check_access_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.CheckAccessResponse):
+        return _copy(value)
+    response = _coerce(value, CheckAccessResponse, "CheckAccessResponse")
+    return pb.CheckAccessResponse(
+        allowed=response.allowed,
+        model_id=response.model_id,
+    )
 
 
-class _ClientCallDetails(grpc.ClientCallDetails):
-    def __init__(
-        self,
-        method: str,
-        timeout: float | None,
-        metadata: Any,
-        credentials: Any,
-        wait_for_ready: bool | None,
-        compression: Any,
-    ) -> None:
-        self.method = method
-        self.timeout = timeout
-        self.metadata = metadata
-        self.credentials = credentials
-        self.wait_for_ready = wait_for_ready
-        self.compression = compression
+def check_access_many_request_from_proto(value: Any) -> CheckAccessManyRequest:
+    return CheckAccessManyRequest(
+        requests=[check_access_request_from_proto(request) for request in value.requests]
+    )
 
 
-class _RelayTokenInterceptor(grpc.UnaryUnaryClientInterceptor):
-    def __init__(self, token: str) -> None:
-        self._token = token
+def check_access_many_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.CheckAccessManyResponse):
+        return _copy(value)
+    response = _coerce(value, CheckAccessManyResponse, "CheckAccessManyResponse")
+    return pb.CheckAccessManyResponse(
+        decisions=[check_access_response_to_proto(decision) for decision in response.decisions]
+    )
 
-    def intercept_unary_unary(
-        self,
-        continuation: Any,
-        client_call_details: grpc.ClientCallDetails,
-        request: Any,
-    ) -> Any:
-        fields = cast(_ClientCallDetailsFields, client_call_details)
-        metadata = list(fields.metadata or [])
-        metadata.append((_AUTHORIZATION_RELAY_TOKEN_HEADER, self._token))
-        updated_details = _ClientCallDetails(
-            method=fields.method,
-            timeout=fields.timeout,
-            metadata=metadata,
-            credentials=fields.credentials,
-            wait_for_ready=fields.wait_for_ready,
-            compression=fields.compression,
+
+def list_relationships_request_from_proto(value: Any) -> ListRelationshipsRequest:
+    return ListRelationshipsRequest(
+        filter=(
+            relationship_filter_from_proto(value.filter)
+            if _has_field(value, "filter")
+            else None
+        ),
+        page_size=value.page_size,
+        page_token=value.page_token,
+    )
+
+
+def list_relationships_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListRelationshipsResponse):
+        return _copy(value)
+    response = _coerce(value, ListRelationshipsResponse, "ListRelationshipsResponse")
+    return pb.ListRelationshipsResponse(
+        relationships=[relationship_to_proto(item) for item in response.relationships],
+        next_page_token=response.next_page_token,
+    )
+
+
+def add_relationship_request_from_proto(value: Any) -> AddRelationshipRequest:
+    return AddRelationshipRequest(
+        relationship=(
+            relationship_from_proto(value.relationship)
+            if _has_field(value, "relationship")
+            else None
         )
-        return continuation(updated_details, request)
+    )
 
 
-class _ClientCallDetailsFields(Protocol):
-    method: str
-    timeout: float | None
-    metadata: Any
-    credentials: Any
-    wait_for_ready: bool | None
-    compression: Any
+def add_relationship_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.AddRelationshipResponse):
+        return _copy(value)
+    response = _coerce(value, AddRelationshipResponse, "AddRelationshipResponse")
+    return pb.AddRelationshipResponse(
+        relationship=(
+            relationship_to_proto(response.relationship)
+            if response.relationship is not None
+            else None
+        )
+    )
+
+
+def delete_relationship_request_from_proto(value: Any) -> DeleteRelationshipRequest:
+    return DeleteRelationshipRequest(
+        relationship_tuple=(
+            relationship_tuple_from_proto(value.relationship_tuple)
+            if _has_field(value, "relationship_tuple")
+            else None
+        )
+    )
+
+
+def delete_relationship_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.DeleteRelationshipResponse):
+        return _copy(value)
+    return pb.DeleteRelationshipResponse()
+
+
+def set_authorization_state_request_from_proto(
+    value: Any,
+) -> SetAuthorizationStateRequest:
+    return SetAuthorizationStateRequest(
+        model=authorization_model_from_proto(value.model)
+        if _has_field(value, "model")
+        else None,
+        relationships=[relationship_from_proto(item) for item in value.relationships]
+    )
+
+
+def set_authorization_state_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.SetAuthorizationStateResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        SetAuthorizationStateResponse,
+        "SetAuthorizationStateResponse",
+    )
+    return pb.SetAuthorizationStateResponse(
+        active_model=(
+            authorization_model_ref_to_proto(response.active_model)
+            if response.active_model is not None
+            else None
+        )
+    )
+
+
+def get_active_model_ref_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.GetActiveModelRefResponse):
+        return _copy(value)
+    response = _coerce(value, GetActiveModelRefResponse, "GetActiveModelRefResponse")
+    return pb.GetActiveModelRefResponse(
+        model=(
+            authorization_model_ref_to_proto(response.model)
+            if response.model is not None
+            else None
+        )
+    )
+
+
+def set_active_model_request_from_proto(value: Any) -> SetActiveModelRequest:
+    return SetActiveModelRequest(
+        model=authorization_model_from_proto(value.model) if _has_field(value, "model") else None
+    )
+
+
+def set_active_model_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.SetActiveModelResponse):
+        return _copy(value)
+    response = _coerce(value, SetActiveModelResponse, "SetActiveModelResponse")
+    return pb.SetActiveModelResponse(
+        model=(
+            authorization_model_ref_to_proto(response.model)
+            if response.model is not None
+            else None
+        )
+    )
+
+
+def list_active_model_resource_types_request_from_proto(
+    value: Any,
+) -> ListActiveModelResourceTypesRequest:
+    return ListActiveModelResourceTypesRequest(
+        filter=(
+            AuthorizationModelResourceTypeFilter(
+                name=value.filter.name,
+                source_layer=value.filter.source_layer,
+            )
+            if _has_field(value, "filter")
+            else None
+        ),
+        page_size=value.page_size,
+        page_token=value.page_token,
+    )
+
+
+def list_active_model_resource_types_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListActiveModelResourceTypesResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        ListActiveModelResourceTypesResponse,
+        "ListActiveModelResourceTypesResponse",
+    )
+    return pb.ListActiveModelResourceTypesResponse(
+        resource_types=[
+            authorization_model_resource_type_to_proto(item)
+            for item in response.resource_types
+        ],
+        next_page_token=response.next_page_token,
+        model_id=response.model_id,
+    )
+
+
+def relationship_filter_from_proto(value: Any) -> RelationshipFilter:
+    return RelationshipFilter(
+        target=relationship_target_from_proto(value.target)
+        if _has_field(value, "target")
+        else None,
+        relation=value.relation,
+        resource=_resource_from_proto(value.resource)
+        if _has_field(value, "resource")
+        else None,
+        target_type=value.target_type,
+        target_entity_type=value.target_entity_type,
+        resource_type=value.resource_type,
+        source_layer=value.source_layer,
+    )
+
+
+def relationship_from_proto(value: Any) -> Relationship:
+    return Relationship(
+        tuple=relationship_tuple_from_proto(value.tuple)
+        if _has_field(value, "tuple")
+        else None,
+        properties=_struct_to_dict(value.properties)
+        if _has_field(value, "properties")
+        else {},
+        source_layer=value.source_layer,
+    )
+
+
+def relationship_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.Relationship):
+        return _copy(value)
+    relationship = _coerce(value, Relationship, "Relationship")
+    return pb.Relationship(
+        tuple=(
+            relationship_tuple_to_proto(relationship.tuple)
+            if relationship.tuple is not None
+            else None
+        ),
+        properties=_struct_from_dict(relationship.properties),
+        source_layer=relationship.source_layer,
+    )
+
+
+def relationship_tuple_from_proto(value: Any) -> RelationshipTuple:
+    return RelationshipTuple(
+        target=relationship_target_from_proto(value.target)
+        if _has_field(value, "target")
+        else None,
+        relation=value.relation,
+        resource=_resource_from_proto(value.resource)
+        if _has_field(value, "resource")
+        else None,
+    )
+
+
+def relationship_tuple_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.RelationshipTuple):
+        return _copy(value)
+    relationship_tuple = _coerce(value, RelationshipTuple, "RelationshipTuple")
+    return pb.RelationshipTuple(
+        target=(
+            relationship_target_to_proto(relationship_tuple.target)
+            if relationship_tuple.target is not None
+            else None
+        ),
+        relation=relationship_tuple.relation,
+        resource=(
+            _resource_to_proto(relationship_tuple.resource)
+            if relationship_tuple.resource is not None
+            else None
+        ),
+    )
+
+
+def relationship_target_from_proto(value: Any) -> RelationshipTarget:
+    selected = _which_oneof(value, "kind")
+    if selected == "subject":
+        return RelationshipTarget(subject=_subject_from_proto(value.subject))
+    if selected == "resource":
+        return RelationshipTarget(resource=_resource_from_proto(value.resource))
+    if selected == "subject_set":
+        return RelationshipTarget(subject_set=subject_set_from_proto(value.subject_set))
+    return RelationshipTarget()
+
+
+def relationship_target_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.RelationshipTarget):
+        return _copy(value)
+    target = _coerce(value, RelationshipTarget, "RelationshipTarget")
+    message = pb.RelationshipTarget()
+    if target.subject is not None:
+        message.subject.CopyFrom(_subject_to_proto(target.subject))
+    elif target.resource is not None:
+        message.resource.CopyFrom(_resource_to_proto(target.resource))
+    elif target.subject_set is not None:
+        message.subject_set.CopyFrom(subject_set_to_proto(target.subject_set))
+    return message
+
+
+def subject_set_from_proto(value: Any) -> SubjectSet:
+    return SubjectSet(
+        resource=_resource_from_proto(value.resource)
+        if _has_field(value, "resource")
+        else None,
+        relation=value.relation,
+    )
+
+
+def subject_set_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.SubjectSet):
+        return _copy(value)
+    subject_set = _coerce(value, SubjectSet, "SubjectSet")
+    return pb.SubjectSet(
+        resource=(
+            _resource_to_proto(subject_set.resource)
+            if subject_set.resource is not None
+            else None
+        ),
+        relation=subject_set.relation,
+    )
+
+
+def authorization_model_from_proto(value: Any) -> AuthorizationModel:
+    return AuthorizationModel(
+        id=value.id,
+        version=value.version,
+        resource_types=[
+            authorization_model_resource_type_from_proto(item)
+            for item in value.resource_types
+        ],
+    )
+
+
+def authorization_model_resource_type_from_proto(
+    value: Any,
+) -> AuthorizationModelResourceType:
+    return AuthorizationModelResourceType(
+        name=value.name,
+        relations=[
+            ModelRelation(
+                name=relation.name,
+                allowed_targets=[
+                    model_allowed_target_from_proto(target)
+                    for target in relation.allowed_targets
+                ],
+            )
+            for relation in value.relations
+        ],
+        actions=[
+            ModelAction(name=action.name, relations=list(action.relations))
+            for action in value.actions
+        ],
+        source_layer=value.source_layer,
+        default_access_policy=value.default_access_policy,
+    )
+
+
+def authorization_model_resource_type_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.AuthorizationModelResourceType):
+        return _copy(value)
+    resource_type = _coerce(
+        value, AuthorizationModelResourceType, "AuthorizationModelResourceType"
+    )
+    return pb.AuthorizationModelResourceType(
+        name=resource_type.name,
+        relations=[
+            pb.ModelRelation(
+                name=relation.name,
+                allowed_targets=[
+                    model_allowed_target_to_proto(target)
+                    for target in relation.allowed_targets
+                ],
+            )
+            for relation in resource_type.relations
+        ],
+        actions=[
+            pb.ModelAction(name=action.name, relations=list(action.relations))
+            for action in resource_type.actions
+        ],
+        source_layer=resource_type.source_layer,
+        default_access_policy=resource_type.default_access_policy,
+    )
+
+
+def authorization_model_ref_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.AuthorizationModelRef):
+        return _copy(value)
+    model = _coerce(value, AuthorizationModelRef, "AuthorizationModelRef")
+    return pb.AuthorizationModelRef(
+        id=model.id,
+        version=model.version,
+        created_at=_timestamp_from_datetime(model.created_at),
+    )
+
+
+def model_allowed_target_from_proto(value: Any) -> ModelAllowedTarget:
+    selected = _which_oneof(value, "kind")
+    if selected == "subject_type":
+        return ModelAllowedTarget(subject_type=value.subject_type)
+    if selected == "resource_type":
+        return ModelAllowedTarget(resource_type=value.resource_type)
+    if selected == "subject_set_type":
+        return ModelAllowedTarget(
+            subject_set_type=SubjectSetType(
+                resource_type=value.subject_set_type.resource_type,
+                relation=value.subject_set_type.relation,
+            )
+        )
+    return ModelAllowedTarget()
+
+
+def model_allowed_target_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ModelAllowedTarget):
+        return _copy(value)
+    target = _coerce(value, ModelAllowedTarget, "ModelAllowedTarget")
+    message = pb.ModelAllowedTarget()
+    if target.subject_type is not None:
+        message.subject_type = target.subject_type
+    elif target.resource_type is not None:
+        message.resource_type = target.resource_type
+    elif target.subject_set_type is not None:
+        message.subject_set_type.CopyFrom(
+            pb.SubjectSetType(
+                resource_type=target.subject_set_type.resource_type,
+                relation=target.subject_set_type.relation,
+            )
+        )
+    return message
+
+
+def _subject_from_proto(value: Any) -> AuthorizationSubject:
+    return AuthorizationSubject(
+        type=value.type,
+        id=value.id,
+        properties=_struct_to_dict(value.properties)
+        if _has_field(value, "properties")
+        else {},
+    )
+
+
+def _subject_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.Subject):
+        return _copy(value)
+    subject = _coerce(value, AuthorizationSubject, "AuthorizationSubject")
+    return pb.Subject(
+        type=subject.type,
+        id=subject.id,
+        properties=_struct_from_dict(subject.properties),
+    )
+
+
+def _action_from_proto(value: Any) -> AuthorizationAction:
+    return AuthorizationAction(
+        name=value.name,
+        properties=_struct_to_dict(value.properties)
+        if _has_field(value, "properties")
+        else {},
+    )
+
+
+def _resource_from_proto(value: Any) -> AuthorizationResource:
+    return AuthorizationResource(
+        type=value.type,
+        id=value.id,
+        properties=_struct_to_dict(value.properties)
+        if _has_field(value, "properties")
+        else {},
+    )
+
+
+def _resource_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.Resource):
+        return _copy(value)
+    resource = _coerce(value, AuthorizationResource, "AuthorizationResource")
+    return pb.Resource(
+        type=resource.type,
+        id=resource.id,
+        properties=_struct_from_dict(resource.properties),
+    )
+
+
+def _authorization_model_ref_from_proto(value: Any) -> AuthorizationModelRef:
+    return AuthorizationModelRef(
+        id=value.id,
+        version=value.version,
+        created_at=_datetime_from_timestamp(value.created_at)
+        if _has_field(value, "created_at")
+        else None,
+    )
+
+
+def _sequence(value: Sequence[Any] | None) -> list[Any]:
+    return list(value or ())
+
+_sequence
+_authorization_model_ref_from_proto

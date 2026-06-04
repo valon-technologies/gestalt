@@ -34,30 +34,22 @@ const (
 	WorkflowRunStatusCanceled  = "canceled"
 	WorkflowRunStatusUnknown   = "unknown"
 
-	WorkflowOperationCreateDefinition   = "create_definition"
-	WorkflowOperationGetDefinition      = "get_definition"
-	WorkflowOperationUpdateDefinition   = "update_definition"
-	WorkflowOperationDeleteDefinition   = "delete_definition"
-	WorkflowOperationStartRun           = "start_run"
-	WorkflowOperationGetRun             = "get_run"
-	WorkflowOperationListRuns           = "list_runs"
-	WorkflowOperationCancelRun          = "cancel_run"
-	WorkflowOperationSignalRun          = "signal_run"
-	WorkflowOperationSignalOrStartRun   = "signal_or_start_run"
-	WorkflowOperationUpsertSchedule     = "upsert_schedule"
-	WorkflowOperationGetSchedule        = "get_schedule"
-	WorkflowOperationListSchedules      = "list_schedules"
-	WorkflowOperationDeleteSchedule     = "delete_schedule"
-	WorkflowOperationPauseSchedule      = "pause_schedule"
-	WorkflowOperationResumeSchedule     = "resume_schedule"
-	WorkflowOperationUpsertEventTrigger = "upsert_event_trigger"
-	WorkflowOperationGetEventTrigger    = "get_event_trigger"
-	WorkflowOperationListEventTriggers  = "list_event_triggers"
-	WorkflowOperationDeleteEventTrigger = "delete_event_trigger"
-	WorkflowOperationPauseEventTrigger  = "pause_event_trigger"
-	WorkflowOperationResumeEventTrigger = "resume_event_trigger"
-	WorkflowOperationPublishEvent       = "publish_event"
-	WorkflowOperationPing               = "ping"
+	WorkflowOperationApplyDefinition     = "apply_definition"
+	WorkflowOperationGetDefinition       = "get_definition"
+	WorkflowOperationListDefinitions     = "list_definitions"
+	WorkflowOperationSetDefinitionPaused = "set_definition_paused"
+	WorkflowOperationSetActivationPaused = "set_activation_paused"
+	WorkflowOperationDeleteDefinition    = "delete_definition"
+	WorkflowOperationStartRun            = "start_run"
+	WorkflowOperationGetRun              = "get_run"
+	WorkflowOperationListRuns            = "list_runs"
+	WorkflowOperationGetRunEvents        = "get_run_events"
+	WorkflowOperationGetRunOutput        = "get_run_output"
+	WorkflowOperationCancelRun           = "cancel_run"
+	WorkflowOperationSignalRun           = "signal_run"
+	WorkflowOperationSignalOrStartRun    = "signal_or_start_run"
+	WorkflowOperationDeliverEvent        = "deliver_event"
+	WorkflowOperationPing                = "ping"
 )
 
 var (
@@ -83,18 +75,18 @@ type workflowRunCompletedMetricSet struct {
 	duration metric.Float64Histogram
 }
 
-type workflowMatchedTriggersMetricSet struct {
+type workflowMatchedActivationsMetricSet struct {
 	count metric.Int64Counter
 }
 
 var (
-	workflowProviderOperationMetrics metricutil.MeterCache[metricSet]
-	workflowManagerOperationMetrics  metricutil.MeterCache[metricSet]
-	workflowRunStartedMetrics        metricutil.MeterCache[countMetricSet]
-	workflowRunCompletedMetrics      metricutil.MeterCache[workflowRunCompletedMetricSet]
-	workflowEventPublishedMetrics    metricutil.MeterCache[countMetricSet]
-	workflowEventMatchedMetrics      metricutil.MeterCache[workflowMatchedTriggersMetricSet]
-	workflowScheduleFiredMetrics     metricutil.MeterCache[countMetricSet]
+	workflowProviderOperationMetrics       metricutil.MeterCache[metricSet]
+	workflowManagerOperationMetrics        metricutil.MeterCache[metricSet]
+	workflowRunStartedMetrics              metricutil.MeterCache[countMetricSet]
+	workflowRunCompletedMetrics            metricutil.MeterCache[workflowRunCompletedMetricSet]
+	workflowEventDeliveredMetrics          metricutil.MeterCache[countMetricSet]
+	workflowEventMatchedActivationsMetrics metricutil.MeterCache[workflowMatchedActivationsMetricSet]
+	workflowActivationFiredMetrics         metricutil.MeterCache[countMetricSet]
 )
 
 func RecordWorkflowProviderOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
@@ -133,31 +125,31 @@ func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, dims W
 	metrics.duration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
 }
 
-func RecordWorkflowEventPublished(ctx context.Context, err error, dims WorkflowMetricDims) {
-	recordCount(ctx, &workflowEventPublishedMetrics, "gestaltd.workflows.events.published", "gestaltd workflow published events", err != nil, workflowMetricAttrs(dims, err)...)
+func RecordWorkflowEventDelivered(ctx context.Context, err error, dims WorkflowMetricDims) {
+	recordCount(ctx, &workflowEventDeliveredMetrics, "gestaltd.workflows.events.delivered", "gestaltd workflow delivered events", err != nil, workflowMetricAttrs(dims, err)...)
 }
 
-func RecordWorkflowEventMatchedTriggers(ctx context.Context, count int64, dims WorkflowMetricDims) {
+func RecordWorkflowEventMatchedActivations(ctx context.Context, count int64, dims WorkflowMetricDims) {
 	if count <= 0 {
 		return
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	metrics := workflowEventMatchedMetrics.Load(ctx, tracerName, func(meter metric.Meter) workflowMatchedTriggersMetricSet {
-		return workflowMatchedTriggersMetricSet{
+	metrics := workflowEventMatchedActivationsMetrics.Load(ctx, tracerName, func(meter metric.Meter) workflowMatchedActivationsMetricSet {
+		return workflowMatchedActivationsMetricSet{
 			count: metricutil.NewInt64Counter(
 				meter,
-				"gestaltd.workflows.events.matched_triggers.count",
-				"Counts gestaltd workflow event trigger matches.",
+				"gestaltd.workflows.events.matched_activations.count",
+				"Counts gestaltd workflow event activation matches.",
 			),
 		}
 	})
 	metrics.count.Add(ctx, count, metric.WithAttributes(workflowMetricAttrs(dims, nil)...))
 }
 
-func RecordWorkflowScheduleFired(ctx context.Context, dims WorkflowMetricDims) {
-	recordCount(ctx, &workflowScheduleFiredMetrics, "gestaltd.workflows.schedules.fired", "gestaltd workflow schedule firings", false, workflowMetricAttrs(dims, nil)...)
+func RecordWorkflowActivationFired(ctx context.Context, dims WorkflowMetricDims) {
+	recordCount(ctx, &workflowActivationFiredMetrics, "gestaltd.workflows.activations.fired", "gestaltd workflow activation firings", false, workflowMetricAttrs(dims, nil)...)
 }
 
 func WorkflowMetricAttributes(dims WorkflowMetricDims) []attribute.KeyValue {

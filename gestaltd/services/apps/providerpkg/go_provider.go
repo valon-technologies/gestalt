@@ -206,7 +206,7 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
 		return "", "", err
 	}
-	if kind == providermanifestv1.KindExternalCredentials {
+	if kind == providermanifestv1.KindExternalCredentials || kind == providermanifestv1.KindAuthorization {
 		if goToolUnavailable != nil {
 			return "", "", goToolUnavailable
 		}

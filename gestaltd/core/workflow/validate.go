@@ -17,11 +17,13 @@ func ValueIsSet(value Value) bool {
 		return true
 	case value.Template != nil:
 		return true
-	case strings.TrimSpace(value.RunInput) != "":
+	case strings.TrimSpace(value.Input) != "":
 		return true
-	case strings.TrimSpace(value.SignalPayload) != "":
+	case strings.TrimSpace(value.Signal) != "":
 		return true
 	case value.StepOutput != nil:
+		return true
+	case value.StepInput != nil:
 		return true
 	default:
 		return false
@@ -38,7 +40,7 @@ func IsScalarJSON(value any) bool {
 	}
 }
 
-// ValidateValueMapRefs validates step-output references in a value map.
+// ValidateValueMapRefs validates step references in a value map.
 func ValidateValueMapRefs(path string, values map[string]Value, previousSteps map[string]struct{}) error {
 	for key := range values {
 		if err := ValidateValueRefs(path+"."+key, values[key], previousSteps); err != nil {
@@ -48,7 +50,7 @@ func ValidateValueMapRefs(path string, values map[string]Value, previousSteps ma
 	return nil
 }
 
-// ValidateValueRefs validates step-output references in a value tree.
+// ValidateValueRefs validates step references in a value tree.
 func ValidateValueRefs(path string, value Value, previousSteps map[string]struct{}) error {
 	if value.StepOutput != nil {
 		stepID := strings.TrimSpace(value.StepOutput.StepID)
@@ -60,6 +62,18 @@ func ValidateValueRefs(path string, value Value, previousSteps map[string]struct
 		}
 		if strings.TrimSpace(value.StepOutput.Path) == "" {
 			return fmt.Errorf("%s.step_output.path is required", path)
+		}
+	}
+	if value.StepInput != nil {
+		stepID := strings.TrimSpace(value.StepInput.StepID)
+		if stepID == "" {
+			return fmt.Errorf("%s.step_input.step_id is required", path)
+		}
+		if _, ok := previousSteps[stepID]; !ok {
+			return fmt.Errorf("%s.step_input.step_id %q must reference an earlier step", path, stepID)
+		}
+		if strings.TrimSpace(value.StepInput.Path) == "" {
+			return fmt.Errorf("%s.step_input.path is required", path)
 		}
 	}
 	for key := range value.Object {

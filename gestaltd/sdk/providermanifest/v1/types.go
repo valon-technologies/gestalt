@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -209,7 +208,6 @@ type HTTPBinding struct {
 	RequestBody    *HTTPRequestBody `json:"requestBody,omitempty" yaml:"requestBody,omitempty"`
 	Security       string           `json:"security,omitempty" yaml:"security,omitempty"`
 	Target         string           `json:"target" yaml:"target"`
-	Ack            *HTTPAck         `json:"ack,omitempty" yaml:"ack,omitempty"`
 }
 
 type HTTPRequestBody struct {
@@ -218,12 +216,6 @@ type HTTPRequestBody struct {
 }
 
 type HTTPMediaType struct {
-}
-
-type HTTPAck struct {
-	Status  int               `json:"status,omitempty" yaml:"status,omitempty"`
-	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	Body    any               `json:"body,omitempty" yaml:"body,omitempty"`
 }
 
 type HTTPSecurityScheme struct {
@@ -865,7 +857,6 @@ func cloneHTTPBinding(src *HTTPBinding) *HTTPBinding {
 	}
 	cloned := *src
 	cloned.RequestBody = cloneHTTPRequestBody(src.RequestBody)
-	cloned.Ack = cloneHTTPAck(src.Ack)
 	return &cloned
 }
 
@@ -889,75 +880,6 @@ func cloneHTTPMediaType(src *HTTPMediaType) *HTTPMediaType {
 	}
 	cloned := *src
 	return &cloned
-}
-
-func cloneHTTPAck(src *HTTPAck) *HTTPAck {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
-	if src.Headers != nil {
-		cloned.Headers = make(map[string]string, len(src.Headers))
-		for name, value := range src.Headers {
-			cloned.Headers[name] = value
-		}
-	}
-	cloned.Body = cloneHTTPBodyValue(src.Body)
-	return &cloned
-}
-
-func cloneHTTPBodyValue(src any) any {
-	if src == nil {
-		return nil
-	}
-	return cloneHTTPBodyReflectValue(reflect.ValueOf(src)).Interface()
-}
-
-func cloneHTTPBodyReflectValue(value reflect.Value) reflect.Value {
-	if !value.IsValid() {
-		return reflect.Value{}
-	}
-	switch value.Kind() {
-	case reflect.Interface:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		return cloneHTTPBodyReflectValue(value.Elem())
-	case reflect.Pointer:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.New(value.Type().Elem())
-		cloned.Elem().Set(cloneHTTPBodyReflectValue(value.Elem()))
-		return cloned
-	case reflect.Map:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.MakeMapWithSize(value.Type(), value.Len())
-		iter := value.MapRange()
-		for iter.Next() {
-			cloned.SetMapIndex(cloneHTTPBodyReflectValue(iter.Key()), cloneHTTPBodyReflectValue(iter.Value()))
-		}
-		return cloned
-	case reflect.Slice:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		for i := 0; i < value.Len(); i++ {
-			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
-		}
-		return cloned
-	case reflect.Array:
-		cloned := reflect.New(value.Type()).Elem()
-		for i := 0; i < value.Len(); i++ {
-			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
-		}
-		return cloned
-	default:
-		return value
-	}
 }
 
 func decodeJSONKnownFields(data []byte, out any) error {

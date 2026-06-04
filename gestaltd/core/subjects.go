@@ -2,23 +2,12 @@ package core
 
 import "strings"
 
-// Actor identifies who performed an action without credential-scoping fields.
-type Actor struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
-}
-
 // TODO(#1823): Add first-class run-as subject and external-identity grant
 // provisioning instead of relying on opaque subject IDs plus separate tuple
 // seeding.
 type RunAsSubject struct {
 	SubjectID           string
-	SubjectKind         string
 	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
 }
 
 func ParseSubjectID(subjectID string) (kind, id string, ok bool) {
@@ -34,15 +23,7 @@ func NormalizeRunAsSubject(subject *RunAsSubject) *RunAsSubject {
 	}
 	out := &RunAsSubject{
 		SubjectID:           strings.TrimSpace(subject.SubjectID),
-		SubjectKind:         strings.TrimSpace(subject.SubjectKind),
 		CredentialSubjectID: strings.TrimSpace(subject.CredentialSubjectID),
-		DisplayName:         strings.TrimSpace(subject.DisplayName),
-		AuthSource:          strings.TrimSpace(subject.AuthSource),
-	}
-	if out.SubjectKind == "" {
-		if kind, _, ok := ParseSubjectID(out.SubjectID); ok {
-			out.SubjectKind = kind
-		}
 	}
 	if out.CredentialSubjectID == "" {
 		out.CredentialSubjectID = out.SubjectID
@@ -57,18 +38,9 @@ func RunAsSubjectsEqual(left, right *RunAsSubject) bool {
 		return left == nil && right == nil
 	}
 	return left.SubjectID == right.SubjectID &&
-		left.SubjectKind == right.SubjectKind &&
-		left.CredentialSubjectID == right.CredentialSubjectID &&
-		left.DisplayName == right.DisplayName &&
-		left.AuthSource == right.AuthSource
+		left.CredentialSubjectID == right.CredentialSubjectID
 }
 
 func RunAsSubjectsMatchIdentity(left, right *RunAsSubject) bool {
-	left = NormalizeRunAsSubject(left)
-	right = NormalizeRunAsSubject(right)
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return left.SubjectID == right.SubjectID &&
-		left.SubjectKind == right.SubjectKind
+	return RunAsSubjectsEqual(left, right)
 }

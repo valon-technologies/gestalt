@@ -55,7 +55,7 @@ var providerLifecycleKinds = []providerLifecycleKind{
 			if lock == nil {
 				return nil
 			}
-			return lock.Providers
+			return lock.Providers.App
 		},
 	},
 	lifecycleHostProviderKind(providermanifestv1.KindAuthentication, providermanifestv1.KindAuthentication),
@@ -91,7 +91,7 @@ var providerLifecycleKinds = []providerLifecycleKind{
 			if lock == nil {
 				return nil
 			}
-			return lock.Runtimes
+			return lock.Providers.Runtime
 		},
 	},
 	{
@@ -116,7 +116,7 @@ var providerLifecycleKinds = []providerLifecycleKind{
 			if lock == nil {
 				return nil
 			}
-			return lock.UIs
+			return lock.Providers.UI
 		},
 	},
 }
@@ -165,27 +165,27 @@ func lifecycleHostProviderKind(kind, manifestKind string) providerLifecycleKind 
 			}
 			switch kind {
 			case providermanifestv1.KindAuthentication:
-				return lock.Authentication
+				return lock.Providers.Authentication
 			case providermanifestv1.KindAuthorization:
-				return lock.Authorization
+				return lock.Providers.Authorization
 			case providermanifestv1.KindExternalCredentials:
-				return lock.ExternalCredentials
+				return lock.Providers.ExternalCredentials
 			case providermanifestv1.KindSecrets:
-				return lock.Secrets
+				return lock.Providers.Secrets
 			case string(config.HostProviderKindTelemetry):
-				return lock.Telemetry
+				return lock.Providers.Telemetry
 			case string(config.HostProviderKindAudit):
-				return lock.Audit
+				return lock.Providers.Audit
 			case providermanifestv1.KindIndexedDB:
-				return lock.IndexedDBs
+				return lock.Providers.IndexedDB
 			case providermanifestv1.KindCache:
-				return lock.Caches
+				return lock.Providers.Cache
 			case providermanifestv1.KindS3:
-				return lock.S3
+				return lock.Providers.S3
 			case providermanifestv1.KindWorkflow:
-				return lock.Workflows
+				return lock.Providers.Workflow
 			case providermanifestv1.KindAgent:
-				return lock.Agents
+				return lock.Providers.Agent
 			default:
 				return nil
 			}

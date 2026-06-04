@@ -837,9 +837,6 @@ spec:
         content:
           application/x-www-form-urlencoded: {}
       target: handle_command
-      ack:
-        body:
-          status: accepted
 `))
 
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
@@ -869,37 +866,6 @@ spec:
 	rendered := string(encoded)
 	if !strings.Contains(rendered, "securitySchemes:") || !strings.Contains(rendered, "http:") {
 		t.Fatalf("expected hosted http metadata in canonical output:\n%s", rendered)
-	}
-}
-
-func TestManifestWorkflow_RejectsNon2xxHTTPAckStatus(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
-kind: app
-source: github.com/acme/apps/bad-http-ack
-version: 1.0.0
-spec:
-  securitySchemes:
-    none:
-      type: none
-  http:
-    command:
-      path: /command
-      method: POST
-      security: none
-      target: handle_command
-      ack:
-        status: 500
-`))
-
-	_, _, err := ReadSourceManifestFile(manifestPath)
-	if err == nil {
-		t.Fatal("expected invalid manifest")
-	}
-	if !strings.Contains(err.Error(), `provider.http.command.ack.status must be a 2xx status`) {
-		t.Fatalf("error = %v", err)
 	}
 }
 

@@ -140,11 +140,8 @@ message AppInvokeGraphQLRequest {
 // SubjectContext identifies the caller that initiated an operation.
 message SubjectContext {
   string id = 1;
-  string kind = 2;
-  string display_name = 3;
-  string auth_source = 4;
-  string email = 5;
-  string credential_subject_id = 6;
+  string credential_subject_id = 2;
+  string email = 3;
 }
 
 message AgentToolRef {

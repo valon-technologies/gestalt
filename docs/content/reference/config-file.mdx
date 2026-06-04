@@ -7,20 +7,21 @@ config API version is `gestaltd.config/v6`, and every config file must declare
 it with `apiVersion`. When you pass multiple `--config` flags, Gestalt merges
 them left-to-right before validation and bootstrap. The top-level keys are
 `server` (listener, encryption, egress, and host-provider selection),
-`authorization` (shared subject access policy), `connections` (reusable
+`authorization` (static authorization model and relationships), `connections` (reusable
 upstream credential definitions), `providers` (named
 authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
 workflow, cache, s3, and agent entries), `providerRepositories` (package index
 URLs), `runtime` (hosted execution backends), `workflows` (config-managed
-schedules and triggers), and `apps` (executable integrations and optional
-app-backed UI mounts):
+definitions), and `apps` (executable integrations and optional app-backed UI
+mounts):
 
 ```yaml
 apiVersion: gestaltd.config/v6
 server:
   # listener, encryption, egress, host-provider selectors
 authorization:
-  policies: {}
+  models: {}
+  relationships: []
 connections: {}
 providerRepositories: {}
 runtime:
@@ -38,8 +39,7 @@ providers:
   ui: {}
   workflow: {}
 workflows:
-  schedules: {}
-  eventTriggers: {}
+  definitions: {}
 apps: {}
 ```
 
@@ -174,16 +174,19 @@ server:
     authentication: oidc
     indexeddb: main
 authorization:
-  policies:
-    support_staff:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
-        - subjectID: user:admin-user
-          role: admin
-        - subjectID: service_account:triage-bot
-          role: viewer
+  models:
+    default:
+      resourceTypes:
+        support:
+          defaultAccessPolicy: deny
+          relations:
+            viewer:
+              subjectTypes: [subject]
+            admin:
+              subjectTypes: [subject]
+          actions:
+            ticket.read:
+              relations: [viewer, admin]
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
@@ -202,13 +205,11 @@ authorization:
 
 `agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
 
-`admin.authorizationPolicy` binds the built-in `/admin` route to one shared subject access policy from `authorization.policies`. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
+`admin.authorizationPolicy` names the policy used to protect the built-in `/admin` route. `admin.allowedRoles` controls which roles may load the built-in admin UI, defaulting to `[admin]`.
 
 `admin.ui` optionally pins `/admin` to one named `providers.ui.<name>` bundle. The selected bundle must ship `admin/index.html` inside its prepared asset root. When `admin.ui` is omitted, Gestalt first auto-discovers admin assets from the root-mounted UI bundle (`path: /`) when that bundle contains `admin/index.html`, then falls back to the built-in admin shell.
 
-`authorization.policies` configures shared subject access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values such as `user:<id>` or `service_account:<id>`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Apps opt into a policy explicitly through `authorizationPolicy`.
-
-`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, and allowed targets. `authorization.relationships` defines static relationship tuples against those resource types. These fields are parsed and validated alongside existing `authorization.policies`; provider reconciliation consumes both the compatibility policy inputs and the generic model fragments when the authorization composer is enabled.
+`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, allowed targets, and per-resource `defaultAccessPolicy`. `authorization.relationships` defines static relationship tuples against those resource types.
 
 ```yaml
 authorization:
@@ -267,9 +268,9 @@ authorization:
         id: authorization.relationships[0]
 ```
 
-Dynamic grants are app-scoped, not policy-scoped. When a app sets `authorizationPolicy`, built-in Gestalt admins can manage additional dynamic members from the admin UI at `/admin/?tab=members`, and callers with role `admin` on a specific app can manage dynamic members for that app through `/admin/api/v1/authorization/apps/{app}/members` or `gestalt authorization apps members ...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that app. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
+Dynamic grants are app-scoped. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
-Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant app access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
+Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant access with static authorization relationships or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
 
 Apps without `authorizationPolicy` are open to any authenticated subject. Bind a app to a policy when non-human access should be explicit.
 
@@ -291,7 +292,6 @@ Apps without `authorizationPolicy` are open to any authenticated subject. Bind a
 | `admin.authorizationPolicy` | | Shared subject access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
-| `authorization.policies` | | Shared subject access policies resolved by canonical `subjectID`. |
 | `authorization.models` | | Static authorization model fragments keyed by model name. Each fragment defines `resourceTypes`, relation `subjectTypes` or `allowedTargets`, and actions. |
 | `authorization.relationships` | | Static relationship tuples with `subject`, `relation`, and `resource` fields. |
 | `authorization.resourceTypes.<type>.dynamic.allowAdditionalRelationships` | `false` | Allows later dynamic source state to add relationship tuples for a static resource type. Dynamic override/removal of static relationships is not supported. |
@@ -526,16 +526,8 @@ providers:
         indexeddb: main
 ```
 
-Authorization providers are optional only when you are relying on static human
-policy members from config. When configured, Gestalt uses the selected
-provider for dynamic subject app/admin authorization, relationship storage,
-model lifecycle, and the built-in admin authorization APIs under
-`/admin/api/v1/authorization/...`.
-
-If `providers.authorization` is omitted, static policy members under
-`authorization.policies` still work, but there is no provider-backed
-relationship store and the dynamic subject authorization control plane is
-unavailable.
+When configured, Gestalt uses the selected authorization provider for
+relationship storage and model lifecycle.
 
 The exact config fields depend on the selected authorization provider package. The first-party `authorization/indexeddb` provider expects the name of a host IndexedDB provider and stores authorization models plus relationships there.
 
@@ -550,15 +542,14 @@ The exact config fields depend on the selected authorization provider package. T
 
 ## `providers.workflow`
 
-Workflow providers back global runs, schedules, and triggers. Configure
-one or more named entries under `providers.workflow`, then reference them from
-top-level `workflows.schedules.*.provider` or
-`workflows.eventTriggers.*.provider`. There is no
-`server.providers.workflow`: config-managed workflow objects choose a provider
-explicitly, or inherit the sole/default workflow provider when `provider` is
-omitted. User-owned schedules and triggers use the same provider pool
-through `/api/v1/workflow/schedules`,
-`/api/v1/workflow/event-triggers`, and `gestalt workflow ...`.
+Workflow providers back definitions, activations, runs, run events, and run
+outputs. Configure one or more named entries under `providers.workflow`, then
+reference them from top-level `workflows.definitions.*.provider`. There is no
+`server.providers.workflow`: each workflow definition chooses a provider
+explicitly, or inherits the sole/default workflow provider when `provider` is
+omitted. Runtime event delivery and run inspection use the same provider pool
+through `/api/v1/workflow/events`, `/api/v1/workflow/runs`, and
+`gestalt workflow ...`.
 
 ```yaml
 providers:
@@ -579,38 +570,37 @@ providers:
         provider: workflow_state
         db: workflow
         objectStores:
-          - schedules
-          - event_triggers
+          - definitions
+          - activations
           - runs
+          - events
       config:
         pollInterval: 1s
 
 workflows:
-  schedules:
+  definitions:
     nightly_sync:
       provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
+      paused: false
       runAs:
         subject:
           id: service_account:roadmap-sync
-      target:
-        steps:
-          - id: sync_items
-            app:
-              name: roadmap
-              operation: sync_items
-  eventTriggers:
-    item_updated:
-      provider: local
-      match:
-        type: roadmap.item.updated
-      target:
-        steps:
-          - id: sync_items
-            app:
-              name: roadmap
-              operation: sync_items
+      steps:
+        - id: sync_items
+          app:
+            name: roadmap
+            operation: sync_items
+      on:
+        nightly:
+          schedule:
+            cron: "0 3 * * *"
+            timezone: America/New_York
+        item_updated:
+          event:
+            type: roadmap.item.updated
+            source: roadmap
+          input:
+            raw: "${{ signal.data }}"
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, it binds a
@@ -655,7 +645,7 @@ runtime:
 
 | Field | Description |
 | --- | --- |
-| `default` | Marks this named workflow entry as the default selection when a config-managed workflow object or API request omits `provider`. |
+| `default` | Marks this named workflow entry as the default selection when a workflow definition or API request omits `provider`. |
 | `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the workflow provider. |
@@ -751,110 +741,85 @@ through the platform shell.
 
 ## `workflows`
 
-Top-level `workflows` declares config-managed schedules and triggers.
-These objects are reconciled into the selected workflow provider at startup and
-invoke an explicit `target.steps` plan. Each step runs exactly one app call
-or one agent turn.
+Top-level `workflows` declares config-managed workflow definitions. Each
+definition is reconciled into the selected workflow provider at startup with a
+single ordered `steps` plan plus zero or more `on` activations. Each step runs
+exactly one app call or one agent turn.
 
-Config-managed workflows are deployment-owned. They are created from YAML at
-startup, updated when config changes, and removed when deleted from config.
-They are distinct from user-owned schedules created through the global workflow
-HTTP API and CLI. For an end-to-end usage guide, see
+Config-managed workflow definitions are deployment-owned. They are applied from
+YAML at startup, updated when config changes, and removed when deleted from
+config. Runtime event delivery and run inspection are available through the
+global workflow HTTP API and CLI. For an end-to-end usage guide, see
 [Workflow](/providers/workflow).
 
 ```yaml
 workflows:
-  schedules:
-    nightly_sync:
+  definitions:
+    roadmap_sync:
       provider: local
-      cron: "0 3 * * *"
-      timezone: America/New_York
-      target:
-        steps:
-          - id: sync_items
-            app:
-              name: roadmap
-              operation: sync_items
-              connection: default
-              instance: tenant-a
-              input:
-                literal:
-                  mode: incremental
+      paused: false
+      steps:
+        - id: sync_items
+          app:
+            name: roadmap
+            operation: sync_items
+            connection: default
+            instance: tenant-a
+            input:
+              literal:
+                mode: incremental
       invokes:
         - app: slack
           operation: conversations.list
         - app: slack
           operation: conversations.history
-      paused: false
-
-  eventTriggers:
-    item_updated:
-      provider: local
-      match:
-        type: roadmap.item.updated
-        source: roadmap
-      target:
-        steps:
-          - id: sync_items
-            app:
-              name: roadmap
-              operation: sync_items
-              input:
-                literal:
-                  reason: sync
       runAs:
         subject:
           id: service_account:roadmap-events
-      invokes:
-        - app: slack
-          operation: chat.postMessage
-      paused: false
+      on:
+        nightly:
+          schedule:
+            cron: "0 3 * * *"
+            timezone: America/New_York
+        item_updated:
+          event:
+            type: roadmap.item.updated
+            source: roadmap
+          input:
+            reason: sync
+            item: "${{ signal.data.item }}"
 ```
 
-### `workflows.schedules.*`
+### `workflows.definitions.*`
 
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.steps` | Required ordered workflow steps. Each step has `id` and exactly one of `app` or `agent`. |
-| `target.steps[].inputs` | Optional named values available to the step. Values use the same source shape as app input values. |
-| `target.steps[].app.name` | Target app key from `apps`. Required for app steps. |
-| `target.steps[].app.operation` | Target operation ID. Required for app steps. |
-| `target.steps[].app.connection` | Optional target connection name. |
-| `target.steps[].app.instance` | Optional target instance name. |
-| `target.steps[].app.input` | Optional workflow value that must resolve to a JSON object. Use `literal` for static params. |
-| `target.steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
-| `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
+| `paused` | When `true`, Gestalt applies the definition in a paused state. |
+| `steps` | Required ordered workflow steps. Each step has `id` and exactly one of `app` or `agent`. |
+| `steps[].inputs` | Optional named values available to the step. Values use the same source shape as app input values. |
+| `steps[].app.name` | Target app key from `apps`. Required for app steps. |
+| `steps[].app.operation` | Target operation ID. Required for app steps. |
+| `steps[].app.connection` | Optional target connection name. |
+| `steps[].app.instance` | Optional target instance name. |
+| `steps[].app.input` | Optional workflow value that must resolve to a JSON object. Use `literal` for static params or `${{ input.* }}` / `${{ steps.<id>.outputs.* }}` templates for run data. |
+| `steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
+| `steps[].timeout` | Optional step timeout in seconds. When omitted, the workflow provider applies its normal step timeout. |
+| `steps[].when` | Optional boolean guard. Step references may only point at earlier steps. |
 | `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
-| `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
-| `cron` | **Required.** Five-field cron expression. |
-| `timezone` | IANA timezone name. Defaults to `UTC`. |
-| `paused` | When `true`, Gestalt reconciles the schedule in a paused state. |
+| `on` | Optional map of activation IDs. Each activation contains exactly one `schedule` or `event` block, optional `input`, and optional `paused`. |
+| `on.<id>.schedule.cron` | Five-field cron expression for scheduled activation. |
+| `on.<id>.schedule.timezone` | IANA timezone name. Defaults to `UTC`. |
+| `on.<id>.event.type` | Event type matcher. |
+| `on.<id>.event.source` | Optional event source matcher. |
+| `on.<id>.event.subject` | Optional event subject matcher. |
+| `on.<id>.input` | Static values or `${{ signal.* }}` templates used to populate `run.input` when the activation starts a run. |
+| `on.<id>.paused` | When `true`, Gestalt applies the activation in a paused state. |
 
-### `workflows.eventTriggers.*`
-
-| Field | Description |
-| --- | --- |
-| `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.steps` | Required ordered workflow steps. Each step has `id` and exactly one of `app` or `agent`. |
-| `target.steps[].app` | App step call fields: `name`, `operation`, optional `connection`, optional `instance`, and optional workflow-value `input`. |
-| `target.steps[].agent` | Agent step turn fields: `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `output`, and `modelOptions`. |
-| `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
-| `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. See [`runAs`](/service-accounts#runas). |
-| `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
-| `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
-| `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
-| `match.type` | **Required.** Event type matcher. |
-| `match.source` | Optional event source matcher. |
-| `match.subject` | Optional event subject matcher. |
-| `paused` | When `true`, Gestalt reconciles the trigger in a paused state. |
-
-Event trigger matching is exact string matching. `match.type` is required;
-`match.source` and `match.subject` are optional exact-match filters. Event
-triggers can be config-managed through YAML or user-owned through the global
-workflow HTTP API and CLI.
+Event activation matching is exact string matching. `event.type` is required;
+`event.source` and `event.subject` are optional exact-match filters.
 
 ## `providers.cache`
 
@@ -1247,14 +1212,14 @@ apps:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the app. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
-| `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this app, and the built-in admin UI / admin API can manage app-scoped dynamic grants for additional members. Static policy members still take precedence. |
+| `authorizationPolicy` | Optional named policy used by host-side operation filtering and execution checks for this app. |
 | `ui` | Optional app-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{app}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the app manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
-| `http` | Optional hosted HTTP binding overrides merged over the app manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, target operation, or acknowledgment response. |
+| `http` | Optional hosted HTTP binding overrides merged over the app manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, or target operation. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection bindings. A binding usually uses `ref` to attach a top-level connection to the local app connection name; simple single-use `none` connections may be declared inline. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
@@ -1795,7 +1760,7 @@ Mounted UI bundles are served on the public listener only. The built-in admin UI
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 
-`authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set a non-empty `subjectID` and a non-empty `role`.
+`authorization.models.<model>.resourceTypes.<type>.defaultAccessPolicy` must be `allow` or `deny` when set.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 

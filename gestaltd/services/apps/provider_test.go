@@ -113,7 +113,6 @@ func (p *roundTripProvider) ResolveHTTPSubject(ctx context.Context, req *core.HT
 		ID:          "user:resolved",
 		Kind:        "user",
 		DisplayName: invocation.HostContextFromContext(ctx).PublicBaseURL,
-		AuthSource:  req.VerifiedSubject,
 	}, nil
 }
 
@@ -212,8 +211,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|subject|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
-			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|subject|roadmap|admin|https://gestalt.example.test",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user||false||subject|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|user:user-123|user||false||subject|roadmap|admin|https://gestalt.example.test",
 		},
 		{
 			name: "service account subject",
@@ -223,8 +222,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.Kind("service_account"),
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|subject|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
-			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|subject|roadmap|admin|https://gestalt.example.test",
+			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account||false||subject|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|service_account:triage-bot|service_account||false||subject|roadmap|admin|https://gestalt.example.test",
 		},
 	}
 
@@ -287,7 +286,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			if !attempted {
 				t.Fatal("expected core.ResolveHTTPSubject to report attempted")
 			}
-			if resolved == nil || resolved.DisplayName != "https://gestalt.example.test" || resolved.AuthSource != "host-only" {
+			if resolved == nil || resolved.ID != "user:resolved" || resolved.Kind != "user" {
 				t.Fatalf("unexpected resolved subject: %+v", resolved)
 			}
 		})
@@ -342,9 +341,6 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 	if reqCtx == nil || reqCtx.GetSubject() == nil {
 		t.Fatal("expected request subject context")
 	}
-	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
-		t.Fatalf("subject display name = %q, want %q", got, "Triage Bot")
-	}
 	if got := reqCtx.GetSubject().GetEmail(); got != "" {
 		t.Fatalf("subject email = %q, want empty", got)
 	}
@@ -377,9 +373,6 @@ func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
 	if got := reqCtx.GetSubject().GetEmail(); got != "ada@example.com" {
 		t.Fatalf("subject email = %q, want ada@example.com", got)
 	}
-	if got := reqCtx.GetSubject().GetDisplayName(); got != "Ada Lovelace" {
-		t.Fatalf("subject display name = %q, want Ada Lovelace", got)
-	}
 }
 
 func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testing.T) {
@@ -397,10 +390,7 @@ func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testi
 	})
 	ctx, _ = invocation.ApplyDelegation(ctx, principal.FromContext(ctx), &core.RunAsSubject{
 		SubjectID:           "service_account:review-bot",
-		SubjectKind:         "service_account",
 		CredentialSubjectID: "service_account:review-bot",
-		DisplayName:         "Review Bot",
-		AuthSource:          "managed_subject",
 	})
 
 	reqCtx, err := requestContextProto(ctx, "")
@@ -409,9 +399,6 @@ func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testi
 	}
 	if got := reqCtx.GetSubject().GetId(); got != "service_account:review-bot" {
 		t.Fatalf("subject id = %q, want service_account:review-bot", got)
-	}
-	if got := reqCtx.GetSubject().GetDisplayName(); got != "Review Bot" {
-		t.Fatalf("subject display name = %q, want Review Bot", got)
 	}
 	if got := reqCtx.GetSubject().GetEmail(); got != "" {
 		t.Fatalf("subject email = %q, want empty", got)
@@ -431,14 +418,9 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	})
 	ctx = invocation.WithRunAsAudit(ctx, &core.RunAsSubject{
 		SubjectID:           "user:user-123",
-		SubjectKind:         "user",
 		CredentialSubjectID: "user:user-123",
-		DisplayName:         "Ada Lovelace",
-		AuthSource:          "source-app",
 	}, &core.RunAsSubject{
-		SubjectID:   "service_account:event-handler",
-		SubjectKind: "service_account",
-		AuthSource:  "event_handler",
+		SubjectID: "service_account:event-handler",
 	})
 
 	reqCtx, err := requestContextProto(ctx, "")
@@ -447,9 +429,6 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	}
 	if reqCtx == nil || reqCtx.GetAgentSubject() == nil {
 		t.Fatal("expected agent subject context")
-	}
-	if got := reqCtx.GetAgentSubject().GetDisplayName(); got != "Ada Lovelace" {
-		t.Fatalf("agent subject display name = %q, want Ada Lovelace", got)
 	}
 	if got := reqCtx.GetAgentSubject().GetEmail(); got != "" {
 		t.Fatalf("agent subject email = %q, want empty", got)
@@ -461,16 +440,10 @@ func TestApplyRequestContext_IncludesDelegatedAgentSubject(t *testing.T) {
 
 	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
 		Subject: &proto.SubjectContext{
-			Id:          "service_account:automation",
-			Kind:        "service_account",
-			DisplayName: "Automation",
-			AuthSource:  "managed_subject",
+			Id: "service_account:automation",
 		},
 		AgentSubject: &proto.SubjectContext{
-			Id:          "user:user-123",
-			Kind:        "user",
-			DisplayName: "Ada Lovelace",
-			AuthSource:  "source-app",
+			Id: "user:user-123",
 		},
 	})
 
@@ -488,11 +461,8 @@ func TestApplyRequestContext_PreservesUserEmail(t *testing.T) {
 
 	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
 		Subject: &proto.SubjectContext{
-			Id:          "user:user-123",
-			Kind:        "user",
-			DisplayName: "Ada Lovelace",
-			AuthSource:  "api_token",
-			Email:       "ada@example.com",
+			Id:    "user:user-123",
+			Email: "ada@example.com",
 		},
 	})
 
@@ -540,10 +510,7 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 		Operation: "reviews.get",
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:review-worker",
-			SubjectKind:         "service_account",
 			CredentialSubjectID: "service_account:review-worker",
-			DisplayName:         "Review Worker",
-			AuthSource:          "managed_subject",
 		},
 	}})
 
@@ -579,10 +546,7 @@ func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
 			Operation: "reviews.get",
 			RunAs: &proto.SubjectContext{
 				Id:                  "service_account:review-worker",
-				Kind:                "service_account",
 				CredentialSubjectId: "service_account:review-worker",
-				DisplayName:         "Review Worker",
-				AuthSource:          "managed_subject",
 			},
 		}},
 	})
@@ -617,21 +581,16 @@ func TestRequestContextProto_PreservesHostOnlyContext(t *testing.T) {
 	}
 }
 
-func TestPrincipalFromProto_NonUserDisplayNameDoesNotCreateIdentity(t *testing.T) {
+func TestPrincipalFromProto_NonUserEmailDoesNotCreateIdentity(t *testing.T) {
 	t.Parallel()
 
 	p := principalFromProto(&proto.SubjectContext{
-		Id:          "service_account:triage-bot",
-		Kind:        "service_account",
-		DisplayName: "Triage Bot",
-		AuthSource:  principal.SourceAPIToken.String(),
-		Email:       "spoofed@example.com",
+		Id:    "service_account:triage-bot",
+		Email: "spoofed@example.com",
 	})
 	if p == nil {
 		t.Fatal("expected principal")
-	}
-	if p.DisplayName != "Triage Bot" {
-		t.Fatalf("display name = %q, want %q", p.DisplayName, "Triage Bot")
+		return
 	}
 	if p.Kind != principal.Kind("service_account") {
 		t.Fatalf("kind = %q, want service_account", p.Kind)
@@ -648,11 +607,8 @@ type httpSubjectEmailClient struct {
 func (*httpSubjectEmailClient) ResolveHTTPSubject(context.Context, *proto.ResolveHTTPSubjectRequest, ...grpc.CallOption) (*proto.ResolveHTTPSubjectResponse, error) {
 	return &proto.ResolveHTTPSubjectResponse{
 		Subject: &proto.SubjectContext{
-			Id:          "user:user-456",
-			Kind:        "user",
-			DisplayName: "App User",
-			AuthSource:  "plugin_http",
-			Email:       "spoofed@example.com",
+			Id:    "user:user-456",
+			Email: "spoofed@example.com",
 		},
 	}, nil
 }
@@ -669,29 +625,27 @@ func TestRemoteProviderResolveHTTPSubjectIgnoresProviderReturnedEmail(t *testing
 	}
 	if resolved == nil {
 		t.Fatal("expected resolved subject")
+		return
 	}
-	if resolved.ID != "user:user-456" || resolved.Kind != "user" || resolved.DisplayName != "App User" || resolved.AuthSource != "plugin_http" {
+	if resolved.ID != "user:user-456" || resolved.Kind != "user" {
 		t.Fatalf("unexpected resolved subject: %#v", resolved)
 	}
 }
 
-func TestPrincipalFromProto_PreservesCustomAuthSource(t *testing.T) {
+func TestPrincipalFromProtoDerivesKindFromSubjectID(t *testing.T) {
 	t.Parallel()
 
 	p := principalFromProto(&proto.SubjectContext{
-		Id:          "service_account:external-installation-127579767",
-		Kind:        "service_account",
-		DisplayName: "External app installation 127579767",
-		AuthSource:  "external_app_webhook",
+		Id: "service_account:external-installation-127579767",
 	})
 	if p == nil {
 		t.Fatal("expected principal")
 	}
-	if p.AuthSource() != "external_app_webhook" {
-		t.Fatalf("auth source = %q, want external_app_webhook", p.AuthSource())
-	}
 	if p.Kind != principal.Kind("service_account") {
 		t.Fatalf("kind = %q, want service_account", p.Kind)
+	}
+	if p.SubjectID != "service_account:external-installation-127579767" {
+		t.Fatalf("subject id = %q", p.SubjectID)
 	}
 }
 

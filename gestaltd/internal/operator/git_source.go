@@ -288,7 +288,7 @@ func (l *Lifecycle) lockGitSnapshotSource(ctx context.Context, cfg *config.Confi
 	metadataProvider := *app
 	metadataProvider.Source = config.NewMetadataSource(snapshot.MetadataURL)
 	metadataProvider.Source.Auth = app.Source.Auth
-	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir)
+	installed, entry, err := l.installMetadataSourcePackage(ctx, expectedKind, name, subject, destDir, &metadataProvider, paths.configDir, artifactModeMaterialize)
 	if err != nil {
 		return LockEntry{}, nil, fmt.Errorf("%s source.git snapshot %s: %w", subject, snapshot.MetadataURL, err)
 	}
@@ -355,8 +355,8 @@ func finalizeGitInstalledLockEntry(paths lifecyclePaths, fingerprintName string,
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("compute manifest path for %s provider: %w", kind, err)
 	}
-	entry.Fingerprint = fingerprint
-	entry.Manifest = filepath.ToSlash(manifestPath)
+	entry.InputDigest = fingerprint
+	entry.ArtifactManifest = filepath.ToSlash(manifestPath)
 	if ui {
 		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
 		if err != nil {

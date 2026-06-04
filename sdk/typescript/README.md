@@ -19,9 +19,9 @@ explicitly names a submodule.
 | --- | --- | --- |
 | Provider authoring | `defineApp`, `operation`, `ok` | Executable app providers, typed request handlers, and operation results. |
 | Runtime schemas | `s`, `object`, `string` | Runtime validation and generated catalog metadata for operation inputs and outputs. |
-| Provider runtimes | `defineAuthenticationProvider`, `defineAuthorizationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
+| Provider runtimes | `defineAuthenticationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
 | Workflow and agent models | `WorkflowProvider`, `Workflow`, `AgentProvider`, `Agent` | Native workflow values, agent sessions, turns, messages, tools, and host-service access. |
-| Host-service clients | `Cache`, `IndexedDB`, `S3`, `App`, `Authorization` | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Host-service clients | `Cache`, `IndexedDB`, `S3`, `App` | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Telemetry | `withModelOperation`, `withToolExecution`, `withAgentInvocation` | Provider-authored GenAI spans and metrics inside a running provider process. |
 
 ```ts
@@ -77,8 +77,8 @@ is omitted, the runtime looks for `provider`, then `app`, then the default
 export.
 
 Use `"app"` as the kind token for executable app providers. Use an object
-target with an explicit kind for authentication, authorization, cache,
-IndexedDB, S3, secrets, workflow, agent, and hosted-runtime providers.
+target with an explicit kind for authentication, cache, IndexedDB, S3,
+secrets, workflow, agent, and hosted-runtime providers.
 
 ## Public surface
 
@@ -86,7 +86,6 @@ The root package exports provider definition helpers:
 
 - `defineApp` for integration operations and session catalogs.
 - `defineAuthenticationProvider` for authentication surfaces.
-- `defineAuthorizationProvider` for custom authorization providers.
 - `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
   `defineSecretsProvider` for host-service backends.
 - `defineWorkflowProvider`, `defineAgentProvider`, and

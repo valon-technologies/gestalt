@@ -31,14 +31,8 @@ func (s *ManagedSubjectService) CreateManagedSubject(ctx context.Context, subjec
 	if subjectID == "" {
 		return nil, fmt.Errorf("create managed subject: subject_id is required")
 	}
-	kind := strings.TrimSpace(subject.Kind)
-	if kind == "" {
-		kind, _, _ = core.ParseSubjectID(subjectID)
-	}
-	if kind != ManagedSubjectKindServiceAccount {
-		return nil, fmt.Errorf("create managed subject: unsupported kind %q", kind)
-	}
-	if parsedKind, _, ok := core.ParseSubjectID(subjectID); !ok || parsedKind != kind {
+	parsedKind, _, ok := core.ParseSubjectID(subjectID)
+	if !ok || parsedKind != ManagedSubjectKindServiceAccount {
 		return nil, fmt.Errorf("create managed subject: subject_id must be a canonical %s subject ID", ManagedSubjectKindServiceAccount)
 	}
 
@@ -46,7 +40,6 @@ func (s *ManagedSubjectService) CreateManagedSubject(ctx context.Context, subjec
 	rec := idb.Record{
 		"id":                    subjectID,
 		"subject_id":            subjectID,
-		"kind":                  kind,
 		"display_name":          strings.TrimSpace(subject.DisplayName),
 		"description":           strings.TrimSpace(subject.Description),
 		"created_by_subject_id": strings.TrimSpace(subject.CreatedBySubjectID),
@@ -155,7 +148,6 @@ func (s *ManagedSubjectService) RemoveManagedSubjectForRollback(ctx context.Cont
 func recordToManagedSubject(rec idb.Record) *core.ManagedSubject {
 	return &core.ManagedSubject{
 		SubjectID:          recString(rec, "subject_id"),
-		Kind:               recString(rec, "kind"),
 		DisplayName:        recString(rec, "display_name"),
 		Description:        recString(rec, "description"),
 		CreatedBySubjectID: recString(rec, "created_by_subject_id"),
@@ -166,10 +158,14 @@ func recordToManagedSubject(rec idb.Record) *core.ManagedSubject {
 }
 
 func managedSubjectToRecord(subject *core.ManagedSubject) idb.Record {
+	kind := ManagedSubjectKindServiceAccount
+	if parsedKind, _, ok := core.ParseSubjectID(subject.SubjectID); ok {
+		kind = parsedKind
+	}
 	return idb.Record{
 		"id":                    strings.TrimSpace(subject.SubjectID),
 		"subject_id":            strings.TrimSpace(subject.SubjectID),
-		"kind":                  strings.TrimSpace(subject.Kind),
+		"kind":                  kind,
 		"display_name":          strings.TrimSpace(subject.DisplayName),
 		"description":           strings.TrimSpace(subject.Description),
 		"created_by_subject_id": strings.TrimSpace(subject.CreatedBySubjectID),

@@ -118,6 +118,7 @@ type agentTurnCreateRequest struct {
 	Metadata       map[string]any        `json:"metadata,omitempty"`
 	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
 	IdempotencyKey string                `json:"idempotencyKey,omitempty"`
+	TimeoutSeconds int32                 `json:"timeoutSeconds,omitempty"`
 }
 
 type agentOutputRequest struct {
@@ -612,6 +613,7 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		Output:         outputProto,
 		Metadata:       metadata,
 		ModelOptions:   modelOptions,
+		TimeoutSeconds: req.TimeoutSeconds,
 	})
 	if err != nil {
 		if errors.Is(err, agentmanager.ErrAgentSessionNotFound) {
@@ -1010,13 +1012,7 @@ func (s *Server) resolveAgentActor(w http.ResponseWriter, r *http.Request) (*pri
 }
 
 func (s *Server) allowsAgentProvider(ctx context.Context, p *principal.Principal, providerName string) bool {
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return false
-	}
-	if s == nil || s.authorizer == nil {
-		return true
-	}
-	return s.authorizer.AllowProvider(ctx, p, providerName)
+	return principal.AllowsProviderPermission(p, providerName)
 }
 
 func resolveAgentIdempotencyKey(w http.ResponseWriter, r *http.Request, bodyValue string) (string, bool) {
@@ -1404,7 +1400,7 @@ func agentSessionInfoFromCoreView(session *coreagent.Session, summaryOnly bool) 
 	info.Model = strings.TrimSpace(session.Model)
 	info.ClientRef = strings.TrimSpace(session.ClientRef)
 	info.State = strings.TrimSpace(string(session.State))
-	info.CreatedBy = agentActorInfoFromCore(session.CreatedBy)
+	info.CreatedBy = workflowActorInfoFromSubjectID(session.CreatedBySubjectID)
 	info.CreatedAt = session.CreatedAt
 	info.UpdatedAt = session.UpdatedAt
 	info.LastTurnAt = session.LastTurnAt
@@ -1460,7 +1456,7 @@ func agentTurnInfoFromCoreView(turn *coreagent.Turn, summaryOnly bool) agentTurn
 	info.Model = strings.TrimSpace(turn.Model)
 	info.Status = strings.TrimSpace(string(turn.Status))
 	info.StatusMessage = turn.StatusMessage
-	info.CreatedBy = agentActorInfoFromCore(turn.CreatedBy)
+	info.CreatedBy = workflowActorInfoFromSubjectID(turn.CreatedBySubjectID)
 	info.CreatedAt = turn.CreatedAt
 	info.StartedAt = turn.StartedAt
 	info.CompletedAt = turn.CompletedAt
@@ -1651,18 +1647,6 @@ func agentMessagePartsFromCore(parts []coreagent.MessagePart) []agentMessagePart
 		})
 	}
 	return out
-}
-
-func agentActorInfoFromCore(actor coreagent.Actor) *workflowActorInfo {
-	if actor == (coreagent.Actor{}) {
-		return nil
-	}
-	return &workflowActorInfo{
-		SubjectID:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
 }
 
 func agentInteractionInfoFromCore(interaction *coreagent.Interaction) agentInteractionInfo {

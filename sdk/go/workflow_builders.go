@@ -71,14 +71,15 @@ type WorkflowStepWhen struct {
 // WorkflowValue contains one workflow value expression. LiteralSet
 // distinguishes an explicit literal null from an unset value.
 type WorkflowValue struct {
-	Literal       any
-	LiteralSet    bool
-	Object        map[string]WorkflowValue
-	Array         []WorkflowValue
-	Template      *WorkflowText
-	RunInput      string
-	SignalPayload string
-	StepOutput    *WorkflowStepOutputSource
+	Literal    any
+	LiteralSet bool
+	Object     map[string]WorkflowValue
+	Array      []WorkflowValue
+	Template   *WorkflowText
+	Input      string
+	Signal     string
+	StepOutput *WorkflowStepOutputSource
+	StepInput  *WorkflowStepInputSource
 }
 
 // WorkflowStepOutputSource references a previous step output envelope.
@@ -87,37 +88,10 @@ type WorkflowStepOutputSource struct {
 	Path   string
 }
 
-// WorkflowActor contains fields for constructing workflow actor
-// metadata.
-type WorkflowActor struct {
-	SubjectID   string
-	SubjectKind string
-	DisplayName string
-	AuthSource  string
-}
-
-// workflowActorToProto creates workflow actor metadata.
-func workflowActorToProto(input WorkflowActor) *proto.WorkflowActor {
-	return &proto.WorkflowActor{
-		SubjectId:   input.SubjectID,
-		SubjectKind: input.SubjectKind,
-		DisplayName: input.DisplayName,
-		AuthSource:  input.AuthSource,
-	}
-}
-
-// workflowActorFromProto converts existing workflow actor metadata into
-// builder input.
-func workflowActorFromProto(value *proto.WorkflowActor) WorkflowActor {
-	if value == nil {
-		return WorkflowActor{}
-	}
-	return WorkflowActor{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
+// WorkflowStepInputSource references a previous step input envelope.
+type WorkflowStepInputSource struct {
+	StepID string
+	Path   string
 }
 
 // boundWorkflowTargetToProto creates a workflow target.
@@ -418,13 +392,16 @@ func workflowValueToProto(input WorkflowValue) (*proto.WorkflowValue, error) {
 	if input.Template != nil {
 		set++
 	}
-	if strings.TrimSpace(input.RunInput) != "" {
+	if strings.TrimSpace(input.Input) != "" {
 		set++
 	}
-	if strings.TrimSpace(input.SignalPayload) != "" {
+	if strings.TrimSpace(input.Signal) != "" {
 		set++
 	}
 	if input.StepOutput != nil {
+		set++
+	}
+	if input.StepInput != nil {
 		set++
 	}
 	if set == 0 {
@@ -458,14 +435,19 @@ func workflowValueToProto(input WorkflowValue) (*proto.WorkflowValue, error) {
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Array{Array: &proto.WorkflowArray{Values: values}}}, nil
 	case input.Template != nil:
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Template{Template: workflowTextToProto(*input.Template)}}, nil
-	case strings.TrimSpace(input.RunInput) != "":
-		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_RunInput{RunInput: &proto.WorkflowPathSource{Path: input.RunInput}}}, nil
-	case strings.TrimSpace(input.SignalPayload) != "":
-		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_SignalPayload{SignalPayload: &proto.WorkflowPathSource{Path: input.SignalPayload}}}, nil
+	case strings.TrimSpace(input.Input) != "":
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Input{Input: &proto.WorkflowPathSource{Path: input.Input}}}, nil
+	case strings.TrimSpace(input.Signal) != "":
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_Signal{Signal: &proto.WorkflowPathSource{Path: input.Signal}}}, nil
 	case input.StepOutput != nil:
 		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_StepOutput{StepOutput: &proto.WorkflowStepOutputSource{
 			StepId: input.StepOutput.StepID,
 			Path:   input.StepOutput.Path,
+		}}}, nil
+	case input.StepInput != nil:
+		return &proto.WorkflowValue{Kind: &proto.WorkflowValue_StepInput{StepInput: &proto.WorkflowStepInputSource{
+			StepId: input.StepInput.StepID,
+			Path:   input.StepInput.Path,
 		}}}, nil
 	default:
 		return nil, nil
@@ -498,10 +480,10 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 	case *proto.WorkflowValue_Template:
 		text := workflowTextFromProto(typed.Template)
 		return WorkflowValue{Template: &text}
-	case *proto.WorkflowValue_RunInput:
-		return WorkflowValue{RunInput: workflowPathSourcePath(typed.RunInput)}
-	case *proto.WorkflowValue_SignalPayload:
-		return WorkflowValue{SignalPayload: workflowPathSourcePath(typed.SignalPayload)}
+	case *proto.WorkflowValue_Input:
+		return WorkflowValue{Input: workflowPathSourcePath(typed.Input)}
+	case *proto.WorkflowValue_Signal:
+		return WorkflowValue{Signal: workflowPathSourcePath(typed.Signal)}
 	case *proto.WorkflowValue_StepOutput:
 		if typed.StepOutput == nil {
 			return WorkflowValue{StepOutput: &WorkflowStepOutputSource{}}
@@ -509,6 +491,14 @@ func workflowValueFromProto(value *proto.WorkflowValue) WorkflowValue {
 		return WorkflowValue{StepOutput: &WorkflowStepOutputSource{
 			StepID: typed.StepOutput.GetStepId(),
 			Path:   typed.StepOutput.GetPath(),
+		}}
+	case *proto.WorkflowValue_StepInput:
+		if typed.StepInput == nil {
+			return WorkflowValue{StepInput: &WorkflowStepInputSource{}}
+		}
+		return WorkflowValue{StepInput: &WorkflowStepInputSource{
+			StepID: typed.StepInput.GetStepId(),
+			Path:   typed.StepInput.GetPath(),
 		}}
 	default:
 		return WorkflowValue{}
@@ -588,14 +578,14 @@ func cloneWorkflowEventProto(value *proto.WorkflowEvent) (*proto.WorkflowEvent, 
 // WorkflowSignal contains fields for constructing a
 // WorkflowSignal.
 type WorkflowSignal struct {
-	ID             string
-	Name           string
-	Payload        any
-	Metadata       any
-	CreatedBy      *WorkflowActor
-	CreatedAt      time.Time
-	IdempotencyKey string
-	Sequence       int64
+	ID                 string
+	Name               string
+	Payload            any
+	Metadata           any
+	CreatedBySubjectID string
+	CreatedAt          time.Time
+	IdempotencyKey     string
+	Sequence           int64
 }
 
 // workflowSignalToProto creates a workflow signal.
@@ -609,14 +599,14 @@ func workflowSignalToProto(input WorkflowSignal) (*proto.WorkflowSignal, error) 
 		return nil, err
 	}
 	return &proto.WorkflowSignal{
-		Id:             input.ID,
-		Name:           input.Name,
-		Payload:        payload,
-		Metadata:       metadata,
-		CreatedBy:      workflowActorFromInput(input.CreatedBy),
-		CreatedAt:      timestampFromNonZeroTime(input.CreatedAt),
-		IdempotencyKey: input.IdempotencyKey,
-		Sequence:       input.Sequence,
+		Id:                 input.ID,
+		Name:               input.Name,
+		Payload:            payload,
+		Metadata:           metadata,
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
+		CreatedAt:          timestampFromNonZeroTime(input.CreatedAt),
+		IdempotencyKey:     input.IdempotencyKey,
+		Sequence:           input.Sequence,
 	}, nil
 }
 
@@ -626,14 +616,14 @@ func workflowSignalFromProto(value *proto.WorkflowSignal) WorkflowSignal {
 		return WorkflowSignal{}
 	}
 	return WorkflowSignal{
-		ID:             value.GetId(),
-		Name:           value.GetName(),
-		Payload:        mapFromStruct(value.GetPayload()),
-		Metadata:       mapFromStruct(value.GetMetadata()),
-		CreatedBy:      workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		CreatedAt:      timeFromTimestamp(value.GetCreatedAt()),
-		IdempotencyKey: value.GetIdempotencyKey(),
-		Sequence:       value.GetSequence(),
+		ID:                 value.GetId(),
+		Name:               value.GetName(),
+		Payload:            mapFromStruct(value.GetPayload()),
+		Metadata:           mapFromStruct(value.GetMetadata()),
+		CreatedBySubjectID: value.GetCreatedBySubjectId(),
+		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
+		IdempotencyKey:     value.GetIdempotencyKey(),
+		Sequence:           value.GetSequence(),
 	}
 }
 
@@ -649,15 +639,15 @@ func cloneWorkflowSignalProto(value *proto.WorkflowSignal) (*proto.WorkflowSigna
 // WorkflowScheduleTrigger contains fields for constructing a
 // schedule-triggered workflow run trigger.
 type WorkflowScheduleTrigger struct {
-	ScheduleID   string
+	ActivationID string
 	ScheduledFor *time.Time
 }
 
 // WorkflowEventTriggerInvocation contains fields for
 // constructing an event-triggered workflow run trigger.
 type WorkflowEventTriggerInvocation struct {
-	TriggerID string
-	Event     *WorkflowEvent
+	ActivationID string
+	Event        *WorkflowEvent
 }
 
 // WorkflowRunTrigger contains fields for constructing a
@@ -669,9 +659,9 @@ type WorkflowRunTrigger struct {
 }
 
 // workflowScheduleTriggerToProto creates a schedule-trigger run trigger.
-func workflowScheduleTriggerToProto(scheduleID string, scheduledFor time.Time) *proto.WorkflowRunTrigger {
+func workflowScheduleTriggerToProto(activationID string, scheduledFor time.Time) *proto.WorkflowRunTrigger {
 	return &proto.WorkflowRunTrigger{Kind: &proto.WorkflowRunTrigger_Schedule{Schedule: &proto.WorkflowScheduleTrigger{
-		ScheduleId:   scheduleID,
+		ActivationId: activationID,
 		ScheduledFor: timestampFromNonZeroTime(scheduledFor),
 	}}}
 }
@@ -699,7 +689,7 @@ func workflowRunTriggerToProto(input WorkflowRunTrigger) (*proto.WorkflowRunTrig
 	}
 	if input.Schedule != nil {
 		return &proto.WorkflowRunTrigger{Kind: &proto.WorkflowRunTrigger_Schedule{Schedule: &proto.WorkflowScheduleTrigger{
-			ScheduleId:   input.Schedule.ScheduleID,
+			ActivationId: input.Schedule.ActivationID,
 			ScheduledFor: timestampFromOptionalTime(input.Schedule.ScheduledFor),
 		}}}, nil
 	}
@@ -713,8 +703,8 @@ func workflowRunTriggerToProto(input WorkflowRunTrigger) (*proto.WorkflowRunTrig
 		event = value
 	}
 	return &proto.WorkflowRunTrigger{Kind: &proto.WorkflowRunTrigger_Event{Event: &proto.WorkflowEventTriggerInvocation{
-		TriggerId: input.Event.TriggerID,
-		Event:     event,
+		ActivationId: input.Event.ActivationID,
+		Event:        event,
 	}}}, nil
 }
 
@@ -736,7 +726,7 @@ func workflowRunTriggerFromProto(value *proto.WorkflowRunTrigger) (WorkflowRunTr
 			return WorkflowRunTrigger{}, err
 		}
 		return WorkflowRunTrigger{Schedule: &WorkflowScheduleTrigger{
-			ScheduleID:   kind.Schedule.GetScheduleId(),
+			ActivationID: kind.Schedule.GetActivationId(),
 			ScheduledFor: scheduledFor,
 		}}, nil
 	case *proto.WorkflowRunTrigger_Event:
@@ -749,8 +739,8 @@ func workflowRunTriggerFromProto(value *proto.WorkflowRunTrigger) (WorkflowRunTr
 			event = &input
 		}
 		return WorkflowRunTrigger{Event: &WorkflowEventTriggerInvocation{
-			TriggerID: kind.Event.GetTriggerId(),
-			Event:     event,
+			ActivationID: kind.Event.GetActivationId(),
+			Event:        event,
 		}}, nil
 	default:
 		return WorkflowRunTrigger{}, nil
@@ -767,27 +757,250 @@ func cloneWorkflowRunTriggerProto(value *proto.WorkflowRunTrigger) (*proto.Workf
 	return workflowRunTriggerToProto(input)
 }
 
-// BoundWorkflowRun contains fields for constructing a
-// BoundWorkflowRun.
-type BoundWorkflowRun struct {
-	ID            string
-	Status        WorkflowRunStatus
-	Target        *BoundWorkflowTarget
-	Trigger       *WorkflowRunTrigger
-	CreatedAt     time.Time
-	StartedAt     *time.Time
-	CompletedAt   *time.Time
-	StatusMessage string
-	ResultBody    string
-	CreatedBy     *WorkflowActor
-	RunAs         *Subject
-	WorkflowKey   string
-	ProviderName  string
-	DefinitionID  string
+// WorkflowScheduleActivation contains a cron activation on a workflow
+// definition.
+type WorkflowScheduleActivation struct {
+	Cron     string
+	Timezone string
 }
 
-// boundWorkflowRunToProto creates a bound workflow run.
-func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, error) {
+// WorkflowEventActivation contains an event activation on a workflow
+// definition.
+type WorkflowEventActivation struct {
+	Match *WorkflowEventMatch
+}
+
+// WorkflowActivation contains one schedule or event activation for a
+// definition. Input is evaluated when the activation fires and becomes
+// run.input.
+type WorkflowActivation struct {
+	ID       string
+	Input    WorkflowValue
+	Paused   bool
+	Schedule *WorkflowScheduleActivation
+	Event    *WorkflowEventActivation
+}
+
+// WorkflowDefinitionSpec is the authored desired state applied atomically to
+// provider-owned definition storage.
+type WorkflowDefinitionSpec struct {
+	ID          string
+	Target      *BoundWorkflowTarget
+	Activations []WorkflowActivation
+	Paused      bool
+	RunAs       *Subject
+}
+
+// WorkflowDefinition is the provider-owned definition projection.
+type WorkflowDefinition struct {
+	ID                 string
+	Generation         int64
+	Target             *BoundWorkflowTarget
+	Activations        []WorkflowActivation
+	Paused             bool
+	CreatedBySubjectID string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	ProviderName       string
+	RunAs              *Subject
+}
+
+func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
+	activations, err := workflowActivationsToProto(input.Activations)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowDefinitionSpec{
+		Id:          input.ID,
+		Target:      target,
+		Activations: activations,
+		Paused:      input.Paused,
+		RunAs:       subjectToProto(input.RunAs),
+	}, nil
+}
+
+func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) (WorkflowDefinitionSpec, error) {
+	if value == nil {
+		return WorkflowDefinitionSpec{}, nil
+	}
+	activations, err := workflowActivationsFromProto(value.GetActivations())
+	if err != nil {
+		return WorkflowDefinitionSpec{}, err
+	}
+	return WorkflowDefinitionSpec{
+		ID:          value.GetId(),
+		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
+		Activations: activations,
+		Paused:      value.GetPaused(),
+		RunAs:       subjectFromProto(value.GetRunAs()),
+	}, nil
+}
+
+func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinition, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
+	activations, err := workflowActivationsToProto(input.Activations)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowDefinition{
+		Id:                 input.ID,
+		Generation:         input.Generation,
+		Target:             target,
+		Activations:        activations,
+		Paused:             input.Paused,
+		CreatedBySubjectId: strings.TrimSpace(input.CreatedBySubjectID),
+		CreatedAt:          timestampFromNonZeroTime(input.CreatedAt),
+		UpdatedAt:          timestampFromNonZeroTime(input.UpdatedAt),
+		ProviderName:       input.ProviderName,
+		RunAs:              subjectToProto(input.RunAs),
+	}, nil
+}
+
+func workflowDefinitionFromProto(value *proto.WorkflowDefinition) (WorkflowDefinition, error) {
+	if value == nil {
+		return WorkflowDefinition{}, nil
+	}
+	activations, err := workflowActivationsFromProto(value.GetActivations())
+	if err != nil {
+		return WorkflowDefinition{}, err
+	}
+	return WorkflowDefinition{
+		ID:                 value.GetId(),
+		Generation:         value.GetGeneration(),
+		Target:             workflowTargetInputPtrFromTarget(value.GetTarget()),
+		Activations:        activations,
+		Paused:             value.GetPaused(),
+		CreatedBySubjectID: value.GetCreatedBySubjectId(),
+		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
+		UpdatedAt:          timeFromTimestamp(value.GetUpdatedAt()),
+		ProviderName:       value.GetProviderName(),
+		RunAs:              subjectFromProto(value.GetRunAs()),
+	}, nil
+}
+
+func workflowActivationsToProto(values []WorkflowActivation) ([]*proto.WorkflowActivation, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowActivation, 0, len(values))
+	for i := range values {
+		activation, err := workflowActivationToProto(values[i])
+		if err != nil {
+			return nil, fmt.Errorf("activations[%d]: %w", i, err)
+		}
+		out = append(out, activation)
+	}
+	return out, nil
+}
+
+func workflowActivationToProto(input WorkflowActivation) (*proto.WorkflowActivation, error) {
+	value, err := workflowValueToProto(input.Input)
+	if err != nil {
+		return nil, fmt.Errorf("input: %w", err)
+	}
+	out := &proto.WorkflowActivation{Id: input.ID, Input: value, Paused: input.Paused}
+	switch {
+	case input.Schedule != nil && input.Event != nil:
+		return nil, fmt.Errorf("activation must set exactly one of schedule or event")
+	case input.Schedule != nil:
+		out.Trigger = &proto.WorkflowActivation_Schedule{Schedule: &proto.WorkflowScheduleActivation{
+			Cron:     input.Schedule.Cron,
+			Timezone: input.Schedule.Timezone,
+		}}
+	case input.Event != nil:
+		out.Trigger = &proto.WorkflowActivation_Event{Event: &proto.WorkflowEventActivation{
+			Match: workflowEventMatchFromInput(input.Event.Match),
+		}}
+	default:
+		return nil, fmt.Errorf("activation must set schedule or event")
+	}
+	return out, nil
+}
+
+func workflowActivationsFromProto(values []*proto.WorkflowActivation) ([]WorkflowActivation, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]WorkflowActivation, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		out = append(out, workflowActivationFromProto(value))
+	}
+	return out, nil
+}
+
+func workflowActivationFromProto(value *proto.WorkflowActivation) WorkflowActivation {
+	out := WorkflowActivation{
+		ID:     value.GetId(),
+		Input:  workflowValueFromProto(value.GetInput()),
+		Paused: value.GetPaused(),
+	}
+	if schedule := value.GetSchedule(); schedule != nil {
+		out.Schedule = &WorkflowScheduleActivation{Cron: schedule.GetCron(), Timezone: schedule.GetTimezone()}
+	}
+	if event := value.GetEvent(); event != nil {
+		out.Event = &WorkflowEventActivation{Match: workflowEventMatchInputPtrFromMatch(event.GetMatch())}
+	}
+	return out
+}
+
+// WorkflowStepAttempt contains one durable attempt for a workflow step.
+type WorkflowStepAttempt struct {
+	ID             string
+	Status         WorkflowStepStatus
+	IdempotencyKey string
+	Input          any
+	Output         any
+	StatusMessage  string
+	StartedAt      *time.Time
+	CompletedAt    *time.Time
+}
+
+// WorkflowStepExecution contains persisted state for one workflow step.
+type WorkflowStepExecution struct {
+	StepID        string
+	Status        WorkflowStepStatus
+	Attempts      []WorkflowStepAttempt
+	Input         any
+	Output        any
+	StatusMessage string
+	SkipReason    string
+	StartedAt     *time.Time
+	CompletedAt   *time.Time
+}
+
+// WorkflowRun contains a provider-owned workflow run projection.
+type WorkflowRun struct {
+	ID                   string
+	Status               WorkflowRunStatus
+	Target               *BoundWorkflowTarget
+	Trigger              *WorkflowRunTrigger
+	CreatedAt            time.Time
+	StartedAt            *time.Time
+	CompletedAt          *time.Time
+	StatusMessage        string
+	Output               any
+	CreatedBySubjectID   string
+	RunAs                *Subject
+	WorkflowKey          string
+	ProviderName         string
+	DefinitionID         string
+	Input                map[string]any
+	DefinitionGeneration int64
+	CurrentStepID        string
+	Steps                []WorkflowStepExecution
+}
+
+func workflowRunToProto(input WorkflowRun) (*proto.WorkflowRun, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -796,207 +1009,271 @@ func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, e
 	if err != nil {
 		return nil, err
 	}
-	return &proto.BoundWorkflowRun{
-		Id:            input.ID,
-		Status:        proto.WorkflowRunStatus(input.Status),
-		Target:        target,
-		Trigger:       trigger,
-		CreatedAt:     timestampFromNonZeroTime(input.CreatedAt),
-		StartedAt:     timestampFromOptionalTime(input.StartedAt),
-		CompletedAt:   timestampFromOptionalTime(input.CompletedAt),
-		StatusMessage: input.StatusMessage,
-		ResultBody:    input.ResultBody,
-		CreatedBy:     workflowActorFromInput(input.CreatedBy),
-		RunAs:         subjectToProto(input.RunAs),
-		WorkflowKey:   input.WorkflowKey,
-		ProviderName:  input.ProviderName,
-		DefinitionId:  input.DefinitionID,
+	output, err := valueFromAny(input.Output)
+	if err != nil {
+		return nil, fmt.Errorf("output: %w", err)
+	}
+	inputStruct, err := structFromAny(input.Input)
+	if err != nil {
+		return nil, fmt.Errorf("input: %w", err)
+	}
+	steps, err := workflowStepExecutionsToProto(input.Steps)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowRun{
+		Id:                   input.ID,
+		Status:               proto.WorkflowRunStatus(input.Status),
+		Target:               target,
+		Trigger:              trigger,
+		CreatedAt:            timestampFromNonZeroTime(input.CreatedAt),
+		StartedAt:            timestampFromOptionalTime(input.StartedAt),
+		CompletedAt:          timestampFromOptionalTime(input.CompletedAt),
+		StatusMessage:        input.StatusMessage,
+		Output:               output,
+		CreatedBySubjectId:   strings.TrimSpace(input.CreatedBySubjectID),
+		RunAs:                subjectToProto(input.RunAs),
+		WorkflowKey:          input.WorkflowKey,
+		ProviderName:         input.ProviderName,
+		DefinitionId:         input.DefinitionID,
+		Input:                inputStruct,
+		DefinitionGeneration: input.DefinitionGeneration,
+		CurrentStepId:        input.CurrentStepID,
+		Steps:                steps,
 	}, nil
 }
 
-// boundWorkflowRunFromProto converts an existing protocol run into builder input.
-func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun, error) {
+func workflowRunFromProto(value *proto.WorkflowRun) (WorkflowRun, error) {
 	if value == nil {
-		return BoundWorkflowRun{}, nil
+		return WorkflowRun{}, nil
 	}
 	startedAt, err := timePtrFromTimestamp(value.GetStartedAt())
 	if err != nil {
-		return BoundWorkflowRun{}, err
+		return WorkflowRun{}, err
 	}
 	completedAt, err := timePtrFromTimestamp(value.GetCompletedAt())
 	if err != nil {
-		return BoundWorkflowRun{}, err
+		return WorkflowRun{}, err
 	}
 	trigger, err := workflowRunTriggerFromProto(value.GetTrigger())
 	if err != nil {
-		return BoundWorkflowRun{}, err
+		return WorkflowRun{}, err
 	}
-	return BoundWorkflowRun{
-		ID:            value.GetId(),
-		Status:        WorkflowRunStatus(value.GetStatus()),
-		Target:        workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Trigger:       &trigger,
-		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
+	steps, err := workflowStepExecutionsFromProto(value.GetSteps())
+	if err != nil {
+		return WorkflowRun{}, err
+	}
+	return WorkflowRun{
+		ID:                   value.GetId(),
+		Status:               WorkflowRunStatus(value.GetStatus()),
+		Target:               workflowTargetInputPtrFromTarget(value.GetTarget()),
+		Trigger:              &trigger,
+		CreatedAt:            timeFromTimestamp(value.GetCreatedAt()),
+		StartedAt:            startedAt,
+		CompletedAt:          completedAt,
+		StatusMessage:        value.GetStatusMessage(),
+		Output:               anyFromValue(value.GetOutput()),
+		CreatedBySubjectID:   value.GetCreatedBySubjectId(),
+		RunAs:                subjectFromProto(value.GetRunAs()),
+		WorkflowKey:          value.GetWorkflowKey(),
+		ProviderName:         value.GetProviderName(),
+		DefinitionID:         value.GetDefinitionId(),
+		Input:                mapFromStruct(value.GetInput()),
+		DefinitionGeneration: value.GetDefinitionGeneration(),
+		CurrentStepID:        value.GetCurrentStepId(),
+		Steps:                steps,
+	}, nil
+}
+
+func workflowStepExecutionsToProto(values []WorkflowStepExecution) ([]*proto.WorkflowStepExecution, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowStepExecution, 0, len(values))
+	for i := range values {
+		value, err := workflowStepExecutionToProto(values[i])
+		if err != nil {
+			return nil, fmt.Errorf("steps[%d]: %w", i, err)
+		}
+		out = append(out, value)
+	}
+	return out, nil
+}
+
+func workflowStepExecutionToProto(input WorkflowStepExecution) (*proto.WorkflowStepExecution, error) {
+	attempts, err := workflowStepAttemptsToProto(input.Attempts)
+	if err != nil {
+		return nil, err
+	}
+	stepInput, err := valueFromAny(input.Input)
+	if err != nil {
+		return nil, fmt.Errorf("input: %w", err)
+	}
+	output, err := valueFromAny(input.Output)
+	if err != nil {
+		return nil, fmt.Errorf("output: %w", err)
+	}
+	return &proto.WorkflowStepExecution{
+		StepId:        input.StepID,
+		Status:        proto.WorkflowStepStatus(input.Status),
+		Attempts:      attempts,
+		Input:         stepInput,
+		Output:        output,
+		StatusMessage: input.StatusMessage,
+		SkipReason:    input.SkipReason,
+		StartedAt:     timestampFromOptionalTime(input.StartedAt),
+		CompletedAt:   timestampFromOptionalTime(input.CompletedAt),
+	}, nil
+}
+
+func workflowStepExecutionsFromProto(values []*proto.WorkflowStepExecution) ([]WorkflowStepExecution, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]WorkflowStepExecution, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		step, err := workflowStepExecutionFromProto(value)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, step)
+	}
+	return out, nil
+}
+
+func workflowStepExecutionFromProto(value *proto.WorkflowStepExecution) (WorkflowStepExecution, error) {
+	startedAt, err := timePtrFromTimestamp(value.GetStartedAt())
+	if err != nil {
+		return WorkflowStepExecution{}, err
+	}
+	completedAt, err := timePtrFromTimestamp(value.GetCompletedAt())
+	if err != nil {
+		return WorkflowStepExecution{}, err
+	}
+	attempts, err := workflowStepAttemptsFromProto(value.GetAttempts())
+	if err != nil {
+		return WorkflowStepExecution{}, err
+	}
+	return WorkflowStepExecution{
+		StepID:        value.GetStepId(),
+		Status:        WorkflowStepStatus(value.GetStatus()),
+		Attempts:      attempts,
+		Input:         anyFromValue(value.GetInput()),
+		Output:        anyFromValue(value.GetOutput()),
+		StatusMessage: value.GetStatusMessage(),
+		SkipReason:    value.GetSkipReason(),
 		StartedAt:     startedAt,
 		CompletedAt:   completedAt,
-		StatusMessage: value.GetStatusMessage(),
-		ResultBody:    value.GetResultBody(),
-		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		RunAs:         subjectFromProto(value.GetRunAs()),
-		WorkflowKey:   value.GetWorkflowKey(),
-		ProviderName:  value.GetProviderName(),
-		DefinitionID:  value.GetDefinitionId(),
 	}, nil
 }
 
-// BoundWorkflowDefinition contains fields for constructing a
-// BoundWorkflowDefinition.
-type BoundWorkflowDefinition struct {
-	ID           string
-	Target       *BoundWorkflowTarget
-	CreatedBy    *WorkflowActor
-	CreatedAt    time.Time
-	ProviderName string
+func workflowStepAttemptsToProto(values []WorkflowStepAttempt) ([]*proto.WorkflowStepAttempt, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowStepAttempt, 0, len(values))
+	for i := range values {
+		value, err := workflowStepAttemptToProto(values[i])
+		if err != nil {
+			return nil, fmt.Errorf("attempts[%d]: %w", i, err)
+		}
+		out = append(out, value)
+	}
+	return out, nil
 }
 
-// boundWorkflowDefinitionToProto creates a bound workflow definition.
-func boundWorkflowDefinitionToProto(input BoundWorkflowDefinition) (*proto.BoundWorkflowDefinition, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
+func workflowStepAttemptToProto(input WorkflowStepAttempt) (*proto.WorkflowStepAttempt, error) {
+	stepInput, err := valueFromAny(input.Input)
+	if err != nil {
+		return nil, fmt.Errorf("input: %w", err)
+	}
+	output, err := valueFromAny(input.Output)
+	if err != nil {
+		return nil, fmt.Errorf("output: %w", err)
+	}
+	return &proto.WorkflowStepAttempt{
+		Id:             input.ID,
+		Status:         proto.WorkflowStepStatus(input.Status),
+		IdempotencyKey: input.IdempotencyKey,
+		Input:          stepInput,
+		Output:         output,
+		StatusMessage:  input.StatusMessage,
+		StartedAt:      timestampFromOptionalTime(input.StartedAt),
+		CompletedAt:    timestampFromOptionalTime(input.CompletedAt),
+	}, nil
+}
+
+func workflowStepAttemptsFromProto(values []*proto.WorkflowStepAttempt) ([]WorkflowStepAttempt, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]WorkflowStepAttempt, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		startedAt, err := timePtrFromTimestamp(value.GetStartedAt())
+		if err != nil {
+			return nil, err
+		}
+		completedAt, err := timePtrFromTimestamp(value.GetCompletedAt())
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, WorkflowStepAttempt{
+			ID:             value.GetId(),
+			Status:         WorkflowStepStatus(value.GetStatus()),
+			IdempotencyKey: value.GetIdempotencyKey(),
+			Input:          anyFromValue(value.GetInput()),
+			Output:         anyFromValue(value.GetOutput()),
+			StatusMessage:  value.GetStatusMessage(),
+			StartedAt:      startedAt,
+			CompletedAt:    completedAt,
+		})
+	}
+	return out, nil
+}
+
+// WorkflowRunEvent contains one provider-persisted run event.
+type WorkflowRunEvent struct {
+	ID        string
+	RunID     string
+	StepID    string
+	Type      string
+	Data      any
+	CreatedAt time.Time
+}
+
+func workflowRunEventToProto(input WorkflowRunEvent) (*proto.WorkflowRunEvent, error) {
+	data, err := structFromAny(input.Data)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.BoundWorkflowDefinition{
-		Id:           input.ID,
-		Target:       target,
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
-		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
-		ProviderName: input.ProviderName,
+	return &proto.WorkflowRunEvent{
+		Id:        input.ID,
+		RunId:     input.RunID,
+		StepId:    input.StepID,
+		Type:      input.Type,
+		Data:      data,
+		CreatedAt: timestampFromNonZeroTime(input.CreatedAt),
 	}, nil
 }
 
-// boundWorkflowDefinitionFromProto converts an existing definition into
-// builder input.
-func boundWorkflowDefinitionFromProto(value *proto.BoundWorkflowDefinition) (BoundWorkflowDefinition, error) {
+func workflowRunEventFromProto(value *proto.WorkflowRunEvent) WorkflowRunEvent {
 	if value == nil {
-		return BoundWorkflowDefinition{}, nil
+		return WorkflowRunEvent{}
 	}
-	return BoundWorkflowDefinition{
-		ID:           value.GetId(),
-		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
-		ProviderName: value.GetProviderName(),
-	}, nil
-}
-
-// cloneBoundWorkflowDefinitionProto creates a copy of an existing definition
-// through the definition input builder.
-func cloneBoundWorkflowDefinitionProto(value *proto.BoundWorkflowDefinition) (*proto.BoundWorkflowDefinition, error) {
-	input, err := boundWorkflowDefinitionFromProto(value)
-	if err != nil || value == nil {
-		return nil, err
+	return WorkflowRunEvent{
+		ID:        value.GetId(),
+		RunID:     value.GetRunId(),
+		StepID:    value.GetStepId(),
+		Type:      value.GetType(),
+		Data:      mapFromStruct(value.GetData()),
+		CreatedAt: timeFromTimestamp(value.GetCreatedAt()),
 	}
-	return boundWorkflowDefinitionToProto(input)
-}
-
-// cloneBoundWorkflowRunProto creates a copy of an existing bound workflow run
-// through the run input builder.
-func cloneBoundWorkflowRunProto(value *proto.BoundWorkflowRun) (*proto.BoundWorkflowRun, error) {
-	input, err := boundWorkflowRunFromProto(value)
-	if err != nil || value == nil {
-		return nil, err
-	}
-	return boundWorkflowRunToProto(input)
-}
-
-// BoundWorkflowSchedule contains fields for constructing a
-// BoundWorkflowSchedule.
-type BoundWorkflowSchedule struct {
-	ID           string
-	Cron         string
-	Timezone     string
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	NextRunAt    *time.Time
-	CreatedBy    *WorkflowActor
-	RunAs        *Subject
-	ProviderName string
-	DefinitionID string
-}
-
-// boundWorkflowScheduleToProto creates a bound workflow schedule.
-func boundWorkflowScheduleToProto(input BoundWorkflowSchedule) (*proto.BoundWorkflowSchedule, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.BoundWorkflowSchedule{
-		Id:           input.ID,
-		Cron:         input.Cron,
-		Timezone:     input.Timezone,
-		Target:       target,
-		Paused:       input.Paused,
-		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
-		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
-		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
-		RunAs:        subjectToProto(input.RunAs),
-		ProviderName: input.ProviderName,
-		DefinitionId: input.DefinitionID,
-	}, nil
-}
-
-// boundWorkflowScheduleFromProto converts an existing protocol schedule
-// into builder input.
-func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWorkflowSchedule, error) {
-	if value == nil {
-		return BoundWorkflowSchedule{}, nil
-	}
-	nextRunAt, err := timePtrFromTimestamp(value.GetNextRunAt())
-	if err != nil {
-		return BoundWorkflowSchedule{}, err
-	}
-	return BoundWorkflowSchedule{
-		ID:           value.GetId(),
-		Cron:         value.GetCron(),
-		Timezone:     value.GetTimezone(),
-		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Paused:       value.GetPaused(),
-		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
-		NextRunAt:    nextRunAt,
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		RunAs:        subjectFromProto(value.GetRunAs()),
-		ProviderName: value.GetProviderName(),
-		DefinitionID: value.GetDefinitionId(),
-	}, nil
-}
-
-// cloneBoundWorkflowScheduleProto creates a copy of an existing schedule
-// through the schedule input builder.
-func cloneBoundWorkflowScheduleProto(value *proto.BoundWorkflowSchedule) (*proto.BoundWorkflowSchedule, error) {
-	input, err := boundWorkflowScheduleFromProto(value)
-	if err != nil || value == nil {
-		return nil, err
-	}
-	return boundWorkflowScheduleToProto(input)
-}
-
-// BoundWorkflowEventTrigger contains fields for constructing a
-// BoundWorkflowEventTrigger.
-type BoundWorkflowEventTrigger struct {
-	ID           string
-	Match        *WorkflowEventMatch
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	CreatedBy    *WorkflowActor
-	RunAs        *Subject
-	ProviderName string
-	DefinitionID string
 }
 
 // WorkflowEventMatch contains fields for matching workflow
@@ -1005,56 +1282,6 @@ type WorkflowEventMatch struct {
 	Type    string
 	Source  string
 	Subject string
-}
-
-// boundWorkflowEventTriggerToProto creates a bound workflow event trigger.
-func boundWorkflowEventTriggerToProto(input BoundWorkflowEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.BoundWorkflowEventTrigger{
-		Id:           input.ID,
-		Match:        workflowEventMatchFromInput(input.Match),
-		Target:       target,
-		Paused:       input.Paused,
-		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
-		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
-		RunAs:        subjectToProto(input.RunAs),
-		ProviderName: input.ProviderName,
-		DefinitionId: input.DefinitionID,
-	}, nil
-}
-
-// boundWorkflowEventTriggerFromProto converts an existing protocol event
-// trigger into builder input.
-func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) (BoundWorkflowEventTrigger, error) {
-	if value == nil {
-		return BoundWorkflowEventTrigger{}, nil
-	}
-	return BoundWorkflowEventTrigger{
-		ID:           value.GetId(),
-		Match:        workflowEventMatchInputPtrFromMatch(value.GetMatch()),
-		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Paused:       value.GetPaused(),
-		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		RunAs:        subjectFromProto(value.GetRunAs()),
-		ProviderName: value.GetProviderName(),
-		DefinitionID: value.GetDefinitionId(),
-	}, nil
-}
-
-// cloneBoundWorkflowEventTriggerProto creates a copy of an existing event
-// trigger through the event trigger input builder.
-func cloneBoundWorkflowEventTriggerProto(value *proto.BoundWorkflowEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
-	input, err := boundWorkflowEventTriggerFromProto(value)
-	if err != nil || value == nil {
-		return nil, err
-	}
-	return boundWorkflowEventTriggerToProto(input)
 }
 
 func newOptionalBoundWorkflowTarget(input *BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
@@ -1076,21 +1303,6 @@ func workflowTargetInputPtrFromTarget(value *proto.BoundWorkflowTarget) *BoundWo
 		return nil
 	}
 	input := boundWorkflowTargetFromProto(value)
-	return &input
-}
-
-func workflowActorFromInput(input *WorkflowActor) *proto.WorkflowActor {
-	if input == nil {
-		return nil
-	}
-	return workflowActorToProto(*input)
-}
-
-func workflowActorInputPtrFromActor(value *proto.WorkflowActor) *WorkflowActor {
-	if value == nil {
-		return nil
-	}
-	input := workflowActorFromProto(value)
 	return &input
 }
 

@@ -187,63 +187,7 @@ func TestRemoteAgentCreateSessionPreservesWorkflowDeadline(t *testing.T) {
 	}
 }
 
-func TestRemoteAgentWorkflowAgentTurnCallsPreserveMarkedDeadline(t *testing.T) {
-	t.Parallel()
-
-	parentDeadline := time.Now().Add(2 * runtimehost.ProviderSessionCreateTimeout)
-	var createTurnRemaining time.Duration
-	var getTurnRemaining time.Duration
-	agent := &remoteAgent{
-		client: &fakeAgentProviderClient{
-			createTurn: func(ctx context.Context, req *proto.CreateAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
-				deadline, ok := ctx.Deadline()
-				if !ok {
-					t.Fatal("CreateTurn context has no deadline")
-				}
-				createTurnRemaining = time.Until(deadline)
-				return &proto.AgentTurn{
-					Id:        "turn-1",
-					SessionId: req.GetSessionId(),
-					Status:    proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
-				}, nil
-			},
-			getTurn: func(ctx context.Context, req *proto.GetAgentProviderTurnRequest, _ ...grpc.CallOption) (*proto.AgentTurn, error) {
-				deadline, ok := ctx.Deadline()
-				if !ok {
-					t.Fatal("GetTurn context has no deadline")
-				}
-				getTurnRemaining = time.Until(deadline)
-				return &proto.AgentTurn{
-					Id:     req.GetTurnId(),
-					Status: proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING,
-				}, nil
-			},
-		},
-	}
-	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
-	defer cancel()
-	ctx := runtimehost.WithWorkflowAgentProviderDeadline(parent)
-
-	if _, err := agent.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{SessionId: "session-1"}); err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if _, err := agent.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"}); err != nil {
-		t.Fatalf("GetTurn: %v", err)
-	}
-	for name, remaining := range map[string]time.Duration{
-		"CreateTurn": createTurnRemaining,
-		"GetTurn":    getTurnRemaining,
-	} {
-		if remaining <= runtimehost.ProviderRPCTimeout {
-			t.Fatalf("%s remaining deadline = %s, want above provider RPC timeout %s", name, remaining, runtimehost.ProviderRPCTimeout)
-		}
-		if remaining > 2*runtimehost.ProviderSessionCreateTimeout {
-			t.Fatalf("%s remaining deadline = %s, want at most parent deadline %s", name, remaining, 2*runtimehost.ProviderSessionCreateTimeout)
-		}
-	}
-}
-
-func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing.T) {
+func TestRemoteAgentTurnCallsUseProviderTimeout(t *testing.T) {
 	t.Parallel()
 
 	parentDeadline := time.Now().Add(2 * runtimehost.ProviderSessionCreateTimeout)
@@ -281,14 +225,13 @@ func TestRemoteAgentTurnCallsKeepProviderTimeoutWithoutWorkflowMarker(t *testing
 	parent, cancel := context.WithDeadline(context.Background(), parentDeadline)
 	defer cancel()
 
-	if _, err := agent.CreateTurn(parent, &proto.CreateAgentProviderTurnRequest{SessionId: "session-1"}); err != nil {
+	if _, err := agent.CreateTurn(parent, &proto.CreateAgentProviderTurnRequest{SessionId: "session-1", TimeoutSeconds: 300}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
 	if _, err := agent.GetTurn(parent, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"}); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
-	marked := runtimehost.WithWorkflowAgentProviderDeadline(parent)
-	if _, err := agent.GetSession(marked, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"}); err != nil {
+	if _, err := agent.GetSession(parent, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"}); err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
 	for name, remaining := range map[string]time.Duration{

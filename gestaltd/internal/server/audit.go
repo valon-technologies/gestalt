@@ -12,24 +12,15 @@ import (
 )
 
 const (
-	auditTargetKindAPIToken             = "api_token"
-	auditTargetKindAPITokenCollection   = "api_token_collection"
-	auditTargetKindConnection           = "connection"
-	auditDecisionProviderAccessDenied   = "provider_access_denied"
-	auditDecisionOperationBindingDenied = "operation_binding_denied"
-	auditDecisionCatalogRoleDenied      = "catalog_role_denied"
+	auditTargetKindAPIToken           = "api_token"
+	auditTargetKindAPITokenCollection = "api_token_collection"
+	auditTargetKindConnection         = "connection"
 )
 
 type auditTarget struct {
 	ID   string
 	Kind string
 	Name string
-}
-
-type auditAuthorization struct {
-	Policy   string
-	Role     string
-	Decision string
 }
 
 func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Principal) (*principal.Principal, error) {
@@ -74,7 +65,7 @@ func (s *Server) auditEventWithTarget(ctx context.Context, p *principal.Principa
 	}
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, p, source, provider, operation)
-	populateAuditEntry(&entry, allowed, err, target, auditAuthorization{})
+	populateAuditEntry(&entry, allowed, err, target)
 	s.auditSink.Log(ctx, entry)
 }
 
@@ -84,8 +75,7 @@ func (s *Server) auditEventWithAuthSource(ctx context.Context, authSource, sourc
 	}
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, nil, source, provider, operation)
-	entry.AuthSource = authSource
-	populateAuditEntry(&entry, allowed, err, auditTarget{}, auditAuthorization{})
+	populateAuditEntry(&entry, allowed, err, auditTarget{})
 	s.auditSink.Log(ctx, entry)
 }
 
@@ -95,24 +85,14 @@ func (s *Server) auditEventWithSubjectIDAndTarget(ctx context.Context, subjectID
 	}
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, &principal.Principal{SubjectID: strings.TrimSpace(subjectID)}, source, provider, operation)
-	entry.AuthSource = authSource
-	populateAuditEntry(&entry, allowed, err, target, auditAuthorization{})
+	populateAuditEntry(&entry, allowed, err, target)
 	s.auditSink.Log(ctx, entry)
 }
 
-func populateAuditEntry(entry *core.AuditEntry, allowed bool, err error, target auditTarget, authz auditAuthorization) {
+func populateAuditEntry(entry *core.AuditEntry, allowed bool, err error, target auditTarget) {
 	entry.Allowed = allowed
 	if err != nil {
 		entry.Error = err.Error()
-	}
-	if authz.Policy != "" {
-		entry.AccessPolicy = authz.Policy
-	}
-	if authz.Role != "" {
-		entry.AccessRole = authz.Role
-	}
-	if authz.Decision != "" {
-		entry.AuthorizationDecision = authz.Decision
 	}
 	if target.ID != "" {
 		entry.TargetID = target.ID
@@ -170,16 +150,6 @@ func (s *Server) auditHTTPEvent(ctx context.Context, p *principal.Principal, pro
 
 func (s *Server) auditHTTPEventWithTarget(ctx context.Context, p *principal.Principal, provider, operation string, allowed bool, err error, target auditTarget) {
 	s.auditEventWithTarget(ctx, p, "http", provider, operation, allowed, err, target)
-}
-
-func (s *Server) auditHTTPAuthorizationEvent(ctx context.Context, p *principal.Principal, provider, operation string, allowed bool, err error, authz auditAuthorization) {
-	if s.auditSink == nil {
-		return
-	}
-
-	ctx, entry := invocation.BuildAuditEntry(ctx, p, "http", provider, operation)
-	populateAuditEntry(&entry, allowed, err, auditTarget{}, authz)
-	s.auditSink.Log(ctx, entry)
 }
 
 func (s *Server) auditRequestEventWithAuthSource(r *http.Request, authSource, provider, operation string, allowed bool, err error) {

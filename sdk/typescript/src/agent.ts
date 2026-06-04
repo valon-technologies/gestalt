@@ -39,7 +39,6 @@ import {
   ListAgentProviderTurnEventsResponseSchema,
   ListAgentProviderTurnsResponseSchema,
   ResolveAgentConnectionRequestSchema,
-  type AgentActor as ProtoAgentActor,
   type AgentInteraction as ProtoAgentInteraction,
   type AgentMessagePartImageRef as ProtoAgentMessagePartImageRef,
   type AgentMessagePartToolCall as ProtoAgentMessagePartToolCall,
@@ -80,8 +79,6 @@ import {
   type SubjectInput,
 } from "./api.ts";
 import {
-  agentActorFromProto,
-  agentActorToProto,
   agentOutputFromProto,
   agentOutputToProto,
   agentMessageFromProto,
@@ -200,12 +197,6 @@ export interface AgentMessage {
   metadata?: JsonObjectInput | undefined;
 }
 
-export interface AgentActor {
-  subjectId?: string | undefined;
-  subjectKind?: string | undefined;
-  displayName?: string | undefined;
-  authSource?: string | undefined;
-}
 
 export interface AgentToolRef {
   app?: string | undefined;
@@ -245,7 +236,7 @@ export interface AgentSession {
   clientRef?: string | undefined;
   state?: AgentSessionState | undefined;
   metadata?: JsonObjectInput | undefined;
-  createdBy?: AgentActor | undefined;
+  createdBySubjectId?: string | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   lastTurnAt?: Date | undefined;
@@ -281,7 +272,7 @@ export interface CreateAgentProviderSessionRequest {
   model: string;
   clientRef: string;
   metadata?: JsonObjectInput | undefined;
-  createdBy?: AgentActor | undefined;
+  createdBySubjectId?: string | undefined;
   subject?: Subject | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
@@ -325,7 +316,7 @@ export interface AgentTurn {
   messages?: readonly AgentMessage[] | undefined;
   output?: AgentTurnOutput | undefined;
   statusMessage?: string | undefined;
-  createdBy?: AgentActor | undefined;
+  createdBySubjectId?: string | undefined;
   createdAt?: Date | undefined;
   startedAt?: Date | undefined;
   completedAt?: Date | undefined;
@@ -365,7 +356,7 @@ export interface CreateAgentProviderTurnRequest {
   tools: readonly ResolvedAgentTool[];
   output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
-  createdBy?: AgentActor | undefined;
+  createdBySubjectId?: string | undefined;
   executionRef: string;
   toolRefs: readonly AgentToolRef[];
   toolSource: AgentToolSourceMode;
@@ -816,7 +807,7 @@ function createAgentProviderSessionRequestFromProto(
     model: request.model,
     clientRef: request.clientRef,
     metadata: optionalObjectFromStruct(request.metadata),
-    createdBy: agentActorFromProto(request.createdBy),
+    createdBySubjectId: request.createdBySubjectId ?? "",
     subject: agentSubjectFromProto(request.subject),
     sessionStart: request.sessionStart === undefined ? undefined : {
       hooks: request.sessionStart.hooks.map((hook) => ({
@@ -888,6 +879,12 @@ function createAgentProviderTurnRequestFromProto(
   if (output === undefined) {
     throw new ConnectError("create turn output is required", Code.InvalidArgument);
   }
+  if (!Number.isInteger(request.timeoutSeconds) || request.timeoutSeconds < 0) {
+    throw new ConnectError(
+      "agent create turn timeoutSeconds must not be negative",
+      Code.InvalidArgument,
+    );
+  }
   return {
     turnId: request.turnId,
     sessionId: request.sessionId,
@@ -897,7 +894,7 @@ function createAgentProviderTurnRequestFromProto(
     tools: request.tools.map(resolvedAgentToolFromProto),
     output,
     metadata: optionalObjectFromStruct(request.metadata),
-    createdBy: agentActorFromProto(request.createdBy),
+    createdBySubjectId: request.createdBySubjectId ?? "",
     executionRef: request.executionRef,
     toolRefs: request.toolRefs.map(agentToolRefFromProto),
     toolSource: request.toolSource as AgentToolSourceMode,
@@ -997,7 +994,7 @@ function agentSessionToProto(
     clientRef: session.clientRef ?? "",
     state: session.state ?? AgentSessionState.UNSPECIFIED,
     metadata: optionalStruct(session.metadata),
-    createdBy: agentActorToProto(session.createdBy),
+    createdBySubjectId: session.createdBySubjectId ?? "",
     createdAt: optionalTimestamp(session.createdAt),
     updatedAt: optionalTimestamp(session.updatedAt),
     lastTurnAt: optionalTimestamp(session.lastTurnAt),
@@ -1014,7 +1011,7 @@ function agentTurnToProto(turn: AgentTurn): MessageInitShape<typeof AgentTurnSch
     messages: turn.messages?.map(agentMessageToProto) ?? [],
     output: agentTurnOutputToProto(turn.output),
     statusMessage: turn.statusMessage ?? "",
-    createdBy: agentActorToProto(turn.createdBy),
+    createdBySubjectId: turn.createdBySubjectId ?? "",
     createdAt: optionalTimestamp(turn.createdAt),
     startedAt: optionalTimestamp(turn.startedAt),
     completedAt: optionalTimestamp(turn.completedAt),
@@ -1090,10 +1087,7 @@ function agentSubjectFromProto(
   }
   return {
     id: subject.id,
-    kind: subject.kind,
     credentialSubjectId: subject.credentialSubjectId,
-    displayName: subject.displayName,
-    authSource: subject.authSource,
     email: subject.email,
   };
 }

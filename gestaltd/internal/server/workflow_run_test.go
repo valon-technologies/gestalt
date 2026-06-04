@@ -18,9 +18,13 @@ import (
 )
 
 type workflowRunResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-	Target struct {
+	ID                   string         `json:"id"`
+	Status               string         `json:"status"`
+	DefinitionID         string         `json:"definitionId"`
+	DefinitionGeneration int64          `json:"definitionGeneration"`
+	Input                map[string]any `json:"input"`
+	CurrentStepID        string         `json:"currentStepId"`
+	Target               struct {
 		Steps []struct {
 			App *struct {
 				Name      string `json:"name"`
@@ -28,9 +32,20 @@ type workflowRunResponse struct {
 			} `json:"app"`
 		} `json:"steps"`
 	} `json:"target"`
+	Steps []struct {
+		StepID   string `json:"stepId"`
+		Status   string `json:"status"`
+		Attempts []struct {
+			ID             string `json:"id"`
+			Status         string `json:"status"`
+			IdempotencyKey string `json:"idempotencyKey"`
+			Output         any    `json:"output"`
+		} `json:"attempts"`
+		Output any `json:"output"`
+	} `json:"steps"`
 	Trigger struct {
-		Kind       string `json:"kind"`
-		ScheduleID string `json:"scheduleId"`
+		Kind         string `json:"kind"`
+		ActivationID string `json:"activationId"`
 	} `json:"trigger"`
 }
 
@@ -67,11 +82,11 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-page"] = &coreworkflow.Run{
-		ID:        "run-page",
-		Status:    coreworkflow.RunStatusRunning,
-		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
-		CreatedAt: &now,
+		ID:                 "run-page",
+		Status:             coreworkflow.RunStatusRunning,
+		Target:             workflowAppStepTarget("roadmap", "sync"),
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -170,18 +185,18 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.runs["run-sync"] = &coreworkflow.Run{
-		ID:        "run-sync",
-		Status:    coreworkflow.RunStatusSucceeded,
-		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
-		CreatedAt: &now,
+		ID:                 "run-sync",
+		Status:             coreworkflow.RunStatusSucceeded,
+		Target:             workflowAppStepTarget("roadmap", "sync"),
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
 	}
 	provider.runs["run-export"] = &coreworkflow.Run{
-		ID:        "run-export",
-		Status:    coreworkflow.RunStatusFailed,
-		Target:    workflowAppStepTarget("roadmap", "export"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
-		CreatedAt: &now,
+		ID:                 "run-export",
+		Status:             coreworkflow.RunStatusFailed,
+		Target:             workflowAppStepTarget("roadmap", "export"),
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -241,6 +256,99 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	}
 }
 
+func TestGlobalWorkflowRunInspectionIncludesDurableStepState(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	user := seedUser(t, services, "ada@example.test")
+	provider := newMemoryWorkflowProvider()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	provider.runs["run-durable"] = &coreworkflow.Run{
+		ID:                   "run-durable",
+		Status:               coreworkflow.RunStatusRunning,
+		Target:               workflowAppStepTarget("roadmap", "sync"),
+		DefinitionID:         "cfg_roadmap_sync",
+		DefinitionGeneration: 7,
+		Input:                map[string]any{"item": "item-1"},
+		CurrentStepID:        "sync",
+		Steps: []coreworkflow.StepExecution{{
+			StepID: "prepare",
+			Status: coreworkflow.StepStatusSucceeded,
+			Output: map[string]any{"checkRunID": "check-1"},
+			Attempts: []coreworkflow.StepAttempt{{
+				ID:             "attempt-1",
+				Status:         coreworkflow.StepStatusSucceeded,
+				IdempotencyKey: "run-durable:prepare:1",
+				Output:         map[string]any{"checkRunID": "check-1"},
+				StartedAt:      &now,
+				CompletedAt:    &now,
+			}},
+			StartedAt:   &now,
+			CompletedAt: &now,
+		}, {
+			StepID: "sync",
+			Status: coreworkflow.StepStatusRunning,
+		}},
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
+		StartedAt:          &now,
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
+			},
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/run-durable", nil)
+	getReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	getResp, err := http.DefaultClient.Do(getReq)
+	if err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	defer func() { _ = getResp.Body.Close() }()
+	if getResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", getResp.StatusCode)
+	}
+	var got workflowRunResponse
+	if err := json.NewDecoder(getResp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode get response: %v", err)
+	}
+	if got.DefinitionID != "cfg_roadmap_sync" || got.DefinitionGeneration != 7 || got.CurrentStepID != "sync" {
+		t.Fatalf("durable run fields = %#v", got)
+	}
+	if got.Input["item"] != "item-1" {
+		t.Fatalf("run input = %#v", got.Input)
+	}
+	if len(got.Steps) != 2 || got.Steps[0].StepID != "prepare" || got.Steps[0].Status != string(coreworkflow.StepStatusSucceeded) || got.Steps[1].StepID != "sync" {
+		t.Fatalf("steps = %#v", got.Steps)
+	}
+	if len(got.Steps[0].Attempts) != 1 || got.Steps[0].Attempts[0].IdempotencyKey != "run-durable:prepare:1" {
+		t.Fatalf("attempts = %#v", got.Steps[0].Attempts)
+	}
+}
+
 func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 	t.Parallel()
 
@@ -250,12 +358,12 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	run := &coreworkflow.Run{
-		ID:        "run-cancel",
-		Status:    coreworkflow.RunStatusRunning,
-		Target:    workflowAppStepTarget("roadmap", "sync"),
-		CreatedBy: coreworkflow.Actor{SubjectID: principal.UserSubjectID(user.ID)},
-		CreatedAt: &now,
-		StartedAt: &now,
+		ID:                 "run-cancel",
+		Status:             coreworkflow.RunStatusRunning,
+		Target:             workflowAppStepTarget("roadmap", "sync"),
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
+		StartedAt:          &now,
 	}
 	provider.runs[run.ID] = run
 

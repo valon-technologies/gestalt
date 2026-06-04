@@ -55,7 +55,7 @@ type invokePluginGraphQLInput struct {
 	Variables       map[string]any `json:"variables,omitempty"`
 }
 
-type workflowScheduleTargetInput struct {
+type workflowDefinitionStepInput struct {
 	App        string         `json:"app"`
 	Operation  string         `json:"operation"`
 	Connection string         `json:"connection,omitempty"`
@@ -63,28 +63,9 @@ type workflowScheduleTargetInput struct {
 	Input      map[string]any `json:"input,omitempty"`
 }
 
-type createWorkflowScheduleInput struct {
-	ProviderName    string                      `json:"provider_name,omitempty"`
-	Cron            string                      `json:"cron"`
-	Timezone        string                      `json:"timezone,omitempty"`
-	Target          workflowScheduleTargetInput `json:"target"`
-	Paused          bool                        `json:"paused,omitempty"`
-	InvocationToken string                      `json:"invocation_token,omitempty"`
-}
-
-type getWorkflowScheduleInput struct {
-	ScheduleID      string `json:"schedule_id"`
-	InvocationToken string `json:"invocation_token,omitempty"`
-}
-
-type updateWorkflowScheduleInput struct {
-	ScheduleID      string                      `json:"schedule_id"`
-	ProviderName    string                      `json:"provider_name,omitempty"`
-	Cron            string                      `json:"cron"`
-	Timezone        string                      `json:"timezone,omitempty"`
-	Target          workflowScheduleTargetInput `json:"target"`
-	Paused          bool                        `json:"paused,omitempty"`
-	InvocationToken string                      `json:"invocation_token,omitempty"`
+type workflowScheduleActivationInput struct {
+	Cron     string `json:"cron"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 type workflowEventMatchInput struct {
@@ -93,29 +74,45 @@ type workflowEventMatchInput struct {
 	Subject string `json:"subject,omitempty"`
 }
 
-type createWorkflowTriggerInput struct {
+type workflowEventActivationInput struct {
+	Match workflowEventMatchInput `json:"match"`
+}
+
+type workflowActivationInput struct {
+	ID       string                           `json:"id"`
+	Schedule *workflowScheduleActivationInput `json:"schedule,omitempty"`
+	Event    *workflowEventActivationInput    `json:"event,omitempty"`
+	Paused   bool                             `json:"paused,omitempty"`
+}
+
+type applyWorkflowDefinitionInput struct {
+	DefinitionID    string                      `json:"definition_id"`
 	ProviderName    string                      `json:"provider_name,omitempty"`
-	Match           workflowEventMatchInput     `json:"match"`
-	Target          workflowScheduleTargetInput `json:"target"`
+	Target          workflowDefinitionStepInput `json:"target"`
+	Activations     []workflowActivationInput   `json:"activations,omitempty"`
 	Paused          bool                        `json:"paused,omitempty"`
 	InvocationToken string                      `json:"invocation_token,omitempty"`
 }
 
-type getWorkflowTriggerInput struct {
-	TriggerID       string `json:"trigger_id"`
+type workflowDefinitionIDInput struct {
+	DefinitionID    string `json:"definition_id"`
 	InvocationToken string `json:"invocation_token,omitempty"`
 }
 
-type updateWorkflowTriggerInput struct {
-	TriggerID       string                      `json:"trigger_id"`
-	ProviderName    string                      `json:"provider_name,omitempty"`
-	Match           workflowEventMatchInput     `json:"match"`
-	Target          workflowScheduleTargetInput `json:"target"`
-	Paused          bool                        `json:"paused,omitempty"`
-	InvocationToken string                      `json:"invocation_token,omitempty"`
+type setWorkflowDefinitionPausedInput struct {
+	DefinitionID    string `json:"definition_id"`
+	Paused          bool   `json:"paused"`
+	InvocationToken string `json:"invocation_token,omitempty"`
 }
 
-type publishWorkflowEventInput struct {
+type setWorkflowActivationPausedInput struct {
+	DefinitionID    string `json:"definition_id"`
+	ActivationID    string `json:"activation_id"`
+	Paused          bool   `json:"paused"`
+	InvocationToken string `json:"invocation_token,omitempty"`
+}
+
+type deliverWorkflowEventInput struct {
 	ID              string         `json:"id,omitempty"`
 	ProviderName    string         `json:"provider_name,omitempty"`
 	Source          string         `json:"source,omitempty"`
@@ -166,19 +163,12 @@ var proxyRouter = gestalt.MustRouter(
 	proxyOperation[makeHTTPRequestInput]("make_http_request", http.MethodGet),
 	proxyOperation[invokePluginInput]("invoke_plugin", http.MethodPost),
 	proxyOperation[invokePluginGraphQLInput]("invoke_plugin_graphql", http.MethodPost),
-	proxyOperation[createWorkflowScheduleInput]("create_workflow_schedule", http.MethodPost),
-	proxyOperation[getWorkflowScheduleInput]("get_workflow_schedule", http.MethodGet),
-	proxyOperation[updateWorkflowScheduleInput]("update_workflow_schedule", http.MethodPost),
-	proxyOperation[getWorkflowScheduleInput]("delete_workflow_schedule", http.MethodPost),
-	proxyOperation[getWorkflowScheduleInput]("pause_workflow_schedule", http.MethodPost),
-	proxyOperation[getWorkflowScheduleInput]("resume_workflow_schedule", http.MethodPost),
-	proxyOperation[createWorkflowTriggerInput]("create_workflow_trigger", http.MethodPost),
-	proxyOperation[getWorkflowTriggerInput]("get_workflow_trigger", http.MethodGet),
-	proxyOperation[updateWorkflowTriggerInput]("update_workflow_trigger", http.MethodPost),
-	proxyOperation[getWorkflowTriggerInput]("delete_workflow_trigger", http.MethodPost),
-	proxyOperation[getWorkflowTriggerInput]("pause_workflow_trigger", http.MethodPost),
-	proxyOperation[getWorkflowTriggerInput]("resume_workflow_trigger", http.MethodPost),
-	proxyOperation[publishWorkflowEventInput]("publish_workflow_event", http.MethodPost),
+	proxyOperation[applyWorkflowDefinitionInput]("apply_workflow_definition", http.MethodPost),
+	proxyOperation[workflowDefinitionIDInput]("get_workflow_definition", http.MethodGet),
+	proxyOperation[setWorkflowDefinitionPausedInput]("set_workflow_definition_paused", http.MethodPost),
+	proxyOperation[setWorkflowActivationPausedInput]("set_workflow_activation_paused", http.MethodPost),
+	proxyOperation[workflowDefinitionIDInput]("delete_workflow_definition", http.MethodPost),
+	proxyOperation[deliverWorkflowEventInput]("deliver_workflow_event", http.MethodPost),
 	proxyOperation[indexedDBRoundtripInput]("indexeddb_roundtrip", http.MethodPost),
 	proxyOperation[s3RoundtripInput]("s3_roundtrip", http.MethodPost),
 )
@@ -338,8 +328,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		envelope["body"] = decodeResultBody(result.Body)
 		return jsonResult(http.StatusOK, envelope), nil
 
-	case "create_workflow_schedule":
-		input, err := decodeJSONParams[createWorkflowScheduleInput](params)
+	case "apply_workflow_definition":
+		input, err := decodeJSONParams[applyWorkflowDefinitionInput](params)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
@@ -348,24 +338,67 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		target, err := workflowTargetInput(input.Target)
+		target, err := workflowDefinitionTargetInput(input.Target)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.CreateSchedule(ctx, gestalt.WorkflowCreateSchedule{
+		activations, err := workflowActivationsInput(input.Activations)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		result, err := client.ApplyDefinition(ctx, gestalt.WorkflowApplyDefinition{
 			ProviderName: input.ProviderName,
-			Cron:         input.Cron,
-			Timezone:     input.Timezone,
-			Target:       target,
+			Spec: &gestalt.WorkflowDefinitionSpec{
+				ID:          input.DefinitionID,
+				Target:      target,
+				Activations: activations,
+				Paused:      input.Paused,
+			},
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
+
+	case "get_workflow_definition":
+		input, err := decodeJSONParams[workflowDefinitionIDInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.GetDefinition(ctx, gestalt.WorkflowGetDefinition{
+			DefinitionID: input.DefinitionID,
+		})
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
+
+	case "set_workflow_definition_paused":
+		input, err := decodeJSONParams[setWorkflowDefinitionPausedInput](params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		client, err := workflowFromContext(ctx, input.InvocationToken)
+		if err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		}
+		defer func() { _ = client.Close() }()
+		result, err := client.SetDefinitionPaused(ctx, gestalt.WorkflowSetDefinitionPaused{
+			DefinitionID: input.DefinitionID,
 			Paused:       input.Paused,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
+		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
 
-	case "get_workflow_schedule":
-		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
+	case "set_workflow_activation_paused":
+		input, err := decodeJSONParams[setWorkflowActivationPausedInput](params)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
@@ -374,43 +407,18 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.GetSchedule(ctx, gestalt.WorkflowGetSchedule{
-			ScheduleID: input.ScheduleID,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
-
-	case "update_workflow_schedule":
-		input, err := decodeJSONParams[updateWorkflowScheduleInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		target, err := workflowTargetInput(input.Target)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		result, err := client.UpdateSchedule(ctx, gestalt.WorkflowUpdateSchedule{
-			ScheduleID:   input.ScheduleID,
-			ProviderName: input.ProviderName,
-			Cron:         input.Cron,
-			Timezone:     input.Timezone,
-			Target:       target,
+		result, err := client.SetActivationPaused(ctx, gestalt.WorkflowSetActivationPaused{
+			DefinitionID: input.DefinitionID,
+			ActivationID: input.ActivationID,
 			Paused:       input.Paused,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
+		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
 
-	case "delete_workflow_schedule":
-		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
+	case "delete_workflow_definition":
+		input, err := decodeJSONParams[workflowDefinitionIDInput](params)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
@@ -419,173 +427,15 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		if err := client.DeleteSchedule(ctx, gestalt.WorkflowDeleteSchedule{
-			ScheduleID: input.ScheduleID,
+		if err := client.DeleteDefinition(ctx, gestalt.WorkflowDeleteDefinition{
+			DefinitionID: input.DefinitionID,
 		}); err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "schedule_id": input.ScheduleID}), nil
+		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "definition_id": input.DefinitionID}), nil
 
-	case "pause_workflow_schedule":
-		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		result, err := client.PauseSchedule(ctx, gestalt.WorkflowPauseSchedule{
-			ScheduleID: input.ScheduleID,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
-
-	case "resume_workflow_schedule":
-		input, err := decodeJSONParams[getWorkflowScheduleInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		result, err := client.ResumeSchedule(ctx, gestalt.WorkflowResumeSchedule{
-			ScheduleID: input.ScheduleID,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowScheduleBody(result)), nil
-
-	case "create_workflow_trigger":
-		input, err := decodeJSONParams[createWorkflowTriggerInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		target, err := workflowTargetInput(input.Target)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		result, err := client.CreateTrigger(ctx, gestalt.WorkflowCreateEventTrigger{
-			ProviderName: input.ProviderName,
-			Match:        workflowEventMatch(input.Match),
-			Target:       target,
-			Paused:       input.Paused,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
-
-	case "get_workflow_trigger":
-		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		result, err := client.GetTrigger(ctx, gestalt.WorkflowGetEventTrigger{
-			TriggerID: input.TriggerID,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
-
-	case "update_workflow_trigger":
-		input, err := decodeJSONParams[updateWorkflowTriggerInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		target, err := workflowTargetInput(input.Target)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		result, err := client.UpdateTrigger(ctx, gestalt.WorkflowUpdateEventTrigger{
-			TriggerID:    input.TriggerID,
-			ProviderName: input.ProviderName,
-			Match:        workflowEventMatch(input.Match),
-			Target:       target,
-			Paused:       input.Paused,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
-
-	case "delete_workflow_trigger":
-		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		if err := client.DeleteTrigger(ctx, gestalt.WorkflowDeleteEventTrigger{
-			TriggerID: input.TriggerID,
-		}); err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "trigger_id": input.TriggerID}), nil
-
-	case "pause_workflow_trigger":
-		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		result, err := client.PauseTrigger(ctx, gestalt.WorkflowPauseEventTrigger{
-			TriggerID: input.TriggerID,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
-
-	case "resume_workflow_trigger":
-		input, err := decodeJSONParams[getWorkflowTriggerInput](params)
-		if err != nil {
-			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
-		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		defer func() { _ = client.Close() }()
-		result, err := client.ResumeTrigger(ctx, gestalt.WorkflowResumeEventTrigger{
-			TriggerID: input.TriggerID,
-		})
-		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
-		}
-		return jsonResult(http.StatusOK, managedWorkflowTriggerBody(result)), nil
-
-	case "publish_workflow_event":
-		input, err := decodeJSONParams[publishWorkflowEventInput](params)
+	case "deliver_workflow_event":
+		input, err := decodeJSONParams[deliverWorkflowEventInput](params)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
@@ -598,7 +448,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.PublishEvent(ctx, gestalt.WorkflowPublishEvent{
+		result, err := client.DeliverEvent(ctx, gestalt.WorkflowDeliverEvent{
 			Event:        event,
 			ProviderName: input.ProviderName,
 		})
@@ -779,7 +629,7 @@ func workflowFromContext(ctx context.Context, invocationToken string) (gestalt.W
 	return gestalt.NewWorkflow(token)
 }
 
-func workflowTargetInput(target workflowScheduleTargetInput) (*gestalt.BoundWorkflowTarget, error) {
+func workflowDefinitionTargetInput(target workflowDefinitionStepInput) (*gestalt.BoundWorkflowTarget, error) {
 	return &gestalt.BoundWorkflowTarget{
 		Steps: []gestalt.WorkflowStep{{
 			ID: strings.TrimSpace(target.Operation),
@@ -802,7 +652,37 @@ func workflowEventMatch(match workflowEventMatchInput) *gestalt.WorkflowEventMat
 	}
 }
 
-func workflowEvent(input publishWorkflowEventInput) (*gestalt.WorkflowEvent, error) {
+func workflowActivationsInput(values []workflowActivationInput) ([]gestalt.WorkflowActivation, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make([]gestalt.WorkflowActivation, 0, len(values))
+	for _, value := range values {
+		activation := gestalt.WorkflowActivation{
+			ID:     value.ID,
+			Paused: value.Paused,
+		}
+		switch {
+		case value.Schedule != nil && value.Event != nil:
+			return nil, errors.New("workflow activation must set exactly one of schedule or event")
+		case value.Schedule != nil:
+			activation.Schedule = &gestalt.WorkflowScheduleActivation{
+				Cron:     value.Schedule.Cron,
+				Timezone: value.Schedule.Timezone,
+			}
+		case value.Event != nil:
+			activation.Event = &gestalt.WorkflowEventActivation{
+				Match: workflowEventMatch(value.Event.Match),
+			}
+		default:
+			return nil, errors.New("workflow activation must set schedule or event")
+		}
+		out = append(out, activation)
+	}
+	return out, nil
+}
+
+func workflowEvent(input deliverWorkflowEventInput) (*gestalt.WorkflowEvent, error) {
 	event := &gestalt.WorkflowEvent{
 		ID:              input.ID,
 		Source:          input.Source,
@@ -823,31 +703,20 @@ func workflowEvent(input publishWorkflowEventInput) (*gestalt.WorkflowEvent, err
 	return event, nil
 }
 
-func managedWorkflowScheduleBody(value *gestalt.WorkflowSchedule) map[string]any {
+func workflowDefinitionBody(value *gestalt.WorkflowDefinition) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
-	schedule := value.Schedule
 	body := map[string]any{
 		"provider_name": value.ProviderName,
 	}
-	if schedule == nil {
-		return body
-	}
-	target := schedule.Target
-	body["schedule"] = map[string]any{
-		"id":         schedule.ID,
-		"cron":       schedule.Cron,
-		"timezone":   schedule.Timezone,
-		"paused":     schedule.Paused,
-		"created_at": timeBody(schedule.CreatedAt),
-		"updated_at": timeBody(schedule.UpdatedAt),
-		"next_run_at": func() any {
-			if schedule.NextRunAt == nil {
-				return nil
-			}
-			return *schedule.NextRunAt
-		}(),
+	definition := map[string]any{
+		"id":          value.ID,
+		"generation":  value.Generation,
+		"paused":      value.Paused,
+		"created_at":  timeBody(value.CreatedAt),
+		"updated_at":  timeBody(value.UpdatedAt),
+		"activations": workflowActivationBodies(value.Activations),
 		"target": map[string]any{
 			"app":        "",
 			"operation":  "",
@@ -856,8 +725,8 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowSchedule) map[string]any
 			"input":      map[string]any{},
 		},
 	}
-	if appTarget := workflowFirstAppStep(target); appTarget != nil {
-		body["schedule"].(map[string]any)["target"] = map[string]any{
+	if appTarget := workflowFirstAppStep(value.Target); appTarget != nil {
+		definition["target"] = map[string]any{
 			"app":        appTarget.Name,
 			"operation":  appTarget.Operation,
 			"connection": appTarget.Connection,
@@ -865,57 +734,38 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowSchedule) map[string]any
 			"input":      workflowAppStepInputMap(appTarget),
 		}
 	}
+	body["definition"] = definition
 	return body
 }
 
-func managedWorkflowTriggerBody(value *gestalt.WorkflowEventTrigger) map[string]any {
-	if value == nil {
-		return map[string]any{}
+func workflowActivationBodies(values []gestalt.WorkflowActivation) []map[string]any {
+	if len(values) == 0 {
+		return nil
 	}
-	trigger := value.Trigger
-	body := map[string]any{
-		"provider_name": value.ProviderName,
-	}
-	if trigger == nil {
-		return body
-	}
-	target := trigger.Target
-	match := trigger.Match
-	body["trigger"] = map[string]any{
-		"id":         trigger.ID,
-		"paused":     trigger.Paused,
-		"created_at": timeBody(trigger.CreatedAt),
-		"updated_at": timeBody(trigger.UpdatedAt),
-		"match": map[string]any{
-			"type":    "",
-			"source":  "",
-			"subject": "",
-		},
-		"target": map[string]any{
-			"app":        "",
-			"operation":  "",
-			"connection": "",
-			"instance":   "",
-			"input":      map[string]any{},
-		},
-	}
-	if match != nil {
-		body["trigger"].(map[string]any)["match"] = map[string]any{
-			"type":    match.Type,
-			"source":  match.Source,
-			"subject": match.Subject,
+	out := make([]map[string]any, 0, len(values))
+	for _, activation := range values {
+		body := map[string]any{
+			"id":     activation.ID,
+			"paused": activation.Paused,
 		}
-	}
-	if appTarget := workflowFirstAppStep(target); appTarget != nil {
-		body["trigger"].(map[string]any)["target"] = map[string]any{
-			"app":        appTarget.Name,
-			"operation":  appTarget.Operation,
-			"connection": appTarget.Connection,
-			"instance":   appTarget.Instance,
-			"input":      workflowAppStepInputMap(appTarget),
+		if activation.Schedule != nil {
+			body["schedule"] = map[string]any{
+				"cron":     activation.Schedule.Cron,
+				"timezone": activation.Schedule.Timezone,
+			}
 		}
+		if activation.Event != nil && activation.Event.Match != nil {
+			body["event"] = map[string]any{
+				"match": map[string]any{
+					"type":    activation.Event.Match.Type,
+					"source":  activation.Event.Match.Source,
+					"subject": activation.Event.Match.Subject,
+				},
+			}
+		}
+		out = append(out, body)
 	}
-	return body
+	return out
 }
 
 func workflowFirstAppStep(target *gestalt.BoundWorkflowTarget) *gestalt.WorkflowStepAppCall {

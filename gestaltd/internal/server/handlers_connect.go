@@ -62,18 +62,12 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
-	p := PrincipalFromContext(r.Context())
-	if !s.allowProviderContext(r.Context(), p, req.Integration) {
-		auditErr = errOperationAccess
-		writeError(w, http.StatusForbidden, errOperationAccess.Error())
-		return
-	}
-
 	conn, hasConnectionDef := s.effectiveConnectionDef(req.Integration, manualConnection)
 	if hasConnectionDef {
 		mode := config.ConnectionModeForConnection(conn)
 		connectionMode = metricutil.NormalizeConnectionMode(mode)
 	}
+	p := PrincipalFromContext(r.Context())
 	auth := conn.Auth
 	if !manualConnectionAllowed(prov, conn, hasConnectionDef) {
 		auditErr = errors.New("integration does not support manual auth")
@@ -382,8 +376,10 @@ func credentialMaterialContext(ctx context.Context, p *principal.Principal, tm c
 		UserID:              strings.TrimSpace(tm.ActorUserID),
 		CredentialSubjectID: strings.TrimSpace(tm.SubjectID),
 	}
-	principal.SetAuthSource(actor, strings.TrimSpace(tm.ActorAuthSource))
-	return principal.WithPrincipal(ctx, actor)
+	if kind, _, ok := core.ParseSubjectID(actor.SubjectID); ok {
+		actor.Kind = principal.Kind(kind)
+	}
+	return principal.WithPrincipal(ctx, principal.Canonicalize(actor))
 }
 
 type connectionSetupResult struct {

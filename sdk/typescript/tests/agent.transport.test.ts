@@ -31,7 +31,6 @@ import { removeTempDir } from "./helpers.ts";
 
 test("AgentProvider accepts JSON display payloads for turn events", async () => {
   const provider = defineAgentProvider({
-    displayName: "Agent transport fixture",
     async listTurnEvents() {
       return [
         {
@@ -42,7 +41,6 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
           source: "fixture-agent",
           visibility: "public",
           display: {
-            kind: "tool",
             phase: "started",
             label: "Lookup fixture",
             ref: "call-1",
@@ -80,7 +78,6 @@ test("AgentProvider accepts JSON display payloads for turn events", async () => 
     source: "fixture-agent",
     visibility: "public",
     display: {
-      kind: "tool",
       phase: "started",
       label: "Lookup fixture",
       ref: "call-1",
@@ -109,6 +106,7 @@ test("AgentProvider rejects structured output without a schema", async () => {
       create(CreateAgentProviderTurnRequestSchema, {
         turnId: "turn-1",
         sessionId: "session-1",
+        timeoutSeconds: 120,
         output: {
           kind: {
             case: "structured",
@@ -127,7 +125,6 @@ test("AgentProvider rejects structured output without a schema", async () => {
 test("AgentProvider forwards invocation tokens to handlers", async () => {
   const seenTokens: string[] = [];
   const provider = defineAgentProvider({
-    displayName: "Agent token fixture",
     createSession(request) {
       seenTokens.push(request.invocationToken);
       return {
@@ -159,6 +156,7 @@ test("AgentProvider forwards invocation tokens to handlers", async () => {
       sessionId: "session-1",
       model: "gpt-test",
       output: { kind: { case: "text", value: {} } },
+      timeoutSeconds: 120,
       invocationToken: "turn-token",
     }),
   );

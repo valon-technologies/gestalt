@@ -33,8 +33,6 @@ const (
 	SessionStateArchived SessionState = "archived"
 )
 
-type Actor = core.Actor
-
 type Message struct {
 	Role     string
 	Text     string
@@ -135,16 +133,16 @@ const (
 )
 
 type Session struct {
-	ID           string
-	ProviderName string
-	Model        string
-	ClientRef    string
-	State        SessionState
-	Metadata     map[string]any
-	CreatedBy    Actor
-	CreatedAt    *time.Time
-	UpdatedAt    *time.Time
-	LastTurnAt   *time.Time
+	ID                 string
+	ProviderName       string
+	Model              string
+	ClientRef          string
+	State              SessionState
+	Metadata           map[string]any
+	CreatedBySubjectID string
+	CreatedAt          *time.Time
+	UpdatedAt          *time.Time
+	LastTurnAt         *time.Time
 }
 
 type Workspace struct {
@@ -183,19 +181,19 @@ type SessionStartHookOutput struct {
 }
 
 type Turn struct {
-	ID            string
-	SessionID     string
-	ProviderName  string
-	Model         string
-	Status        ExecutionStatus
-	Messages      []Message
-	Output        TurnOutput
-	StatusMessage string
-	CreatedBy     Actor
-	CreatedAt     *time.Time
-	StartedAt     *time.Time
-	CompletedAt   *time.Time
-	ExecutionRef  string
+	ID                 string
+	SessionID          string
+	ProviderName       string
+	Model              string
+	Status             ExecutionStatus
+	Messages           []Message
+	Output             TurnOutput
+	StatusMessage      string
+	CreatedBySubjectID string
+	CreatedAt          *time.Time
+	StartedAt          *time.Time
+	CompletedAt        *time.Time
+	ExecutionRef       string
 }
 
 type Output struct {

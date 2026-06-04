@@ -31,9 +31,9 @@ These fields are emitted when available:
 
 | Field | Meaning |
 | --- | --- |
-| `auth_source` | Authentication mechanism for the caller: `session`, `api_token`, or `env`. |
 | `subject_id` | Canonical caller subject such as `user:<id>` or [`service_account:<id>`](/service-accounts) |
-| `subject_kind` | Canonical subject type, such as `user` or `service_account` |
+| `credential_subject_id` | Credential subject when it differs from `subject_id` |
+| `run_as_subject_id` | Delegated run-as subject for the invocation, when present |
 | `target_kind` | Generic kind for the object the event acted on, such as `api_token` or `connection` |
 | `target_id` | Stable identifier for the affected object when one exists |
 | `target_name` | Human-readable label for the affected object |
@@ -65,9 +65,6 @@ Workflow events also use workflow-specific fields when available:
 | `workflow_target_provider` | Target app, agent provider, or tool provider involved in the workflow action or denial. |
 | `workflow_target_operation` | Target operation involved in the workflow action or denial. |
 | `workflow_created_by_subject_id` | Original workflow creator subject for audited operations that execute inside a workflow context. |
-| `workflow_created_by_subject_kind` | Original workflow creator subject kind. |
-| `workflow_created_by_display_name` | Display name for the original workflow creator, when available. |
-| `workflow_created_by_auth_source` | Auth source for the original workflow creator, when available. |
 
 ## Event Names
 
@@ -92,26 +89,17 @@ Non-invocation audit events use explicit operation names:
 
 Workflow-manager audit events use `source=workflow_manager`. Their `provider`
 field is the selected workflow backend, not an app or agent step. They
-emit one audit record per backend for fanout event publishes.
+emit one audit record per backend for fanout event delivery.
 
-- `workflow.definition.create`
-- `workflow.definition.update`
+- `workflow.definition.apply`
 - `workflow.definition.delete`
-- `workflow.schedule.create`
-- `workflow.schedule.update`
-- `workflow.schedule.delete`
-- `workflow.schedule.pause`
-- `workflow.schedule.resume`
-- `workflow.event_trigger.create`
-- `workflow.event_trigger.update`
-- `workflow.event_trigger.delete`
-- `workflow.event_trigger.pause`
-- `workflow.event_trigger.resume`
+- `workflow.definition.pause`
+- `workflow.activation.pause`
 - `workflow.run.start`
 - `workflow.run.signal`
 - `workflow.run.signal_or_start`
 - `workflow.run.cancel`
-- `workflow.event.publish`
+- `workflow.event.deliver`
 
 Denied requests to `/api/v1/{integration}/{operation}` that are blocked before
 `GuardedInvoker` still use the attempted catalog operation ID in `operation`,
@@ -123,7 +111,7 @@ rejects the request before invocation.
 ## Workflow Manager Events
 
 Workflow-manager audit records cover mutating workflow actions and event
-publishing from HTTP, CLI, and app SDK paths. Read-only workflow list/get
+delivery from HTTP, CLI, and app SDK paths. Read-only workflow list/get
 requests remain ordinary HTTP request telemetry.
 
 Workflow object actions set the generic target fields:
@@ -131,10 +119,9 @@ Workflow object actions set the generic target fields:
 | Object | `target_kind` | `target_id` | `target_name` |
 | --- | --- | --- | --- |
 | Definition | `workflow_definition` | Definition ID | Empty |
-| Schedule | `workflow_schedule` | Schedule ID | Empty |
-| Event trigger | `workflow_event_trigger` | Trigger ID | Empty |
+| Activation | `workflow_activation` | Activation ID | Empty |
 | Run | `workflow_run` | Run ID when available | Empty |
-| Published event | `workflow_event` | Empty | Event type |
+| Delivered event | `workflow_event` | Empty | Event type |
 
 Run start and signal-or-start events include `workflow_key_sha256` so operators
 can correlate repeated events for the same workflow key without logging the raw
@@ -166,7 +153,7 @@ the target provider and operation.
 | IndexedDB operations | Yes: `db.client.operation.duration` | No | Datastore calls are internal implementation telemetry, not audit events. |
 | API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | Audit records exist for explicit token create/revoke flows and CLI token minting. |
-| Workflow-manager mutations and event publishing | No dedicated semantic metric family | Yes | Workflow control-plane actions are audited with `source=workflow_manager`. |
+| Workflow-manager mutations and event delivery | No dedicated semantic metric family | Yes | Workflow control-plane actions are audited with `source=workflow_manager`. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These remain audit-only workflow events. |
 
 See [Observability](/observability) for the metric families and attribute
@@ -180,9 +167,7 @@ definitions.
   "event_time": "2026-04-06T18:23:11.842Z",
   "request_id": "2a7c1d7f-2b25-4b7a-8ae8-02f4d8f6f2b2",
   "source": "mcp",
-  "auth_source": "api_token",
   "subject_id": "user:usr_123",
-  "subject_kind": "user",
   "provider": "github",
   "operation": "issues_list",
   "depth": 0,
@@ -200,11 +185,9 @@ Workflow-manager records keep workflow routing context in audit logs:
   "event_time": "2026-05-14T00:45:59.542Z",
   "request_id": "21d82738-3fa7-4d5f-b33f-cff12b92bb24",
   "source": "workflow_manager",
-  "auth_source": "api_token",
   "subject_id": "service_account:slack-bot",
-  "subject_kind": "service_account",
   "provider": "temporal",
-  "operation": "workflow.event.publish",
+  "operation": "workflow.event.deliver",
   "target_kind": "workflow_event",
   "target_name": "slack.message.created",
   "caller_app": "slack",
@@ -226,7 +209,7 @@ With the default `providers.audit.default.source: inherit`, you can still split 
 ## Metrics Notes
 
 Audit logs are a good source for invocation-based activity metrics. In
-particular, `source`, `auth_source`, `subject_id`, `provider`, `operation`, and
+particular, `source`, `subject_id`, `provider`, `operation`, and
 `allowed` are enough to derive distinct-user activity over guarded invocations.
 
 For DAU, WAU, or MAU built from tool usage, filter to successful top-level invocations where `allowed = true`, `depth = 0`, and `subject_id` is non-empty. That produces a clean “subjects who actually invoked a tool” metric. If you need a broader product-activity definition, treat the non-invocation audit events as a separate metric family rather than mixing them into invocation counts.

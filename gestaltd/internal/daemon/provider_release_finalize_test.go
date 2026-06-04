@@ -101,7 +101,7 @@ func TestProviderReleaseRejectsMismatchedArchiveCatalogs(t *testing.T) {
 		t.Fatalf("collectReleaseArchives: %v", err)
 	}
 	_, err = buildProviderReleaseMetadata(manifest, version, archives)
-	if err == nil || !strings.Contains(err.Error(), "static catalog does not match other release archives") {
+	if err == nil || !strings.Contains(err.Error(), "static validation catalog in") {
 		t.Fatalf("buildProviderReleaseMetadata error = %v, want static catalog mismatch", err)
 	}
 }
@@ -173,29 +173,41 @@ func TestProviderReleaseMetadataIncludesPlatformArchives(t *testing.T) {
 	t.Parallel()
 
 	outputDir := t.TempDir()
-	const testVersion = "1.0.0"
-	writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v"+testVersion+"_linux_amd64.tar.gz", providerReleaseManifestForTest(testVersion, "Release Test", "linux", "amd64"))
-	writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v"+testVersion+"_darwin_arm64.tar.gz", providerReleaseManifestForTest(testVersion, "Release Test", "darwin", "arm64"))
-	manifest, version, archives, err := collectReleaseArchives(outputDir, testVersion)
+	linuxArchive := writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v1.0.0_linux_amd64.tar.gz", providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"))
+	darwinArchive := writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v1.0.0_darwin_arm64.tar.gz", providerReleaseManifestForTest("1.0.0", "Release Test", "darwin", "arm64"))
+	linuxSHA, err := providerpkg.ArchiveDigest(linuxArchive)
 	if err != nil {
-		t.Fatalf("collectReleaseArchives: %v", err)
+		t.Fatalf("ArchiveDigest(linux): %v", err)
+	}
+	darwinSHA, err := providerpkg.ArchiveDigest(darwinArchive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest(darwin): %v", err)
 	}
 	metadata, err := buildProviderReleaseMetadata(
-		manifest,
-		version,
-		archives,
+		providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"),
+		"1.0.0",
+		[]releaseArchive{
+			{Path: linuxArchive, SHA256: linuxSHA, Target: "linux/amd64"},
+			{Path: darwinArchive, SHA256: darwinSHA, Target: "darwin/arm64"},
+		},
 	)
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	for _, target := range []string{"linux/amd64", "darwin/arm64"} {
+	for target, wantSHA := range map[string]string{
+		"linux/amd64":  linuxSHA,
+		"darwin/arm64": darwinSHA,
+	} {
 		artifact, ok := metadata.Artifacts[target]
 		if !ok {
 			t.Fatalf("metadata artifacts missing %s: %+v", target, metadata.Artifacts)
 		}
-		if artifact.SHA256 == "" {
-			t.Fatalf("metadata artifact %s sha is empty", target)
+		if artifact.SHA256 != wantSHA {
+			t.Fatalf("metadata artifact %s sha = %q, want %q", target, artifact.SHA256, wantSHA)
 		}
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Catalog == nil {
+		t.Fatalf("release metadata static catalog = %+v, want embedded catalog", metadata.StaticValidation)
 	}
 }
 

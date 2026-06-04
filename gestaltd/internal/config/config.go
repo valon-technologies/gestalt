@@ -12,7 +12,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -782,25 +781,33 @@ func (c *RuntimePlacementConfig) lifecyclePolicyConfig() RuntimePlacementPoolCon
 }
 
 type WorkflowsConfig struct {
-	Schedules     map[string]WorkflowScheduleConfig     `yaml:"schedules,omitempty"`
-	EventTriggers map[string]WorkflowEventTriggerConfig `yaml:"eventTriggers,omitempty"`
+	Definitions map[string]WorkflowDefinitionConfig `yaml:"definitions,omitempty"`
 }
 
-type WorkflowScheduleConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	RunAs    *WorkflowRunAsConfig  `yaml:"runAs,omitempty"`
-	Cron     string                `yaml:"cron,omitempty"`
-	Timezone string                `yaml:"timezone,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+type WorkflowDefinitionConfig struct {
+	Provider string                              `yaml:"provider,omitempty"`
+	Steps    []WorkflowStepConfig                `yaml:"steps,omitempty"`
+	RunAs    *WorkflowRunAsConfig                `yaml:"runAs,omitempty"`
+	Paused   bool                                `yaml:"paused,omitempty"`
+	On       map[string]WorkflowActivationConfig `yaml:"on,omitempty"`
 }
 
-type WorkflowEventTriggerConfig struct {
-	Provider string                `yaml:"provider,omitempty"`
-	Target   *WorkflowTargetConfig `yaml:"target,omitempty"`
-	RunAs    *WorkflowRunAsConfig  `yaml:"runAs,omitempty"`
-	Match    WorkflowEventMatch    `yaml:"match,omitempty"`
-	Paused   bool                  `yaml:"paused,omitempty"`
+type WorkflowActivationConfig struct {
+	Schedule *WorkflowScheduleActivationConfig `yaml:"schedule,omitempty"`
+	Event    *WorkflowEventActivationConfig    `yaml:"event,omitempty"`
+	Input    WorkflowValueConfig               `yaml:"input,omitempty"`
+	Paused   bool                              `yaml:"paused,omitempty"`
+}
+
+type WorkflowScheduleActivationConfig struct {
+	Cron     string `yaml:"cron,omitempty"`
+	Timezone string `yaml:"timezone,omitempty"`
+}
+
+type WorkflowEventActivationConfig struct {
+	Type    string `yaml:"type,omitempty"`
+	Source  string `yaml:"source,omitempty"`
+	Subject string `yaml:"subject,omitempty"`
 }
 
 type WorkflowRunAsConfig struct {
@@ -808,25 +815,17 @@ type WorkflowRunAsConfig struct {
 }
 
 type WorkflowRunAsSubjectConfig struct {
-	ID          string `yaml:"id,omitempty"`
-	Kind        string `yaml:"kind,omitempty"`
-	DisplayName string `yaml:"displayName,omitempty"`
-	AuthSource  string `yaml:"authSource,omitempty"`
+	ID                  string `yaml:"id,omitempty"`
+	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
 }
 
 func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 	if r == nil || r.Subject == nil {
 		return nil
 	}
-	authSource := r.Subject.AuthSource
-	if authSource == "" {
-		authSource = "config"
-	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:   r.Subject.ID,
-		SubjectKind: r.Subject.Kind,
-		DisplayName: r.Subject.DisplayName,
-		AuthSource:  authSource,
+		SubjectID:           r.Subject.ID,
+		CredentialSubjectID: r.Subject.CredentialSubjectID,
 	})
 }
 
@@ -936,17 +935,23 @@ func (c *WorkflowStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type WorkflowValueConfig struct {
-	Literal       any
-	LiteralSet    bool
-	Object        map[string]WorkflowValueConfig
-	Array         []WorkflowValueConfig
-	Template      *WorkflowTextConfig
-	RunInput      string
-	SignalPayload string
-	StepOutput    *WorkflowStepOutputSourceConfig
+	Literal    any
+	LiteralSet bool
+	Object     map[string]WorkflowValueConfig
+	Array      []WorkflowValueConfig
+	Template   *WorkflowTextConfig
+	Input      string
+	Signal     string
+	StepOutput *WorkflowStepOutputSourceConfig
+	StepInput  *WorkflowStepInputSourceConfig
 }
 
 type WorkflowStepOutputSourceConfig struct {
+	StepID string `yaml:"stepId,omitempty"`
+	Path   string `yaml:"path,omitempty"`
+}
+
+type WorkflowStepInputSourceConfig struct {
 	StepID string `yaml:"stepId,omitempty"`
 	Path   string `yaml:"path,omitempty"`
 }
@@ -987,16 +992,23 @@ func (c *WorkflowValueConfig) UnmarshalYAML(value *yaml.Node) error {
 				}
 				c.Template = &out
 				return nil
-			case "runInput":
-				return workflowValuePathSource(node, &c.RunInput)
-			case "signalPayload":
-				return workflowValuePathSource(node, &c.SignalPayload)
+			case "input":
+				return workflowValuePathSource(node, &c.Input)
+			case "signal":
+				return workflowValuePathSource(node, &c.Signal)
 			case "stepOutput":
 				var out WorkflowStepOutputSourceConfig
 				if err := node.Decode(&out); err != nil {
 					return err
 				}
 				c.StepOutput = &out
+				return nil
+			case "stepInput":
+				var out WorkflowStepInputSourceConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.StepInput = &out
 				return nil
 			}
 		}
@@ -1487,7 +1499,6 @@ func cloneHTTPBindings(src map[string]*HTTPBinding) map[string]*HTTPBinding {
 		}
 		copyBinding := *binding
 		copyBinding.RequestBody = cloneHTTPRequestBody(binding.RequestBody)
-		copyBinding.Ack = cloneHTTPAck(binding.Ack)
 		cloned[name] = &copyBinding
 	}
 	return cloned
@@ -1510,72 +1521,6 @@ func cloneHTTPRequestBody(src *providermanifestv1.HTTPRequestBody) *providermani
 		}
 	}
 	return &cloned
-}
-
-func cloneHTTPAck(src *providermanifestv1.HTTPAck) *providermanifestv1.HTTPAck {
-	if src == nil {
-		return nil
-	}
-	cloned := *src
-	if src.Headers != nil {
-		cloned.Headers = maps.Clone(src.Headers)
-	}
-	cloned.Body = cloneHTTPBodyValue(src.Body)
-	return &cloned
-}
-
-func cloneHTTPBodyValue(src any) any {
-	if src == nil {
-		return nil
-	}
-	return cloneHTTPBodyReflectValue(reflect.ValueOf(src)).Interface()
-}
-
-func cloneHTTPBodyReflectValue(value reflect.Value) reflect.Value {
-	if !value.IsValid() {
-		return reflect.Value{}
-	}
-	switch value.Kind() {
-	case reflect.Interface:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		return cloneHTTPBodyReflectValue(value.Elem())
-	case reflect.Pointer:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.New(value.Type().Elem())
-		cloned.Elem().Set(cloneHTTPBodyReflectValue(value.Elem()))
-		return cloned
-	case reflect.Map:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.MakeMapWithSize(value.Type(), value.Len())
-		iter := value.MapRange()
-		for iter.Next() {
-			cloned.SetMapIndex(cloneHTTPBodyReflectValue(iter.Key()), cloneHTTPBodyReflectValue(iter.Value()))
-		}
-		return cloned
-	case reflect.Slice:
-		if value.IsNil() {
-			return reflect.Zero(value.Type())
-		}
-		cloned := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
-		for i := 0; i < value.Len(); i++ {
-			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
-		}
-		return cloned
-	case reflect.Array:
-		cloned := reflect.New(value.Type()).Elem()
-		for i := 0; i < value.Len(); i++ {
-			cloned.Index(i).Set(cloneHTTPBodyReflectValue(value.Index(i)))
-		}
-		return cloned
-	default:
-		return value
-	}
 }
 
 func mergeHTTPSecurityScheme(base, override *HTTPSecurityScheme) *HTTPSecurityScheme {
@@ -1667,28 +1612,6 @@ func mergeHTTPBinding(base, override *HTTPBinding) *HTTPBinding {
 				requestBody.Content = cloneHTTPRequestBody(override.RequestBody).Content
 			}
 			merged.RequestBody = &requestBody
-		}
-	}
-	if override.Ack != nil {
-		if merged.Ack == nil {
-			merged.Ack = cloneHTTPAck(override.Ack)
-		} else {
-			ack := cloneHTTPAck(merged.Ack)
-			if override.Ack.Status != 0 {
-				ack.Status = override.Ack.Status
-			}
-			if override.Ack.Headers != nil {
-				if ack.Headers == nil {
-					ack.Headers = map[string]string{}
-				}
-				for key, value := range override.Ack.Headers {
-					ack.Headers[key] = value
-				}
-			}
-			if override.Ack.Body != nil {
-				ack.Body = cloneHTTPBodyValue(override.Ack.Body)
-			}
-			merged.Ack = ack
 		}
 	}
 	return &merged
@@ -1881,20 +1804,9 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Policies      map[string]SubjectPolicyDef               `yaml:"policies,omitempty"`
 	Models        map[string]AuthorizationModelDef          `yaml:"models,omitempty"`
 	Relationships []AuthorizationRelationshipDef            `yaml:"relationships,omitempty"`
 	ResourceTypes map[string]AuthorizationResourcePolicyDef `yaml:"resourceTypes,omitempty"`
-}
-
-type SubjectPolicyDef struct {
-	Default string                   `yaml:"default,omitempty"`
-	Members []SubjectPolicyMemberDef `yaml:"members,omitempty"`
-}
-
-type SubjectPolicyMemberDef struct {
-	SubjectID string `yaml:"subjectID,omitempty"`
-	Role      string `yaml:"role"`
 }
 
 type AuthorizationModelDef struct {
@@ -1903,10 +1815,11 @@ type AuthorizationModelDef struct {
 }
 
 type AuthorizationResourceTypeDef struct {
-	Relations map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
-	Actions   map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
-	Dynamic   AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
-	Source    AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
+	DefaultAccessPolicy string                                `yaml:"defaultAccessPolicy,omitempty"`
+	Relations           map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
+	Actions             map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
+	Dynamic             AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
+	Source              AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
 }
 
 type AuthorizationRelationDef struct {
@@ -2352,10 +2265,7 @@ type AppInvocationRunAsConfig struct {
 
 type AppInvocationRunAsSubjectConfig struct {
 	ID                  string `yaml:"id,omitempty"`
-	Kind                string `yaml:"kind,omitempty"`
 	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
-	DisplayName         string `yaml:"displayName,omitempty"`
-	AuthSource          string `yaml:"authSource,omitempty"`
 }
 
 func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
@@ -2365,10 +2275,7 @@ func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
 	if subject := d.RunAs.Subject; subject != nil {
 		return core.NormalizeRunAsSubject(&core.RunAsSubject{
 			SubjectID:           subject.ID,
-			SubjectKind:         subject.Kind,
 			CredentialSubjectID: subject.CredentialSubjectID,
-			DisplayName:         subject.DisplayName,
-			AuthSource:          subject.AuthSource,
 		})
 	}
 	return nil
@@ -2421,43 +2328,10 @@ func LoadPartialPreserveMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsMode(paths, os.LookupEnv, envMissingPreserve, "", false, false, false)
 }
 
-// LoadAppScopePreserveMissingEnvPaths projects the merged YAML before typed
-// decoding so dropped non-string fields with unresolved env placeholders cannot
-// fail before the app scope is applied.
-func LoadAppScopePreserveMissingEnvPaths(paths []string, apps []string) (*Config, error) {
-	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
-	if err != nil {
-		return nil, err
-	}
-	if err := NormalizeConfigSecretRefs(&root); err != nil {
-		return nil, err
-	}
-	if err := applyAppScopeNode(&root, apps); err != nil {
-		return nil, err
-	}
-	if err := validateNoMissingEnvRefsInNode(&root); err != nil {
-		return nil, err
-	}
-	return loadConfigFromRoot(paths, root, false, false)
-}
-
-func validateNoMissingEnvRefsInNode(node *yaml.Node) error {
-	data, err := yaml.Marshal(documentValueNode(node))
-	if err != nil {
-		return fmt.Errorf("marshaling scoped config YAML: %w", err)
-	}
-	if _, firstMissing, err := expandEnvVariables(string(data), os.LookupEnv, true); err != nil {
-		return err
-	} else if firstMissing != "" {
-		return fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
-	}
-	return nil
-}
-
 func ValidateNoMissingEnvRefs(cfg *Config) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("marshaling scoped config YAML: %w", err)
+		return fmt.Errorf("marshaling config YAML: %w", err)
 	}
 	if _, firstMissing, err := expandEnvVariables(string(data), os.LookupEnv, true); err != nil {
 		return err
@@ -2465,176 +2339,6 @@ func ValidateNoMissingEnvRefs(cfg *Config) error {
 		return fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 	}
 	return nil
-}
-
-func ValidateNoMissingEnvRefsForAppScope(cfg *Config) error {
-	if cfg == nil {
-		return nil
-	}
-	scoped := *cfg
-	scoped.Connections = filterConnectionDefs(cfg.Connections, referencedTopLevelConnectionDefs(cfg))
-	scoped.ProviderRepositories = filterProviderRepositories(cfg.ProviderRepositories, referencedProviderRepositories(cfg))
-	scoped.ProviderSnapshotRepositories = filterProviderSnapshotRepositories(cfg.ProviderSnapshotRepositories, referencedProviderSnapshotRepositories(cfg))
-	return ValidateNoMissingEnvRefs(&scoped)
-}
-
-func referencedTopLevelConnectionDefs(cfg *Config) map[string]struct{} {
-	refs := map[string]struct{}{}
-	addEntryRefs := func(entry *ProviderEntry) {
-		if entry == nil {
-			return
-		}
-		for _, conn := range entry.Connections {
-			if conn == nil {
-				continue
-			}
-			if ref := strings.TrimSpace(conn.Ref); ref != "" {
-				refs[ref] = struct{}{}
-			}
-		}
-	}
-	for _, entry := range cfg.Apps {
-		addEntryRefs(entry)
-	}
-	for _, entries := range [][]*ProviderEntry{
-		mapProviderEntries(cfg.Providers.Authentication),
-		mapProviderEntries(cfg.Providers.Authorization),
-		mapProviderEntries(cfg.Providers.ExternalCredentials),
-		mapProviderEntries(cfg.Providers.Secrets),
-		mapProviderEntries(cfg.Providers.Telemetry),
-		mapProviderEntries(cfg.Providers.Audit),
-		mapProviderEntries(cfg.Providers.IndexedDB),
-		mapProviderEntries(cfg.Providers.Cache),
-		mapProviderEntries(cfg.Providers.S3),
-		mapProviderEntries(cfg.Providers.Workflow),
-		mapProviderEntries(cfg.Providers.Agent),
-	} {
-		for _, entry := range entries {
-			addEntryRefs(entry)
-		}
-	}
-	return refs
-}
-
-func referencedProviderRepositories(cfg *Config) map[string]struct{} {
-	refs := map[string]struct{}{}
-	keepAll := false
-	collectProviderSources(cfg, func(source ProviderSource) {
-		if !source.IsPackage() {
-			return
-		}
-		if repo := strings.TrimSpace(source.PackageRepo()); repo != "" {
-			refs[repo] = struct{}{}
-			return
-		}
-		keepAll = true
-	})
-	if keepAll {
-		for name := range cfg.ProviderRepositories {
-			refs[name] = struct{}{}
-		}
-	}
-	return refs
-}
-
-func referencedProviderSnapshotRepositories(cfg *Config) map[string]struct{} {
-	refs := map[string]struct{}{}
-	collectProviderSources(cfg, func(source ProviderSource) {
-		if git := source.GitSource(); git != nil {
-			if repo := strings.TrimSpace(git.ArtifactRepository); repo != "" {
-				refs[repo] = struct{}{}
-			}
-		}
-	})
-	return refs
-}
-
-func collectProviderSources(cfg *Config, visit func(ProviderSource)) {
-	if cfg == nil || visit == nil {
-		return
-	}
-	visitEntry := func(entry *ProviderEntry) {
-		if entry != nil {
-			visit(entry.Source)
-		}
-	}
-	for _, entry := range cfg.Apps {
-		visitEntry(entry)
-	}
-	for _, entries := range [][]*ProviderEntry{
-		mapProviderEntries(cfg.Providers.Authentication),
-		mapProviderEntries(cfg.Providers.Authorization),
-		mapProviderEntries(cfg.Providers.ExternalCredentials),
-		mapProviderEntries(cfg.Providers.Secrets),
-		mapProviderEntries(cfg.Providers.Telemetry),
-		mapProviderEntries(cfg.Providers.Audit),
-		mapProviderEntries(cfg.Providers.IndexedDB),
-		mapProviderEntries(cfg.Providers.Cache),
-		mapProviderEntries(cfg.Providers.S3),
-		mapProviderEntries(cfg.Providers.Workflow),
-		mapProviderEntries(cfg.Providers.Agent),
-	} {
-		for _, entry := range entries {
-			visitEntry(entry)
-		}
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil {
-			visit(entry.Source)
-		}
-	}
-	for _, entry := range cfg.Runtime.Providers {
-		if entry != nil {
-			visit(entry.Source)
-		}
-	}
-}
-
-func mapProviderEntries(entries map[string]*ProviderEntry) []*ProviderEntry {
-	out := make([]*ProviderEntry, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, entry)
-	}
-	return out
-}
-
-func filterConnectionDefs(entries map[string]*ConnectionDef, keep map[string]struct{}) map[string]*ConnectionDef {
-	if len(entries) == 0 {
-		return entries
-	}
-	filtered := make(map[string]*ConnectionDef, len(keep))
-	for name := range keep {
-		if entry := entries[name]; entry != nil {
-			filtered[name] = entry
-		}
-	}
-	return filtered
-}
-
-func filterProviderRepositories(entries map[string]ProviderRepositoryConfig, keep map[string]struct{}) map[string]ProviderRepositoryConfig {
-	if len(entries) == 0 {
-		return entries
-	}
-	filtered := make(map[string]ProviderRepositoryConfig, len(keep))
-	for name := range keep {
-		if entry, ok := entries[name]; ok {
-			filtered[name] = entry
-		}
-	}
-	return filtered
-}
-
-func filterProviderSnapshotRepositories(entries map[string]ProviderSnapshotRepositoryConfig, keep map[string]struct{}) map[string]ProviderSnapshotRepositoryConfig {
-	if len(entries) == 0 {
-		return entries
-	}
-	filtered := make(map[string]ProviderSnapshotRepositoryConfig, len(keep))
-	for name := range keep {
-		if entry, ok := entries[name]; ok {
-			filtered[name] = entry
-		}
-	}
-	return filtered
 }
 
 // ValidateSelectedAgentHarnessEnvPaths fails if the selected agent harness
@@ -3486,8 +3190,7 @@ func applyDefaults(cfg *Config) {
 		cfg.Connections = map[string]*ConnectionDef{}
 	}
 	cfg.Apps = nonNilProviderEntryMap(cfg.Apps)
-	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
-	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
+	cfg.Workflows.Definitions = nonNilWorkflowDefinitionMap(cfg.Workflows.Definitions)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
@@ -3502,16 +3205,9 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Agent = nonNilProviderEntryMap(cfg.Providers.Agent)
 }
 
-func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {
+func nonNilWorkflowDefinitionMap(in map[string]WorkflowDefinitionConfig) map[string]WorkflowDefinitionConfig {
 	if in == nil {
-		return map[string]WorkflowScheduleConfig{}
-	}
-	return in
-}
-
-func nonNilWorkflowEventTriggerMap(in map[string]WorkflowEventTriggerConfig) map[string]WorkflowEventTriggerConfig {
-	if in == nil {
-		return map[string]WorkflowEventTriggerConfig{}
+		return map[string]WorkflowDefinitionConfig{}
 	}
 	return in
 }
@@ -3725,15 +3421,6 @@ func normalizeAuthorizationConfig(cfg *Config) error {
 }
 
 func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {
-	if len(cfg.Policies) == 0 {
-		cfg.Policies = nil
-	} else {
-		policies := make(map[string]SubjectPolicyDef, len(cfg.Policies))
-		for name, policy := range cfg.Policies {
-			policies[name] = normalizedSubjectPolicyDef(policy)
-		}
-		cfg.Policies = policies
-	}
 	if len(cfg.Models) == 0 {
 		cfg.Models = nil
 	} else {
@@ -3933,13 +3620,6 @@ func normalizeAdminConfig(cfg *Config) error {
 	return nil
 }
 
-func normalizedSubjectPolicyDef(policy SubjectPolicyDef) SubjectPolicyDef {
-	if len(policy.Members) == 0 {
-		policy.Members = nil
-	}
-	return policy
-}
-
 func applyAppMountBindings(cfg *Config) error {
 	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil
@@ -3967,9 +3647,6 @@ func applyAppMountBindings(cfg *Config) error {
 			return fmt.Errorf("config validation: apps.%s.ui.path: %w", appName, err)
 		}
 		app.MountPath = normalizedPath
-		if err := validateAuthorizationPolicyReference(cfg, "app", appName, app.AuthorizationPolicy); err != nil {
-			return err
-		}
 		if app.UI == "" {
 			continue
 		}

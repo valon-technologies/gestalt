@@ -18,6 +18,9 @@ import {
   AgentProvider as AgentProviderService,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
+  AuthorizationProvider as AuthorizationProviderService,
+} from "./internal/gen/v1/authorization_pb.ts";
+import {
   AuthenticationProvider as AuthenticationProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
@@ -25,7 +28,6 @@ import {
   type CompleteLoginRequest as AuthCompleteLoginRequest,
   type ValidateExternalTokenRequest,
 } from "./internal/gen/v1/authentication_pb.ts";
-import { AuthorizationProvider as AuthorizationProviderService } from "./internal/gen/v1/authorization_pb.ts";
 import {
   Cache as CacheService,
   CacheDeleteManyResponseSchema,
@@ -174,8 +176,8 @@ export type RuntimeArgs = {
  */
 export type LoadedProvider =
   | AppProvider
-  | AuthenticationProvider
   | AuthorizationProvider
+  | AuthenticationProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider
@@ -202,6 +204,17 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       );
     },
   },
+  authorization: {
+    isProvider:
+      isAuthorizationProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.AUTHORIZATION,
+    registerService(router, provider) {
+      router.service(
+        AuthorizationProviderService,
+        createAuthorizationProviderService(provider as AuthorizationProvider),
+      );
+    },
+  },
   authentication: {
     isProvider:
       isAuthenticationProvider as (value: unknown) => value is LoadedProvider,
@@ -210,18 +223,6 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       router.service(
         AuthenticationProviderService,
         createAuthenticationService(provider as AuthenticationProvider),
-      );
-    },
-  },
-  authorization: {
-    isProvider: isAuthorizationProvider as (
-      value: unknown,
-    ) => value is LoadedProvider,
-    protoKind: ProtoProviderKind.AUTHORIZATION,
-    registerService(router, provider) {
-      router.service(
-        AuthorizationProviderService,
-        createAuthorizationProviderService(provider as AuthorizationProvider),
       );
     },
   },
@@ -617,10 +618,7 @@ export function createProviderService(
         ? {
             subject: {
               id: subject.id,
-              kind: subject.kind,
               credentialSubjectId: subject.credentialSubjectId ?? "",
-              displayName: subject.displayName,
-              authSource: subject.authSource,
               email: subject.email ?? "",
             },
           }
@@ -835,18 +833,12 @@ function providerRequest(
     },
     subject: {
       id: subject?.id ?? "",
-      kind: subject?.kind ?? "",
       credentialSubjectId: subject?.credentialSubjectId ?? "",
-      displayName: subject?.displayName ?? "",
-      authSource: subject?.authSource ?? "",
       email: subject?.email ?? "",
     },
     agentSubject: {
       id: agentSubject?.id ?? "",
-      kind: agentSubject?.kind ?? "",
       credentialSubjectId: agentSubject?.credentialSubjectId ?? "",
-      displayName: agentSubject?.displayName ?? "",
-      authSource: agentSubject?.authSource ?? "",
       email: agentSubject?.email ?? "",
     },
     credential: {

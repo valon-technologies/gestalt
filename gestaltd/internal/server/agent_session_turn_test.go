@@ -25,7 +25,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	gproto "google.golang.org/protobuf/proto"
@@ -39,225 +38,6 @@ func newServerTestAgentRunGrants(t testing.TB) *agentgrant.Manager {
 		t.Fatalf("agentgrant.NewManager: %v", err)
 	}
 	return grants
-}
-
-type dynamicProviderAuthorizer struct {
-	allowed atomic.Bool
-}
-
-func (a *dynamicProviderAuthorizer) Start(context.Context) error                    { return nil }
-func (a *dynamicProviderAuthorizer) Close() error                                   { return nil }
-func (a *dynamicProviderAuthorizer) ReloadAuthorizationState(context.Context) error { return nil }
-
-func (a *dynamicProviderAuthorizer) AllowProvider(context.Context, *principal.Principal, string) bool {
-	return a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
-	return a.AllowProvider(ctx, p, provider)
-}
-
-func (a *dynamicProviderAuthorizer) ResolveAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) ResolvePolicyAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) ResolveAdminAccess(context.Context, *principal.Principal, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) AllowCatalogOperation(context.Context, *principal.Principal, string, catalog.CatalogOperation) bool {
-	return a.allowed.Load()
-}
-
-func (a *dynamicProviderAuthorizer) PolicyNameForProvider(string) string { return "agent_policy" }
-
-func (a *dynamicProviderAuthorizer) StaticRoleForPolicyIdentity(string, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, false
-}
-
-func (a *dynamicProviderAuthorizer) StaticRoleForProviderIdentity(string, string) (authorization.AccessContext, bool) {
-	return authorization.AccessContext{}, false
-}
-
-func (a *dynamicProviderAuthorizer) StaticMembersForPolicy(string) ([]authorization.StaticSubjectMember, bool) {
-	return nil, false
-}
-
-func (a *dynamicProviderAuthorizer) StaticMembersForProvider(string) (string, []authorization.StaticSubjectMember, bool) {
-	return "", nil, false
-}
-
-func TestAgentSessionRejectsUnauthorizedProvider(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	var createSessionCalled atomic.Bool
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"managed": {AuthorizationPolicy: "agent_policy"},
-		}
-		authz := mustAuthorizer(t, config.AuthorizationConfig{
-			Policies: map[string]config.SubjectPolicyDef{
-				"agent_policy": {Default: "deny"},
-			},
-		}, cfg.AppDefs)
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	provider.createSessionHook = func() {
-		createSessionCalled.Store(true)
-	}
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusForbidden {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s, want 403", sessionResp.StatusCode, body)
-	}
-	if createSessionCalled.Load() {
-		t.Fatal("agent provider CreateSession was called despite authorization denial")
-	}
-}
-
-func TestAgentTurnRechecksProviderAuthorization(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	authz := &dynamicProviderAuthorizer{}
-	authz.allowed.Store(true)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s, want 201", sessionResp.StatusCode, body)
-	}
-	var session map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	sessionID := session["id"].(string)
-
-	authz.allowed.Store(false)
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	if turnResp.StatusCode != http.StatusForbidden {
-		body, _ := io.ReadAll(turnResp.Body)
-		t.Fatalf("create turn status = %d body=%s, want 403", turnResp.StatusCode, body)
-	}
-	if got := len(provider.capturedGetSessionRequests()); got != 0 {
-		t.Fatalf("provider get session requests len = %d, want 0", got)
-	}
-	if got := len(provider.capturedTurnRequests()); got != 0 {
-		t.Fatalf("provider turn requests len = %d, want 0", got)
-	}
-}
-
-func TestAgentCreateTurnReportsMissingSession(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	authz := &dynamicProviderAuthorizer{}
-	authz.allowed.Store(true)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/missing-session/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	body, _ := io.ReadAll(turnResp.Body)
-	if turnResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("create turn status = %d body=%s, want 404", turnResp.StatusCode, body)
-	}
-	if !strings.Contains(string(body), `session \"missing-session\" not found`) {
-		t.Fatalf("create turn body = %s, want missing session", body)
-	}
-	if strings.Contains(string(body), `turn \"missing-session\" not found`) {
-		t.Fatalf("create turn body = %s, should not report missing turn", body)
-	}
 }
 
 func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
@@ -318,74 +98,6 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 	}
 }
 
-func TestAgentCreateTurnDoesNotReportSessionMissingAfterSessionResolved(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAgentProvider()
-	provider.createTurnHook = func(turn *coreagent.Turn) {
-		turn.CreatedBy.SubjectID = principal.UserSubjectID("someone-else")
-	}
-	authz := &dynamicProviderAuthorizer{}
-	authz.allowed.Store(true)
-	ts := newTestServer(t, func(cfg *server.Config) {
-		services := testutil.NewStubServices(t)
-		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Agent = agentControl
-		cfg.Authorizer = authz
-		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:      agentControl,
-			Authorizer: authz,
-			RunGrants:  newServerTestAgentRunGrants(t),
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
-	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	sessionResp, err := http.DefaultClient.Do(sessionReq)
-	if err != nil {
-		t.Fatalf("create session: %v", err)
-	}
-	defer func() { _ = sessionResp.Body.Close() }()
-	if sessionResp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(sessionResp.Body)
-		t.Fatalf("create session status = %d body=%s, want 201", sessionResp.StatusCode, body)
-	}
-	var session map[string]any
-	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
-		t.Fatalf("decode session: %v", err)
-	}
-	sessionID := session["id"].(string)
-
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
-	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	turnResp, err := http.DefaultClient.Do(turnReq)
-	if err != nil {
-		t.Fatalf("create turn: %v", err)
-	}
-	defer func() { _ = turnResp.Body.Close() }()
-	body, _ := io.ReadAll(turnResp.Body)
-	if turnResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("create turn status = %d body=%s, want 404", turnResp.StatusCode, body)
-	}
-	if strings.Contains(string(body), `session \"`+sessionID+`\" not found`) {
-		t.Fatalf("create turn body = %s, should not report missing session", body)
-	}
-	if !strings.Contains(string(body), `turn \"`) {
-		t.Fatalf("create turn body = %s, want missing turn", body)
-	}
-}
-
 func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	t.Parallel()
 
@@ -438,16 +150,13 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	provider.mu.Lock()
 	provider.sessions["session-managed"] = &coreagent.Session{
-		ID:           "session-managed",
-		ProviderName: "managed",
-		Model:        "gpt-5.4",
-		State:        coreagent.SessionStateActive,
-		CreatedBy: coreagent.Actor{
-			SubjectID:   principal.UserSubjectID(user.ID),
-			SubjectKind: string(principal.KindUser),
-		},
-		CreatedAt: &now,
-		UpdatedAt: &now,
+		ID:                 "session-managed",
+		ProviderName:       "managed",
+		Model:              "gpt-5.4",
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: principal.UserSubjectID(user.ID),
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 	provider.mu.Unlock()
 
@@ -535,15 +244,15 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
-		ID:           req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		ClientRef:    req.GetClientRef(),
-		State:        coreagent.SessionStateActive,
-		Metadata:     mapFromStruct(req.GetMetadata()),
-		CreatedBy:    actorFromProto(req.GetCreatedBy()),
-		CreatedAt:    &now,
-		UpdatedAt:    &now,
+		ID:                 req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		State:              coreagent.SessionStateActive,
+		Metadata:           mapFromStruct(req.GetMetadata()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedAt:          &now,
+		UpdatedAt:          &now,
 	}
 	p.sessions[session.ID] = session
 	return cloneSession(session), nil
@@ -624,18 +333,18 @@ func (p *memoryAgentProvider) CreateTurn(_ context.Context, req *proto.CreateAge
 	now := time.Now().UTC().Truncate(time.Second)
 	metadata := mapFromStruct(req.GetMetadata())
 	turn := &coreagent.Turn{
-		ID:           req.GetTurnId(),
-		SessionID:    req.GetSessionId(),
-		ProviderName: "managed",
-		Model:        req.GetModel(),
-		Status:       coreagent.ExecutionStatusSucceeded,
-		Messages:     messagesFromProto(req.GetMessages()),
-		CreatedBy:    actorFromProto(req.GetCreatedBy()),
-		CreatedAt:    &now,
-		StartedAt:    &now,
-		CompletedAt:  &now,
-		ExecutionRef: req.GetExecutionRef(),
-		Output:       coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
+		ID:                 req.GetTurnId(),
+		SessionID:          req.GetSessionId(),
+		ProviderName:       "managed",
+		Model:              req.GetModel(),
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Messages:           messagesFromProto(req.GetMessages()),
+		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
+		CreatedAt:          &now,
+		StartedAt:          &now,
+		CompletedAt:        &now,
+		ExecutionRef:       req.GetExecutionRef(),
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "turn completed"}},
 	}
 	if req.GetOutput().GetStructured() != nil {
 		turn.Output = coreagent.TurnOutput{
@@ -987,18 +696,6 @@ func mapFromStruct(value *structpb.Struct) map[string]any {
 		return nil
 	}
 	return value.AsMap()
-}
-
-func actorFromProto(value *proto.AgentActor) coreagent.Actor {
-	if value == nil {
-		return coreagent.Actor{}
-	}
-	return coreagent.Actor{
-		SubjectID:   value.GetSubjectId(),
-		SubjectKind: value.GetSubjectKind(),
-		DisplayName: value.GetDisplayName(),
-		AuthSource:  value.GetAuthSource(),
-	}
 }
 
 func messagesFromProto(values []*proto.AgentMessage) []coreagent.Message {

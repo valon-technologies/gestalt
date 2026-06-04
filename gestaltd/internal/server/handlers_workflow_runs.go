@@ -24,10 +24,7 @@ import (
 )
 
 type workflowActorInfo struct {
-	SubjectID   string `json:"subjectId,omitempty"`
-	SubjectKind string `json:"subjectKind,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-	AuthSource  string `json:"authSource,omitempty"`
+	SubjectID string `json:"subjectId,omitempty"`
 }
 
 type workflowRunEventInfo struct {
@@ -44,24 +41,51 @@ type workflowRunEventInfo struct {
 
 type workflowRunTriggerInfo struct {
 	Kind         string                `json:"kind,omitempty"`
-	ScheduleID   string                `json:"scheduleId,omitempty"`
+	ActivationID string                `json:"activationId,omitempty"`
 	ScheduledFor *time.Time            `json:"scheduledFor,omitempty"`
-	TriggerID    string                `json:"triggerId,omitempty"`
 	Event        *workflowRunEventInfo `json:"event,omitempty"`
 }
 
 type workflowRunInfo struct {
-	ID            string                     `json:"id"`
-	Provider      string                     `json:"provider"`
-	Status        string                     `json:"status,omitempty"`
-	Target        workflowScheduleTargetInfo `json:"target"`
-	Trigger       *workflowRunTriggerInfo    `json:"trigger,omitempty"`
-	CreatedBy     *workflowActorInfo         `json:"createdBy,omitempty"`
-	CreatedAt     *time.Time                 `json:"createdAt,omitempty"`
-	StartedAt     *time.Time                 `json:"startedAt,omitempty"`
-	CompletedAt   *time.Time                 `json:"completedAt,omitempty"`
-	StatusMessage string                     `json:"statusMessage,omitempty"`
-	ResultBody    string                     `json:"resultBody,omitempty"`
+	ID                   string                      `json:"id"`
+	Provider             string                      `json:"provider"`
+	Status               string                      `json:"status,omitempty"`
+	Target               workflowScheduleTargetInfo  `json:"target"`
+	DefinitionID         string                      `json:"definitionId,omitempty"`
+	DefinitionGeneration int64                       `json:"definitionGeneration,omitempty"`
+	Input                map[string]any              `json:"input,omitempty"`
+	CurrentStepID        string                      `json:"currentStepId,omitempty"`
+	Steps                []workflowStepExecutionInfo `json:"steps,omitempty"`
+	Trigger              *workflowRunTriggerInfo     `json:"trigger,omitempty"`
+	CreatedBy            *workflowActorInfo          `json:"createdBy,omitempty"`
+	CreatedAt            *time.Time                  `json:"createdAt,omitempty"`
+	StartedAt            *time.Time                  `json:"startedAt,omitempty"`
+	CompletedAt          *time.Time                  `json:"completedAt,omitempty"`
+	StatusMessage        string                      `json:"statusMessage,omitempty"`
+	Output               any                         `json:"output,omitempty"`
+}
+
+type workflowStepExecutionInfo struct {
+	StepID        string                    `json:"stepId,omitempty"`
+	Status        string                    `json:"status,omitempty"`
+	Attempts      []workflowStepAttemptInfo `json:"attempts,omitempty"`
+	Input         any                       `json:"input,omitempty"`
+	Output        any                       `json:"output,omitempty"`
+	StatusMessage string                    `json:"statusMessage,omitempty"`
+	SkipReason    string                    `json:"skipReason,omitempty"`
+	StartedAt     *time.Time                `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time                `json:"completedAt,omitempty"`
+}
+
+type workflowStepAttemptInfo struct {
+	ID             string     `json:"id,omitempty"`
+	Status         string     `json:"status,omitempty"`
+	IdempotencyKey string     `json:"idempotencyKey,omitempty"`
+	Input          any        `json:"input,omitempty"`
+	Output         any        `json:"output,omitempty"`
+	StatusMessage  string     `json:"statusMessage,omitempty"`
+	StartedAt      *time.Time `json:"startedAt,omitempty"`
+	CompletedAt    *time.Time `json:"completedAt,omitempty"`
 }
 
 type workflowRunCancelRequest struct {
@@ -74,7 +98,7 @@ type workflowRunListResponse struct {
 }
 
 func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
@@ -164,7 +188,7 @@ func workflowRunStatusFromQuery(w http.ResponseWriter, raw string) (coreworkflow
 }
 
 func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
@@ -177,7 +201,7 @@ func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) cancelGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.resolveWorkflowScheduleActor(w, r)
+	p, ok := s.resolveWorkflowActor(w, r)
 	if !ok {
 		return
 	}
@@ -215,11 +239,59 @@ func workflowRunInfoFromCore(run *coreworkflow.Run, providerName string) workflo
 	info.StartedAt = run.StartedAt
 	info.CompletedAt = run.CompletedAt
 	info.StatusMessage = run.StatusMessage
-	info.ResultBody = run.ResultBody
+	info.Output = run.Output
 	info.Target = workflowScheduleTargetInfoFromCore(run.Target)
+	info.DefinitionID = strings.TrimSpace(run.DefinitionID)
+	info.DefinitionGeneration = run.DefinitionGeneration
+	info.Input = maps.Clone(run.Input)
+	info.CurrentStepID = strings.TrimSpace(run.CurrentStepID)
+	info.Steps = workflowStepExecutionsInfoFromCore(run.Steps)
 	info.Trigger = workflowRunTriggerInfoFromCore(run.Trigger)
-	info.CreatedBy = workflowActorInfoFromCore(run.CreatedBy)
+	info.CreatedBy = workflowActorInfoFromSubjectID(run.CreatedBySubjectID)
 	return info
+}
+
+func workflowStepExecutionsInfoFromCore(steps []coreworkflow.StepExecution) []workflowStepExecutionInfo {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]workflowStepExecutionInfo, 0, len(steps))
+	for i := range steps {
+		step := steps[i]
+		out = append(out, workflowStepExecutionInfo{
+			StepID:        strings.TrimSpace(step.StepID),
+			Status:        strings.TrimSpace(string(step.Status)),
+			Attempts:      workflowStepAttemptsInfoFromCore(step.Attempts),
+			Input:         step.Input,
+			Output:        step.Output,
+			StatusMessage: strings.TrimSpace(step.StatusMessage),
+			SkipReason:    strings.TrimSpace(step.SkipReason),
+			StartedAt:     step.StartedAt,
+			CompletedAt:   step.CompletedAt,
+		})
+	}
+	return out
+}
+
+func workflowStepAttemptsInfoFromCore(attempts []coreworkflow.StepAttempt) []workflowStepAttemptInfo {
+	if len(attempts) == 0 {
+		return nil
+	}
+	out := make([]workflowStepAttemptInfo, 0, len(attempts))
+	for i := range attempts {
+		attempt := attempts[i]
+		out = append(out, workflowStepAttemptInfo{
+			ID:             strings.TrimSpace(attempt.ID),
+			Status:         strings.TrimSpace(string(attempt.Status)),
+			IdempotencyKey: strings.TrimSpace(attempt.IdempotencyKey),
+			Input:          attempt.Input,
+			Output:         attempt.Output,
+			StatusMessage:  strings.TrimSpace(attempt.StatusMessage),
+			StartedAt:      attempt.StartedAt,
+			CompletedAt:    attempt.CompletedAt,
+		})
+	}
+	return out
 }
 
 func workflowRunTriggerInfoFromCore(trigger coreworkflow.RunTrigger) *workflowRunTriggerInfo {
@@ -227,13 +299,13 @@ func workflowRunTriggerInfoFromCore(trigger coreworkflow.RunTrigger) *workflowRu
 	case trigger.Schedule != nil:
 		return &workflowRunTriggerInfo{
 			Kind:         "schedule",
-			ScheduleID:   trigger.Schedule.ScheduleID,
+			ActivationID: trigger.Schedule.ActivationID,
 			ScheduledFor: trigger.Schedule.ScheduledFor,
 		}
 	case trigger.Event != nil:
 		return &workflowRunTriggerInfo{
-			Kind:      "event",
-			TriggerID: trigger.Event.TriggerID,
+			Kind:         "event",
+			ActivationID: trigger.Event.ActivationID,
 			Event: &workflowRunEventInfo{
 				ID:              trigger.Event.Event.ID,
 				Source:          trigger.Event.Event.Source,
@@ -253,24 +325,19 @@ func workflowRunTriggerInfoFromCore(trigger coreworkflow.RunTrigger) *workflowRu
 	}
 }
 
-func workflowActorInfoFromCore(actor coreworkflow.Actor) *workflowActorInfo {
-	if actor == (coreworkflow.Actor{}) {
+func workflowActorInfoFromSubjectID(subjectID string) *workflowActorInfo {
+	subjectID = strings.TrimSpace(subjectID)
+	if subjectID == "" {
 		return nil
 	}
-	return &workflowActorInfo{
-		SubjectID:   actor.SubjectID,
-		SubjectKind: actor.SubjectKind,
-		DisplayName: actor.DisplayName,
-		AuthSource:  actor.AuthSource,
-	}
+	return &workflowActorInfo{SubjectID: subjectID}
 }
 
 func (s *Server) writeWorkflowRunManagerError(w http.ResponseWriter, r *http.Request, runID string, err error) {
 	switch {
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired),
-		errors.Is(err, workflowmanager.ErrWorkflowScheduleSubject):
+	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired):
 		writeError(w, http.StatusUnauthorized, err.Error())
 	case errors.Is(err, invocation.ErrInvalidInvocation):
 		writeError(w, http.StatusBadRequest, err.Error())

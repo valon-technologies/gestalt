@@ -20,48 +20,30 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthorizationProvider_Evaluate_FullMethodName                 = "/gestalt.provider.v1.AuthorizationProvider/Evaluate"
-	AuthorizationProvider_EvaluateMany_FullMethodName             = "/gestalt.provider.v1.AuthorizationProvider/EvaluateMany"
-	AuthorizationProvider_SearchResources_FullMethodName          = "/gestalt.provider.v1.AuthorizationProvider/SearchResources"
-	AuthorizationProvider_SearchSubjects_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/SearchSubjects"
-	AuthorizationProvider_EffectiveSearchResources_FullMethodName = "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchResources"
-	AuthorizationProvider_EffectiveSearchSubjects_FullMethodName  = "/gestalt.provider.v1.AuthorizationProvider/EffectiveSearchSubjects"
-	AuthorizationProvider_SearchActions_FullMethodName            = "/gestalt.provider.v1.AuthorizationProvider/SearchActions"
-	AuthorizationProvider_Expand_FullMethodName                   = "/gestalt.provider.v1.AuthorizationProvider/Expand"
-	AuthorizationProvider_GetMetadata_FullMethodName              = "/gestalt.provider.v1.AuthorizationProvider/GetMetadata"
-	AuthorizationProvider_ReadRelationships_FullMethodName        = "/gestalt.provider.v1.AuthorizationProvider/ReadRelationships"
-	AuthorizationProvider_WriteRelationships_FullMethodName       = "/gestalt.provider.v1.AuthorizationProvider/WriteRelationships"
-	AuthorizationProvider_GetActiveModel_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/GetActiveModel"
-	AuthorizationProvider_ListModels_FullMethodName               = "/gestalt.provider.v1.AuthorizationProvider/ListModels"
-	AuthorizationProvider_WriteModel_FullMethodName               = "/gestalt.provider.v1.AuthorizationProvider/WriteModel"
+	AuthorizationProvider_CheckAccess_FullMethodName                  = "/gestalt.provider.v1.AuthorizationProvider/CheckAccess"
+	AuthorizationProvider_CheckAccessMany_FullMethodName              = "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany"
+	AuthorizationProvider_ListRelationships_FullMethodName            = "/gestalt.provider.v1.AuthorizationProvider/ListRelationships"
+	AuthorizationProvider_AddRelationship_FullMethodName              = "/gestalt.provider.v1.AuthorizationProvider/AddRelationship"
+	AuthorizationProvider_DeleteRelationship_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship"
+	AuthorizationProvider_SetAuthorizationState_FullMethodName        = "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState"
+	AuthorizationProvider_GetActiveModelRef_FullMethodName            = "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef"
+	AuthorizationProvider_SetActiveModel_FullMethodName               = "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel"
+	AuthorizationProvider_ListActiveModelResourceTypes_FullMethodName = "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes"
 )
 
 // AuthorizationProviderClient is the client API for AuthorizationProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthorizationProviderClient interface {
-	Evaluate(ctx context.Context, in *AccessEvaluationRequest, opts ...grpc.CallOption) (*AccessDecision, error)
-	EvaluateMany(ctx context.Context, in *AccessEvaluationsRequest, opts ...grpc.CallOption) (*AccessEvaluationsResponse, error)
-	// Direct search over stored relationships. Implementations must not expand
-	// inherited or computed permissions here.
-	SearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error)
-	// Direct search over stored relationships. Implementations must not expand
-	// inherited or computed permissions here.
-	SearchSubjects(ctx context.Context, in *SubjectSearchRequest, opts ...grpc.CallOption) (*SubjectSearchResponse, error)
-	// Effective search that evaluates rewrites and inherited relations.
-	EffectiveSearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error)
-	// Effective search that evaluates rewrites and inherited relations.
-	EffectiveSearchSubjects(ctx context.Context, in *EffectiveSubjectSearchRequest, opts ...grpc.CallOption) (*EffectiveSubjectSearchResponse, error)
-	SearchActions(ctx context.Context, in *ActionSearchRequest, opts ...grpc.CallOption) (*ActionSearchResponse, error)
-	// Expands one resource relation into the relationship targets that contribute
-	// to it. Responses may be partial when truncated or max_depth_reached is true.
-	Expand(ctx context.Context, in *ExpandRequest, opts ...grpc.CallOption) (*ExpandResponse, error)
-	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AuthorizationMetadata, error)
-	ReadRelationships(ctx context.Context, in *ReadRelationshipsRequest, opts ...grpc.CallOption) (*ReadRelationshipsResponse, error)
-	WriteRelationships(ctx context.Context, in *WriteRelationshipsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetActiveModel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetActiveModelResponse, error)
-	ListModels(ctx context.Context, in *ListModelsRequest, opts ...grpc.CallOption) (*ListModelsResponse, error)
-	WriteModel(ctx context.Context, in *WriteModelRequest, opts ...grpc.CallOption) (*AuthorizationModelRef, error)
+	CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error)
+	CheckAccessMany(ctx context.Context, in *CheckAccessManyRequest, opts ...grpc.CallOption) (*CheckAccessManyResponse, error)
+	ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error)
+	AddRelationship(ctx context.Context, in *AddRelationshipRequest, opts ...grpc.CallOption) (*AddRelationshipResponse, error)
+	DeleteRelationship(ctx context.Context, in *DeleteRelationshipRequest, opts ...grpc.CallOption) (*DeleteRelationshipResponse, error)
+	SetAuthorizationState(ctx context.Context, in *SetAuthorizationStateRequest, opts ...grpc.CallOption) (*SetAuthorizationStateResponse, error)
+	GetActiveModelRef(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetActiveModelRefResponse, error)
+	SetActiveModel(ctx context.Context, in *SetActiveModelRequest, opts ...grpc.CallOption) (*SetActiveModelResponse, error)
+	ListActiveModelResourceTypes(ctx context.Context, in *ListActiveModelResourceTypesRequest, opts ...grpc.CallOption) (*ListActiveModelResourceTypesResponse, error)
 }
 
 type authorizationProviderClient struct {
@@ -72,140 +54,90 @@ func NewAuthorizationProviderClient(cc grpc.ClientConnInterface) AuthorizationPr
 	return &authorizationProviderClient{cc}
 }
 
-func (c *authorizationProviderClient) Evaluate(ctx context.Context, in *AccessEvaluationRequest, opts ...grpc.CallOption) (*AccessDecision, error) {
+func (c *authorizationProviderClient) CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AccessDecision)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_Evaluate_FullMethodName, in, out, cOpts...)
+	out := new(CheckAccessResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_CheckAccess_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) EvaluateMany(ctx context.Context, in *AccessEvaluationsRequest, opts ...grpc.CallOption) (*AccessEvaluationsResponse, error) {
+func (c *authorizationProviderClient) CheckAccessMany(ctx context.Context, in *CheckAccessManyRequest, opts ...grpc.CallOption) (*CheckAccessManyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AccessEvaluationsResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_EvaluateMany_FullMethodName, in, out, cOpts...)
+	out := new(CheckAccessManyResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_CheckAccessMany_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) SearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error) {
+func (c *authorizationProviderClient) ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ResourceSearchResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_SearchResources_FullMethodName, in, out, cOpts...)
+	out := new(ListRelationshipsResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_ListRelationships_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) SearchSubjects(ctx context.Context, in *SubjectSearchRequest, opts ...grpc.CallOption) (*SubjectSearchResponse, error) {
+func (c *authorizationProviderClient) AddRelationship(ctx context.Context, in *AddRelationshipRequest, opts ...grpc.CallOption) (*AddRelationshipResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SubjectSearchResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_SearchSubjects_FullMethodName, in, out, cOpts...)
+	out := new(AddRelationshipResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_AddRelationship_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) EffectiveSearchResources(ctx context.Context, in *ResourceSearchRequest, opts ...grpc.CallOption) (*ResourceSearchResponse, error) {
+func (c *authorizationProviderClient) DeleteRelationship(ctx context.Context, in *DeleteRelationshipRequest, opts ...grpc.CallOption) (*DeleteRelationshipResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ResourceSearchResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_EffectiveSearchResources_FullMethodName, in, out, cOpts...)
+	out := new(DeleteRelationshipResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_DeleteRelationship_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) EffectiveSearchSubjects(ctx context.Context, in *EffectiveSubjectSearchRequest, opts ...grpc.CallOption) (*EffectiveSubjectSearchResponse, error) {
+func (c *authorizationProviderClient) SetAuthorizationState(ctx context.Context, in *SetAuthorizationStateRequest, opts ...grpc.CallOption) (*SetAuthorizationStateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(EffectiveSubjectSearchResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_EffectiveSearchSubjects_FullMethodName, in, out, cOpts...)
+	out := new(SetAuthorizationStateResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_SetAuthorizationState_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) SearchActions(ctx context.Context, in *ActionSearchRequest, opts ...grpc.CallOption) (*ActionSearchResponse, error) {
+func (c *authorizationProviderClient) GetActiveModelRef(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetActiveModelRefResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ActionSearchResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_SearchActions_FullMethodName, in, out, cOpts...)
+	out := new(GetActiveModelRefResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_GetActiveModelRef_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) Expand(ctx context.Context, in *ExpandRequest, opts ...grpc.CallOption) (*ExpandResponse, error) {
+func (c *authorizationProviderClient) SetActiveModel(ctx context.Context, in *SetActiveModelRequest, opts ...grpc.CallOption) (*SetActiveModelResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ExpandResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_Expand_FullMethodName, in, out, cOpts...)
+	out := new(SetActiveModelResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_SetActiveModel_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*AuthorizationMetadata, error) {
+func (c *authorizationProviderClient) ListActiveModelResourceTypes(ctx context.Context, in *ListActiveModelResourceTypesRequest, opts ...grpc.CallOption) (*ListActiveModelResourceTypesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AuthorizationMetadata)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_GetMetadata_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authorizationProviderClient) ReadRelationships(ctx context.Context, in *ReadRelationshipsRequest, opts ...grpc.CallOption) (*ReadRelationshipsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ReadRelationshipsResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_ReadRelationships_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authorizationProviderClient) WriteRelationships(ctx context.Context, in *WriteRelationshipsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_WriteRelationships_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authorizationProviderClient) GetActiveModel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetActiveModelResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetActiveModelResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_GetActiveModel_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authorizationProviderClient) ListModels(ctx context.Context, in *ListModelsRequest, opts ...grpc.CallOption) (*ListModelsResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ListModelsResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_ListModels_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *authorizationProviderClient) WriteModel(ctx context.Context, in *WriteModelRequest, opts ...grpc.CallOption) (*AuthorizationModelRef, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(AuthorizationModelRef)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_WriteModel_FullMethodName, in, out, cOpts...)
+	out := new(ListActiveModelResourceTypesResponse)
+	err := c.cc.Invoke(ctx, AuthorizationProvider_ListActiveModelResourceTypes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -216,28 +148,15 @@ func (c *authorizationProviderClient) WriteModel(ctx context.Context, in *WriteM
 // All implementations must embed UnimplementedAuthorizationProviderServer
 // for forward compatibility.
 type AuthorizationProviderServer interface {
-	Evaluate(context.Context, *AccessEvaluationRequest) (*AccessDecision, error)
-	EvaluateMany(context.Context, *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error)
-	// Direct search over stored relationships. Implementations must not expand
-	// inherited or computed permissions here.
-	SearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error)
-	// Direct search over stored relationships. Implementations must not expand
-	// inherited or computed permissions here.
-	SearchSubjects(context.Context, *SubjectSearchRequest) (*SubjectSearchResponse, error)
-	// Effective search that evaluates rewrites and inherited relations.
-	EffectiveSearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error)
-	// Effective search that evaluates rewrites and inherited relations.
-	EffectiveSearchSubjects(context.Context, *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error)
-	SearchActions(context.Context, *ActionSearchRequest) (*ActionSearchResponse, error)
-	// Expands one resource relation into the relationship targets that contribute
-	// to it. Responses may be partial when truncated or max_depth_reached is true.
-	Expand(context.Context, *ExpandRequest) (*ExpandResponse, error)
-	GetMetadata(context.Context, *emptypb.Empty) (*AuthorizationMetadata, error)
-	ReadRelationships(context.Context, *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error)
-	WriteRelationships(context.Context, *WriteRelationshipsRequest) (*emptypb.Empty, error)
-	GetActiveModel(context.Context, *emptypb.Empty) (*GetActiveModelResponse, error)
-	ListModels(context.Context, *ListModelsRequest) (*ListModelsResponse, error)
-	WriteModel(context.Context, *WriteModelRequest) (*AuthorizationModelRef, error)
+	CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error)
+	CheckAccessMany(context.Context, *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
+	ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
+	AddRelationship(context.Context, *AddRelationshipRequest) (*AddRelationshipResponse, error)
+	DeleteRelationship(context.Context, *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error)
+	SetAuthorizationState(context.Context, *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error)
+	GetActiveModelRef(context.Context, *emptypb.Empty) (*GetActiveModelRefResponse, error)
+	SetActiveModel(context.Context, *SetActiveModelRequest) (*SetActiveModelResponse, error)
+	ListActiveModelResourceTypes(context.Context, *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
 	mustEmbedUnimplementedAuthorizationProviderServer()
 }
 
@@ -248,47 +167,32 @@ type AuthorizationProviderServer interface {
 // pointer dereference when methods are called.
 type UnimplementedAuthorizationProviderServer struct{}
 
-func (UnimplementedAuthorizationProviderServer) Evaluate(context.Context, *AccessEvaluationRequest) (*AccessDecision, error) {
-	return nil, status.Error(codes.Unimplemented, "method Evaluate not implemented")
+func (UnimplementedAuthorizationProviderServer) CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckAccess not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) EvaluateMany(context.Context, *AccessEvaluationsRequest) (*AccessEvaluationsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method EvaluateMany not implemented")
+func (UnimplementedAuthorizationProviderServer) CheckAccessMany(context.Context, *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckAccessMany not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) SearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SearchResources not implemented")
+func (UnimplementedAuthorizationProviderServer) ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRelationships not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) SearchSubjects(context.Context, *SubjectSearchRequest) (*SubjectSearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SearchSubjects not implemented")
+func (UnimplementedAuthorizationProviderServer) AddRelationship(context.Context, *AddRelationshipRequest) (*AddRelationshipResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddRelationship not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) EffectiveSearchResources(context.Context, *ResourceSearchRequest) (*ResourceSearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method EffectiveSearchResources not implemented")
+func (UnimplementedAuthorizationProviderServer) DeleteRelationship(context.Context, *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteRelationship not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) EffectiveSearchSubjects(context.Context, *EffectiveSubjectSearchRequest) (*EffectiveSubjectSearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method EffectiveSearchSubjects not implemented")
+func (UnimplementedAuthorizationProviderServer) SetAuthorizationState(context.Context, *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAuthorizationState not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) SearchActions(context.Context, *ActionSearchRequest) (*ActionSearchResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SearchActions not implemented")
+func (UnimplementedAuthorizationProviderServer) GetActiveModelRef(context.Context, *emptypb.Empty) (*GetActiveModelRefResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetActiveModelRef not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) Expand(context.Context, *ExpandRequest) (*ExpandResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Expand not implemented")
+func (UnimplementedAuthorizationProviderServer) SetActiveModel(context.Context, *SetActiveModelRequest) (*SetActiveModelResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetActiveModel not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*AuthorizationMetadata, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetMetadata not implemented")
-}
-func (UnimplementedAuthorizationProviderServer) ReadRelationships(context.Context, *ReadRelationshipsRequest) (*ReadRelationshipsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ReadRelationships not implemented")
-}
-func (UnimplementedAuthorizationProviderServer) WriteRelationships(context.Context, *WriteRelationshipsRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method WriteRelationships not implemented")
-}
-func (UnimplementedAuthorizationProviderServer) GetActiveModel(context.Context, *emptypb.Empty) (*GetActiveModelResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetActiveModel not implemented")
-}
-func (UnimplementedAuthorizationProviderServer) ListModels(context.Context, *ListModelsRequest) (*ListModelsResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListModels not implemented")
-}
-func (UnimplementedAuthorizationProviderServer) WriteModel(context.Context, *WriteModelRequest) (*AuthorizationModelRef, error) {
-	return nil, status.Error(codes.Unimplemented, "method WriteModel not implemented")
+func (UnimplementedAuthorizationProviderServer) ListActiveModelResourceTypes(context.Context, *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListActiveModelResourceTypes not implemented")
 }
 func (UnimplementedAuthorizationProviderServer) mustEmbedUnimplementedAuthorizationProviderServer() {}
 func (UnimplementedAuthorizationProviderServer) testEmbeddedByValue()                               {}
@@ -311,254 +215,164 @@ func RegisterAuthorizationProviderServer(s grpc.ServiceRegistrar, srv Authorizat
 	s.RegisterService(&AuthorizationProvider_ServiceDesc, srv)
 }
 
-func _AuthorizationProvider_Evaluate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AccessEvaluationRequest)
+func _AuthorizationProvider_CheckAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckAccessRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).Evaluate(ctx, in)
+		return srv.(AuthorizationProviderServer).CheckAccess(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_Evaluate_FullMethodName,
+		FullMethod: AuthorizationProvider_CheckAccess_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).Evaluate(ctx, req.(*AccessEvaluationRequest))
+		return srv.(AuthorizationProviderServer).CheckAccess(ctx, req.(*CheckAccessRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_EvaluateMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(AccessEvaluationsRequest)
+func _AuthorizationProvider_CheckAccessMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckAccessManyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).EvaluateMany(ctx, in)
+		return srv.(AuthorizationProviderServer).CheckAccessMany(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_EvaluateMany_FullMethodName,
+		FullMethod: AuthorizationProvider_CheckAccessMany_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).EvaluateMany(ctx, req.(*AccessEvaluationsRequest))
+		return srv.(AuthorizationProviderServer).CheckAccessMany(ctx, req.(*CheckAccessManyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_SearchResources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ResourceSearchRequest)
+func _AuthorizationProvider_ListRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRelationshipsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).SearchResources(ctx, in)
+		return srv.(AuthorizationProviderServer).ListRelationships(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_SearchResources_FullMethodName,
+		FullMethod: AuthorizationProvider_ListRelationships_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).SearchResources(ctx, req.(*ResourceSearchRequest))
+		return srv.(AuthorizationProviderServer).ListRelationships(ctx, req.(*ListRelationshipsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_SearchSubjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SubjectSearchRequest)
+func _AuthorizationProvider_AddRelationship_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddRelationshipRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).SearchSubjects(ctx, in)
+		return srv.(AuthorizationProviderServer).AddRelationship(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_SearchSubjects_FullMethodName,
+		FullMethod: AuthorizationProvider_AddRelationship_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).SearchSubjects(ctx, req.(*SubjectSearchRequest))
+		return srv.(AuthorizationProviderServer).AddRelationship(ctx, req.(*AddRelationshipRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_EffectiveSearchResources_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ResourceSearchRequest)
+func _AuthorizationProvider_DeleteRelationship_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRelationshipRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).EffectiveSearchResources(ctx, in)
+		return srv.(AuthorizationProviderServer).DeleteRelationship(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_EffectiveSearchResources_FullMethodName,
+		FullMethod: AuthorizationProvider_DeleteRelationship_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).EffectiveSearchResources(ctx, req.(*ResourceSearchRequest))
+		return srv.(AuthorizationProviderServer).DeleteRelationship(ctx, req.(*DeleteRelationshipRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_EffectiveSearchSubjects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(EffectiveSubjectSearchRequest)
+func _AuthorizationProvider_SetAuthorizationState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAuthorizationStateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).EffectiveSearchSubjects(ctx, in)
+		return srv.(AuthorizationProviderServer).SetAuthorizationState(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_EffectiveSearchSubjects_FullMethodName,
+		FullMethod: AuthorizationProvider_SetAuthorizationState_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).EffectiveSearchSubjects(ctx, req.(*EffectiveSubjectSearchRequest))
+		return srv.(AuthorizationProviderServer).SetAuthorizationState(ctx, req.(*SetAuthorizationStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_SearchActions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ActionSearchRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).SearchActions(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthorizationProvider_SearchActions_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).SearchActions(ctx, req.(*ActionSearchRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthorizationProvider_Expand_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ExpandRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).Expand(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthorizationProvider_Expand_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).Expand(ctx, req.(*ExpandRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthorizationProvider_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _AuthorizationProvider_GetActiveModelRef_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).GetMetadata(ctx, in)
+		return srv.(AuthorizationProviderServer).GetActiveModelRef(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_GetMetadata_FullMethodName,
+		FullMethod: AuthorizationProvider_GetActiveModelRef_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).GetMetadata(ctx, req.(*emptypb.Empty))
+		return srv.(AuthorizationProviderServer).GetActiveModelRef(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_ReadRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadRelationshipsRequest)
+func _AuthorizationProvider_SetActiveModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetActiveModelRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).ReadRelationships(ctx, in)
+		return srv.(AuthorizationProviderServer).SetActiveModel(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_ReadRelationships_FullMethodName,
+		FullMethod: AuthorizationProvider_SetActiveModel_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).ReadRelationships(ctx, req.(*ReadRelationshipsRequest))
+		return srv.(AuthorizationProviderServer).SetActiveModel(ctx, req.(*SetActiveModelRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_WriteRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WriteRelationshipsRequest)
+func _AuthorizationProvider_ListActiveModelResourceTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListActiveModelResourceTypesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).WriteRelationships(ctx, in)
+		return srv.(AuthorizationProviderServer).ListActiveModelResourceTypes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_WriteRelationships_FullMethodName,
+		FullMethod: AuthorizationProvider_ListActiveModelResourceTypes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).WriteRelationships(ctx, req.(*WriteRelationshipsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthorizationProvider_GetActiveModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).GetActiveModel(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthorizationProvider_GetActiveModel_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).GetActiveModel(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthorizationProvider_ListModels_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListModelsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).ListModels(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthorizationProvider_ListModels_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).ListModels(ctx, req.(*ListModelsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _AuthorizationProvider_WriteModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WriteModelRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).WriteModel(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AuthorizationProvider_WriteModel_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).WriteModel(ctx, req.(*WriteModelRequest))
+		return srv.(AuthorizationProviderServer).ListActiveModelResourceTypes(ctx, req.(*ListActiveModelResourceTypesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -571,60 +385,40 @@ var AuthorizationProvider_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*AuthorizationProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Evaluate",
-			Handler:    _AuthorizationProvider_Evaluate_Handler,
+			MethodName: "CheckAccess",
+			Handler:    _AuthorizationProvider_CheckAccess_Handler,
 		},
 		{
-			MethodName: "EvaluateMany",
-			Handler:    _AuthorizationProvider_EvaluateMany_Handler,
+			MethodName: "CheckAccessMany",
+			Handler:    _AuthorizationProvider_CheckAccessMany_Handler,
 		},
 		{
-			MethodName: "SearchResources",
-			Handler:    _AuthorizationProvider_SearchResources_Handler,
+			MethodName: "ListRelationships",
+			Handler:    _AuthorizationProvider_ListRelationships_Handler,
 		},
 		{
-			MethodName: "SearchSubjects",
-			Handler:    _AuthorizationProvider_SearchSubjects_Handler,
+			MethodName: "AddRelationship",
+			Handler:    _AuthorizationProvider_AddRelationship_Handler,
 		},
 		{
-			MethodName: "EffectiveSearchResources",
-			Handler:    _AuthorizationProvider_EffectiveSearchResources_Handler,
+			MethodName: "DeleteRelationship",
+			Handler:    _AuthorizationProvider_DeleteRelationship_Handler,
 		},
 		{
-			MethodName: "EffectiveSearchSubjects",
-			Handler:    _AuthorizationProvider_EffectiveSearchSubjects_Handler,
+			MethodName: "SetAuthorizationState",
+			Handler:    _AuthorizationProvider_SetAuthorizationState_Handler,
 		},
 		{
-			MethodName: "SearchActions",
-			Handler:    _AuthorizationProvider_SearchActions_Handler,
+			MethodName: "GetActiveModelRef",
+			Handler:    _AuthorizationProvider_GetActiveModelRef_Handler,
 		},
 		{
-			MethodName: "Expand",
-			Handler:    _AuthorizationProvider_Expand_Handler,
+			MethodName: "SetActiveModel",
+			Handler:    _AuthorizationProvider_SetActiveModel_Handler,
 		},
 		{
-			MethodName: "GetMetadata",
-			Handler:    _AuthorizationProvider_GetMetadata_Handler,
-		},
-		{
-			MethodName: "ReadRelationships",
-			Handler:    _AuthorizationProvider_ReadRelationships_Handler,
-		},
-		{
-			MethodName: "WriteRelationships",
-			Handler:    _AuthorizationProvider_WriteRelationships_Handler,
-		},
-		{
-			MethodName: "GetActiveModel",
-			Handler:    _AuthorizationProvider_GetActiveModel_Handler,
-		},
-		{
-			MethodName: "ListModels",
-			Handler:    _AuthorizationProvider_ListModels_Handler,
-		},
-		{
-			MethodName: "WriteModel",
-			Handler:    _AuthorizationProvider_WriteModel_Handler,
+			MethodName: "ListActiveModelResourceTypes",
+			Handler:    _AuthorizationProvider_ListActiveModelResourceTypes_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

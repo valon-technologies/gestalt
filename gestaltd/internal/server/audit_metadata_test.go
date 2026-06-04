@@ -15,7 +15,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
@@ -99,9 +98,6 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	}
 	if record["provider"] != "audit-prov" {
 		t.Errorf("expected provider=audit-prov, got %v", record["provider"])
-	}
-	if record["auth_source"] != "session" {
-		t.Errorf("expected auth_source=session, got %v", record["auth_source"])
 	}
 	if subjectID, ok := record["subject_id"].(string); !ok || subjectID == "" {
 		t.Errorf("expected non-empty subject_id, got %v", record["subject_id"])
@@ -198,7 +194,6 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 		routeAuth      string
 		wantSource     string
 		wantError      string
-		wantAuthSource string
 		wantProvider   string
 	}{
 		{
@@ -226,7 +221,6 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			withMCPHandler: true,
 			wantSource:     "mcp",
 			wantError:      "invalid token",
-			wantAuthSource: "session",
 		},
 		{
 			name:         "missing_plugin_route_auth_uses_named_provider_in_audit",
@@ -328,116 +322,13 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 			if record["provider"] != tc.wantProvider {
 				t.Fatalf("expected provider %q, got %v", tc.wantProvider, record["provider"])
 			}
-			if tc.wantAuthSource == "" {
-				if authSource, ok := record["auth_source"]; ok && authSource != "" {
-					t.Fatalf("expected empty auth_source, got %v", authSource)
-				}
-			} else if record["auth_source"] != tc.wantAuthSource {
-				t.Fatalf("expected auth_source %q, got %v", tc.wantAuthSource, record["auth_source"])
+			if authSource, ok := record["auth_source"]; ok && authSource != "" {
+				t.Fatalf("expected auth_source omitted, got %v", authSource)
+			}
+			if subjectKind, ok := record["subject_kind"]; ok && subjectKind != "" {
+				t.Fatalf("expected subject_kind omitted, got %v", subjectKind)
 			}
 		})
-	}
-}
-
-func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
-	t.Parallel()
-
-	var auditBuf bytes.Buffer
-	auditSink := invocation.NewSlogAuditSink(&auditBuf)
-
-	subjectToken, subjectTokenHash, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-
-	stub := &stubIntegrationWithOps{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "audit-subject-prov",
-			ConnMode: core.ConnectionModeSubject,
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				if token != "identity-token" {
-					t.Fatalf("unexpected token %q", token)
-				}
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-			},
-		},
-		ops: []core.Operation{{Name: "ping", Method: http.MethodPost}},
-	}
-
-	providers := testutil.NewProviderRegistry(t, stub)
-	authz, err := newTestAuthorizer(config.AuthorizationConfig{}, nil)
-
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-
-	svc := testutil.NewStubServices(t)
-	seedSubjectAPIToken(t, svc, subjectTokenHash, "service_account:triage-bot", "triage-bot")
-	if err := svc.ExternalCredentials.PutCredential(t.Context(), &core.ExternalCredential{
-		ID:          "identity-audit-token",
-		SubjectID:   "service_account:triage-bot",
-		Integration: "audit-subject-prov",
-		Connection:  "workspace",
-		Instance:    "team-a",
-		AccessToken: "identity-token",
-	}); err != nil {
-		t.Fatalf("PutCredential: %v", err)
-	}
-
-	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials, invocation.WithAuthorizer(authz))
-	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
-
-	srv, err := server.New(server.Config{
-		Auth:        &coretesting.StubAuthProvider{N: "test"},
-		AuditSink:   auditSink,
-		Services:    svc,
-		Providers:   providers,
-		Invoker:     guarded,
-		Authorizer:  authz,
-		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
-	})
-	if err != nil {
-		t.Fatalf("creating server: %v", err)
-	}
-	ts := httptest.NewServer(srv)
-	t.Cleanup(ts.Close)
-
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-subject-prov/ping?_connection=workspace&_instance=team-a", bytes.NewBufferString(`{}`))
-	req.Header.Set("Authorization", "Bearer "+subjectToken)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var record map[string]any
-	if err := json.Unmarshal(auditBuf.Bytes(), &record); err != nil {
-		t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
-	}
-
-	if record["subject_id"] != "service_account:triage-bot" {
-		t.Fatalf("expected service account subject_id, got %v", record["subject_id"])
-	}
-	if record["subject_kind"] != "service_account" {
-		t.Fatalf("expected subject_kind=service_account, got %v", record["subject_kind"])
-	}
-	if record["credential_mode"] != "subject" {
-		t.Fatalf("expected credential_mode=subject, got %v", record["credential_mode"])
-	}
-	if record["credential_subject_id"] != "service_account:triage-bot" {
-		t.Fatalf("expected credential_subject_id service account principal, got %v", record["credential_subject_id"])
-	}
-	if record["credential_connection"] != "workspace" {
-		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])
-	}
-	if record["credential_instance"] != "team-a" {
-		t.Fatalf("expected credential_instance=team-a, got %v", record["credential_instance"])
 	}
 }
 

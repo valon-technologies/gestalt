@@ -13,7 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-const ConfigManagedSchedulePrefix = "cfg_"
+const ConfigManagedDefinitionPrefix = "cfg_"
 
 type RunStatus string
 
@@ -25,7 +25,16 @@ const (
 	RunStatusCanceled  RunStatus = "canceled"
 )
 
-type Actor = core.Actor
+type StepStatus string
+
+const (
+	StepStatusPending   StepStatus = "pending"
+	StepStatusRunning   StepStatus = "running"
+	StepStatusSkipped   StepStatus = "skipped"
+	StepStatusSucceeded StepStatus = "succeeded"
+	StepStatusFailed    StepStatus = "failed"
+	StepStatusUnknown   StepStatus = "unknown"
+)
 
 type Target struct {
 	Steps []Step
@@ -78,17 +87,23 @@ type StepWhen struct {
 }
 
 type Value struct {
-	Literal       any
-	LiteralSet    bool
-	Object        map[string]Value
-	Array         []Value
-	Template      *Text
-	RunInput      string
-	SignalPayload string
-	StepOutput    *StepOutputSource
+	Literal    any
+	LiteralSet bool
+	Object     map[string]Value
+	Array      []Value
+	Template   *Text
+	Input      string
+	Signal     string
+	StepOutput *StepOutputSource
+	StepInput  *StepInputSource
 }
 
 type StepOutputSource struct {
+	StepID string
+	Path   string
+}
+
+type StepInputSource struct {
 	StepID string
 	Path   string
 }
@@ -115,6 +130,10 @@ func CloneValue(value Value) Value {
 	if value.StepOutput != nil {
 		source := *value.StepOutput
 		out.StepOutput = &source
+	}
+	if value.StepInput != nil {
+		source := *value.StepInput
+		out.StepInput = &source
 	}
 	return out
 }
@@ -157,13 +176,13 @@ type EventMatch struct {
 }
 
 type ScheduleTrigger struct {
-	ScheduleID   string
+	ActivationID string
 	ScheduledFor *time.Time
 }
 
 type EventTriggerInvocation struct {
-	TriggerID string
-	Event     Event
+	ActivationID string
+	Event        Event
 }
 
 type RunTrigger struct {
@@ -173,52 +192,110 @@ type RunTrigger struct {
 }
 
 type Run struct {
-	ID            string
-	Status        RunStatus
-	WorkflowKey   string
-	Target        Target
-	DefinitionID  string
-	Trigger       RunTrigger
-	CreatedBy     Actor
-	RunAs         *core.RunAsSubject
-	CreatedAt     *time.Time
+	ID                   string
+	Status               RunStatus
+	WorkflowKey          string
+	Target               Target
+	DefinitionID         string
+	DefinitionGeneration int64
+	Input                map[string]any
+	CurrentStepID        string
+	Steps                []StepExecution
+	Trigger              RunTrigger
+	CreatedBySubjectID   string
+	RunAs                *core.RunAsSubject
+	CreatedAt            *time.Time
+	StartedAt            *time.Time
+	CompletedAt          *time.Time
+	StatusMessage        string
+	Output               any
+}
+
+type StepAttempt struct {
+	ID             string
+	Status         StepStatus
+	IdempotencyKey string
+	Input          any
+	Output         any
+	StatusMessage  string
+	StartedAt      *time.Time
+	CompletedAt    *time.Time
+}
+
+type StepExecution struct {
+	StepID        string
+	Status        StepStatus
+	Attempts      []StepAttempt
+	Input         any
+	Output        any
+	StatusMessage string
+	SkipReason    string
 	StartedAt     *time.Time
 	CompletedAt   *time.Time
-	StatusMessage string
-	ResultBody    string
 }
 
 type Schedule struct {
-	ID           string
-	Cron         string
-	Timezone     string
-	Target       Target
-	DefinitionID string
-	Paused       bool
-	CreatedBy    Actor
-	RunAs        *core.RunAsSubject
-	CreatedAt    *time.Time
-	UpdatedAt    *time.Time
-	NextRunAt    *time.Time
+	ID                 string
+	Cron               string
+	Timezone           string
+	Target             Target
+	DefinitionID       string
+	Paused             bool
+	CreatedBySubjectID string
+	RunAs              *core.RunAsSubject
+	CreatedAt          *time.Time
+	UpdatedAt          *time.Time
+	NextRunAt          *time.Time
 }
 
 type EventTrigger struct {
-	ID           string
-	Match        EventMatch
-	Target       Target
-	DefinitionID string
-	Paused       bool
-	CreatedBy    Actor
-	RunAs        *core.RunAsSubject
-	CreatedAt    *time.Time
-	UpdatedAt    *time.Time
+	ID                 string
+	Match              EventMatch
+	Target             Target
+	DefinitionID       string
+	Paused             bool
+	CreatedBySubjectID string
+	RunAs              *core.RunAsSubject
+	CreatedAt          *time.Time
+	UpdatedAt          *time.Time
 }
 
 type Definition struct {
-	ID        string
-	Target    Target
-	CreatedBy Actor
-	CreatedAt *time.Time
+	ID                 string
+	Generation         int64
+	Target             Target
+	Activations        []Activation
+	Paused             bool
+	CreatedBySubjectID string
+	CreatedAt          *time.Time
+	UpdatedAt          *time.Time
+	ProviderName       string
+	RunAs              *core.RunAsSubject
+}
+
+type DefinitionSpec struct {
+	ID          string
+	Target      Target
+	Activations []Activation
+	Paused      bool
+	RunAs       *core.RunAsSubject
+}
+
+type ScheduleActivation struct {
+	Cron     string
+	Timezone string
+}
+
+type EventActivation struct {
+	Match EventMatch
+}
+
+type Activation struct {
+	ID       string
+	Input    Value
+	Paused   bool
+	Schedule *ScheduleActivation
+	Event    *EventActivation
 }
 
 type ListRunsRequest struct {
@@ -234,14 +311,14 @@ type ListRunsResponse struct {
 }
 
 type Signal struct {
-	ID             string
-	Name           string
-	Payload        map[string]any
-	Metadata       map[string]any
-	CreatedBy      Actor
-	CreatedAt      *time.Time
-	IdempotencyKey string
-	Sequence       int64
+	ID                 string
+	Name               string
+	Payload            map[string]any
+	Metadata           map[string]any
+	CreatedBySubjectID string
+	CreatedAt          *time.Time
+	IdempotencyKey     string
+	Sequence           int64
 }
 
 type SignalRunResponse struct {
@@ -252,29 +329,21 @@ type SignalRunResponse struct {
 }
 
 type Provider interface {
-	CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error)
-	GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error)
-	UpdateDefinition(ctx context.Context, req *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error)
+	ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error)
+	GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error)
+	ListDefinitions(ctx context.Context, req *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error)
+	SetDefinitionPaused(ctx context.Context, req *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error)
+	SetActivationPaused(ctx context.Context, req *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error)
 	DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) error
-	StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error)
-	GetRun(ctx context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error)
+	StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error)
+	GetRun(ctx context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.WorkflowRun, error)
 	ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error)
-	CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error)
+	GetRunEvents(ctx context.Context, req *proto.GetWorkflowProviderRunEventsRequest) (*proto.GetWorkflowProviderRunEventsResponse, error)
+	GetRunOutput(ctx context.Context, req *proto.GetWorkflowProviderRunOutputRequest) (*proto.GetWorkflowProviderRunOutputResponse, error)
+	CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.WorkflowRun, error)
 	SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error)
 	SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error)
-	UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
-	GetSchedule(ctx context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
-	ListSchedules(ctx context.Context, req *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error)
-	DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowProviderScheduleRequest) error
-	PauseSchedule(ctx context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
-	ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error)
-	UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
-	GetEventTrigger(ctx context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
-	ListEventTriggers(ctx context.Context, req *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error)
-	DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowProviderEventTriggerRequest) error
-	PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
-	ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error)
-	PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error)
+	DeliverEvent(ctx context.Context, req *proto.DeliverWorkflowProviderEventRequest) (*proto.WorkflowEvent, error)
 	Ping(ctx context.Context) error
 	Close() error
 }

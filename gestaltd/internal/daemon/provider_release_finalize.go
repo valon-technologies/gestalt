@@ -287,7 +287,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	if err != nil {
 		return nil, fmt.Errorf("project static validation manifest: %w", err)
 	}
-	staticCatalog, err := staticValidationCatalogFromReleaseArchives(archives)
+	staticCatalog, err := staticValidationCatalogForRelease(manifest, archives)
 	if err != nil {
 		return nil, err
 	}
@@ -315,46 +315,50 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	return metadata, nil
 }
 
-func staticValidationCatalogFromReleaseArchives(archives []releaseArchive) (*catalog.Catalog, error) {
-	var canonical *catalog.Catalog
-	var canonicalPayload []byte
-	hasCanonical := false
-	for _, archive := range archives {
-		cat, err := readStaticCatalogFromReleaseArchive(archive.Path)
+func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, archives []releaseArchive) (*catalog.Catalog, error) {
+	if manifest == nil || len(archives) == 0 {
+		return nil, nil
+	}
+	var firstCatalog *catalog.Catalog
+	var firstData []byte
+	for i, archive := range archives {
+		data, cat, err := staticValidationCatalogFromArchive(manifest, archive)
 		if err != nil {
 			return nil, err
 		}
-		payload, err := json.Marshal(cat)
-		if err != nil {
-			return nil, fmt.Errorf("normalize static catalog for %s: %w", filepath.Base(archive.Path), err)
-		}
-		if !hasCanonical {
-			canonical = cat
-			canonicalPayload = payload
-			hasCanonical = true
+		if i == 0 {
+			firstData = data
+			firstCatalog = cat
 			continue
 		}
-		if !bytes.Equal(payload, canonicalPayload) {
-			return nil, fmt.Errorf("release archive %s static catalog does not match other release archives", filepath.Base(archive.Path))
+		if !bytes.Equal(bytes.TrimSpace(firstData), bytes.TrimSpace(data)) {
+			return nil, fmt.Errorf("static validation catalog in %s does not match %s", filepath.Base(archive.Path), filepath.Base(archives[0].Path))
 		}
 	}
-	return canonical, nil
+	return firstCatalog, nil
 }
 
-func readStaticCatalogFromReleaseArchive(archivePath string) (*catalog.Catalog, error) {
-	tempDir, err := os.MkdirTemp("", "gestaltd-release-catalog-*")
+func staticValidationCatalogFromArchive(manifest *providermanifestv1.Manifest, archive releaseArchive) ([]byte, *catalog.Catalog, error) {
+	data, err := packageio.ReadArchiveEntry(archive.Path, packageio.StaticCatalogFile)
 	if err != nil {
-		return nil, err
+		if !packageio.StaticCatalogRequired(manifest) && strings.Contains(err.Error(), "does not contain") {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("read static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
-	if err := providerpkg.ExtractPackage(archivePath, tempDir); err != nil {
-		return nil, fmt.Errorf("extract static catalog from release archive %s: %w", filepath.Base(archivePath), err)
+	var cat catalog.Catalog
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&cat); err != nil {
+		return nil, nil, fmt.Errorf("decode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 	}
-	cat, err := providerpkg.ReadStaticCatalog(tempDir, "")
-	if err != nil {
-		return nil, fmt.Errorf("read static catalog from release archive %s: %w", filepath.Base(archivePath), err)
+	if strings.TrimSpace(cat.Name) == "" {
+		cat.Name = manifest.Source
 	}
-	return cat, nil
+	if err := cat.Validate(); err != nil {
+		return nil, nil, fmt.Errorf("validate static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+	}
+	return data, &cat, nil
 }
 
 func providerReleaseArtifactTarget(manifest *providermanifestv1.Manifest, archive releaseArchive) string {

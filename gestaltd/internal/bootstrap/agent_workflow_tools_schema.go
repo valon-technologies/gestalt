@@ -1,50 +1,16 @@
 package bootstrap
 
 import (
-	"maps"
 	"strings"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 )
 
-func workflowSystemToolCreateScheduleSchema() map[string]any {
-	return workflowSystemToolObjectSchema([]string{"cron"}, map[string]any{
-		"provider":     workflowSystemToolStringSchema("Workflow provider name."),
-		"cron":         workflowSystemToolStringSchema("Cron expression."),
-		"timezone":     workflowSystemToolStringSchema("IANA timezone."),
-		"paused":       map[string]any{"type": "boolean"},
-		"target":       workflowSystemToolTargetSchema(),
-		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to schedule."),
-	})
-}
-
 func workflowSystemToolStartRunSchema() map[string]any {
-	common := map[string]any{
-		"provider":    workflowSystemToolStringSchema("Workflow provider name."),
-		"workflowKey": workflowSystemToolStringSchema("Workflow key."),
-	}
-	targetProperties := maps.Clone(common)
-	targetProperties["target"] = workflowSystemToolTargetSchema()
-	definitionProperties := maps.Clone(common)
-	definitionProperties["definitionId"] = workflowSystemToolStringSchema("Workflow definition ID to run.")
-	return map[string]any{
-		"type": "object",
-		"oneOf": []any{
-			workflowSystemToolObjectSchema([]string{"target"}, targetProperties),
-			workflowSystemToolObjectSchema([]string{"definitionId"}, definitionProperties),
-		},
-	}
-}
-
-func workflowSystemToolUpdateScheduleSchema() map[string]any {
-	return workflowSystemToolObjectSchema([]string{"scheduleId"}, map[string]any{
-		"scheduleId":   workflowSystemToolStringSchema("Schedule ID."),
+	return workflowSystemToolObjectSchema([]string{"definitionId"}, map[string]any{
 		"provider":     workflowSystemToolStringSchema("Workflow provider name."),
-		"cron":         workflowSystemToolStringSchema("Cron expression. If omitted, the existing cron is preserved."),
-		"timezone":     workflowSystemToolStringSchema("IANA timezone. If omitted, the existing timezone is preserved."),
-		"paused":       map[string]any{"type": "boolean", "description": "Paused state. If omitted, the existing paused state is preserved."},
-		"target":       workflowSystemToolTargetSchema(),
-		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to schedule. If omitted with no target, the existing resolved target is preserved."),
+		"workflowKey":  workflowSystemToolStringSchema("Workflow key."),
+		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to run."),
 	})
 }
 
@@ -67,18 +33,12 @@ func workflowSystemToolListRunsSchema() map[string]any {
 	})
 }
 
-func workflowSystemToolCreateDefinitionSchema() map[string]any {
-	return workflowSystemToolObjectSchema([]string{"target"}, map[string]any{
-		"provider": workflowSystemToolStringSchema("Workflow provider name."),
-		"target":   workflowSystemToolTargetSchema(),
-	})
-}
-
-func workflowSystemToolUpdateDefinitionSchema() map[string]any {
+func workflowSystemToolApplyDefinitionSchema() map[string]any {
 	return workflowSystemToolObjectSchema([]string{"definitionId", "target"}, map[string]any{
 		"definitionId": workflowSystemToolStringSchema("Workflow definition ID."),
 		"provider":     workflowSystemToolStringSchema("Workflow provider name."),
 		"target":       workflowSystemToolTargetSchema(),
+		"paused":       map[string]any{"type": "boolean"},
 	})
 }
 
@@ -89,15 +49,29 @@ func workflowSystemToolTargetSchema() map[string]any {
 }
 
 func workflowSystemToolStepSchema() map[string]any {
-	return workflowSystemToolObjectSchema([]string{"id"}, map[string]any{
+	schema := workflowSystemToolObjectSchema([]string{"id"}, map[string]any{
 		"id":             workflowSystemToolStringSchema("Stable step ID."),
 		"inputs":         map[string]any{"type": "object"},
 		"app":            workflowSystemToolAppCallSchema("App name."),
 		"agent":          workflowSystemToolAgentTurnSchema(),
 		"when":           workflowSystemToolStepWhenSchema(),
-		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
+		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0, "description": "Optional execution budget in seconds. Providers choose their own timeout when omitted or zero."},
 		"metadata":       map[string]any{"type": "object"},
 	})
+	schema["oneOf"] = []any{
+		map[string]any{
+			"required": []string{"app"},
+			"not":      map[string]any{"required": []string{"agent"}},
+		},
+		map[string]any{
+			"required": []string{"agent"},
+			"properties": map[string]any{
+				"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
+			},
+			"not": map[string]any{"required": []string{"app"}},
+		},
+	}
+	return schema
 }
 
 func workflowSystemToolAppCallSchema(nameDescription string) map[string]any {

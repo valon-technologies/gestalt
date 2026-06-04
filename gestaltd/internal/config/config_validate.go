@@ -58,9 +58,6 @@ func CanonicalizeStructure(cfg *Config) error {
 // already run on the config.
 func ValidateCanonicalStructure(cfg *Config) error {
 	appOwnedUIBindings := appOwnedUIBindings(cfg)
-	if err := validateAuthorizationPolicies(cfg); err != nil {
-		return err
-	}
 	if err := validateAuthorizationModelConfig(cfg); err != nil {
 		return err
 	}
@@ -123,9 +120,6 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
 		}
 		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
-			return err
-		}
-		if err := validateAuthorizationPolicyReference(cfg, "ui", name, entry.AuthorizationPolicy); err != nil {
 			return err
 		}
 		if entry.Path == "" {
@@ -926,9 +920,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validateAppS3Bindings(cfg, name, entry); err != nil {
 		return err
 	}
-	if err := validateAuthorizationPolicyReference(cfg, "app", name, entry.AuthorizationPolicy); err != nil {
-		return err
-	}
 	if _, err := cfg.EffectiveRuntimePlacement("apps."+name, entry); err != nil {
 		return err
 	}
@@ -998,23 +989,9 @@ func normalizeAppInvocationRunAs(path string, invoke *AppInvocationDependency) e
 	}
 	subject := runAs.Subject
 	subject.ID = strings.TrimSpace(subject.ID)
-	subject.Kind = strings.TrimSpace(subject.Kind)
 	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
-	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
-	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
 	if subject.ID == "" {
 		return fmt.Errorf("config validation: %s.runAs.subject.id is required", path)
-	}
-	if subject.Kind == "" {
-		if kind, _, ok := core.ParseSubjectID(subject.ID); ok {
-			subject.Kind = kind
-		}
-	}
-	if subject.Kind == "" {
-		return fmt.Errorf("config validation: %s.runAs.subject.kind is required", path)
-	}
-	if subject.CredentialSubjectID == "" {
-		subject.CredentialSubjectID = subject.ID
 	}
 	return nil
 }
@@ -1562,35 +1539,6 @@ func normalizeProviderRuntimeConfig(subject string, entry *ProviderEntry, allowL
 	return nil
 }
 
-func validateAuthorizationPolicies(cfg *Config) error {
-	for name, policy := range cfg.Authorization.Policies {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("config validation: authorization.policies keys must be non-empty")
-		}
-		switch strings.TrimSpace(policy.Default) {
-		case "", "allow", "deny":
-		default:
-			return fmt.Errorf("config validation: authorization.policies.%s.default must be %q or %q", name, "allow", "deny")
-		}
-		seenSubjectIDs := make(map[string]int, len(policy.Members))
-		for i, member := range policy.Members {
-			subjectID := strings.TrimSpace(member.SubjectID)
-			role := strings.TrimSpace(member.Role)
-			switch {
-			case role == "":
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].role is required", name, i)
-			case subjectID == "":
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID is required", name, i)
-			}
-			if prev, exists := seenSubjectIDs[subjectID]; exists {
-				return fmt.Errorf("config validation: authorization.policies.%s.members[%d].subjectID duplicates members[%d]", name, i, prev)
-			}
-			seenSubjectIDs[subjectID] = i
-		}
-	}
-	return nil
-}
-
 func validateAuthorizationModelConfig(cfg *Config) error {
 	definedResourceTypes := make(map[string]string)
 	resourceTypeRelations := make(map[string]map[string]AuthorizationRelationDef)
@@ -1676,6 +1624,11 @@ func validateAuthorizationResourceTypeDef(parentPath, name, path string, def Aut
 	if err := validateAuthorizationSourceMetadata(path+".source", def.Source); err != nil {
 		return err
 	}
+	switch strings.TrimSpace(def.DefaultAccessPolicy) {
+	case "", "allow", "deny":
+	default:
+		return fmt.Errorf("config validation: %s.defaultAccessPolicy must be %q or %q", path, "allow", "deny")
+	}
 	for relationName, relation := range def.Relations {
 		relationPath := path + ".relations." + relationName
 		if err := validateAuthorizationMapKey(path+".relations", relationName); err != nil {
@@ -1743,8 +1696,14 @@ func validateAuthorizationAllowedTargetDef(path string, target AuthorizationAllo
 }
 
 func validateAuthorizationRelationshipDef(path string, relationship AuthorizationRelationshipDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
-	if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
-		return err
+	if hasAuthorizationRelationshipTarget(relationship.Target) {
+		if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
+			return err
+		}
+	} else {
+		if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(relationship.Relation) == "" {
 		return fmt.Errorf("config validation: %s.relation is required", path)
@@ -1760,13 +1719,14 @@ func validateAuthorizationRelationshipDef(path string, relationship Authorizatio
 	if _, ok := relations[strings.TrimSpace(relationship.Relation)]; !ok {
 		return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", path, relationship.Relation, resourceType)
 	}
-	if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
-		return err
-	}
 	if err := validateAuthorizationSourceMetadata(path+".source", relationship.Source); err != nil {
 		return err
 	}
 	return nil
+}
+
+func hasAuthorizationRelationshipTarget(target AuthorizationRelationshipTargetDef) bool {
+	return target.Subject != nil || target.Resource != nil || target.SubjectSet != nil
 }
 
 func validateAuthorizationMapKey(path, key string) error {
@@ -1869,17 +1829,6 @@ func validateStringList(path string, values []string) error {
 	return nil
 }
 
-func validateAuthorizationPolicyReference(cfg *Config, kind, name, policy string) error {
-	policy = strings.TrimSpace(policy)
-	if policy == "" {
-		return nil
-	}
-	if _, ok := cfg.Authorization.Policies[policy]; !ok {
-		return fmt.Errorf("config validation: %s %q authorizationPolicy references unknown policy %q", kind, name, policy)
-	}
-	return nil
-}
-
 func validateAdminConfig(cfg *Config) error {
 	if cfg == nil {
 		return nil
@@ -1902,9 +1851,6 @@ func validateAdminConfig(cfg *Config) error {
 		}
 		if authProvider == nil {
 			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.authentication to be configured")
-		}
-		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
-			return err
 		}
 		if len(admin.AllowedRoles) == 0 {
 			return fmt.Errorf("config validation: server.admin.allowedRoles must not be empty when server.admin.authorizationPolicy is set")
@@ -2012,126 +1958,121 @@ var workflowScheduleCronParser = cronv3.NewParser(
 	cronv3.Minute | cronv3.Hour | cronv3.Dom | cronv3.Month | cronv3.Dow,
 )
 
-func validateWorkflowScheduleCron(scheduleKey, spec string) error {
+func validateWorkflowScheduleCron(path, spec string) error {
 	if _, err := workflowScheduleCronParser.Parse(spec); err != nil {
-		return fmt.Errorf("config validation: workflows.schedules.%s.cron %q is invalid: %w", scheduleKey, spec, err)
+		return fmt.Errorf("config validation: %s.schedule.cron %q is invalid: %w", path, spec, err)
 	}
 	return nil
 }
 
 func validateWorkflowsConfig(cfg *Config) error {
-	if len(cfg.Workflows.Schedules) > 0 {
-		normalized := make(map[string]WorkflowScheduleConfig, len(cfg.Workflows.Schedules))
-		for key := range cfg.Workflows.Schedules {
-			schedule := cfg.Workflows.Schedules[key]
+	if len(cfg.Workflows.Definitions) > 0 {
+		normalized := make(map[string]WorkflowDefinitionConfig, len(cfg.Workflows.Definitions))
+		for key := range cfg.Workflows.Definitions {
+			definition := cfg.Workflows.Definitions[key]
 			key = strings.TrimSpace(key)
 			if key == "" {
-				return fmt.Errorf("config validation: workflows.schedules keys must not be empty")
+				return fmt.Errorf("config validation: workflows.definitions keys must not be empty")
 			}
 			if _, exists := normalized[key]; exists {
-				return fmt.Errorf("config validation: workflows.schedules duplicates %q", key)
+				return fmt.Errorf("config validation: workflows.definitions duplicates %q", key)
 			}
-			if err := validateWorkflowScheduleTarget(cfg, key, &schedule); err != nil {
+			if err := validateWorkflowDefinitionTarget(cfg, key, &definition); err != nil {
 				return err
 			}
-			runAs, err := normalizeWorkflowRunAs("workflows.schedules."+key+".runAs", schedule.RunAs)
+			runAs, err := normalizeWorkflowRunAs("workflows.definitions."+key+".runAs", definition.RunAs)
 			if err != nil {
 				return err
 			}
-			schedule.RunAs = runAs
-			schedule.Provider = strings.TrimSpace(schedule.Provider)
-			providerName, _, err := cfg.EffectiveWorkflowProvider(schedule.Provider)
+			definition.RunAs = runAs
+			definition.Provider = strings.TrimSpace(definition.Provider)
+			providerName, _, err := cfg.EffectiveWorkflowProvider(definition.Provider)
 			if err != nil {
-				return fmt.Errorf("config validation: workflows.schedules.%s.provider: %w", key, err)
+				return fmt.Errorf("config validation: workflows.definitions.%s.provider: %w", key, err)
 			}
 			if providerName == "" {
-				return fmt.Errorf("config validation: workflows.schedules.%s.provider is required", key)
+				return fmt.Errorf("config validation: workflows.definitions.%s.provider is required", key)
 			}
-			schedule.Cron = strings.TrimSpace(schedule.Cron)
-			if schedule.Cron == "" {
-				return fmt.Errorf("config validation: workflows.schedules.%s.cron is required", key)
-			}
-			if err := validateWorkflowScheduleCron(key, schedule.Cron); err != nil {
+			if err := normalizeWorkflowActivationsConfig(key, &definition); err != nil {
 				return err
 			}
-			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
-			if schedule.Timezone == "" {
-				schedule.Timezone = "UTC"
-			}
-			if _, err := time.LoadLocation(schedule.Timezone); err != nil {
-				return fmt.Errorf("config validation: workflows.schedules.%s.timezone %q is invalid: %w", key, schedule.Timezone, err)
-			}
-			normalized[key] = schedule
+			normalized[key] = definition
 		}
-		cfg.Workflows.Schedules = normalized
-	}
-
-	if len(cfg.Workflows.EventTriggers) > 0 {
-		normalized := make(map[string]WorkflowEventTriggerConfig, len(cfg.Workflows.EventTriggers))
-		for key := range cfg.Workflows.EventTriggers {
-			trigger := cfg.Workflows.EventTriggers[key]
-			key = strings.TrimSpace(key)
-			if key == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers keys must not be empty")
-			}
-			if _, exists := normalized[key]; exists {
-				return fmt.Errorf("config validation: workflows.eventTriggers duplicates %q", key)
-			}
-			if err := validateWorkflowEventTriggerTarget(cfg, key, &trigger); err != nil {
-				return err
-			}
-			runAs, err := normalizeWorkflowRunAs("workflows.eventTriggers."+key+".runAs", trigger.RunAs)
-			if err != nil {
-				return err
-			}
-			trigger.RunAs = runAs
-			trigger.Provider = strings.TrimSpace(trigger.Provider)
-			providerName, _, err := cfg.EffectiveWorkflowProvider(trigger.Provider)
-			if err != nil {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.provider: %w", key, err)
-			}
-			if providerName == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.provider is required", key)
-			}
-			trigger.Match.Type = strings.TrimSpace(trigger.Match.Type)
-			if trigger.Match.Type == "" {
-				return fmt.Errorf("config validation: workflows.eventTriggers.%s.match.type is required", key)
-			}
-			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
-			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
-			normalized[key] = trigger
-		}
-		cfg.Workflows.EventTriggers = normalized
+		cfg.Workflows.Definitions = normalized
 	}
 	return nil
 }
 
-func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowScheduleConfig) error {
-	if schedule == nil {
-		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
+func validateWorkflowDefinitionTarget(cfg *Config, key string, definition *WorkflowDefinitionConfig) error {
+	if definition == nil {
+		return fmt.Errorf("config validation: workflows.definitions.%s is required", key)
 	}
-	targetPath := "workflows.schedules." + key + ".target"
-	if err := normalizeWorkflowTarget(cfg, targetPath, schedule.Target); err != nil {
+	stepsPath := "workflows.definitions." + key + ".steps"
+	if err := normalizeWorkflowSteps(cfg, stepsPath, definition.Steps); err != nil {
 		return err
 	}
-	return validateWorkflowTargetApps(cfg, targetPath, schedule.Target)
+	return validateWorkflowStepApps(cfg, stepsPath, definition.Steps)
 }
 
-func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
-	if trigger == nil {
-		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
+func normalizeWorkflowActivationsConfig(definitionKey string, definition *WorkflowDefinitionConfig) error {
+	if len(definition.On) == 0 {
+		return nil
 	}
-	targetPath := "workflows.eventTriggers." + key + ".target"
-	if err := normalizeWorkflowTarget(cfg, targetPath, trigger.Target); err != nil {
-		return err
+	normalized := make(map[string]WorkflowActivationConfig, len(definition.On))
+	for activationID := range definition.On {
+		activation := definition.On[activationID]
+		activationID = strings.TrimSpace(activationID)
+		if activationID == "" {
+			return fmt.Errorf("config validation: workflows.definitions.%s.on keys must not be empty", definitionKey)
+		}
+		if _, exists := normalized[activationID]; exists {
+			return fmt.Errorf("config validation: workflows.definitions.%s.on duplicates %q", definitionKey, activationID)
+		}
+		path := "workflows.definitions." + definitionKey + ".on." + activationID
+		switch {
+		case activation.Schedule != nil && activation.Event != nil:
+			return fmt.Errorf("config validation: %s must set exactly one of schedule or event", path)
+		case activation.Schedule != nil:
+			activation.Schedule.Cron = strings.TrimSpace(activation.Schedule.Cron)
+			if activation.Schedule.Cron == "" {
+				return fmt.Errorf("config validation: %s.schedule.cron is required", path)
+			}
+			if err := validateWorkflowScheduleCron(path, activation.Schedule.Cron); err != nil {
+				return err
+			}
+			activation.Schedule.Timezone = strings.TrimSpace(activation.Schedule.Timezone)
+			if activation.Schedule.Timezone == "" {
+				activation.Schedule.Timezone = "UTC"
+			}
+			if _, err := time.LoadLocation(activation.Schedule.Timezone); err != nil {
+				return fmt.Errorf("config validation: %s.schedule.timezone %q is invalid: %w", path, activation.Schedule.Timezone, err)
+			}
+		case activation.Event != nil:
+			activation.Event.Type = strings.TrimSpace(activation.Event.Type)
+			if activation.Event.Type == "" {
+				return fmt.Errorf("config validation: %s.event.type is required", path)
+			}
+			activation.Event.Source = strings.TrimSpace(activation.Event.Source)
+			activation.Event.Subject = strings.TrimSpace(activation.Event.Subject)
+		default:
+			return fmt.Errorf("config validation: %s must set schedule or event", path)
+		}
+		if err := normalizeWorkflowValueConfig(path+".input", &activation.Input); err != nil {
+			return err
+		}
+		if err := coreworkflow.ValidateValueRefs(path+".input", WorkflowValueToCore(activation.Input), map[string]struct{}{}); err != nil {
+			return fmt.Errorf("config validation: %w", err)
+		}
+		normalized[activationID] = activation
 	}
-	return validateWorkflowTargetApps(cfg, targetPath, trigger.Target)
+	definition.On = normalized
+	return nil
 }
 
-func validateWorkflowTargetApps(cfg *Config, path string, target *WorkflowTargetConfig) error {
-	for i := range target.Steps {
-		step := &target.Steps[i]
-		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+func validateWorkflowStepApps(cfg *Config, path string, steps []WorkflowStepConfig) error {
+	for i := range steps {
+		step := &steps[i]
+		stepPath := fmt.Sprintf("%s[%d]", path, i)
 		if step.App != nil {
 			if _, ok := cfg.Apps[step.App.Name]; !ok {
 				return fmt.Errorf("config validation: %s.app.name references unknown app %q", stepPath, step.App.Name)
@@ -2150,34 +2091,21 @@ func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowR
 	}
 	subject := *runAs.Subject
 	subject.ID = strings.TrimSpace(subject.ID)
-	subject.Kind = strings.TrimSpace(subject.Kind)
-	subject.DisplayName = strings.TrimSpace(subject.DisplayName)
-	subject.AuthSource = strings.TrimSpace(subject.AuthSource)
-	if subject.AuthSource == "" {
-		subject.AuthSource = "config"
-	}
+	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
 	if subject.ID == "" {
 		return nil, fmt.Errorf("config validation: %s.subject.id is required", path)
-	}
-	kind, _, ok := core.ParseSubjectID(subject.ID)
-	if subject.Kind == "" {
-		if ok {
-			subject.Kind = kind
-		}
-	} else if ok && subject.Kind != kind {
-		return nil, fmt.Errorf("config validation: %s.subject.kind %q must match subject.id kind %q", path, subject.Kind, kind)
 	}
 	return &WorkflowRunAsConfig{Subject: &subject}, nil
 }
 
-func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetConfig) error {
-	if target == nil || len(target.Steps) == 0 {
-		return fmt.Errorf("config validation: %s.steps is required", path)
+func normalizeWorkflowSteps(cfg *Config, path string, steps []WorkflowStepConfig) error {
+	if len(steps) == 0 {
+		return fmt.Errorf("config validation: %s is required", path)
 	}
 	seen := map[string]struct{}{}
-	for i := range target.Steps {
-		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
-		step := &target.Steps[i]
+	for i := range steps {
+		stepPath := fmt.Sprintf("%s[%d]", path, i)
+		step := &steps[i]
 		step.ID = strings.TrimSpace(step.ID)
 		if step.ID == "" {
 			return fmt.Errorf("config validation: %s.id is required", stepPath)
@@ -2194,6 +2122,15 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 		if (step.App == nil) == (step.Agent == nil) {
 			return fmt.Errorf("config validation: %s must set exactly one of app or agent", stepPath)
 		}
+		step.Timeout = strings.TrimSpace(step.Timeout)
+		var parsedTimeout time.Duration
+		if step.Timeout != "" {
+			var err error
+			parsedTimeout, err = time.ParseDuration(step.Timeout)
+			if err != nil {
+				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
+			}
+		}
 		if step.App != nil {
 			if err := normalizeWorkflowStepAppCallConfig(stepPath+".app", step.App, true); err != nil {
 				return err
@@ -2203,14 +2140,11 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			}
 		}
 		if step.Agent != nil {
+			if step.Timeout != "" && parsedTimeout < 0 {
+				return fmt.Errorf("config validation: %s.timeout must not be negative for agent steps", stepPath)
+			}
 			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent); err != nil {
 				return err
-			}
-		}
-		step.Timeout = strings.TrimSpace(step.Timeout)
-		if step.Timeout != "" {
-			if _, err := time.ParseDuration(step.Timeout); err != nil {
-				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
 			}
 		}
 		if step.When != nil {
@@ -2408,17 +2342,22 @@ func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error
 			set++
 		}
 	}
-	if strings.TrimSpace(value.RunInput) != "" {
-		value.RunInput = strings.TrimSpace(value.RunInput)
+	if strings.TrimSpace(value.Input) != "" {
+		value.Input = strings.TrimSpace(value.Input)
 		set++
 	}
-	if strings.TrimSpace(value.SignalPayload) != "" {
-		value.SignalPayload = strings.TrimSpace(value.SignalPayload)
+	if strings.TrimSpace(value.Signal) != "" {
+		value.Signal = strings.TrimSpace(value.Signal)
 		set++
 	}
 	if value.StepOutput != nil {
 		value.StepOutput.StepID = strings.TrimSpace(value.StepOutput.StepID)
 		value.StepOutput.Path = strings.TrimSpace(value.StepOutput.Path)
+		set++
+	}
+	if value.StepInput != nil {
+		value.StepInput.StepID = strings.TrimSpace(value.StepInput.StepID)
+		value.StepInput.Path = strings.TrimSpace(value.StepInput.Path)
 		set++
 	}
 	if set > 1 {

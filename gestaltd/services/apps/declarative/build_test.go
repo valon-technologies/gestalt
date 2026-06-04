@@ -166,6 +166,7 @@ func TestBuildExposesCatalog(t *testing.T) {
 	cat := provider.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() should return *catalog.Catalog")
+		return
 	}
 
 	if cat.Name != "catprov" {
@@ -311,6 +312,7 @@ func TestBuildAppliesIconFile(t *testing.T) {
 	cat := prov.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil Catalog")
+		return
 	}
 	if cat.IconSVG != svg {
 		t.Fatalf("expected icon from file, got %q", cat.IconSVG)

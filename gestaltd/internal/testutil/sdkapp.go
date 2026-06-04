@@ -285,73 +285,68 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) Evaluate(_ context.Context, _ *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
-	return &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"}, nil
+func (p *Provider) CheckAccess(_ context.Context, _ *gestalt.CheckAccessRequest) (*gestalt.CheckAccessResponse, error) {
+	return &gestalt.CheckAccessResponse{Allowed: true, ModelId: "model-v1"}, nil
 }
 
-func (p *Provider) EvaluateMany(_ context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
-	decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
-	for range req.GetRequests() {
-		decisions = append(decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"})
+func (p *Provider) CheckAccessMany(_ context.Context, req *gestalt.CheckAccessManyRequest) (*gestalt.CheckAccessManyResponse, error) {
+	decisions := make([]*gestalt.CheckAccessResponse, 0, len(req.Requests))
+	for range req.Requests {
+		decisions = append(decisions, &gestalt.CheckAccessResponse{Allowed: true, ModelId: "model-v1"})
 	}
-	return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
+	return &gestalt.CheckAccessManyResponse{Decisions: decisions}, nil
 }
 
-func (p *Provider) SearchResources(_ context.Context, _ *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
-	return &gestalt.ResourceSearchResponse{
-		Resources: []*gestalt.AuthorizationResource{{Type: "app", Id: "github"}},
-		ModelId:   "model-v1",
-	}, nil
-}
-
-func (p *Provider) SearchSubjects(_ context.Context, _ *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
-	return &gestalt.SubjectSearchResponse{
-		Subjects: []*gestalt.AuthorizationSubject{{Type: "user", Id: "generated-user"}},
-		ModelId:  "model-v1",
-	}, nil
-}
-
-func (p *Provider) SearchActions(_ context.Context, _ *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
-	return &gestalt.ActionSearchResponse{
-		Actions: []*gestalt.AuthorizationAction{{Name: "invoke"}},
-		ModelId: "model-v1",
-	}, nil
-}
-
-func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
-	return &gestalt.AuthorizationMetadata{
-		Capabilities: []string{"evaluate", "relationships", "models"},
-		ActiveModelId: "model-v1",
-	}, nil
-}
-
-func (p *Provider) ReadRelationships(_ context.Context, _ *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
-	return &gestalt.ReadRelationshipsResponse{
+func (p *Provider) ListRelationships(_ context.Context, _ *gestalt.ListRelationshipsRequest) (*gestalt.ListRelationshipsResponse, error) {
+	return &gestalt.ListRelationshipsResponse{
 		Relationships: []*gestalt.Relationship{{
-			Subject:  &gestalt.AuthorizationSubject{Type: "user", Id: "generated-user"},
-			Relation: "viewer",
-			Resource: &gestalt.AuthorizationResource{Type: "app", Id: "github"},
+			Tuple: &gestalt.RelationshipTuple{
+				Target:   &gestalt.RelationshipTarget{Subject: &gestalt.AuthorizationSubject{Type: "user", Id: "generated-user"}},
+				Relation: "viewer",
+				Resource: &gestalt.AuthorizationResource{Type: "app", Id: "github"},
+			},
+			SourceLayer: gestalt.SourceLayerRuntime,
 		}},
-		ModelId: "model-v1",
 	}, nil
 }
 
-func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error { return nil }
+func (p *Provider) AddRelationship(_ context.Context, req *gestalt.AddRelationshipRequest) (*gestalt.AddRelationshipResponse, error) {
+	return &gestalt.AddRelationshipResponse{Relationship: req.Relationship}, nil
+}
 
-func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
-	return &gestalt.GetActiveModelResponse{
+func (p *Provider) DeleteRelationship(context.Context, *gestalt.DeleteRelationshipRequest) (*gestalt.DeleteRelationshipResponse, error) {
+	return &gestalt.DeleteRelationshipResponse{}, nil
+}
+
+func (p *Provider) SetAuthorizationState(_ context.Context, req *gestalt.SetAuthorizationStateRequest) (*gestalt.SetAuthorizationStateResponse, error) {
+	return &gestalt.SetAuthorizationStateResponse{
+		ActiveModel: &gestalt.AuthorizationModelRef{Id: req.Model.Id, Version: req.Model.Version},
+	}, nil
+}
+
+func (p *Provider) GetActiveModelRef(context.Context) (*gestalt.GetActiveModelRefResponse, error) {
+	return &gestalt.GetActiveModelRefResponse{
 		Model: &gestalt.AuthorizationModelRef{Id: "model-v1", Version: "v1"},
 	}, nil
 }
 
-func (p *Provider) ListModels(_ context.Context, _ *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
-	return &gestalt.ListModelsResponse{
-		Models: []*gestalt.AuthorizationModelRef{{Id: "model-v1", Version: "v1"}},
-	}, nil
+func (p *Provider) SetActiveModel(_ context.Context, req *gestalt.SetActiveModelRequest) (*gestalt.SetActiveModelResponse, error) {
+	return &gestalt.SetActiveModelResponse{Model: &gestalt.AuthorizationModelRef{Id: req.Model.Id, Version: req.Model.Version}}, nil
 }
 
-func (p *Provider) WriteModel(context.Context, *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
-	return &gestalt.AuthorizationModelRef{Id: "model-v2", Version: "v2"}, nil
+func (p *Provider) ListActiveModelResourceTypes(context.Context, *gestalt.ListActiveModelResourceTypesRequest) (*gestalt.ListActiveModelResourceTypesResponse, error) {
+	return &gestalt.ListActiveModelResourceTypesResponse{
+		ResourceTypes: []*gestalt.AuthorizationModelResourceType{{
+			Name: "app",
+			Actions: []*gestalt.ModelAction{{
+				Name:      "invoke",
+				Relations: []string{"viewer"},
+			}},
+			SourceLayer:         gestalt.SourceLayerRuntime,
+			DefaultAccessPolicy: gestalt.DefaultAccessPolicyDeny,
+		}},
+		ModelId: "model-v1",
+	}, nil
 }
 `
 }
@@ -423,71 +418,66 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) StartRun(context.Context, *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) ApplyDefinition(context.Context, *gestalt.ApplyWorkflowProviderDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
+	return &gestalt.WorkflowDefinition{ID: "generated-definition", Generation: 1}, nil
 }
 
-func (p *Provider) GetRun(context.Context, *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) GetDefinition(context.Context, *gestalt.GetWorkflowProviderDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
+	return &gestalt.WorkflowDefinition{ID: "generated-definition", Generation: 1}, nil
+}
+
+func (p *Provider) ListDefinitions(context.Context, *gestalt.ListWorkflowProviderDefinitionsRequest) (*gestalt.ListWorkflowProviderDefinitionsResponse, error) {
+	return &gestalt.ListWorkflowProviderDefinitionsResponse{}, nil
+}
+
+func (p *Provider) SetDefinitionPaused(context.Context, *gestalt.SetWorkflowProviderDefinitionPausedRequest) (*gestalt.WorkflowDefinition, error) {
+	return &gestalt.WorkflowDefinition{ID: "generated-definition", Generation: 1, Paused: true}, nil
+}
+
+func (p *Provider) SetActivationPaused(context.Context, *gestalt.SetWorkflowProviderActivationPausedRequest) (*gestalt.WorkflowDefinition, error) {
+	return &gestalt.WorkflowDefinition{ID: "generated-definition", Generation: 1}, nil
+}
+
+func (p *Provider) DeleteDefinition(context.Context, *gestalt.DeleteWorkflowProviderDefinitionRequest) error {
+	return nil
+}
+
+func (p *Provider) StartRun(context.Context, *gestalt.StartWorkflowProviderRunRequest) (*gestalt.WorkflowRun, error) {
+	return &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+}
+
+func (p *Provider) GetRun(context.Context, *gestalt.GetWorkflowProviderRunRequest) (*gestalt.WorkflowRun, error) {
+	return &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
 }
 
 func (p *Provider) ListRuns(context.Context, *gestalt.ListWorkflowProviderRunsRequest) (*gestalt.ListWorkflowProviderRunsResponse, error) {
 	return &gestalt.ListWorkflowProviderRunsResponse{}, nil
 }
 
-func (p *Provider) CancelRun(context.Context, *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
+func (p *Provider) GetRunEvents(context.Context, *gestalt.GetWorkflowProviderRunEventsRequest) (*gestalt.GetWorkflowProviderRunEventsResponse, error) {
+	return &gestalt.GetWorkflowProviderRunEventsResponse{}, nil
 }
 
-func (p *Provider) UpsertSchedule(context.Context, *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
+func (p *Provider) GetRunOutput(context.Context, *gestalt.GetWorkflowProviderRunOutputRequest) (*gestalt.GetWorkflowProviderRunOutputResponse, error) {
+	return &gestalt.GetWorkflowProviderRunOutputResponse{}, nil
 }
 
-func (p *Provider) GetSchedule(context.Context, *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
+func (p *Provider) CancelRun(context.Context, *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.WorkflowRun, error) {
+	return &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
 }
 
-func (p *Provider) ListSchedules(context.Context, *gestalt.ListWorkflowProviderSchedulesRequest) (*gestalt.ListWorkflowProviderSchedulesResponse, error) {
-	return &gestalt.ListWorkflowProviderSchedulesResponse{}, nil
+func (p *Provider) SignalRun(_ context.Context, req *gestalt.SignalWorkflowProviderRunRequest) (*gestalt.SignalWorkflowRunResponse, error) {
+	return &gestalt.SignalWorkflowRunResponse{Run: &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, Signal: req.Signal}, nil
 }
 
-func (p *Provider) DeleteSchedule(context.Context, *gestalt.DeleteWorkflowProviderScheduleRequest) error {
-	return nil
+func (p *Provider) SignalOrStartRun(_ context.Context, req *gestalt.SignalOrStartWorkflowProviderRunRequest) (*gestalt.SignalWorkflowRunResponse, error) {
+	return &gestalt.SignalWorkflowRunResponse{Run: &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, Signal: req.Signal, StartedRun: true, WorkflowKey: req.WorkflowKey}, nil
 }
 
-func (p *Provider) PauseSchedule(context.Context, *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule", Paused: true}, nil
-}
-
-func (p *Provider) ResumeSchedule(context.Context, *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
-}
-
-func (p *Provider) UpsertEventTrigger(context.Context, *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
-}
-
-func (p *Provider) GetEventTrigger(context.Context, *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
-}
-
-func (p *Provider) ListEventTriggers(context.Context, *gestalt.ListWorkflowProviderEventTriggersRequest) (*gestalt.ListWorkflowProviderEventTriggersResponse, error) {
-	return &gestalt.ListWorkflowProviderEventTriggersResponse{}, nil
-}
-
-func (p *Provider) DeleteEventTrigger(context.Context, *gestalt.DeleteWorkflowProviderEventTriggerRequest) error {
-	return nil
-}
-
-func (p *Provider) PauseEventTrigger(context.Context, *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger", Paused: true}, nil
-}
-
-func (p *Provider) ResumeEventTrigger(context.Context, *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
-}
-
-func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
+func (p *Provider) DeliverEvent(_ context.Context, req *gestalt.DeliverWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
+	if req.Event != nil {
+		return req.Event, nil
+	}
 	return &gestalt.WorkflowEvent{ID: "generated-event"}, nil
 }
 `

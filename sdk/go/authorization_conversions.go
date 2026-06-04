@@ -2,1256 +2,604 @@ package gestalt
 
 import (
 	"fmt"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func protoAuthorizationSubject(value *AuthorizationSubject) (*proto.Subject, error) {
-	if value == nil {
+func authorizationSubjectFromProto(in *proto.Subject) *AuthorizationSubject {
+	if in == nil {
+		return nil
+	}
+	return &AuthorizationSubject{Type: in.GetType(), Id: in.GetId(), Properties: mapFromStruct(in.GetProperties())}
+}
+
+func protoAuthorizationSubject(in *AuthorizationSubject) (*proto.Subject, error) {
+	if in == nil {
 		return nil, nil
 	}
-	properties, err := structFromAny(value.Properties)
+	properties, err := structFromMap(in.Properties)
 	if err != nil {
 		return nil, fmt.Errorf("subject properties: %w", err)
 	}
-	return &proto.Subject{
-		Type:       value.Type,
-		Id:         value.Id,
-		Properties: properties,
-	}, nil
+	return &proto.Subject{Type: in.Type, Id: in.Id, Properties: properties}, nil
 }
 
-func authorizationSubjectFromProto(value *proto.Subject) *AuthorizationSubject {
-	if value == nil {
+func authorizationActionFromProto(in *proto.Action) *AuthorizationAction {
+	if in == nil {
 		return nil
 	}
-	return &AuthorizationSubject{
-		Type:       value.GetType(),
-		Id:         value.GetId(),
-		Properties: mapFromStruct(value.GetProperties()),
-	}
+	return &AuthorizationAction{Name: in.GetName(), Properties: mapFromStruct(in.GetProperties())}
 }
 
-func protoAuthorizationResource(value *AuthorizationResource) (*proto.Resource, error) {
-	if value == nil {
+func protoAuthorizationAction(in *AuthorizationAction) (*proto.Action, error) {
+	if in == nil {
 		return nil, nil
 	}
-	properties, err := structFromAny(value.Properties)
-	if err != nil {
-		return nil, fmt.Errorf("resource properties: %w", err)
-	}
-	return &proto.Resource{
-		Type:       value.Type,
-		Id:         value.Id,
-		Properties: properties,
-	}, nil
-}
-
-func authorizationResourceFromProto(value *proto.Resource) *AuthorizationResource {
-	if value == nil {
-		return nil
-	}
-	return &AuthorizationResource{
-		Type:       value.GetType(),
-		Id:         value.GetId(),
-		Properties: mapFromStruct(value.GetProperties()),
-	}
-}
-
-func protoAuthorizationSubjectSet(value *AuthorizationSubjectSet) (*proto.SubjectSet, error) {
-	if value == nil {
-		return nil, nil
-	}
-	resource, err := protoAuthorizationResource(value.Resource)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.SubjectSet{Resource: resource, Relation: value.Relation}, nil
-}
-
-func authorizationSubjectSetFromProto(value *proto.SubjectSet) *AuthorizationSubjectSet {
-	if value == nil {
-		return nil
-	}
-	return &AuthorizationSubjectSet{
-		Resource: authorizationResourceFromProto(value.GetResource()),
-		Relation: value.GetRelation(),
-	}
-}
-
-func protoAuthorizationRelationshipTarget(value *AuthorizationRelationshipTarget) (*proto.RelationshipTarget, error) {
-	if value == nil {
-		return nil, nil
-	}
-	switch {
-	case value.Subject != nil:
-		subject, err := protoAuthorizationSubject(value.Subject)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.RelationshipTarget{
-			Kind: &proto.RelationshipTarget_Subject{Subject: subject},
-		}, nil
-	case value.Resource != nil:
-		resource, err := protoAuthorizationResource(value.Resource)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.RelationshipTarget{
-			Kind: &proto.RelationshipTarget_Resource{Resource: resource},
-		}, nil
-	case value.SubjectSet != nil:
-		subjectSet, err := protoAuthorizationSubjectSet(value.SubjectSet)
-		if err != nil {
-			return nil, err
-		}
-		return &proto.RelationshipTarget{
-			Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: subjectSet},
-		}, nil
-	default:
-		return &proto.RelationshipTarget{}, nil
-	}
-}
-
-func authorizationRelationshipTargetFromProto(value *proto.RelationshipTarget) *AuthorizationRelationshipTarget {
-	if value == nil {
-		return nil
-	}
-	switch kind := value.GetKind().(type) {
-	case *proto.RelationshipTarget_Subject:
-		return &AuthorizationRelationshipTarget{Subject: authorizationSubjectFromProto(kind.Subject)}
-	case *proto.RelationshipTarget_Resource:
-		return &AuthorizationRelationshipTarget{Resource: authorizationResourceFromProto(kind.Resource)}
-	case *proto.RelationshipTarget_SubjectSet:
-		return &AuthorizationRelationshipTarget{SubjectSet: authorizationSubjectSetFromProto(kind.SubjectSet)}
-	default:
-		return &AuthorizationRelationshipTarget{}
-	}
-}
-
-func protoAuthorizationAction(value *AuthorizationAction) (*proto.Action, error) {
-	if value == nil {
-		return nil, nil
-	}
-	properties, err := structFromAny(value.Properties)
+	properties, err := structFromMap(in.Properties)
 	if err != nil {
 		return nil, fmt.Errorf("action properties: %w", err)
 	}
-	return &proto.Action{Name: value.Name, Properties: properties}, nil
+	return &proto.Action{Name: in.Name, Properties: properties}, nil
 }
 
-func authorizationActionFromProto(value *proto.Action) *AuthorizationAction {
-	if value == nil {
+func authorizationResourceFromProto(in *proto.Resource) *AuthorizationResource {
+	if in == nil {
 		return nil
 	}
-	return &AuthorizationAction{
-		Name:       value.GetName(),
-		Properties: mapFromStruct(value.GetProperties()),
-	}
+	return &AuthorizationResource{Type: in.GetType(), Id: in.GetId(), Properties: mapFromStruct(in.GetProperties())}
 }
 
-func protoAccessEvaluationRequest(value *AccessEvaluationRequest) (*proto.AccessEvaluationRequest, error) {
-	if value == nil {
+func protoAuthorizationResource(in *AuthorizationResource) (*proto.Resource, error) {
+	if in == nil {
 		return nil, nil
 	}
-	subject, err := protoAuthorizationSubject(value.Subject)
+	properties, err := structFromMap(in.Properties)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resource properties: %w", err)
 	}
-	action, err := protoAuthorizationAction(value.Action)
-	if err != nil {
-		return nil, err
-	}
-	resource, err := protoAuthorizationResource(value.Resource)
-	if err != nil {
-		return nil, err
-	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("context: %w", err)
-	}
-	return &proto.AccessEvaluationRequest{
-		Subject:  subject,
-		Action:   action,
-		Resource: resource,
-		Context:  context,
-	}, nil
+	return &proto.Resource{Type: in.Type, Id: in.Id, Properties: properties}, nil
 }
 
-func accessEvaluationRequestFromProto(value *proto.AccessEvaluationRequest) *AccessEvaluationRequest {
-	if value == nil {
+func checkAccessRequestFromProto(in *proto.CheckAccessRequest) *CheckAccessRequest {
+	if in == nil {
 		return nil
 	}
-	return &AccessEvaluationRequest{
-		Subject:  authorizationSubjectFromProto(value.GetSubject()),
-		Action:   authorizationActionFromProto(value.GetAction()),
-		Resource: authorizationResourceFromProto(value.GetResource()),
-		Context:  mapFromStruct(value.GetContext()),
+	return &CheckAccessRequest{
+		Subject:  authorizationSubjectFromProto(in.GetSubject()),
+		Action:   authorizationActionFromProto(in.GetAction()),
+		Resource: authorizationResourceFromProto(in.GetResource()),
 	}
 }
 
-func protoAccessDecision(value *AccessDecision) (*proto.AccessDecision, error) {
-	if value == nil {
-		return nil, nil
-	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("decision context: %w", err)
-	}
-	return &proto.AccessDecision{
-		Allowed: value.Allowed,
-		Context: context,
-		ModelId: value.ModelId,
-	}, nil
-}
-
-func accessDecisionFromProto(value *proto.AccessDecision) *AccessDecision {
-	if value == nil {
+func protoCheckAccessResponse(in *CheckAccessResponse) *proto.CheckAccessResponse {
+	if in == nil {
 		return nil
 	}
-	return &AccessDecision{
-		Allowed: value.GetAllowed(),
-		Context: mapFromStruct(value.GetContext()),
-		ModelId: value.GetModelId(),
+	return &proto.CheckAccessResponse{Allowed: in.Allowed, ModelId: in.ModelId}
+}
+
+func checkAccessManyRequestFromProto(in *proto.CheckAccessManyRequest) *CheckAccessManyRequest {
+	if in == nil {
+		return nil
+	}
+	out := &CheckAccessManyRequest{Requests: make([]*CheckAccessRequest, 0, len(in.GetRequests()))}
+	for _, req := range in.GetRequests() {
+		out.Requests = append(out.Requests, checkAccessRequestFromProto(req))
+	}
+	return out
+}
+
+func protoCheckAccessManyResponse(in *CheckAccessManyResponse) *proto.CheckAccessManyResponse {
+	if in == nil {
+		return nil
+	}
+	out := &proto.CheckAccessManyResponse{Decisions: make([]*proto.CheckAccessResponse, 0, len(in.Decisions))}
+	for _, decision := range in.Decisions {
+		out.Decisions = append(out.Decisions, protoCheckAccessResponse(decision))
+	}
+	return out
+}
+
+func relationshipTargetFromProto(in *proto.RelationshipTarget) *RelationshipTarget {
+	if in == nil {
+		return nil
+	}
+	switch kind := in.GetKind().(type) {
+	case *proto.RelationshipTarget_Subject:
+		return &RelationshipTarget{Subject: authorizationSubjectFromProto(kind.Subject)}
+	case *proto.RelationshipTarget_Resource:
+		return &RelationshipTarget{Resource: authorizationResourceFromProto(kind.Resource)}
+	case *proto.RelationshipTarget_SubjectSet:
+		return &RelationshipTarget{SubjectSet: subjectSetFromProto(kind.SubjectSet)}
+	default:
+		return &RelationshipTarget{}
 	}
 }
 
-func protoAccessEvaluationsRequest(value *AccessEvaluationsRequest) (*proto.AccessEvaluationsRequest, error) {
-	if value == nil {
+func protoRelationshipTarget(in *RelationshipTarget) (*proto.RelationshipTarget, error) {
+	if in == nil {
 		return nil, nil
 	}
-	requests := make([]*proto.AccessEvaluationRequest, 0, len(value.Requests))
-	for i, request := range value.Requests {
-		out, err := protoAccessEvaluationRequest(request)
+	if in.Subject != nil {
+		subject, err := protoAuthorizationSubject(in.Subject)
 		if err != nil {
-			return nil, fmt.Errorf("requests[%d]: %w", i, err)
+			return nil, err
 		}
-		if out != nil {
-			requests = append(requests, out)
-		}
+		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: subject}}, nil
 	}
-	return &proto.AccessEvaluationsRequest{Requests: requests}, nil
-}
-
-func accessEvaluationsRequestFromProto(value *proto.AccessEvaluationsRequest) *AccessEvaluationsRequest {
-	if value == nil {
-		return nil
-	}
-	requests := make([]*AccessEvaluationRequest, 0, len(value.GetRequests()))
-	for _, request := range value.GetRequests() {
-		requests = append(requests, accessEvaluationRequestFromProto(request))
-	}
-	return &AccessEvaluationsRequest{Requests: requests}
-}
-
-func protoAccessEvaluationsResponse(value *AccessEvaluationsResponse) (*proto.AccessEvaluationsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	decisions := make([]*proto.AccessDecision, 0, len(value.Decisions))
-	for i, decision := range value.Decisions {
-		out, err := protoAccessDecision(decision)
+	if in.Resource != nil {
+		resource, err := protoAuthorizationResource(in.Resource)
 		if err != nil {
-			return nil, fmt.Errorf("decisions[%d]: %w", i, err)
+			return nil, err
 		}
-		if out != nil {
-			decisions = append(decisions, out)
-		}
+		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Resource{Resource: resource}}, nil
 	}
-	return &proto.AccessEvaluationsResponse{Decisions: decisions}, nil
-}
-
-func accessEvaluationsResponseFromProto(value *proto.AccessEvaluationsResponse) *AccessEvaluationsResponse {
-	if value == nil {
-		return nil
-	}
-	decisions := make([]*AccessDecision, 0, len(value.GetDecisions()))
-	for _, decision := range value.GetDecisions() {
-		decisions = append(decisions, accessDecisionFromProto(decision))
-	}
-	return &AccessEvaluationsResponse{Decisions: decisions}
-}
-
-func protoResourceSearchRequest(value *ResourceSearchRequest) (*proto.ResourceSearchRequest, error) {
-	if value == nil {
-		return nil, nil
-	}
-	subject, err := protoAuthorizationSubject(value.Subject)
-	if err != nil {
-		return nil, err
-	}
-	action, err := protoAuthorizationAction(value.Action)
-	if err != nil {
-		return nil, err
-	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("context: %w", err)
-	}
-	return &proto.ResourceSearchRequest{
-		Subject:      subject,
-		Action:       action,
-		ResourceType: value.ResourceType,
-		Context:      context,
-		PageSize:     value.PageSize,
-		PageToken:    value.PageToken,
-	}, nil
-}
-
-func resourceSearchRequestFromProto(value *proto.ResourceSearchRequest) *ResourceSearchRequest {
-	if value == nil {
-		return nil
-	}
-	return &ResourceSearchRequest{
-		Subject:      authorizationSubjectFromProto(value.GetSubject()),
-		Action:       authorizationActionFromProto(value.GetAction()),
-		ResourceType: value.GetResourceType(),
-		Context:      mapFromStruct(value.GetContext()),
-		PageSize:     value.GetPageSize(),
-		PageToken:    value.GetPageToken(),
-	}
-}
-
-func protoResourceSearchResponse(value *ResourceSearchResponse) (*proto.ResourceSearchResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	resources := make([]*proto.Resource, 0, len(value.Resources))
-	for i, resource := range value.Resources {
-		out, err := protoAuthorizationResource(resource)
+	if in.SubjectSet != nil {
+		subjectSet, err := protoSubjectSet(in.SubjectSet)
 		if err != nil {
-			return nil, fmt.Errorf("resources[%d]: %w", i, err)
+			return nil, err
 		}
-		if out != nil {
-			resources = append(resources, out)
-		}
+		return &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: subjectSet}}, nil
 	}
-	return &proto.ResourceSearchResponse{
-		Resources:     resources,
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
-	}, nil
+	return &proto.RelationshipTarget{}, nil
 }
 
-func resourceSearchResponseFromProto(value *proto.ResourceSearchResponse) *ResourceSearchResponse {
-	if value == nil {
+func subjectSetFromProto(in *proto.SubjectSet) *SubjectSet {
+	if in == nil {
 		return nil
 	}
-	resources := make([]*AuthorizationResource, 0, len(value.GetResources()))
-	for _, resource := range value.GetResources() {
-		resources = append(resources, authorizationResourceFromProto(resource))
-	}
-	return &ResourceSearchResponse{
-		Resources:     resources,
-		NextPageToken: value.GetNextPageToken(),
-		ModelId:       value.GetModelId(),
-	}
+	return &SubjectSet{Resource: authorizationResourceFromProto(in.GetResource()), Relation: in.GetRelation()}
 }
 
-func protoSubjectSearchRequest(value *SubjectSearchRequest) (*proto.SubjectSearchRequest, error) {
-	if value == nil {
+func protoSubjectSet(in *SubjectSet) (*proto.SubjectSet, error) {
+	if in == nil {
 		return nil, nil
 	}
-	resource, err := protoAuthorizationResource(value.Resource)
+	resource, err := protoAuthorizationResource(in.Resource)
 	if err != nil {
 		return nil, err
 	}
-	action, err := protoAuthorizationAction(value.Action)
-	if err != nil {
-		return nil, err
-	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("context: %w", err)
-	}
-	return &proto.SubjectSearchRequest{
-		Resource:    resource,
-		Action:      action,
-		SubjectType: value.SubjectType,
-		Context:     context,
-		PageSize:    value.PageSize,
-		PageToken:   value.PageToken,
-	}, nil
+	return &proto.SubjectSet{Resource: resource, Relation: in.Relation}, nil
 }
 
-func subjectSearchRequestFromProto(value *proto.SubjectSearchRequest) *SubjectSearchRequest {
-	if value == nil {
+func relationshipFilterFromProto(in *proto.RelationshipFilter) *RelationshipFilter {
+	if in == nil {
 		return nil
 	}
-	return &SubjectSearchRequest{
-		Resource:    authorizationResourceFromProto(value.GetResource()),
-		Action:      authorizationActionFromProto(value.GetAction()),
-		SubjectType: value.GetSubjectType(),
-		Context:     mapFromStruct(value.GetContext()),
-		PageSize:    value.GetPageSize(),
-		PageToken:   value.GetPageToken(),
+	return &RelationshipFilter{
+		Target:           relationshipTargetFromProto(in.GetTarget()),
+		Relation:         in.GetRelation(),
+		Resource:         authorizationResourceFromProto(in.GetResource()),
+		TargetType:       RelationshipTargetType(in.GetTargetType()),
+		TargetEntityType: in.GetTargetEntityType(),
+		ResourceType:     in.GetResourceType(),
+		SourceLayer:      SourceLayer(in.GetSourceLayer()),
 	}
 }
 
-func protoSubjectSearchResponse(value *SubjectSearchResponse) (*proto.SubjectSearchResponse, error) {
-	if value == nil {
+func protoRelationshipFilter(in *RelationshipFilter) (*proto.RelationshipFilter, error) {
+	if in == nil {
 		return nil, nil
 	}
-	subjects := make([]*proto.Subject, 0, len(value.Subjects))
-	for i, subject := range value.Subjects {
-		out, err := protoAuthorizationSubject(subject)
-		if err != nil {
-			return nil, fmt.Errorf("subjects[%d]: %w", i, err)
-		}
-		if out != nil {
-			subjects = append(subjects, out)
-		}
+	target, err := protoRelationshipTarget(in.Target)
+	if err != nil {
+		return nil, err
 	}
-	return &proto.SubjectSearchResponse{
-		Subjects:      subjects,
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
+	resource, err := protoAuthorizationResource(in.Resource)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.RelationshipFilter{
+		Target:           target,
+		Relation:         in.Relation,
+		Resource:         resource,
+		TargetType:       proto.RelationshipTargetType(in.TargetType),
+		TargetEntityType: in.TargetEntityType,
+		ResourceType:     in.ResourceType,
+		SourceLayer:      proto.SourceLayer(in.SourceLayer),
 	}, nil
 }
 
-func subjectSearchResponseFromProto(value *proto.SubjectSearchResponse) *SubjectSearchResponse {
-	if value == nil {
+func listRelationshipsRequestFromProto(in *proto.ListRelationshipsRequest) *ListRelationshipsRequest {
+	if in == nil {
 		return nil
 	}
-	subjects := make([]*AuthorizationSubject, 0, len(value.GetSubjects()))
-	for _, subject := range value.GetSubjects() {
-		subjects = append(subjects, authorizationSubjectFromProto(subject))
-	}
-	return &SubjectSearchResponse{
-		Subjects:      subjects,
-		NextPageToken: value.GetNextPageToken(),
-		ModelId:       value.GetModelId(),
+	return &ListRelationshipsRequest{
+		Filter:    relationshipFilterFromProto(in.GetFilter()),
+		PageSize:  in.GetPageSize(),
+		PageToken: in.GetPageToken(),
 	}
 }
 
-func protoEffectiveSubjectSearchRequest(value *EffectiveSubjectSearchRequest) (*proto.EffectiveSubjectSearchRequest, error) {
-	if value == nil {
+func protoListRelationshipsResponse(in *ListRelationshipsResponse) (*proto.ListRelationshipsResponse, error) {
+	if in == nil {
 		return nil, nil
 	}
-	resource, err := protoAuthorizationResource(value.Resource)
+	relationships, err := protoRelationships(in.Relationships)
 	if err != nil {
 		return nil, err
 	}
-	action, err := protoAuthorizationAction(value.Action)
-	if err != nil {
-		return nil, err
-	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("context: %w", err)
-	}
-	return &proto.EffectiveSubjectSearchRequest{
-		Resource:  resource,
-		Action:    action,
-		Context:   context,
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}, nil
+	return &proto.ListRelationshipsResponse{Relationships: relationships, NextPageToken: in.NextPageToken}, nil
 }
 
-func effectiveSubjectSearchRequestFromProto(value *proto.EffectiveSubjectSearchRequest) *EffectiveSubjectSearchRequest {
-	if value == nil {
-		return nil
-	}
-	return &EffectiveSubjectSearchRequest{
-		Resource:  authorizationResourceFromProto(value.GetResource()),
-		Action:    authorizationActionFromProto(value.GetAction()),
-		Context:   mapFromStruct(value.GetContext()),
-		PageSize:  value.GetPageSize(),
-		PageToken: value.GetPageToken(),
-	}
-}
-
-func protoEffectiveSubjectSearchResponse(value *EffectiveSubjectSearchResponse) (*proto.EffectiveSubjectSearchResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	targets := make([]*proto.RelationshipTarget, 0, len(value.Targets))
-	for i, target := range value.Targets {
-		out, err := protoAuthorizationRelationshipTarget(target)
-		if err != nil {
-			return nil, fmt.Errorf("targets[%d]: %w", i, err)
-		}
-		if out != nil {
-			targets = append(targets, out)
-		}
-	}
-	return &proto.EffectiveSubjectSearchResponse{
-		Targets:       targets,
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
-		Truncated:     value.Truncated,
-	}, nil
-}
-
-func effectiveSubjectSearchResponseFromProto(value *proto.EffectiveSubjectSearchResponse) *EffectiveSubjectSearchResponse {
-	if value == nil {
-		return nil
-	}
-	targets := make([]*AuthorizationRelationshipTarget, 0, len(value.GetTargets()))
-	for _, target := range value.GetTargets() {
-		targets = append(targets, authorizationRelationshipTargetFromProto(target))
-	}
-	return &EffectiveSubjectSearchResponse{
-		Targets:       targets,
-		NextPageToken: value.GetNextPageToken(),
-		ModelId:       value.GetModelId(),
-		Truncated:     value.GetTruncated(),
-	}
-}
-
-func protoActionSearchRequest(value *ActionSearchRequest) (*proto.ActionSearchRequest, error) {
-	if value == nil {
-		return nil, nil
-	}
-	subject, err := protoAuthorizationSubject(value.Subject)
-	if err != nil {
-		return nil, err
-	}
-	resource, err := protoAuthorizationResource(value.Resource)
-	if err != nil {
-		return nil, err
-	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("context: %w", err)
-	}
-	return &proto.ActionSearchRequest{
-		Subject:   subject,
-		Resource:  resource,
-		Context:   context,
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}, nil
-}
-
-func actionSearchRequestFromProto(value *proto.ActionSearchRequest) *ActionSearchRequest {
-	if value == nil {
-		return nil
-	}
-	return &ActionSearchRequest{
-		Subject:   authorizationSubjectFromProto(value.GetSubject()),
-		Resource:  authorizationResourceFromProto(value.GetResource()),
-		Context:   mapFromStruct(value.GetContext()),
-		PageSize:  value.GetPageSize(),
-		PageToken: value.GetPageToken(),
-	}
-}
-
-func protoActionSearchResponse(value *ActionSearchResponse) (*proto.ActionSearchResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	actions := make([]*proto.Action, 0, len(value.Actions))
-	for i, action := range value.Actions {
-		out, err := protoAuthorizationAction(action)
-		if err != nil {
-			return nil, fmt.Errorf("actions[%d]: %w", i, err)
-		}
-		if out != nil {
-			actions = append(actions, out)
-		}
-	}
-	return &proto.ActionSearchResponse{
-		Actions:       actions,
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
-	}, nil
-}
-
-func actionSearchResponseFromProto(value *proto.ActionSearchResponse) *ActionSearchResponse {
-	if value == nil {
-		return nil
-	}
-	actions := make([]*AuthorizationAction, 0, len(value.GetActions()))
-	for _, action := range value.GetActions() {
-		actions = append(actions, authorizationActionFromProto(action))
-	}
-	return &ActionSearchResponse{
-		Actions:       actions,
-		NextPageToken: value.GetNextPageToken(),
-		ModelId:       value.GetModelId(),
-	}
-}
-
-func protoAuthorizationMetadata(value *AuthorizationMetadata) *proto.AuthorizationMetadata {
-	if value == nil {
-		return nil
-	}
-	return &proto.AuthorizationMetadata{
-		Capabilities:  append([]string(nil), value.Capabilities...),
-		ActiveModelId: value.ActiveModelId,
-	}
-}
-
-func authorizationMetadataFromProto(value *proto.AuthorizationMetadata) *AuthorizationMetadata {
-	if value == nil {
-		return nil
-	}
-	return &AuthorizationMetadata{
-		Capabilities:  append([]string(nil), value.GetCapabilities()...),
-		ActiveModelId: value.GetActiveModelId(),
-	}
-}
-
-func protoRelationship(value *Relationship) (*proto.Relationship, error) {
-	if value == nil {
-		return nil, nil
-	}
-	subject, err := protoAuthorizationSubject(value.Subject)
-	if err != nil {
-		return nil, err
-	}
-	resource, err := protoAuthorizationResource(value.Resource)
-	if err != nil {
-		return nil, err
-	}
-	properties, err := structFromAny(value.Properties)
-	if err != nil {
-		return nil, fmt.Errorf("relationship properties: %w", err)
-	}
-	target, err := protoAuthorizationRelationshipTarget(value.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.Relationship{
-		Subject:    subject,
-		Relation:   value.Relation,
-		Resource:   resource,
-		Properties: properties,
-		Target:     target,
-	}, nil
-}
-
-func relationshipFromProto(value *proto.Relationship) *Relationship {
-	if value == nil {
+func relationshipFromProto(in *proto.Relationship) *Relationship {
+	if in == nil {
 		return nil
 	}
 	return &Relationship{
-		Subject:    authorizationSubjectFromProto(value.GetSubject()),
-		Relation:   value.GetRelation(),
-		Resource:   authorizationResourceFromProto(value.GetResource()),
-		Properties: mapFromStruct(value.GetProperties()),
-		Target:     authorizationRelationshipTargetFromProto(value.GetTarget()),
+		Tuple:       relationshipTupleFromProto(in.GetTuple()),
+		Properties:  mapFromStruct(in.GetProperties()),
+		SourceLayer: SourceLayer(in.GetSourceLayer()),
 	}
 }
 
-func protoRelationshipKey(value *RelationshipKey) (*proto.RelationshipKey, error) {
-	if value == nil {
+func protoRelationship(in *Relationship) (*proto.Relationship, error) {
+	if in == nil {
 		return nil, nil
 	}
-	subject, err := protoAuthorizationSubject(value.Subject)
+	tuple, err := protoRelationshipTuple(in.Tuple)
 	if err != nil {
 		return nil, err
 	}
-	resource, err := protoAuthorizationResource(value.Resource)
+	properties, err := structFromMap(in.Properties)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("relationship properties: %w", err)
 	}
-	target, err := protoAuthorizationRelationshipTarget(value.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.RelationshipKey{
-		Subject:  subject,
-		Relation: value.Relation,
-		Resource: resource,
-		Target:   target,
-	}, nil
+	return &proto.Relationship{Tuple: tuple, Properties: properties, SourceLayer: proto.SourceLayer(in.SourceLayer)}, nil
 }
 
-func relationshipKeyFromProto(value *proto.RelationshipKey) *RelationshipKey {
-	if value == nil {
-		return nil
+func relationshipsFromProto(in []*proto.Relationship) []*Relationship {
+	out := make([]*Relationship, 0, len(in))
+	for _, item := range in {
+		out = append(out, relationshipFromProto(item))
 	}
-	return &RelationshipKey{
-		Subject:  authorizationSubjectFromProto(value.GetSubject()),
-		Relation: value.GetRelation(),
-		Resource: authorizationResourceFromProto(value.GetResource()),
-		Target:   authorizationRelationshipTargetFromProto(value.GetTarget()),
-	}
+	return out
 }
 
-func protoReadRelationshipsRequest(value *ReadRelationshipsRequest) (*proto.ReadRelationshipsRequest, error) {
-	if value == nil {
-		return nil, nil
-	}
-	subject, err := protoAuthorizationSubject(value.Subject)
-	if err != nil {
-		return nil, err
-	}
-	resource, err := protoAuthorizationResource(value.Resource)
-	if err != nil {
-		return nil, err
-	}
-	target, err := protoAuthorizationRelationshipTarget(value.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ReadRelationshipsRequest{
-		Subject:   subject,
-		Relation:  value.Relation,
-		Resource:  resource,
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-		ModelId:   value.ModelId,
-		Target:    target,
-	}, nil
-}
-
-func readRelationshipsRequestFromProto(value *proto.ReadRelationshipsRequest) *ReadRelationshipsRequest {
-	if value == nil {
-		return nil
-	}
-	return &ReadRelationshipsRequest{
-		Subject:   authorizationSubjectFromProto(value.GetSubject()),
-		Relation:  value.GetRelation(),
-		Resource:  authorizationResourceFromProto(value.GetResource()),
-		PageSize:  value.GetPageSize(),
-		PageToken: value.GetPageToken(),
-		ModelId:   value.GetModelId(),
-		Target:    authorizationRelationshipTargetFromProto(value.GetTarget()),
-	}
-}
-
-func protoReadRelationshipsResponse(value *ReadRelationshipsResponse) (*proto.ReadRelationshipsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	relationships := make([]*proto.Relationship, 0, len(value.Relationships))
-	for i, relationship := range value.Relationships {
-		out, err := protoRelationship(relationship)
+func protoRelationships(in []*Relationship) ([]*proto.Relationship, error) {
+	out := make([]*proto.Relationship, 0, len(in))
+	for i, item := range in {
+		relationship, err := protoRelationship(item)
 		if err != nil {
 			return nil, fmt.Errorf("relationships[%d]: %w", i, err)
 		}
-		if out != nil {
-			relationships = append(relationships, out)
-		}
+		out = append(out, relationship)
 	}
-	return &proto.ReadRelationshipsResponse{
-		Relationships: relationships,
-		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
-	}, nil
+	return out, nil
 }
 
-func readRelationshipsResponseFromProto(value *proto.ReadRelationshipsResponse) *ReadRelationshipsResponse {
-	if value == nil {
+func relationshipTupleFromProto(in *proto.RelationshipTuple) *RelationshipTuple {
+	if in == nil {
 		return nil
 	}
-	relationships := make([]*Relationship, 0, len(value.GetRelationships()))
-	for _, relationship := range value.GetRelationships() {
-		relationships = append(relationships, relationshipFromProto(relationship))
-	}
-	return &ReadRelationshipsResponse{
-		Relationships: relationships,
-		NextPageToken: value.GetNextPageToken(),
-		ModelId:       value.GetModelId(),
+	return &RelationshipTuple{
+		Target:   relationshipTargetFromProto(in.GetTarget()),
+		Relation: in.GetRelation(),
+		Resource: authorizationResourceFromProto(in.GetResource()),
 	}
 }
 
-func protoWriteRelationshipsRequest(value *WriteRelationshipsRequest) (*proto.WriteRelationshipsRequest, error) {
-	if value == nil {
+func protoRelationshipTuple(in *RelationshipTuple) (*proto.RelationshipTuple, error) {
+	if in == nil {
 		return nil, nil
 	}
-	writes := make([]*proto.Relationship, 0, len(value.Writes))
-	for i, write := range value.Writes {
-		out, err := protoRelationship(write)
-		if err != nil {
-			return nil, fmt.Errorf("writes[%d]: %w", i, err)
-		}
-		if out != nil {
-			writes = append(writes, out)
-		}
+	target, err := protoRelationshipTarget(in.Target)
+	if err != nil {
+		return nil, err
 	}
-	deletes := make([]*proto.RelationshipKey, 0, len(value.Deletes))
-	for i, deleteKey := range value.Deletes {
-		out, err := protoRelationshipKey(deleteKey)
-		if err != nil {
-			return nil, fmt.Errorf("deletes[%d]: %w", i, err)
-		}
-		if out != nil {
-			deletes = append(deletes, out)
-		}
+	resource, err := protoAuthorizationResource(in.Resource)
+	if err != nil {
+		return nil, err
 	}
-	return &proto.WriteRelationshipsRequest{
-		Writes:  writes,
-		Deletes: deletes,
-		ModelId: value.ModelId,
-	}, nil
+	return &proto.RelationshipTuple{Target: target, Relation: in.Relation, Resource: resource}, nil
 }
 
-func writeRelationshipsRequestFromProto(value *proto.WriteRelationshipsRequest) *WriteRelationshipsRequest {
-	if value == nil {
+func addRelationshipRequestFromProto(in *proto.AddRelationshipRequest) *AddRelationshipRequest {
+	if in == nil {
 		return nil
 	}
-	writes := make([]*Relationship, 0, len(value.GetWrites()))
-	for _, write := range value.GetWrites() {
-		writes = append(writes, relationshipFromProto(write))
-	}
-	deletes := make([]*RelationshipKey, 0, len(value.GetDeletes()))
-	for _, deleteKey := range value.GetDeletes() {
-		deletes = append(deletes, relationshipKeyFromProto(deleteKey))
-	}
-	return &WriteRelationshipsRequest{
-		Writes:  writes,
-		Deletes: deletes,
-		ModelId: value.GetModelId(),
-	}
+	return &AddRelationshipRequest{Relationship: relationshipFromProto(in.GetRelationship())}
 }
 
-func protoAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationModel {
-	if value == nil {
+func protoAddRelationshipResponse(in *AddRelationshipResponse) (*proto.AddRelationshipResponse, error) {
+	if in == nil {
+		return nil, nil
+	}
+	relationship, err := protoRelationship(in.Relationship)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.AddRelationshipResponse{Relationship: relationship}, nil
+}
+
+func deleteRelationshipRequestFromProto(in *proto.DeleteRelationshipRequest) *DeleteRelationshipRequest {
+	if in == nil {
 		return nil
 	}
-	resourceTypes := make([]*proto.AuthorizationModelResourceType, 0, len(value.ResourceTypes))
-	for _, resourceType := range value.ResourceTypes {
-		if out := protoAuthorizationModelResourceType(resourceType); out != nil {
-			resourceTypes = append(resourceTypes, out)
-		}
+	return &DeleteRelationshipRequest{RelationshipTuple: relationshipTupleFromProto(in.GetRelationshipTuple())}
+}
+
+func protoDeleteRelationshipResponse(in *DeleteRelationshipResponse) *proto.DeleteRelationshipResponse {
+	if in == nil {
+		return nil
 	}
-	return &proto.AuthorizationModel{
-		Version:       value.Version,
-		ResourceTypes: resourceTypes,
+	return &proto.DeleteRelationshipResponse{}
+}
+
+func setAuthorizationStateRequestFromProto(in *proto.SetAuthorizationStateRequest) *SetAuthorizationStateRequest {
+	if in == nil {
+		return nil
+	}
+	return &SetAuthorizationStateRequest{
+		Model:         authorizationModelFromProto(in.GetModel()),
+		Relationships: relationshipsFromProto(in.GetRelationships()),
 	}
 }
 
-func authorizationModelFromProto(value *proto.AuthorizationModel) *AuthorizationModel {
-	if value == nil {
+func protoSetAuthorizationStateResponse(in *SetAuthorizationStateResponse) *proto.SetAuthorizationStateResponse {
+	if in == nil {
 		return nil
 	}
-	resourceTypes := make([]*AuthorizationModelResourceType, 0, len(value.GetResourceTypes()))
-	for _, resourceType := range value.GetResourceTypes() {
-		resourceTypes = append(resourceTypes, authorizationModelResourceTypeFromProto(resourceType))
+	return &proto.SetAuthorizationStateResponse{ActiveModel: protoAuthorizationModelRef(in.ActiveModel)}
+}
+
+func authorizationModelFromProto(in *proto.AuthorizationModel) *AuthorizationModel {
+	if in == nil {
+		return nil
 	}
 	return &AuthorizationModel{
-		Version:       value.GetVersion(),
-		ResourceTypes: resourceTypes,
+		Id:            in.GetId(),
+		Version:       in.GetVersion(),
+		ResourceTypes: authorizationModelResourceTypesFromProto(in.GetResourceTypes()),
 	}
 }
 
-func protoAuthorizationModelResourceType(value *AuthorizationModelResourceType) *proto.AuthorizationModelResourceType {
-	if value == nil {
-		return nil
+func protoAuthorizationModel(in *AuthorizationModel) (*proto.AuthorizationModel, error) {
+	if in == nil {
+		return nil, nil
 	}
-	relations := make([]*proto.AuthorizationModelRelation, 0, len(value.Relations))
-	for _, relation := range value.Relations {
-		if out := protoAuthorizationModelRelation(relation); out != nil {
-			relations = append(relations, out)
-		}
+	resourceTypes, err := protoAuthorizationModelResourceTypes(in.ResourceTypes)
+	if err != nil {
+		return nil, err
 	}
-	actions := make([]*proto.AuthorizationModelAction, 0, len(value.Actions))
-	for _, action := range value.Actions {
-		if out := protoAuthorizationModelAction(action); out != nil {
-			actions = append(actions, out)
-		}
-	}
-	return &proto.AuthorizationModelResourceType{
-		Name:      value.Name,
-		Relations: relations,
-		Actions:   actions,
-	}
+	return &proto.AuthorizationModel{Id: in.Id, Version: in.Version, ResourceTypes: resourceTypes}, nil
 }
 
-func authorizationModelResourceTypeFromProto(value *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
-	if value == nil {
+func authorizationModelRefFromProto(in *proto.AuthorizationModelRef) *AuthorizationModelRef {
+	if in == nil {
 		return nil
 	}
-	relations := make([]*AuthorizationModelRelation, 0, len(value.GetRelations()))
-	for _, relation := range value.GetRelations() {
-		relations = append(relations, authorizationModelRelationFromProto(relation))
+	var createdAt time.Time
+	if in.GetCreatedAt() != nil {
+		createdAt = in.GetCreatedAt().AsTime()
 	}
-	actions := make([]*AuthorizationModelAction, 0, len(value.GetActions()))
-	for _, action := range value.GetActions() {
-		actions = append(actions, authorizationModelActionFromProto(action))
+	return &AuthorizationModelRef{Id: in.GetId(), Version: in.GetVersion(), CreatedAt: createdAt}
+}
+
+func protoAuthorizationModelRef(in *AuthorizationModelRef) *proto.AuthorizationModelRef {
+	if in == nil {
+		return nil
+	}
+	out := &proto.AuthorizationModelRef{Id: in.Id, Version: in.Version}
+	if !in.CreatedAt.IsZero() {
+		out.CreatedAt = timestamppb.New(in.CreatedAt)
+	}
+	return out
+}
+
+func protoGetActiveModelRefResponse(in *GetActiveModelRefResponse) *proto.GetActiveModelRefResponse {
+	if in == nil {
+		return nil
+	}
+	return &proto.GetActiveModelRefResponse{Model: protoAuthorizationModelRef(in.Model)}
+}
+
+func setActiveModelRequestFromProto(in *proto.SetActiveModelRequest) *SetActiveModelRequest {
+	if in == nil {
+		return nil
+	}
+	return &SetActiveModelRequest{Model: authorizationModelFromProto(in.GetModel())}
+}
+
+func protoSetActiveModelResponse(in *SetActiveModelResponse) *proto.SetActiveModelResponse {
+	if in == nil {
+		return nil
+	}
+	return &proto.SetActiveModelResponse{Model: protoAuthorizationModelRef(in.Model)}
+}
+
+func authorizationModelResourceTypeFromProto(in *proto.AuthorizationModelResourceType) *AuthorizationModelResourceType {
+	if in == nil {
+		return nil
 	}
 	return &AuthorizationModelResourceType{
-		Name:      value.GetName(),
-		Relations: relations,
-		Actions:   actions,
+		Name:                in.GetName(),
+		Relations:           modelRelationsFromProto(in.GetRelations()),
+		Actions:             modelActionsFromProto(in.GetActions()),
+		SourceLayer:         SourceLayer(in.GetSourceLayer()),
+		DefaultAccessPolicy: DefaultAccessPolicy(in.GetDefaultAccessPolicy()),
 	}
 }
 
-func protoAuthorizationModelRelation(value *AuthorizationModelRelation) *proto.AuthorizationModelRelation {
-	if value == nil {
-		return nil
-	}
-	allowedTargets := make([]*proto.AuthorizationModelAllowedTarget, 0, len(value.AllowedTargets))
-	for _, target := range value.AllowedTargets {
-		if out := protoAuthorizationModelAllowedTarget(target); out != nil {
-			allowedTargets = append(allowedTargets, out)
-		}
-	}
-	return &proto.AuthorizationModelRelation{
-		Name:           value.Name,
-		SubjectTypes:   append([]string(nil), value.SubjectTypes...),
-		AllowedTargets: allowedTargets,
-		Rewrite:        protoAuthorizationModelRewrite(value.Rewrite),
-	}
-}
-
-func authorizationModelRelationFromProto(value *proto.AuthorizationModelRelation) *AuthorizationModelRelation {
-	if value == nil {
-		return nil
-	}
-	allowedTargets := make([]*AuthorizationModelAllowedTarget, 0, len(value.GetAllowedTargets()))
-	for _, target := range value.GetAllowedTargets() {
-		allowedTargets = append(allowedTargets, authorizationModelAllowedTargetFromProto(target))
-	}
-	return &AuthorizationModelRelation{
-		Name:           value.GetName(),
-		SubjectTypes:   append([]string(nil), value.GetSubjectTypes()...),
-		AllowedTargets: allowedTargets,
-		Rewrite:        authorizationModelRewriteFromProto(value.GetRewrite()),
-	}
-}
-
-func protoAuthorizationModelAction(value *AuthorizationModelAction) *proto.AuthorizationModelAction {
-	if value == nil {
-		return nil
-	}
-	return &proto.AuthorizationModelAction{
-		Name:      value.Name,
-		Relations: append([]string(nil), value.Relations...),
-		Rewrite:   protoAuthorizationModelRewrite(value.Rewrite),
-	}
-}
-
-func authorizationModelActionFromProto(value *proto.AuthorizationModelAction) *AuthorizationModelAction {
-	if value == nil {
-		return nil
-	}
-	return &AuthorizationModelAction{
-		Name:      value.GetName(),
-		Relations: append([]string(nil), value.GetRelations()...),
-		Rewrite:   authorizationModelRewriteFromProto(value.GetRewrite()),
-	}
-}
-
-func protoAuthorizationModelAllowedTarget(value *AuthorizationModelAllowedTarget) *proto.AuthorizationModelAllowedTarget {
-	if value == nil {
-		return nil
-	}
-	switch {
-	case value.SubjectType != "":
-		return &proto.AuthorizationModelAllowedTarget{
-			Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: value.SubjectType},
-		}
-	case value.ResourceType != "":
-		return &proto.AuthorizationModelAllowedTarget{
-			Kind: &proto.AuthorizationModelAllowedTarget_ResourceType{ResourceType: value.ResourceType},
-		}
-	case value.SubjectSet != nil:
-		return &proto.AuthorizationModelAllowedTarget{
-			Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{
-				SubjectSet: &proto.AuthorizationModelSubjectSetTarget{
-					ResourceType: value.SubjectSet.ResourceType,
-					Relation:     value.SubjectSet.Relation,
-				},
-			},
-		}
-	default:
-		return &proto.AuthorizationModelAllowedTarget{}
-	}
-}
-
-func authorizationModelAllowedTargetFromProto(value *proto.AuthorizationModelAllowedTarget) *AuthorizationModelAllowedTarget {
-	if value == nil {
-		return nil
-	}
-	switch kind := value.GetKind().(type) {
-	case *proto.AuthorizationModelAllowedTarget_SubjectType:
-		return &AuthorizationModelAllowedTarget{SubjectType: kind.SubjectType}
-	case *proto.AuthorizationModelAllowedTarget_ResourceType:
-		return &AuthorizationModelAllowedTarget{ResourceType: kind.ResourceType}
-	case *proto.AuthorizationModelAllowedTarget_SubjectSet:
-		if kind.SubjectSet == nil {
-			return &AuthorizationModelAllowedTarget{}
-		}
-		return &AuthorizationModelAllowedTarget{
-			SubjectSet: &AuthorizationModelSubjectSetTarget{
-				ResourceType: kind.SubjectSet.GetResourceType(),
-				Relation:     kind.SubjectSet.GetRelation(),
-			},
-		}
-	default:
-		return &AuthorizationModelAllowedTarget{}
-	}
-}
-
-func protoAuthorizationModelRewrite(value *AuthorizationModelRewrite) *proto.AuthorizationModelRewrite {
-	if value == nil {
-		return nil
-	}
-	switch {
-	case value.This != nil:
-		return &proto.AuthorizationModelRewrite{
-			Kind: &proto.AuthorizationModelRewrite_This{This: &proto.AuthorizationModelRewriteThis{}},
-		}
-	case value.ComputedUserset != nil:
-		return &proto.AuthorizationModelRewrite{
-			Kind: &proto.AuthorizationModelRewrite_ComputedUserset{
-				ComputedUserset: &proto.AuthorizationModelComputedUserset{Relation: value.ComputedUserset.Relation},
-			},
-		}
-	case value.TupleToUserset != nil:
-		return &proto.AuthorizationModelRewrite{
-			Kind: &proto.AuthorizationModelRewrite_TupleToUserset{
-				TupleToUserset: &proto.AuthorizationModelTupleToUserset{
-					TuplesetRelation: value.TupleToUserset.TuplesetRelation,
-					ComputedRelation: value.TupleToUserset.ComputedRelation,
-				},
-			},
-		}
-	case value.Union != nil:
-		children := make([]*proto.AuthorizationModelRewrite, 0, len(value.Union.Children))
-		for _, child := range value.Union.Children {
-			if out := protoAuthorizationModelRewrite(child); out != nil {
-				children = append(children, out)
-			}
-		}
-		return &proto.AuthorizationModelRewrite{
-			Kind: &proto.AuthorizationModelRewrite_Union{
-				Union: &proto.AuthorizationModelRewriteUnion{Children: children},
-			},
-		}
-	default:
-		return &proto.AuthorizationModelRewrite{}
-	}
-}
-
-func authorizationModelRewriteFromProto(value *proto.AuthorizationModelRewrite) *AuthorizationModelRewrite {
-	if value == nil {
-		return nil
-	}
-	switch kind := value.GetKind().(type) {
-	case *proto.AuthorizationModelRewrite_This:
-		return &AuthorizationModelRewrite{This: &AuthorizationModelRewriteThis{}}
-	case *proto.AuthorizationModelRewrite_ComputedUserset:
-		return &AuthorizationModelRewrite{
-			ComputedUserset: &AuthorizationModelComputedUserset{Relation: kind.ComputedUserset.GetRelation()},
-		}
-	case *proto.AuthorizationModelRewrite_TupleToUserset:
-		return &AuthorizationModelRewrite{
-			TupleToUserset: &AuthorizationModelTupleToUserset{
-				TuplesetRelation: kind.TupleToUserset.GetTuplesetRelation(),
-				ComputedRelation: kind.TupleToUserset.GetComputedRelation(),
-			},
-		}
-	case *proto.AuthorizationModelRewrite_Union:
-		var children []*AuthorizationModelRewrite
-		if kind.Union != nil {
-			children = make([]*AuthorizationModelRewrite, 0, len(kind.Union.GetChildren()))
-			for _, child := range kind.Union.GetChildren() {
-				children = append(children, authorizationModelRewriteFromProto(child))
-			}
-		}
-		return &AuthorizationModelRewrite{Union: &AuthorizationModelRewriteUnion{Children: children}}
-	default:
-		return &AuthorizationModelRewrite{}
-	}
-}
-
-func protoAuthorizationModelRef(value *AuthorizationModelRef) *proto.AuthorizationModelRef {
-	if value == nil {
-		return nil
-	}
-	return &proto.AuthorizationModelRef{
-		Id:        value.Id,
-		Version:   value.Version,
-		CreatedAt: timestampFromNonZeroTime(value.CreatedAt),
-	}
-}
-
-func authorizationModelRefFromProto(value *proto.AuthorizationModelRef) *AuthorizationModelRef {
-	if value == nil {
-		return nil
-	}
-	return &AuthorizationModelRef{
-		Id:        value.GetId(),
-		Version:   value.GetVersion(),
-		CreatedAt: timeFromTimestamp(value.GetCreatedAt()),
-	}
-}
-
-func protoGetActiveModelResponse(value *GetActiveModelResponse) *proto.GetActiveModelResponse {
-	if value == nil {
-		return nil
-	}
-	return &proto.GetActiveModelResponse{Model: protoAuthorizationModelRef(value.Model)}
-}
-
-func getActiveModelResponseFromProto(value *proto.GetActiveModelResponse) *GetActiveModelResponse {
-	if value == nil {
-		return nil
-	}
-	return &GetActiveModelResponse{Model: authorizationModelRefFromProto(value.GetModel())}
-}
-
-func protoListModelsRequest(value *ListModelsRequest) *proto.ListModelsRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.ListModelsRequest{
-		PageSize:  value.PageSize,
-		PageToken: value.PageToken,
-	}
-}
-
-func listModelsRequestFromProto(value *proto.ListModelsRequest) *ListModelsRequest {
-	if value == nil {
-		return nil
-	}
-	return &ListModelsRequest{
-		PageSize:  value.GetPageSize(),
-		PageToken: value.GetPageToken(),
-	}
-}
-
-func protoListModelsResponse(value *ListModelsResponse) *proto.ListModelsResponse {
-	if value == nil {
-		return nil
-	}
-	models := make([]*proto.AuthorizationModelRef, 0, len(value.Models))
-	for _, model := range value.Models {
-		if out := protoAuthorizationModelRef(model); out != nil {
-			models = append(models, out)
-		}
-	}
-	return &proto.ListModelsResponse{
-		Models:        models,
-		NextPageToken: value.NextPageToken,
-	}
-}
-
-func listModelsResponseFromProto(value *proto.ListModelsResponse) *ListModelsResponse {
-	if value == nil {
-		return nil
-	}
-	models := make([]*AuthorizationModelRef, 0, len(value.GetModels()))
-	for _, model := range value.GetModels() {
-		models = append(models, authorizationModelRefFromProto(model))
-	}
-	return &ListModelsResponse{
-		Models:        models,
-		NextPageToken: value.GetNextPageToken(),
-	}
-}
-
-func protoWriteModelRequest(value *WriteModelRequest) *proto.WriteModelRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.WriteModelRequest{Model: protoAuthorizationModel(value.Model)}
-}
-
-func writeModelRequestFromProto(value *proto.WriteModelRequest) *WriteModelRequest {
-	if value == nil {
-		return nil
-	}
-	return &WriteModelRequest{Model: authorizationModelFromProto(value.GetModel())}
-}
-
-func protoExpandRequest(value *ExpandRequest) (*proto.ExpandRequest, error) {
-	if value == nil {
+func protoAuthorizationModelResourceType(in *AuthorizationModelResourceType) (*proto.AuthorizationModelResourceType, error) {
+	if in == nil {
 		return nil, nil
 	}
-	resource, err := protoAuthorizationResource(value.Resource)
+	allowedRelations, err := protoModelRelations(in.Relations)
 	if err != nil {
 		return nil, err
 	}
-	context, err := structFromAny(value.Context)
-	if err != nil {
-		return nil, fmt.Errorf("context: %w", err)
-	}
-	return &proto.ExpandRequest{
-		Resource: resource,
-		Relation: value.Relation,
-		Context:  context,
-		MaxDepth: value.MaxDepth,
-		ModelId:  value.ModelId,
+	return &proto.AuthorizationModelResourceType{
+		Name:                in.Name,
+		Relations:           allowedRelations,
+		Actions:             protoModelActions(in.Actions),
+		SourceLayer:         proto.SourceLayer(in.SourceLayer),
+		DefaultAccessPolicy: proto.DefaultAccessPolicy(in.DefaultAccessPolicy),
 	}, nil
 }
 
-func expandRequestFromProto(value *proto.ExpandRequest) *ExpandRequest {
-	if value == nil {
-		return nil
+func authorizationModelResourceTypesFromProto(in []*proto.AuthorizationModelResourceType) []*AuthorizationModelResourceType {
+	out := make([]*AuthorizationModelResourceType, 0, len(in))
+	for _, item := range in {
+		out = append(out, authorizationModelResourceTypeFromProto(item))
 	}
-	return &ExpandRequest{
-		Resource: authorizationResourceFromProto(value.GetResource()),
-		Relation: value.GetRelation(),
-		Context:  mapFromStruct(value.GetContext()),
-		MaxDepth: value.GetMaxDepth(),
-		ModelId:  value.GetModelId(),
-	}
+	return out
 }
 
-func protoExpandNode(value *ExpandNode) (*proto.ExpandNode, error) {
-	if value == nil {
-		return nil, nil
-	}
-	target, err := protoAuthorizationRelationshipTarget(value.Target)
-	if err != nil {
-		return nil, err
-	}
-	children := make([]*proto.ExpandNode, 0, len(value.Children))
-	for i, child := range value.Children {
-		out, err := protoExpandNode(child)
+func protoAuthorizationModelResourceTypes(in []*AuthorizationModelResourceType) ([]*proto.AuthorizationModelResourceType, error) {
+	out := make([]*proto.AuthorizationModelResourceType, 0, len(in))
+	for i, item := range in {
+		resourceType, err := protoAuthorizationModelResourceType(item)
 		if err != nil {
-			return nil, fmt.Errorf("children[%d]: %w", i, err)
+			return nil, fmt.Errorf("resource_types[%d]: %w", i, err)
 		}
-		if out != nil {
-			children = append(children, out)
-		}
+		out = append(out, resourceType)
 	}
-	return &proto.ExpandNode{
-		Target:   target,
-		Relation: value.Relation,
-		Children: children,
-	}, nil
+	return out, nil
 }
 
-func expandNodeFromProto(value *proto.ExpandNode) *ExpandNode {
-	if value == nil {
+func modelRelationsFromProto(in []*proto.ModelRelation) []*ModelRelation {
+	out := make([]*ModelRelation, 0, len(in))
+	for _, item := range in {
+		if item == nil {
+			out = append(out, nil)
+			continue
+		}
+		out = append(out, &ModelRelation{Name: item.GetName(), AllowedTargets: modelAllowedTargetsFromProto(item.GetAllowedTargets())})
+	}
+	return out
+}
+
+func protoModelRelations(in []*ModelRelation) ([]*proto.ModelRelation, error) {
+	out := make([]*proto.ModelRelation, 0, len(in))
+	for i, item := range in {
+		if item == nil {
+			out = append(out, nil)
+			continue
+		}
+		allowedTargets, err := protoModelAllowedTargets(item.AllowedTargets)
+		if err != nil {
+			return nil, fmt.Errorf("relations[%d].allowed_targets: %w", i, err)
+		}
+		out = append(out, &proto.ModelRelation{Name: item.Name, AllowedTargets: allowedTargets})
+	}
+	return out, nil
+}
+
+func modelActionsFromProto(in []*proto.ModelAction) []*ModelAction {
+	out := make([]*ModelAction, 0, len(in))
+	for _, item := range in {
+		if item == nil {
+			out = append(out, nil)
+			continue
+		}
+		out = append(out, &ModelAction{Name: item.GetName(), Relations: append([]string(nil), item.GetRelations()...)})
+	}
+	return out
+}
+
+func protoModelActions(in []*ModelAction) []*proto.ModelAction {
+	out := make([]*proto.ModelAction, 0, len(in))
+	for _, item := range in {
+		if item == nil {
+			out = append(out, nil)
+			continue
+		}
+		out = append(out, &proto.ModelAction{Name: item.Name, Relations: append([]string(nil), item.Relations...)})
+	}
+	return out
+}
+
+func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []*ModelAllowedTarget {
+	out := make([]*ModelAllowedTarget, 0, len(in))
+	for _, item := range in {
+		if item == nil {
+			out = append(out, nil)
+			continue
+		}
+		switch kind := item.GetKind().(type) {
+		case *proto.ModelAllowedTarget_SubjectType:
+			out = append(out, &ModelAllowedTarget{SubjectType: kind.SubjectType})
+		case *proto.ModelAllowedTarget_ResourceType:
+			out = append(out, &ModelAllowedTarget{ResourceType: kind.ResourceType})
+		case *proto.ModelAllowedTarget_SubjectSetType:
+			out = append(out, &ModelAllowedTarget{SubjectSetType: subjectSetTypeFromProto(kind.SubjectSetType)})
+		default:
+			out = append(out, &ModelAllowedTarget{})
+		}
+	}
+	return out
+}
+
+func protoModelAllowedTargets(in []*ModelAllowedTarget) ([]*proto.ModelAllowedTarget, error) {
+	out := make([]*proto.ModelAllowedTarget, 0, len(in))
+	for _, item := range in {
+		out = append(out, protoModelAllowedTarget(item))
+	}
+	return out, nil
+}
+
+func protoModelAllowedTarget(in *ModelAllowedTarget) *proto.ModelAllowedTarget {
+	if in == nil {
 		return nil
 	}
-	children := make([]*ExpandNode, 0, len(value.GetChildren()))
-	for _, child := range value.GetChildren() {
-		children = append(children, expandNodeFromProto(child))
+	if in.SubjectType != "" {
+		return &proto.ModelAllowedTarget{Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: in.SubjectType}}
 	}
-	return &ExpandNode{
-		Target:   authorizationRelationshipTargetFromProto(value.GetTarget()),
-		Relation: value.GetRelation(),
-		Children: children,
+	if in.ResourceType != "" {
+		return &proto.ModelAllowedTarget{Kind: &proto.ModelAllowedTarget_ResourceType{ResourceType: in.ResourceType}}
+	}
+	if in.SubjectSetType != nil {
+		return &proto.ModelAllowedTarget{Kind: &proto.ModelAllowedTarget_SubjectSetType{SubjectSetType: protoSubjectSetType(in.SubjectSetType)}}
+	}
+	return &proto.ModelAllowedTarget{}
+}
+
+func subjectSetTypeFromProto(in *proto.SubjectSetType) *SubjectSetType {
+	if in == nil {
+		return nil
+	}
+	return &SubjectSetType{ResourceType: in.GetResourceType(), Relation: in.GetRelation()}
+}
+
+func protoSubjectSetType(in *SubjectSetType) *proto.SubjectSetType {
+	if in == nil {
+		return nil
+	}
+	return &proto.SubjectSetType{ResourceType: in.ResourceType, Relation: in.Relation}
+}
+
+func listActiveModelResourceTypesRequestFromProto(in *proto.ListActiveModelResourceTypesRequest) *ListActiveModelResourceTypesRequest {
+	if in == nil {
+		return nil
+	}
+	return &ListActiveModelResourceTypesRequest{
+		Filter:    authorizationModelResourceTypeFilterFromProto(in.GetFilter()),
+		PageSize:  in.GetPageSize(),
+		PageToken: in.GetPageToken(),
 	}
 }
 
-func protoExpandResponse(value *ExpandResponse) (*proto.ExpandResponse, error) {
-	if value == nil {
+func authorizationModelResourceTypeFilterFromProto(in *proto.AuthorizationModelResourceTypeFilter) *AuthorizationModelResourceTypeFilter {
+	if in == nil {
+		return nil
+	}
+	return &AuthorizationModelResourceTypeFilter{Name: in.GetName(), SourceLayer: SourceLayer(in.GetSourceLayer())}
+}
+
+func protoListActiveModelResourceTypesResponse(in *ListActiveModelResourceTypesResponse) (*proto.ListActiveModelResourceTypesResponse, error) {
+	if in == nil {
 		return nil, nil
 	}
-	root, err := protoExpandNode(value.Root)
+	resourceTypes, err := protoAuthorizationModelResourceTypes(in.ResourceTypes)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ExpandResponse{
-		Root:            root,
-		Truncated:       value.Truncated,
-		CycleDetected:   value.CycleDetected,
-		MaxDepthReached: value.MaxDepthReached,
-		ModelId:         value.ModelId,
+	return &proto.ListActiveModelResourceTypesResponse{
+		ResourceTypes: resourceTypes,
+		NextPageToken: in.NextPageToken,
+		ModelId:       in.ModelId,
 	}, nil
-}
-
-func expandResponseFromProto(value *proto.ExpandResponse) *ExpandResponse {
-	if value == nil {
-		return nil
-	}
-	return &ExpandResponse{
-		Root:            expandNodeFromProto(value.GetRoot()),
-		Truncated:       value.GetTruncated(),
-		CycleDetected:   value.GetCycleDetected(),
-		MaxDepthReached: value.GetMaxDepthReached(),
-		ModelId:         value.GetModelId(),
-	}
 }

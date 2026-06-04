@@ -7,7 +7,6 @@ mod api;
 mod app_access;
 mod auth;
 mod auth_server;
-mod authorization;
 mod cache;
 mod cache_server;
 mod catalog;
@@ -40,16 +39,16 @@ pub mod proto {
 }
 
 pub use agent::{
-    AgentActor, AgentExecutionStatus, AgentHost, AgentHostApi, AgentHostError,
-    AgentHostExecuteToolInput, AgentHostListToolsInput, AgentHostResolveConnectionInput,
-    AgentInteraction, AgentInteractionState, AgentInteractionType, AgentJson, AgentMessage,
-    AgentMessagePart, AgentMessagePartImageRef, AgentMessagePartToolCall,
-    AgentMessagePartToolResult, AgentMessagePartType, AgentOutput, AgentPreparedWorkspace,
-    AgentProvider, AgentProviderCapabilities, AgentSession, AgentSessionStartConfig,
-    AgentSessionStartHook, AgentSessionStartHookOutput, AgentSessionState, AgentStructuredOutput,
-    AgentTextOutput, AgentToolAnnotations, AgentToolRef, AgentToolSourceMode, AgentTurn,
-    AgentTurnDisplay, AgentTurnEvent, AgentTurnOutput, AgentTurnStructuredOutput,
-    AgentTurnTextOutput, AgentWorkspace, AgentWorkspaceGitCheckout, CancelAgentProviderTurnRequest,
+    AgentExecutionStatus, AgentHost, AgentHostApi, AgentHostError, AgentHostExecuteToolInput,
+    AgentHostListToolsInput, AgentHostResolveConnectionInput, AgentInteraction,
+    AgentInteractionState, AgentInteractionType, AgentJson, AgentMessage, AgentMessagePart,
+    AgentMessagePartImageRef, AgentMessagePartToolCall, AgentMessagePartToolResult,
+    AgentMessagePartType, AgentOutput, AgentPreparedWorkspace, AgentProvider,
+    AgentProviderCapabilities, AgentSession, AgentSessionStartConfig, AgentSessionStartHook,
+    AgentSessionStartHookOutput, AgentSessionState, AgentStructuredOutput, AgentTextOutput,
+    AgentToolAnnotations, AgentToolRef, AgentToolSourceMode, AgentTurn, AgentTurnDisplay,
+    AgentTurnEvent, AgentTurnOutput, AgentTurnStructuredOutput, AgentTurnTextOutput,
+    AgentWorkspace, AgentWorkspaceGitCheckout, CancelAgentProviderTurnRequest,
     CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest, ExecuteAgentToolResponse,
     GetAgentProviderCapabilitiesRequest, GetAgentProviderInteractionRequest,
     GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
@@ -67,6 +66,7 @@ pub use agent_access::{
     AgentListSessions, AgentListSessionsResponse, AgentListTurnEvents, AgentListTurnEventsResponse,
     AgentListTurns, AgentListTurnsResponse, AgentResolveInteraction, AgentUpdateSession,
 };
+pub use api::parse_subject_id;
 pub use api::{
     Access, Credential, HTTPSubjectRequest, Host, Provider, Request, Response, RuntimeMetadata,
     Subject, ok,
@@ -77,22 +77,6 @@ pub use app_access::{
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,
-};
-pub use authorization::{
-    AUTHORIZATION_SUBJECT_TYPE_SUBJECT, AccessDecision, AccessEvaluationRequest,
-    AccessEvaluationsRequest, AccessEvaluationsResponse, ActionSearchRequest, ActionSearchResponse,
-    Authorization, AuthorizationAction, AuthorizationApi, AuthorizationError,
-    AuthorizationMetadata, AuthorizationModel, AuthorizationModelAction,
-    AuthorizationModelAllowedTarget, AuthorizationModelComputedUserset, AuthorizationModelRef,
-    AuthorizationModelRelation, AuthorizationModelResourceType, AuthorizationModelRewrite,
-    AuthorizationModelRewriteThis, AuthorizationModelRewriteUnion,
-    AuthorizationModelSubjectSetTarget, AuthorizationModelTupleToUserset, AuthorizationProvider,
-    AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
-    AuthorizationSubjectSet, EffectiveSubjectSearchRequest, EffectiveSubjectSearchResponse,
-    ExpandNode, ExpandRequest, ExpandResponse, GetActiveModelResponse, ListModelsRequest,
-    ListModelsResponse, ReadRelationshipsRequest, ReadRelationshipsResponse, Relationship,
-    RelationshipKey, ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest,
-    SubjectSearchResponse, WriteModelRequest, WriteRelationshipsRequest,
 };
 pub use cache::{Cache, CacheApi, CacheEntry, CacheError, CacheProvider, CacheSetOptions};
 pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};
@@ -127,52 +111,46 @@ pub use s3::{S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteO
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 pub use workflow::{
-    BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule,
-    BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
-    DeleteWorkflowProviderEventTriggerRequest, DeleteWorkflowProviderScheduleRequest,
-    GetWorkflowProviderEventTriggerRequest, GetWorkflowProviderRunRequest,
-    GetWorkflowProviderScheduleRequest, ListWorkflowProviderEventTriggersRequest,
-    ListWorkflowProviderEventTriggersResponse, ListWorkflowProviderRunsRequest,
-    ListWorkflowProviderRunsResponse, ListWorkflowProviderSchedulesRequest,
-    ListWorkflowProviderSchedulesResponse, PauseWorkflowProviderEventTriggerRequest,
-    PauseWorkflowProviderScheduleRequest, PublishWorkflowProviderEventRequest,
-    ResumeWorkflowProviderEventTriggerRequest, ResumeWorkflowProviderScheduleRequest,
+    ApplyWorkflowProviderDefinitionRequest, BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
+    DeleteWorkflowProviderDefinitionRequest, DeliverWorkflowProviderEventRequest,
+    GetWorkflowProviderDefinitionRequest, GetWorkflowProviderRunEventsRequest,
+    GetWorkflowProviderRunEventsResponse, GetWorkflowProviderRunOutputRequest,
+    GetWorkflowProviderRunOutputResponse, GetWorkflowProviderRunRequest,
+    ListWorkflowProviderDefinitionsRequest, ListWorkflowProviderDefinitionsResponse,
+    ListWorkflowProviderRunsRequest, ListWorkflowProviderRunsResponse,
+    SetWorkflowProviderActivationPausedRequest, SetWorkflowProviderDefinitionPausedRequest,
     SignalOrStartWorkflowProviderRunRequest, SignalWorkflowProviderRunRequest,
-    SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
-    UpsertWorkflowProviderEventTriggerRequest, UpsertWorkflowProviderScheduleRequest,
-    WorkflowActor, WorkflowAgentMessage, WorkflowDefinition, WorkflowEvalContext,
-    WorkflowEvalResult, WorkflowEvent, WorkflowEventMatch, WorkflowEventTrigger,
-    WorkflowEventTriggerInvocation, WorkflowExecutionRequest, WorkflowJson, WorkflowProvider,
-    WorkflowRun, WorkflowRunSignal, WorkflowRunStatus, WorkflowRunTrigger, WorkflowSchedule,
+    SignalWorkflowRunResponse, StartWorkflowProviderRunRequest, WorkflowActivation,
+    WorkflowAgentMessage, WorkflowArray, WorkflowDefinition, WorkflowDefinitionSpec,
+    WorkflowEvalContext, WorkflowEvalResult, WorkflowEvent, WorkflowEventActivation,
+    WorkflowEventMatch, WorkflowEventTriggerInvocation, WorkflowExecutionRequest, WorkflowJson,
+    WorkflowManualTrigger, WorkflowObject, WorkflowPathSource, WorkflowProvider, WorkflowRun,
+    WorkflowRunEvent, WorkflowRunStatus, WorkflowRunTrigger, WorkflowScheduleActivation,
     WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction,
-    WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepOutputSource, WorkflowStepWhen,
-    WorkflowText, WorkflowValue, bound_workflow_definition_input_from_definition,
-    bound_workflow_event_trigger_input_from_trigger, bound_workflow_run_input_from_run,
-    bound_workflow_schedule_input_from_schedule, bound_workflow_target_input_from_target,
-    evaluate_workflow_value, latest_workflow_signal, new_bound_workflow_event_trigger,
-    new_bound_workflow_event_trigger_from_trigger, new_bound_workflow_run,
-    new_bound_workflow_run_from_run, new_bound_workflow_schedule,
-    new_bound_workflow_schedule_from_schedule, new_bound_workflow_target,
-    new_bound_workflow_target_from_target, new_workflow_actor, new_workflow_agent_message,
-    new_workflow_event, new_workflow_event_from_event, new_workflow_event_match,
-    new_workflow_event_trigger_invocation, new_workflow_run_trigger,
-    new_workflow_run_trigger_from_trigger, new_workflow_schedule_trigger, new_workflow_signal,
-    new_workflow_signal_from_signal, new_workflow_step, new_workflow_step_agent_turn,
-    new_workflow_step_app_call, new_workflow_step_when, new_workflow_text, new_workflow_value,
-    path_value, render_workflow_template, workflow_actor_input_from_actor,
-    workflow_event_input_from_event, workflow_event_match_input_from_match,
-    workflow_run_trigger_input_from_trigger, workflow_signal_input_from_signal,
-    workflow_step_agent_turn_input_from_turn, workflow_step_app_call_input_from_call,
-    workflow_step_input_from_step, workflow_value_input_from_value,
+    WorkflowStepAgentTurn, WorkflowStepAppCall, WorkflowStepAttempt, WorkflowStepExecution,
+    WorkflowStepInputSource, WorkflowStepOutputSource, WorkflowStepStatus, WorkflowStepWhen,
+    WorkflowText, WorkflowValue, evaluate_workflow_value, latest_workflow_signal,
+    new_bound_workflow_target, new_bound_workflow_target_from_target, new_workflow_agent_message,
+    new_workflow_definition, new_workflow_definition_spec, new_workflow_event,
+    new_workflow_event_from_event, new_workflow_event_match, new_workflow_run,
+    new_workflow_run_from_run, new_workflow_signal, new_workflow_signal_from_signal,
+    new_workflow_step, new_workflow_step_agent_turn, new_workflow_step_app_call,
+    new_workflow_step_when, new_workflow_text, new_workflow_value, path_value,
+    render_workflow_template, workflow_event_input_from_event,
+    workflow_event_match_input_from_match, workflow_run_trigger_input_from_trigger,
+    workflow_signal_input_from_signal, workflow_step_agent_turn_input_from_turn,
+    workflow_step_app_call_input_from_call, workflow_step_input_from_step,
+    workflow_subject_from_proto, workflow_subject_to_proto, workflow_value_array,
+    workflow_value_input, workflow_value_input_from_value, workflow_value_literal,
+    workflow_value_object, workflow_value_signal, workflow_value_step_input,
+    workflow_value_step_output, workflow_value_template,
 };
 pub use workflow_access::{
-    Workflow, WorkflowContract, WorkflowCreateDefinition, WorkflowCreateEventTrigger,
-    WorkflowCreateSchedule, WorkflowDeleteDefinition, WorkflowDeleteEventTrigger,
-    WorkflowDeleteSchedule, WorkflowError, WorkflowGetDefinition, WorkflowGetEventTrigger,
-    WorkflowGetSchedule, WorkflowPauseEventTrigger, WorkflowPauseSchedule, WorkflowPublishEvent,
-    WorkflowResumeEventTrigger, WorkflowResumeSchedule, WorkflowSignalOrStartRun,
-    WorkflowSignalRun, WorkflowStartRun, WorkflowUpdateDefinition, WorkflowUpdateEventTrigger,
-    WorkflowUpdateSchedule,
+    Workflow, WorkflowApplyDefinition, WorkflowCancelRun, WorkflowContract,
+    WorkflowDeleteDefinition, WorkflowDeliverEvent, WorkflowError, WorkflowGetDefinition,
+    WorkflowGetRun, WorkflowGetRunEvents, WorkflowGetRunOutput, WorkflowListRuns,
+    WorkflowSetActivationPaused, WorkflowSetDefinitionPaused, WorkflowSignalOrStartRun,
+    WorkflowSignalRun, WorkflowStartRun,
 };
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {
@@ -224,17 +202,6 @@ macro_rules! export_authentication_provider {
         pub fn __gestalt_serve_authentication(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_authentication_provider(provider)
-        }
-    };
-}
-
-/// Exports the authorization-provider entrypoint expected by `gestaltd`.
-#[macro_export]
-macro_rules! export_authorization_provider {
-    (constructor = $constructor:path $(,)?) => {
-        pub fn __gestalt_serve_authorization(_name: &str) -> $crate::Result<()> {
-            let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_authorization_provider(provider)
         }
     };
 }

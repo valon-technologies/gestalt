@@ -13,12 +13,12 @@ import (
 // WorkflowValueToCore converts config YAML value form into core workflow value form.
 func WorkflowValueToCore(value WorkflowValueConfig) coreworkflow.Value {
 	out := coreworkflow.Value{
-		Literal:       value.Literal,
-		LiteralSet:    value.LiteralSet,
-		Object:        workflowValueMapToCore(value.Object),
-		Array:         workflowValueArrayToCore(value.Array),
-		RunInput:      strings.TrimSpace(value.RunInput),
-		SignalPayload: strings.TrimSpace(value.SignalPayload),
+		Literal:    value.Literal,
+		LiteralSet: value.LiteralSet,
+		Object:     workflowValueMapToCore(value.Object),
+		Array:      workflowValueArrayToCore(value.Array),
+		Input:      strings.TrimSpace(value.Input),
+		Signal:     strings.TrimSpace(value.Signal),
 	}
 	if value.Template != nil {
 		out.Template = &coreworkflow.Text{Template: strings.TrimSpace(value.Template.Template)}
@@ -27,6 +27,12 @@ func WorkflowValueToCore(value WorkflowValueConfig) coreworkflow.Value {
 		out.StepOutput = &coreworkflow.StepOutputSource{
 			StepID: strings.TrimSpace(value.StepOutput.StepID),
 			Path:   strings.TrimSpace(value.StepOutput.Path),
+		}
+	}
+	if value.StepInput != nil {
+		out.StepInput = &coreworkflow.StepInputSource{
+			StepID: strings.TrimSpace(value.StepInput.StepID),
+			Path:   strings.TrimSpace(value.StepInput.Path),
 		}
 	}
 	return out
@@ -54,12 +60,17 @@ func workflowValueArrayToCore(values []WorkflowValueConfig) []coreworkflow.Value
 	return out
 }
 
-// WorkflowTargetToCore converts config YAML target form into core workflow target form.
+// WorkflowStepsToCore converts config YAML steps into the core workflow target form.
+func WorkflowStepsToCore(steps []WorkflowStepConfig) coreworkflow.Target {
+	return coreworkflow.Target{Steps: workflowStepsToCore(steps)}
+}
+
+// WorkflowTargetToCore converts config target form into core workflow target form.
 func WorkflowTargetToCore(target *WorkflowTargetConfig) coreworkflow.Target {
 	if target == nil {
 		return coreworkflow.Target{}
 	}
-	return coreworkflow.Target{Steps: workflowStepsToCore(target.Steps)}
+	return WorkflowStepsToCore(target.Steps)
 }
 
 func workflowStepsToCore(steps []WorkflowStepConfig) []coreworkflow.Step {

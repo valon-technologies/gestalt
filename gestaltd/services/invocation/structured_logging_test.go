@@ -183,7 +183,6 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) {
 				assertStructuredLogField(t, record, "surface", string(invocation.InvocationSurfaceHTTPBinding))
 				assertStructuredLogField(t, record, "http_binding", "slack_events")
 				assertStructuredLogField(t, record, "subject_id", "service_account:workflow-config")
-				assertStructuredLogField(t, record, "subject_kind", "service_account")
 				assertStructuredLogField(t, record, "result_status_class", "5xx")
 				if got := record["result_status"]; got != float64(http.StatusInternalServerError) {
 					t.Fatalf("result_status = %v, want %d", got, http.StatusInternalServerError)

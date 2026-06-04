@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -246,9 +245,6 @@ apps:
           content:
             application/x-www-form-urlencoded: {}
         target: handle_command
-        ack:
-          body:
-            status: accepted
 `)
 
 	cfg, err := Load(path)
@@ -289,9 +285,6 @@ apps:
 	}
 	if got, want := entry.HTTP["command"].Target, "handle_command"; got != want {
 		t.Fatalf("HTTP[command].Target = %q, want %q", got, want)
-	}
-	if entry.HTTP["command"].Ack == nil || entry.HTTP["command"].Ack.Body == nil {
-		t.Fatalf("HTTP[command].Ack = %#v", entry.HTTP["command"].Ack)
 	}
 }
 
@@ -349,69 +342,6 @@ func TestProviderEntryEffectiveHTTPSecuritySchemes_MergesHMACFields(t *testing.T
 	}
 	if scheme.Secret == nil || scheme.Secret.Env != "REQUEST_SIGNING_SECRET" {
 		t.Fatalf("Secret = %#v, want REQUEST_SIGNING_SECRET", scheme.Secret)
-	}
-}
-
-func TestProviderEntryEffectiveHTTPBindings_ClonesAckBody(t *testing.T) {
-	t.Parallel()
-
-	entry := &ProviderEntry{
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				HTTP: map[string]*providermanifestv1.HTTPBinding{
-					"command": {
-						Path:     "/command",
-						Method:   "POST",
-						Security: "signed",
-						Target:   "handle_command",
-						Ack: &providermanifestv1.HTTPAck{
-							Headers: map[string]string{"Content-Type": "application/json"},
-							Body: map[string]any{
-								"text": "Working on it...",
-								"meta": map[string]any{
-									"tags": []any{"one", "two"},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	effective := entry.EffectiveHTTPBindings()
-	body, ok := effective["command"].Ack.Body.(map[string]any)
-	if !ok {
-		t.Fatalf("effective ack body = %#v", effective["command"].Ack.Body)
-	}
-	body["text"] = "changed"
-	meta, ok := body["meta"].(map[string]any)
-	if !ok {
-		t.Fatalf("effective ack body meta = %#v", body["meta"])
-	}
-	tags, ok := meta["tags"].([]any)
-	if !ok {
-		t.Fatalf("effective ack body tags = %#v", meta["tags"])
-	}
-	tags[0] = "changed"
-
-	originalBody, ok := entry.ResolvedManifest.Spec.HTTP["command"].Ack.Body.(map[string]any)
-	if !ok {
-		t.Fatalf("original ack body = %#v", entry.ResolvedManifest.Spec.HTTP["command"].Ack.Body)
-	}
-	if got, want := originalBody["text"], "Working on it..."; got != want {
-		t.Fatalf("original ack body text = %#v, want %q", got, want)
-	}
-	originalMeta, ok := originalBody["meta"].(map[string]any)
-	if !ok {
-		t.Fatalf("original ack body meta = %#v", originalBody["meta"])
-	}
-	originalTags, ok := originalMeta["tags"].([]any)
-	if !ok {
-		t.Fatalf("original ack body tags = %#v", originalMeta["tags"])
-	}
-	if got, want := originalTags[0], "one"; got != want {
-		t.Fatalf("original ack body tags[0] = %#v, want %q", got, want)
 	}
 }
 
@@ -536,6 +466,7 @@ apps:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if authCfg["clientId"] != "client-from-env" {
@@ -815,57 +746,7 @@ server:
 	}
 }
 
-func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		members []SubjectPolicyMemberDef
-		want    string
-	}{
-		{
-			name: "duplicate subject id",
-			members: []SubjectPolicyMemberDef{
-				{SubjectID: "user:123", Role: "viewer"},
-				{SubjectID: "user:123", Role: "admin"},
-			},
-			want: "subjectID duplicates",
-		},
-		{
-			name: "missing subject id",
-			members: []SubjectPolicyMemberDef{
-				{Role: "viewer"},
-			},
-			want: "subjectID is required",
-		},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := &Config{
-				APIVersion: ConfigAPIVersion,
-				Authorization: AuthorizationConfig{
-					Policies: map[string]SubjectPolicyDef{
-						"roadmap": {
-							Default: "deny",
-							Members: tc.members,
-						},
-					},
-				},
-			}
-
-			err := ValidateStructure(cfg)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.want)
-			}
-		})
-	}
-}
-
-func TestLoadAuthorizationModelFragments(t *testing.T) {
+func TestLoadRejectsAuthorizationPolicies(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -876,10 +757,27 @@ authorization:
       members:
         - subjectID: user:legacy
           role: admin
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `field policies not found`) {
+		t.Fatalf("Load error = %v, want unknown policies field", err)
+	}
+}
+
+func TestLoadAuthorizationModelFragments(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+authorization:
   models:
     default:
       resourceTypes:
         team:
+          defaultAccessPolicy: deny
           relations:
             member:
               subjectTypes: [subject]
@@ -921,10 +819,10 @@ authorization:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Authorization.Policies["legacy_admins"].Members[0].SubjectID; got != "user:legacy" {
-		t.Fatalf("legacy policy subjectID = %q, want user:legacy", got)
-	}
 	team := cfg.Authorization.Models["default"].ResourceTypes["team"]
+	if got := team.DefaultAccessPolicy; got != "deny" {
+		t.Fatalf("team defaultAccessPolicy = %q, want deny", got)
+	}
 	if !team.Dynamic.AllowAdditionalRelationships {
 		t.Fatal("team dynamic allowAdditionalRelationships = false, want true")
 	}
@@ -981,6 +879,18 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				}),
 			}},
 			wantErr: `references unknown relation "admin"`,
+		},
+		{
+			name: "invalid default access policy",
+			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
+				"default": model(map[string]AuthorizationResourceTypeDef{
+					"team": {
+						DefaultAccessPolicy: "sometimes",
+						Relations:           map[string]AuthorizationRelationDef{"member": subjectRelation("subject")},
+					},
+				}),
+			}},
+			wantErr: `authorization.models.default.resourceTypes.team.defaultAccessPolicy must be "allow" or "deny"`,
 		},
 		{
 			name: "model key has surrounding whitespace",
@@ -1096,6 +1006,61 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateAuthorizationRelationshipAllowsExplicitSubjectSetTarget(t *testing.T) {
+	t.Parallel()
+
+	err := ValidateStructure(&Config{
+		APIVersion: ConfigAPIVersion,
+		Authorization: AuthorizationConfig{
+			Models: map[string]AuthorizationModelDef{
+				"default": {
+					ResourceTypes: map[string]AuthorizationResourceTypeDef{
+						"team": {
+							Relations: map[string]AuthorizationRelationDef{
+								"member": {SubjectTypes: []string{"subject"}},
+							},
+						},
+						"AuthorizationProvider": {
+							Relations: map[string]AuthorizationRelationDef{
+								"admin": {
+									AllowedTargets: []AuthorizationAllowedTargetDef{
+										{SubjectType: "subject"},
+										{SubjectSet: &AuthorizationSubjectSetTargetDef{
+											ResourceType: "team",
+											Relation:     "member",
+										}},
+									},
+								},
+							},
+							Actions: map[string]AuthorizationActionDef{
+								"SetAuthorizationState": {Relations: []string{"admin"}},
+							},
+						},
+					},
+				},
+			},
+			Relationships: []AuthorizationRelationshipDef{
+				{
+					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:michael.wang@valon.com"},
+					Relation: "member",
+					Resource: AuthorizationResourceDef{Type: "team", ID: "gestalt_admins"},
+				},
+				{
+					Target: AuthorizationRelationshipTargetDef{SubjectSet: &AuthorizationSubjectSetDef{
+						Resource: AuthorizationResourceDef{Type: "team", ID: "gestalt_admins"},
+						Relation: "member",
+					}},
+					Relation: "admin",
+					Resource: AuthorizationResourceDef{Type: "AuthorizationProvider", ID: "authorization"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateStructure error = %v, want nil", err)
 	}
 }
 
@@ -1319,10 +1284,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1359,10 +1320,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1397,10 +1354,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1434,10 +1387,6 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-authorization:
-  policies:
-    admin_policy:
-      default: deny
 `)
 
 		_, err := Load(path)
@@ -1897,6 +1846,7 @@ apps:
 		gitSource := entry.Source.GitSource()
 		if gitSource == nil {
 			t.Fatal("Source.GitSource() = nil")
+			return
 		}
 		repo, ref, manifestPath := gitSource.NormalizedLocationParts()
 		if repo != "https://github.com/Valon-Technologies/Gestalt-Providers.git" ||
@@ -2080,6 +2030,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "ui", "default", "provider.yaml")
 		if got := entry.Source.Path; got != wantPath {
@@ -2113,6 +2064,7 @@ server:
 		entry := cfg.Providers.S3["minio"]
 		if entry == nil {
 			t.Fatal(`Providers.S3["minio"] = nil`)
+			return
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "providers", "s3", "minio", "manifest.yaml")
 		if got := entry.Source.Path; got != wantPath {
@@ -2151,6 +2103,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		wantSourcePath := filepath.Join(filepath.Dir(path), "web", "roadmap", "manifest.yaml")
 		if got := entry.Source.Path; got != wantSourcePath {
@@ -2182,13 +2135,6 @@ apps:
       bundle: roadmap
       path: /create-customer-roadmap-review/
     authorizationPolicy: roadmap_policy
-authorization:
-  policies:
-    roadmap_policy:
-      default: deny
-      members:
-        - subjectID: user:viewer-user
-          role: viewer
 server:
   providers:
     indexeddb: sqlite
@@ -2202,6 +2148,7 @@ server:
 		entry := cfg.Providers.UI["roadmap"]
 		if entry == nil {
 			t.Fatal(`Providers.UI["roadmap"] = nil`)
+			return
 		}
 		if got := entry.Path; got != "/create-customer-roadmap-review" {
 			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
@@ -2986,42 +2933,42 @@ apps:
     source:
       path: ./providers/slack/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
               credentialMode: none
               input:
                 source: yaml
-  eventTriggers:
+      on:
+        schedule:
+          schedule:
+            cron: "0 2 * * *"
     task_updated:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-events
-          kind: service_account
-      match:
-        type: roadmap.task.updated
-        source: roadmap
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: backfill_items
               input:
                 source: event
-      paused: true
+      on:
+        event:
+          event:
+            type: roadmap.task.updated
+            source: roadmap
+          paused: true
 providers:
   workflow:
     temporal:
@@ -3041,44 +2988,50 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		wantSchedule := WorkflowScheduleConfig{
+		wantScheduleDefinition := WorkflowDefinitionConfig{
 			Provider: "temporal",
 			RunAs: &WorkflowRunAsConfig{
 				Subject: &WorkflowRunAsSubjectConfig{
-					ID:         "service_account:roadmap-workflow",
-					Kind:       "service_account",
-					AuthSource: "config",
+					ID: "service_account:roadmap-workflow",
 				},
 			},
-			Target: workflowTestAppStepTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
+			Steps: workflowTestAppStepConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
 				"source": "yaml",
 			}),
-			Cron:     "0 2 * * *",
-			Timezone: "UTC",
+			On: map[string]WorkflowActivationConfig{
+				"schedule": {
+					Schedule: &WorkflowScheduleActivationConfig{
+						Cron:     "0 2 * * *",
+						Timezone: "UTC",
+					},
+				},
+			},
 		}
-		if got := cfg.Workflows.Schedules["nightly"]; !reflect.DeepEqual(got, wantSchedule) {
-			t.Fatalf("Workflows.Schedules[nightly] = %#v, want %#v", got, wantSchedule)
+		if got := cfg.Workflows.Definitions["nightly"]; !reflect.DeepEqual(got, wantScheduleDefinition) {
+			t.Fatalf("Workflows.Definitions[nightly] = %#v, want %#v", got, wantScheduleDefinition)
 		}
-		wantTrigger := WorkflowEventTriggerConfig{
+		wantEventDefinition := WorkflowDefinitionConfig{
 			Provider: "temporal",
 			RunAs: &WorkflowRunAsConfig{
 				Subject: &WorkflowRunAsSubjectConfig{
-					ID:         "service_account:roadmap-events",
-					Kind:       "service_account",
-					AuthSource: "config",
+					ID: "service_account:roadmap-events",
 				},
 			},
-			Target: workflowTestAppStepTargetConfig("roadmap", "backfill_items", "", map[string]any{
+			Steps: workflowTestAppStepConfig("roadmap", "backfill_items", "", map[string]any{
 				"source": "event",
 			}),
-			Match: WorkflowEventMatch{
-				Type:   "roadmap.task.updated",
-				Source: "roadmap",
+			On: map[string]WorkflowActivationConfig{
+				"event": {
+					Event: &WorkflowEventActivationConfig{
+						Type:   "roadmap.task.updated",
+						Source: "roadmap",
+					},
+					Paused: true,
+				},
 			},
-			Paused: true,
 		}
-		if got := cfg.Workflows.EventTriggers["task_updated"]; !reflect.DeepEqual(got, wantTrigger) {
-			t.Fatalf("Workflows.EventTriggers[task_updated] = %#v, want %#v", got, wantTrigger)
+		if got := cfg.Workflows.Definitions["task_updated"]; !reflect.DeepEqual(got, wantEventDefinition) {
+			t.Fatalf("Workflows.Definitions[task_updated] = %#v, want %#v", got, wantEventDefinition)
 		}
 	})
 
@@ -3091,21 +3044,18 @@ server:
 			want string
 		}{
 			{
-				name: "unknown schedule app",
+				name: "unknown definition app",
 				yaml: `
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: missing
               operation: nightly_sync
 providers:
@@ -3116,10 +3066,10 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].app.name references unknown app "missing"`,
+				want: `workflows.definitions.nightly.steps[0].app.name references unknown app "missing"`,
 			},
 			{
-				name: "schedule rejects invokes",
+				name: "definition rejects invokes",
 				yaml: `
 apps:
   roadmap:
@@ -3129,18 +3079,15 @@ apps:
     source:
       path: ./providers/slack/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
       invokes:
@@ -3156,25 +3103,22 @@ server:
 				want: `field invokes not found`,
 			},
 			{
-				name: "schedule app rejects unsupported credential mode",
+				name: "definition app rejects unsupported credential mode",
 				yaml: `
 apps:
   roadmap:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
               credentialMode: unsupported-mode
@@ -3186,29 +3130,63 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].app.credentialMode "unsupported-mode" is not supported`,
+				want: `workflows.definitions.nightly.steps[0].app.credentialMode "unsupported-mode" is not supported`,
 			},
 			{
-				name: "agent step when rejects self reference",
+				name: "agent step rejects sub-second negative timeout",
 				yaml: `
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: diagnosis
-            agent:
+      steps:
+        - id: diagnosis
+          timeout: -500ms
+          agent:
               provider: simple
               prompt: "diagnose"
               output:
                 text: {}
-            when:
+      on:
+        nightly:
+          schedule:
+            cron: "0 2 * * *"
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.definitions.nightly.steps[0].timeout must not be negative for agent steps`,
+			},
+			{
+				name: "agent step when rejects self reference",
+				yaml: `
+workflows:
+  definitions:
+    nightly:
+      provider: temporal
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+      steps:
+        - id: diagnosis
+          timeout: 1s
+          agent:
+              provider: simple
+              prompt: "diagnose"
+              output:
+                text: {}
+          when:
               value:
                 stepOutput:
                   stepId: diagnosis
@@ -3226,35 +3204,34 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].when.value.step_output.step_id "diagnosis" must reference an earlier step`,
+				want: `workflows.definitions.nightly.steps[0].when.value.step_output.step_id "diagnosis" must reference an earlier step`,
 			},
 			{
 				name: "step inputs reject future reference",
 				yaml: `
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: diagnosis
-            inputs:
+      steps:
+        - id: diagnosis
+          timeout: 1s
+          inputs:
               source:
                 stepOutput:
                   stepId: pr_fix
                   path: agent.output.text.text
-            agent:
+          agent:
               provider: simple
               prompt: "diagnose"
               output:
                 text: {}
-          - id: pr_fix
-            agent:
+        - id: pr_fix
+          timeout: 1s
+          agent:
               provider: simple
               prompt: "fix"
               output:
@@ -3271,31 +3248,34 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[0].inputs.source.step_output.step_id "pr_fix" must reference an earlier step`,
+				want: `workflows.definitions.nightly.steps[0].inputs.source.step_output.step_id "pr_fix" must reference an earlier step`,
 			},
 			{
 				name: "agent step when requires equals",
 				yaml: `
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: diagnosis
-            agent:
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+      steps:
+        - id: diagnosis
+          timeout: 1s
+          agent:
               provider: simple
               prompt: "diagnose"
               output:
                 text: {}
-          - id: pr_fix
-            agent:
+        - id: pr_fix
+          timeout: 1s
+          agent:
               provider: simple
               prompt: "fix"
               output:
                 text: {}
-            when:
+          when:
               value:
                 stepOutput:
                   stepId: diagnosis
@@ -3312,31 +3292,34 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[1].when.equals is required`,
+				want: `workflows.definitions.nightly.steps[1].when.equals is required`,
 			},
 			{
 				name: "agent step when requires value",
 				yaml: `
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: diagnosis
-            agent:
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+      steps:
+        - id: diagnosis
+          timeout: 1s
+          agent:
               provider: simple
               prompt: "diagnose"
               output:
                 text: {}
-          - id: pr_fix
-            agent:
+        - id: pr_fix
+          timeout: 1s
+          agent:
               provider: simple
               prompt: "fix"
               output:
                 text: {}
-            when:
+          when:
               equals: null
 providers:
   agent:
@@ -3350,21 +3333,22 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.steps[1].when.value is required`,
+				want: `workflows.definitions.nightly.steps[1].when.value is required`,
 			},
 			{
-				name: "event trigger agent missing provider",
+				name: "definition agent missing provider",
 				yaml: `
 workflows:
-  eventTriggers:
+  definitions:
     task_updated:
       provider: temporal
-      match:
-        type: roadmap.task.updated
-      target:
-        steps:
-          - id: run
-            agent:
+      runAs:
+        subject:
+          id: service_account:roadmap-events
+      steps:
+        - id: run
+          timeout: 1s
+          agent:
               model: gpt-5.5
 providers:
   workflow:
@@ -3374,7 +3358,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.eventTriggers.task_updated.target.steps[0].agent.provider is required`,
+				want: `workflows.definitions.task_updated.steps[0].agent.provider is required`,
 			},
 		}
 
@@ -3394,7 +3378,7 @@ server:
 		}
 	})
 
-	t.Run("workflow schedules and event triggers require runAs", func(t *testing.T) {
+	t.Run("workflow definitions require runAs", func(t *testing.T) {
 		t.Parallel()
 
 		cases := []struct {
@@ -3403,21 +3387,19 @@ server:
 			want string
 		}{
 			{
-				name: "schedule",
+				name: "scheduled definition",
 				yaml: `
 apps:
   roadmap:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
 providers:
@@ -3428,25 +3410,22 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.runAs is required`,
+				want: `workflows.definitions.nightly.runAs is required`,
 			},
 			{
-				name: "event trigger",
+				name: "event definition",
 				yaml: `
 apps:
   roadmap:
     source:
       path: ./app/manifest.yaml
 workflows:
-  eventTriggers:
+  definitions:
     task_updated:
       provider: temporal
-      match:
-        type: roadmap.task.updated
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: backfill_items
 providers:
@@ -3457,7 +3436,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.eventTriggers.task_updated.runAs is required`,
+				want: `workflows.definitions.task_updated.runAs is required`,
 			},
 		}
 
@@ -3486,18 +3465,15 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
 providers:
@@ -3522,7 +3498,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		effective, _, err := cfg.EffectiveWorkflowProvider(cfg.Workflows.Schedules["nightly"].Provider)
+		effective, _, err := cfg.EffectiveWorkflowProvider(cfg.Workflows.Definitions["nightly"].Provider)
 		if err != nil {
 			t.Fatalf("EffectiveWorkflowProvider: %v", err)
 		}
@@ -3577,18 +3553,15 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: missing
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
 providers:
@@ -3610,7 +3583,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflows.schedules.nightly.provider`) || !strings.Contains(err.Error(), `unknown workflow "missing"`) {
+		if !strings.Contains(err.Error(), `workflows.definitions.nightly.provider`) || !strings.Contains(err.Error(), `unknown workflow "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -3624,14 +3597,15 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     nightly:
       provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      runAs:
+        subject:
+          id: service_account:roadmap-workflow
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
 providers:
@@ -3663,7 +3637,7 @@ server:
 		}
 	})
 
-	t.Run("allows workflow schedules without provider operation allowlists", func(t *testing.T) {
+	t.Run("allows workflow definitions without provider operation allowlists", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3672,18 +3646,15 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     invalid:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "*/5 * * * *"
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: backfill_items
 providers:
@@ -3707,7 +3678,7 @@ server:
 		}
 	})
 
-	t.Run("allows workflow event triggers without provider operation allowlists", func(t *testing.T) {
+	t.Run("allows workflow event activations without provider operation allowlists", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3716,21 +3687,21 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  eventTriggers:
+  definitions:
     invalid:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-events
-          kind: service_account
-      match:
-        type: roadmap.task.updated
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: backfill_items
+      on:
+        task_updated:
+          event:
+            type: roadmap.task.updated
 providers:
   workflow:
     temporal:
@@ -3752,7 +3723,7 @@ server:
 		}
 	})
 
-	t.Run("rejects workflow event triggers without match type", func(t *testing.T) {
+	t.Run("rejects workflow event activations without event type", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3761,21 +3732,21 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  eventTriggers:
+  definitions:
     invalid:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-events
-          kind: service_account
-      match:
-        source: roadmap
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
+      on:
+        task_updated:
+          event:
+            source: roadmap
 providers:
   workflow:
     temporal:
@@ -3795,12 +3766,12 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflows.eventTriggers.invalid.match.type is required`) {
+		if !strings.Contains(err.Error(), `workflows.definitions.invalid.on.task_updated.event.type is required`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("rejects invalid workflow schedule cron and timezone", func(t *testing.T) {
+	t.Run("rejects invalid workflow schedule activation cron and timezone", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -3809,21 +3780,22 @@ apps:
     source:
       path: ./app/manifest.yaml
 workflows:
-  schedules:
+  definitions:
     invalid:
       provider: temporal
       runAs:
         subject:
           id: service_account:roadmap-workflow
-          kind: service_account
-      cron: "0 0 0 * * *"
-      timezone: Mars/Olympus
-      target:
-        steps:
-          - id: main
-            app:
+      steps:
+        - id: main
+          app:
               name: roadmap
               operation: nightly_sync
+      on:
+        nightly:
+          schedule:
+            cron: "0 0 0 * * *"
+            timezone: Mars/Olympus
 providers:
   workflow:
     temporal:
@@ -3843,7 +3815,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `workflows.schedules.invalid.cron`) {
+		if !strings.Contains(err.Error(), `workflows.definitions.invalid.on.nightly.schedule.cron`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -4287,6 +4259,7 @@ server:
 		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if auth.DockerConfigJSON != `{"auths":{"ghcr.io":{"username":"ghcr-user","password":"ghcr-token"}}}` {
 			t.Fatalf("dockerConfigJson = %q", auth.DockerConfigJSON)
@@ -4335,6 +4308,7 @@ server:
 		auth := cfg.Providers.Agent["simple"].Runtime.ImagePullAuth
 		if auth == nil {
 			t.Fatal("imagePullAuth = nil")
+			return
 		}
 		if _, isSecretRef, err := ParseSecretRefTransport(auth.DockerConfigJSON); err != nil || !isSecretRef {
 			t.Fatalf("dockerConfigJson secret ref parse = %v, %v; want encoded secret ref", isSecretRef, err)
@@ -5083,6 +5057,7 @@ apps:
 	entry := cfg.Apps["service"]
 	if entry == nil {
 		t.Fatal(`Apps["service"] = nil`)
+		return
 	}
 	if !entry.Source.IsPackage() {
 		t.Fatal("Source.IsPackage = false, want true")
@@ -5140,6 +5115,7 @@ providers:
 	} {
 		if entry == nil {
 			t.Fatalf("%s entry = nil", subject)
+			return
 		}
 		if got := entry.Source.Builtin; got != "" {
 			t.Fatalf("%s Source.Builtin = %q, want empty for package source", subject, got)
@@ -6195,6 +6171,7 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	canonical := connections[core.AppConnectionName]
 	if canonical == nil {
 		t.Fatalf("connections[%q] missing", core.AppConnectionName)
+		return
 	}
 	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
 		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
@@ -6262,8 +6239,7 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 					CredentialMode: providermanifestv1.ConnectionModeNone,
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
-							ID:          " service_account:automation ",
-							DisplayName: " Automation app ",
+							ID: " service_account:automation ",
 						},
 						ApplyByDefault: &applyByDefault,
 					},
@@ -6278,11 +6254,12 @@ func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
 	subject := cfg.Apps["source"].Invokes[0].RunAsSubject()
 	if subject == nil {
 		t.Fatal("RunAsSubject() = nil, want subject")
+		return
 	}
 	if subject.SubjectID != "service_account:automation" {
 		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
 	}
-	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Automation app" {
+	if subject.CredentialSubjectID != subject.SubjectID {
 		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
 	}
 	if cfg.Apps["source"].Invokes[0].RunAsAppliesByDefault() {
@@ -6328,8 +6305,7 @@ func TestValidateStructureRejectsAppInvokeRunAsOnSurface(t *testing.T) {
 					Surface: string(SpecSurfaceGraphQL),
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
-							ID:   "service_account:automation",
-							Kind: "service_account",
+							ID: "service_account:automation",
 						},
 					},
 				}},
@@ -6449,6 +6425,7 @@ server:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-app", "provider.yaml") {
 		t.Fatalf("auth app source path = %q, want %q", got, filepath.Join(dir, "auth-app", "provider.yaml"))
@@ -6539,6 +6516,7 @@ server:
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
 	if auth == nil {
 		t.Fatal("SelectedAuthenticationProvider = nil")
+		return
 	}
 	authCfg := mustDecodeNode(t, auth.Config)
 	if len(authCfg) != 3 {
@@ -6704,508 +6682,7 @@ apps:
 	}
 }
 
-func TestApplyAppScopeKeepsAppClosureAndUI(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		Server: ServerConfig{
-			Admin: AdminConfig{
-				UI: "admin_console",
-			},
-			Providers: ServerProvidersConfig{
-				IndexedDB: "sqlite",
-				Secrets:   "runtime_env",
-			},
-		},
-		Apps: map[string]*ProviderEntry{
-			"alpha": {
-				Source: ProviderSource{
-					Path: "alpha/manifest.yaml",
-					Auth: &SourceAuthDef{
-						Token: EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "source-token"}),
-					},
-				},
-				UI:        "alpha_ui",
-				MountPath: "/alpha",
-				RouteAuth: &RouteAuthDef{Provider: "server"},
-				IndexedDB: &IndexedDBBindingConfig{
-					Provider: "sqlite",
-				},
-				Cache:   []string{"session"},
-				S3:      []string{"assets"},
-				Runtime: &RuntimePlacementConfig{Provider: "runner"},
-				Env: map[string]string{
-					"TOKEN": EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "app-token"}),
-				},
-				Invokes: []AppInvocationDependency{{
-					App:       "beta",
-					Operation: "ping",
-				}},
-			},
-			"beta": {
-				Source: ProviderSource{Path: "beta/manifest.yaml"},
-				Invokes: []AppInvocationDependency{{
-					App:       "delta",
-					Operation: "pong",
-				}},
-			},
-			"delta": {
-				Source: ProviderSource{Path: "delta/manifest.yaml"},
-			},
-			"gamma": {
-				Source: ProviderSource{Path: "gamma/manifest.yaml"},
-			},
-		},
-		Providers: ProvidersConfig{
-			Authentication: map[string]*ProviderEntry{
-				"auth":   {Source: ProviderSource{Builtin: "test"}, Default: true},
-				"unused": {Source: ProviderSource{Path: "providers/auth/unused.yaml"}},
-			},
-			Secrets: map[string]*ProviderEntry{
-				"runtime_env": {Source: ProviderSource{Builtin: "env"}},
-				"repo_auth": {
-					Source: ProviderSource{
-						Path: "providers/secrets/repo_auth.yaml",
-						Auth: &SourceAuthDef{
-							Token: EncodeSecretRefTransport(SecretRef{Provider: "env_auth", Name: "repo-token"}),
-						},
-					},
-				},
-				"env_auth": {Source: ProviderSource{Builtin: "env"}},
-				"unused":   {Source: ProviderSource{Path: "providers/secrets/unused.yaml"}},
-			},
-			IndexedDB: map[string]*ProviderEntry{
-				"sqlite": {Source: ProviderSource{Path: "providers/indexeddb/sqlite.yaml"}},
-				"noisy":  {Source: ProviderSource{Path: "providers/indexeddb/noisy.yaml"}},
-			},
-			Cache: map[string]*ProviderEntry{
-				"session": {Source: ProviderSource{Path: "providers/cache/session.yaml"}},
-				"unused":  {Source: ProviderSource{Path: "providers/cache/unused.yaml"}},
-			},
-			S3: map[string]*ProviderEntry{
-				"assets": {Source: ProviderSource{Path: "providers/s3/assets.yaml"}},
-				"unused": {Source: ProviderSource{Path: "providers/s3/unused.yaml"}},
-			},
-			Workflow: map[string]*ProviderEntry{
-				"temporal": {Source: ProviderSource{Path: "providers/workflow/temporal.yaml"}},
-				"unused":   {Source: ProviderSource{Path: "providers/workflow/unused.yaml"}},
-			},
-			Agent: map[string]*ProviderEntry{
-				"agent_default": {Source: ProviderSource{Path: "providers/agent/default.yaml"}, Default: true},
-				"agent_one":     {Source: ProviderSource{Path: "providers/agent/one.yaml"}},
-				"agent_two":     {Source: ProviderSource{Path: "providers/agent/two.yaml"}},
-				"unused":        {Source: ProviderSource{Path: "providers/agent/unused.yaml"}},
-			},
-			UI: map[string]*UIEntry{
-				"admin_console": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/admin.yaml"}}},
-				"alpha_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}, OwnerApp: "alpha"},
-				"gamma_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/gamma.yaml"}}, OwnerApp: "gamma"},
-			},
-		},
-		Runtime: RuntimeConfig{
-			Providers: map[string]*RuntimeProviderEntry{
-				"runner": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "runtime/runner.yaml"}}},
-				"noisy":  {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "runtime/noisy.yaml"}}},
-			},
-		},
-		Workflows: WorkflowsConfig{
-			Schedules: map[string]WorkflowScheduleConfig{
-				"kept": {
-					Provider: "temporal",
-					Target: &WorkflowTargetConfig{Steps: []WorkflowStepConfig{
-						{
-							ID:  "main",
-							App: &WorkflowStepAppCallConfig{Name: "alpha"},
-						},
-						{
-							ID: "agent_one",
-							Agent: &WorkflowStepAgentConfig{
-								Provider: "agent_one",
-								Prompt:   WorkflowTextConfig{Template: "first agent step"},
-							},
-						},
-						{
-							ID: "agent_default",
-							Agent: &WorkflowStepAgentConfig{
-								Prompt: WorkflowTextConfig{Template: "default agent step"},
-							},
-						},
-						{
-							ID: "agent_two",
-							Agent: &WorkflowStepAgentConfig{
-								Provider: "agent_two",
-								Prompt:   WorkflowTextConfig{Template: "second agent step"},
-							},
-						},
-					}},
-				},
-				"dropped": {
-					Target: workflowTestAppStepTargetConfig("gamma", "", "", nil),
-				},
-			},
-		},
-	}
-
-	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
-		t.Fatalf("ApplyAppScope: %v", err)
-	}
-
-	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha", "beta", "delta"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Apps = %v, want %v", got, want)
-	}
-	if got, want := sortedUIEntryKeys(cfg.Providers.UI), []string{"admin_console", "alpha_ui"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.UI = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.Authentication), []string{"auth"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.Authentication = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.Secrets), []string{"env_auth", "repo_auth", "runtime_env"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.Secrets = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.IndexedDB), []string{"sqlite"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.IndexedDB = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.Cache), []string{"session"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.Cache = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.S3), []string{"assets"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.S3 = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.Workflow), []string{"temporal"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.Workflow = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Providers.Agent), []string{"agent_default", "agent_one", "agent_two"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.Agent = %v, want %v", got, want)
-	}
-	if got, want := sortedRuntimeProviderEntryKeys(cfg.Runtime.Providers), []string{"runner"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Runtime.Providers = %v, want %v", got, want)
-	}
-	if got, want := sortedWorkflowScheduleKeys(cfg.Workflows.Schedules), []string{"kept"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Workflows.Schedules = %v, want %v", got, want)
-	}
-}
-
-func TestApplyAppScopeKeepsSameNameUIBeforeCanonicalization(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		Apps: map[string]*ProviderEntry{
-			"alpha": {
-				Source:    ProviderSource{Path: "alpha/manifest.yaml"},
-				MountPath: "/alpha",
-			},
-			"unused": {
-				Source: ProviderSource{Path: "unused/manifest.yaml"},
-			},
-		},
-		Providers: ProvidersConfig{
-			UI: map[string]*UIEntry{
-				"alpha":  {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}},
-				"unused": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/unused.yaml"}}},
-			},
-		},
-	}
-
-	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
-		t.Fatalf("ApplyAppScope: %v", err)
-	}
-
-	if got, want := sortedUIEntryKeys(cfg.Providers.UI), []string{"alpha"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Providers.UI = %v, want %v", got, want)
-	}
-}
-
-func TestApplyAppScopeNodeKeepsOwnerAppUI(t *testing.T) {
-	t.Parallel()
-
-	var root yaml.Node
-	if err := yaml.Unmarshal([]byte(withDefaultConfigAPIVersion(`
-providers:
-  ui:
-    alpha_view:
-      ownerApp: alpha
-      source:
-        path: ui/alpha.yaml
-    noisy:
-      ownerApp: noisy
-      source:
-        path: ui/noisy.yaml
-apps:
-  alpha:
-    source:
-      path: alpha/manifest.yaml
-`)), &root); err != nil {
-		t.Fatalf("yaml.Unmarshal: %v", err)
-	}
-
-	if err := applyAppScopeNode(&root, []string{"alpha"}); err != nil {
-		t.Fatalf("applyAppScopeNode: %v", err)
-	}
-
-	providersUI := mappingValueNode(mappingValueNode(documentValueNode(&root), "providers"), "ui")
-	if mappingValueNode(providersUI, "alpha_view") == nil {
-		t.Fatal("providers.ui.alpha_view should be retained by ownerApp")
-	}
-	if mappingValueNode(providersUI, "noisy") != nil {
-		t.Fatal("providers.ui.noisy should be dropped")
-	}
-}
-
-func TestApplyAppScopeNodeKeepsWorkflowStepRefs(t *testing.T) {
-	t.Parallel()
-
-	var root yaml.Node
-	if err := yaml.Unmarshal([]byte(withDefaultConfigAPIVersion(`
-providers:
-  workflow:
-    temporal:
-      source:
-        path: providers/workflow/temporal.yaml
-    unused:
-      source:
-        path: providers/workflow/unused.yaml
-  agent:
-    agent_default:
-      default: true
-      source:
-        path: providers/agent/default.yaml
-    agent_one:
-      source:
-        path: providers/agent/one.yaml
-    agent_two:
-      source:
-        path: providers/agent/two.yaml
-    unused:
-      source:
-        path: providers/agent/unused.yaml
-apps:
-  alpha:
-    source:
-      path: alpha/manifest.yaml
-  beta:
-    source:
-      path: beta/manifest.yaml
-    invokes:
-      - app: delta
-        operation: ping
-  delta:
-    source:
-      path: delta/manifest.yaml
-  noisy:
-    source:
-      path: noisy/manifest.yaml
-workflows:
-  schedules:
-    kept:
-      provider: temporal
-      cron: "0 3 * * *"
-      target:
-        steps:
-          - id: call_alpha
-            app:
-              name: alpha
-              operation: sync
-          - id: explicit_agent
-            agent:
-              provider: agent_one
-              prompt: "Inspect"
-              tools:
-                - app: beta
-                  operation: search
-          - id: default_agent
-            agent:
-              prompt: "Summarize"
-          - id: second_explicit_agent
-            agent:
-              provider: agent_two
-              prompt: "Fix"
-          - id: reply
-            app:
-              name: beta
-              operation: reply
-    dropped:
-      cron: "0 4 * * *"
-      target:
-        steps:
-          - id: call_noisy
-            app:
-              name: noisy
-              operation: sync
-`)), &root); err != nil {
-		t.Fatalf("yaml.Unmarshal: %v", err)
-	}
-
-	if err := applyAppScopeNode(&root, []string{"alpha"}); err != nil {
-		t.Fatalf("applyAppScopeNode: %v", err)
-	}
-
-	doc := documentValueNode(&root)
-	appsNode := mappingValueNode(doc, "apps")
-	for _, name := range []string{"alpha", "beta", "delta"} {
-		if mappingValueNode(appsNode, name) == nil {
-			t.Fatalf("apps.%s should be retained", name)
-		}
-	}
-	if mappingValueNode(appsNode, "noisy") != nil {
-		t.Fatal("apps.noisy should be dropped")
-	}
-	schedulesNode := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), "kept")
-	if schedulesNode == nil {
-		t.Fatal("workflows.schedules.kept should be retained")
-	}
-	if mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), "dropped") != nil {
-		t.Fatal("workflows.schedules.dropped should be dropped")
-	}
-	workflowProviders := mappingValueNode(mappingValueNode(doc, "providers"), "workflow")
-	if mappingValueNode(workflowProviders, "temporal") == nil || mappingValueNode(workflowProviders, "unused") != nil {
-		t.Fatalf("providers.workflow = %#v, want only temporal retained", mappingNodeEntries(workflowProviders))
-	}
-	agentProviders := mappingValueNode(mappingValueNode(doc, "providers"), "agent")
-	for _, name := range []string{"agent_default", "agent_one", "agent_two"} {
-		if mappingValueNode(agentProviders, name) == nil {
-			t.Fatalf("providers.agent.%s should be retained", name)
-		}
-	}
-	if mappingValueNode(agentProviders, "unused") != nil {
-		t.Fatal("providers.agent.unused should be dropped")
-	}
-}
-
-func TestLoadAppScopePreserveMissingEnvPathsKeepsProjectReposForUnqualifiedPackageSource(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-providerRepositories:
-  mirror:
-    url: https://mirror.example.test/provider-index.yaml
-  private:
-    url: https://private.example.test/provider-index.yaml
-apps:
-  alpha:
-    source:
-      package: github.com/acme/apps/alpha
-  beta:
-    source:
-      repo: private
-      package: github.com/acme/apps/beta
-`)
-
-	cfg, err := LoadAppScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
-	if err != nil {
-		t.Fatalf("LoadAppScopePreserveMissingEnvPaths: %v", err)
-	}
-
-	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Apps = %v, want %v", got, want)
-	}
-	if got, want := sortedProviderRepositoryKeys(cfg.ProviderRepositories), []string{"mirror", "private"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("ProviderRepositories = %v, want %v", got, want)
-	}
-}
-
-func TestLoadAppScopePreserveMissingEnvPathsFiltersProjectReposForQualifiedPackageSource(t *testing.T) {
-	t.Parallel()
-
-	path := mustWriteConfigFile(t, `
-providerRepositories:
-  mirror:
-    url: https://mirror.example.test/provider-index.yaml
-  private:
-    url: https://private.example.test/provider-index.yaml
-apps:
-  alpha:
-    source:
-      repo: private
-      package: github.com/acme/apps/alpha
-  beta:
-    source:
-      repo: mirror
-      package: github.com/acme/apps/beta
-`)
-
-	cfg, err := LoadAppScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
-	if err != nil {
-		t.Fatalf("LoadAppScopePreserveMissingEnvPaths: %v", err)
-	}
-
-	if got, want := sortedProviderRepositoryKeys(cfg.ProviderRepositories), []string{"private"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("ProviderRepositories = %v, want %v", got, want)
-	}
-}
-
-func TestReferencedProviderRepositoriesKeepsProjectReposForUnqualifiedPackageSource(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		ProviderRepositories: map[string]ProviderRepositoryConfig{
-			"mirror":  {URL: "https://mirror.example.test/provider-index.yaml"},
-			"private": {URL: "https://private.example.test/provider-index.yaml"},
-		},
-		Apps: map[string]*ProviderEntry{
-			"alpha": {
-				Source: ProviderSource{packageName: "github.com/acme/apps/alpha"},
-			},
-		},
-	}
-
-	if got, want := sortedStringSetKeys(referencedProviderRepositories(cfg)), []string{"mirror", "private"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("referencedProviderRepositories = %v, want %v", got, want)
-	}
-}
-
-func TestApplyAppScopeRetainedWorkflowAddsReferencedApps(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		Apps: map[string]*ProviderEntry{
-			"alpha": {Source: ProviderSource{Path: "alpha/manifest.yaml"}},
-			"beta":  {Source: ProviderSource{Path: "beta/manifest.yaml"}},
-			"delta": {Source: ProviderSource{Path: "delta/manifest.yaml"}},
-			"gamma": {Source: ProviderSource{Path: "gamma/manifest.yaml"}},
-		},
-		Workflows: WorkflowsConfig{
-			Schedules: map[string]WorkflowScheduleConfig{
-				"fanout": {
-					Target: &WorkflowTargetConfig{Steps: []WorkflowStepConfig{
-						{
-							ID:  "alpha",
-							App: &WorkflowStepAppCallConfig{Name: "alpha", Operation: "ping"},
-						},
-						{
-							ID:  "beta",
-							App: &WorkflowStepAppCallConfig{Name: "beta", Operation: "pong"},
-						},
-					}},
-				},
-				"dependency_target": {
-					Target: workflowTestAppStepTargetConfig("beta", "", "", nil),
-				},
-			},
-		},
-	}
-
-	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
-		t.Fatalf("ApplyAppScope: %v", err)
-	}
-	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha", "beta"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Apps = %v, want %v", got, want)
-	}
-	if got, want := sortedWorkflowScheduleKeys(cfg.Workflows.Schedules), []string{"fanout"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Workflows.Schedules = %v, want %v", got, want)
-	}
-}
-
-func TestApplyAppScopeRejectsUnknownApp(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{Apps: map[string]*ProviderEntry{}}
-	err := ApplyAppScope(cfg, []string{"missing"})
-	if err == nil || !strings.Contains(err.Error(), `unknown app "missing"`) {
-		t.Fatalf("ApplyAppScope error = %v, want unknown app", err)
-	}
-}
-
-func workflowTestAppStepTargetConfig(name, operation string, credentialMode providermanifestv1.ConnectionMode, input map[string]any) *WorkflowTargetConfig {
+func workflowTestAppStepConfig(name, operation string, credentialMode providermanifestv1.ConnectionMode, input map[string]any) []WorkflowStepConfig {
 	step := WorkflowStepConfig{
 		ID: "main",
 		App: &WorkflowStepAppCallConfig{
@@ -7215,7 +6692,7 @@ func workflowTestAppStepTargetConfig(name, operation string, credentialMode prov
 			Input:          workflowTestLiteralObjectValueConfig(input),
 		},
 	}
-	return &WorkflowTargetConfig{Steps: []WorkflowStepConfig{step}}
+	return []WorkflowStepConfig{step}
 }
 
 func workflowTestLiteralObjectValueConfig(input map[string]any) WorkflowValueConfig {
@@ -7227,58 +6704,4 @@ func workflowTestLiteralObjectValueConfig(input map[string]any) WorkflowValueCon
 		fields[key] = WorkflowValueConfig{Literal: value, LiteralSet: true}
 	}
 	return WorkflowValueConfig{Object: fields}
-}
-
-func sortedProviderEntryKeys(entries map[string]*ProviderEntry) []string {
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-func sortedUIEntryKeys(entries map[string]*UIEntry) []string {
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-func sortedProviderRepositoryKeys(entries map[string]ProviderRepositoryConfig) []string {
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-func sortedStringSetKeys(entries map[string]struct{}) []string {
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-func sortedWorkflowScheduleKeys(entries map[string]WorkflowScheduleConfig) []string {
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-func sortedRuntimeProviderEntryKeys(entries map[string]*RuntimeProviderEntry) []string {
-	keys := make([]string, 0, len(entries))
-	for key := range entries {
-		keys = append(keys, key)
-	}
-	slices.Sort(keys)
-	return keys
 }

@@ -49,12 +49,11 @@ func (p *remoteProviderBase) ResolveHTTPSubject(ctx context.Context, req *core.H
 	if strings.TrimSpace(subject.GetId()) == "" {
 		return nil, nil
 	}
-	return &core.HTTPResolvedSubject{
-		ID:          strings.TrimSpace(subject.GetId()),
-		Kind:        strings.TrimSpace(subject.GetKind()),
-		DisplayName: strings.TrimSpace(subject.GetDisplayName()),
-		AuthSource:  strings.TrimSpace(subject.GetAuthSource()),
-	}, nil
+	resolved := &core.HTTPResolvedSubject{ID: strings.TrimSpace(subject.GetId())}
+	if kind, _, ok := core.ParseSubjectID(resolved.ID); ok {
+		resolved.Kind = kind
+	}
+	return resolved, nil
 }
 
 func httpSubjectRequestProto(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSubjectRequest, error) {

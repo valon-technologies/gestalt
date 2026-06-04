@@ -232,14 +232,6 @@ class AgentMessage:
     metadata: JsonObjectInput | None = None
 
 
-@dataclass(slots=True)
-class AgentActor:
-    subject_id: str = ""
-    subject_kind: str = ""
-    display_name: str = ""
-    auth_source: str = ""
-
-
 @dataclass(init=False, slots=True)
 class AgentToolRef:
     app: str = ""
@@ -293,7 +285,7 @@ class AgentSession:
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     metadata: JsonObjectInput | None = None
-    created_by: AgentActor | Mapping[str, Any] | None = None
+    created_by_subject_id: str = ""
     created_at: TimestampInput = None
     updated_at: TimestampInput = None
     last_turn_at: TimestampInput = None
@@ -336,7 +328,7 @@ class CreateAgentProviderSessionRequest:
     model: str = ""
     client_ref: str = ""
     metadata: JsonObject | None = None
-    created_by: AgentActor | None = None
+    created_by_subject_id: str = ""
     subject: Subject | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
@@ -381,7 +373,7 @@ class AgentTurn:
     messages: Iterable[AgentMessage | Mapping[str, Any]] = field(default_factory=list)
     output: "AgentTurnOutput | Mapping[str, Any] | None" = None
     status_message: str = ""
-    created_by: AgentActor | Mapping[str, Any] | None = None
+    created_by_subject_id: str = ""
     created_at: TimestampInput = None
     started_at: TimestampInput = None
     completed_at: TimestampInput = None
@@ -450,7 +442,7 @@ class CreateAgentProviderTurnRequest:
     tools: Iterable[ResolvedAgentTool] = field(default_factory=list)
     output: AgentOutput | Mapping[str, Any] | None = None
     metadata: JsonObject | None = None
-    created_by: AgentActor | None = None
+    created_by_subject_id: str = ""
     execution_ref: str = ""
     tool_refs: Iterable[AgentToolRef] = field(default_factory=list)
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
@@ -646,9 +638,9 @@ def create_agent_provider_session_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by=agent_actor_from_proto(request.created_by)
-        if has_field(request, "created_by")
-        else None,
+        created_by_subject_id=request.created_by_subject_id.strip()
+        if has_field(request, "created_by_subject_id")
+        else "",
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
@@ -707,7 +699,10 @@ def create_agent_provider_turn_request_from_proto(
 ) -> CreateAgentProviderTurnRequest:
     if not has_field(request, "output"):
         raise ValueError("create turn output is required")
+    if request.timeout_seconds < 0:
+        raise ValueError("agent create turn timeout_seconds must not be negative")
     return CreateAgentProviderTurnRequest(
+        timeout_seconds=request.timeout_seconds,
         turn_id=request.turn_id,
         session_id=request.session_id,
         idempotency_key=request.idempotency_key,
@@ -718,9 +713,9 @@ def create_agent_provider_turn_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by=agent_actor_from_proto(request.created_by)
-        if has_field(request, "created_by")
-        else None,
+        created_by_subject_id=request.created_by_subject_id.strip()
+        if has_field(request, "created_by_subject_id")
+        else "",
         execution_ref=request.execution_ref,
         tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
         tool_source=request.tool_source,
@@ -731,7 +726,6 @@ def create_agent_provider_turn_request_from_proto(
         if has_field(request, "model_options")
         else None,
         run_grant=request.run_grant,
-        timeout_seconds=request.timeout_seconds,
     )
 
 
@@ -832,7 +826,7 @@ def agent_session_to_proto(value: AgentSession | Mapping[str, Any]) -> Any:
         state=_int_field(session.state),
     )
     _copy_struct(out, "metadata", session.metadata)
-    _copy_message(out, "created_by", agent_actor_to_proto(session.created_by))
+    _copy_scalar(out, "created_by_subject_id", (session.created_by_subject_id or "").strip())
     _copy_timestamp(out, "created_at", session.created_at)
     _copy_timestamp(out, "updated_at", session.updated_at)
     _copy_timestamp(out, "last_turn_at", session.last_turn_at)
@@ -947,7 +941,7 @@ def agent_turn_to_proto(value: AgentTurn | Mapping[str, Any]) -> Any:
     if output is not None:
         field, message = output
         getattr(out, field).CopyFrom(message)
-    _copy_message(out, "created_by", agent_actor_to_proto(turn.created_by))
+    _copy_scalar(out, "created_by_subject_id", (turn.created_by_subject_id or "").strip())
     _copy_timestamp(out, "created_at", turn.created_at)
     _copy_timestamp(out, "started_at", turn.started_at)
     _copy_timestamp(out, "completed_at", turn.completed_at)
@@ -1160,34 +1154,12 @@ def agent_image_ref_to_proto(
     return pb.AgentMessagePartImageRef(uri=image_ref.uri, mime_type=image_ref.mime_type)
 
 
-def agent_actor_from_proto(value: Any) -> AgentActor:
-    return AgentActor(
-        subject_id=value.subject_id,
-        subject_kind=value.subject_kind,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
-    )
-
-
-def agent_actor_to_proto(value: AgentActor | Mapping[str, Any] | None) -> Any | None:
-    if value is None:
-        return None
-    actor = _coerce(value, AgentActor, "AgentActor")
-    return pb.AgentActor(
-        subject_id=actor.subject_id,
-        subject_kind=actor.subject_kind,
-        display_name=actor.display_name,
-        auth_source=actor.auth_source,
-    )
 
 
 def subject_from_proto(value: Any) -> Subject:
     return Subject(
         id=value.id,
-        kind=value.kind,
         credential_subject_id=value.credential_subject_id,
-        display_name=value.display_name,
-        auth_source=value.auth_source,
         email=value.email,
     )
 
@@ -1200,10 +1172,7 @@ def subject_to_proto(
     subject = _coerce(value, Subject, "Subject")
     return _app_pb.SubjectContext(
         id=subject.id,
-        kind=subject.kind,
         credential_subject_id=subject.credential_subject_id,
-        display_name=subject.display_name,
-        auth_source=subject.auth_source,
         email=subject.email,
     )
 
@@ -1313,9 +1282,9 @@ def agent_session_from_proto(value: Any) -> AgentSession:
         metadata=struct_to_dict(value.metadata)
         if has_field(value, "metadata")
         else None,
-        created_by=agent_actor_from_proto(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         created_at=datetime_from_timestamp(value.created_at)
         if has_field(value, "created_at")
         else None,
@@ -1346,9 +1315,9 @@ def agent_turn_from_proto(value: Any) -> AgentTurn:
         messages=[agent_message_from_proto(message) for message in value.messages],
         output=_agent_turn_output_from_proto(value),
         status_message=value.status_message,
-        created_by=agent_actor_from_proto(value.created_by)
-        if has_field(value, "created_by")
-        else None,
+        created_by_subject_id=value.created_by_subject_id.strip()
+        if has_field(value, "created_by_subject_id")
+        else "",
         created_at=datetime_from_timestamp(value.created_at)
         if has_field(value, "created_at")
         else None,
@@ -1563,6 +1532,10 @@ def _coerce(value: Any, cls: type[Any], field_name: str) -> Any:
     raise TypeError(f"{field_name} must be {cls.__name__} or a mapping")
 
 
+def _copy_scalar(target: Any, field: str, value: str) -> None:
+    setattr(target, field, value or "")
+
+
 def _copy_message(target: Any, field: str, value: Any | None) -> None:
     if value is not None:
         getattr(target, field).CopyFrom(value)
@@ -1584,27 +1557,6 @@ def _copy_value(target: Any, field: str, value: Any) -> None:
         getattr(target, field).CopyFrom(value_from_json(value))
 
 
-def agent_actor_to_dict(actor: Any) -> dict[str, Any]:
-    """Convert an ``AgentActor`` value to a plain dictionary."""
-
-    return _message_fields(
-        actor,
-        ("subject_id", "subject_kind", "display_name", "auth_source"),
-    )
-
-
-def agent_actor_from_dict(value: Mapping[str, Any] | None) -> Any:
-    """Create an ``AgentActor`` from a plain dictionary."""
-
-    data = dict(value or {})
-    return AgentActor(
-        subject_id=data.get("subject_id", ""),
-        subject_kind=data.get("subject_kind", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
-    )
-
-
 def subject_to_dict(subject: Any) -> dict[str, Any]:
     """Convert an ``Subject`` value to a dictionary."""
 
@@ -1612,10 +1564,7 @@ def subject_to_dict(subject: Any) -> dict[str, Any]:
         subject,
         (
             "id",
-            "kind",
             "credential_subject_id",
-            "display_name",
-            "auth_source",
             "email",
         ),
     )
@@ -1627,10 +1576,7 @@ def subject_from_dict(value: Mapping[str, Any] | None) -> Any:
     data = dict(value or {})
     return Subject(
         id=data.get("id", ""),
-        kind=data.get("kind", ""),
         credential_subject_id=data.get("credential_subject_id", ""),
-        display_name=data.get("display_name", ""),
-        auth_source=data.get("auth_source", ""),
         email=data.get("email", ""),
     )
 
@@ -2110,8 +2056,13 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CreateAgentProviderTurnRequest):
         if not has_field(value, "output"):
             raise ValueError("create turn output is required")
+        if value.timeout_seconds < 0:
+            raise ValueError("agent create turn timeout_seconds must not be negative")
         return _copy(value)
     data = _data(value, kwargs)
+    timeout_seconds = data.get("timeout_seconds", 0)
+    if timeout_seconds < 0:
+        raise ValueError("agent create turn timeout_seconds must not be negative")
     request = pb.CreateAgentProviderTurnRequest(
         session_id=data.get("session_id", ""),
         model=data.get("model", ""),
@@ -2121,7 +2072,7 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
         ],
         tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
         idempotency_key=data.get("idempotency_key", ""),
-        timeout_seconds=data.get("timeout_seconds", 0),
+        timeout_seconds=timeout_seconds,
     )
     request.output.CopyFrom(_agent_output_to_proto(data.get("output")))
     if data.get("metadata") is not None:
@@ -2255,11 +2206,10 @@ class Agent:
     method is mutated to include that invocation token before the RPC is sent.
     """
 
-    def __init__(self, invocation_token: str) -> None:
+    def __init__(
+        self, invocation_token: str, *, workflow: JsonObjectInput | None = None
+    ) -> None:
         trimmed_token = invocation_token.strip()
-        if not trimmed_token:
-            raise RuntimeError("agent: invocation token is not available")
-
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"agent: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2268,6 +2218,7 @@ class Agent:
         self._channel = host_service_channel("agent", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)
         self._invocation_token = trimmed_token
+        self._workflow = struct_from_dict(workflow) if workflow else None
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -2280,14 +2231,14 @@ class Agent:
         """Create an agent session."""
 
         request = _agent_create_session_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_session_from_proto(_grpc_call(self._stub.CreateSession, request))
 
     def get_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
         """Fetch one agent session."""
 
         request = _agent_get_session_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_session_from_proto(_grpc_call(self._stub.GetSession, request))
 
     def list_sessions(
@@ -2296,7 +2247,7 @@ class Agent:
         """List agent sessions visible to the invocation token."""
 
         request = _agent_list_sessions_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_sessions_response_from_proto(
             _grpc_call(self._stub.ListSessions, request)
         )
@@ -2307,21 +2258,21 @@ class Agent:
         """Update mutable fields on an agent session."""
 
         request = _agent_update_session_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_session_from_proto(_grpc_call(self._stub.UpdateSession, request))
 
     def create_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Create an agent turn."""
 
         request = _agent_create_turn_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_turn_from_proto(_grpc_call(self._stub.CreateTurn, request))
 
     def get_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Fetch one agent turn."""
 
         request = _agent_get_turn_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_turn_from_proto(_grpc_call(self._stub.GetTurn, request))
 
     def list_turns(
@@ -2330,7 +2281,7 @@ class Agent:
         """List turns for an agent session."""
 
         request = _agent_list_turns_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_turns_response_from_proto(
             _grpc_call(self._stub.ListTurns, request)
         )
@@ -2339,7 +2290,7 @@ class Agent:
         """Cancel an in-progress agent turn."""
 
         request = _agent_cancel_turn_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_turn_from_proto(_grpc_call(self._stub.CancelTurn, request))
 
     def list_turn_events(
@@ -2348,7 +2299,7 @@ class Agent:
         """List events emitted for an agent turn."""
 
         request = _agent_list_turn_events_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_turn_events_response_from_proto(
             _grpc_call(self._stub.ListTurnEvents, request)
         )
@@ -2359,7 +2310,7 @@ class Agent:
         """List pending or completed agent interactions."""
 
         request = _agent_list_interactions_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return list_agent_interactions_response_from_proto(
             _grpc_call(self._stub.ListInteractions, request)
         )
@@ -2370,10 +2321,15 @@ class Agent:
         """Resolve an agent interaction with a host response."""
 
         request = _agent_resolve_interaction_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return agent_interaction_from_proto(
             _grpc_call(self._stub.ResolveInteraction, request)
         )
+
+    def _attach_context(self, request: Any) -> None:
+        request.invocation_token = self._invocation_token
+        if self._workflow is not None and hasattr(request, "workflow"):
+            request.workflow.CopyFrom(self._workflow)
 
     def __enter__(self) -> Agent:
         """Return the client for ``with`` statements."""

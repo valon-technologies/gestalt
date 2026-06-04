@@ -641,9 +641,6 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	if auditRecord["operation"] != "api_token.list" {
 		t.Fatalf("expected audit operation api_token.list, got %v", auditRecord["operation"])
 	}
-	if auditRecord["auth_source"] != "session" {
-		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
-	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
 	}
@@ -760,15 +757,10 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 						Method:   http.MethodPost,
 						Security: "public",
 						Target:   "receive_event",
-						Ack: &providermanifestv1.HTTPAck{
-							Status: http.StatusAccepted,
-							Body:   map[string]any{"accepted": true},
-						},
 					},
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, srv)
 
@@ -779,8 +771,8 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 		t.Fatalf("http binding request: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusAccepted {
-		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusAccepted)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("http binding status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
 	select {

@@ -109,12 +109,6 @@ func (s *Server) verifyHTTPBindingHMACRequest(r *http.Request, binding MountedHT
 	if subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) != 1 {
 		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid request signature", nil)
 	}
-	if binding.Ack != nil && strings.TrimSpace(binding.Security.TimestampHeader) != "" && binding.Security.MaxAgeSeconds > 0 {
-		replayKey := binding.AppName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
-		if !s.httpBindingReplayStore.MarkIfNew(replayKey, time.Duration(binding.Security.MaxAgeSeconds)*time.Second) {
-			return nil, newHTTPBindingRequestError(http.StatusOK, "duplicate signed delivery", nil)
-		}
-	}
 	return &verifiedHTTPBindingSender{
 		Scheme:  binding.SecurityName,
 		Subject: binding.AppName + "/" + binding.Name + "#" + binding.SecurityName,
