@@ -2,6 +2,8 @@ import { create } from "@bufbuild/protobuf";
 import {
   Code,
   ConnectError,
+  createClient,
+  type Client,
   type ServiceImpl,
 } from "@connectrpc/connect";
 
@@ -14,6 +16,7 @@ import {
   DefaultAccessPolicy as ProtoDefaultAccessPolicy,
   DeleteRelationshipResponseSchema,
   GetActiveModelRefResponseSchema,
+  ListRelationshipsRequestSchema,
   ListActiveModelResourceTypesResponseSchema,
   ListRelationshipsResponseSchema,
   ModelActionSchema,
@@ -39,6 +42,7 @@ import {
   type DeleteRelationshipRequest as ProtoDeleteRelationshipRequest,
   type ListActiveModelResourceTypesRequest as ProtoListActiveModelResourceTypesRequest,
   type ListRelationshipsRequest as ProtoListRelationshipsRequest,
+  type ListRelationshipsResponse as ProtoListRelationshipsResponse,
   type ModelAllowedTarget as ProtoModelAllowedTarget,
   type Relationship as ProtoRelationship,
   type RelationshipFilter as ProtoRelationshipFilter,
@@ -56,6 +60,12 @@ import {
   timestampFromDate,
   type JsonObjectInput,
 } from "./protocol.ts";
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
 
 export const RelationshipTargetType = {
   UNSPECIFIED: ProtoRelationshipTargetType.UNSPECIFIED,
@@ -251,6 +261,54 @@ export interface ListActiveModelResourceTypesResponse {
   resourceTypes?: readonly AuthorizationModelResourceType[] | undefined;
   nextPageToken?: string | undefined;
   modelId?: string | undefined;
+}
+
+export interface Authorization {
+  listRelationships(
+    request: ListRelationshipsRequest,
+  ): Promise<ListRelationshipsResponse>;
+}
+
+class AuthorizationImpl implements Authorization {
+  private readonly client: Client<typeof AuthorizationProviderService>;
+
+  constructor(target?: string, relayToken?: string) {
+    const host = target
+      ? { target, token: relayToken?.trim() ?? "" }
+      : requireHostServiceTarget("authorization");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("authorization", host.target),
+      hostServiceMetadataInterceptors(host.token, ""),
+    );
+    this.client = createClient(AuthorizationProviderService, transport);
+  }
+
+  async listRelationships(
+    request: ListRelationshipsRequest,
+  ): Promise<ListRelationshipsResponse> {
+    return listRelationshipsResponseFromProto(
+      await this.client.listRelationships(listRelationshipsRequestToProto(request)),
+    );
+  }
+}
+
+let sharedAuthorization:
+  | { target: string; token: string; client: Authorization }
+  | undefined;
+
+export function Authorization(): Authorization {
+  const { target, token } = requireHostServiceTarget("authorization");
+  if (
+    sharedAuthorization &&
+    sharedAuthorization.target === target &&
+    sharedAuthorization.token === token
+  ) {
+    return sharedAuthorization.client;
+  }
+
+  const client = new AuthorizationImpl(target, token);
+  sharedAuthorization = { target, token, client };
+  return client;
 }
 
 export interface AuthorizationProviderOptions extends ProviderBaseOptions {
@@ -516,6 +574,25 @@ function listRelationshipsRequestFromProto(
   };
 }
 
+function listRelationshipsRequestToProto(
+  value: ListRelationshipsRequest,
+) {
+  return create(ListRelationshipsRequestSchema, {
+    filter: relationshipFilterToProto(value.filter),
+    pageSize: value.pageSize ?? 0,
+    pageToken: value.pageToken ?? "",
+  });
+}
+
+function listRelationshipsResponseFromProto(
+  value: ProtoListRelationshipsResponse,
+): ListRelationshipsResponse {
+  return {
+    relationships: value.relationships.map(relationshipFromProtoRequired),
+    nextPageToken: value.nextPageToken,
+  };
+}
+
 function listRelationshipsResponseToProto(
   value: ListRelationshipsResponse | undefined,
 ) {
@@ -717,6 +794,21 @@ function relationshipFilterFromProto(
     targetEntityType: value.targetEntityType,
     resourceType: value.resourceType,
     sourceLayer: value.sourceLayer,
+  };
+}
+
+function relationshipFilterToProto(value: RelationshipFilter | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    target: relationshipTargetToProto(value.target),
+    relation: value.relation ?? "",
+    resource: resourceToProto(value.resource),
+    targetType: value.targetType ?? RelationshipTargetType.UNSPECIFIED,
+    targetEntityType: value.targetEntityType ?? "",
+    resourceType: value.resourceType ?? "",
+    sourceLayer: value.sourceLayer ?? SourceLayer.UNSPECIFIED,
   };
 }
 

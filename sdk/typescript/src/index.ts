@@ -110,6 +110,7 @@ export {
   type RuntimeLogWriterOptions,
 } from "./runtime-log-host.ts";
 export {
+  Authorization,
   AuthorizationProvider,
   DefaultAccessPolicy,
   RelationshipTargetType,
@@ -119,6 +120,7 @@ export {
   isAuthorizationProvider,
   type AddRelationshipRequest,
   type AddRelationshipResponse,
+  type Authorization as AuthorizationClient,
   type AuthorizationAction,
   type AuthorizationModel,
   type AuthorizationModelRef,
