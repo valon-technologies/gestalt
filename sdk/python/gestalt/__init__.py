@@ -168,11 +168,13 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
 _AUTHORIZATION_AUTHORED_EXPORTS = (
     "AddRelationshipRequest",
     "AddRelationshipResponse",
+    "Authorization",
     "AuthorizationAction",
     "AuthorizationModel",
     "AuthorizationModelRef",
     "AuthorizationModelResourceType",
     "AuthorizationModelResourceTypeFilter",
+    "AuthorizationProtocol",
     "AuthorizationResource",
     "AuthorizationSubject",
     "CheckAccessManyRequest",
