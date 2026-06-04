@@ -169,7 +169,6 @@ type Deps struct {
 	AgentRunGrants              *agentgrant.Manager
 	WorkflowManager             workflowmanager.Service
 	AgentManager                agentmanager.Service
-	AuthorizationProvider       core.AuthorizationProvider
 	Egress                      EgressDeps
 	AppInvocation               invocation.Invoker
 	WorkflowAppInvocationGrants map[string]appaccessservice.InvocationGrants
@@ -982,12 +981,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders)
-	if err != nil {
-		_ = closeAuthProviders(authProviders)
-		return nil, err
-	}
-	deps.AuthorizationProvider = authorizationProvider
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {
