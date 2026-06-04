@@ -14,14 +14,11 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"gopkg.in/yaml.v3"
 )
 
@@ -90,7 +87,6 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	t.Parallel()
 
 	hostServices, invTokens, err := buildProviderHostServices("metadata", Deps{
-		AuthorizationProvider: &recordingAuthorizationProvider{},
 		Services: &coredata.Services{
 			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
 		},
@@ -103,32 +99,10 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	}
 
 	names := hostServiceNames(hostServices)
-	for _, want := range []string{"authorization", "app", "workflow_provider", "agent_provider", "external_credentials"} {
+	for _, want := range []string{"app", "workflow_provider", "agent_provider", "external_credentials"} {
 		if !hasHostServiceName(names, want) {
 			t.Fatalf("provider host services missing %q: %v", want, names)
 		}
-	}
-}
-
-func TestAppAuthorizationHostServiceIsReadOnly(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingAuthorizationProvider{}
-	service := appAuthorizationHostService{provider: provider}
-
-	_, err := service.ListRelationships(context.Background(), &proto.ListRelationshipsRequest{
-		Filter: &proto.RelationshipFilter{ResourceType: "workplaceHub"},
-	})
-	if err != nil {
-		t.Fatalf("ListRelationships: %v", err)
-	}
-	if len(provider.listRequests) != 1 || provider.listRequests[0].GetFilter().GetResourceType() != "workplaceHub" {
-		t.Fatalf("ListRelationships requests = %#v", provider.listRequests)
-	}
-
-	_, err = service.AddRelationship(context.Background(), &proto.AddRelationshipRequest{})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("AddRelationship error = %v, want PermissionDenied", err)
 	}
 }
 
