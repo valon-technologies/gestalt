@@ -183,7 +183,7 @@ type Deps struct {
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
-type AuthorizationFactory func(node yaml.Node) (core.AuthorizationProvider, error)
+type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService) (core.AuthorizationProvider, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -966,7 +966,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
-	authorizationProviders, err := buildAuthorizationProviders(cfg, factories)
+	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
@@ -1820,7 +1820,7 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 	return auth, nil
 }
 
-func buildAuthorizationProviders(cfg *config.Config, factories *FactoryRegistry) (map[string]core.AuthorizationProvider, error) {
+func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (map[string]core.AuthorizationProvider, error) {
 	if len(cfg.Providers.Authorization) == 0 {
 		return nil, nil
 	}
@@ -1834,14 +1834,14 @@ func buildAuthorizationProviders(cfg *config.Config, factories *FactoryRegistry)
 	if entry == nil {
 		return nil, nil
 	}
-	provider, err := buildNamedAuthorizationProvider(name, entry, factories)
+	provider, err := buildNamedAuthorizationProvider(ctx, name, entry, factories, deps)
 	if err != nil {
 		return nil, err
 	}
 	return map[string]core.AuthorizationProvider{name: provider}, nil
 }
 
-func buildNamedAuthorizationProvider(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (core.AuthorizationProvider, error) {
+func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthorizationProvider, error) {
 	logicalName := strings.TrimSpace(name)
 	if logicalName == "" {
 		logicalName = "authorization"
@@ -1857,7 +1857,11 @@ func buildNamedAuthorizationProvider(name string, entry *config.ProviderEntry, f
 			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
 	}
-	provider, err := factories.Authorization(node)
+	hostServices, _, err := buildProviderHostServices(logicalName, deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+	}
+	provider, err := factories.Authorization(ctx, logicalName, node, hostServices)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
