@@ -638,9 +638,7 @@ def create_agent_provider_session_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by_subject_id=request.created_by_subject_id.strip()
-        if has_field(request, "created_by_subject_id")
-        else "",
+        created_by_subject_id=request.created_by_subject_id.strip(),
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
@@ -713,9 +711,7 @@ def create_agent_provider_turn_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        created_by_subject_id=request.created_by_subject_id.strip()
-        if has_field(request, "created_by_subject_id")
-        else "",
+        created_by_subject_id=request.created_by_subject_id.strip(),
         execution_ref=request.execution_ref,
         tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
         tool_source=request.tool_source,
@@ -1282,9 +1278,7 @@ def agent_session_from_proto(value: Any) -> AgentSession:
         metadata=struct_to_dict(value.metadata)
         if has_field(value, "metadata")
         else None,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        created_by_subject_id=value.created_by_subject_id.strip(),
         created_at=datetime_from_timestamp(value.created_at)
         if has_field(value, "created_at")
         else None,
@@ -1315,9 +1309,7 @@ def agent_turn_from_proto(value: Any) -> AgentTurn:
         messages=[agent_message_from_proto(message) for message in value.messages],
         output=_agent_turn_output_from_proto(value),
         status_message=value.status_message,
-        created_by_subject_id=value.created_by_subject_id.strip()
-        if has_field(value, "created_by_subject_id")
-        else "",
+        created_by_subject_id=value.created_by_subject_id.strip(),
         created_at=datetime_from_timestamp(value.created_at)
         if has_field(value, "created_at")
         else None,

@@ -935,6 +935,7 @@ class AgentTransportTests(unittest.TestCase):
             idempotency_key="session-req-1",
             model="gpt-5.1",
             client_ref="cli-session-1",
+            created_by_subject_id="user:session-owner",
         )
         create_session_metadata = struct_pb2.Struct()
         create_session_metadata.update({"source": "py-test"})
@@ -975,6 +976,7 @@ class AgentTransportTests(unittest.TestCase):
                         ],
                     )
                 ],
+                created_by_subject_id="user:turn-owner",
                 execution_ref="exec-turn-1",
                 output=agent_pb2.AgentOutput(
                     text=agent_pb2.AgentTextOutput(),
@@ -1020,12 +1022,14 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(_provider.configured, [("agent-runtime", {"tenant": "acme"})])
         self.assertEqual(created_session.id, "session-1")
         self.assertEqual(created_session.state, agent_pb2.AGENT_SESSION_STATE_ACTIVE)
+        self.assertEqual(created_session.created_by_subject_id, "user:session-owner")
         self.assertEqual(
             [session.id for session in listed_sessions.sessions], ["session-1"]
         )
         self.assertEqual(fetched_session.state, agent_pb2.AGENT_SESSION_STATE_ARCHIVED)
         self.assertEqual(updated_session.client_ref, "cli-session-2")
         self.assertEqual(created_turn.id, "turn-1")
+        self.assertEqual(created_turn.created_by_subject_id, "user:turn-owner")
         self.assertEqual(
             created_turn.status,
             agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
