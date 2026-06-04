@@ -87,6 +87,7 @@ type CapabilityLister interface {
 // UserStore is the user persistence surface the broker needs to canonicalize
 // session identities before resolving user-scoped credentials.
 type UserStore interface {
+	GetUser(ctx context.Context, id string) (*core.User, error)
 	FindOrCreateUser(ctx context.Context, email string) (*core.User, error)
 }
 
@@ -740,7 +741,40 @@ func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *prin
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
 	p = principal.Canonicalize(p)
-	if p == nil || p.UserID != "" || principal.IsNonUserPrincipal(p) || p.Identity == nil || p.Identity.Email == "" {
+	if p == nil || principal.IsNonUserPrincipal(p) {
+		return nil
+	}
+	if p.UserID != "" {
+		if b.users == nil {
+			return nil
+		}
+		dbUser, err := b.users.GetUser(ctx, p.UserID)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return nil
+			}
+			return fmt.Errorf("%w: %v", ErrUserResolution, err)
+		}
+		if dbUser == nil || dbUser.ID == "" {
+			return fmt.Errorf("%w: no user record returned", ErrUserResolution)
+		}
+		p.UserID = dbUser.ID
+		if p.Identity == nil {
+			p.Identity = &core.UserIdentity{}
+		}
+		if p.Identity.Email == "" {
+			p.Identity.Email = dbUser.Email
+		}
+		if p.Identity.DisplayName == "" {
+			p.Identity.DisplayName = dbUser.DisplayName
+		}
+		if p.Kind == "" {
+			p.Kind = principal.KindUser
+		}
+		principal.Canonicalize(p)
+		return nil
+	}
+	if p.Identity == nil || p.Identity.Email == "" {
 		return nil
 	}
 	if b.users == nil {

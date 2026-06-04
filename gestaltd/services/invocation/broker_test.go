@@ -53,6 +53,36 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 	}
 }
 
+func TestBrokerResolveUserPrincipalHydratesKnownUserIdentity(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	user, err := svc.Users.FindOrCreateUser(context.Background(), "abc@valon.com")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	broker := NewBroker(testutil.NewProviderRegistry(t), svc.Users, svc.ExternalCredentials)
+	p := &principal.Principal{
+		UserID:    user.ID,
+		SubjectID: principal.UserSubjectID(user.ID),
+		Kind:      principal.KindUser,
+		Source:    principal.SourceAPIToken,
+	}
+
+	if err := broker.resolveUserPrincipal(context.Background(), p); err != nil {
+		t.Fatalf("resolveUserPrincipal: %v", err)
+	}
+	if p.Identity == nil {
+		t.Fatal("identity was not hydrated")
+	}
+	if got := p.Identity.Email; got != "abc@valon.com" {
+		t.Fatalf("identity email = %q, want abc@valon.com", got)
+	}
+	if got := p.SubjectID; got != principal.UserSubjectID(user.ID) {
+		t.Fatalf("subject ID = %q, want %q", got, principal.UserSubjectID(user.ID))
+	}
+}
+
 func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T) {
 	t.Parallel()
 
