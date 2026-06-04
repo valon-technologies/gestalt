@@ -26,6 +26,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
@@ -51,6 +54,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, s3HostService)
 	}
 	hostServices = append(hostServices,
+		buildPluginAuthorizationHostService(deps.AuthorizationProvider),
 		buildAppInvocationHostService(deps, invTokens),
 		buildWorkflowProviderHostService(name, deps, invTokens),
 		buildPluginAgentProviderHostService(name, deps, invTokens),
@@ -480,6 +484,72 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 			proto.RegisterExternalCredentialProviderServer(srv, externalcredentialsservice.NewProviderServer(provider))
 		},
 	}
+}
+
+func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) runtimehost.HostService {
+	return runtimehost.HostService{
+		Name:           "authorization",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAuthorizationProviderServer(srv, appAuthorizationHostService{provider: provider})
+		},
+	}
+}
+
+type appAuthorizationHostService struct {
+	proto.UnimplementedAuthorizationProviderServer
+	provider core.AuthorizationProvider
+}
+
+func (s appAuthorizationHostService) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	if s.provider == nil {
+		return nil, status.Error(codes.Unavailable, "authorization provider is not configured")
+	}
+	return s.provider.CheckAccess(ctx, req)
+}
+
+func (s appAuthorizationHostService) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	if s.provider == nil {
+		return nil, status.Error(codes.Unavailable, "authorization provider is not configured")
+	}
+	return s.provider.CheckAccessMany(ctx, req)
+}
+
+func (s appAuthorizationHostService) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	if s.provider == nil {
+		return nil, status.Error(codes.Unavailable, "authorization provider is not configured")
+	}
+	return s.provider.ListRelationships(ctx, req)
+}
+
+func (s appAuthorizationHostService) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
+	if s.provider == nil {
+		return nil, status.Error(codes.Unavailable, "authorization provider is not configured")
+	}
+	return s.provider.GetActiveModelRef(ctx)
+}
+
+func (s appAuthorizationHostService) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	if s.provider == nil {
+		return nil, status.Error(codes.Unavailable, "authorization provider is not configured")
+	}
+	return s.provider.ListActiveModelResourceTypes(ctx, req)
+}
+
+func (appAuthorizationHostService) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "authorization relationship mutations are not available to apps")
+}
+
+func (appAuthorizationHostService) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "authorization relationship mutations are not available to apps")
+}
+
+func (appAuthorizationHostService) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "authorization state mutations are not available to apps")
+}
+
+func (appAuthorizationHostService) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return nil, status.Error(codes.PermissionDenied, "authorization model mutations are not available to apps")
 }
 
 func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
