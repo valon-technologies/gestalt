@@ -8,9 +8,13 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 )
 
 func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *testing.T) {
@@ -181,6 +185,60 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicy(t *testi
 	if got := policies["team"]; got != proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY {
 		t.Fatalf("team default policy = %v, want deny", got)
 	}
+}
+
+func TestBuildAuthorizationProviderPassesIndexedDBHostService(t *testing.T) {
+	t.Parallel()
+
+	var runtimeConfig yaml.Node
+	if err := yaml.Unmarshal([]byte(`
+command: /bin/true
+config:
+  indexeddb: main-db
+`), &runtimeConfig); err != nil {
+		t.Fatalf("decode runtime config: %v", err)
+	}
+	var capturedName string
+	var capturedHostServices []runtimehost.HostService
+	factories := &FactoryRegistry{
+		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService) (core.AuthorizationProvider, error) {
+			capturedName = name
+			capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
+			return &recordingAuthorizationProvider{}, nil
+		},
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "indexeddb"}},
+		Providers: config.ProvidersConfig{
+			Authorization: map[string]*config.ProviderEntry{
+				"indexeddb": {Config: *runtimeConfig.Content[0]},
+			},
+		},
+	}
+	deps := Deps{
+		EncryptionKey:         []byte("0123456789abcdef0123456789abcdef"),
+		SelectedIndexedDBName: "main-db",
+		IndexedDBs: map[string]indexeddb.IndexedDB{
+			"main-db": &coretesting.StubIndexedDB{},
+		},
+	}
+
+	providers, err := buildAuthorizationProviders(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAuthorizationProviders: %v", err)
+	}
+	if providers["indexeddb"] == nil {
+		t.Fatal("authorization provider was not built")
+	}
+	if capturedName != "indexeddb" {
+		t.Fatalf("authorization provider name = %q, want indexeddb", capturedName)
+	}
+	for _, hostService := range capturedHostServices {
+		if hostService.Name == "indexeddb" {
+			return
+		}
+	}
+	t.Fatalf("authorization host services = %#v, want indexeddb host service", capturedHostServices)
 }
 
 type recordingAuthorizationProvider struct {
