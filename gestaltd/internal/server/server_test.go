@@ -2167,6 +2167,10 @@ func TestMountedUIRoutes(t *testing.T) {
 		cfg.MountedUIs = []server.MountedUI{{
 			Path:    "/sample-portal",
 			Handler: handler,
+			Routes: []server.MountedUIRoute{{
+				Path:         "/*",
+				AllowedRoles: []string{"viewer"},
+			}},
 		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -2296,6 +2300,234 @@ func TestMountedUIRoutes_PrefersNestedMount(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "parent-shell") {
 		t.Fatalf("body = %q, want parent shell", body)
+	}
+}
+
+func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	user := seedUserRecord(t, svc, "ui-user", "ui-user@example.test", time.Now())
+	authz := &serverTestAuthorizationProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{
+			{
+				Name:                "dealHub",
+				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+			},
+			{
+				Name:                "brainPolicy",
+				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW,
+			},
+			{
+				Name:                "gestaltAdmin",
+				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+			},
+		},
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(
+				principal.UserSubjectID(user.ID),
+				"admin",
+				"dealHub",
+				"dealHub",
+			),
+			testAuthorizationRelationship(
+				principal.UserSubjectID(user.ID),
+				"admin",
+				"gestaltAdmin",
+				"gestaltAdmin",
+			),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ui-user@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorization = authz
+		cfg.MountedUIs = []server.MountedUI{
+			{
+				Name:    "deal-hub-ui",
+				Path:    "/deal-hub",
+				AppName: "dealHub",
+				Routes: []server.MountedUIRoute{{
+					Path:         "/*",
+					AllowedRoles: []string{"admin"},
+				}},
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("deal-hub-shell"))
+				}),
+			},
+			{
+				Name:                "brain-ui",
+				Path:                "/brain",
+				AppName:             "brain",
+				AuthorizationPolicy: "brainPolicy",
+				Routes: []server.MountedUIRoute{
+					{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+					{Path: "/*", AllowedRoles: []string{"viewer"}},
+				},
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte("brain-shell"))
+				}),
+			},
+		}
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin-shell"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/deal-hub/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected mounted UI: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("protected mounted UI status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("deal-hub-shell")) {
+		t.Fatalf("protected mounted UI body = %q, want shell", body)
+	}
+	if len(authz.listRelationshipRequests) == 0 {
+		t.Fatal("authorization ListRelationships was not called")
+	}
+	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "dealHub" {
+		t.Fatalf("relationship resource type = %q, want app resource type dealHub", got)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET viewer mounted UI: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("viewer mounted UI status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("brain-shell")) {
+		t.Fatalf("viewer mounted UI body = %q, want shell", body)
+	}
+	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "brainPolicy" {
+		t.Fatalf("relationship resource type = %q, want explicit AuthorizationPolicy brainPolicy", got)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/admin/settings", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET admin mounted UI: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("admin mounted UI status = %d, want 403: %s", resp.StatusCode, body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET admin UI: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin UI status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if !bytes.Contains(body, []byte("admin-shell")) {
+		t.Fatalf("admin UI body = %q, want shell", body)
+	}
+	if len(authz.listRelationshipRequests) < 2 {
+		t.Fatalf("authorization ListRelationships calls = %d, want at least 2", len(authz.listRelationshipRequests))
+	}
+	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "gestaltAdmin" {
+		t.Fatalf("relationship resource type = %q, want gestaltAdmin", got)
+	}
+}
+
+type serverTestAuthorizationProvider struct {
+	core.AuthorizationProvider
+
+	resourceTypes            []*proto.AuthorizationModelResourceType
+	relationships            []*proto.Relationship
+	listRelationshipRequests []*proto.ListRelationshipsRequest
+}
+
+func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	p.listRelationshipRequests = append(p.listRelationshipRequests, req)
+	filter := req.GetFilter()
+	out := []*proto.Relationship{}
+	for _, relationship := range p.relationships {
+		if !relationshipMatchesFilter(relationship, filter) {
+			continue
+		}
+		out = append(out, relationship)
+	}
+	return &proto.ListRelationshipsResponse{Relationships: out}, nil
+}
+
+func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	name := strings.TrimSpace(req.GetFilter().GetName())
+	out := []*proto.AuthorizationModelResourceType{}
+	for _, resourceType := range p.resourceTypes {
+		if name != "" && strings.TrimSpace(resourceType.GetName()) != name {
+			continue
+		}
+		out = append(out, resourceType)
+	}
+	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: out}, nil
+}
+
+func relationshipMatchesFilter(relationship *proto.Relationship, filter *proto.RelationshipFilter) bool {
+	if relationship == nil || filter == nil {
+		return false
+	}
+	tuple := relationship.GetTuple()
+	if resource := filter.GetResource(); resource != nil {
+		if tuple.GetResource().GetType() != resource.GetType() || tuple.GetResource().GetId() != resource.GetId() {
+			return false
+		}
+	}
+	if relation := strings.TrimSpace(filter.GetRelation()); relation != "" && tuple.GetRelation() != relation {
+		return false
+	}
+	if target := filter.GetTarget().GetSubject(); target != nil {
+		subject := tuple.GetTarget().GetSubject()
+		if subject.GetType() != target.GetType() || subject.GetId() != target.GetId() {
+			return false
+		}
+	}
+	return true
+}
+
+func testAuthorizationRelationship(subjectID, relation, resourceType, resourceID string) *proto.Relationship {
+	return &proto.Relationship{
+		Tuple: &proto.RelationshipTuple{
+			Target: &proto.RelationshipTarget{
+				Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{
+					Type: "subject",
+					Id:   subjectID,
+				}},
+			},
+			Relation: relation,
+			Resource: &proto.Resource{
+				Type: resourceType,
+				Id:   resourceID,
+			},
+		},
+		SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 	}
 }
 

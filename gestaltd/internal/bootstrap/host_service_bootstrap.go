@@ -18,6 +18,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -50,6 +51,9 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 	} else if ok {
 		hostServices = append(hostServices, s3HostService)
 	}
+	if authorizationHostService, ok := authorizationHostServiceFromDeps(deps); ok {
+		hostServices = append(hostServices, authorizationHostService)
+	}
 	hostServices = append(hostServices,
 		buildAppInvocationHostService(deps, invTokens),
 		buildWorkflowProviderHostService(name, deps, invTokens),
@@ -69,6 +73,19 @@ func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
 	deps.Caches = scopedCacheBindings(entry.Cache, deps.Caches)
 	deps.S3 = scopedS3Bindings(entry.S3, deps.S3)
 	return deps
+}
+
+func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool) {
+	if deps.Authorization == nil {
+		return runtimehost.HostService{}, false
+	}
+	return runtimehost.HostService{
+		Name:           "authorization",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
+		Register: func(srv *grpc.Server) {
+			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(deps.Authorization))
+		},
+	}, true
 }
 
 func scopedCacheBindings(names []string, bindings map[string]corecache.Cache) map[string]corecache.Cache {

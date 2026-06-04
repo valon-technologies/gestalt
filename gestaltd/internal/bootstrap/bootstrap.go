@@ -164,6 +164,7 @@ type Deps struct {
 	CacheDefs                   map[string]*config.ProviderEntry
 	CacheFactory                CacheFactory
 	S3                          map[string]s3sdk.S3
+	Authorization               core.AuthorizationProvider
 	WorkflowRuntime             *workflowRuntime
 	AgentRuntime                *agentRuntime
 	AgentRunGrants              *agentgrant.Manager
@@ -980,6 +981,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
+	}
+	if _, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders); err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	} else {
+		deps.Authorization = authorizationProvider
 	}
 	closeExternalCredentialsOnError := true
 	defer func() {

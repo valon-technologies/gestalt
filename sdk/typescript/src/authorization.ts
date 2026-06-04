@@ -6,16 +6,25 @@ import {
   type Client,
   type ServiceImpl,
 } from "@connectrpc/connect";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 
 import {
+  ActionSchema,
+  AddRelationshipRequestSchema,
   AddRelationshipResponseSchema,
+  AuthorizationModelSchema,
+  AuthorizationModelResourceTypeFilterSchema,
   AuthorizationModelRefSchema,
   AuthorizationModelResourceTypeSchema,
+  CheckAccessManyRequestSchema,
   CheckAccessManyResponseSchema,
+  CheckAccessRequestSchema,
   CheckAccessResponseSchema,
   DefaultAccessPolicy as ProtoDefaultAccessPolicy,
+  DeleteRelationshipRequestSchema,
   DeleteRelationshipResponseSchema,
   GetActiveModelRefResponseSchema,
+  ListActiveModelResourceTypesRequestSchema,
   ListRelationshipsRequestSchema,
   ListActiveModelResourceTypesResponseSchema,
   ListRelationshipsResponseSchema,
@@ -27,7 +36,9 @@ import {
   RelationshipTargetType as ProtoRelationshipTargetType,
   RelationshipTupleSchema,
   ResourceSchema,
+  SetActiveModelRequestSchema,
   SetActiveModelResponseSchema,
+  SetAuthorizationStateRequestSchema,
   SetAuthorizationStateResponseSchema,
   SourceLayer as ProtoSourceLayer,
   SubjectSchema,
@@ -35,12 +46,18 @@ import {
   SubjectSetTypeSchema,
   AuthorizationProvider as AuthorizationProviderService,
   type AddRelationshipRequest as ProtoAddRelationshipRequest,
+  type AddRelationshipResponse as ProtoAddRelationshipResponse,
   type AuthorizationModel as ProtoAuthorizationModel,
   type AuthorizationModelResourceType as ProtoAuthorizationModelResourceType,
   type CheckAccessManyRequest as ProtoCheckAccessManyRequest,
+  type CheckAccessManyResponse as ProtoCheckAccessManyResponse,
   type CheckAccessRequest as ProtoCheckAccessRequest,
+  type CheckAccessResponse as ProtoCheckAccessResponse,
   type DeleteRelationshipRequest as ProtoDeleteRelationshipRequest,
+  type DeleteRelationshipResponse as ProtoDeleteRelationshipResponse,
+  type GetActiveModelRefResponse as ProtoGetActiveModelRefResponse,
   type ListActiveModelResourceTypesRequest as ProtoListActiveModelResourceTypesRequest,
+  type ListActiveModelResourceTypesResponse as ProtoListActiveModelResourceTypesResponse,
   type ListRelationshipsRequest as ProtoListRelationshipsRequest,
   type ListRelationshipsResponse as ProtoListRelationshipsResponse,
   type ModelAllowedTarget as ProtoModelAllowedTarget,
@@ -48,13 +65,16 @@ import {
   type RelationshipFilter as ProtoRelationshipFilter,
   type RelationshipTarget as ProtoRelationshipTarget,
   type RelationshipTuple as ProtoRelationshipTuple,
+  type SetActiveModelResponse as ProtoSetActiveModelResponse,
   type SetActiveModelRequest as ProtoSetActiveModelRequest,
+  type SetAuthorizationStateResponse as ProtoSetAuthorizationStateResponse,
   type SetAuthorizationStateRequest as ProtoSetAuthorizationStateRequest,
   type SubjectSet as ProtoSubjectSet,
 } from "./internal/gen/v1/authorization_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import {
+  dateFromTimestamp,
   jsonObjectFromStruct,
   structFromObject,
   timestampFromDate,
@@ -264,9 +284,29 @@ export interface ListActiveModelResourceTypesResponse {
 }
 
 export interface Authorization {
+  checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse>;
+  checkAccessMany(
+    request: CheckAccessManyRequest,
+  ): Promise<CheckAccessManyResponse>;
   listRelationships(
     request: ListRelationshipsRequest,
   ): Promise<ListRelationshipsResponse>;
+  addRelationship(
+    request: AddRelationshipRequest,
+  ): Promise<AddRelationshipResponse>;
+  deleteRelationship(
+    request: DeleteRelationshipRequest,
+  ): Promise<DeleteRelationshipResponse>;
+  setAuthorizationState(
+    request: SetAuthorizationStateRequest,
+  ): Promise<SetAuthorizationStateResponse>;
+  getActiveModelRef(): Promise<GetActiveModelRefResponse>;
+  setActiveModel(
+    request: SetActiveModelRequest,
+  ): Promise<SetActiveModelResponse>;
+  listActiveModelResourceTypes(
+    request: ListActiveModelResourceTypesRequest,
+  ): Promise<ListActiveModelResourceTypesResponse>;
 }
 
 class AuthorizationImpl implements Authorization {
@@ -283,11 +323,75 @@ class AuthorizationImpl implements Authorization {
     this.client = createClient(AuthorizationProviderService, transport);
   }
 
+  async checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse> {
+    return checkAccessResponseFromProto(
+      await this.client.checkAccess(checkAccessRequestToProto(request)),
+    );
+  }
+
+  async checkAccessMany(
+    request: CheckAccessManyRequest,
+  ): Promise<CheckAccessManyResponse> {
+    return checkAccessManyResponseFromProto(
+      await this.client.checkAccessMany(checkAccessManyRequestToProto(request)),
+    );
+  }
+
   async listRelationships(
     request: ListRelationshipsRequest,
   ): Promise<ListRelationshipsResponse> {
     return listRelationshipsResponseFromProto(
       await this.client.listRelationships(listRelationshipsRequestToProto(request)),
+    );
+  }
+
+  async addRelationship(
+    request: AddRelationshipRequest,
+  ): Promise<AddRelationshipResponse> {
+    return addRelationshipResponseFromProto(
+      await this.client.addRelationship(addRelationshipRequestToProto(request)),
+    );
+  }
+
+  async deleteRelationship(
+    request: DeleteRelationshipRequest,
+  ): Promise<DeleteRelationshipResponse> {
+    return deleteRelationshipResponseFromProto(
+      await this.client.deleteRelationship(deleteRelationshipRequestToProto(request)),
+    );
+  }
+
+  async setAuthorizationState(
+    request: SetAuthorizationStateRequest,
+  ): Promise<SetAuthorizationStateResponse> {
+    return setAuthorizationStateResponseFromProto(
+      await this.client.setAuthorizationState(
+        setAuthorizationStateRequestToProto(request),
+      ),
+    );
+  }
+
+  async getActiveModelRef(): Promise<GetActiveModelRefResponse> {
+    return getActiveModelRefResponseFromProto(
+      await this.client.getActiveModelRef(create(EmptySchema)),
+    );
+  }
+
+  async setActiveModel(
+    request: SetActiveModelRequest,
+  ): Promise<SetActiveModelResponse> {
+    return setActiveModelResponseFromProto(
+      await this.client.setActiveModel(setActiveModelRequestToProto(request)),
+    );
+  }
+
+  async listActiveModelResourceTypes(
+    request: ListActiveModelResourceTypesRequest,
+  ): Promise<ListActiveModelResourceTypesResponse> {
+    return listActiveModelResourceTypesResponseFromProto(
+      await this.client.listActiveModelResourceTypes(
+        listActiveModelResourceTypesRequestToProto(request),
+      ),
     );
   }
 }
@@ -529,6 +633,30 @@ function checkAccessRequestFromProto(
   };
 }
 
+function checkAccessRequestToProto(value: CheckAccessRequest) {
+  return create(CheckAccessRequestSchema, {
+    subject: subjectToProto(value.subject),
+    action: value.action
+      ? create(ActionSchema, {
+          name: value.action.name ?? "",
+          properties: value.action.properties === undefined
+            ? undefined
+            : structFromObject(value.action.properties),
+        })
+      : undefined,
+    resource: resourceToProto(value.resource),
+  });
+}
+
+function checkAccessResponseFromProto(
+  value: ProtoCheckAccessResponse,
+): CheckAccessResponse {
+  return {
+    allowed: value.allowed,
+    modelId: value.modelId,
+  };
+}
+
 function checkAccessResponseToProto(value: CheckAccessResponse | undefined) {
   if (!value) {
     throw new ConnectError(
@@ -547,6 +675,20 @@ function checkAccessManyRequestFromProto(
 ): CheckAccessManyRequest {
   return {
     requests: value.requests.map(checkAccessRequestFromProto),
+  };
+}
+
+function checkAccessManyRequestToProto(value: CheckAccessManyRequest) {
+  return create(CheckAccessManyRequestSchema, {
+    requests: (value.requests ?? []).map(checkAccessRequestToProto),
+  });
+}
+
+function checkAccessManyResponseFromProto(
+  value: ProtoCheckAccessManyResponse,
+): CheckAccessManyResponse {
+  return {
+    decisions: value.decisions.map(checkAccessResponseFromProto),
   };
 }
 
@@ -616,6 +758,20 @@ function addRelationshipRequestFromProto(
   };
 }
 
+function addRelationshipRequestToProto(value: AddRelationshipRequest) {
+  return create(AddRelationshipRequestSchema, {
+    relationship: relationshipToProto(value.relationship),
+  });
+}
+
+function addRelationshipResponseFromProto(
+  value: ProtoAddRelationshipResponse,
+): AddRelationshipResponse {
+  return {
+    relationship: relationshipFromProto(value.relationship),
+  };
+}
+
 function addRelationshipResponseToProto(
   value: AddRelationshipResponse | undefined,
 ) {
@@ -640,12 +796,41 @@ function deleteRelationshipRequestFromProto(
   };
 }
 
+function deleteRelationshipRequestToProto(value: DeleteRelationshipRequest) {
+  return create(DeleteRelationshipRequestSchema, {
+    relationshipTuple: relationshipTupleToProto(value.relationshipTuple),
+  });
+}
+
+function deleteRelationshipResponseFromProto(
+  _value: ProtoDeleteRelationshipResponse,
+): DeleteRelationshipResponse {
+  return {};
+}
+
 function setAuthorizationStateRequestFromProto(
   value: ProtoSetAuthorizationStateRequest,
 ): SetAuthorizationStateRequest {
   return {
     model: authorizationModelFromProto(value.model),
     relationships: value.relationships.map(relationshipFromProtoRequired),
+  };
+}
+
+function setAuthorizationStateRequestToProto(
+  value: SetAuthorizationStateRequest,
+) {
+  return create(SetAuthorizationStateRequestSchema, {
+    model: authorizationModelToProto(value.model),
+    relationships: (value.relationships ?? []).map(relationshipToProtoRequired),
+  });
+}
+
+function setAuthorizationStateResponseFromProto(
+  value: ProtoSetAuthorizationStateResponse,
+): SetAuthorizationStateResponse {
+  return {
+    activeModel: authorizationModelRefFromProto(value.activeModel),
   };
 }
 
@@ -663,6 +848,14 @@ function setAuthorizationStateResponseToProto(
       ? authorizationModelRefToProto(value.activeModel)
       : undefined,
   });
+}
+
+function getActiveModelRefResponseFromProto(
+  value: ProtoGetActiveModelRefResponse,
+): GetActiveModelRefResponse {
+  return {
+    model: authorizationModelRefFromProto(value.model),
+  };
 }
 
 function getActiveModelRefResponseToProto(
@@ -684,6 +877,20 @@ function setActiveModelRequestFromProto(
 ): SetActiveModelRequest {
   return {
     model: authorizationModelFromProto(value.model),
+  };
+}
+
+function setActiveModelRequestToProto(value: SetActiveModelRequest) {
+  return create(SetActiveModelRequestSchema, {
+    model: authorizationModelToProto(value.model),
+  });
+}
+
+function setActiveModelResponseFromProto(
+  value: ProtoSetActiveModelResponse,
+): SetActiveModelResponse {
+  return {
+    model: authorizationModelRefFromProto(value.model),
   };
 }
 
@@ -711,6 +918,31 @@ function listActiveModelResourceTypesRequestFromProto(
       : undefined,
     pageSize: value.pageSize,
     pageToken: value.pageToken,
+  };
+}
+
+function listActiveModelResourceTypesRequestToProto(
+  value: ListActiveModelResourceTypesRequest,
+) {
+  return create(ListActiveModelResourceTypesRequestSchema, {
+    filter: value.filter
+      ? create(AuthorizationModelResourceTypeFilterSchema, {
+          name: value.filter.name ?? "",
+          sourceLayer: value.filter.sourceLayer ?? SourceLayer.UNSPECIFIED,
+        })
+      : undefined,
+    pageSize: value.pageSize ?? 0,
+    pageToken: value.pageToken ?? "",
+  });
+}
+
+function listActiveModelResourceTypesResponseFromProto(
+  value: ProtoListActiveModelResourceTypesResponse,
+): ListActiveModelResourceTypesResponse {
+  return {
+    resourceTypes: value.resourceTypes.map(authorizationModelResourceTypeFromProto),
+    nextPageToken: value.nextPageToken,
+    modelId: value.modelId,
   };
 }
 
@@ -940,6 +1172,19 @@ function authorizationModelFromProto(
   };
 }
 
+function authorizationModelToProto(value: AuthorizationModel | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  return create(AuthorizationModelSchema, {
+    id: value.id ?? "",
+    version: value.version ?? "",
+    resourceTypes: (value.resourceTypes ?? []).map(
+      authorizationModelResourceTypeToProto,
+    ),
+  });
+}
+
 function authorizationModelResourceTypeFromProto(
   value: ProtoAuthorizationModelResourceType,
 ): AuthorizationModelResourceType {
@@ -1025,6 +1270,19 @@ function modelAllowedTargetToProto(value: ModelAllowedTarget) {
     });
   }
   return create(ModelAllowedTargetSchema);
+}
+
+function authorizationModelRefFromProto(
+  value: ProtoGetActiveModelRefResponse["model"] | undefined,
+): AuthorizationModelRef | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    id: value.id,
+    version: value.version,
+    createdAt: value.createdAt ? dateFromTimestamp(value.createdAt) : undefined,
+  };
 }
 
 function authorizationModelRefToProto(value: AuthorizationModelRef) {

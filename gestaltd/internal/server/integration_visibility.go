@@ -69,16 +69,16 @@ func (s *Server) mountedUIForProvider(provider, mountedPath string) (MountedUI, 
 }
 
 func (s *Server) mountedUIRootAccessibleContext(ctx context.Context, p *principal.Principal, mounted MountedUI) bool {
-	if mounted.AuthorizationPolicy == "" {
+	if !mountedUIRequiresAuthorization(mounted) {
 		return true
 	}
 	if p == nil || principal.IsNonUserPrincipal(p) {
 		return false
 	}
 
-	access := invocation.AccessContext{}
 	route, matched := mounted.routeForRequestPath(mountedUIRootRequestPath(mounted))
-	return matched && len(route.AllowedRoles) > 0 && mountedUIRoleAllowed(access.Role, route.AllowedRoles)
+	_, allowed, err := s.authorizeMountedUIRoute(ctx, p, mounted, route, matched)
+	return err == nil && allowed
 }
 
 func mountedUIRootRequestPath(mounted MountedUI) string {

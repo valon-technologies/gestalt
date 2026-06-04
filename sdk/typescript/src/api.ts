@@ -7,6 +7,9 @@ export interface Subject {
   id: string;
   credentialSubjectId: string;
   email: string;
+  kind?: string | undefined;
+  displayName?: string | undefined;
+  authSource?: string | undefined;
 }
 
 /**
@@ -169,11 +172,17 @@ export function request(
       id: subject.id ?? "",
       credentialSubjectId: subject.credentialSubjectId ?? "",
       email: subject.email ?? "",
+      kind: subject.kind,
+      displayName: subject.displayName,
+      authSource: subject.authSource,
     },
     agentSubject: {
       id: agentSubject.id ?? "",
       credentialSubjectId: agentSubject.credentialSubjectId ?? "",
       email: agentSubject.email ?? "",
+      kind: agentSubject.kind,
+      displayName: agentSubject.displayName,
+      authSource: agentSubject.authSource,
     },
     credential: {
       mode: credential.mode ?? "",

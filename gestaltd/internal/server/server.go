@@ -84,6 +84,7 @@ type Server struct {
 	auth                   core.AuthenticationProvider
 	authProviders          map[string]core.AuthenticationProvider
 	serverAuthProvider     string
+	authorization          core.AuthorizationProvider
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
@@ -147,6 +148,7 @@ type Config struct {
 	Auth                 core.AuthenticationProvider
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.AuthenticationProvider
+	Authorization        core.AuthorizationProvider
 	AuditSink            core.AuditSink
 	Services             *coredata.Services
 	Providers            *registry.ProviderMap[core.Provider]
@@ -231,7 +233,11 @@ func New(cfg Config) (*Server, error) {
 	if agentStreamHeartbeat <= 0 {
 		agentStreamHeartbeat = defaultAgentTurnEventStreamHeartbeatInterval
 	}
-	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin)
+	defaultAdminResource := ""
+	if !noAuth && cfg.Authorization != nil {
+		defaultAdminResource = defaultAdminAuthorizationResource
+	}
+	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin, defaultAdminResource)
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin route: %w", err)
 	}
@@ -333,6 +339,7 @@ func New(cfg Config) (*Server, error) {
 		auth:                   cfg.Auth,
 		authProviders:          authProviders,
 		serverAuthProvider:     serverAuthProvider,
+		authorization:          cfg.Authorization,
 		auditSink:              cfg.AuditSink,
 		users:                  users,
 		externalCredentials:    externalCredentials,

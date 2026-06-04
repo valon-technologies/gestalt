@@ -75,7 +75,7 @@ import {
 } from "./internal/gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
-import { errorMessage, type OperationResult, type Request } from "./api.ts";
+import { errorMessage, parseSubjectId, type OperationResult, type Request } from "./api.ts";
 import {
   AgentProvider,
   createAgentProviderService,
@@ -835,11 +835,13 @@ function providerRequest(
       id: subject?.id ?? "",
       credentialSubjectId: subject?.credentialSubjectId ?? "",
       email: subject?.email ?? "",
+      kind: subjectKind(subject?.id ?? ""),
     },
     agentSubject: {
       id: agentSubject?.id ?? "",
       credentialSubjectId: agentSubject?.credentialSubjectId ?? "",
       email: agentSubject?.email ?? "",
+      kind: subjectKind(agentSubject?.id ?? ""),
     },
     credential: {
       mode: credential?.mode ?? "",
@@ -862,6 +864,10 @@ function providerRequest(
     invocationToken,
     idempotencyKey: idempotencyKey.trim(),
   };
+}
+
+function subjectKind(subjectID: string): string {
+  return parseSubjectId(subjectID)?.kind ?? "";
 }
 
 function providerRequestToolRefs(
