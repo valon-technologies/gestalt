@@ -15,16 +15,16 @@ import (
 const workflowStepOutputBodyMaxBytes = 64 * 1024
 
 type Request struct {
-	ProviderName    string
-	RunID           string
-	Target          *gestalt.BoundWorkflowTarget
-	Trigger         *gestalt.WorkflowRunTrigger
-	Input           map[string]any
-	Metadata        map[string]any
+	ProviderName       string
+	RunID              string
+	Target             *gestalt.BoundWorkflowTarget
+	Trigger            *gestalt.WorkflowRunTrigger
+	Input              map[string]any
+	Metadata           map[string]any
 	CreatedBySubjectID string
-	RunAs           *gestalt.Subject
-	InvocationToken string
-	Signals         []gestalt.WorkflowSignal
+	RunAs              *gestalt.Subject
+	InvocationToken    string
+	Signals            []gestalt.WorkflowSignal
 }
 
 type Response struct {
@@ -34,7 +34,27 @@ type Response struct {
 
 type StepExecutor interface {
 	Execute(context.Context, Request) (*Response, error)
+	ExecuteStep(context.Context, StepRequest) (*StepResponse, error)
 	Close() error
+}
+
+type StepRequest struct {
+	Request        Request
+	StepIndex      int
+	Outputs        map[string]any
+	StepInputs     map[string]any
+	SkippedStepIDs []string
+}
+
+type StepResponse struct {
+	Status      int
+	Step        StepResult
+	Input       map[string]any
+	Output      any
+	Outputs     map[string]any
+	StepInputs  map[string]any
+	FinalStepID string
+	FinalOutput any
 }
 
 type AppInvocation struct {
@@ -108,7 +128,6 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 	if req.Target == nil || len(req.Target.Steps) == 0 {
 		return nil, fmt.Errorf("workflow target steps are required")
 	}
-	token := strings.TrimSpace(req.InvocationToken)
 	result := workflowStepsResult{
 		Version: 1,
 		Status:  "succeeded",
@@ -117,60 +136,247 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 	}
 	skipped := map[string]struct{}{}
 	stepInputs := map[string]any{}
-	sessions := map[string]workflowAgentSessionState{}
-	scope := WorkflowStepInvocationScope(req)
 	for i := range req.Target.Steps {
-		step := req.Target.Steps[i]
-		stepID := strings.TrimSpace(step.ID)
-		if stepID == "" {
-			return workflowFailedStepResponse(result, stepID, "invalid_step", "workflow step id is required")
-		}
-		runStep, skipReason, err := workflowStepWhenMatches(step.When, req, result.Outputs, skipped)
+		stepResp, err := e.ExecuteStep(ctx, StepRequest{
+			Request:        req,
+			StepIndex:      i,
+			Outputs:        result.Outputs,
+			StepInputs:     stepInputs,
+			SkippedStepIDs: skippedStepIDs(skipped),
+		})
 		if err != nil {
-			return workflowFailedStepResponse(result, stepID, "invalid_when", err.Error())
+			return nil, err
 		}
-		if !runStep {
-			result.Steps = append(result.Steps, workflowStepResult{ID: stepID, Status: "skipped", SkippedReason: skipReason})
+		result.Outputs = stepResp.Outputs
+		if result.Outputs == nil {
+			result.Outputs = map[string]any{}
+		}
+		stepInputs = stepResp.StepInputs
+		if stepInputs == nil {
+			stepInputs = map[string]any{}
+		}
+		stepID := strings.TrimSpace(stepResp.Step.ID)
+		result.Steps = append(result.Steps, stepResp.Step)
+		switch strings.ToLower(strings.TrimSpace(stepResp.Step.Status)) {
+		case "skipped":
 			skipped[stepID] = struct{}{}
-			continue
-		}
-		inputs, err := (EvalContext{Request: req, Outputs: result.Outputs, StepInputs: stepInputs}).EvaluateStepInputs(step.Inputs)
-		if err != nil {
-			return workflowFailedStepResponse(result, stepID, "invalid_input", WorkflowEvalError(err).Error())
-		}
-		stepInputs[stepID] = inputs
-		stepCtx := ctx
-		cancelStep := func() {}
-		if step.TimeoutSeconds > 0 {
-			stepCtx, cancelStep = context.WithTimeout(ctx, time.Duration(step.TimeoutSeconds)*time.Second)
-		}
-		var output any
-		var turnID string
-		switch {
-		case step.App != nil && step.Agent != nil:
-			cancelStep()
-			return workflowFailedStepResponse(result, stepID, "invalid_step", "workflow step cannot set both app and agent")
-		case step.App != nil:
-			output, err = e.invokeAppStep(stepCtx, req, token, step.App, inputs, result.Outputs, stepInputs, scope, stepID)
-		case step.Agent != nil:
-			output, turnID, err = e.invokeAgentStep(stepCtx, req, token, step.Agent, inputs, result.Outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
+		case "succeeded":
+			result.FinalStepID = stepResp.FinalStepID
+			result.FinalOutput = stepResp.FinalOutput
+		case "failed":
+			result.Status = "failed"
+			result.Error = stepResp.Step.Error
+			body, err := json.Marshal(result)
+			if err != nil {
+				return nil, err
+			}
+			status := stepResp.Status
+			if status == 0 {
+				status = http.StatusInternalServerError
+			}
+			return &Response{Status: status, Body: string(body)}, nil
 		default:
-			err = fmt.Errorf("workflow step must set app or agent")
+			return workflowFailedStepResponse(result, stepID, "invalid_step_result", "workflow step returned invalid status")
 		}
-		cancelStep()
-		if err != nil {
-			return workflowFailedStepResponse(result, stepID, "step_failed", err.Error())
-		}
-		result.Outputs[stepID] = output
-		result.FinalStepID = stepID
-		result.FinalOutput = output
-		result.Steps = append(result.Steps, workflowStepResult{ID: stepID, Status: "succeeded", TurnID: turnID})
 	}
 	body, err := json.Marshal(result)
 	if err != nil {
 		return nil, err
 	}
 	return &Response{Status: http.StatusOK, Body: string(body)}, nil
+}
+
+func (e *Executor) ExecuteStep(ctx context.Context, stepReq StepRequest) (*StepResponse, error) {
+	if e == nil {
+		return nil, fmt.Errorf("workflow executor is not configured")
+	}
+	req := stepReq.Request
+	if req.Target == nil || len(req.Target.Steps) == 0 {
+		return nil, fmt.Errorf("workflow target steps are required")
+	}
+	if stepReq.StepIndex < 0 || stepReq.StepIndex >= len(req.Target.Steps) {
+		return nil, fmt.Errorf("workflow step index %d is out of range", stepReq.StepIndex)
+	}
+	outputs := cloneWorkflowMap(stepReq.Outputs)
+	if outputs == nil {
+		outputs = map[string]any{}
+	}
+	stepInputs := cloneWorkflowMap(stepReq.StepInputs)
+	if stepInputs == nil {
+		stepInputs = map[string]any{}
+	}
+	skipped := skippedStepIDMap(stepReq.SkippedStepIDs)
+	step := req.Target.Steps[stepReq.StepIndex]
+	stepID := strings.TrimSpace(step.ID)
+	if stepID == "" {
+		return failedStepResponse(stepID, "invalid_step", "workflow step id is required", "", nil, outputs, stepInputs), nil
+	}
+	runStep, skipReason, err := workflowStepWhenMatches(step.When, req, outputs, skipped)
+	if err != nil {
+		return failedStepResponse(stepID, "invalid_when", err.Error(), "", nil, outputs, stepInputs), nil
+	}
+	if !runStep {
+		return &StepResponse{
+			Status:     http.StatusOK,
+			Step:       workflowStepResult{ID: stepID, Status: "skipped", SkippedReason: skipReason},
+			Outputs:    outputs,
+			StepInputs: stepInputs,
+		}, nil
+	}
+	inputs, err := (EvalContext{Request: req, Outputs: outputs, StepInputs: stepInputs}).EvaluateStepInputs(step.Inputs)
+	if err != nil {
+		return failedStepResponse(stepID, "invalid_input", WorkflowEvalError(err).Error(), "", nil, outputs, stepInputs), nil
+	}
+	stepInputs[stepID] = inputs
+	sessions, err := workflowAgentSessionsFromOutputs(req.Target, stepReq.StepIndex, outputs)
+	if err != nil {
+		return failedStepResponse(stepID, "invalid_agent_session", err.Error(), "", inputs, outputs, stepInputs), nil
+	}
+	stepCtx := ctx
+	cancelStep := func() {}
+	if step.TimeoutSeconds > 0 {
+		stepCtx, cancelStep = context.WithTimeout(ctx, time.Duration(step.TimeoutSeconds)*time.Second)
+	}
+	token := strings.TrimSpace(req.InvocationToken)
+	scope := WorkflowStepInvocationScope(req)
+	var output any
+	var turnID string
+	switch {
+	case step.App != nil && step.Agent != nil:
+		cancelStep()
+		return failedStepResponse(stepID, "invalid_step", "workflow step cannot set both app and agent", "", inputs, outputs, stepInputs), nil
+	case step.App != nil:
+		output, err = e.invokeAppStep(stepCtx, req, token, step.App, inputs, outputs, stepInputs, scope, stepID)
+	case step.Agent != nil:
+		output, turnID, err = e.invokeAgentStep(stepCtx, req, token, step.Agent, inputs, outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
+	default:
+		err = fmt.Errorf("workflow step must set app or agent")
+	}
+	cancelStep()
+	if err != nil {
+		return failedStepResponse(stepID, "step_failed", err.Error(), turnID, inputs, outputs, stepInputs), nil
+	}
+	outputs[stepID] = output
+	return &StepResponse{
+		Status:      http.StatusOK,
+		Step:        workflowStepResult{ID: stepID, Status: "succeeded", TurnID: turnID},
+		Input:       inputs,
+		Output:      output,
+		Outputs:     outputs,
+		StepInputs:  stepInputs,
+		FinalStepID: stepID,
+		FinalOutput: output,
+	}, nil
+}
+
+func failedStepResponse(stepID, code, message, turnID string, input map[string]any, outputs map[string]any, stepInputs map[string]any) *StepResponse {
+	errValue := &workflowStepError{StepID: stepID, Code: code, Message: message}
+	return &StepResponse{
+		Status:     http.StatusInternalServerError,
+		Step:       workflowStepResult{ID: stepID, Status: "failed", TurnID: turnID, Error: errValue},
+		Input:      input,
+		Outputs:    outputs,
+		StepInputs: stepInputs,
+	}
+}
+
+func skippedStepIDs(values map[string]struct{}) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func skippedStepIDMap(values []string) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			out[value] = struct{}{}
+		}
+	}
+	return out
+}
+
+func cloneWorkflowMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
+}
+
+func workflowAgentSessionsFromOutputs(target *gestalt.BoundWorkflowTarget, stepIndex int, outputs map[string]any) (map[string]workflowAgentSessionState, error) {
+	sessions := map[string]workflowAgentSessionState{}
+	if target == nil || stepIndex <= 0 {
+		return sessions, nil
+	}
+	if stepIndex > len(target.Steps) {
+		stepIndex = len(target.Steps)
+	}
+	for i := 0; i < stepIndex; i++ {
+		step := target.Steps[i]
+		if step.Agent == nil {
+			continue
+		}
+		stepID := strings.TrimSpace(step.ID)
+		output, ok := outputs[stepID]
+		if !ok {
+			continue
+		}
+		sessionID, ok := workflowAgentSessionIDFromOutput(output)
+		if !ok {
+			return nil, fmt.Errorf("workflow agent step %q output is missing agent.sessionId", stepID)
+		}
+		sessionKey := strings.TrimSpace(step.Agent.SessionKey)
+		if sessionKey == "" {
+			sessionKey = stepID
+		}
+		providerName := strings.TrimSpace(step.Agent.Provider)
+		model := strings.TrimSpace(step.Agent.Model)
+		optionsKey := stableJSON(step.Agent.ModelOptions)
+		state, exists := sessions[sessionKey]
+		if exists {
+			if state.providerName != providerName || state.model != model || state.options != optionsKey {
+				return nil, fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, or model_options", sessionKey)
+			}
+			continue
+		}
+		sessions[sessionKey] = workflowAgentSessionState{
+			session:      &gestalt.AgentSession{ID: sessionID, ProviderName: providerName, Model: model},
+			providerName: providerName,
+			model:        model,
+			options:      optionsKey,
+		}
+	}
+	return sessions, nil
+}
+
+func workflowAgentSessionIDFromOutput(output any) (string, bool) {
+	object, ok := output.(map[string]any)
+	if !ok {
+		return "", false
+	}
+	kind, _ := object["kind"].(string)
+	if strings.TrimSpace(kind) != "agent" {
+		return "", false
+	}
+	agent, ok := object["agent"].(map[string]any)
+	if !ok {
+		return "", false
+	}
+	sessionID, ok := agent["sessionId"].(string)
+	sessionID = strings.TrimSpace(sessionID)
+	return sessionID, ok && sessionID != ""
 }
 
 func WorkflowEvalError(err error) error {

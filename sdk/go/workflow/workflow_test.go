@@ -101,6 +101,107 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 	}
 }
 
+func TestExecutorExecuteStepUsesPriorOutput(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAppInvoker{}
+	executor := New(Config{AppInvoker: invoker})
+	resp, err := executor.ExecuteStep(context.Background(), StepRequest{
+		Request: Request{
+			ProviderName: "indexeddb",
+			RunID:        "run-1",
+			Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+				{
+					ID: "collect",
+					App: &gestalt.WorkflowStepAppCall{
+						Name:      "github",
+						Operation: "pullRequests.get",
+					},
+				},
+				{
+					ID: "notify",
+					Inputs: map[string]gestalt.WorkflowValue{
+						"summary": {StepOutput: &gestalt.WorkflowStepOutputSource{StepID: "collect", Path: "summary"}},
+					},
+					App: &gestalt.WorkflowStepAppCall{
+						Name:      "slack",
+						Operation: "chat.postMessage",
+						Input: gestalt.WorkflowValue{Object: map[string]gestalt.WorkflowValue{
+							"text": {Template: &gestalt.WorkflowText{Template: "summary=${{ steps.collect.outputs.summary }}"}},
+						}},
+					},
+				},
+			}},
+		},
+		StepIndex: 1,
+		Outputs: map[string]any{
+			"collect": map[string]any{"summary": "ready"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStep: %v", err)
+	}
+	if resp.Status != 200 || resp.Step.ID != "notify" || resp.Step.Status != "succeeded" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if invoker.call.Params["text"] != "summary=ready" {
+		t.Fatalf("params = %#v", invoker.call.Params)
+	}
+	if resp.StepInputs["notify"].(map[string]any)["summary"] != "ready" {
+		t.Fatalf("step inputs = %#v", resp.StepInputs)
+	}
+	if _, ok := resp.Outputs["collect"]; !ok {
+		t.Fatalf("prior output was not preserved: %#v", resp.Outputs)
+	}
+	if _, ok := resp.Outputs["notify"]; !ok {
+		t.Fatalf("current output was not recorded: %#v", resp.Outputs)
+	}
+}
+
+func TestExecutorExecuteStepSkipsMissingDependency(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAppInvoker{}
+	executor := New(Config{AppInvoker: invoker})
+	resp, err := executor.ExecuteStep(context.Background(), StepRequest{
+		Request: Request{
+			ProviderName: "indexeddb",
+			RunID:        "run-1",
+			Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+				{
+					ID: "collect",
+					App: &gestalt.WorkflowStepAppCall{
+						Name:      "github",
+						Operation: "pullRequests.get",
+					},
+				},
+				{
+					ID: "notify",
+					When: &gestalt.WorkflowStepWhen{
+						Value:  gestalt.WorkflowValue{StepOutput: &gestalt.WorkflowStepOutputSource{StepID: "collect", Path: "ok"}},
+						Equals: true,
+					},
+					App: &gestalt.WorkflowStepAppCall{
+						Name:      "slack",
+						Operation: "chat.postMessage",
+					},
+				},
+			}},
+		},
+		StepIndex:      1,
+		SkippedStepIDs: []string{"collect"},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStep: %v", err)
+	}
+	if resp.Status != 200 || resp.Step.ID != "notify" || resp.Step.Status != "skipped" || resp.Step.SkippedReason != "missing_dependency" {
+		t.Fatalf("response = %#v", resp)
+	}
+	if invoker.call.App != "" {
+		t.Fatalf("app was invoked: %#v", invoker.call)
+	}
+}
+
 func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	t.Parallel()
 
