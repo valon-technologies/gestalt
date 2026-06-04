@@ -52,6 +52,11 @@ func ValidateValueMapRefs(path string, values map[string]Value, previousSteps ma
 
 // ValidateValueRefs validates step references in a value tree.
 func ValidateValueRefs(path string, value Value, previousSteps map[string]struct{}) error {
+	if value.Template != nil {
+		if err := ValidateTemplateRefs(path+".template", value.Template.Template, previousSteps); err != nil {
+			return err
+		}
+	}
 	if value.StepOutput != nil {
 		stepID := strings.TrimSpace(value.StepOutput.StepID)
 		if stepID == "" {
@@ -59,9 +64,6 @@ func ValidateValueRefs(path string, value Value, previousSteps map[string]struct
 		}
 		if _, ok := previousSteps[stepID]; !ok {
 			return fmt.Errorf("%s.step_output.step_id %q must reference an earlier step", path, stepID)
-		}
-		if strings.TrimSpace(value.StepOutput.Path) == "" {
-			return fmt.Errorf("%s.step_output.path is required", path)
 		}
 	}
 	if value.StepInput != nil {
@@ -71,9 +73,6 @@ func ValidateValueRefs(path string, value Value, previousSteps map[string]struct
 		}
 		if _, ok := previousSteps[stepID]; !ok {
 			return fmt.Errorf("%s.step_input.step_id %q must reference an earlier step", path, stepID)
-		}
-		if strings.TrimSpace(value.StepInput.Path) == "" {
-			return fmt.Errorf("%s.step_input.path is required", path)
 		}
 	}
 	for key := range value.Object {
@@ -87,6 +86,96 @@ func ValidateValueRefs(path string, value Value, previousSteps map[string]struct
 		}
 	}
 	return nil
+}
+
+// TemplateExpressions returns the unescaped ${{ ... }} expressions in a
+// workflow template. A leading extra dollar escapes the marker.
+func TemplateExpressions(template string) ([]string, error) {
+	var out []string
+	for i := 0; i < len(template); {
+		if strings.HasPrefix(template[i:], "$${{") {
+			i += 4
+			continue
+		}
+		if !strings.HasPrefix(template[i:], "${{") {
+			i++
+			continue
+		}
+		end := strings.Index(template[i+3:], "}}")
+		if end < 0 {
+			return nil, fmt.Errorf("unterminated template expression")
+		}
+		expr := strings.TrimSpace(template[i+3 : i+3+end])
+		if expr == "" {
+			return nil, fmt.Errorf("empty template expression")
+		}
+		out = append(out, expr)
+		i += 3 + end + 2
+	}
+	return out, nil
+}
+
+// ValidateTemplateRefs validates workflow template expression roots and step
+// references without evaluating the template.
+func ValidateTemplateRefs(path string, template string, previousSteps map[string]struct{}) error {
+	expressions, err := TemplateExpressions(template)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	for _, expr := range expressions {
+		if err := validateTemplateExpressionRef(expr, previousSteps); err != nil {
+			return fmt.Errorf("%s expression %q: %w", path, expr, err)
+		}
+	}
+	return nil
+}
+
+func validateTemplateExpressionRef(expr string, previousSteps map[string]struct{}) error {
+	switch {
+	case strings.HasPrefix(expr, "input."):
+		if strings.TrimSpace(strings.TrimPrefix(expr, "input.")) == "" {
+			return fmt.Errorf("input path is required")
+		}
+		return nil
+	case strings.HasPrefix(expr, "signal."):
+		if strings.TrimSpace(strings.TrimPrefix(expr, "signal.")) == "" {
+			return fmt.Errorf("signal path is required")
+		}
+		return nil
+	case strings.HasPrefix(expr, "steps."):
+		return validateTemplateStepExpression(strings.TrimPrefix(expr, "steps."), previousSteps)
+	default:
+		return fmt.Errorf("unsupported root; expected input.*, signal.*, steps.<step>.outputs, or steps.<step>.inputs")
+	}
+}
+
+func validateTemplateStepExpression(expr string, previousSteps map[string]struct{}) error {
+	stepID, tail, ok := strings.Cut(expr, ".")
+	stepID = strings.TrimSpace(stepID)
+	if !ok || stepID == "" {
+		return fmt.Errorf("step id is required")
+	}
+	if _, ok := previousSteps[stepID]; !ok {
+		return fmt.Errorf("step %q must reference an earlier step", stepID)
+	}
+	switch {
+	case tail == "outputs":
+		return nil
+	case strings.HasPrefix(tail, "outputs."):
+		if strings.TrimSpace(strings.TrimPrefix(tail, "outputs.")) == "" {
+			return fmt.Errorf("step output path is required")
+		}
+		return nil
+	case tail == "inputs":
+		return nil
+	case strings.HasPrefix(tail, "inputs."):
+		if strings.TrimSpace(strings.TrimPrefix(tail, "inputs.")) == "" {
+			return fmt.Errorf("step input path is required")
+		}
+		return nil
+	default:
+		return fmt.Errorf("expected outputs or inputs")
+	}
 }
 
 // ValidateStepWhen validates a step when clause and its value references.
