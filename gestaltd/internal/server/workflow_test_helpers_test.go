@@ -63,17 +63,24 @@ func (c *stubWorkflowControl) ProviderNames() []string {
 }
 
 type memoryWorkflowProvider struct {
-	mu               sync.Mutex
-	runs             map[string]*coreworkflow.Run
-	listRunReqs      []coreworkflow.ListRunsRequest
-	listRunsNextPage string
-	cancelReqs       []*proto.CancelWorkflowProviderRunRequest
-	deliveredEvents  []*proto.DeliverWorkflowProviderEventRequest
+	mu                  sync.Mutex
+	definitions         map[string]*coreworkflow.Definition
+	runs                map[string]*coreworkflow.Run
+	definitionPauseReqs []*proto.SetWorkflowProviderDefinitionPausedRequest
+	activationPauseReqs []*proto.SetWorkflowProviderActivationPausedRequest
+	deletedDefinitions  []string
+	activationPauseErr  error
+	deleteDefinitionErr error
+	listRunReqs         []coreworkflow.ListRunsRequest
+	listRunsNextPage    string
+	cancelReqs          []*proto.CancelWorkflowProviderRunRequest
+	deliveredEvents     []*proto.DeliverWorkflowProviderEventRequest
 }
 
 func newMemoryWorkflowProvider() *memoryWorkflowProvider {
 	return &memoryWorkflowProvider{
-		runs: map[string]*coreworkflow.Run{},
+		definitions: map[string]*coreworkflow.Definition{},
+		runs:        map[string]*coreworkflow.Run{},
 	}
 }
 
@@ -81,24 +88,85 @@ func (p *memoryWorkflowProvider) ApplyDefinition(context.Context, *proto.ApplyWo
 	return nil, core.ErrNotFound
 }
 
-func (p *memoryWorkflowProvider) GetDefinition(context.Context, *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
-	return nil, core.ErrNotFound
+func (p *memoryWorkflowProvider) GetDefinition(_ context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	definition := p.definitions[strings.TrimSpace(req.GetDefinitionId())]
+	if definition == nil {
+		return nil, core.ErrNotFound
+	}
+	return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
 }
 
 func (p *memoryWorkflowProvider) ListDefinitions(context.Context, *proto.ListWorkflowProviderDefinitionsRequest) (*proto.ListWorkflowProviderDefinitionsResponse, error) {
-	return &proto.ListWorkflowProviderDefinitionsResponse{}, nil
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	resp := &proto.ListWorkflowProviderDefinitionsResponse{}
+	for _, definition := range p.definitions {
+		pb, err := workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
+		if err != nil {
+			return nil, err
+		}
+		resp.Definitions = append(resp.Definitions, pb)
+	}
+	return resp, nil
 }
 
-func (p *memoryWorkflowProvider) SetDefinitionPaused(context.Context, *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
+func (p *memoryWorkflowProvider) SetDefinitionPaused(_ context.Context, req *proto.SetWorkflowProviderDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	definition := p.definitions[strings.TrimSpace(req.GetDefinitionId())]
+	if definition == nil {
+		return nil, core.ErrNotFound
+	}
+	p.definitionPauseReqs = append(p.definitionPauseReqs, &proto.SetWorkflowProviderDefinitionPausedRequest{
+		DefinitionId:         strings.TrimSpace(req.GetDefinitionId()),
+		Paused:               req.GetPaused(),
+		RequestedBySubjectId: strings.TrimSpace(req.GetRequestedBySubjectId()),
+	})
+	definition.Paused = req.GetPaused()
+	return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
+}
+
+func (p *memoryWorkflowProvider) SetActivationPaused(_ context.Context, req *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.activationPauseErr != nil {
+		return nil, p.activationPauseErr
+	}
+	definition := p.definitions[strings.TrimSpace(req.GetDefinitionId())]
+	if definition == nil {
+		return nil, core.ErrNotFound
+	}
+	activationID := strings.TrimSpace(req.GetActivationId())
+	for i := range definition.Activations {
+		if strings.TrimSpace(definition.Activations[i].ID) == activationID {
+			p.activationPauseReqs = append(p.activationPauseReqs, &proto.SetWorkflowProviderActivationPausedRequest{
+				DefinitionId:         strings.TrimSpace(req.GetDefinitionId()),
+				ActivationId:         activationID,
+				Paused:               req.GetPaused(),
+				RequestedBySubjectId: strings.TrimSpace(req.GetRequestedBySubjectId()),
+			})
+			definition.Activations[i].Paused = req.GetPaused()
+			return workflowwire.DefinitionToProto(cloneWorkflowDefinition(definition))
+		}
+	}
 	return nil, core.ErrNotFound
 }
 
-func (p *memoryWorkflowProvider) SetActivationPaused(context.Context, *proto.SetWorkflowProviderActivationPausedRequest) (*proto.WorkflowDefinition, error) {
-	return nil, core.ErrNotFound
-}
-
-func (p *memoryWorkflowProvider) DeleteDefinition(context.Context, *proto.DeleteWorkflowProviderDefinitionRequest) error {
-	return core.ErrNotFound
+func (p *memoryWorkflowProvider) DeleteDefinition(_ context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.deleteDefinitionErr != nil {
+		return p.deleteDefinitionErr
+	}
+	definitionID := strings.TrimSpace(req.GetDefinitionId())
+	if p.definitions[definitionID] == nil {
+		return core.ErrNotFound
+	}
+	delete(p.definitions, definitionID)
+	p.deletedDefinitions = append(p.deletedDefinitions, definitionID)
+	return nil
 }
 
 func (p *memoryWorkflowProvider) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.WorkflowRun, error) {
@@ -193,6 +261,35 @@ func cloneWorkflowRun(src *coreworkflow.Run) *coreworkflow.Run {
 	dst := *src
 	dst.Target = cloneWorkflowTarget(src.Target)
 	dst.Input = cloneMap(src.Input)
+	return &dst
+}
+
+func cloneWorkflowDefinition(src *coreworkflow.Definition) *coreworkflow.Definition {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	dst.Target = cloneWorkflowTarget(src.Target)
+	if src.Activations != nil {
+		dst.Activations = make([]coreworkflow.Activation, len(src.Activations))
+		for i := range src.Activations {
+			activation := src.Activations[i]
+			activation.Input = coreworkflow.CloneValue(activation.Input)
+			if activation.Schedule != nil {
+				schedule := *activation.Schedule
+				activation.Schedule = &schedule
+			}
+			if activation.Event != nil {
+				event := *activation.Event
+				activation.Event = &event
+			}
+			dst.Activations[i] = activation
+		}
+	}
+	if src.RunAs != nil {
+		runAs := *src.RunAs
+		dst.RunAs = &runAs
+	}
 	return &dst
 }
 

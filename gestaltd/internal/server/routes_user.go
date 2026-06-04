@@ -19,6 +19,14 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Delete("/apps/{name}", s.disconnectIntegration)
 
 		r.Post("/workflow/events", s.deliverWorkflowEvent)
+		r.Get("/workflow/definitions", s.listGlobalWorkflowDefinitions)
+		r.Route("/workflow/definitions", func(r chi.Router) {
+			r.Get("/", s.listGlobalWorkflowDefinitions)
+			r.Get("/{definitionID}", s.getGlobalWorkflowDefinition)
+			r.Patch("/{definitionID}", s.setGlobalWorkflowDefinitionPaused)
+			r.Delete("/{definitionID}", s.deleteGlobalWorkflowDefinition)
+			r.Patch("/{definitionID}/activations/{activationID}", s.setGlobalWorkflowActivationPaused)
+		})
 		r.Get("/workflow/runs", s.listGlobalWorkflowRuns)
 		r.Route("/workflow/runs", func(r chi.Router) {
 			r.Get("/", s.listGlobalWorkflowRuns)
