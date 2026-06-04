@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiClient, ApiError, encode_path_segment};
+use crate::api::{ApiClient, ApiError};
 use crate::interactive::{InputPrompt, PromptOption, prompt_input, prompt_select};
 use crate::output;
 
@@ -267,115 +267,17 @@ pub fn connect_with_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    connect_with_scope_and_browser_opener(
-        client,
-        ConnectScope::User,
-        name,
-        connection,
-        instance,
-        open_browser,
-    )
-}
-
-pub fn connect_managed_subject(
-    client: &ApiClient,
-    subject_id: &str,
-    name: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-) -> Result<()> {
-    connect_managed_subject_with_browser_opener(
-        client,
-        subject_id,
-        name,
-        connection,
-        instance,
-        |url| open::that(url).map(|_| ()).map_err(Into::into),
-    )
-}
-
-pub fn connect_managed_subject_with_browser_opener<F>(
-    client: &ApiClient,
-    subject_id: &str,
-    name: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    open_browser: F,
-) -> Result<()>
-where
-    F: FnOnce(&str) -> Result<()>,
-{
-    connect_with_scope_and_browser_opener(
-        client,
-        ConnectScope::ManagedSubject { subject_id },
-        name,
-        connection,
-        instance,
-        open_browser,
-    )
-}
-
-fn connect_with_scope_and_browser_opener<F>(
-    client: &ApiClient,
-    scope: ConnectScope<'_>,
-    name: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    open_browser: F,
-) -> Result<()>
-where
-    F: FnOnce(&str) -> Result<()>,
-{
-    let integration = fetch_app(client, scope, name)?;
+    let integration = fetch_app(client, name)?;
     let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
 
     match flow.mode {
-        ConnectMode::OAuth => start_oauth(client, scope, &flow, instance, open_browser),
-        ConnectMode::Manual => connect_manual(client, scope, &flow, instance),
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ConnectScope<'a> {
-    User,
-    ManagedSubject { subject_id: &'a str },
-}
-
-impl ConnectScope<'_> {
-    fn integrations_path(self) -> String {
-        match self {
-            Self::User => "/api/v1/apps".to_string(),
-            Self::ManagedSubject { subject_id } => format!(
-                "/api/v1/authorization/subjects/{}/apps",
-                encode_path_segment(subject_id)
-            ),
-        }
-    }
-
-    fn start_oauth_path(self) -> String {
-        match self {
-            Self::User => "/api/v1/auth/start-oauth".to_string(),
-            Self::ManagedSubject { subject_id } => format!(
-                "/api/v1/authorization/subjects/{}/auth/start-oauth",
-                encode_path_segment(subject_id)
-            ),
-        }
-    }
-
-    fn connect_manual_path(self) -> String {
-        match self {
-            Self::User => "/api/v1/auth/connect-manual".to_string(),
-            Self::ManagedSubject { subject_id } => format!(
-                "/api/v1/authorization/subjects/{}/auth/connect-manual",
-                encode_path_segment(subject_id)
-            ),
-        }
+        ConnectMode::OAuth => start_oauth(client, &flow, instance, open_browser),
+        ConnectMode::Manual => connect_manual(client, &flow, instance),
     }
 }
 
 fn start_oauth<F>(
     client: &ApiClient,
-    scope: ConnectScope<'_>,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
     open_browser: F,
@@ -386,7 +288,7 @@ where
     let connection_params = prompt_connection_params(flow.connection_param_defs())?;
     let resp = client
         .post(
-            &scope.start_oauth_path(),
+            "/api/v1/auth/start-oauth",
             &StartOAuthRequest {
                 integration: flow.integration_name(),
                 connection: flow.connection_name(),
@@ -412,7 +314,6 @@ where
 
 fn connect_manual(
     client: &ApiClient,
-    scope: ConnectScope<'_>,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
 ) -> Result<()> {
@@ -432,7 +333,7 @@ fn connect_manual(
     let response: ConnectManualResponse = serde_json::from_value(
         client
             .post(
-                &scope.connect_manual_path(),
+                "/api/v1/auth/connect-manual",
                 &ConnectManualRequest {
                     integration: flow.integration_name(),
                     credentials: credentials.request(),
@@ -521,13 +422,10 @@ fn complete_pending_selection(
     Ok(())
 }
 
-fn fetch_app(client: &ApiClient, scope: ConnectScope<'_>, name: &str) -> Result<IntegrationInfo> {
-    let apps: Vec<IntegrationInfo> = serde_json::from_value(
-        client
-            .get(&scope.integrations_path())
-            .context("failed to load apps")?,
-    )
-    .context("failed to parse apps")?;
+fn fetch_app(client: &ApiClient, name: &str) -> Result<IntegrationInfo> {
+    let apps: Vec<IntegrationInfo> =
+        serde_json::from_value(client.get("/api/v1/apps").context("failed to load apps")?)
+            .context("failed to parse apps")?;
 
     apps.into_iter()
         .find(|app| app.name == name)
