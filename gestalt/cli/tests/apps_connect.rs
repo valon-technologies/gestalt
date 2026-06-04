@@ -55,46 +55,6 @@ fn test_connect_includes_connection_and_instance() {
 }
 
 #[test]
-fn test_connect_managed_subject_uses_subject_scoped_oauth_routes() {
-    let mut server = Server::new();
-    let _integrations = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/authorization/subjects/service_account%3Arelease-bot/apps",
-        StatusCode::OK
-    )
-    .with_body(
-        r#"[{"name":"acme_crm","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
-    )
-    .create();
-    let mock = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/authorization/subjects/service_account%3Arelease-bot/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"workspace","instance":"team-a","integration":"acme_crm"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::apps::connect_managed_subject_with_browser_opener(
-        &client,
-        "service_account:release-bot",
-        "acme_crm",
-        Some("workspace"),
-        Some("team-a"),
-        |_| Ok(()),
-    );
-
-    mock.assert();
-    assert!(result.is_ok());
-}
-
-#[test]
 fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() {
     let mut server = Server::new();
     let _integrations = authed_json_mock!(

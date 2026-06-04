@@ -5,10 +5,7 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub use connect::{
-    connect, connect_managed_subject, connect_managed_subject_with_browser_opener,
-    connect_with_browser_opener,
-};
+pub use connect::{connect, connect_with_browser_opener};
 
 const APP_CONNECTION_NAME: &str = "_app";
 const APP_CONNECTION_ALIAS: &str = "app";

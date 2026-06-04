@@ -14,9 +14,7 @@ import { StructSchema as RootStructSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protocol helper types.
 import type { Struct as RootStruct } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose generated protocol schemas.
-import { AccessEvaluationRequestSchema as RootAccessEvaluationRequestSchema } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose generated protocol message types.
-import type { AccessEvaluationRequest as RootAccessEvaluationRequest } from "@valon-technologies/gestalt";
+import { CheckAccessRequestSchema as RootCheckAccessRequestSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose runtime-log generated request schemas.
 import { AppendRuntimeLogsRequestSchema as RootAppendRuntimeLogsRequestSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose runtime-log generated enums.
@@ -30,7 +28,7 @@ import { connectionParamToProto } from "@valon-technologies/gestalt";
 // @ts-expect-error Protocol helper subpath is not public.
 import type { Struct as ProtocolStruct } from "@valon-technologies/gestalt/protocol";
 // @ts-expect-error Generated protocol subpath is not public.
-import type { AccessEvaluationRequest as ProtocolRequest } from "@valon-technologies/gestalt/protocol/v1";
+import type { CheckAccessRequest as ProtocolRequest } from "@valon-technologies/gestalt/protocol/v1";
 // @ts-expect-error Generated agent contract helpers are not public.
 import type { agentContractSchemas } from "@valon-technologies/gestalt/test/agent-contract";
 
