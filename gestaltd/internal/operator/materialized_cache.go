@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -22,7 +23,8 @@ const (
 )
 
 type materializedCache struct {
-	dir string
+	dir    string
+	remote materializedCacheRemote
 }
 
 type materializedCacheLookupResult string
@@ -112,33 +114,86 @@ func materializedCacheKeyForRequest(req materializedCacheRequest) (materializedC
 	}, true, nil
 }
 
-func (c materializedCache) Restore(req materializedCacheRequest) (*materializedCacheRestore, error) {
+func (c materializedCache) Restore(ctx context.Context, req materializedCacheRequest) (*materializedCacheRestore, error) {
 	key, eligible, err := materializedCacheKeyForRequest(req)
 	if err != nil || !eligible {
 		return nil, err
 	}
 	entryDir := c.entryDir(key)
+	fallback := materializedCacheMiss
 	entry, err := c.readEntry(entryDir, req, key)
-	if os.IsNotExist(err) {
-		return &materializedCacheRestore{Result: materializedCacheMiss, Key: key}, nil
+	if err == nil {
+		restore, err := c.stageRestore(entryDir, req.DestinationDir, entry)
+		if err == nil {
+			restore.Result = materializedCacheHit
+			restore.Key = key
+			return restore, nil
+		}
+		fallback = materializedCacheInvalid
+	} else if !os.IsNotExist(err) {
+		fallback = materializedCacheInvalid
 	}
+	if c.remote != nil {
+		return c.restoreFromRemote(ctx, req, key, fallback)
+	}
+	return materializedCacheRestoreResult(key, fallback)
+}
+
+func (c materializedCache) restoreFromRemote(ctx context.Context, req materializedCacheRequest, key materializedCacheKey, fallback materializedCacheLookupResult) (*materializedCacheRestore, error) {
+	entryDir := c.entryDir(key)
+	parentDir := filepath.Dir(entryDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create materialized cache parent: %w", err)
+	}
+	archiveReader, hit, err := c.remote.Get(ctx, key)
 	if err != nil {
-		return invalidMaterializedCacheRestore(key)
+		return materializedCacheRestoreResult(key, fallback)
 	}
-	restore, err := c.stageRestore(entryDir, req.DestinationDir, entry)
+	if !hit {
+		return materializedCacheRestoreResult(key, fallback)
+	}
+	defer func() { _ = archiveReader.Close() }()
+
+	tmpDir, err := os.MkdirTemp(parentDir, "."+filepath.Base(entryDir)+".remote-*")
 	if err != nil {
-		return invalidMaterializedCacheRestore(key)
+		return nil, fmt.Errorf("create remote materialized cache temp entry: %w", err)
 	}
+	keepTmp := false
+	defer func() {
+		if !keepTmp {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}()
+	if err := extractMaterializedCacheEntryArchive(archiveReader, tmpDir); err != nil {
+		return materializedCacheRestoreResult(key, materializedCacheInvalid)
+	}
+	entry, err := c.readEntry(tmpDir, req, key)
+	if err != nil {
+		return materializedCacheRestoreResult(key, materializedCacheInvalid)
+	}
+	restore, err := c.stageRestore(tmpDir, req.DestinationDir, entry)
+	if err != nil {
+		return materializedCacheRestoreResult(key, materializedCacheInvalid)
+	}
+	if err := os.RemoveAll(entryDir); err != nil {
+		_ = restore.cleanup()
+		return nil, fmt.Errorf("remove stale materialized cache entry: %w", err)
+	}
+	if err := os.Rename(tmpDir, entryDir); err != nil {
+		_ = restore.cleanup()
+		return nil, fmt.Errorf("commit remote materialized cache entry: %w", err)
+	}
+	keepTmp = true
 	restore.Result = materializedCacheHit
 	restore.Key = key
 	return restore, nil
 }
 
-func invalidMaterializedCacheRestore(key materializedCacheKey) (*materializedCacheRestore, error) {
-	return &materializedCacheRestore{Result: materializedCacheInvalid, Key: key}, nil
+func materializedCacheRestoreResult(key materializedCacheKey, result materializedCacheLookupResult) (*materializedCacheRestore, error) {
+	return &materializedCacheRestore{Result: result, Key: key}, nil
 }
 
-func (c materializedCache) Put(req materializedCacheRequest, sourceDir string) (materializedCacheKey, int, int64, error) {
+func (c materializedCache) Put(ctx context.Context, req materializedCacheRequest, sourceDir string) (materializedCacheKey, int, int64, error) {
 	key, eligible, err := materializedCacheKeyForRequest(req)
 	if err != nil {
 		return key, 0, 0, err
@@ -200,6 +255,24 @@ func (c materializedCache) Put(req materializedCacheRequest, sourceDir string) (
 		return key, 0, 0, fmt.Errorf("commit materialized cache entry: %w", err)
 	}
 	keepTmp = true
+	if c.remote != nil {
+		archivePath, err := os.CreateTemp(parentDir, "."+filepath.Base(entryDir)+".archive-*.tar.gz")
+		if err != nil {
+			return key, len(files), bytes, fmt.Errorf("create materialized cache archive temp file: %w", err)
+		}
+		archiveName := archivePath.Name()
+		if err := archivePath.Close(); err != nil {
+			_ = os.Remove(archiveName)
+			return key, len(files), bytes, fmt.Errorf("close materialized cache archive temp file: %w", err)
+		}
+		defer func() { _ = os.Remove(archiveName) }()
+		if err := writeMaterializedCacheEntryArchive(entryDir, archiveName); err != nil {
+			return key, len(files), bytes, err
+		}
+		if err := c.remote.Put(ctx, key, archiveName); err != nil {
+			return key, len(files), bytes, err
+		}
+	}
 	return key, len(files), bytes, nil
 }
 

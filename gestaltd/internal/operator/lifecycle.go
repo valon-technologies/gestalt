@@ -1033,6 +1033,10 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 
 func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StatePaths, mode artifactMode, opts SyncOptions) error {
 	opts = normalizeSyncOptions(opts)
+	syncCache, err := materializedCacheFromSyncOptions(mode, opts)
+	if err != nil {
+		return err
+	}
 	recorder := opts.Observability.Recorder
 	if recorder != nil {
 		recorder.Begin(syncActionForArtifactMode(mode), configPaths, mode == artifactModeCheck, opts.Parallelism)
@@ -1045,13 +1049,11 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 		return fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
-	if mode == artifactModeMaterialize && opts.CacheDir != "" {
-		paths.syncCacheDir = resolveCLIArtifactsDir(opts.CacheDir)
-	}
+	paths.syncCache = syncCache
 	paths.syncMetrics = recorder
 	paths.syncBuildOutput = opts.Observability.BuildOutput
 	if recorder != nil {
-		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.syncCacheDir, opts.CacheDir != "", mode == artifactModeMaterialize && paths.syncCacheDir != "")
+		recorder.SetPaths(paths.artifactsDir, paths.lockfilePath, paths.syncCache.dir, opts.CacheDir != "", mode == artifactModeMaterialize && paths.syncCache.dir != "")
 	}
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
@@ -1536,7 +1538,7 @@ type lifecyclePaths struct {
 	agentDir               string
 	runtimeDir             string
 	uiDir                  string
-	syncCacheDir           string
+	syncCache              materializedCache
 	syncMetrics            *SyncMetricsRecorder
 	syncBuildOutput        providerpkg.CommandOutput
 }
@@ -5120,9 +5122,10 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 	}
 	cacheResult := syncCacheResultMiss
 	cacheEligible := true
-	if paths.syncCacheDir != "" {
+	cache := paths.syncCache
+	if cache.dir != "" {
 		cacheStart := time.Now()
-		restore, err := (materializedCache{dir: paths.syncCacheDir}).Restore(cacheReq)
+		restore, err := cache.Restore(ctx, cacheReq)
 		if restore != nil {
 			cacheResult = string(restore.Result)
 		}
@@ -5210,9 +5213,9 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 	if err := validateLockedInstalledManifest(kind, name, subject, installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
-	if paths.syncCacheDir != "" && cacheEligible {
+	if cache.dir != "" && cacheEligible {
 		cacheStart := time.Now()
-		key, files, bytes, putErr := (materializedCache{dir: paths.syncCacheDir}).Put(cacheReq, installed.Root)
+		key, files, bytes, putErr := cache.Put(ctx, cacheReq, installed.Root)
 		recordSyncCacheEntry(paths, syncCacheMetricsEvent{
 			Subject:    subject,
 			SourceKind: cacheReq.SourceKind,
