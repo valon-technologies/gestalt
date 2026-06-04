@@ -8,7 +8,7 @@ export function hostInvocationContext(requestOrToken: Request | string) {
   const providerName = stringValue(requestOrToken.workflow.providerName) || stringValue(requestOrToken.workflow.provider);
   const runId = stringValue(requestOrToken.workflow.runId);
   return providerName && runId
-    ? { invocationToken, workflow: { provider: providerName, providerName, runId } }
+    ? { invocationToken: "", workflow: { provider: providerName, providerName, runId } }
     : { invocationToken };
 }
 
