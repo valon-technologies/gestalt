@@ -1796,22 +1796,21 @@ def _cache_servicer(*, provider: AppProvider) -> Any:
 
 
 def _plugin_request(request: Any) -> Request:
-    tool_refs, tool_refs_set = _tool_refs_from_proto(getattr(request, "context", None))
+    request_context = getattr(request, "context", None)
+    tool_refs, tool_refs_set = _tool_refs_from_proto(request_context)
     return Request(
         token=getattr(request, "token", ""),
         connection_params=dict(getattr(request, "connection_params", {})),
-        subject=_subject_from_proto(getattr(request, "context", None), "subject"),
-        agent_subject=_subject_from_proto(
-            getattr(request, "context", None), "agent_subject"
-        ),
-        credential=_credential_from_proto(getattr(request, "context", None)),
-        access=_access_from_proto(getattr(request, "context", None)),
-        host=_host_from_proto(getattr(request, "context", None)),
-        workflow=_workflow_from_proto(getattr(request, "context", None)),
+        subject=_subject_from_proto(request_context, "subject"),
+        agent_subject=_subject_from_proto(request_context, "agent_subject"),
+        credential=_credential_from_proto(request_context),
+        access=_access_from_proto(request_context),
+        host=_host_from_proto(request_context),
+        workflow=_workflow_from_proto(request_context),
         tool_refs=tool_refs,
         tool_refs_set=tool_refs_set,
         idempotency_key=getattr(request, "idempotency_key", "").strip(),
-        invocation_token=getattr(request, "invocation_token", ""),
+        context=request_context,
     )
 
 

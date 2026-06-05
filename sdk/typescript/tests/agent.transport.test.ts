@@ -21,6 +21,10 @@ import {
   ResolvedAgentConnectionSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
+  RequestContextSchema,
+  SubjectContextSchema,
+} from "../src/internal/gen/v1/app_pb.ts";
+import {
   AgentHost,
   createAgentProviderService,
   defineAgentProvider,
@@ -122,18 +126,18 @@ test("AgentProvider rejects structured output without a schema", async () => {
   }
 });
 
-test("AgentProvider forwards invocation tokens to handlers", async () => {
-  const seenTokens: string[] = [];
+test("AgentProvider forwards request context subjects to handlers", async () => {
+  const seenSubjectIds: string[] = [];
   const provider = defineAgentProvider({
     createSession(request) {
-      seenTokens.push(request.invocationToken);
+      seenSubjectIds.push(request.subject?.id ?? "");
       return {
         id: request.sessionId,
         model: request.model,
       };
     },
     createTurn(request) {
-      seenTokens.push(request.invocationToken);
+      seenSubjectIds.push(request.subject?.id ?? "");
       return {
         id: request.turnId,
         sessionId: request.sessionId,
@@ -147,7 +151,11 @@ test("AgentProvider forwards invocation tokens to handlers", async () => {
     create(CreateAgentProviderSessionRequestSchema, {
       sessionId: "session-1",
       model: "gpt-test",
-      invocationToken: "session-token",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "user:session",
+        }),
+      }),
     }),
   );
   await (service.createTurn as any)(
@@ -157,11 +165,15 @@ test("AgentProvider forwards invocation tokens to handlers", async () => {
       model: "gpt-test",
       output: { kind: { case: "text", value: {} } },
       timeoutSeconds: 120,
-      invocationToken: "turn-token",
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "user:turn",
+        }),
+      }),
     }),
   );
 
-  expect(seenTokens).toEqual(["session-token", "turn-token"]);
+  expect(seenSubjectIds).toEqual(["user:session", "user:turn"]);
 });
 
 async function reserveTCPAddress(): Promise<string> {

@@ -141,6 +141,7 @@ impl Provider for TestProvider {
                         context.access.role.as_str(),
                         context.host.public_base_url.as_str(),
                     ),
+                    ..Default::default()
                 }))
             }
             "none" => Ok(None),
@@ -178,7 +179,6 @@ struct Output {
     credential_mode: String,
     access_role: String,
     host_base_url: String,
-    invocation_token: String,
     idempotency_key: String,
     workflow_run_id: String,
     workflow_activation_id: String,
@@ -208,7 +208,6 @@ async fn serves_provider_requests_over_unix_socket() {
                 let credential_mode = request.credential.mode.clone();
                 let access_role = request.access.role.clone();
                 let host_base_url = request.host.public_base_url.clone();
-                let invocation_token = request.invocation_token().to_string();
                 Ok::<Response<Output>, std::convert::Infallible>(ok(Output {
                     message: format!("{greeting}, {}!", input.name),
                     subject_id,
@@ -217,7 +216,6 @@ async fn serves_provider_requests_over_unix_socket() {
                     credential_mode,
                     access_role,
                     host_base_url,
-                    invocation_token,
                     idempotency_key: request.idempotency_key.clone(),
                     workflow_run_id: request
                         .workflow
@@ -362,7 +360,6 @@ async fn serves_provider_requests_over_unix_socket() {
             token: String::new(),
             connection_params: Default::default(),
             invocation_id: String::new(),
-            invocation_token: "token-123".to_string(),
             idempotency_key: " transport-tool-123 ".to_string(),
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
@@ -408,10 +405,12 @@ async fn serves_provider_requests_over_unix_socket() {
                         id: "service_account:review-worker".to_string(),
                         credential_subject_id: "service_account:review-worker".to_string(),
                         email: String::new(),
+                        ..Default::default()
                     }),
                     ..Default::default()
                 }],
                 tool_refs_set: true,
+                ..Default::default()
             }),
         })
         .await
@@ -421,7 +420,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_activation_id":"activation-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_activation_id":"activation-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
     );
 
     let session_catalog = client

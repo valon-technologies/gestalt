@@ -24,7 +24,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -994,7 +993,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 		return nil, fmt.Errorf("wait for runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
+	hostServices, err := buildProviderHostServices(name, appProviderHostServiceDeps(entry, deps))
 	if err != nil {
 		return nil, err
 	}
@@ -1055,13 +1054,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			cleanup:      cleanup,
 		}),
 		appservice.WithHostContext(deps.BaseURL),
-	}
-	if invTokens != nil {
-		opts = append(opts,
-			appservice.WithInvocationTokens(invTokens),
-			appservice.WithInvocationTokenSubject(name, appaccessservice.InvocationGrantsFromDependencies(appInvocationDependencies(entry.Invokes))),
-			appservice.WithWorkflowManagerGrants(appWorkflowGrants(entry.Capabilities)),
-		)
+		appservice.WithCallerProvider(invocation.ProviderKindApp, name),
 	}
 	prov, err := appservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
 	if err != nil {

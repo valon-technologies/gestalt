@@ -30,23 +30,9 @@ func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			tokens, err := NewInvocationTokenManager([]byte("workflow-manager-token-test-secret"))
-			if err != nil {
-				t.Fatalf("NewInvocationTokenManager: %v", err)
-			}
-			token, err := tokens.MintRootTokenWithWorkflowGrants(
-				principal.WithPrincipal(context.Background(), testWorkflowPrincipal()),
-				"caller",
-				nil,
-				grants,
-			)
-			if err != nil {
-				t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
-			}
-
-			server := NewProviderServer("caller", nil, tokens)
-			_, err = server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-				InvocationToken: token,
+			server := NewProviderServer("caller", nil, grants)
+			_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
+				Context: managerServerRequestContext("caller"),
 			})
 			if status.Code(err) != codes.PermissionDenied {
 				t.Fatalf("ApplyDefinition error = %v, want PermissionDenied", err)
@@ -58,45 +44,32 @@ func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *
 func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-runas-test-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	token, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), testWorkflowPrincipal()),
-		"caller",
-		nil,
-		workflowgrants.Grants{
-			workflowgrants.OperationDefinitionsApply:  {},
-			workflowgrants.OperationRunsStart:         {},
-			workflowgrants.OperationRunsSignalOrStart: {},
-		},
-	)
-	if err != nil {
-		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
-	}
-	server := NewProviderServer("caller", nil, tokens)
+	server := NewProviderServer("caller", nil, workflowgrants.Grants{
+		workflowgrants.OperationDefinitionsApply:  {},
+		workflowgrants.OperationRunsStart:         {},
+		workflowgrants.OperationRunsSignalOrStart: {},
+	})
 	runAs := &proto.SubjectContext{Id: "user:ada"}
 
 	for name, call := range map[string]func() error{
 		"apply definition": func() error {
 			_, callErr := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
-				InvocationToken: token,
-				Spec:            &proto.WorkflowDefinitionSpec{RunAs: runAs},
+				Context: managerServerRequestContext("caller"),
+				Spec:    &proto.WorkflowDefinitionSpec{RunAs: runAs},
 			})
 			return callErr
 		},
 		"start run": func() error {
 			_, callErr := server.StartRun(context.Background(), &proto.StartWorkflowProviderRunRequest{
-				InvocationToken: token,
-				RunAs:           runAs,
+				Context: managerServerRequestContext("caller"),
+				RunAs:   runAs,
 			})
 			return callErr
 		},
 		"signal or start run": func() error {
 			_, callErr := server.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
-				InvocationToken: token,
-				RunAs:           runAs,
+				Context: managerServerRequestContext("caller"),
+				RunAs:   runAs,
 			})
 			return callErr
 		},
@@ -113,11 +86,6 @@ func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-deliver-selected-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	token := mintDeliverEventToken(t, tokens, "valonSats")
 	selected := &recordingWorkflowProvider{deliveredID: "provider-event"}
 	other := &recordingWorkflowProvider{}
 	var auditBuf bytes.Buffer
@@ -132,12 +100,12 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 		},
 		Audit: invocation.NewSlogAuditSink(&auditBuf),
 	})
-	server := NewProviderServer("valonSats", manager, tokens)
+	server := NewProviderServer("sourceApp", manager, workflowgrants.Grants{workflowgrants.OperationEventsDeliver: {}})
 
 	delivered, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
-		ProviderName:    "selected",
-		InvocationToken: token,
-		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted", Source: "slack"},
+		ProviderName: "selected",
+		Context:      managerServerRequestContext("sourceApp"),
+		Event:        &proto.WorkflowEvent{Type: "example.event", Source: "sourceApp"},
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)
@@ -148,11 +116,11 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	if len(selected.deliverReqs) != 1 {
 		t.Fatalf("selected deliver requests = %d, want 1", len(selected.deliverReqs))
 	}
-	if got := selected.deliverReqs[0].GetAppName(); got != "valonSats" {
-		t.Fatalf("selected deliver app = %q, want valonSats", got)
+	if got := selected.deliverReqs[0].GetAppName(); got != "sourceApp" {
+		t.Fatalf("selected deliver app = %q, want sourceApp", got)
 	}
-	if got := selected.deliverReqs[0].GetEvent().GetSource(); got != "valonSats" {
-		t.Fatalf("selected deliver source = %q, want valonSats", got)
+	if got := selected.deliverReqs[0].GetEvent().GetSource(); got != "sourceApp" {
+		t.Fatalf("selected deliver source = %q, want sourceApp", got)
 	}
 	if len(other.deliverReqs) != 0 {
 		t.Fatalf("other deliver requests = %d, want 0", len(other.deliverReqs))
@@ -164,8 +132,8 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 		"provider":       "selected",
 		"operation":      "workflow.event.deliver",
 		"target_kind":    "workflow_event",
-		"target_name":    "valon_sats.attempt.submitted",
-		"caller_app":     "valonSats",
+		"target_name":    "example.event",
+		"caller_app":     "sourceApp",
 		"subject_id":     "user:user-123",
 		"request_id_set": true,
 		"allowed":        true,
@@ -189,7 +157,7 @@ func TestWorkflowManagerDeliverEventSelectedProviderRequiresCallerApp(t *testing
 	_, err := manager.DeliverEvent(context.Background(), testWorkflowPrincipal(), workflowmanager.EventDeliver{
 		ProviderName: "selected",
 		AppName:      "   ",
-		Event:        coreworkflow.Event{Type: "valon_sats.attempt.submitted"},
+		Event:        coreworkflow.Event{Type: "example.event"},
 	})
 	if !errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired) {
 		t.Fatalf("DeliverEvent error = %v, want ErrWorkflowEventSourceRequired", err)
@@ -239,26 +207,25 @@ func managerServerAuditStringPresent(record map[string]any, key string) bool {
 	return ok && value != ""
 }
 
-func mintDeliverEventToken(t *testing.T, tokens *InvocationTokenManager, callerApp string) string {
-	t.Helper()
-	token, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), testWorkflowPrincipal()),
-		callerApp,
-		nil,
-		workflowgrants.Grants{workflowgrants.OperationEventsDeliver: {}},
-	)
-	if err != nil {
-		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
-	}
-	return token
-}
-
 func testWorkflowPrincipal() *principal.Principal {
 	return &principal.Principal{
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
 		Kind:      principal.KindUser,
 		Source:    principal.SourceSession,
+	}
+}
+
+func managerServerRequestContext(callerApp string) *proto.RequestContext {
+	return &proto.RequestContext{
+		Caller: &proto.ProviderContext{
+			Kind: string(invocation.ProviderKindApp),
+			Name: callerApp,
+		},
+		Subject: &proto.SubjectContext{
+			Id:                  "user:user-123",
+			CredentialSubjectId: "user:user-123",
+		},
 	}
 }
 

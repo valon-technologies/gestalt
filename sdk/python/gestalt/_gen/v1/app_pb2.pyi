@@ -151,34 +151,6 @@ class OperationResult(_message.Message):
     headers: _containers.MessageMap[str, StringList]
     def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ..., headers: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
 
-class AppInvocationGrant(_message.Message):
-    __slots__ = ()
-    APP_FIELD_NUMBER: _ClassVar[int]
-    OPERATIONS_FIELD_NUMBER: _ClassVar[int]
-    SURFACES_FIELD_NUMBER: _ClassVar[int]
-    ALL_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
-    app: str
-    operations: _containers.RepeatedScalarFieldContainer[str]
-    surfaces: _containers.RepeatedScalarFieldContainer[str]
-    all_operations: bool
-    def __init__(self, app: _Optional[str] = ..., operations: _Optional[_Iterable[str]] = ..., surfaces: _Optional[_Iterable[str]] = ..., all_operations: _Optional[bool] = ...) -> None: ...
-
-class ExchangeInvocationTokenRequest(_message.Message):
-    __slots__ = ()
-    PARENT_INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    GRANTS_FIELD_NUMBER: _ClassVar[int]
-    TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
-    parent_invocation_token: str
-    grants: _containers.RepeatedCompositeFieldContainer[AppInvocationGrant]
-    ttl_seconds: int
-    def __init__(self, parent_invocation_token: _Optional[str] = ..., grants: _Optional[_Iterable[_Union[AppInvocationGrant, _Mapping]]] = ..., ttl_seconds: _Optional[int] = ...) -> None: ...
-
-class ExchangeInvocationTokenResponse(_message.Message):
-    __slots__ = ()
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    invocation_token: str
-    def __init__(self, invocation_token: _Optional[str] = ...) -> None: ...
-
 class AppInvokeRequest(_message.Message):
     __slots__ = ()
     APP_FIELD_NUMBER: _ClassVar[int]
@@ -186,20 +158,18 @@ class AppInvokeRequest(_message.Message):
     PARAMS_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
-    WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     app: str
     operation: str
     params: _struct_pb2.Struct
     connection: str
     instance: str
-    invocation_token: str
     idempotency_key: str
     credential_mode: str
-    workflow: _struct_pb2.Struct
-    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: RequestContext
+    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
 
 class AppInvokeGraphQLRequest(_message.Message):
     __slots__ = ()
@@ -208,26 +178,40 @@ class AppInvokeGraphQLRequest(_message.Message):
     VARIABLES_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     app: str
     document: str
     variables: _struct_pb2.Struct
     connection: str
     instance: str
-    invocation_token: str
     idempotency_key: str
-    def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    context: RequestContext
+    def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
 
 class SubjectContext(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
+    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    PERMISSIONS_FIELD_NUMBER: _ClassVar[int]
     id: str
     credential_subject_id: str
     email: str
-    def __init__(self, id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
+    scopes: _containers.RepeatedScalarFieldContainer[str]
+    permissions: _containers.RepeatedCompositeFieldContainer[SubjectPermissionContext]
+    def __init__(self, id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., email: _Optional[str] = ..., scopes: _Optional[_Iterable[str]] = ..., permissions: _Optional[_Iterable[_Union[SubjectPermissionContext, _Mapping]]] = ...) -> None: ...
+
+class SubjectPermissionContext(_message.Message):
+    __slots__ = ()
+    APP_FIELD_NUMBER: _ClassVar[int]
+    OPERATIONS_FIELD_NUMBER: _ClassVar[int]
+    ALL_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
+    app: str
+    operations: _containers.RepeatedScalarFieldContainer[str]
+    all_operations: bool
+    def __init__(self, app: _Optional[str] = ..., operations: _Optional[_Iterable[str]] = ..., all_operations: _Optional[bool] = ...) -> None: ...
 
 class AgentToolRef(_message.Message):
     __slots__ = ()
@@ -281,6 +265,40 @@ class HostContext(_message.Message):
     public_base_url: str
     def __init__(self, public_base_url: _Optional[str] = ...) -> None: ...
 
+class ProviderContext(_message.Message):
+    __slots__ = ()
+    KIND_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    kind: str
+    name: str
+    def __init__(self, kind: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class InvocationContext(_message.Message):
+    __slots__ = ()
+    REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
+    DEPTH_FIELD_NUMBER: _ClassVar[int]
+    CALL_CHAIN_FIELD_NUMBER: _ClassVar[int]
+    SURFACE_FIELD_NUMBER: _ClassVar[int]
+    INTERNAL_CONNECTION_ACCESS_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_FIELD_NUMBER: _ClassVar[int]
+    request_id: str
+    depth: int
+    call_chain: _containers.RepeatedScalarFieldContainer[str]
+    surface: str
+    internal_connection_access: bool
+    connection: str
+    def __init__(self, request_id: _Optional[str] = ..., depth: _Optional[int] = ..., call_chain: _Optional[_Iterable[str]] = ..., surface: _Optional[str] = ..., internal_connection_access: _Optional[bool] = ..., connection: _Optional[str] = ...) -> None: ...
+
+class RequestMetaContext(_message.Message):
+    __slots__ = ()
+    CLIENT_IP_FIELD_NUMBER: _ClassVar[int]
+    REMOTE_ADDR_FIELD_NUMBER: _ClassVar[int]
+    USER_AGENT_FIELD_NUMBER: _ClassVar[int]
+    client_ip: str
+    remote_addr: str
+    user_agent: str
+    def __init__(self, client_ip: _Optional[str] = ..., remote_addr: _Optional[str] = ..., user_agent: _Optional[str] = ...) -> None: ...
+
 class RequestContext(_message.Message):
     __slots__ = ()
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -289,17 +307,23 @@ class RequestContext(_message.Message):
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
     HOST_FIELD_NUMBER: _ClassVar[int]
     AGENT_SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    CALLER_FIELD_NUMBER: _ClassVar[int]
+    INVOCATION_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
+    REQUEST_META_FIELD_NUMBER: _ClassVar[int]
     subject: SubjectContext
     credential: CredentialContext
     access: AccessContext
     workflow: _struct_pb2.Struct
     host: HostContext
     agent_subject: SubjectContext
+    caller: ProviderContext
+    invocation: InvocationContext
     tool_refs: _containers.RepeatedCompositeFieldContainer[AgentToolRef]
     tool_refs_set: bool
-    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ...) -> None: ...
+    request_meta: RequestMetaContext
+    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., caller: _Optional[_Union[ProviderContext, _Mapping]] = ..., invocation: _Optional[_Union[InvocationContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ..., request_meta: _Optional[_Union[RequestMetaContext, _Mapping]] = ...) -> None: ...
 
 class HTTPSubjectRequest(_message.Message):
     __slots__ = ()
@@ -381,7 +405,6 @@ class ExecuteRequest(_message.Message):
     CONNECTION_PARAMS_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     operation: str
     params: _struct_pb2.Struct
@@ -389,9 +412,8 @@ class ExecuteRequest(_message.Message):
     connection_params: _containers.ScalarMap[str, str]
     invocation_id: str
     context: RequestContext
-    invocation_token: str
     idempotency_key: str
-    def __init__(self, operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., token: _Optional[str] = ..., connection_params: _Optional[_Mapping[str, str]] = ..., invocation_id: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    def __init__(self, operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., token: _Optional[str] = ..., connection_params: _Optional[_Mapping[str, str]] = ..., invocation_id: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class GetSessionCatalogRequest(_message.Message):
     __slots__ = ()

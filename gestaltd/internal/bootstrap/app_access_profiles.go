@@ -7,13 +7,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
-func appInvocationDependencies(invokes []config.AppInvocationDependency) []appaccessservice.InvocationDependency {
+func appAccessDependenciesFromInvokes(invokes []config.AppInvocationDependency) []appaccessservice.AppAccessDependency {
 	if len(invokes) == 0 {
 		return nil
 	}
-	dependencies := make([]appaccessservice.InvocationDependency, 0, len(invokes))
+	dependencies := make([]appaccessservice.AppAccessDependency, 0, len(invokes))
 	for _, invoke := range invokes {
-		dependencies = append(dependencies, appaccessservice.InvocationDependency{
+		dependencies = append(dependencies, appaccessservice.AppAccessDependency{
 			App:            invoke.App,
 			Operation:      invoke.Operation,
 			Surface:        invoke.Surface,
@@ -23,6 +23,26 @@ func appInvocationDependencies(invokes []config.AppInvocationDependency) []appac
 		})
 	}
 	return dependencies
+}
+
+func appAccessProfiles(apps map[string]*config.ProviderEntry) map[string]appaccessservice.AppAccessProfiles {
+	if len(apps) == 0 {
+		return nil
+	}
+	out := make(map[string]appaccessservice.AppAccessProfiles, len(apps))
+	for name, entry := range apps {
+		if entry == nil {
+			continue
+		}
+		profiles := appaccessservice.ExactAppAccessProfilesFromDependencies(appAccessDependenciesFromInvokes(entry.Invokes))
+		if len(profiles) > 0 {
+			out[name] = profiles
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func appWorkflowGrants(capabilities *config.AppCapabilitiesConfig) workflowgrants.Grants {

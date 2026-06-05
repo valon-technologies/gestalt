@@ -486,7 +486,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
 	providerReq.PreparedWorkspace = nil
-	providerReq.InvocationToken = ""
 	session, err = provider.CreateSession(ctx, providerReq)
 	if err != nil {
 		if sessionStart != nil || workspace != nil {
@@ -691,7 +690,6 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.State = req.GetState()
 	providerReq.Metadata = providerMetadata
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.InvocationToken = ""
 	session, err = owned.provider.UpdateSession(ctx, providerReq)
 	if err != nil {
 		return nil, err
@@ -797,7 +795,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.RunGrant = runGrant
-	providerReq.InvocationToken = ""
 	turn, err = ownedSession.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
 		return nil, err
@@ -916,7 +913,6 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.TurnId = strings.TrimSpace(req.GetTurnId())
 	providerReq.Reason = strings.TrimSpace(req.GetReason())
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.InvocationToken = ""
 	turn, err = owned.provider.CancelTurn(ctx, providerReq)
 	if err != nil {
 		return nil, err
@@ -1019,7 +1015,6 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	providerReq.InteractionId = interactionID
 	providerReq.TurnId = owned.turn.ID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.InvocationToken = ""
 	interaction, err = owned.provider.ResolveInteraction(ctx, providerReq)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {

@@ -79,7 +79,6 @@ export {
 export {
   App,
   type AppGraphQLInvokeOptions,
-  type AppInvocationGrant,
   type AppInvokeOptions,
 } from "./app-access.ts";
 export {

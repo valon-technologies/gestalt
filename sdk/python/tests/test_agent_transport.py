@@ -90,6 +90,7 @@ _host_list_requests: list[dict[str, Any]] = []
 _host_execute_requests: list[dict[str, Any]] = []
 _host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, Any]] = []
+_manager_contexts: list[dict[str, Any]] = []
 _manager_workflows: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
@@ -377,16 +378,10 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
 class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
     def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "create_session",
-                "invocation_token": request.invocation_token,
-                "provider_name": request.provider_name,
-                "session_id": "",
-                "turn_id": "",
-                "interaction_id": "",
-                "reason": "",
-            }
+        _record_manager_request(
+            request,
+            "create_session",
+            provider_name=request.provider_name,
         )
         return agent_pb2.AgentSession(
             id="session-managed-1",
@@ -399,17 +394,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
     def GetSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _record_manager_workflow(request)
-        _manager_requests.append(
-            {
-                "method": "get_session",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": request.session_id,
-                "turn_id": "",
-                "interaction_id": "",
-                "reason": "",
-            }
-        )
+        _record_manager_request(request, "get_session", session_id=request.session_id)
         return agent_pb2.AgentSession(
             id=request.session_id,
             provider_name="openai",
@@ -420,16 +405,10 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def ListSessions(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "list_sessions",
-                "invocation_token": request.invocation_token,
-                "provider_name": request.provider_name,
-                "session_id": "",
-                "turn_id": "",
-                "interaction_id": "",
-                "reason": "",
-            }
+        _record_manager_request(
+            request,
+            "list_sessions",
+            provider_name=request.provider_name,
         )
         return agent_pb2.ListAgentProviderSessionsResponse(
             sessions=[
@@ -445,17 +424,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def UpdateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "update_session",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": request.session_id,
-                "turn_id": "",
-                "interaction_id": "",
-                "reason": "",
-            }
-        )
+        _record_manager_request(request, "update_session", session_id=request.session_id)
         return agent_pb2.AgentSession(
             id=request.session_id,
             provider_name="openai",
@@ -467,28 +436,20 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def CreateTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "create_turn",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": request.session_id,
-                "turn_id": "",
-                "interaction_id": "",
-                "reason": "",
-                "tool_source": request.tool_source,
-                "tool_ref_count": len(request.tool_refs),
-                "timeout_seconds": request.timeout_seconds,
-                "output_kind": request.output.WhichOneof("kind")
-                if request.HasField("output")
-                else "",
-                "has_structured_schema": request.output.structured.HasField(
-                    "schema"
-                )
-                if request.HasField("output")
-                and request.output.WhichOneof("kind") == "structured"
-                else False,
-            }
+        _record_manager_request(
+            request,
+            "create_turn",
+            session_id=request.session_id,
+            tool_source=request.tool_source,
+            tool_ref_count=len(request.tool_refs),
+            timeout_seconds=request.timeout_seconds,
+            output_kind=request.output.WhichOneof("kind")
+            if request.HasField("output")
+            else "",
+            has_structured_schema=request.output.structured.HasField("schema")
+            if request.HasField("output")
+            and request.output.WhichOneof("kind") == "structured"
+            else False,
         )
         return agent_pb2.AgentTurn(
             id="turn-managed-1",
@@ -503,17 +464,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def GetTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "get_turn",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": "",
-                "turn_id": request.turn_id,
-                "interaction_id": "",
-                "reason": "",
-            }
-        )
+        _record_manager_request(request, "get_turn", turn_id=request.turn_id)
         return agent_pb2.AgentTurn(
             id=request.turn_id,
             session_id="session-managed-1",
@@ -526,17 +477,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def ListTurns(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "list_turns",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": request.session_id,
-                "turn_id": "",
-                "interaction_id": "",
-                "reason": "",
-            }
-        )
+        _record_manager_request(request, "list_turns", session_id=request.session_id)
         return agent_pb2.ListAgentProviderTurnsResponse(
             turns=[
                 agent_pb2.AgentTurn(
@@ -552,16 +493,11 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def CancelTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "cancel_turn",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": "",
-                "turn_id": request.turn_id,
-                "interaction_id": "",
-                "reason": request.reason,
-            }
+        _record_manager_request(
+            request,
+            "cancel_turn",
+            turn_id=request.turn_id,
+            reason=request.reason,
         )
         return agent_pb2.AgentTurn(
             id=request.turn_id,
@@ -574,17 +510,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def ListTurnEvents(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "list_turn_events",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": "",
-                "turn_id": request.turn_id,
-                "interaction_id": "",
-                "reason": "",
-            }
-        )
+        _record_manager_request(request, "list_turn_events", turn_id=request.turn_id)
         return agent_pb2.ListAgentProviderTurnEventsResponse(
             events=[
                 agent_pb2.AgentTurnEvent(
@@ -600,17 +526,7 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def ListInteractions(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "list_interactions",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": "",
-                "turn_id": request.turn_id,
-                "interaction_id": "",
-                "reason": "",
-            }
-        )
+        _record_manager_request(request, "list_interactions", turn_id=request.turn_id)
         return agent_pb2.ListAgentProviderInteractionsResponse(
             interactions=[
                 agent_pb2.AgentInteraction(
@@ -627,16 +543,11 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
 
     def ResolveInteraction(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
-        _manager_requests.append(
-            {
-                "method": "resolve_interaction",
-                "invocation_token": request.invocation_token,
-                "provider_name": "",
-                "session_id": "",
-                "turn_id": request.turn_id,
-                "interaction_id": request.interaction_id,
-                "reason": "",
-            }
+        _record_manager_request(
+            request,
+            "resolve_interaction",
+            turn_id=request.turn_id,
+            interaction_id=request.interaction_id,
         )
         return agent_pb2.AgentInteraction(
             id=request.interaction_id,
@@ -650,6 +561,31 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
         )
 
 
+def _record_manager_request(request: Any, method: str, **fields: Any) -> None:
+    _record_manager_context(request)
+    entry = {
+        "method": method,
+        "provider_name": "",
+        "session_id": "",
+        "turn_id": "",
+        "interaction_id": "",
+        "reason": "",
+    }
+    entry.update(fields)
+    _manager_requests.append(entry)
+
+
+def _record_manager_context(request: Any) -> None:
+    _manager_contexts.append(
+        json_format.MessageToDict(
+            request.context,
+            preserving_proto_field_name=True,
+        )
+        if request.HasField("context")
+        else {}
+    )
+
+
 def _record_relay_tokens(context: grpc.ServicerContext) -> None:
     _manager_relay_tokens.extend(
         value
@@ -660,8 +596,11 @@ def _record_relay_tokens(context: grpc.ServicerContext) -> None:
 
 def _record_manager_workflow(request: Any) -> None:
     _manager_workflows.append(
-        json_format.MessageToDict(request.workflow, preserving_proto_field_name=True)
-        if request.HasField("workflow")
+        json_format.MessageToDict(
+            request.context.workflow,
+            preserving_proto_field_name=True,
+        )
+        if request.HasField("context") and request.context.HasField("workflow")
         else {}
     )
 
@@ -743,6 +682,7 @@ class AgentTransportTests(unittest.TestCase):
         _host_execute_requests.clear()
         _host_connection_requests.clear()
         _manager_requests.clear()
+        _manager_contexts.clear()
         _manager_workflows.clear()
         _manager_relay_tokens.clear()
 
@@ -1189,7 +1129,10 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(len(list_response.tools[0].description), 5 * 1024 * 1024)
 
     def test_agent_roundtrip(self) -> None:
-        with Agent("token-123") as manager:
+        context = app_pb2.RequestContext(
+            subject=app_pb2.SubjectContext(id="user:agent-manager")
+        )
+        with Agent(Request(context=context)) as manager:
             created_session = manager.create_session(
                 agent_pb2.CreateAgentProviderSessionRequest(
                     provider_name="openai",
@@ -1279,11 +1222,14 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(resolved.state, agent_pb2.AGENT_INTERACTION_STATE_RESOLVED)
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"] * 11)
         self.assertEqual(
+            _manager_contexts,
+            [{"subject": {"id": "user:agent-manager"}}] * 11,
+        )
+        self.assertEqual(
             _manager_requests,
             [
                 {
                     "method": "create_session",
-                    "invocation_token": "token-123",
                     "provider_name": "openai",
                     "session_id": "",
                     "turn_id": "",
@@ -1292,7 +1238,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "get_session",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "session-managed-1",
                     "turn_id": "",
@@ -1301,7 +1246,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "list_sessions",
-                    "invocation_token": "token-123",
                     "provider_name": "openai",
                     "session_id": "",
                     "turn_id": "",
@@ -1310,7 +1254,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "update_session",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "session-managed-1",
                     "turn_id": "",
@@ -1319,7 +1262,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "create_turn",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "session-managed-1",
                     "turn_id": "",
@@ -1333,7 +1275,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "get_turn",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "",
                     "turn_id": "turn-managed-1",
@@ -1342,7 +1283,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "list_turns",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "session-managed-1",
                     "turn_id": "",
@@ -1351,7 +1291,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "cancel_turn",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "",
                     "turn_id": "turn-managed-1",
@@ -1360,7 +1299,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "list_turn_events",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "",
                     "turn_id": "turn-managed-1",
@@ -1369,7 +1307,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "list_interactions",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "",
                     "turn_id": "turn-managed-1",
@@ -1378,7 +1315,6 @@ class AgentTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "resolve_interaction",
-                    "invocation_token": "token-123",
                     "provider_name": "",
                     "session_id": "",
                     "turn_id": "turn-managed-1",
@@ -1389,7 +1325,11 @@ class AgentTransportTests(unittest.TestCase):
         )
 
     def test_request_agent_roundtrip(self) -> None:
-        request = Request(invocation_token="token-embedded")
+        request = Request(
+            context=app_pb2.RequestContext(
+                subject=app_pb2.SubjectContext(id="user:request-agent")
+            )
+        )
 
         with request.agent() as manager:
             fetched = manager.get_session(
@@ -1399,11 +1339,14 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(fetched.id, "session-managed-1")
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
         self.assertEqual(
+            _manager_contexts,
+            [{"subject": {"id": "user:request-agent"}}],
+        )
+        self.assertEqual(
             _manager_requests,
             [
                 {
                     "method": "get_session",
-                    "invocation_token": "token-embedded",
                     "provider_name": "",
                     "session_id": "session-managed-1",
                     "turn_id": "",
@@ -1413,12 +1356,18 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
-    def test_request_agent_forwards_workflow_without_invocation_token(self) -> None:
-        request = Request(
-            workflow={
+    def test_request_agent_forwards_workflow_context(self) -> None:
+        context = app_pb2.RequestContext(
+            subject=app_pb2.SubjectContext(id="user:workflow-caller")
+        )
+        context.workflow.update(
+            {
                 "runId": "run-python-agent",
                 "runAs": {"id": "service_account:workflow-test"},
             }
+        )
+        request = Request(
+            context=context,
         )
 
         with request.agent() as manager:
@@ -1432,12 +1381,23 @@ class AgentTransportTests(unittest.TestCase):
             [
                 {
                     "method": "get_session",
-                    "invocation_token": "",
                     "provider_name": "",
                     "session_id": "session-managed-1",
                     "turn_id": "",
                     "interaction_id": "",
                     "reason": "",
+                }
+            ],
+        )
+        self.assertEqual(
+            _manager_contexts,
+            [
+                {
+                    "subject": {"id": "user:workflow-caller"},
+                    "workflow": {
+                        "runId": "run-python-agent",
+                        "runAs": {"id": "service_account:workflow-test"},
+                    },
                 }
             ],
         )
@@ -1452,7 +1412,7 @@ class AgentTransportTests(unittest.TestCase):
         )
 
     def test_agent_accepts_native_inputs(self) -> None:
-        with Agent("token-123") as manager:
+        with Agent(Request()) as manager:
             created_turn = manager.create_turn(
                 AgentCreateTurn(
                     session_id="session-managed-1",
@@ -1511,7 +1471,7 @@ class AgentTransportTests(unittest.TestCase):
         self.assertTrue(_manager_requests[0]["has_structured_schema"])
 
     def test_agent_create_turn_requires_unambiguous_output(self) -> None:
-        with Agent("token-123") as manager:
+        with Agent(Request()) as manager:
             with self.assertRaisesRegex(ValueError, "agent output is required"):
                 manager.create_turn(
                     AgentCreateTurn(

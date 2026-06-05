@@ -98,7 +98,7 @@ class Request:
     subject: Subject = dataclasses.field(default_factory=Subject)
     credential: Credential = dataclasses.field(default_factory=Credential)
     access: Access = dataclasses.field(default_factory=Access)
-    invocation_token: str = ""
+    context: Any | None = None
     # Workflow callback metadata uses a JSON-style lowerCamelCase object such
     # as runId, target.steps, trigger.activationId, and trigger.event.specVersion.
     workflow: JsonObject = dataclasses.field(default_factory=dict)
@@ -116,20 +116,17 @@ class Request:
     def app(self) -> "AppProtocol":
         from ._app_access import _AppClient
 
-        return _AppClient(self.invocation_token, workflow=self.workflow)
+        return _AppClient(self)
 
     def agent(self) -> "Agent":
         from ._agent import Agent
 
-        return Agent(self.invocation_token, workflow=self.workflow)
+        return Agent(self)
 
     def workflows(self) -> "Workflow":
         from ._workflow import Workflow
 
-        return Workflow(
-            self.invocation_token,
-            idempotency_key=self.idempotency_key,
-        )
+        return Workflow(self)
 
     def authorization(self) -> AuthorizationProtocol:
         from ._authorization import _shared_authorization_client

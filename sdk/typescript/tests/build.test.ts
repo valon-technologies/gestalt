@@ -349,7 +349,6 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
         credentialMode: "subject",
         accessPolicy: "sample_policy",
         accessRole: "admin",
-        invocationToken: "",
         idempotencyKey: "build-tool-123",
       });
 

@@ -102,7 +102,7 @@ class AppOperationTests(unittest.TestCase):
                 return "second"
 
     def test_handler_receives_request(self) -> None:
-        """Operations that take Request should receive it with token and params."""
+        """Operations that take Request should receive host request metadata."""
         app = App("test-plugin")
 
         @app.operation
@@ -113,7 +113,6 @@ class AppOperationTests(unittest.TestCase):
                 "subject_id": req.subject.id,
                 "credential_mode": req.credential.mode,
                 "access_role": req.access.role,
-                "invocation_token": req.invocation_token,
             }
 
         result = app.execute(
@@ -125,7 +124,6 @@ class AppOperationTests(unittest.TestCase):
                 subject=Subject(id="user:user-123"),
                 credential=Credential(mode="subject"),
                 access=Access(role="admin"),
-                invocation_token="invoke-123",
             ),
         )
         body = json.loads(result.body)
@@ -134,7 +132,6 @@ class AppOperationTests(unittest.TestCase):
         self.assertEqual(body["subject_id"], "user:user-123")
         self.assertEqual(body["credential_mode"], "subject")
         self.assertEqual(body["access_role"], "admin")
-        self.assertEqual(body["invocation_token"], "invoke-123")
 
     def test_async_handler(self) -> None:
         app = App("test-plugin")

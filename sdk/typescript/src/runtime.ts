@@ -55,6 +55,8 @@ import {
   type HTTPSubjectRequest as ProtoHTTPSubjectRequest,
   type RequestContext as ProtoRequestContext,
   type ResolveHTTPSubjectRequest as ProtoResolveHTTPSubjectRequest,
+  type SubjectContext as ProtoSubjectContext,
+  type SubjectPermissionContext as ProtoSubjectPermissionContext,
   AppProvider as AppProviderService,
   StartProviderResponseSchema,
   type ExecuteRequest,
@@ -75,7 +77,14 @@ import {
 } from "./internal/gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
-import { errorMessage, parseSubjectId, type OperationResult, type Request } from "./api.ts";
+import {
+  errorMessage,
+  parseSubjectId,
+  type OperationResult,
+  type Request,
+  type Subject,
+  type SubjectPermission,
+} from "./api.ts";
 import {
   AgentProvider,
   createAgentProviderService,
@@ -589,7 +598,6 @@ export function createProviderService(
             request.token,
             request.connectionParams,
             request.context,
-            request.invocationToken,
             request.idempotencyKey,
           ),
         ),
@@ -818,11 +826,8 @@ function providerRequest(
   token: string,
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
-  invocationToken = "",
   idempotencyKey = "",
 ): Request {
-  const subject = requestContext?.subject;
-  const agentSubject = requestContext?.agentSubject;
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
@@ -831,18 +836,8 @@ function providerRequest(
     connectionParams: {
       ...connectionParams,
     },
-    subject: {
-      id: subject?.id ?? "",
-      credentialSubjectId: subject?.credentialSubjectId ?? "",
-      email: subject?.email ?? "",
-      kind: subjectKind(subject?.id ?? ""),
-    },
-    agentSubject: {
-      id: agentSubject?.id ?? "",
-      credentialSubjectId: agentSubject?.credentialSubjectId ?? "",
-      email: agentSubject?.email ?? "",
-      kind: subjectKind(agentSubject?.id ?? ""),
-    },
+    subject: providerSubject(requestContext?.subject),
+    agentSubject: providerSubject(requestContext?.agentSubject),
     credential: {
       mode: credential?.mode ?? "",
       subjectId: credential?.subjectId ?? "",
@@ -861,9 +856,29 @@ function providerRequest(
     host: {
       publicBaseUrl: host?.publicBaseUrl ?? "",
     },
-    invocationToken,
+    __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
   };
+}
+
+function providerSubject(subject?: ProtoSubjectContext): Subject {
+  return {
+    id: subject?.id ?? "",
+    credentialSubjectId: subject?.credentialSubjectId ?? "",
+    email: subject?.email ?? "",
+    scopes: [...(subject?.scopes ?? [])],
+    permissions: subjectPermissionsFromProto(subject?.permissions),
+    kind: subjectKind(subject?.id ?? ""),
+  };
+}
+
+function subjectPermissionsFromProto(
+  permissions?: readonly ProtoSubjectPermissionContext[] | undefined,
+): SubjectPermission[] {
+  return permissions?.map((permission) => ({
+    app: permission.app,
+    operations: permission.allOperations ? [] : [...permission.operations],
+  })) ?? [];
 }
 
 function subjectKind(subjectID: string): string {

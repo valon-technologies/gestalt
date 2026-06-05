@@ -6,6 +6,7 @@ use tonic::codegen::async_trait;
 use crate::agent::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
+use crate::proto::v1;
 
 /// Split a canonical subject ID such as `user:ada` into kind and id.
 pub fn parse_subject_id(subject_id: &str) -> Option<(&str, &str)> {
@@ -28,6 +29,21 @@ pub struct Subject {
     pub credential_subject_id: String,
     /// Email address resolved by the Gestalt host for user subjects.
     pub email: String,
+    /// Scopes resolved for the subject.
+    pub scopes: Vec<String>,
+    /// App operation permissions resolved for the subject.
+    pub permissions: Vec<SubjectPermission>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// One app permission attached to a subject.
+pub struct SubjectPermission {
+    /// App name the permission applies to.
+    pub app: String,
+    /// Specific operation ids granted on the app.
+    pub operations: Vec<String>,
+    /// Whether every operation on the app is granted.
+    pub all_operations: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -86,8 +102,8 @@ pub struct Request {
     pub tool_refs: Vec<AgentToolRef>,
     /// Whether the host attached a tool-ref context to this request.
     pub tool_refs_set: bool,
-    /// Invocation token used to call host services.
-    pub invocation_token: String,
+    /// Host-supplied request context propagated back to host services.
+    pub context: Option<v1::RequestContext>,
 }
 
 impl Request {
@@ -96,28 +112,19 @@ impl Request {
         self.connection_params.get(name).map(String::as_str)
     }
 
-    /// Returns the invocation token used to call host services.
-    pub fn invocation_token(&self) -> &str {
-        &self.invocation_token
-    }
-
-    /// Creates an app client using this request's invocation token.
+    /// Creates an app client using this request's host context.
     pub async fn app(&self) -> std::result::Result<crate::App, crate::AppError> {
-        crate::App::connect(self.invocation_token()).await
+        crate::App::connect(self).await
     }
 
-    /// Creates a workflow using this request's invocation token.
+    /// Creates a workflow using this request's host context.
     pub async fn workflow(&self) -> std::result::Result<crate::Workflow, crate::WorkflowError> {
-        crate::Workflow::connect_with_idempotency_key(
-            self.invocation_token(),
-            self.idempotency_key.trim(),
-        )
-        .await
+        crate::Workflow::connect(self).await
     }
 
-    /// Creates an agent using this request's invocation token.
+    /// Creates an agent using this request's host context.
     pub async fn agent(&self) -> std::result::Result<crate::Agent, crate::AgentError> {
-        crate::Agent::connect(self.invocation_token()).await
+        crate::Agent::connect(self).await
     }
 }
 

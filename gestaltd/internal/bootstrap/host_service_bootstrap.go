@@ -12,9 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -35,19 +33,14 @@ const (
 	hostServiceTLSCAPEMEnv          = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
-func buildProviderHostServices(name string, deps Deps, extraHostServices ...runtimehost.HostService) ([]runtimehost.HostService, *appaccessservice.InvocationTokenManager, error) {
-	invTokens, err := appaccessservice.NewInvocationTokenManager(deps.EncryptionKey)
-	if err != nil {
-		return nil, nil, err
-	}
-
+func buildProviderHostServices(name string, deps Deps, extraHostServices ...runtimehost.HostService) ([]runtimehost.HostService, error) {
 	var hostServices []runtimehost.HostService
 	hostServices = append(hostServices, indexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, name)...)
 	if cacheHostService, ok := cacheServiceFromDeps(name, deps); ok {
 		hostServices = append(hostServices, cacheHostService)
 	}
 	if s3HostService, ok, err := s3ServiceFromDeps(name, deps); err != nil {
-		return nil, nil, err
+		return nil, err
 	} else if ok {
 		hostServices = append(hostServices, s3HostService)
 	}
@@ -55,15 +48,15 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, authorizationHostService)
 	}
 	hostServices = append(hostServices,
-		buildAppInvocationHostService(deps, invTokens),
-		buildWorkflowProviderHostService(name, deps, invTokens),
-		buildPluginAgentProviderHostService(name, deps, invTokens),
+		buildAppInvocationHostService(name, deps),
+		buildWorkflowProviderHostService(name, deps),
+		buildPluginAgentProviderHostService(name, deps),
 	)
 	if deps.Services != nil && !core.ExternalCredentialProviderMissing(deps.Services.ExternalCredentials) {
 		hostServices = append(hostServices, buildPluginExternalCredentialsHostService(deps.Services.ExternalCredentials))
 	}
 	hostServices = append(hostServices, extraHostServices...)
-	return hostServices, invTokens, nil
+	return hostServices, nil
 }
 
 func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
@@ -72,6 +65,7 @@ func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
 	}
 	deps.Caches = scopedCacheBindings(entry.Cache, deps.Caches)
 	deps.S3 = scopedS3Bindings(entry.S3, deps.S3)
+	deps.WorkflowManagerGrants = appWorkflowGrants(entry.Capabilities)
 	return deps
 }
 
@@ -455,7 +449,7 @@ func registerS3Servers(bindings map[string]s3sdk.S3, defaultBinding, pluginName 
 	return s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
 }
 
-func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
+func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -464,17 +458,16 @@ func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appacce
 		Name:           "workflow_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, tokens))
+			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, deps.WorkflowManagerGrants))
 		},
 	}
 }
 
-func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginAgentProviderHostService(pluginName string, deps Deps) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
 	}
-	workflowRuns := workflowRunResolverFromDeps(deps)
 	return runtimehost.HostService{
 		Name:           "agent_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentProvider_ServiceDesc.ServiceName)},
@@ -482,8 +475,6 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *a
 			proto.RegisterAgentProviderServer(srv, agentservice.NewProviderServer(
 				pluginName,
 				manager,
-				tokens,
-				agentservice.WithWorkflowRunResolver(workflowRuns),
 			))
 		},
 	}
@@ -499,47 +490,20 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
+func buildAppInvocationHostService(appName string, deps Deps) runtimehost.HostService {
 	invoker := deps.AppInvocation
 	if invoker == nil {
 		invoker = unavailableAppInvocation{}
 	}
-	workflowRuns := workflowRunResolverFromDeps(deps)
 	return runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAppServer(srv, appaccessservice.NewServer(
 				invoker,
-				tokens,
-				appaccessservice.WithWorkflowRunResolver(workflowRuns),
+				appaccessservice.WithAuthorizationProvider(deps.Authorization),
+				appaccessservice.WithCallerApp(appName, deps.AppAccessProfiles[strings.TrimSpace(appName)]),
 			))
 		},
 	}
-}
-
-type workflowRunResolver struct {
-	runtime *workflowRuntime
-}
-
-func workflowRunResolverFromDeps(deps Deps) appaccessservice.WorkflowRunResolver {
-	if deps.WorkflowRuntime == nil {
-		return nil
-	}
-	return workflowRunResolver{runtime: deps.WorkflowRuntime}
-}
-
-func (r workflowRunResolver) ResolveWorkflowRun(ctx context.Context, providerName, runID string) (*coreworkflow.Run, error) {
-	if r.runtime == nil {
-		return nil, fmt.Errorf("workflow runtime is not configured")
-	}
-	_, provider, err := r.runtime.ResolveProvider(ctx, providerName)
-	if err != nil {
-		return nil, err
-	}
-	runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{RunId: strings.TrimSpace(runID)})
-	if err != nil {
-		return nil, err
-	}
-	return workflowwire.RunFromProto(runProto)
 }

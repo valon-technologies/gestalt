@@ -77,7 +77,6 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	ctx = withRequestContext(ctx, req.GetContext())
-	ctx = withInvocationToken(ctx, req.GetInvocationToken())
 	ctx = WithIdempotencyKey(ctx, req.GetIdempotencyKey())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
@@ -233,11 +232,14 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 	if reqCtx == nil {
 		return ctx
 	}
+	ctx = context.WithValue(ctx, requestContextKey{}, reqCtx)
 	if subject := reqCtx.GetSubject(); subject != nil {
 		ctx = WithSubject(ctx, Subject{
 			ID:                  subject.GetId(),
 			CredentialSubjectID: subject.GetCredentialSubjectId(),
 			Email:               subject.GetEmail(),
+			Scopes:              cloneStrings(subject.GetScopes()),
+			Permissions:         subjectPermissionsFromProto(subject.GetPermissions()),
 		})
 	}
 	if subject := reqCtx.GetAgentSubject(); subject != nil {
@@ -245,6 +247,8 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			ID:                  subject.GetId(),
 			CredentialSubjectID: subject.GetCredentialSubjectId(),
 			Email:               subject.GetEmail(),
+			Scopes:              cloneStrings(subject.GetScopes()),
+			Permissions:         subjectPermissionsFromProto(subject.GetPermissions()),
 		})
 	}
 	if credential := reqCtx.GetCredential(); credential != nil {
@@ -273,4 +277,11 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 		ctx = WithToolRefsContext(ctx, agentToolRefsFromProto(reqCtx.GetToolRefs()))
 	}
 	return ctx
+}
+
+type requestContextKey struct{}
+
+func requestContextFromContext(ctx context.Context) *proto.RequestContext {
+	reqCtx, _ := ctx.Value(requestContextKey{}).(*proto.RequestContext)
+	return reqCtx
 }

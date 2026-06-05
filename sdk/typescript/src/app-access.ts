@@ -8,7 +8,6 @@ import {
   structFromObject,
   type JsonObjectInput,
 } from "./protocol.ts";
-import { hostInvocationContext } from "./invocation-context.ts";
 import {
   createHostServiceGrpcTransport,
   hostServiceMetadataInterceptors,
@@ -26,17 +25,6 @@ export interface AppInvokeOptions {
   idempotencyKey?: string;
   /** Credential mode requested for the target operation. */
   credentialMode?: ConnectionMode;
-}
-/** Grant included when exchanging an invocation token for a child token. */
-export interface AppInvocationGrant {
-  /** App name that the child token may invoke. */
-  app: string;
-  /** Specific operation ids allowed by the child token. */
-  operations?: string[];
-  /** Surface names allowed by the child token. */
-  surfaces?: string[];
-  /** Whether the child token may invoke every operation on the app. */
-  allOperations?: boolean;
 }
 
 /** Options for invoking an app GraphQL surface. */
@@ -59,26 +47,21 @@ export interface App {
     document: string,
     options?: AppGraphQLInvokeOptions,
   ): Promise<OperationResult>;
-  exchangeInvocationToken(options?: {
-    grants?: AppInvocationGrant[];
-    ttlSeconds?: number;
-  }): Promise<string>;
 }
 
 /**
  * Transport-backed implementation for invoking sibling app operations.
  *
- * The constructor accepts either a Gestalt request or an invocation token. The
- * token is attached to every operation, GraphQL, and token-exchange request.
+ * The constructor accepts a Gestalt request and forwards its host request
+ * context to every operation and GraphQL request.
  */
 class AppImpl implements App {
   private readonly client: Client<typeof AppService>;
-  private readonly invocationContext: ReturnType<typeof hostInvocationContext>;
+  private readonly request: Request;
 
   constructor(request: Request);
-  constructor(invocationToken: string);
-  constructor(requestOrToken: Request | string) {
-    this.invocationContext = hostInvocationContext(requestOrToken);
+  constructor(request: Request) {
+    this.request = request;
 
     const { target, token } = requireHostServiceTarget("app");
     const transport = createHostServiceGrpcTransport(
@@ -96,7 +79,6 @@ class AppImpl implements App {
     options?: AppInvokeOptions,
   ): Promise<OperationResult> {
     const response = await this.client.invoke({
-      ...this.invocationContext,
       app,
       operation,
       params: structFromObject(params),
@@ -104,6 +86,7 @@ class AppImpl implements App {
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
       credentialMode: options?.credentialMode?.trim() ?? "",
+      context: this.request.__requestContext,
     });
     return {
       status: response.status,
@@ -124,7 +107,6 @@ class AppImpl implements App {
     }
 
     const response = await this.client.invokeGraphQL({
-      invocationToken: this.invocationContext.invocationToken,
       app,
       document: trimmedDocument,
       ...(options?.variables !== undefined
@@ -133,6 +115,7 @@ class AppImpl implements App {
       connection: options?.connection ?? "",
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
+      context: this.request.__requestContext,
     });
     return {
       status: response.status,
@@ -141,31 +124,6 @@ class AppImpl implements App {
     };
   }
 
-  /** Exchanges this invocation token for a narrower child token. */
-  async exchangeInvocationToken(options?: {
-    /** Grants to attach to the child token. */
-    grants?: AppInvocationGrant[];
-    /** Requested child-token time-to-live in seconds. */
-    ttlSeconds?: number;
-  }): Promise<string> {
-    const response = await this.client.exchangeInvocationToken({
-      parentInvocationToken: this.invocationContext.invocationToken,
-      grants: (options?.grants ?? [])
-        .map((grant) => ({
-          app: grant.app.trim(),
-          operations: (grant.operations ?? [])
-            .map((operation) => operation.trim())
-            .filter(Boolean),
-          surfaces: (grant.surfaces ?? [])
-            .map((surface) => surface.trim().toLowerCase())
-            .filter(Boolean),
-          allOperations: grant.allOperations ?? false,
-        }))
-        .filter((grant) => grant.app.length > 0),
-      ttlSeconds: BigInt(Math.max(0, options?.ttlSeconds ?? 0)),
-    });
-    return response.invocationToken;
-  }
 }
 
 export const App = AppImpl;

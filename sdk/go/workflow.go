@@ -3,16 +3,15 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type workflow struct {
-	client          proto.WorkflowProviderClient
-	invocationToken string
-	idempotencyKey  string
+	client         proto.WorkflowProviderClient
+	context        *proto.RequestContext
+	idempotencyKey string
 }
 
 // Workflow is the fakeable contract for applying definitions and starting or
@@ -36,15 +35,12 @@ type Workflow interface {
 
 var sharedWorkflowTransport sharedManagerTransport[proto.WorkflowProviderClient]
 
-// NewWorkflow returns a capability that attaches invocationToken to every request.
-func NewWorkflow(invocationToken string) (Workflow, error) {
-	return newWorkflow(invocationToken)
+// NewWorkflow returns a workflow capability for the current provider request.
+func NewWorkflow(req Request) (Workflow, error) {
+	return newWorkflow(requestContextForRequest(req))
 }
 
-func newWorkflow(invocationToken string) (*workflow, error) {
-	if strings.TrimSpace(invocationToken) == "" {
-		return nil, fmt.Errorf("workflow: invocation token is not available")
-	}
+func newWorkflow(reqCtx *proto.RequestContext) (*workflow, error) {
 	target, token, err := hostServiceTarget("workflow")
 	if err != nil {
 		return nil, err
@@ -58,12 +54,12 @@ func newWorkflow(invocationToken string) (*workflow, error) {
 		return nil, err
 	}
 
-	return &workflow{client: client, invocationToken: strings.TrimSpace(invocationToken)}, nil
+	return &workflow{client: client, context: cloneRequestContext(reqCtx)}, nil
 }
 
 // WorkflowFromContext returns a Workflow using context metadata.
 func WorkflowFromContext(ctx context.Context) (Workflow, error) {
-	client, err := newWorkflow(InvocationTokenFromContext(ctx))
+	client, err := newWorkflow(requestContextFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +79,7 @@ func (c *workflow) ApplyDefinition(ctx context.Context, input WorkflowApplyDefin
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
@@ -99,7 +95,7 @@ func (c *workflow) GetDefinition(ctx context.Context, input WorkflowGetDefinitio
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowGetDefinitionRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.GetDefinition(ctx, req)
 	if err != nil {
 		return nil, err
@@ -112,7 +108,7 @@ func (c *workflow) ListDefinitions(ctx context.Context, input WorkflowListDefini
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowListDefinitionsRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.ListDefinitions(ctx, req)
 	if err != nil {
 		return nil, err
@@ -125,7 +121,7 @@ func (c *workflow) SetDefinitionPaused(ctx context.Context, input WorkflowSetDef
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowSetDefinitionPausedRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.SetDefinitionPaused(ctx, req)
 	if err != nil {
 		return nil, err
@@ -138,7 +134,7 @@ func (c *workflow) SetActivationPaused(ctx context.Context, input WorkflowSetAct
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowSetActivationPausedRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.SetActivationPaused(ctx, req)
 	if err != nil {
 		return nil, err
@@ -151,7 +147,7 @@ func (c *workflow) DeleteDefinition(ctx context.Context, input WorkflowDeleteDef
 		return fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowDeleteDefinitionRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	_, err := c.client.DeleteDefinition(ctx, req)
 	return err
 }
@@ -164,7 +160,7 @@ func (c *workflow) StartRun(ctx context.Context, input WorkflowStartRun) (*Workf
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
@@ -180,7 +176,7 @@ func (c *workflow) GetRun(ctx context.Context, input WorkflowGetRun) (*WorkflowR
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowGetRunRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.GetRun(ctx, req)
 	if err != nil {
 		return nil, err
@@ -193,7 +189,7 @@ func (c *workflow) GetRunEvents(ctx context.Context, input WorkflowGetRunEvents)
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowGetRunEventsRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.GetRunEvents(ctx, req)
 	if err != nil {
 		return nil, err
@@ -206,7 +202,7 @@ func (c *workflow) GetRunOutput(ctx context.Context, input WorkflowGetRunOutput)
 		return nil, fmt.Errorf("workflow: client is not initialized")
 	}
 	req := newWorkflowGetRunOutputRequest(input)
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.GetRunOutput(ctx, req)
 	if err != nil {
 		return nil, err
@@ -222,7 +218,7 @@ func (c *workflow) SignalRun(ctx context.Context, input WorkflowSignalRun) (*Wor
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.SignalRun(ctx, req)
 	if err != nil {
 		return nil, err
@@ -238,7 +234,7 @@ func (c *workflow) SignalOrStartRun(ctx context.Context, input WorkflowSignalOrS
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
@@ -257,7 +253,7 @@ func (c *workflow) DeliverEvent(ctx context.Context, input WorkflowDeliverEvent)
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
+	req.Context = cloneRequestContext(c.context)
 	resp, err := c.client.DeliverEvent(ctx, req)
 	if err != nil {
 		return nil, err

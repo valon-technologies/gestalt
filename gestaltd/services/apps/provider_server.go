@@ -41,7 +41,6 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	ctx = applyRequestContext(ctx, req.GetContext())
-	ctx = appaccessservice.WithInvocationToken(ctx, req.GetInvocationToken())
 	ctx = invocation.WithIdempotencyKey(ctx, req.GetIdempotencyKey())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
@@ -122,7 +121,7 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		return ctx
 	}
 	if subject := reqCtx.GetSubject(); subject != nil {
-		ctx = principal.WithPrincipal(ctx, principalFromProto(subject))
+		ctx = principal.WithPrincipal(ctx, appaccessservice.PrincipalFromSubjectContext(subject))
 	}
 	if agentSubject := reqCtx.GetAgentSubject(); agentSubject != nil {
 		ctx = invocation.WithRunAsAudit(ctx, agentwire.RunAsSubjectFromProto(agentSubject), agentwire.RunAsSubjectFromProto(reqCtx.GetSubject()))
@@ -152,28 +151,31 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 	if reqCtx.GetToolRefsSet() {
 		ctx = invocation.WithToolRefsContext(ctx, agentwire.ToolRefsFromProto(reqCtx.GetToolRefs()))
 	}
+	if caller := reqCtx.GetCaller(); caller != nil {
+		ctx = invocation.WithCallerProvider(ctx, invocation.ProviderKind(caller.GetKind()), caller.GetName())
+	}
+	if inv := reqCtx.GetInvocation(); inv != nil {
+		ctx = invocation.ContextWithMeta(ctx, &invocation.InvocationMeta{
+			RequestID: strings.TrimSpace(inv.GetRequestId()),
+			Depth:     int(inv.GetDepth()),
+			CallChain: append([]string(nil), inv.GetCallChain()...),
+		})
+		if surface := invocation.InvocationSurface(strings.TrimSpace(inv.GetSurface())); surface != "" {
+			ctx = invocation.WithInvocationSurface(ctx, surface)
+		}
+		if inv.GetInternalConnectionAccess() {
+			ctx = invocation.WithInternalConnectionAccess(ctx)
+		}
+		if connection := strings.TrimSpace(inv.GetConnection()); connection != "" {
+			ctx = invocation.WithConnection(ctx, connection)
+		}
+	}
+	if reqMeta := reqCtx.GetRequestMeta(); reqMeta != nil {
+		ctx = invocation.WithRequestMeta(ctx, invocation.RequestMeta{
+			ClientIP:   reqMeta.GetClientIp(),
+			RemoteAddr: reqMeta.GetRemoteAddr(),
+			UserAgent:  reqMeta.GetUserAgent(),
+		})
+	}
 	return ctx
-}
-
-func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
-	if subject == nil {
-		return nil
-	}
-	email := strings.TrimSpace(subject.GetEmail())
-	p := &principal.Principal{
-		SubjectID:           subject.GetId(),
-		CredentialSubjectID: strings.TrimSpace(subject.GetCredentialSubjectId()),
-	}
-	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
-		p.Kind = principal.Kind(kind)
-	}
-	p.UserID = principal.UserIDFromSubjectID(p.SubjectID)
-	p = principal.Canonicalized(p)
-	if p.Kind == principal.KindUser && email != "" {
-		p.Identity = &core.UserIdentity{Email: email}
-	}
-	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
-		return &principal.Principal{}
-	}
-	return p
 }

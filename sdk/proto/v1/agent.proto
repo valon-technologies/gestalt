@@ -161,8 +161,8 @@ message AgentSession {
 }
 
 message CreateAgentProviderSessionRequest {
-  reserved 6;
-  reserved "provider_options";
+  reserved 6, 14;
+  reserved "provider_options", "workflow";
 
   string session_id = 1;
   string idempotency_key = 2;
@@ -174,9 +174,8 @@ message CreateAgentProviderSessionRequest {
   AgentSessionStartConfig session_start = 9;
   PreparedAgentWorkspace prepared_workspace = 10;
   string provider_name = 11;
-  string invocation_token = 12;
+  RequestContext context = 12;
   AgentWorkspace workspace = 13;
-  google.protobuf.Struct workflow = 14;
 }
 
 message AgentSessionStartConfig {
@@ -201,8 +200,9 @@ message AgentSessionStartHookOutput {
 message GetAgentProviderSessionRequest {
   string session_id = 1;
   SubjectContext subject = 2;
-  string invocation_token = 3;
-  google.protobuf.Struct workflow = 4;
+  RequestContext context = 3;
+  reserved 4;
+  reserved "workflow";
 }
 
 message ListAgentProviderSessionsRequest {
@@ -216,8 +216,9 @@ message ListAgentProviderSessionsRequest {
   // metadata unless exact session_ids require direct lookup.
   bool summary_only = 5;
   string provider_name = 6;
-  string invocation_token = 7;
-  google.protobuf.Struct workflow = 8;
+  RequestContext context = 7;
+  reserved 8;
+  reserved "workflow";
 }
 
 message ListAgentProviderSessionsResponse {
@@ -230,8 +231,9 @@ message UpdateAgentProviderSessionRequest {
   AgentSessionState state = 3;
   google.protobuf.Struct metadata = 4;
   SubjectContext subject = 5;
-  string invocation_token = 6;
-  google.protobuf.Struct workflow = 7;
+  RequestContext context = 6;
+  reserved 7;
+  reserved "workflow";
 }
 
 message AgentTurn {
@@ -299,10 +301,11 @@ message CreateAgentProviderTurnRequest {
   // If unset or zero, the provider chooses its own execution timeout. This does
   // not control the CreateTurn RPC deadline.
   int32 timeout_seconds = 18;
-  string invocation_token = 19;
+  RequestContext context = 19;
   bool tool_refs_set = 20;
   AgentOutput output = 21;
-  google.protobuf.Struct workflow = 22;
+  reserved 22;
+  reserved "workflow";
 }
 
 message AgentTextOutput {}
@@ -321,8 +324,9 @@ message AgentOutput {
 message GetAgentProviderTurnRequest {
   string turn_id = 1;
   SubjectContext subject = 2;
-  string invocation_token = 3;
-  google.protobuf.Struct workflow = 4;
+  RequestContext context = 3;
+  reserved 4;
+  reserved "workflow";
 }
 
 message ListAgentProviderTurnsRequest {
@@ -337,8 +341,9 @@ message ListAgentProviderTurnsRequest {
   // messages, output text, and structured output unless exact turn_ids require
   // direct lookup.
   bool summary_only = 6;
-  string invocation_token = 7;
-  google.protobuf.Struct workflow = 8;
+  RequestContext context = 7;
+  reserved 8;
+  reserved "workflow";
 }
 
 message ListAgentProviderTurnsResponse {
@@ -349,8 +354,9 @@ message CancelAgentProviderTurnRequest {
   string turn_id = 1;
   string reason = 2;
   SubjectContext subject = 3;
-  string invocation_token = 4;
-  google.protobuf.Struct workflow = 5;
+  RequestContext context = 4;
+  reserved 5;
+  reserved "workflow";
 }
 
 message AgentTurnEvent {
@@ -370,8 +376,9 @@ message ListAgentProviderTurnEventsRequest {
   int64 after_seq = 2;
   int32 limit = 3;
   SubjectContext subject = 4;
-  string invocation_token = 5;
-  google.protobuf.Struct workflow = 6;
+  RequestContext context = 5;
+  reserved 6;
+  reserved "workflow";
 }
 
 message ListAgentProviderTurnEventsResponse {
@@ -381,14 +388,15 @@ message ListAgentProviderTurnEventsResponse {
 message GetAgentProviderInteractionRequest {
   string interaction_id = 1;
   SubjectContext subject = 2;
-  string invocation_token = 3;
+  RequestContext context = 3;
 }
 
 message ListAgentProviderInteractionsRequest {
   string turn_id = 1;
   SubjectContext subject = 2;
-  string invocation_token = 3;
-  google.protobuf.Struct workflow = 4;
+  RequestContext context = 3;
+  reserved 4;
+  reserved "workflow";
 }
 
 message ListAgentProviderInteractionsResponse {
@@ -399,9 +407,10 @@ message ResolveAgentProviderInteractionRequest {
   string interaction_id = 1;
   google.protobuf.Struct resolution = 2;
   SubjectContext subject = 3;
-  string invocation_token = 4;
+  RequestContext context = 4;
   string turn_id = 5;
-  google.protobuf.Struct workflow = 6;
+  reserved 6;
+  reserved "workflow";
 }
 
 message ExecuteAgentToolRequest {

@@ -36,6 +36,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -151,34 +152,35 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey               []byte
-	BaseURL                     string
-	RuntimeRelayBaseURL         string
-	SecretManager               core.SecretManager
-	Services                    *coredata.Services
-	SelectedIndexedDBName       string
-	IndexedDBs                  map[string]indexeddb.IndexedDB
-	IndexedDBDefs               map[string]*config.ProviderEntry
-	IndexedDBFactory            IndexedDBFactory
-	Caches                      map[string]corecache.Cache
-	CacheDefs                   map[string]*config.ProviderEntry
-	CacheFactory                CacheFactory
-	S3                          map[string]s3sdk.S3
-	Authorization               core.AuthorizationProvider
-	WorkflowRuntime             *workflowRuntime
-	AgentRuntime                *agentRuntime
-	AgentRunGrants              *agentgrant.Manager
-	WorkflowManager             workflowmanager.Service
-	AgentManager                agentmanager.Service
-	Egress                      EgressDeps
-	AppInvocation               invocation.Invoker
-	WorkflowAppInvocationGrants map[string]appaccessservice.InvocationGrants
-	Runtime                     runtimeprovider.Provider
-	RuntimeRegistry             *runtimeRegistry
-	PublicHostServices          *runtimehost.PublicHostServiceRegistry
-	HostServiceTLSCAFile        string
-	HostServiceTLSCAPEM         string
-	Telemetry                   core.TelemetryProvider
+	EncryptionKey         []byte
+	BaseURL               string
+	RuntimeRelayBaseURL   string
+	SecretManager         core.SecretManager
+	Services              *coredata.Services
+	SelectedIndexedDBName string
+	IndexedDBs            map[string]indexeddb.IndexedDB
+	IndexedDBDefs         map[string]*config.ProviderEntry
+	IndexedDBFactory      IndexedDBFactory
+	Caches                map[string]corecache.Cache
+	CacheDefs             map[string]*config.ProviderEntry
+	CacheFactory          CacheFactory
+	S3                    map[string]s3sdk.S3
+	Authorization         core.AuthorizationProvider
+	WorkflowRuntime       *workflowRuntime
+	AgentRuntime          *agentRuntime
+	AgentRunGrants        *agentgrant.Manager
+	WorkflowManager       workflowmanager.Service
+	AgentManager          agentmanager.Service
+	Egress                EgressDeps
+	AppInvocation         invocation.Invoker
+	AppAccessProfiles     map[string]appaccessservice.AppAccessProfiles
+	WorkflowManagerGrants workflowgrants.Grants
+	Runtime               runtimeprovider.Provider
+	RuntimeRegistry       *runtimeRegistry
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile  string
+	HostServiceTLSCAPEM   string
+	Telemetry             core.TelemetryProvider
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -967,6 +969,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
+	deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1672,7 +1675,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, cfg *config.Conf
 			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices(logicalName, deps)
+	hostServices, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1864,7 +1867,7 @@ func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *co
 			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices(logicalName, deps)
+	hostServices, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
@@ -1954,7 +1957,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices(name, deps)
+	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
@@ -2016,7 +2019,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
 	}
-	hostServices, _, err := buildProviderHostServices(name, deps, agentHostService)
+	hostServices, err := buildProviderHostServices(name, deps, agentHostService)
 	if err != nil {
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}

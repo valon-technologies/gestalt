@@ -26,7 +26,7 @@ from ._agent import (
     subject_from_proto,
     subject_to_proto,
 )
-from ._api import Subject
+from ._api import Request, Subject
 from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import app_pb2 as _app_pb
 from ._gen.v1 import workflow_pb2 as _pb
@@ -2258,17 +2258,12 @@ class WorkflowProtocol(Protocol):
 class Workflow:
     """Client for applying definitions, starting runs, signaling, and delivering events.
 
-    This capability is for provider code that receives an invocation token. Methods
-    attach that token to each request before calling the host service. The
-    optional ``idempotency_key`` is used for create requests that do not already
+    This capability is for provider code that receives a Gestalt request. The
+    request idempotency key is used for create requests that do not already
     include one.
     """
 
-    def __init__(self, invocation_token: str, *, idempotency_key: str = "") -> None:
-        trimmed_token = invocation_token.strip()
-        if not trimmed_token:
-            raise RuntimeError("workflow: invocation token is not available")
-
+    def __init__(self, request: Request) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(
@@ -2280,8 +2275,8 @@ class Workflow:
             "workflow", target, token=relay_token
         )
         self._stub = pb_grpc.WorkflowProviderStub(self._channel)
-        self._invocation_token = trimmed_token
-        self._idempotency_key = idempotency_key.strip()
+        self._context = request.context
+        self._idempotency_key = request.idempotency_key.strip()
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -2294,7 +2289,7 @@ class Workflow:
         """Start a workflow run."""
 
         request = _workflow_start_run_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
         return workflow_run_from_proto(_grpc_call(self._stub.StartRun, request))
@@ -2305,7 +2300,7 @@ class Workflow:
         """Signal an existing workflow run."""
 
         request = _workflow_signal_run_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return workflow_run_signal_from_proto(
             _grpc_call(self._stub.SignalRun, request)
         )
@@ -2316,7 +2311,7 @@ class Workflow:
         """Signal a run, or start it when no matching run exists."""
 
         request = _workflow_signal_or_start_run_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
         return workflow_run_signal_from_proto(
@@ -2329,7 +2324,7 @@ class Workflow:
         """Apply a reusable workflow definition."""
 
         request = _workflow_apply_definition_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
         return workflow_definition_from_proto(
@@ -2342,7 +2337,7 @@ class Workflow:
         """Fetch one workflow definition."""
 
         request = _workflow_get_definition_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return workflow_definition_from_proto(
             _grpc_call(self._stub.GetDefinition, request)
         )
@@ -2350,9 +2345,8 @@ class Workflow:
     def list_definitions(self) -> list[WorkflowDefinition]:
         """List workflow definitions."""
 
-        request = pb.ListWorkflowProviderDefinitionsRequest(
-            invocation_token=self._invocation_token
-        )
+        request = pb.ListWorkflowProviderDefinitionsRequest()
+        self._attach_context(request)
         response = _grpc_call(self._stub.ListDefinitions, request)
         return [workflow_definition_from_proto(item) for item in response.definitions]
 
@@ -2362,7 +2356,7 @@ class Workflow:
         """Pause or resume a workflow definition."""
 
         request = _workflow_set_definition_paused_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return workflow_definition_from_proto(
             _grpc_call(self._stub.SetDefinitionPaused, request)
         )
@@ -2373,7 +2367,7 @@ class Workflow:
         """Pause or resume a workflow activation."""
 
         request = _workflow_set_activation_paused_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return workflow_definition_from_proto(
             _grpc_call(self._stub.SetActivationPaused, request)
         )
@@ -2384,7 +2378,7 @@ class Workflow:
         """Delete a workflow definition."""
 
         request = _workflow_delete_definition_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         _grpc_call(self._stub.DeleteDefinition, request)
         return None
 
@@ -2394,7 +2388,7 @@ class Workflow:
         """Fetch run events."""
 
         request = _workflow_get_run_events_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         response = _grpc_call(self._stub.GetRunEvents, request)
         return GetWorkflowProviderRunEventsResponse(
             events=[
@@ -2409,7 +2403,7 @@ class Workflow:
         """Fetch run output."""
 
         request = _workflow_get_run_output_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         response = _grpc_call(self._stub.GetRunOutput, request)
         return GetWorkflowProviderRunOutputResponse(
             output=cast(WorkflowJsonValue, value_to_json(response.output))
@@ -2423,10 +2417,14 @@ class Workflow:
         """Deliver an event into workflow activation matching."""
 
         request = _workflow_deliver_event_request(request, **kwargs)
-        request.invocation_token = self._invocation_token
+        self._attach_context(request)
         return workflow_event_input_from_event(
             _grpc_call(self._stub.DeliverEvent, request)
         )
+
+    def _attach_context(self, request: Any) -> None:
+        if self._context is not None and hasattr(request, "context"):
+            request.context.CopyFrom(self._context)
 
     def __enter__(self) -> Workflow:
         """Return the client for ``with`` statements."""
@@ -2455,7 +2453,6 @@ class WorkflowExecutionRequest:
     input: WorkflowJsonObject | None = None
     metadata: WorkflowJsonObject | None = None
     created_by_subject_id: str = ""
-    invocation_token: str = ""
     signals: Sequence[WorkflowSignal] = _dataclasses.field(default_factory=list)
     steps: Mapping[str, Any] | None = None
 

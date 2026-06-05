@@ -24,8 +24,10 @@ use generated::v1::{
     ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
-    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
+    RequestContext as ProviderRequestContext, ResolveAgentProviderInteractionRequest,
+    UpdateAgentProviderSessionRequest,
 };
+use gestalt::proto::v1::{RequestContext, SubjectContext};
 use gestalt::{
     Agent, AgentCancelTurn, AgentCreateSession, AgentCreateTurn, AgentGetSession, AgentGetTurn,
     AgentInteractionState, AgentListInteractions, AgentListSessions, AgentListTurnEvents,
@@ -42,7 +44,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
     method: String,
-    invocation_token: String,
+    context_subject_id: String,
     provider_name: String,
     session_id: String,
     turn_id: String,
@@ -67,7 +69,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create_session".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: request.provider_name.clone(),
             session_id: String::new(),
             turn_id: String::new(),
@@ -94,7 +96,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "get_session".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: request.session_id.clone(),
             turn_id: String::new(),
@@ -120,7 +122,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_sessions".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             provider_name: request.provider_name,
             session_id: String::new(),
             turn_id: String::new(),
@@ -148,7 +150,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "update_session".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: request.session_id.clone(),
             turn_id: String::new(),
@@ -179,7 +181,7 @@ impl ProtoAgentProvider for TestAgentServer {
             .push(request.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create_turn".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: request.session_id.clone(),
             turn_id: String::new(),
@@ -212,7 +214,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "get_turn".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: String::new(),
             turn_id: request.turn_id.clone(),
@@ -245,7 +247,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_turns".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: request.session_id.clone(),
             turn_id: String::new(),
@@ -274,7 +276,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "cancel_turn".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: String::new(),
             turn_id: request.turn_id.clone(),
@@ -302,7 +304,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_turn_events".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: String::new(),
             turn_id: request.turn_id.clone(),
@@ -330,7 +332,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_interactions".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: String::new(),
             turn_id: request.turn_id.clone(),
@@ -377,7 +379,7 @@ impl ProtoAgentProvider for TestAgentServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "resolve_interaction".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             provider_name: String::new(),
             session_id: String::new(),
             turn_id: request.turn_id.clone(),
@@ -427,7 +429,11 @@ async fn agent_connects_over_tcp_and_sends_relay_token() {
             .expect("serve agent");
     });
 
-    let mut manager = Agent::connect("token-123").await.expect("connect agent");
+    let request = Request {
+        context: Some(request_context("user:agent-access")),
+        ..Request::default()
+    };
+    let mut manager = Agent::connect(&request).await.expect("connect agent");
     let created = manager
         .create_session(AgentCreateSession {
             provider_name: "openai".to_string(),
@@ -453,7 +459,7 @@ async fn agent_connects_over_tcp_and_sends_relay_token() {
 }
 
 #[tokio::test]
-async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
+async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-agent.sock");
     let _socket_guard =
@@ -470,7 +476,11 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut manager = Agent::connect("token-123").await.expect("connect agent");
+    let request = Request {
+        context: Some(request_context("user:agent-access")),
+        ..Request::default()
+    };
+    let mut manager = Agent::connect(&request).await.expect("connect agent");
     let created_session = manager
         .create_session(AgentCreateSession {
             provider_name: "openai".to_string(),
@@ -591,7 +601,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
         vec![
             SeenRequest {
                 method: "create_session".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: "openai".to_string(),
                 session_id: String::new(),
                 turn_id: String::new(),
@@ -600,7 +610,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "get_session".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: "session-managed-1".to_string(),
                 turn_id: String::new(),
@@ -609,7 +619,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "list_sessions".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: "openai".to_string(),
                 session_id: String::new(),
                 turn_id: String::new(),
@@ -618,7 +628,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "update_session".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: "session-managed-1".to_string(),
                 turn_id: String::new(),
@@ -627,7 +637,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "create_turn".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: "session-managed-1".to_string(),
                 turn_id: String::new(),
@@ -636,7 +646,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "get_turn".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: String::new(),
                 turn_id: "turn-managed-1".to_string(),
@@ -645,7 +655,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "list_turns".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: "session-managed-1".to_string(),
                 turn_id: String::new(),
@@ -654,7 +664,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "cancel_turn".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: String::new(),
                 turn_id: "turn-managed-1".to_string(),
@@ -663,7 +673,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "list_turn_events".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: String::new(),
                 turn_id: "turn-managed-1".to_string(),
@@ -672,7 +682,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "list_interactions".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: String::new(),
                 turn_id: "turn-managed-1".to_string(),
@@ -681,7 +691,7 @@ async fn agent_connects_over_unix_socket_and_sends_invocation_token() {
             },
             SeenRequest {
                 method: "resolve_interaction".to_string(),
-                invocation_token: "token-123".to_string(),
+                context_subject_id: "user:agent-access".to_string(),
                 provider_name: String::new(),
                 session_id: String::new(),
                 turn_id: "turn-managed-1".to_string(),
@@ -713,7 +723,11 @@ async fn agent_create_turn_accepts_native_values() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let mut manager = Agent::connect("token-123").await.expect("connect agent");
+    let request = Request {
+        context: Some(request_context("user:agent-access")),
+        ..Request::default()
+    };
+    let mut manager = Agent::connect(&request).await.expect("connect agent");
     let created_turn = manager
         .create_turn(AgentCreateTurn {
             session_id: "session-managed-1".to_string(),
@@ -735,6 +749,7 @@ async fn agent_create_turn_accepts_native_values() {
                     id: "service_account:gestalt-support-github".to_string(),
                     credential_subject_id: "service_account:github-credential".to_string(),
                     email: String::new(),
+                    ..Default::default()
                 }),
                 ..Default::default()
             }],
@@ -758,7 +773,10 @@ async fn agent_create_turn_accepts_native_values() {
         .clone();
     assert_eq!(requests.len(), 1);
     let request = &requests[0];
-    assert_eq!(request.invocation_token, "token-123");
+    assert_eq!(
+        context_subject_id(&request.context),
+        "user:agent-access".to_string()
+    );
     assert_eq!(request.session_id, "session-managed-1");
     assert_eq!(request.model, "gpt-5.1");
     assert_eq!(
@@ -815,7 +833,7 @@ async fn agent_create_turn_accepts_native_values() {
 }
 
 #[tokio::test]
-async fn request_agent_uses_embedded_invocation_token() {
+async fn request_agent_uses_embedded_context() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-agent.sock");
     let _socket_guard =
@@ -833,8 +851,8 @@ async fn request_agent_uses_embedded_invocation_token() {
     helpers::wait_for_socket(&socket).await;
 
     let request = Request {
-        invocation_token: "token-embedded".to_string(),
-        ..Request::default()
+        context: Some(request_context("user:request-agent")),
+        ..Default::default()
     };
     let mut manager = request.agent().await.expect("request agent");
     let response = manager
@@ -848,7 +866,7 @@ async fn request_agent_uses_embedded_invocation_token() {
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(seen.len(), 1);
-    assert_eq!(seen[0].invocation_token, "token-embedded");
+    assert_eq!(seen[0].context_subject_id, "user:request-agent");
     assert_eq!(seen[0].method, "get_session");
 
     serve_task.abort();
@@ -888,4 +906,22 @@ fn maybe_record_relay_token(
             .expect("lock relay tokens")
             .push(token.to_str().expect("relay token ascii").to_string());
     }
+}
+
+fn request_context(subject_id: &str) -> RequestContext {
+    RequestContext {
+        subject: Some(SubjectContext {
+            id: subject_id.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+fn context_subject_id(context: &Option<ProviderRequestContext>) -> String {
+    context
+        .as_ref()
+        .and_then(|context| context.subject.as_ref())
+        .map(|subject| subject.id.clone())
+        .unwrap_or_default()
 }

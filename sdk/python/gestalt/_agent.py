@@ -8,7 +8,7 @@ from typing import Any, Protocol, TypeAlias
 
 import grpc
 
-from ._api import Subject
+from ._api import Request, Subject
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import app_pb2 as _app_pb
@@ -2193,15 +2193,11 @@ class AgentProtocol(Protocol):
 class Agent:
     """Client for managing agent sessions, turns, events, and interactions.
 
-    This capability is for provider code that receives an invocation token and then
-    needs to call the host's agent API. Each request passed to a
-    method is mutated to include that invocation token before the RPC is sent.
+    This capability is for provider code that receives a Gestalt request and
+    needs to call the host's agent API.
     """
 
-    def __init__(
-        self, invocation_token: str, *, workflow: JsonObjectInput | None = None
-    ) -> None:
-        trimmed_token = invocation_token.strip()
+    def __init__(self, request: Request) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"agent: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2209,8 +2205,7 @@ class Agent:
 
         self._channel = host_service_channel("agent", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)
-        self._invocation_token = trimmed_token
-        self._workflow = struct_from_dict(workflow) if workflow else None
+        self._context = request.context
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -2236,7 +2231,7 @@ class Agent:
     def list_sessions(
         self, request: Any | None = None, **kwargs: Any
     ) -> ListAgentSessionsResponse:
-        """List agent sessions visible to the invocation token."""
+        """List agent sessions visible to the request context."""
 
         request = _agent_list_sessions_request(request, **kwargs)
         self._attach_context(request)
@@ -2319,9 +2314,8 @@ class Agent:
         )
 
     def _attach_context(self, request: Any) -> None:
-        request.invocation_token = self._invocation_token
-        if self._workflow is not None and hasattr(request, "workflow"):
-            request.workflow.CopyFrom(self._workflow)
+        if self._context is not None and hasattr(request, "context"):
+            request.context.CopyFrom(self._context)
 
     def __enter__(self) -> Agent:
         """Return the client for ``with`` statements."""

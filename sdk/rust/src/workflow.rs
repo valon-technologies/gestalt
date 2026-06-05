@@ -6,7 +6,7 @@ use serde_json::Value;
 use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{RuntimeMetadata, Subject};
+use crate::api::{RuntimeMetadata, Subject, SubjectPermission};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1 as pb;
 use crate::protocol;
@@ -79,6 +79,16 @@ pub fn workflow_subject_from_proto(input: pb::SubjectContext) -> Subject {
         id: input.id,
         credential_subject_id: input.credential_subject_id,
         email: input.email,
+        scopes: input.scopes,
+        permissions: input
+            .permissions
+            .into_iter()
+            .map(|permission| SubjectPermission {
+                app: permission.app,
+                operations: permission.operations,
+                all_operations: permission.all_operations,
+            })
+            .collect(),
     }
 }
 
@@ -87,6 +97,16 @@ pub fn workflow_subject_to_proto(input: Subject) -> pb::SubjectContext {
         id: input.id,
         credential_subject_id: input.credential_subject_id,
         email: input.email,
+        scopes: input.scopes,
+        permissions: input
+            .permissions
+            .into_iter()
+            .map(|permission| pb::SubjectPermissionContext {
+                app: permission.app,
+                operations: permission.operations,
+                all_operations: permission.all_operations,
+            })
+            .collect(),
     }
 }
 
@@ -710,7 +730,6 @@ pub struct WorkflowExecutionRequest {
     pub trigger: Option<WorkflowRunTrigger>,
     pub input: Option<Value>,
     pub metadata: Option<Value>,
-    pub invocation_token: String,
     pub signals: Vec<WorkflowSignal>,
 }
 

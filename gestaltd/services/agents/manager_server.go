@@ -14,14 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
 )
-
-type InvocationTokenManager = appaccessservice.InvocationTokenManager
-
-func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
-	return appaccessservice.NewInvocationTokenManager(secret)
-}
 
 type ManagerService interface {
 	CreateSession(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
@@ -40,25 +33,16 @@ type ManagerService interface {
 type ProviderServer struct {
 	proto.UnimplementedAgentProviderServer
 
-	pluginName   string
-	manager      ManagerService
-	tokens       *InvocationTokenManager
-	workflowRuns appaccessservice.WorkflowRunResolver
+	pluginName string
+	manager    ManagerService
 }
 
 type ProviderServerOption func(*ProviderServer)
 
-func WithWorkflowRunResolver(resolver appaccessservice.WorkflowRunResolver) ProviderServerOption {
-	return func(s *ProviderServer) {
-		s.workflowRuns = resolver
-	}
-}
-
-func NewProviderServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager, opts ...ProviderServerOption) *ProviderServer {
+func NewProviderServer(pluginName string, manager ManagerService, opts ...ProviderServerOption) *ProviderServer {
 	s := &ProviderServer{
 		pluginName: pluginName,
 		manager:    manager,
-		tokens:     tokens,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -72,11 +56,11 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
-	session, err := s.manager.CreateSession(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	session, err := s.manager.CreateSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -87,7 +71,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +79,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	session, err := s.manager.GetSession(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	session, err := s.manager.GetSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -106,14 +90,14 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
 	}
-	sessions, err := s.manager.ListSessions(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	sessions, err := s.manager.ListSessions(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -132,7 +116,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +124,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	session, err := s.manager.UpdateSession(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	session, err := s.manager.UpdateSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -151,7 +135,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +143,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	turn, err := s.manager.CreateTurn(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	turn, err := s.manager.CreateTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -170,7 +154,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +162,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	turn, err := s.manager.GetTurn(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	turn, err := s.manager.GetTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -189,7 +173,7 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +184,7 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
 	}
-	turns, err := s.manager.ListTurns(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	turns, err := s.manager.ListTurns(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -219,7 +203,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +211,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	turn, err := s.manager.CancelTurn(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	turn, err := s.manager.CancelTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -238,7 +222,7 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +230,7 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	events, err := s.manager.ListTurnEvents(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	events, err := s.manager.ListTurnEvents(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -261,7 +245,7 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +253,7 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	interactions, err := s.manager.ListInteractions(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	interactions, err := s.manager.ListInteractions(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -280,7 +264,7 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(ctx, req.GetInvocationToken(), req.GetWorkflow())
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +276,7 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 	if interactionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "interaction_id is required")
 	}
-	interaction, err := s.manager.ResolveInteraction(s.restoreTokenContext(ctx, tokenCtx), tokenCtx.Principal(), req)
+	interaction, err := s.manager.ResolveInteraction(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
@@ -303,31 +287,13 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 	return nil, status.Error(codes.Unimplemented, "agent get capabilities is not available through the public provider facade")
 }
 
-func (s *ProviderServer) tokenContext(ctx context.Context, token string, workflow *structpb.Struct) (appaccessservice.TokenContext, error) {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return appaccessservice.WorkflowRunAsTokenContext(ctx, s.workflowRuns, workflow)
-	}
-	if s == nil || s.tokens == nil {
-		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-	}
-	tokenCtx, err := s.tokens.ResolveToken(token, "")
-	if err != nil {
-		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	if tokenCtx.CallerApp() == "" {
-		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
-	}
-	return appaccessservice.TokenContextWithWorkflow(tokenCtx, workflow), nil
+func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
+	return appaccessservice.ProviderRequestContextFromProto(reqCtx, "", s.pluginName)
 }
 
-func (s *ProviderServer) callerAppName(tokenCtx appaccessservice.TokenContext) string {
-	return tokenCtx.CallerApp()
-}
-
-func (s *ProviderServer) restoreTokenContext(ctx context.Context, tokenCtx appaccessservice.TokenContext) context.Context {
-	ctx = appaccessservice.RestoreTokenContext(ctx, tokenCtx, "")
-	if caller := s.callerAppName(tokenCtx); caller != "" {
+func (s *ProviderServer) restoreRequestContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {
+	ctx = reqCtx.Restore(ctx, "")
+	if caller := reqCtx.CallerName(); caller != "" {
 		ctx = agentmanager.WithCallerAppName(ctx, caller)
 	}
 	return ctx

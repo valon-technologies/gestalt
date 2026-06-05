@@ -78,9 +78,6 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 	if invoker.call.App != "slack" || invoker.call.Operation != "chat.postMessage" {
 		t.Fatalf("call = %#v", invoker.call)
 	}
-	if invoker.call.Token != "" {
-		t.Fatalf("token = %q, want empty", invoker.call.Token)
-	}
 	if invoker.call.Params["text"] != "hello Ada" || invoker.call.Params["name"] != "Ada" {
 		t.Fatalf("params = %#v", invoker.call.Params)
 	}
@@ -207,8 +204,8 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 
 	agent := &recordingAgentClient{}
 	executor := New(Config{
-		NewAgent: func(token string) (AgentClient, error) {
-			agent.token = token
+		NewAgent: func(req gestalt.Request) (AgentClient, error) {
+			agent.request = req
 			return agent, nil
 		},
 		AgentPollInterval: 0,
@@ -236,9 +233,6 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	}
 	if resp.Status != 200 {
 		t.Fatalf("status = %d, want 200", resp.Status)
-	}
-	if agent.token != "" {
-		t.Fatalf("token = %q, want empty", agent.token)
 	}
 	if agent.session.ProviderName != "claude" || agent.session.Model != "default" {
 		t.Fatalf("session = %#v", agent.session)
@@ -268,7 +262,7 @@ func (i *recordingAppInvoker) InvokeWorkflowApp(_ context.Context, call AppInvoc
 }
 
 type recordingAgentClient struct {
-	token           string
+	request         gestalt.Request
 	session         gestalt.AgentCreateSession
 	sessionWorkflow map[string]any
 	turn            gestalt.AgentCreateTurn

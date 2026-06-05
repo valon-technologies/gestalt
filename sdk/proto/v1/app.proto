@@ -90,28 +90,6 @@ message OperationResult {
   map<string, StringList> headers = 3;
 }
 
-// AppInvocationGrant describes one app operation grant minted into an
-// exchanged invocation token.
-message AppInvocationGrant {
-  string app = 1;
-  repeated string operations = 2;
-  repeated string surfaces = 3;
-  bool all_operations = 4;
-}
-
-// ExchangeInvocationTokenRequest narrows an existing invocation token to a
-// child token that carries only the requested app grants.
-message ExchangeInvocationTokenRequest {
-  string parent_invocation_token = 1;
-  repeated AppInvocationGrant grants = 2;
-  int64 ttl_seconds = 3;
-}
-
-// ExchangeInvocationTokenResponse returns the child invocation token.
-message ExchangeInvocationTokenResponse {
-  string invocation_token = 1;
-}
-
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
 message AppInvokeRequest {
   string app = 2;
@@ -119,10 +97,9 @@ message AppInvokeRequest {
   google.protobuf.Struct params = 4;
   string connection = 5;
   string instance = 6;
-  string invocation_token = 7;
   string idempotency_key = 8;
   string credential_mode = 9;
-  google.protobuf.Struct workflow = 10;
+  RequestContext context = 11;
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -133,8 +110,8 @@ message AppInvokeGraphQLRequest {
   google.protobuf.Struct variables = 3;
   string connection = 4;
   string instance = 5;
-  string invocation_token = 6;
   string idempotency_key = 7;
+  RequestContext context = 8;
 }
 
 // SubjectContext identifies the caller that initiated an operation.
@@ -142,6 +119,14 @@ message SubjectContext {
   string id = 1;
   string credential_subject_id = 2;
   string email = 3;
+  repeated string scopes = 4;
+  repeated SubjectPermissionContext permissions = 5;
+}
+
+message SubjectPermissionContext {
+  string app = 1;
+  repeated string operations = 2;
+  bool all_operations = 3;
 }
 
 message AgentToolRef {
@@ -179,6 +164,28 @@ message HostContext {
   string public_base_url = 1;
 }
 
+// ProviderContext identifies the provider process that received the request
+// context from the host and is trusted to propagate it back to host services.
+message ProviderContext {
+  string kind = 1;
+  string name = 2;
+}
+
+message InvocationContext {
+  string request_id = 1;
+  int32 depth = 2;
+  repeated string call_chain = 3;
+  string surface = 4;
+  bool internal_connection_access = 5;
+  string connection = 6;
+}
+
+message RequestMetaContext {
+  string client_ip = 1;
+  string remote_addr = 2;
+  string user_agent = 3;
+}
+
 // RequestContext bundles the caller, credential, access, and host metadata for
 // one operation.
 message RequestContext {
@@ -189,12 +196,15 @@ message RequestContext {
   HostContext host = 5;
   // Original agent caller when an agent tool executes with delegated run-as identity.
   SubjectContext agent_subject = 6;
+  ProviderContext caller = 7;
+  InvocationContext invocation = 8;
   // Agent tool refs granted to the operation request, when the request is
   // executing as an agent tool.
   repeated AgentToolRef tool_refs = 9;
   // Preserves the distinction between an omitted tool-ref context and an
   // explicitly empty inherited tool-ref context.
   bool tool_refs_set = 10;
+  RequestMetaContext request_meta = 11;
 }
 
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional
@@ -239,7 +249,6 @@ message ExecuteRequest {
   map<string, string> connection_params = 4;
   string invocation_id = 5;
   RequestContext context = 6;
-  string invocation_token = 8;
   string idempotency_key = 9;
 }
 
@@ -280,7 +289,6 @@ service AppProvider {
 }
 
 service App {
-  rpc ExchangeInvocationToken(ExchangeInvocationTokenRequest) returns (ExchangeInvocationTokenResponse);
   rpc Invoke(AppInvokeRequest) returns (OperationResult);
   rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult);
 }

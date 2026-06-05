@@ -18,9 +18,15 @@ import {
   type Request,
   type Subject,
   type SubjectInput,
+  type SubjectPermission,
   errorMessage,
 } from "./api.ts";
-import { SubjectContextSchema, type SubjectContext } from "./internal/gen/v1/app_pb.ts";
+import {
+  SubjectContextSchema,
+  SubjectPermissionContextSchema,
+  type SubjectContext,
+  type SubjectPermissionContext,
+} from "./internal/gen/v1/app_pb.ts";
 import {
   ApplyWorkflowProviderDefinitionRequestSchema,
   BoundWorkflowTargetSchema,
@@ -1670,7 +1676,6 @@ export interface WorkflowExecutionRequest {
   input?: Record<string, JsonInput> | undefined;
   metadata?: Record<string, JsonInput> | undefined;
   createdBySubjectId?: string | undefined;
-  invocationToken?: string | undefined;
   signals?: readonly WorkflowSignal[] | undefined;
   steps?: Record<string, { inputs?: Record<string, unknown>; outputs?: unknown }> | undefined;
 }
@@ -1844,6 +1849,8 @@ export function subjectToProto(input?: SubjectInput | Subject): SubjectContext |
     id: input.id ?? "",
     credentialSubjectId: input.credentialSubjectId ?? "",
     email: input.email ?? "",
+    scopes: [...(input.scopes ?? [])],
+    permissions: subjectPermissionsToProto(input.permissions),
   });
 }
 
@@ -1853,6 +1860,8 @@ export function subjectFromProto(input?: SubjectContext): Subject | undefined {
     id: input.id,
     credentialSubjectId: input.credentialSubjectId,
     email: input.email,
+    scopes: [...input.scopes],
+    permissions: subjectPermissionsFromProto(input.permissions),
   };
 }
 
@@ -1862,7 +1871,28 @@ export function subjectInputFromProto(input?: SubjectContext): SubjectInput | un
     id: input.id,
     credentialSubjectId: input.credentialSubjectId,
     email: input.email,
+    scopes: [...input.scopes],
+    permissions: subjectPermissionsFromProto(input.permissions),
   };
+}
+
+function subjectPermissionsFromProto(
+  permissions: readonly SubjectPermissionContext[],
+): SubjectPermission[] {
+  return permissions.map((permission) => ({
+    app: permission.app,
+    operations: permission.allOperations ? [] : [...permission.operations],
+  }));
+}
+
+function subjectPermissionsToProto(
+  permissions?: readonly SubjectPermission[] | undefined,
+): SubjectPermissionContext[] {
+  return permissions?.map((permission) => create(SubjectPermissionContextSchema, {
+    app: permission.app,
+    operations: [...permission.operations],
+    allOperations: permission.operations.length === 0,
+  })) ?? [];
 }
 
 function listDefinitionsResult(value: readonly WorkflowDefinition[] | ListWorkflowProviderDefinitionsResponse): ListWorkflowProviderDefinitionsResponse {

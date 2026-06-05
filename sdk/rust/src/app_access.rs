@@ -1,16 +1,15 @@
-use std::time::Duration;
-
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::UnixStream;
-use tonic::Request;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
+use tonic::Request as GrpcRequest;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
+use crate::api::Request;
 use crate::OperationResult;
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{self as pb, app_client::AppClient as ProtoAppClient};
@@ -22,9 +21,6 @@ const APP_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`App`].
 pub enum AppError {
-    /// The invocation token was empty.
-    #[error("app: invocation token is not available")]
-    MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
@@ -40,19 +36,6 @@ pub enum AppError {
     /// The host returned a protocol value the SDK could not represent.
     #[error("{0}")]
     Protocol(String),
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-/// Grant included when exchanging an invocation token for a child token.
-pub struct InvocationGrant {
-    /// App name that the child token may invoke.
-    pub plugin: String,
-    /// Specific operation ids allowed by the child token.
-    pub operations: Vec<String>,
-    /// Surface names allowed by the child token.
-    pub surfaces: Vec<String>,
-    /// Whether the child token may invoke every operation on the app.
-    pub all_operations: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -96,27 +79,17 @@ pub trait AppContract: Send {
         variables: Option<serde_json::Value>,
         options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError>;
-    async fn exchange_invocation_token(
-        &mut self,
-        grants: &[InvocationGrant],
-        ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppError>;
 }
 
 /// Client for invoking sibling app operations through Gestalt.
 pub struct App {
     client: ProtoAppClient<AppTransport>,
-    invocation_token: String,
+    context: Option<pb::RequestContext>,
 }
 
 impl App {
-    /// Connects to the app service with an invocation token from Gestalt.
-    pub async fn connect(invocation_token: impl AsRef<str>) -> std::result::Result<Self, AppError> {
-        let invocation_token = invocation_token.as_ref().trim().to_owned();
-        if invocation_token.is_empty() {
-            return Err(AppError::MissingInvocationToken);
-        }
-
+    /// Connects to the app service with host request context from Gestalt.
+    pub async fn connect(request: &Request) -> std::result::Result<Self, AppError> {
         let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| AppError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
@@ -148,7 +121,7 @@ impl App {
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),
-            invocation_token,
+            context: request.context.clone(),
         })
     }
 
@@ -177,7 +150,6 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
-                invocation_token: self.invocation_token.clone(),
                 idempotency_key: options
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
@@ -186,7 +158,7 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.credential_mode.trim().to_string())
                     .unwrap_or_default(),
-                workflow: None,
+                context: self.context.clone(),
             })
             .await?
             .into_inner();
@@ -237,11 +209,11 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
-                invocation_token: self.invocation_token.clone(),
                 idempotency_key: options
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
                     .unwrap_or_default(),
+                context: self.context.clone(),
             })
             .await?
             .into_inner();
@@ -257,28 +229,6 @@ impl App {
         })
     }
 
-    /// Exchanges this invocation token for a narrower child token.
-    pub async fn exchange_invocation_token(
-        &mut self,
-        grants: &[InvocationGrant],
-        ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppError> {
-        let ttl_seconds = ttl
-            .map(duration_to_ttl_seconds)
-            .transpose()?
-            .unwrap_or_default();
-        let response = self
-            .client
-            .exchange_invocation_token(pb::ExchangeInvocationTokenRequest {
-                parent_invocation_token: self.invocation_token.clone(),
-                grants: encode_invocation_grants(grants),
-                ttl_seconds,
-            })
-            .await?
-            .into_inner();
-
-        Ok(response.invocation_token)
-    }
 }
 
 #[async_trait]
@@ -303,13 +253,6 @@ impl AppContract for App {
         App::invoke_graphql(self, &plugin, &document, variables, options).await
     }
 
-    async fn exchange_invocation_token(
-        &mut self,
-        grants: &[InvocationGrant],
-        ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppError> {
-        App::exchange_invocation_token(self, grants, ttl).await
-    }
 }
 
 enum AppTarget {
@@ -361,50 +304,6 @@ fn parse_app_target(raw_target: &str) -> Result<AppTarget, AppError> {
     Ok(AppTarget::Unix(target.to_string()))
 }
 
-fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocationGrant> {
-    grants
-        .iter()
-        .filter_map(|grant| {
-            let app = grant.plugin.trim();
-            if app.is_empty() {
-                return None;
-            }
-            let operations = grant
-                .operations
-                .iter()
-                .map(|operation| operation.trim())
-                .filter(|operation| !operation.is_empty())
-                .map(ToOwned::to_owned)
-                .collect();
-            let surfaces = grant
-                .surfaces
-                .iter()
-                .map(|surface| surface.trim())
-                .filter(|surface| !surface.is_empty())
-                .map(|surface| surface.to_ascii_lowercase())
-                .collect();
-
-            Some(pb::AppInvocationGrant {
-                app: app.to_owned(),
-                operations,
-                surfaces,
-                all_operations: grant.all_operations,
-            })
-        })
-        .collect()
-}
-
-fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, AppError> {
-    if ttl.is_zero() {
-        return Ok(0);
-    }
-
-    let ttl_seconds = ttl.as_secs().max(1);
-    i64::try_from(ttl_seconds).map_err(|_| {
-        AppError::Protocol("app: exchange token ttl exceeds supported range".to_string())
-    })
-}
-
 fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, AppError> {
     let header = if token.trim().is_empty() {
         None
@@ -423,7 +322,7 @@ struct RelayTokenInterceptor {
 }
 
 impl Interceptor for RelayTokenInterceptor {
-    fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, tonic::Status> {
+    fn call(&mut self, mut request: GrpcRequest<()>) -> Result<GrpcRequest<()>, tonic::Status> {
         if let Some(header) = self.header.clone() {
             request
                 .metadata_mut()

@@ -37,8 +37,8 @@ func (h *agentTransportHarness) CreateSession(ctx context.Context, req *proto.Cr
 	h.sessionRequests = append(h.sessionRequests, gproto.Clone(req).(*proto.CreateAgentProviderSessionRequest))
 	h.mu.Unlock()
 
-	if h.requireAuthContext && req.GetInvocationToken() == "" && req.GetWorkflow() == nil {
-		return nil, status.Error(codes.FailedPrecondition, "invocation token or workflow context is required")
+	if h.requireAuthContext && req.GetContext() == nil {
+		return nil, status.Error(codes.FailedPrecondition, "request context is required")
 	}
 	return &proto.AgentSession{
 		Id:           "session-1",
@@ -120,7 +120,7 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewAgent("parent-token")
+	client, err := gestalt.NewAgent(agentTransportRequest())
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
@@ -161,8 +161,8 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.sessionRequests) != 1 {
 		t.Fatalf("session requests len = %d, want 1", len(harness.sessionRequests))
 	}
-	if harness.sessionRequests[0].GetInvocationToken() != "parent-token" {
-		t.Fatalf("session invocation token = %q, want %q", harness.sessionRequests[0].GetInvocationToken(), "parent-token")
+	if got := harness.sessionRequests[0].GetContext().GetSubject().GetId(); got != "user:transport" {
+		t.Fatalf("session subject = %q, want user:transport", got)
 	}
 	if harness.sessionRequests[0].GetProviderName() != "managed" || harness.sessionRequests[0].GetModel() != "gpt-test" {
 		t.Fatalf("session request = %+v, want provider_name=managed model=gpt-test", harness.sessionRequests[0])
@@ -170,8 +170,8 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.turnRequests) != 1 {
 		t.Fatalf("turn requests len = %d, want 1", len(harness.turnRequests))
 	}
-	if harness.turnRequests[0].GetInvocationToken() != "parent-token" {
-		t.Fatalf("turn invocation token = %q, want %q", harness.turnRequests[0].GetInvocationToken(), "parent-token")
+	if got := harness.turnRequests[0].GetContext().GetSubject().GetId(); got != "user:transport" {
+		t.Fatalf("turn subject = %q, want user:transport", got)
 	}
 	if harness.turnRequests[0].GetSessionId() != "session-1" || harness.turnRequests[0].GetModel() != "gpt-test" {
 		t.Fatalf("turn request = %+v, want session_id=session-1 model=gpt-test", harness.turnRequests[0])
@@ -184,7 +184,7 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
-func TestTransport_AgentWorkflowContextWithoutInvocationToken(t *testing.T) {
+func TestTransport_AgentWorkflowContext(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -203,7 +203,7 @@ func TestTransport_AgentWorkflowContextWithoutInvocationToken(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewAgent("")
+	client, err := gestalt.NewAgent(agentTransportRequest())
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
@@ -244,21 +244,18 @@ func TestTransport_AgentWorkflowContextWithoutInvocationToken(t *testing.T) {
 	if len(harness.sessionRequests) != 1 || len(harness.turnRequests) != 1 || len(harness.getTurnRequests) != 1 || len(harness.cancelTurnRequests) != 1 {
 		t.Fatalf("requests = sessions:%d turns:%d get:%d cancel:%d", len(harness.sessionRequests), len(harness.turnRequests), len(harness.getTurnRequests), len(harness.cancelTurnRequests))
 	}
-	if harness.sessionRequests[0].GetInvocationToken() != "" || harness.turnRequests[0].GetInvocationToken() != "" || harness.getTurnRequests[0].GetInvocationToken() != "" || harness.cancelTurnRequests[0].GetInvocationToken() != "" {
-		t.Fatalf("tokens = session:%q turn:%q get:%q cancel:%q, want empty", harness.sessionRequests[0].GetInvocationToken(), harness.turnRequests[0].GetInvocationToken(), harness.getTurnRequests[0].GetInvocationToken(), harness.cancelTurnRequests[0].GetInvocationToken())
-	}
-	if got := harness.turnRequests[0].GetWorkflow().AsMap()["runId"]; got != "run-1" {
+	if got := harness.turnRequests[0].GetContext().GetWorkflow().AsMap()["runId"]; got != "run-1" {
 		t.Fatalf("workflow runId = %#v, want run-1", got)
 	}
-	if got := harness.getTurnRequests[0].GetWorkflow().AsMap()["runId"]; got != "run-1" {
+	if got := harness.getTurnRequests[0].GetContext().GetWorkflow().AsMap()["runId"]; got != "run-1" {
 		t.Fatalf("get workflow runId = %#v, want run-1", got)
 	}
-	if got := harness.cancelTurnRequests[0].GetWorkflow().AsMap()["runId"]; got != "run-1" {
+	if got := harness.cancelTurnRequests[0].GetContext().GetWorkflow().AsMap()["runId"]; got != "run-1" {
 		t.Fatalf("cancel workflow runId = %#v, want run-1", got)
 	}
 }
 
-func TestTransport_AgentEmptyInvocationTokenWithoutWorkflowFails(t *testing.T) {
+func TestTransport_AgentMissingRequestContextFails(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -277,7 +274,7 @@ func TestTransport_AgentEmptyInvocationTokenWithoutWorkflowFails(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewAgent("")
+	client, err := gestalt.NewAgent(gestalt.Request{})
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
@@ -296,11 +293,8 @@ func TestTransport_AgentEmptyInvocationTokenWithoutWorkflowFails(t *testing.T) {
 	if len(harness.sessionRequests) != 1 {
 		t.Fatalf("session requests len = %d, want 1", len(harness.sessionRequests))
 	}
-	if harness.sessionRequests[0].GetInvocationToken() != "" {
-		t.Fatalf("invocation token = %q, want empty", harness.sessionRequests[0].GetInvocationToken())
-	}
-	if harness.sessionRequests[0].GetWorkflow() != nil {
-		t.Fatalf("workflow = %#v, want nil", harness.sessionRequests[0].GetWorkflow())
+	if harness.sessionRequests[0].GetContext() != nil {
+		t.Fatalf("context = %#v, want nil", harness.sessionRequests[0].GetContext())
 	}
 }
 
@@ -323,7 +317,7 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewAgent("parent-token")
+	client, err := gestalt.NewAgent(agentTransportRequest())
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
@@ -366,8 +360,8 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 		t.Fatalf("turn requests len = %d, want 1", len(harness.turnRequests))
 	}
 	got := harness.turnRequests[0]
-	if got.GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
+	if got.GetContext().GetSubject().GetId() != "user:transport" {
+		t.Fatalf("subject = %q, want user:transport", got.GetContext().GetSubject().GetId())
 	}
 	if got.GetMessages()[0].GetParts()[0].GetType() != proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT {
 		t.Fatalf("message part type = %s, want text", got.GetMessages()[0].GetParts()[0].GetType())
@@ -383,5 +377,15 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 	if got.GetTimeoutSeconds() != 120 {
 		t.Fatalf("timeout_seconds = %d, want 120", got.GetTimeoutSeconds())
+	}
+}
+
+func agentTransportRequest() gestalt.Request {
+	return gestalt.Request{
+		Subject: gestalt.Subject{
+			ID:                  "user:transport",
+			CredentialSubjectID: "user:transport",
+			Email:               "transport@example.test",
+		},
 	}
 }

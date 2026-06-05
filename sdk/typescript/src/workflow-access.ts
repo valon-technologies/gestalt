@@ -179,21 +179,17 @@ export interface Workflow {
 /**
  * Client for applying workflow definitions and controlling durable runs.
  *
- * The constructor accepts either a Gestalt request or an invocation token. Each
- * workflow call forwards that token to the workflow-provider facade. When
- * constructed from a request, mutating calls reuse the request idempotency key
- * unless the call provides one explicitly.
+ * Mutating calls reuse the request idempotency key unless the call provides one
+ * explicitly.
  */
 class WorkflowImpl implements Workflow {
   private readonly client: Client<typeof WorkflowProviderService>;
-  private readonly invocationToken: string;
+  private readonly context: Request["__requestContext"];
   private readonly idempotencyKey: string;
 
-  constructor(request: Request);
-  constructor(invocationToken: string);
-  constructor(requestOrToken: Request | string) {
-    this.invocationToken = normalizeInvocationToken(requestOrToken);
-    this.idempotencyKey = normalizeIdempotencyKey(requestOrToken);
+  constructor(request: Request) {
+    this.context = request.__requestContext;
+    this.idempotencyKey = request.idempotencyKey.trim();
 
     const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
@@ -220,7 +216,7 @@ class WorkflowImpl implements Workflow {
         await this.client.applyDefinition({
           providerName: request.providerName,
           spec: workflowDefinitionSpecToProto(request.spec),
-          invocationToken: this.invocationToken,
+          context: this.context,
           idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
           requestedBySubjectId: request.requestedBySubjectId ?? "",
         }),
@@ -237,19 +233,19 @@ class WorkflowImpl implements Workflow {
       workflowDefinitionFromProto(
         await this.client.getDefinition({
           definitionId: request.definitionId,
-          invocationToken: this.invocationToken,
+          context: this.context,
         }),
       ),
       "Workflow.getDefinition returned no definition",
     );
   }
 
-  /** Lists workflow definitions visible to the current invocation token. */
+  /** Lists workflow definitions visible to the request context. */
   async listDefinitions(
     _request: WorkflowListDefinitions = {},
   ): Promise<readonly WorkflowDefinition[]> {
     const response = await this.client.listDefinitions({
-      invocationToken: this.invocationToken,
+      context: this.context,
     });
     return response.definitions.map((definition) =>
       requireDefinition(workflowDefinitionFromProto(definition), "Workflow.listDefinitions returned an empty definition")
@@ -265,7 +261,7 @@ class WorkflowImpl implements Workflow {
         await this.client.setDefinitionPaused({
           definitionId: request.definitionId,
           paused: request.paused,
-          invocationToken: this.invocationToken,
+          context: this.context,
           requestedBySubjectId: request.requestedBySubjectId ?? "",
         }),
       ),
@@ -283,7 +279,7 @@ class WorkflowImpl implements Workflow {
           definitionId: request.definitionId,
           activationId: request.activationId,
           paused: request.paused,
-          invocationToken: this.invocationToken,
+          context: this.context,
           requestedBySubjectId: request.requestedBySubjectId ?? "",
         }),
       ),
@@ -297,7 +293,7 @@ class WorkflowImpl implements Workflow {
   ): Promise<void> {
     await this.client.deleteDefinition({
       definitionId: request.definitionId,
-      invocationToken: this.invocationToken,
+      context: this.context,
     });
   }
 
@@ -314,7 +310,7 @@ class WorkflowImpl implements Workflow {
           input: structFromObject(request.input),
           idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
           workflowKey: request.workflowKey ?? "",
-          invocationToken: this.invocationToken,
+          context: this.context,
           createdBySubjectId: request.createdBySubjectId ?? "",
           runAs: subjectToProto(request.runAs),
         }),
@@ -331,14 +327,14 @@ class WorkflowImpl implements Workflow {
       workflowRunFromProto(
         await this.client.getRun({
           runId: request.runId,
-          invocationToken: this.invocationToken,
+          context: this.context,
         }),
       ),
       "Workflow.getRun returned no run",
     );
   }
 
-  /** Lists workflow runs visible to the current invocation token. */
+  /** Lists workflow runs visible to the request context. */
   async listRuns(
     request: WorkflowListRuns = {},
   ): Promise<{ runs: readonly WorkflowRun[]; nextPageToken?: string | undefined }> {
@@ -347,7 +343,7 @@ class WorkflowImpl implements Workflow {
       pageToken: request.pageToken ?? "",
       status: request.status ?? 0,
       targetApp: request.targetApp ?? "",
-      invocationToken: this.invocationToken,
+      context: this.context,
     });
     return {
       runs: response.runs.map((run) => requireRun(workflowRunFromProto(run), "Workflow.listRuns returned an empty run")),
@@ -361,7 +357,7 @@ class WorkflowImpl implements Workflow {
   ): Promise<readonly WorkflowRunEvent[]> {
     const response = await this.client.getRunEvents({
       runId: request.runId,
-      invocationToken: this.invocationToken,
+      context: this.context,
     });
     return response.events.map((event) =>
       requireRunEvent(workflowRunEventFromProto(event), "Workflow.getRunEvents returned an empty event")
@@ -374,7 +370,7 @@ class WorkflowImpl implements Workflow {
   ): Promise<GetWorkflowProviderRunOutputResponse> {
     const response = await this.client.getRunOutput({
       runId: request.runId,
-      invocationToken: this.invocationToken,
+      context: this.context,
     });
     return {
       output: response.output === undefined
@@ -392,7 +388,7 @@ class WorkflowImpl implements Workflow {
         await this.client.cancelRun({
           runId: request.runId,
           reason: request.reason ?? "",
-          invocationToken: this.invocationToken,
+          context: this.context,
         }),
       ),
       "Workflow.cancelRun returned no run",
@@ -408,7 +404,7 @@ class WorkflowImpl implements Workflow {
         await this.client.signalRun({
           runId: request.runId,
           signal: workflowSignalToProto(request.signal),
-          invocationToken: this.invocationToken,
+          context: this.context,
         }),
       ),
       "Workflow.signalRun returned no response",
@@ -429,7 +425,7 @@ class WorkflowImpl implements Workflow {
           input: structFromObject(request.input),
           idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
           signal: workflowSignalToProto(request.signal),
-          invocationToken: this.invocationToken,
+          context: this.context,
           createdBySubjectId: request.createdBySubjectId ?? "",
           runAs: subjectToProto(request.runAs),
         }),
@@ -448,7 +444,7 @@ class WorkflowImpl implements Workflow {
           appName: request.appName ?? "",
           event: workflowEventToProto(request.event),
           deliveredBySubjectId: request.deliveredBySubjectId ?? "",
-          invocationToken: this.invocationToken,
+          context: this.context,
           providerName: request.providerName ?? "",
         }),
       ),
@@ -458,25 +454,6 @@ class WorkflowImpl implements Workflow {
 }
 
 export const Workflow = WorkflowImpl;
-
-function normalizeInvocationToken(requestOrToken: Request | string): string {
-  const invocationToken =
-    typeof requestOrToken === "string"
-      ? requestOrToken
-      : requestOrToken.invocationToken;
-  const trimmed = invocationToken.trim();
-  if (!trimmed) {
-    throw new Error("workflow: invocation token is not available");
-  }
-  return trimmed;
-}
-
-function normalizeIdempotencyKey(requestOrToken: Request | string): string {
-  if (typeof requestOrToken === "string") {
-    return "";
-  }
-  return requestOrToken.idempotencyKey.trim();
-}
 
 function generationToBigInt(value: bigint | number | undefined): bigint {
   if (value === undefined) {

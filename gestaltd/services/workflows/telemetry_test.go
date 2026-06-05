@@ -15,7 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
@@ -262,31 +262,6 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		}),
 		Workflow: workflowManagerTelemetryControl{provider: provider},
 	})
-	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-telemetry-test-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "github",
-		Operations: []string{"issues.triage"},
-	}})
-	token, err := tokens.MintRootTokenWithWorkflowGrants(
-		principal.WithPrincipal(context.Background(), principal.Canonicalize(&principal.Principal{
-			SubjectID:        "user:user-123",
-			UserID:           "user-123",
-			Kind:             principal.KindUser,
-			Source:           principal.SourceSession,
-			TokenPermissions: permissions,
-			Scopes:           principal.PermissionApps(permissions),
-		})),
-		"slack",
-		nil,
-		workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}},
-	)
-	if err != nil {
-		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
-	}
-
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer(grpc.UnaryInterceptor(func(
 		ctx context.Context,
@@ -296,7 +271,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	) (any, error) {
 		return handler(metricutil.WithMeterProvider(ctx, metrics.Provider), req)
 	}))
-	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, tokens))
+	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}}))
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -316,12 +291,13 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	t.Cleanup(func() { _ = conn.Close() })
 	client := proto.NewWorkflowProviderClient(conn)
 
-	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, "slack:T123:C123:1712161829.000300", "idem-success"))
+	reqCtx := workflowManagerTelemetryRequestContext()
+	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161829.000300", "idem-success"))
 	if err != nil {
 		t.Fatalf("SignalOrStartRun success: %v", err)
 	}
 	provider.signalOrStartErr = status.Error(codes.FailedPrecondition, "provider rejected run")
-	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, "slack:T123:C123:1712161830.000400", "idem-failure"))
+	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161830.000400", "idem-failure"))
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("SignalOrStartRun failure = %v, want FailedPrecondition", err)
 	}
@@ -391,14 +367,27 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 	return workflow
 }
 
-func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotencyKey string) *proto.SignalOrStartWorkflowProviderRunRequest {
+func workflowManagerTelemetrySignalOrStartRequest(reqCtx *proto.RequestContext, workflowKey, idempotencyKey string) *proto.SignalOrStartWorkflowProviderRunRequest {
 	return &proto.SignalOrStartWorkflowProviderRunRequest{
-		ProviderName:    "local",
-		WorkflowKey:     workflowKey,
-		IdempotencyKey:  idempotencyKey,
-		InvocationToken: token,
-		DefinitionId:    "definition-1",
-		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
+		ProviderName:   "local",
+		WorkflowKey:    workflowKey,
+		IdempotencyKey: idempotencyKey,
+		Context:        reqCtx,
+		DefinitionId:   "definition-1",
+		Signal:         &proto.WorkflowSignal{Name: "slack.message"},
+	}
+}
+
+func workflowManagerTelemetryRequestContext() *proto.RequestContext {
+	return &proto.RequestContext{
+		Caller: &proto.ProviderContext{
+			Kind: string(invocation.ProviderKindApp),
+			Name: "slack",
+		},
+		Subject: &proto.SubjectContext{
+			Id:                  "user:user-123",
+			CredentialSubjectId: "user:user-123",
+		},
 	}
 }
 

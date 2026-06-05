@@ -70,6 +70,7 @@ import {
 } from "./internal/gen/v1/agent_pb.ts";
 import {
   type SubjectContext as ProtoSubjectContext,
+  type SubjectPermissionContext as ProtoSubjectPermissionContext,
   type AgentToolRef as ProtoAgentToolRef,
 } from "./internal/gen/v1/app_pb.ts";
 import {
@@ -77,6 +78,7 @@ import {
   type MaybePromise,
   type Subject,
   type SubjectInput,
+  type SubjectPermission,
 } from "./api.ts";
 import {
   agentOutputFromProto,
@@ -276,13 +278,11 @@ export interface CreateAgentProviderSessionRequest {
   subject?: Subject | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
-  invocationToken: string;
 }
 
 export interface GetAgentProviderSessionRequest {
   sessionId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderSessionsRequest {
@@ -291,7 +291,6 @@ export interface ListAgentProviderSessionsRequest {
   state: AgentSessionState;
   limit: number;
   summaryOnly: boolean;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderSessionsResponse {
@@ -304,7 +303,6 @@ export interface UpdateAgentProviderSessionRequest {
   state: AgentSessionState;
   metadata?: JsonObjectInput | undefined;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface AgentTurn {
@@ -364,7 +362,6 @@ export interface CreateAgentProviderTurnRequest {
   modelOptions?: JsonObjectInput | undefined;
   runGrant: string;
   timeoutSeconds: number;
-  invocationToken: string;
 }
 
 export interface AgentTextOutput {
@@ -381,7 +378,6 @@ export type AgentOutput =
 export interface GetAgentProviderTurnRequest {
   turnId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderTurnsRequest {
@@ -391,7 +387,6 @@ export interface ListAgentProviderTurnsRequest {
   status: AgentExecutionStatus;
   limit: number;
   summaryOnly: boolean;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderTurnsResponse {
@@ -402,7 +397,6 @@ export interface CancelAgentProviderTurnRequest {
   turnId: string;
   reason: string;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface AgentTurnEvent {
@@ -422,7 +416,6 @@ export interface ListAgentProviderTurnEventsRequest {
   afterSeq: bigint;
   limit: number;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderTurnEventsResponse {
@@ -446,13 +439,11 @@ export interface AgentInteraction {
 export interface GetAgentProviderInteractionRequest {
   interactionId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderInteractionsRequest {
   turnId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface ListAgentProviderInteractionsResponse {
@@ -463,7 +454,6 @@ export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
   subject?: Subject | undefined;
-  invocationToken: string;
 }
 
 export interface GetAgentProviderCapabilitiesRequest {}
@@ -808,7 +798,7 @@ function createAgentProviderSessionRequestFromProto(
     clientRef: request.clientRef,
     metadata: optionalObjectFromStruct(request.metadata),
     createdBySubjectId: request.createdBySubjectId ?? "",
-    subject: agentSubjectFromProto(request.subject),
+    subject: agentRequestSubjectFromProto(request),
     sessionStart: request.sessionStart === undefined ? undefined : {
       hooks: request.sessionStart.hooks.map((hook) => ({
         id: hook.id,
@@ -827,7 +817,6 @@ function createAgentProviderSessionRequestFromProto(
       root: request.preparedWorkspace.root,
       cwd: request.preparedWorkspace.cwd,
     },
-    invocationToken: request.invocationToken,
   };
 }
 
@@ -836,8 +825,7 @@ function getAgentProviderSessionRequestFromProto(
 ): GetAgentProviderSessionRequest {
   return {
     sessionId: request.sessionId,
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -845,12 +833,11 @@ function listAgentProviderSessionsRequestFromProto(
   request: ProtoListAgentProviderSessionsRequest,
 ): ListAgentProviderSessionsRequest {
   return {
-    subject: agentSubjectFromProto(request.subject),
+    subject: agentRequestSubjectFromProto(request),
     sessionIds: [...request.sessionIds],
     state: request.state as AgentSessionState,
     limit: request.limit,
     summaryOnly: request.summaryOnly,
-    invocationToken: request.invocationToken,
   };
 }
 
@@ -862,8 +849,7 @@ function updateAgentProviderSessionRequestFromProto(
     clientRef: request.clientRef,
     state: request.state as AgentSessionState,
     metadata: optionalObjectFromStruct(request.metadata),
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -898,11 +884,10 @@ function createAgentProviderTurnRequestFromProto(
     executionRef: request.executionRef,
     toolRefs: request.toolRefs.map(agentToolRefFromProto),
     toolSource: request.toolSource as AgentToolSourceMode,
-    subject: agentSubjectFromProto(request.subject),
+    subject: agentRequestSubjectFromProto(request),
     modelOptions: optionalObjectFromStruct(request.modelOptions),
     runGrant: request.runGrant,
     timeoutSeconds: request.timeoutSeconds,
-    invocationToken: request.invocationToken,
   };
 }
 
@@ -911,8 +896,7 @@ function getAgentProviderTurnRequestFromProto(
 ): GetAgentProviderTurnRequest {
   return {
     turnId: request.turnId,
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -921,12 +905,11 @@ function listAgentProviderTurnsRequestFromProto(
 ): ListAgentProviderTurnsRequest {
   return {
     sessionId: request.sessionId,
-    subject: agentSubjectFromProto(request.subject),
+    subject: agentRequestSubjectFromProto(request),
     turnIds: [...request.turnIds],
     status: request.status as AgentExecutionStatus,
     limit: request.limit,
     summaryOnly: request.summaryOnly,
-    invocationToken: request.invocationToken,
   };
 }
 
@@ -936,8 +919,7 @@ function cancelAgentProviderTurnRequestFromProto(
   return {
     turnId: request.turnId,
     reason: request.reason,
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -948,8 +930,7 @@ function listAgentProviderTurnEventsRequestFromProto(
     turnId: request.turnId,
     afterSeq: request.afterSeq,
     limit: request.limit,
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -958,8 +939,7 @@ function getAgentProviderInteractionRequestFromProto(
 ): GetAgentProviderInteractionRequest {
   return {
     interactionId: request.interactionId,
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -968,8 +948,7 @@ function listAgentProviderInteractionsRequestFromProto(
 ): ListAgentProviderInteractionsRequest {
   return {
     turnId: request.turnId,
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -979,8 +958,7 @@ function resolveAgentProviderInteractionRequestFromProto(
   return {
     interactionId: request.interactionId,
     resolution: optionalObjectFromStruct(request.resolution),
-    subject: agentSubjectFromProto(request.subject),
-    invocationToken: request.invocationToken,
+    subject: agentRequestSubjectFromProto(request),
   };
 }
 
@@ -1079,6 +1057,15 @@ function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgent
   };
 }
 
+function agentRequestSubjectFromProto(
+  request: {
+    context?: { subject?: ProtoSubjectContext | undefined } | undefined;
+    subject?: ProtoSubjectContext | undefined;
+  },
+): Subject | undefined {
+  return agentSubjectFromProto(request.context?.subject ?? request.subject);
+}
+
 function agentSubjectFromProto(
   subject?: ProtoSubjectContext | undefined,
 ): Subject | undefined {
@@ -1089,7 +1076,18 @@ function agentSubjectFromProto(
     id: subject.id,
     credentialSubjectId: subject.credentialSubjectId,
     email: subject.email,
+    scopes: [...subject.scopes],
+    permissions: agentSubjectPermissionsFromProto(subject.permissions),
   };
+}
+
+function agentSubjectPermissionsFromProto(
+  permissions: readonly ProtoSubjectPermissionContext[],
+): SubjectPermission[] {
+  return permissions.map((permission) => ({
+    app: permission.app,
+    operations: permission.allOperations ? [] : [...permission.operations],
+  }));
 }
 
 function optionalTimestamp(value?: Date | undefined) {

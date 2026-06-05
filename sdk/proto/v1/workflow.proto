@@ -254,18 +254,18 @@ message WorkflowSignal {
 message ApplyWorkflowProviderDefinitionRequest {
   string provider_name = 1;
   WorkflowDefinitionSpec spec = 2;
-  string invocation_token = 3;
+  RequestContext context = 3;
   string idempotency_key = 4;
   string requested_by_subject_id = 5;
 }
 
 message GetWorkflowProviderDefinitionRequest {
   string definition_id = 1;
-  string invocation_token = 2;
+  RequestContext context = 2;
 }
 
 message ListWorkflowProviderDefinitionsRequest {
-  string invocation_token = 1;
+  RequestContext context = 1;
 }
 
 message ListWorkflowProviderDefinitionsResponse {
@@ -275,7 +275,7 @@ message ListWorkflowProviderDefinitionsResponse {
 message SetWorkflowProviderDefinitionPausedRequest {
   string definition_id = 1;
   bool paused = 2;
-  string invocation_token = 3;
+  RequestContext context = 3;
   string requested_by_subject_id = 4;
 }
 
@@ -283,13 +283,13 @@ message SetWorkflowProviderActivationPausedRequest {
   string definition_id = 1;
   string activation_id = 2;
   bool paused = 3;
-  string invocation_token = 4;
+  RequestContext context = 4;
   string requested_by_subject_id = 5;
 }
 
 message DeleteWorkflowProviderDefinitionRequest {
   string definition_id = 1;
-  string invocation_token = 2;
+  RequestContext context = 2;
 }
 
 message StartWorkflowProviderRunRequest {
@@ -298,7 +298,7 @@ message StartWorkflowProviderRunRequest {
   string created_by_subject_id = 4;
   string workflow_key = 6;
   string provider_name = 7;
-  string invocation_token = 8;
+  RequestContext context = 8;
   string definition_id = 9;
   SubjectContext run_as = 10;
   google.protobuf.Struct input = 11;
@@ -307,14 +307,14 @@ message StartWorkflowProviderRunRequest {
 
 message GetWorkflowProviderRunRequest {
   string run_id = 2;
-  string invocation_token = 3;
+  RequestContext context = 3;
 }
 
 message ListWorkflowProviderRunsRequest {
   int32 page_size = 1;
   string page_token = 2;
   WorkflowRunStatus status = 3;
-  string invocation_token = 4;
+  RequestContext context = 4;
   string target_app = 5;
 }
 
@@ -326,13 +326,13 @@ message ListWorkflowProviderRunsResponse {
 message CancelWorkflowProviderRunRequest {
   string run_id = 2;
   string reason = 3;
-  string invocation_token = 4;
+  RequestContext context = 4;
 }
 
 message SignalWorkflowProviderRunRequest {
   string run_id = 1;
   WorkflowSignal signal = 2;
-  string invocation_token = 3;
+  RequestContext context = 3;
 }
 
 message SignalOrStartWorkflowProviderRunRequest {
@@ -342,7 +342,7 @@ message SignalOrStartWorkflowProviderRunRequest {
   string created_by_subject_id = 4;
   WorkflowSignal signal = 6;
   string provider_name = 7;
-  string invocation_token = 8;
+  RequestContext context = 8;
   string definition_id = 9;
   SubjectContext run_as = 10;
   google.protobuf.Struct input = 11;
@@ -360,7 +360,7 @@ message DeliverWorkflowProviderEventRequest {
   string app_name = 1;
   WorkflowEvent event = 2;
   string delivered_by_subject_id = 3;
-  string invocation_token = 4;
+  RequestContext context = 4;
   string provider_name = 5;
 }
 
@@ -375,7 +375,7 @@ message WorkflowRunEvent {
 
 message GetWorkflowProviderRunEventsRequest {
   string run_id = 1;
-  string invocation_token = 2;
+  RequestContext context = 2;
 }
 
 message GetWorkflowProviderRunEventsResponse {
@@ -384,7 +384,7 @@ message GetWorkflowProviderRunEventsResponse {
 
 message GetWorkflowProviderRunOutputRequest {
   string run_id = 1;
-  string invocation_token = 2;
+  RequestContext context = 2;
 }
 
 message GetWorkflowProviderRunOutputResponse {

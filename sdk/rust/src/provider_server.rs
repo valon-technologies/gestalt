@@ -6,7 +6,9 @@ use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent::{AgentToolRef, agent_tool_ref_from_proto};
-use crate::api::{Access, Credential, HTTPSubjectRequest, Request, Response, Subject};
+use crate::api::{
+    Access, Credential, HTTPSubjectRequest, Request, Response, Subject, SubjectPermission,
+};
 use crate::catalog::{catalog_to_proto, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
@@ -145,10 +147,10 @@ where
                 Value::Object(object_map(request.params)),
                 request_context(
                     request.context.as_ref(),
+                    request.context.clone(),
                     request.token,
                     request.connection_params.into_iter().collect(),
                     request.idempotency_key.trim().to_string(),
-                    request.invocation_token,
                 ),
             )
             .await;
@@ -173,9 +175,9 @@ where
         let request = request.into_inner();
         let request = request_context(
             request.context.as_ref(),
+            request.context.clone(),
             request.token,
             request.connection_params.into_iter().collect(),
-            String::new(),
             String::new(),
         );
         let catalog = self
@@ -200,9 +202,9 @@ where
                 http_subject_request(request.request.as_ref()),
                 &request_context(
                     request.context.as_ref(),
+                    request.context.clone(),
                     String::new(),
                     Default::default(),
-                    String::new(),
                     String::new(),
                 ),
             )
@@ -229,10 +231,10 @@ where
 
 fn request_context(
     context: Option<&crate::generated::v1::RequestContext>,
+    context_proto: Option<crate::generated::v1::RequestContext>,
     token: String,
     connection_params: std::collections::BTreeMap<String, String>,
     idempotency_key: String,
-    invocation_token: String,
 ) -> Request {
     Request {
         token,
@@ -248,7 +250,7 @@ fn request_context(
         tool_refs_set: context
             .map(|context| context.tool_refs_set)
             .unwrap_or(false),
-        invocation_token,
+        context: context_proto,
     }
 }
 
@@ -274,6 +276,16 @@ fn request_subject_field(
         id: subject.id.clone(),
         credential_subject_id: subject.credential_subject_id.clone(),
         email: subject.email.clone(),
+        scopes: subject.scopes.clone(),
+        permissions: subject
+            .permissions
+            .iter()
+            .map(|permission| SubjectPermission {
+                app: permission.app.clone(),
+                operations: permission.operations.clone(),
+                all_operations: permission.all_operations,
+            })
+            .collect(),
     }
 }
 
@@ -362,5 +374,15 @@ fn subject_to_proto(subject: Subject) -> SubjectContext {
         id: subject.id,
         credential_subject_id: subject.credential_subject_id,
         email: subject.email,
+        scopes: subject.scopes,
+        permissions: subject
+            .permissions
+            .into_iter()
+            .map(|permission| crate::generated::v1::SubjectPermissionContext {
+                app: permission.app,
+                operations: permission.operations,
+                all_operations: permission.all_operations,
+            })
+            .collect(),
     }
 }

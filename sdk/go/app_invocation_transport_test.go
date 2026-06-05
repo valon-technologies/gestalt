@@ -58,16 +58,7 @@ func (h *pluginAppTransportHarness) Invoke(ctx context.Context, req *proto.AppIn
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.requests = append(h.requests, &proto.AppInvokeRequest{
-		InvocationToken: req.GetInvocationToken(),
-		App:             req.GetApp(),
-		Operation:       req.GetOperation(),
-		Params:          cloneStruct(req.GetParams()),
-		Connection:      req.GetConnection(),
-		Instance:        req.GetInstance(),
-		IdempotencyKey:  req.GetIdempotencyKey(),
-		Workflow:        cloneStruct(req.GetWorkflow()),
-	})
+	h.requests = append(h.requests, gproto.Clone(req).(*proto.AppInvokeRequest))
 	h.mu.Unlock()
 
 	return &proto.OperationResult{
@@ -86,15 +77,7 @@ func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *prot
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.graphQL = append(h.graphQL, &proto.AppInvokeGraphQLRequest{
-		InvocationToken: req.GetInvocationToken(),
-		App:             req.GetApp(),
-		Document:        req.GetDocument(),
-		Variables:       cloneStruct(req.GetVariables()),
-		Connection:      req.GetConnection(),
-		Instance:        req.GetInstance(),
-		IdempotencyKey:  req.GetIdempotencyKey(),
-	})
+	h.graphQL = append(h.graphQL, gproto.Clone(req).(*proto.AppInvokeGraphQLRequest))
 	h.mu.Unlock()
 
 	return &proto.OperationResult{
@@ -133,7 +116,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
 
-	client, err := gestalt.NewApp("parent-token")
+	client, err := gestalt.NewApp(appTransportRequest())
 	if err != nil {
 		t.Fatalf("App: %v", err)
 	}
@@ -208,8 +191,8 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.requests) != 2 {
 		t.Fatalf("invoke requests len = %d, want 2", len(harness.requests))
 	}
-	if harness.requests[0].GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want %q", harness.requests[0].GetInvocationToken(), "parent-token")
+	if got := harness.requests[0].GetContext().GetSubject().GetId(); got != "user:transport" {
+		t.Fatalf("subject = %q, want user:transport", got)
 	}
 	if harness.requests[0].GetApp() != "github" || harness.requests[0].GetOperation() != "get_issue" {
 		t.Fatalf("invoke target = %s.%s, want github.get_issue", harness.requests[0].GetApp(), harness.requests[0].GetOperation())
@@ -220,7 +203,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if got := harness.requests[0].GetParams().AsMap(); got["issue_number"] != float64(42) {
 		t.Fatalf("invoke params = %#v, want issue_number=42", got)
 	}
-	if got := harness.requests[0].GetWorkflow().AsMap(); got["runId"] != "run-42" {
+	if got := harness.requests[0].GetContext().GetWorkflow().AsMap(); got["runId"] != "run-42" {
 		t.Fatalf("invoke workflow context = %#v, want runId=run-42", got)
 	}
 	if got := harness.requests[1].GetParams().AsMap(); len(got) != 1 || got["issue_number"] != float64(43) {
@@ -229,13 +212,23 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.graphQL) != 1 {
 		t.Fatalf("graphql requests len = %d, want 1", len(harness.graphQL))
 	}
-	if harness.graphQL[0].GetInvocationToken() != "parent-token" {
-		t.Fatalf("graphql invocation token = %q, want parent-token", harness.graphQL[0].GetInvocationToken())
+	if got := harness.graphQL[0].GetContext().GetSubject().GetId(); got != "user:transport" {
+		t.Fatalf("graphql subject = %q, want user:transport", got)
 	}
 	if harness.graphQL[0].GetApp() != "linear" || harness.graphQL[0].GetDocument() != "query { viewer { id } }" {
 		t.Fatalf("graphql request = %s %q, want linear trimmed document", harness.graphQL[0].GetApp(), harness.graphQL[0].GetDocument())
 	}
 	if harness.graphQL[0].GetIdempotencyKey() != "graphql-call-42" {
 		t.Fatalf("graphql idempotency key = %q, want graphql-call-42", harness.graphQL[0].GetIdempotencyKey())
+	}
+}
+
+func appTransportRequest() gestalt.Request {
+	return gestalt.Request{
+		Subject: gestalt.Subject{
+			ID:                  "user:transport",
+			CredentialSubjectID: "user:transport",
+			Email:               "transport@example.test",
+		},
 	}
 }
