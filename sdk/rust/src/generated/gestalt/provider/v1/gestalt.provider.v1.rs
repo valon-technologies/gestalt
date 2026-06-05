@@ -176,6 +176,8 @@ pub struct AppInvokeRequest {
     pub credential_mode: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "10")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "11")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 /// AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through Gestalt.
@@ -195,9 +197,11 @@ pub struct AppInvokeGraphQlRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 /// SubjectContext identifies the caller that initiated an operation.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubjectContext {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
@@ -207,8 +211,21 @@ pub struct SubjectContext {
     pub email: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub display_name: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "5")]
+    pub scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "6")]
+    pub permissions: ::prost::alloc::vec::Vec<SubjectPermissionContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubjectPermissionContext {
+    #[prost(string, tag = "1")]
+    pub app: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "2")]
+    pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, tag = "3")]
+    pub all_operations: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentToolRef {
     #[prost(string, tag = "1")]
     pub app: ::prost::alloc::string::String,
@@ -259,6 +276,39 @@ pub struct HostContext {
     #[prost(string, tag = "1")]
     pub public_base_url: ::prost::alloc::string::String,
 }
+/// ProviderContext identifies the provider process that received the request
+/// context from the host and is trusted to propagate it back to host services.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ProviderContext {
+    #[prost(string, tag = "1")]
+    pub kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct InvocationContext {
+    #[prost(string, tag = "1")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "2")]
+    pub depth: i32,
+    #[prost(string, repeated, tag = "3")]
+    pub call_chain: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "4")]
+    pub surface: ::prost::alloc::string::String,
+    #[prost(bool, tag = "5")]
+    pub internal_connection_access: bool,
+    #[prost(string, tag = "6")]
+    pub connection: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RequestMetaContext {
+    #[prost(string, tag = "1")]
+    pub client_ip: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub remote_addr: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub user_agent: ::prost::alloc::string::String,
+}
 /// RequestContext bundles the caller, credential, access, and host metadata for
 /// one operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -276,6 +326,10 @@ pub struct RequestContext {
     /// Original agent caller when an agent tool executes with delegated run-as identity.
     #[prost(message, optional, tag = "6")]
     pub agent_subject: ::core::option::Option<SubjectContext>,
+    #[prost(message, optional, tag = "7")]
+    pub caller: ::core::option::Option<ProviderContext>,
+    #[prost(message, optional, tag = "8")]
+    pub invocation: ::core::option::Option<InvocationContext>,
     /// Agent tool refs granted to the operation request, when the request is
     /// executing as an agent tool.
     #[prost(message, repeated, tag = "9")]
@@ -284,6 +338,8 @@ pub struct RequestContext {
     /// explicitly empty inherited tool-ref context.
     #[prost(bool, tag = "10")]
     pub tool_refs_set: bool,
+    #[prost(message, optional, tag = "11")]
+    pub request_meta: ::core::option::Option<RequestMetaContext>,
 }
 /// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 /// plugin-local subject resolution hook.
@@ -329,7 +385,7 @@ pub struct ResolveHttpSubjectRequest {
 /// request should execute as. An unset subject means "fall back to the binding
 /// subject". When reject_status is set, the host should reject the inbound
 /// request with the provided status and message.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolveHttpSubjectResponse {
     #[prost(message, optional, tag = "1")]
     pub subject: ::core::option::Option<SubjectContext>,
@@ -621,6 +677,8 @@ pub struct CreateAgentProviderSessionRequest {
     pub workspace: ::core::option::Option<AgentWorkspace>,
     #[prost(message, optional, tag = "14")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "15")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentSessionStartConfig {
@@ -664,6 +722,8 @@ pub struct GetAgentProviderSessionRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderSessionsRequest {
@@ -687,6 +747,8 @@ pub struct ListAgentProviderSessionsRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "9")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderSessionsResponse {
@@ -709,6 +771,8 @@ pub struct UpdateAgentProviderSessionRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "7")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "8")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurn {
@@ -831,6 +895,8 @@ pub struct CreateAgentProviderTurnRequest {
     pub output: ::core::option::Option<AgentOutput>,
     #[prost(message, optional, tag = "22")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "23")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentTextOutput {}
@@ -864,6 +930,8 @@ pub struct GetAgentProviderTurnRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnsRequest {
@@ -888,6 +956,8 @@ pub struct ListAgentProviderTurnsRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "9")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnsResponse {
@@ -906,6 +976,8 @@ pub struct CancelAgentProviderTurnRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurnEvent {
@@ -942,13 +1014,15 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "7")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnEventsResponse {
     #[prost(message, repeated, tag = "1")]
     pub events: ::prost::alloc::vec::Vec<AgentTurnEvent>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetAgentProviderInteractionRequest {
     #[prost(string, tag = "1")]
     pub interaction_id: ::prost::alloc::string::String,
@@ -956,6 +1030,8 @@ pub struct GetAgentProviderInteractionRequest {
     pub subject: ::core::option::Option<SubjectContext>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderInteractionsRequest {
@@ -967,6 +1043,8 @@ pub struct ListAgentProviderInteractionsRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "5")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderInteractionsResponse {
@@ -987,6 +1065,8 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub turn_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "7")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecuteAgentToolRequest {
@@ -1004,6 +1084,8 @@ pub struct ExecuteAgentToolRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub run_grant: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecuteAgentToolResponse {
@@ -1012,7 +1094,7 @@ pub struct ExecuteAgentToolResponse {
     #[prost(string, tag = "2")]
     pub body: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListedAgentTool {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
@@ -1035,7 +1117,7 @@ pub struct ListedAgentTool {
     #[prost(string, tag = "10")]
     pub search_text: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
@@ -1049,6 +1131,8 @@ pub struct ListAgentToolsRequest {
     pub run_grant: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub query: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsResponse {
@@ -1057,7 +1141,7 @@ pub struct ListAgentToolsResponse {
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolveAgentConnectionRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
@@ -1069,6 +1153,8 @@ pub struct ResolveAgentConnectionRequest {
     pub instance: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub run_grant: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentConnection {
@@ -3399,25 +3485,31 @@ pub struct ApplyWorkflowProviderDefinitionRequest {
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub requested_by_subject_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderDefinitionRequest {
     #[prost(string, tag = "1")]
     pub definition_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<RequestContext>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderDefinitionsRequest {
     #[prost(string, tag = "1")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderDefinitionsResponse {
     #[prost(message, repeated, tag = "1")]
     pub definitions: ::prost::alloc::vec::Vec<WorkflowDefinition>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetWorkflowProviderDefinitionPausedRequest {
     #[prost(string, tag = "1")]
     pub definition_id: ::prost::alloc::string::String,
@@ -3427,8 +3519,10 @@ pub struct SetWorkflowProviderDefinitionPausedRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub requested_by_subject_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub context: ::core::option::Option<RequestContext>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SetWorkflowProviderActivationPausedRequest {
     #[prost(string, tag = "1")]
     pub definition_id: ::prost::alloc::string::String,
@@ -3440,13 +3534,17 @@ pub struct SetWorkflowProviderActivationPausedRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub requested_by_subject_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeleteWorkflowProviderDefinitionRequest {
     #[prost(string, tag = "1")]
     pub definition_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowProviderRunRequest {
@@ -3468,15 +3566,19 @@ pub struct StartWorkflowProviderRunRequest {
     pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(int64, tag = "12")]
     pub expected_definition_generation: i64,
+    #[prost(message, optional, tag = "13")]
+    pub context: ::core::option::Option<RequestContext>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunRequest {
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub context: ::core::option::Option<RequestContext>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsRequest {
     #[prost(int32, tag = "1")]
     pub page_size: i32,
@@ -3488,6 +3590,8 @@ pub struct ListWorkflowProviderRunsRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub target_app: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsResponse {
@@ -3496,7 +3600,7 @@ pub struct ListWorkflowProviderRunsResponse {
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CancelWorkflowProviderRunRequest {
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
@@ -3504,6 +3608,8 @@ pub struct CancelWorkflowProviderRunRequest {
     pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalWorkflowProviderRunRequest {
@@ -3513,6 +3619,8 @@ pub struct SignalWorkflowProviderRunRequest {
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalOrStartWorkflowProviderRunRequest {
@@ -3536,6 +3644,8 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(int64, tag = "12")]
     pub expected_definition_generation: i64,
+    #[prost(message, optional, tag = "13")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalWorkflowRunResponse {
@@ -3560,6 +3670,8 @@ pub struct DeliverWorkflowProviderEventRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowRunEvent {
@@ -3576,24 +3688,28 @@ pub struct WorkflowRunEvent {
     #[prost(message, optional, tag = "6")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunEventsRequest {
     #[prost(string, tag = "1")]
     pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunEventsResponse {
     #[prost(message, repeated, tag = "1")]
     pub events: ::prost::alloc::vec::Vec<WorkflowRunEvent>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunOutputRequest {
     #[prost(string, tag = "1")]
     pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub invocation_token: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetWorkflowProviderRunOutputResponse {

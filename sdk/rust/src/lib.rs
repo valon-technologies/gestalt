@@ -69,7 +69,7 @@ pub use agent_access::{
 pub use api::parse_subject_id;
 pub use api::{
     Access, Credential, HTTPSubjectRequest, Host, Provider, Request, Response, RuntimeMetadata,
-    Subject, ok,
+    Subject, current_request_context, ok, with_request_context,
 };
 pub use app_access::{
     App, AppContract, AppError, InvocationGrant, InvokeGraphQLOptions, InvokeOptions,

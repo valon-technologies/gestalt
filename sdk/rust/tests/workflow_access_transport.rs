@@ -15,10 +15,10 @@ use gestalt::proto::v1::{
     GetWorkflowProviderDefinitionRequest, GetWorkflowProviderRunEventsRequest,
     GetWorkflowProviderRunOutputRequest, GetWorkflowProviderRunRequest,
     ListWorkflowProviderDefinitionsRequest, ListWorkflowProviderDefinitionsResponse,
-    ListWorkflowProviderRunsRequest, ListWorkflowProviderRunsResponse,
+    ListWorkflowProviderRunsRequest, ListWorkflowProviderRunsResponse, RequestContext,
     SetWorkflowProviderActivationPausedRequest, SetWorkflowProviderDefinitionPausedRequest,
     SignalOrStartWorkflowProviderRunRequest, SignalWorkflowProviderRunRequest,
-    SignalWorkflowRunResponse, StartWorkflowProviderRunRequest, WorkflowActivation,
+    SignalWorkflowRunResponse, StartWorkflowProviderRunRequest, SubjectContext, WorkflowActivation,
     WorkflowDefinition, WorkflowEvent, WorkflowRun, WorkflowRunEvent, WorkflowRunStatus,
     WorkflowScheduleActivation, WorkflowSignal, WorkflowStep, WorkflowStepAppCall,
     workflow_activation, workflow_step,
@@ -40,7 +40,7 @@ const RELAY_HEADER: &str = "x-gestalt-host-service-relay-token";
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
     method: String,
-    invocation_token: String,
+    context_subject_id: String,
     relay_token: String,
     provider_name: String,
     definition_id: String,
@@ -76,7 +76,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             .ok_or_else(|| Status::invalid_argument("missing spec"))?;
         self.record(SeenRequest {
             method: "apply-definition".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             provider_name: request.provider_name.clone(),
             definition_id: spec.id.clone(),
@@ -101,7 +101,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "get-definition".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             definition_id: request.definition_id.clone(),
             ..Default::default()
@@ -121,7 +121,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "list-definitions".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             ..Default::default()
         });
@@ -142,7 +142,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "set-definition-paused".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             definition_id: request.definition_id.clone(),
             ..Default::default()
@@ -163,7 +163,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "set-activation-paused".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             definition_id: request.definition_id.clone(),
             activation_id: request.activation_id.clone(),
@@ -189,7 +189,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "delete-definition".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             definition_id: request.definition_id,
             ..Default::default()
@@ -217,7 +217,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         }
         self.record(SeenRequest {
             method: "start-run".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             provider_name: request.provider_name.clone(),
             definition_id: request.definition_id.clone(),
@@ -244,7 +244,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "list-runs".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             event_type: request.target_app,
             ..Default::default()
@@ -267,7 +267,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "get-run".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             run_id: request.run_id.clone(),
             ..Default::default()
@@ -288,7 +288,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "get-run-events".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             run_id: request.run_id.clone(),
             ..Default::default()
@@ -315,7 +315,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "get-run-output".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             run_id: request.run_id,
             ..Default::default()
@@ -335,7 +335,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "cancel-run".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             run_id: request.run_id.clone(),
             ..Default::default()
@@ -356,7 +356,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
         let request = request.into_inner();
         self.record(SeenRequest {
             method: "signal-run".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             run_id: request.run_id.clone(),
             event_type: request
@@ -396,7 +396,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             .push(request.clone());
         self.record(SeenRequest {
             method: "signal-or-start-run".to_string(),
-            invocation_token: request.invocation_token.clone(),
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             provider_name: request.provider_name.clone(),
             definition_id: request.definition_id.clone(),
@@ -434,7 +434,7 @@ impl ProtoWorkflowProvider for TestWorkflowServer {
             .ok_or_else(|| Status::invalid_argument("missing event"))?;
         self.record(SeenRequest {
             method: "deliver-event".to_string(),
-            invocation_token: request.invocation_token,
+            context_subject_id: context_subject_id(&request.context),
             relay_token,
             provider_name: request.provider_name,
             event_type: event.r#type.clone(),
@@ -459,9 +459,16 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
     let _host_socket = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, &socket);
     let _host_token = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token");
 
-    let mut workflow = Workflow::connect_with_idempotency_key("invoke-token", "default-key")
-        .await
-        .expect("connect workflow");
+    let request = Request {
+        idempotency_key: "default-key".to_string(),
+        ..Default::default()
+    };
+    let mut workflow = gestalt::with_request_context(
+        Some(request_context("user:workflow-access")),
+        Workflow::connect(&request),
+    )
+    .await
+    .expect("connect workflow");
 
     let definition = workflow
         .apply_definition(WorkflowApplyDefinition {
@@ -659,7 +666,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
     let seen = server.seen.lock().expect("seen lock").clone();
     assert!(
         seen.iter()
-            .all(|request| request.invocation_token == "invoke-token")
+            .all(|request| request.context_subject_id == "user:workflow-access")
     );
     assert!(
         seen.iter()
@@ -710,7 +717,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
 }
 
 #[tokio::test]
-async fn request_workflow_uses_embedded_invocation_token_and_idempotency_key() {
+async fn request_workflow_uses_embedded_context_and_idempotency_key() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-request-workflow.sock");
     let server = TestWorkflowServer::default();
@@ -718,11 +725,15 @@ async fn request_workflow_uses_embedded_invocation_token_and_idempotency_key() {
     let _host_socket = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, &socket);
 
     let request = Request {
-        invocation_token: "request-token".to_string(),
         idempotency_key: "request-key".to_string(),
         ..Default::default()
     };
-    let mut workflow = request.workflow().await.expect("request workflow");
+    let mut workflow = gestalt::with_request_context(
+        Some(request_context("user:request-workflow")),
+        request.workflow(),
+    )
+    .await
+    .expect("request workflow");
     workflow
         .start_run(WorkflowStartRun {
             provider_name: "temporal".to_string(),
@@ -748,8 +759,8 @@ async fn request_workflow_uses_embedded_invocation_token_and_idempotency_key() {
             .expect("seen lock")
             .first()
             .expect("seen request")
-            .invocation_token,
-        "request-token"
+            .context_subject_id,
+        "user:request-workflow"
     );
 
     serve_task.abort();
@@ -779,6 +790,24 @@ fn app_target() -> BoundWorkflowTarget {
             ..Default::default()
         }],
     }
+}
+
+fn request_context(subject_id: &str) -> RequestContext {
+    RequestContext {
+        subject: Some(SubjectContext {
+            id: subject_id.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+fn context_subject_id(context: &Option<RequestContext>) -> String {
+    context
+        .as_ref()
+        .and_then(|context| context.subject.as_ref())
+        .map(|subject| subject.id.clone())
+        .unwrap_or_default()
 }
 
 fn relay_token<T>(request: &GrpcRequest<T>) -> String {

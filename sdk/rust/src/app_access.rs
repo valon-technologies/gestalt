@@ -1,9 +1,10 @@
 use std::time::Duration;
 
 use hyper_util::rt::TokioIo;
+use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::UnixStream;
-use tonic::Request;
+use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
@@ -12,6 +13,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
 use crate::OperationResult;
+use crate::api::{Request, current_request_context};
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{self as pb, app_client::AppClient as ProtoAppClient};
 use crate::protocol;
@@ -103,19 +105,71 @@ pub trait AppContract: Send {
     ) -> std::result::Result<String, AppError>;
 }
 
+/// Source used to connect an app host-service client.
+pub trait AppConnectionSource {
+    /// Legacy invocation token to forward, when available.
+    fn app_invocation_token(&self) -> &str;
+
+    /// Request context to forward on new host-service calls.
+    fn app_request_context(&self) -> Option<pb::RequestContext> {
+        None
+    }
+
+    /// Legacy workflow context to forward with invocation-token calls.
+    fn app_workflow(&self) -> std::result::Result<Option<Struct>, AppError> {
+        Ok(None)
+    }
+
+    /// Whether an empty invocation token should fail connection.
+    fn app_requires_invocation_token(&self) -> bool {
+        true
+    }
+}
+
+impl AppConnectionSource for &Request {
+    fn app_invocation_token(&self) -> &str {
+        self.invocation_token()
+    }
+
+    fn app_request_context(&self) -> Option<pb::RequestContext> {
+        current_request_context()
+    }
+
+    fn app_workflow(&self) -> std::result::Result<Option<Struct>, AppError> {
+        workflow_to_struct(&self.workflow)
+    }
+
+    fn app_requires_invocation_token(&self) -> bool {
+        false
+    }
+}
+
+impl<T> AppConnectionSource for T
+where
+    T: AsRef<str>,
+{
+    fn app_invocation_token(&self) -> &str {
+        self.as_ref()
+    }
+}
+
 /// Client for invoking sibling app operations through Gestalt.
 pub struct App {
     client: ProtoAppClient<AppTransport>,
     invocation_token: String,
+    context: Option<pb::RequestContext>,
+    workflow: Option<Struct>,
 }
 
 impl App {
-    /// Connects to the app service with an invocation token from Gestalt.
-    pub async fn connect(invocation_token: impl AsRef<str>) -> std::result::Result<Self, AppError> {
-        let invocation_token = invocation_token.as_ref().trim().to_owned();
-        if invocation_token.is_empty() {
+    /// Connects to the app service with request context or a legacy invocation token.
+    pub async fn connect(source: impl AppConnectionSource) -> std::result::Result<Self, AppError> {
+        let invocation_token = source.app_invocation_token().trim().to_owned();
+        if invocation_token.is_empty() && source.app_requires_invocation_token() {
             return Err(AppError::MissingInvocationToken);
         }
+        let context = source.app_request_context();
+        let workflow = source.app_workflow()?;
 
         let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| AppError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
@@ -149,6 +203,8 @@ impl App {
                 relay_token_interceptor(relay_token.trim())?,
             ),
             invocation_token,
+            context,
+            workflow,
         })
     }
 
@@ -186,7 +242,8 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.credential_mode.trim().to_string())
                     .unwrap_or_default(),
-                workflow: None,
+                workflow: self.workflow.clone(),
+                context: self.context.clone(),
             })
             .await?
             .into_inner();
@@ -242,6 +299,7 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
                     .unwrap_or_default(),
+                context: self.context.clone(),
             })
             .await?
             .into_inner();
@@ -361,6 +419,17 @@ fn parse_app_target(raw_target: &str) -> Result<AppTarget, AppError> {
     Ok(AppTarget::Unix(target.to_string()))
 }
 
+fn workflow_to_struct(
+    workflow: &serde_json::Map<String, serde_json::Value>,
+) -> std::result::Result<Option<Struct>, AppError> {
+    if workflow.is_empty() {
+        return Ok(None);
+    }
+    protocol::struct_from_json(serde_json::Value::Object(workflow.clone()))
+        .map(Some)
+        .map_err(|err| AppError::Protocol(err.to_string()))
+}
+
 fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocationGrant> {
     grants
         .iter()
@@ -423,7 +492,7 @@ struct RelayTokenInterceptor {
 }
 
 impl Interceptor for RelayTokenInterceptor {
-    fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, tonic::Status> {
+    fn call(&mut self, mut request: GrpcRequest<()>) -> Result<GrpcRequest<()>, tonic::Status> {
         if let Some(header) = self.header.clone() {
             request
                 .metadata_mut()

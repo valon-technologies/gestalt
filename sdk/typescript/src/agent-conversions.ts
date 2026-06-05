@@ -21,8 +21,10 @@ import {
 } from "./internal/gen/v1/agent_pb.ts";
 import {
   SubjectContextSchema,
+  SubjectPermissionContextSchema,
   AgentToolRefSchema,
   type SubjectContext as ProtoSubjectContext,
+  type SubjectPermissionContext as ProtoSubjectPermissionContext,
   type AgentToolRef as ProtoAgentToolRef,
 } from "./internal/gen/v1/app_pb.ts";
 import {
@@ -43,7 +45,7 @@ import type {
   AgentTurnOutput,
   AgentTurnDisplay,
 } from "./agent.ts";
-import type { Subject, SubjectInput } from "./api.ts";
+import type { Subject, SubjectInput, SubjectPermission } from "./api.ts";
 
 export function agentTurnDisplayFromProto(
   display?: ProtoAgentTurnDisplay | undefined,
@@ -299,11 +301,14 @@ function agentRunAsSubjectFromProto(
     id: subject.id,
     credentialSubjectId: subject.credentialSubjectId,
     email: subject.email,
+    displayName: subject.displayName,
+    scopes: [...subject.scopes],
+    permissions: subjectPermissionsFromProto(subject.permissions),
   };
 }
 
 function agentRunAsSubjectToProto(
-  subject?: SubjectInput | undefined,
+  subject?: SubjectInput | Subject | undefined,
 ): ProtoSubjectContext | undefined {
   if (subject === undefined) {
     return undefined;
@@ -312,5 +317,27 @@ function agentRunAsSubjectToProto(
     id: subject.id ?? "",
     credentialSubjectId: subject.credentialSubjectId ?? "",
     email: subject.email ?? "",
+    displayName: subject.displayName ?? "",
+    scopes: [...(subject.scopes ?? [])],
+    permissions: subjectPermissionsToProto(subject.permissions),
   });
+}
+
+function subjectPermissionsFromProto(
+  permissions: readonly ProtoSubjectPermissionContext[],
+): SubjectPermission[] {
+  return permissions.map((permission) => ({
+    app: permission.app,
+    operations: permission.allOperations ? [] : [...permission.operations],
+  }));
+}
+
+function subjectPermissionsToProto(
+  permissions?: readonly SubjectPermission[] | undefined,
+): ProtoSubjectPermissionContext[] {
+  return permissions?.map((permission) => create(SubjectPermissionContextSchema, {
+    app: permission.app,
+    operations: [...permission.operations],
+    allOperations: permission.operations.length === 0,
+  })) ?? [];
 }

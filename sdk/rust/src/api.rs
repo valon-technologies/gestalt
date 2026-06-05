@@ -1,11 +1,13 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
+use std::future::Future;
 
 use tonic::codegen::async_trait;
 
 use crate::agent::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
+use crate::proto::v1;
 
 /// Split a canonical subject ID such as `user:ada` into kind and id.
 pub fn parse_subject_id(subject_id: &str) -> Option<(&str, &str)> {
@@ -92,6 +94,10 @@ pub struct Request {
     pub invocation_token: String,
 }
 
+tokio::task_local! {
+    static REQUEST_CONTEXT: Option<v1::RequestContext>;
+}
+
 impl Request {
     /// Returns one resolved connection parameter by name.
     pub fn connection_param(&self, name: &str) -> Option<&str> {
@@ -103,24 +109,43 @@ impl Request {
         &self.invocation_token
     }
 
-    /// Creates an app client using this request's invocation token.
+    /// Creates an app client using this request's invocation token or scoped request context.
     pub async fn app(&self) -> std::result::Result<crate::App, crate::AppError> {
-        crate::App::connect(self.invocation_token()).await
+        crate::App::connect(self).await
     }
 
-    /// Creates a workflow using this request's invocation token.
+    /// Creates a workflow using this request's invocation token or scoped request context.
     pub async fn workflow(&self) -> std::result::Result<crate::Workflow, crate::WorkflowError> {
-        crate::Workflow::connect_with_idempotency_key(
-            self.invocation_token(),
-            self.idempotency_key.trim(),
-        )
-        .await
+        crate::Workflow::connect(self).await
     }
 
-    /// Creates an agent using this request's invocation token.
+    /// Creates an agent using this request's invocation token or scoped request context.
     pub async fn agent(&self) -> std::result::Result<crate::Agent, crate::AgentError> {
-        crate::Agent::connect(self.invocation_token()).await
+        crate::Agent::connect(self).await
     }
+}
+
+/// Returns the host-supplied request context for the currently executing provider handler.
+pub fn current_request_context() -> Option<v1::RequestContext> {
+    REQUEST_CONTEXT.try_with(Clone::clone).ok().flatten()
+}
+
+/// Runs an async operation with the supplied request context available to Gestalt clients.
+pub async fn with_request_context<F>(context: Option<v1::RequestContext>, future: F) -> F::Output
+where
+    F: Future,
+{
+    REQUEST_CONTEXT.scope(context, future).await
+}
+
+pub(crate) async fn scope_request_context<F>(
+    context: Option<v1::RequestContext>,
+    future: F,
+) -> F::Output
+where
+    F: Future,
+{
+    with_request_context(context, future).await
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

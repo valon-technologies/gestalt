@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 func TestGrantToolRefsSetDistinguishesUnsetAndExplicitEmpty(t *testing.T) {
@@ -69,6 +70,30 @@ func TestGrantToolRefsSetInferredForNonEmptyToolRefs(t *testing.T) {
 	}
 	if !grant.ToolRefsSet || len(grant.ToolRefs) != 1 {
 		t.Fatalf("non-empty grant tool refs = set %t refs %#v, want set with one ref", grant.ToolRefsSet, grant.ToolRefs)
+	}
+}
+
+func TestGrantCallerProviderRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	grants := newTestManager(t)
+	token, err := grants.Mint(Grant{
+		ProviderName: "test",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		CallerKind:   invocation.ProviderKindAgent,
+		CallerName:   "agent/codex",
+		SubjectID:    "user:user-123",
+	})
+	if err != nil {
+		t.Fatalf("Mint grant: %v", err)
+	}
+	grant, err := grants.Resolve(token)
+	if err != nil {
+		t.Fatalf("Resolve grant: %v", err)
+	}
+	if grant.CallerKind != invocation.ProviderKindAgent || grant.CallerName != "agent/codex" {
+		t.Fatalf("caller provider = %s/%q, want agent/agent/codex", grant.CallerKind, grant.CallerName)
 	}
 }
 

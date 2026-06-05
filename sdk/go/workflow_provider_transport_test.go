@@ -15,11 +15,11 @@ import (
 type fullWorkflowProvider struct {
 	gestalt.UnimplementedWorkflowProvider
 	closeTracker
-	configuredName          string
-	startRunInvocationToken string
-	definitionToken         string
-	deliverEventToken       string
-	deliveredEvents         []string
+	configuredName      string
+	startRunSubject     string
+	definitionSubject   string
+	deliverEventSubject string
+	deliveredEvents     []string
 }
 
 func (p *fullWorkflowProvider) Configure(_ context.Context, name string, _ map[string]any) error {
@@ -37,7 +37,7 @@ func (p *fullWorkflowProvider) Metadata() gestalt.ProviderMetadata {
 }
 
 func (p *fullWorkflowProvider) StartRun(ctx context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.WorkflowRun, error) {
-	p.startRunInvocationToken = gestalt.InvocationTokenFromContext(ctx)
+	p.startRunSubject = gestalt.RequestFromContext(ctx).Subject.ID
 	return &gestalt.WorkflowRun{
 		ID:                   req.IdempotencyKey,
 		Status:               gestalt.WorkflowRunStatusValuePending,
@@ -49,7 +49,7 @@ func (p *fullWorkflowProvider) StartRun(ctx context.Context, req *gestalt.StartW
 }
 
 func (p *fullWorkflowProvider) ApplyDefinition(ctx context.Context, req *gestalt.ApplyWorkflowProviderDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
-	p.definitionToken = gestalt.InvocationTokenFromContext(ctx)
+	p.definitionSubject = gestalt.RequestFromContext(ctx).Subject.ID
 	spec := req.Spec
 	if spec == nil {
 		spec = &gestalt.WorkflowDefinitionSpec{}
@@ -64,7 +64,7 @@ func (p *fullWorkflowProvider) ApplyDefinition(ctx context.Context, req *gestalt
 }
 
 func (p *fullWorkflowProvider) DeliverEvent(ctx context.Context, req *gestalt.DeliverWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
-	p.deliverEventToken = gestalt.InvocationTokenFromContext(ctx)
+	p.deliverEventSubject = gestalt.RequestFromContext(ctx).Subject.ID
 	if req.Event != nil {
 		p.deliveredEvents = append(p.deliveredEvents, req.Event.Type)
 		return &gestalt.WorkflowEvent{ID: "delivered-go", Type: req.Event.Type}, nil
@@ -107,8 +107,8 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	definition, err := workflowClient.ApplyDefinition(rpcCtx, &proto.ApplyWorkflowProviderDefinitionRequest{
-		IdempotencyKey:  "definition-1",
-		InvocationToken: "workflow-definition-token",
+		IdempotencyKey: "definition-1",
+		Context:        workflowProviderTransportContext(),
 		Spec: &proto.WorkflowDefinitionSpec{
 			Id: "definition-1",
 			Target: &proto.BoundWorkflowTarget{
@@ -134,8 +134,8 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	if definition.GetId() != "definition-1" || definition.GetGeneration() != 2 {
 		t.Fatalf("ApplyDefinition = %#v", definition)
 	}
-	if provider.definitionToken != "workflow-definition-token" {
-		t.Fatalf("ApplyDefinition invocation token = %q, want workflow-definition-token", provider.definitionToken)
+	if provider.definitionSubject != "user:transport" {
+		t.Fatalf("ApplyDefinition subject = %q, want user:transport", provider.definitionSubject)
 	}
 
 	input, err := structpb.NewStruct(map[string]any{"issue": map[string]any{"number": 42}})
@@ -144,7 +144,7 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	run, err := workflowClient.StartRun(rpcCtx, &proto.StartWorkflowProviderRunRequest{
 		IdempotencyKey:               "run-1",
-		InvocationToken:              "workflow-run-token",
+		Context:                      workflowProviderTransportContext(),
 		DefinitionId:                 "definition-1",
 		ExpectedDefinitionGeneration: 2,
 		WorkflowKey:                  "github:issue:42",
@@ -159,13 +159,13 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	if run.GetDefinitionId() != "definition-1" || run.GetDefinitionGeneration() != 2 {
 		t.Fatalf("run definition = %q/%d", run.GetDefinitionId(), run.GetDefinitionGeneration())
 	}
-	if provider.startRunInvocationToken != "workflow-run-token" {
-		t.Fatalf("StartRun invocation token = %q, want workflow-run-token", provider.startRunInvocationToken)
+	if provider.startRunSubject != "user:transport" {
+		t.Fatalf("StartRun subject = %q, want user:transport", provider.startRunSubject)
 	}
 
 	delivered, err := workflowClient.DeliverEvent(rpcCtx, &proto.DeliverWorkflowProviderEventRequest{
-		Event:           &proto.WorkflowEvent{Type: "issue.created"},
-		InvocationToken: "workflow-event-token",
+		Event:   &proto.WorkflowEvent{Type: "issue.created"},
+		Context: workflowProviderTransportContext(),
 	})
 	if err != nil {
 		t.Fatalf("DeliverEvent: %v", err)
@@ -176,7 +176,17 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	if len(provider.deliveredEvents) != 1 || provider.deliveredEvents[0] != "issue.created" {
 		t.Fatalf("delivered events = %v, want [issue.created]", provider.deliveredEvents)
 	}
-	if provider.deliverEventToken != "workflow-event-token" {
-		t.Fatalf("DeliverEvent invocation token = %q, want workflow-event-token", provider.deliverEventToken)
+	if provider.deliverEventSubject != "user:transport" {
+		t.Fatalf("DeliverEvent subject = %q, want user:transport", provider.deliverEventSubject)
+	}
+}
+
+func workflowProviderTransportContext() *proto.RequestContext {
+	return &proto.RequestContext{
+		Subject: &proto.SubjectContext{
+			Id:                  "user:transport",
+			CredentialSubjectId: "user:transport",
+			Email:               "transport@example.test",
+		},
 	}
 }

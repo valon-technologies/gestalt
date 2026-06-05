@@ -2,11 +2,11 @@ package gestalt
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -35,19 +35,26 @@ func hostServiceDialOptions(token string, binding string) []grpc.DialOption {
 	return host.DialOptions(token, binding)
 }
 
-func cloneHostServiceRequest[M gproto.Message](serviceName string, req M, invocationToken, defaultIdempotencyKey string) (M, error) {
-	var zero M
+func attachHostServiceAuth(req gproto.Message, reqCtx *proto.RequestContext, invocationToken string) {
 	if protoMessageIsNil(req) {
-		return zero, fmt.Errorf("%s: request is nil", serviceName)
+		return
 	}
-	clone, ok := gproto.Clone(req).(M)
-	if !ok {
-		return zero, fmt.Errorf("%s: clone request %T", serviceName, req)
-	}
-	msg := clone.ProtoReflect()
+	msg := req.ProtoReflect()
 	setProtoStringField(msg, "invocation_token", strings.TrimSpace(invocationToken), false)
-	setProtoStringField(msg, "idempotency_key", strings.TrimSpace(defaultIdempotencyKey), true)
-	return clone, nil
+	setProtoMessageField(msg, "context", cloneRequestContext(reqCtx))
+}
+
+func attachWorkflowContextField(ctx context.Context, req gproto.Message) error {
+	workflow := WorkflowContextFromContext(ctx)
+	if workflow == nil || protoMessageIsNil(req) {
+		return nil
+	}
+	msg, err := structFromAny(workflow)
+	if err != nil {
+		return err
+	}
+	setProtoMessageField(req.ProtoReflect(), "workflow", msg)
+	return nil
 }
 
 func protoMessageIsNil[M gproto.Message](msg M) bool {
@@ -75,4 +82,15 @@ func setProtoStringField(msg protoreflect.Message, name protoreflect.Name, value
 		return
 	}
 	msg.Set(field, protoreflect.ValueOfString(value))
+}
+
+func setProtoMessageField(msg protoreflect.Message, name protoreflect.Name, value gproto.Message) {
+	if protoMessageIsNil(value) || !msg.IsValid() {
+		return
+	}
+	field := msg.Descriptor().Fields().ByName(name)
+	if field == nil || field.Kind() != protoreflect.MessageKind {
+		return
+	}
+	msg.Set(field, protoreflect.ValueOfMessage(value.ProtoReflect()))
 }

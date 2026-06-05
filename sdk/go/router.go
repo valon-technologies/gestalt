@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 // Request carries execution-scoped metadata into typed handlers.
@@ -23,6 +25,7 @@ type Request struct {
 	ToolRefs         []AgentToolRef
 	ToolRefsSet      bool
 	invocationToken  string
+	requestContext   *proto.RequestContext
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -40,11 +43,11 @@ func (r Request) InvocationToken() string {
 }
 
 func (r Request) App() (App, error) {
-	return NewApp(r.invocationToken)
+	return NewAppFromRequest(r)
 }
 
 func (r Request) Workflow() (Workflow, error) {
-	client, err := newWorkflow(r.invocationToken)
+	client, err := newWorkflow(requestContextForRequest(r), r.InvocationToken(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +56,139 @@ func (r Request) Workflow() (Workflow, error) {
 }
 
 func (r Request) Agent() (Agent, error) {
-	return NewAgent(r.invocationToken)
+	return NewAgentFromRequest(r)
+}
+
+// RequestFromContext reconstructs the current provider request from ctx.
+func RequestFromContext(ctx context.Context) Request {
+	return Request{
+		ConnectionParams: ConnectionParams(ctx),
+		Subject:          SubjectFromContext(ctx),
+		AgentSubject:     AgentSubjectFromContext(ctx),
+		Credential:       CredentialFromContext(ctx),
+		Access:           AccessFromContext(ctx),
+		Host:             HostContextFromContext(ctx),
+		IdempotencyKey:   IdempotencyKeyFromContext(ctx),
+		ToolRefs:         ToolRefsFromContext(ctx),
+		ToolRefsSet:      ToolRefsSetFromContext(ctx),
+		invocationToken:  invocationTokenFromContext(ctx),
+		requestContext:   requestContextFromContext(ctx),
+	}
+}
+
+func requestContextForRequest(req Request) *proto.RequestContext {
+	reqCtx := cloneRequestContext(req.requestContext)
+	if reqCtx == nil {
+		reqCtx = &proto.RequestContext{}
+	}
+	if reqCtx.Subject == nil && !emptySubject(req.Subject) {
+		reqCtx.Subject = subjectContextFromSubject(req.Subject)
+	}
+	if reqCtx.AgentSubject == nil && !emptySubject(req.AgentSubject) {
+		reqCtx.AgentSubject = subjectContextFromSubject(req.AgentSubject)
+	}
+	if reqCtx.Credential == nil && !emptyCredential(req.Credential) {
+		reqCtx.Credential = &proto.CredentialContext{
+			Mode:       req.Credential.Mode,
+			SubjectId:  req.Credential.SubjectID,
+			Connection: req.Credential.Connection,
+			Instance:   req.Credential.Instance,
+		}
+	}
+	if reqCtx.Access == nil && !emptyAccess(req.Access) {
+		reqCtx.Access = &proto.AccessContext{Policy: req.Access.Policy, Role: req.Access.Role}
+	}
+	if reqCtx.Host == nil && req.Host.PublicBaseURL != "" {
+		reqCtx.Host = &proto.HostContext{PublicBaseUrl: req.Host.PublicBaseURL}
+	}
+	if !reqCtx.ToolRefsSet && req.ToolRefsSet {
+		reqCtx.ToolRefsSet = true
+		reqCtx.ToolRefs = agentToolRefsToProto(req.ToolRefs)
+	}
+	if emptyRequestContext(reqCtx) {
+		return nil
+	}
+	return reqCtx
+}
+
+func subjectContextFromSubject(subject Subject) *proto.SubjectContext {
+	return &proto.SubjectContext{
+		Id:                  subject.ID,
+		CredentialSubjectId: subject.CredentialSubjectID,
+		Email:               subject.Email,
+		DisplayName:         subject.DisplayName,
+		Scopes:              cloneStrings(subject.Scopes),
+		Permissions:         subjectPermissionsToProto(subject.Permissions),
+	}
+}
+
+func emptySubject(subject Subject) bool {
+	return subject.ID == "" && subject.CredentialSubjectID == "" && subject.Email == "" && subject.DisplayName == "" && len(subject.Scopes) == 0 && len(subject.Permissions) == 0
+}
+
+func subjectPermissionsToProto(values []SubjectPermission) []*proto.SubjectPermissionContext {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]*proto.SubjectPermissionContext, 0, len(values))
+	for _, value := range values {
+		app := strings.TrimSpace(value.App)
+		if app == "" {
+			continue
+		}
+		permission := &proto.SubjectPermissionContext{App: app}
+		if len(value.Operations) == 0 {
+			permission.AllOperations = true
+		} else {
+			permission.Operations = cloneStrings(value.Operations)
+		}
+		out = append(out, permission)
+	}
+	return out
+}
+
+func subjectPermissionsFromProto(values []*proto.SubjectPermissionContext) []SubjectPermission {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]SubjectPermission, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		app := strings.TrimSpace(value.GetApp())
+		if app == "" {
+			continue
+		}
+		permission := SubjectPermission{App: app}
+		if !value.GetAllOperations() {
+			permission.Operations = cloneStrings(value.GetOperations())
+		}
+		out = append(out, permission)
+	}
+	return out
+}
+
+func emptyCredential(credential Credential) bool {
+	return credential.Mode == "" && credential.SubjectID == "" && credential.Connection == "" && credential.Instance == ""
+}
+
+func emptyAccess(access Access) bool {
+	return access.Policy == "" && access.Role == ""
+}
+
+func emptyRequestContext(reqCtx *proto.RequestContext) bool {
+	return reqCtx == nil ||
+		reqCtx.Subject == nil &&
+			reqCtx.AgentSubject == nil &&
+			reqCtx.Credential == nil &&
+			reqCtx.Access == nil &&
+			reqCtx.Host == nil &&
+			reqCtx.Workflow == nil &&
+			!reqCtx.ToolRefsSet &&
+			reqCtx.Caller == nil &&
+			reqCtx.Invocation == nil &&
+			reqCtx.RequestMeta == nil
 }
 
 // Response is the typed handler result marshaled into the provider response body.
@@ -224,6 +359,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			ToolRefs:         ToolRefsFromContext(ctx),
 			ToolRefsSet:      ToolRefsSetFromContext(ctx),
 			invocationToken:  invocationTokenFromContext(ctx),
+			requestContext:   requestContextFromContext(ctx),
 		})
 	})
 	if result == nil {

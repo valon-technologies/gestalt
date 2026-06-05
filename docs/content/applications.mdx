@@ -653,7 +653,7 @@ details. Those come from the deployment bindings.
 Use `App` when executable app code needs to call another configured app as
 part of the same request. The caller must declare the
 allowed call graph in `apps.<caller>.invokes`; at runtime the SDK sends the
-current invocation token to the host, and the host preserves the original
+current request context to the host, and the host preserves the original
 subject, credential context, and permission ceiling for the nested call.
 
 ```yaml
@@ -791,7 +791,7 @@ apps:
   </Tabs.Tab>
 </Tabs>
 
-The nested call must fit inside the caller's configured `invokes` grant. Pass
+The nested call must fit inside the caller's configured `invokes` authorization relationship. Pass
 `connection`, `instance`, or an idempotency key when the target app should
 use a specific connected account, provider instance, or retry boundary. For raw
 GraphQL surfaces, use `InvokeGraphQL`, `invoke_graphql`, or `invokeGraphQL` in

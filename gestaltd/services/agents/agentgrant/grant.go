@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 const (
@@ -39,6 +40,8 @@ type Grant struct {
 	SessionID           string
 	TurnID              string
 	CallerAppName       string
+	CallerKind          invocation.ProviderKind
+	CallerName          string
 	SubjectID           string
 	CredentialSubjectID string
 	Permissions         []core.AccessPermission
@@ -55,6 +58,8 @@ type claims struct {
 	SessionID           string                  `json:"session_id,omitempty"`
 	TurnID              string                  `json:"turn_id,omitempty"`
 	CallerAppName       string                  `json:"caller_app_name,omitempty"`
+	CallerKind          string                  `json:"caller_kind,omitempty"`
+	CallerName          string                  `json:"caller_name,omitempty"`
 	CredentialSubjectID string                  `json:"credential_subject_id,omitempty"`
 	Permissions         []core.AccessPermission `json:"permissions,omitempty"`
 	ToolScope           string                  `json:"tool_scope,omitempty"`
@@ -91,6 +96,14 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 	if grant.ID == "" {
 		grant.ID = uuid.NewString()
 	}
+	callerKind := invocation.ProviderKind(strings.TrimSpace(string(grant.CallerKind)))
+	callerName := strings.TrimSpace(grant.CallerName)
+	if callerName == "" {
+		callerName = strings.TrimSpace(grant.CallerAppName)
+	}
+	if callerKind == "" && callerName != "" {
+		callerKind = invocation.ProviderKindApp
+	}
 	encoded := claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        grant.ID,
@@ -105,6 +118,8 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 		SessionID:           strings.TrimSpace(grant.SessionID),
 		TurnID:              strings.TrimSpace(grant.TurnID),
 		CallerAppName:       strings.TrimSpace(grant.CallerAppName),
+		CallerKind:          string(callerKind),
+		CallerName:          callerName,
 		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
 		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
 	}
@@ -148,12 +163,22 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 	if err := m.openValue(sealPurposeToolScope, strings.TrimSpace(decoded.ToolScope), &scope); err != nil {
 		return Grant{}, fmt.Errorf("agent run grant is invalid or expired")
 	}
+	callerKind := invocation.ProviderKind(strings.TrimSpace(decoded.CallerKind))
+	callerName := strings.TrimSpace(decoded.CallerName)
+	if callerName == "" {
+		callerName = strings.TrimSpace(decoded.CallerAppName)
+	}
+	if callerKind == "" && callerName != "" {
+		callerKind = invocation.ProviderKindApp
+	}
 	grant := Grant{
 		ID:                  strings.TrimSpace(decoded.ID),
 		ProviderName:        strings.TrimSpace(decoded.ProviderName),
 		SessionID:           strings.TrimSpace(decoded.SessionID),
 		TurnID:              strings.TrimSpace(decoded.TurnID),
 		CallerAppName:       strings.TrimSpace(decoded.CallerAppName),
+		CallerKind:          callerKind,
+		CallerName:          callerName,
 		SubjectID:           strings.TrimSpace(decoded.Subject),
 		CredentialSubjectID: strings.TrimSpace(decoded.CredentialSubjectID),
 		Permissions:         append([]core.AccessPermission(nil), decoded.Permissions...),

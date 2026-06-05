@@ -309,7 +309,7 @@ func TestAppInvocationExchangeRequiresExplicitGrantScope(t *testing.T) {
 		t.Fatalf("MintRootToken: %v", err)
 	}
 
-	server := NewAppServer(nil, manager)
+	server := NewAppServer(nil, WithInvocationTokenManager(manager))
 	_, err = server.ExchangeInvocationToken(context.Background(), &proto.ExchangeInvocationTokenRequest{
 		ParentInvocationToken: rootToken,
 		Grants: []*proto.AppInvocationGrant{{

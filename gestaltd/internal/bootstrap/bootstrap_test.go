@@ -39,6 +39,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -62,6 +63,18 @@ func bootstrapGraphQLStringPtr(value string) *string {
 
 func bootstrapTextAgentOutput() *proto.AgentOutput {
 	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
+}
+
+func bootstrapAgentRequestContext(t testing.TB, p *principal.Principal, callerName string) *proto.RequestContext {
+	t.Helper()
+	reqCtx, err := appaccessservice.RequestContextProto(principal.WithPrincipal(context.Background(), p), "", invocation.CallerProvider{
+		Kind: invocation.ProviderKindApp,
+		Name: callerName,
+	})
+	if err != nil {
+		t.Fatalf("RequestContextProto: %v", err)
+	}
+	return reqCtx
 }
 
 func bootstrapGraphQLSchema() graphqlschema.Schema {
@@ -802,7 +815,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 				SessionId: req.GetSessionId(),
 				TurnId:    turnID,
 				PageSize:  5,
-				RunGrant:  req.GetRunGrant(),
+				Context:   req.GetContext(),
 			}
 			listResp, err := client.ListTools(ctx, listReq)
 			if err != nil {
@@ -825,7 +838,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 				TurnId:     turnID,
 				ToolCallId: "tool-call-1",
 				ToolId:     tools[0].ID,
-				RunGrant:   req.GetRunGrant(),
+				Context:    req.GetContext(),
 				Arguments: func() *structpb.Struct {
 					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 					if err != nil {
@@ -2285,6 +2298,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Scopes:              principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 
 	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
@@ -2301,6 +2315,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "roadmap",
 			Operation: "sync",
@@ -2353,8 +2368,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if len(createTurnReq.GetToolRefs()) != 1 || createTurnReq.GetToolRefs()[0].GetApp() != "roadmap" || createTurnReq.GetToolRefs()[0].GetOperation() != "sync" {
 		t.Fatalf("CreateTurn tool refs = %#v", createTurnReq.GetToolRefs())
 	}
-	if strings.TrimSpace(createTurnReq.GetRunGrant()) == "" {
-		t.Fatal("CreateTurn run_grant is empty")
+	if createTurnReq.GetContext() == nil {
+		t.Fatal("CreateTurn context is empty")
 	}
 	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"subject":"user:user-123"`) || !strings.Contains(toolBodies[0], `"taskId":"task-123"`) {
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
@@ -2368,6 +2383,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it without explicit tools"}},
 		ToolRefsSet:    true,
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(global search): %v", err)
@@ -2376,7 +2392,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	globalToolBodies := append([]string(nil), provider.toolBodies...)
 	provider.mu.Unlock()
 	if len(globalToolBodies) != 1 {
-		t.Fatalf("global tool callback bodies = %#v, want no execution for empty catalog grant", globalToolBodies)
+		t.Fatalf("global tool callback bodies = %#v, want no execution for empty catalog scope", globalToolBodies)
 	}
 
 	_, err = result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
@@ -2386,6 +2402,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync ashby"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs:       []*proto.AgentToolRef{{App: "ashby", Operation: "sync"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
@@ -2583,6 +2600,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 
 	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
@@ -2599,6 +2617,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs:       []*proto.AgentToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
@@ -2622,6 +2641,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my assigned tickets"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs:       []*proto.AgentToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
@@ -2719,6 +2739,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 
 	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
@@ -2735,6 +2756,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "search docs"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs:       []*proto.AgentToolRef{{App: "docs"}},
 	})
 	if err != nil {
@@ -2796,6 +2818,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load beta docs"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs:       []*proto.AgentToolRef{{App: "docs", Operation: betaOperation}},
 	})
 	if err != nil {
@@ -2819,6 +2842,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load hidden docs"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		ToolRefs: []*proto.AgentToolRef{
 			{App: "*"},
 			{App: "docs", Operation: "aardvark_admin"},
@@ -2848,7 +2872,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	}
 }
 
-func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalogGrant(t *testing.T) {
+func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalogScope(t *testing.T) {
 	t.Parallel()
 
 	threshold := 0
@@ -2955,6 +2979,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 
 	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
@@ -2971,6 +2996,7 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "show me my linear tickets"}},
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
@@ -3082,7 +3108,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
-	turn, err := result.AgentManager.CreateTurn(agentmanager.WithCallerAppName(ctx, "slack"), p, &proto.CreateAgentProviderTurnRequest{
+	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "slack"), p, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "http-slack-linear-search",
@@ -3215,7 +3241,7 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
-	turn, err := result.AgentManager.CreateTurn(agentmanager.WithCallerAppName(ctx, "slack"), p, &proto.CreateAgentProviderTurnRequest{
+	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "slack"), p, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "http-global-linear-search",
@@ -3407,6 +3433,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 		SubjectID: "system:config",
 	}
 	startCtx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 	session, err := result.AgentManager.CreateSession(startCtx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
@@ -3419,6 +3446,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3509,6 +3537,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 		SubjectID: "system:config",
 	}
 	startCtx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 	session, err := result.AgentManager.CreateSession(startCtx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
@@ -3521,6 +3550,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3594,6 +3624,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 
 	p := &principal.Principal{SubjectID: "system:config"}
 	startCtx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 	session, err := result.AgentManager.CreateSession(startCtx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
@@ -3606,6 +3637,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3680,6 +3712,7 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 
 	p := &principal.Principal{SubjectID: "system:config"}
 	startCtx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 	session, err := result.AgentManager.CreateSession(startCtx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
@@ -3692,6 +3725,7 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -3750,6 +3784,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 
 	p := &principal.Principal{SubjectID: "system:config"}
 	startCtx := principal.WithPrincipal(context.Background(), p)
+	reqContext := bootstrapAgentRequestContext(t, p, "managed")
 	session, err := result.AgentManager.CreateSession(startCtx, p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
@@ -3762,6 +3797,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
+		Context:        reqContext,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
 			Text: "request approval",
@@ -5425,7 +5461,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, &proto.CreateAgentProviderTurnRequest{
+	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(startCtx, invocation.ProviderKindApp, "roadmap"), systemPrincipal, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -5448,8 +5484,8 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		stored.CompletedAt = nil
 	}
 	providerImpl.mu.Unlock()
-	if strings.TrimSpace(createTurnReq.GetRunGrant()) == "" {
-		t.Fatal("CreateTurn run_grant is empty")
+	if createTurnReq.GetContext() == nil {
+		t.Fatal("CreateTurn context is empty")
 	}
 	if len(createTurnReq.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
@@ -5458,7 +5494,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId: session.ID,
 		TurnId:    turn.ID,
 		PageSize:  5,
-		RunGrant:  createTurnReq.GetRunGrant(),
+		Context:   createTurnReq.GetContext(),
 	})
 	if len(listResp.GetTools()) != 1 {
 		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
@@ -5474,7 +5510,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-1",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		RunGrant:   createTurnReq.GetRunGrant(),
+		Context:    createTurnReq.GetContext(),
 	})
 	if err != nil {
 		t.Fatalf("invoke agent host callback: %v", err)
@@ -5495,7 +5531,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-mismatch",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		RunGrant:   createTurnReq.GetRunGrant(),
+		Context:    createTurnReq.GetContext(),
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback with mismatched session status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
@@ -5513,7 +5549,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-wrong-turn",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		RunGrant:   createTurnReq.GetRunGrant(),
+		Context:    createTurnReq.GetContext(),
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback with mismatched provider turn status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
@@ -5547,13 +5583,13 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		ToolCallId: "tool-call-2",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		RunGrant:   createTurnReq.RunGrant,
+		Context:    createTurnReq.GetContext(),
 	}); status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("invoke agent host callback after cancel status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
 }
 
-func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T) {
+func TestBootstrapDoesNotRevokeAgentScopeWhenCancelReturnsLiveTurn(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5616,7 +5652,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	turn, err := result.AgentManager.CreateTurn(startCtx, systemPrincipal, &proto.CreateAgentProviderTurnRequest{
+	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(startCtx, invocation.ProviderKindApp, "roadmap"), systemPrincipal, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -5636,8 +5672,8 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		stored.CompletedAt = nil
 	}
 	providerImpl.mu.Unlock()
-	if strings.TrimSpace(createTurnReq.GetRunGrant()) == "" {
-		t.Fatal("CreateTurn run_grant is empty")
+	if createTurnReq.GetContext() == nil {
+		t.Fatal("CreateTurn context is empty")
 	}
 	if len(createTurnReq.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
@@ -5646,7 +5682,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionId: session.ID,
 		TurnId:    turn.ID,
 		PageSize:  5,
-		RunGrant:  createTurnReq.GetRunGrant(),
+		Context:   createTurnReq.GetContext(),
 	})
 	if len(listResp.GetTools()) != 1 {
 		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
@@ -5662,7 +5698,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		ToolCallId: "tool-call-before-cancel",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		RunGrant:   createTurnReq.GetRunGrant(),
+		Context:    createTurnReq.GetContext(),
 	}); err != nil {
 		t.Fatalf("invoke agent host callback before cancel: %v", err)
 	}
@@ -5678,7 +5714,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		ToolCallId: "tool-call-after-live-cancel",
 		ToolId:     tool.GetId(),
 		Arguments:  args,
-		RunGrant:   createTurnReq.RunGrant,
+		Context:    createTurnReq.GetContext(),
 	}); err != nil {
 		t.Fatalf("invoke agent host callback after live cancel: %v", err)
 	}

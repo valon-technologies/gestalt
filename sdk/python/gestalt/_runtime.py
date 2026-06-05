@@ -22,7 +22,7 @@ from . import _runtime_provider as _runtime_provider_native
 from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
-from ._api import Access, Credential, Error, Host, Request, Subject
+from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPermission
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
@@ -456,9 +456,7 @@ def _servable_target(
         target, AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
-    if kind == ProviderKind.AUTHORIZATION and isinstance(
-        target, AuthorizationProvider
-    ):
+    if kind == ProviderKind.AUTHORIZATION and isinstance(target, AuthorizationProvider):
         return _authorization_runtime_plugin(target)
     if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
@@ -1060,8 +1058,10 @@ def _workflow_provider_servicer(provider: AppProvider) -> Any:
                 request,
                 context,
             )
-            return _workflow_native.list_workflow_provider_definitions_response_to_proto(
-                result
+            return (
+                _workflow_native.list_workflow_provider_definitions_response_to_proto(
+                    result
+                )
             )
 
         @_grpc_handler("workflow set definition paused")
@@ -1388,9 +1388,7 @@ def _provider_servicer(*, app: App) -> Any:
                 return app_pb2.OperationResult(
                     status=status,
                     body=body,
-                    headers=_proto_string_lists(
-                        {"Content-Type": [JSON_CONTENT_TYPE]}
-                    ),
+                    headers=_proto_string_lists({"Content-Type": [JSON_CONTENT_TYPE]}),
                 )
             return app_pb2.OperationResult(
                 status=result.status,
@@ -1584,9 +1582,7 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
     authorization_provider = cast(AuthorizationProvider, provider)
 
-    class AuthorizationServicer(
-        authorization_pb2_grpc.AuthorizationProviderServicer
-    ):
+    class AuthorizationServicer(authorization_pb2_grpc.AuthorizationProviderServicer):
         @_grpc_handler("authorization check access")
         def CheckAccess(self, request: Any, context: Any) -> Any:
             response = authorization_provider.check_access(
@@ -1645,14 +1641,18 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
         @_grpc_handler("authorization set authorization state")
         def SetAuthorizationState(self, request: Any, context: Any) -> Any:
             response = authorization_provider.set_authorization_state(
-                _authorization_native.set_authorization_state_request_from_proto(request)
+                _authorization_native.set_authorization_state_request_from_proto(
+                    request
+                )
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.set_authorization_state_response_to_proto(response)
+            return _authorization_native.set_authorization_state_response_to_proto(
+                response
+            )
 
         @_grpc_handler("authorization get active model ref")
         def GetActiveModelRef(self, _request: Any, context: Any) -> Any:
@@ -1662,7 +1662,9 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.get_active_model_ref_response_to_proto(response)
+            return _authorization_native.get_active_model_ref_response_to_proto(
+                response
+            )
 
         @_grpc_handler("authorization set active model")
         def SetActiveModel(self, request: Any, context: Any) -> Any:
@@ -1688,10 +1690,8 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return (
-                _authorization_native.list_active_model_resource_types_response_to_proto(
-                    response
-                )
+            return _authorization_native.list_active_model_resource_types_response_to_proto(
+                response
             )
 
     return AuthorizationServicer()
@@ -1797,22 +1797,22 @@ def _cache_servicer(*, provider: AppProvider) -> Any:
 
 
 def _plugin_request(request: Any) -> Request:
-    tool_refs, tool_refs_set = _tool_refs_from_proto(getattr(request, "context", None))
+    request_context = getattr(request, "context", None)
+    tool_refs, tool_refs_set = _tool_refs_from_proto(request_context)
     return Request(
         token=getattr(request, "token", ""),
         connection_params=dict(getattr(request, "connection_params", {})),
-        subject=_subject_from_proto(getattr(request, "context", None), "subject"),
-        agent_subject=_subject_from_proto(
-            getattr(request, "context", None), "agent_subject"
-        ),
-        credential=_credential_from_proto(getattr(request, "context", None)),
-        access=_access_from_proto(getattr(request, "context", None)),
-        host=_host_from_proto(getattr(request, "context", None)),
-        workflow=_workflow_from_proto(getattr(request, "context", None)),
+        subject=_subject_from_proto(request_context, "subject"),
+        agent_subject=_subject_from_proto(request_context, "agent_subject"),
+        credential=_credential_from_proto(request_context),
+        access=_access_from_proto(request_context),
+        invocation_token=getattr(request, "invocation_token", "").strip(),
+        host=_host_from_proto(request_context),
+        workflow=_workflow_from_proto(request_context),
         tool_refs=tool_refs,
         tool_refs_set=tool_refs_set,
         idempotency_key=getattr(request, "idempotency_key", "").strip(),
-        invocation_token=getattr(request, "invocation_token", ""),
+        context=request_context,
     )
 
 
@@ -1840,8 +1840,7 @@ def _http_subject_request(request: Any) -> HTTPSubjectRequest:
 
 def _proto_string_lists(values: dict[str, list[str]]) -> dict[str, Any]:
     return {
-        key: app_pb2.StringList(values=list(items))
-        for key, items in values.items()
+        key: app_pb2.StringList(values=list(items)) for key, items in values.items()
     }
 
 
@@ -1856,6 +1855,15 @@ def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
         credential_subject_id=getattr(subject, "credential_subject_id", ""),
         email=getattr(subject, "email", ""),
         display_name=getattr(subject, "display_name", ""),
+        scopes=list(getattr(subject, "scopes", ())),
+        permissions=[
+            SubjectPermission(
+                app=getattr(permission, "app", ""),
+                operations=list(getattr(permission, "operations", ())),
+                all_operations=bool(getattr(permission, "all_operations", False)),
+            )
+            for permission in getattr(subject, "permissions", ())
+        ],
     )
 
 

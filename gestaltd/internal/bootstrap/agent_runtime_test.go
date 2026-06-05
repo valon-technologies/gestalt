@@ -27,8 +27,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -40,6 +40,55 @@ import (
 
 func agentRuntimeTextOutput() *proto.AgentOutput {
 	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
+}
+
+func mustPutAgentRuntimeTurnScope(t testing.TB, scopes *agentturnscope.Store, scope agentturnscope.Scope) *proto.RequestContext {
+	t.Helper()
+	reqCtx, err := putAgentRuntimeTurnScope(scopes, scope)
+	if err != nil {
+		t.Fatalf("Put turn scope: %v", err)
+	}
+	return reqCtx
+}
+
+func putAgentRuntimeTurnScope(scopes *agentturnscope.Store, scope agentturnscope.Scope) (*proto.RequestContext, error) {
+	if scope.ProviderName == "" {
+		scope.ProviderName = "simple"
+	}
+	if scope.SessionID == "" {
+		scope.SessionID = "session-1"
+	}
+	if scope.TurnID == "" {
+		scope.TurnID = "turn-1"
+	}
+	if scope.CallerKind == "" {
+		scope.CallerKind = invocation.ProviderKindApp
+	}
+	if scope.CallerName == "" {
+		scope.CallerName = "caller"
+	}
+	if scope.SubjectID == "" {
+		scope.SubjectID = "system:agent-runtime-test"
+	}
+	if scope.CredentialSubjectID == "" {
+		scope.CredentialSubjectID = scope.SubjectID
+	}
+	if err := scopes.Put(scope); err != nil {
+		return nil, err
+	}
+	return &proto.RequestContext{
+		Caller: &proto.ProviderContext{
+			Kind: string(scope.CallerKind),
+			Name: scope.CallerName,
+		},
+		Subject: &proto.SubjectContext{
+			Id:                  scope.SubjectID,
+			CredentialSubjectId: scope.CredentialSubjectID,
+		},
+		Credential: &proto.CredentialContext{
+			SubjectId: scope.CredentialSubjectID,
+		},
+	}, nil
 }
 
 func buildAgentProviderBinary(t *testing.T) string {
@@ -267,22 +316,16 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newAgentRuntime() error = %v", err)
 	}
-	grants, err := agentgrant.NewManager(nil)
-	if err != nil {
-		t.Fatalf("agentgrant.NewManager() error = %v", err)
-	}
-	runGrant, err := grants.Mint(agentgrant.Grant{
+	scopes := newTestAgentTurnScopes()
+	reqCtx := mustPutAgentRuntimeTurnScope(t, scopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		SubjectID:    "system:agent-runtime-test",
-		Connections: []agentgrant.ConnectionBinding{
+		Connections: []agentturnscope.ConnectionBinding{
 			{Connection: "vertex"},
 		},
 	})
-	if err != nil {
-		t.Fatalf("Mint() error = %v", err)
-	}
 	expiresAt := time.Now().Add(time.Hour).UTC()
 	connectionRuntime := invocation.ConnectionRuntimeMap{
 		"simple": {
@@ -307,7 +350,8 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 			ExpiresAt: &expiresAt,
 		}, nil
 	}
-	runtime.SetRunGrants(grants)
+	runtime.SetTurnScopes(scopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 	runtime.SetInvoker(invocation.NewBroker(nil, nil, externalCredentials, invocation.WithConnectionRuntime(connectionRuntime.Resolve)))
 	runtime.PublishProvider("simple", &turnLookupAgentProvider{turn: &coreagent.Turn{
 		ID:        "turn-1",
@@ -320,7 +364,7 @@ func TestAgentRuntimeResolveConnectionUsesAgentConnectionRuntime(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		Connection:   "vertex",
-		RunGrant:     runGrant,
+		Context:      reqCtx,
 	})
 	if err != nil {
 		t.Fatalf("ResolveConnection() error = %v", err)
@@ -1101,7 +1145,8 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	}
 	services := testutil.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	agentRuntime.SetRunGrants(newTestAgentRunGrants(t))
+	agentRuntime.SetTurnScopes(newTestAgentTurnScopes())
+	agentRuntime.SetToolIDCodec(newTestAgentToolIDs(t))
 	deps := Deps{
 		BaseURL:              "https://gestalt.example.test",
 		EncryptionKey:        []byte("0123456789abcdef0123456789abcdef"),
@@ -1237,7 +1282,8 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	}
 	services := testutil.NewStubServices(t)
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	agentRuntime.SetRunGrants(newTestAgentRunGrants(t))
+	agentRuntime.SetTurnScopes(newTestAgentTurnScopes())
+	agentRuntime.SetToolIDCodec(newTestAgentToolIDs(t))
 	deps := Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
@@ -2204,8 +2250,9 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	invoker := &recordingAgentRuntimeInvoker{}
 	agentRuntime := &agentRuntime{providers: map[string]coreagent.Provider{}}
 	agentRuntime.SetInvoker(invoker)
-	runGrants := newTestAgentRunGrants(t)
-	agentRuntime.SetRunGrants(runGrants)
+	turnScopes := newTestAgentTurnScopes()
+	agentRuntime.SetTurnScopes(turnScopes)
+	agentRuntime.SetToolIDCodec(newTestAgentToolIDs(t))
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
@@ -2217,9 +2264,10 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 		}}},
 	})
 	agentRuntime.SetToolSearcher(agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
+		Providers:  providers,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    invoker,
 	}))
 	capturingRuntime := newCapturingRuntime()
 
@@ -2497,12 +2545,12 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testing.T) {
+func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactScope(t *testing.T) {
 	t.Parallel()
 
 	hidden := false
 	invoker := &recordingAgentRuntimeInvoker{}
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "slack",
 		ConnMode: core.ConnectionModeNone,
@@ -2519,9 +2567,10 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		}},
 	})
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
+		Providers:  providers,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -2538,10 +2587,11 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 	runtime.SetToolSearcher(manager)
 
-	modeGrant, err := runGrants.Mint(agentgrant.Grant{
+	modeContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2554,18 +2604,18 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint credential mode grant: %v", err)
+		t.Fatalf("Put credential mode turn scope: %v", err)
 	}
 	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
+		ToolID: mustMintAgentToolID(t, turnScopes, coreagent.ToolTarget{
 			App:            "slack",
 			Operation:      "chat.postMessage",
 			CredentialMode: core.ConnectionModeNone,
 		}),
-		RunGrant:  modeGrant,
+		Context:   modeContext,
 		Arguments: map[string]any{"text": "hello"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -2590,7 +2640,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	if len(exactTools) != 1 || !exactTools[0].Hidden {
 		t.Fatalf("ResolveTools exact hidden = %#v, want one hidden tool", exactTools)
 	}
-	exactGrant, err := runGrants.Mint(agentgrant.Grant{
+	exactContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2607,7 +2657,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint exact grant: %v", err)
+		t.Fatalf("Put exact turn scope: %v", err)
 	}
 	resp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "simple",
@@ -2615,7 +2665,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		TurnID:       "turn-1",
 		ToolCallID:   "call-1",
 		ToolID:       exactTools[0].ID,
-		RunGrant:     exactGrant,
+		Context:      exactContext,
 		Arguments:    map[string]any{"eventId": "evt-1"},
 	})
 	if err != nil {
@@ -2645,7 +2695,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
 			"simple": &routingAgentProvider{
@@ -2661,7 +2711,8 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 
 	runAs := &core.RunAsSubject{
 		SubjectID: "service_account:review-worker",
@@ -2676,14 +2727,14 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		CredentialMode: core.ConnectionModeNone,
 		RunAs:          runAs,
 	}
-	messageToolID := mustMintAgentToolID(t, runGrants, messageTarget)
-	reviewToolID := mustMintAgentToolID(t, runGrants, reviewTarget)
+	messageToolID := mustMintAgentToolID(t, turnScopes, messageTarget)
+	reviewToolID := mustMintAgentToolID(t, turnScopes, reviewTarget)
 	runtime.SetToolSearcher(staticAgentToolResolver{tools: []coreagent.Tool{
 		{ID: messageToolID, Target: messageTarget},
 		{ID: reviewToolID, Target: reviewTarget},
 	}})
 
-	grant, err := runGrants.Mint(agentgrant.Grant{
+	reqContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2699,7 +2750,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint runAs grant: %v", err)
+		t.Fatalf("Put runAs turn scope: %v", err)
 	}
 
 	if _, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -2707,7 +2758,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       messageToolID,
-		RunGrant:     grant,
+		Context:      reqContext,
 		Arguments:    map[string]any{"eventId": "evt-1"},
 	}); err != nil {
 		t.Fatalf("ExecuteTool source: %v", err)
@@ -2718,7 +2769,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       reviewToolID,
-		RunGrant:     grant,
+		Context:      reqContext,
 		Arguments:    map[string]any{"owner": "acme", "repo": "widgets"},
 	}); err != nil {
 		t.Fatalf("ExecuteTool target: %v", err)
@@ -2745,11 +2796,11 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 	}
 }
 
-func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
+func TestAgentRuntimeExecuteToolRejectsTerminalTurnScope(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
@@ -2759,9 +2810,10 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		}}},
 	})
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
+		Providers:  providers,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -2778,10 +2830,11 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 	runtime.SetToolSearcher(manager)
 
-	grant, err := runGrants.Mint(agentgrant.Grant{
+	reqContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2794,17 +2847,17 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint grant: %v", err)
+		t.Fatalf("Put turn scope: %v", err)
 	}
 	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
+		ToolID: mustMintAgentToolID(t, turnScopes, coreagent.ToolTarget{
 			App:       "roadmap",
 			Operation: "sync",
 		}),
-		RunGrant:  grant,
+		Context:   reqContext,
 		Arguments: map[string]any{"taskId": "task-123"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -2815,11 +2868,11 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.T) {
+func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefScope(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	providers := testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 		N:        "roadmap",
 		ConnMode: core.ConnectionModeNone,
@@ -2829,9 +2882,10 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		}}},
 	})
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
+		Providers:  providers,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -2852,10 +2906,11 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 	runtime.SetToolSearcher(manager)
 
-	grant, err := runGrants.Mint(agentgrant.Grant{
+	reqContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "requested-turn-1",
@@ -2868,14 +2923,17 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint grant: %v", err)
+		t.Fatalf("Put turn scope: %v", err)
+	}
+	if err := turnScopes.Alias("simple", "session-1", "requested-turn-1", "provider-turn-1"); err != nil {
+		t.Fatalf("Alias provider-owned turn scope: %v", err)
 	}
 	listResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
 		PageSize:     5,
-		RunGrant:     grant,
+		Context:      reqContext,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with provider-owned turn ID: %v", err)
@@ -2888,7 +2946,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SessionID:    "session-1",
 		TurnID:       "provider-turn-1",
 		ToolID:       listResp.Tools[0].ToolID,
-		RunGrant:     grant,
+		Context:      reqContext,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
@@ -2898,37 +2956,12 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		t.Fatalf("ExecuteTool response = %#v, want accepted task body", resp)
 	}
 
-	wrongGrant, err := runGrants.Mint(agentgrant.Grant{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "other-requested-turn",
-		SubjectID:    "user:user-123",
-		Permissions: []core.AccessPermission{{
-			App:        "roadmap",
-			Operations: []string{"sync"},
-		}},
-		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
-	})
-	if err != nil {
-		t.Fatalf("Mint wrong grant: %v", err)
-	}
-	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
-		ProviderName: "simple",
-		SessionID:    "session-1",
-		TurnID:       "provider-turn-1",
-		PageSize:     5,
-		RunGrant:     wrongGrant,
-	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ListTools wrong execution ref error = %v, want ErrAuthorizationDenied", err)
-	}
 }
 
 func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *testing.T) {
 	t.Parallel()
 
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
 			"simple": &routingAgentProvider{
@@ -2942,9 +2975,10 @@ func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *t
 			},
 		},
 	}
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 
-	grant, err := runGrants.Mint(agentgrant.Grant{
+	reqContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -2952,14 +2986,14 @@ func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *t
 		ToolSource:   coreagent.ToolSourceModeNone,
 	})
 	if err != nil {
-		t.Fatalf("Mint grant: %v", err)
+		t.Fatalf("Put turn scope: %v", err)
 	}
 
 	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "simple",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		RunGrant:     grant,
+		Context:      reqContext,
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("ListTools error = %v, want authorization denied before tool searcher", err)
@@ -2969,7 +3003,7 @@ func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *t
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       "not-a-minted-tool-id",
-		RunGrant:     grant,
+		Context:      reqContext,
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) || strings.Contains(err.Error(), "tool id is invalid") {
 		t.Fatalf("ExecuteTool error = %v, want source denial before tool id resolution", err)
@@ -2979,18 +3013,18 @@ func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *t
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		Connection:   "anthropic",
-		RunGrant:     grant,
+		Context:      reqContext,
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) || strings.Contains(err.Error(), "credential resolver is not configured") {
 		t.Fatalf("ResolveConnection error = %v, want source denial before credential resolver", err)
 	}
 }
 
-func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
+func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	readOnly := true
 	roadmapProvider := &coretesting.StubIntegration{
 		N:        "roadmap",
@@ -3046,9 +3080,10 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	}
 	providers := testutil.NewProviderRegistry(t, roadmapProvider, docsProvider)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: providers,
-		RunGrants: runGrants,
-		Invoker:   invoker,
+		Providers:  providers,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -3065,10 +3100,11 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 	runtime.SetToolSearcher(manager)
 
-	grant, err := runGrants.Mint(agentgrant.Grant{
+	reqContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3085,7 +3121,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint grant: %v", err)
+		t.Fatalf("Put turn scope: %v", err)
 	}
 
 	listResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
@@ -3093,7 +3129,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		RunGrant:     grant,
+		Context:      reqContext,
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -3124,7 +3160,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		TurnID:       "turn-1",
 		PageSize:     1,
 		Query:        "loud roadmap",
-		RunGrant:     grant,
+		Context:      reqContext,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with query: %v", err)
@@ -3139,7 +3175,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		t.Fatalf("listed query metadata = tags %#v search %q", queryResp.Tools[0].Tags, queryResp.Tools[0].SearchText)
 	}
 
-	emptyGrant, err := runGrants.Mint(agentgrant.Grant{
+	emptyContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3151,23 +3187,23 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint empty grant: %v", err)
+		t.Fatalf("Put empty turn scope: %v", err)
 	}
 	emptyListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		RunGrant:     emptyGrant,
+		Context:      emptyContext,
 	})
 	if err != nil {
-		t.Fatalf("ListTools with empty mcp catalog grant: %v", err)
+		t.Fatalf("ListTools with empty mcp catalog scope: %v", err)
 	}
 	if len(emptyListResp.Tools) != 0 || emptyListResp.NextPageToken != "" {
-		t.Fatalf("ListTools empty grant = %#v, want no tools", emptyListResp)
+		t.Fatalf("ListTools empty scope = %#v, want no tools", emptyListResp)
 	}
 
-	manyDocsGrant, err := runGrants.Mint(agentgrant.Grant{
+	manyDocsContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3180,14 +3216,14 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint docs grant: %v", err)
+		t.Fatalf("Put docs turn scope: %v", err)
 	}
 	pagedDocs, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     5,
-		RunGrant:     manyDocsGrant,
+		Context:      manyDocsContext,
 	})
 	if err != nil {
 		t.Fatalf("ListTools with small page size: %v", err)
@@ -3206,7 +3242,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		TurnID:       "turn-1",
 		PageSize:     10000,
 		PageToken:    pagedDocs.NextPageToken,
-		RunGrant:     manyDocsGrant,
+		Context:      manyDocsContext,
 	})
 	if err != nil {
 		t.Fatalf("ListTools final large page: %v", err)
@@ -3225,14 +3261,14 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       tool.ToolID,
-		RunGrant:     emptyGrant,
+		Context:      emptyContext,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ExecuteTool with empty mcp catalog grant error = %v, want ErrAuthorizationDenied", err)
+		t.Fatalf("ExecuteTool with empty mcp catalog scope error = %v, want ErrAuthorizationDenied", err)
 	}
 
-	broadGrant, err := runGrants.Mint(agentgrant.Grant{
+	broadContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3245,20 +3281,20 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint broad grant: %v", err)
+		t.Fatalf("Put broad turn scope: %v", err)
 	}
 	broadListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		RunGrant:     broadGrant,
+		Context:      broadContext,
 	})
 	if err != nil {
-		t.Fatalf("ListTools with broad mcp catalog grant: %v", err)
+		t.Fatalf("ListTools with broad mcp catalog scope: %v", err)
 	}
 	if broadListResp.NextPageToken != "" || len(broadListResp.Tools) != 1 || broadListResp.Tools[0].Ref.Operation != "sync" {
-		t.Fatalf("ListTools broad grant response = %#v, want sync tool", broadListResp)
+		t.Fatalf("ListTools broad scope response = %#v, want sync tool", broadListResp)
 	}
 
 	execResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -3266,11 +3302,11 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       tool.ToolID,
-		RunGrant:     grant,
+		Context:      reqContext,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
-		t.Fatalf("ExecuteTool with mcp catalog grant: %v", err)
+		t.Fatalf("ExecuteTool with mcp catalog scope: %v", err)
 	}
 	if execResp == nil || execResp.Status != http.StatusAccepted || execResp.Body != `{"taskId":"task-123"}` {
 		t.Fatalf("ExecuteTool response = %#v, want accepted task body", execResp)
@@ -3281,18 +3317,18 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       broadListResp.Tools[0].ToolID,
-		RunGrant:     broadGrant,
+		Context:      broadContext,
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
-		t.Fatalf("ExecuteTool with broad mcp catalog grant: %v", err)
+		t.Fatalf("ExecuteTool with broad mcp catalog scope: %v", err)
 	}
 	if broadExecResp == nil || broadExecResp.Status != http.StatusAccepted || broadExecResp.Body != `{"taskId":"task-123"}` {
 		t.Fatalf("ExecuteTool broad response = %#v, want accepted task body", broadExecResp)
 	}
 }
 
-func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing.T) {
+func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadScopes(t *testing.T) {
 	t.Parallel()
 
 	invoker := &reconnectingAgentRuntimeInvoker{
@@ -3300,7 +3336,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 			"linear": fmt.Errorf("%w: token expired and refresh failed", invocation.ErrReconnectRequired),
 		},
 	}
-	runGrants := newTestAgentRunGrants(t)
+	turnScopes := newTestAgentTurnScopes()
 	githubProvider := &coretesting.StubIntegration{
 		N:        "github",
 		ConnMode: core.ConnectionModeNone,
@@ -3321,9 +3357,10 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		},
 	}
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: testutil.NewProviderRegistry(t, githubProvider, linearProvider),
-		RunGrants: runGrants,
-		Invoker:   invoker,
+		Providers:  testutil.NewProviderRegistry(t, githubProvider, linearProvider),
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    invoker,
 	})
 	runtime := &agentRuntime{
 		providers: map[string]coreagent.Provider{
@@ -3340,10 +3377,11 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		},
 	}
 	runtime.SetInvoker(invoker)
-	runtime.SetRunGrants(runGrants)
+	runtime.SetTurnScopes(turnScopes)
+	runtime.SetToolIDCodec(newTestAgentToolIDs(t))
 	runtime.SetToolSearcher(manager)
 
-	broadGrant, err := runGrants.Mint(agentgrant.Grant{
+	broadContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3356,17 +3394,17 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint broad grant: %v", err)
+		t.Fatalf("Put broad turn scope: %v", err)
 	}
 	broadListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		RunGrant:     broadGrant,
+		Context:      broadContext,
 	})
 	if err != nil {
-		t.Fatalf("ListTools with broad grant: %v", err)
+		t.Fatalf("ListTools with broad scope: %v", err)
 	}
 	if len(broadListResp.Tools) != 2 || broadListResp.NextPageToken != "" {
 		t.Fatalf("ListTools broad response = %#v, want GitHub tool plus Linear sentinel", broadListResp)
@@ -3386,7 +3424,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID:       linearSentinel.ToolID,
-		RunGrant:     broadGrant,
+		Context:      broadContext,
 	})
 	if err != nil {
 		t.Fatalf("ExecuteTool sentinel: %v", err)
@@ -3398,7 +3436,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		t.Fatalf("ExecuteTool sentinel invoked provider = %#v, want no provider invoke", calls)
 	}
 
-	pluginGrant, err := runGrants.Mint(agentgrant.Grant{
+	pluginContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3411,14 +3449,14 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint app grant: %v", err)
+		t.Fatalf("Put app turn scope: %v", err)
 	}
 	pluginListResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		RunGrant:     pluginGrant,
+		Context:      pluginContext,
 	})
 	if err != nil {
 		t.Fatalf("ListTools plugin-level unavailable: %v", err)
@@ -3427,7 +3465,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		t.Fatalf("ListTools plugin-level unavailable = %#v, want only Linear sentinel", pluginListResp)
 	}
 
-	exactGrant, err := runGrants.Mint(agentgrant.Grant{
+	exactContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
@@ -3440,14 +3478,14 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 	})
 	if err != nil {
-		t.Fatalf("Mint exact grant: %v", err)
+		t.Fatalf("Put exact turn scope: %v", err)
 	}
 	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "claude",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		PageSize:     10,
-		RunGrant:     exactGrant,
+		Context:      exactContext,
 	})
 	if !errors.Is(err, invocation.ErrReconnectRequired) {
 		t.Fatalf("ListTools exact unavailable error = %v, want ErrReconnectRequired", err)
@@ -3663,7 +3701,8 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	}
 
 	runtimeState := &agentRuntime{providers: map[string]coreagent.Provider{}}
-	runtimeState.SetRunGrants(newTestAgentRunGrants(t))
+	runtimeState.SetTurnScopes(newTestAgentTurnScopes())
+	runtimeState.SetToolIDCodec(newTestAgentToolIDs(t))
 	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,

@@ -11,6 +11,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
@@ -102,7 +103,10 @@ func (r *remoteWorkflow) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	req.ProviderName = r.name
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationApplyDefinition, workflowDims{targetKind: workflowProtoTargetKind(req.GetSpec().GetTarget())})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.ApplyDefinition(ctx, req)
 }
@@ -111,7 +115,10 @@ func (r *remoteWorkflow) GetDefinition(ctx context.Context, req *proto.GetWorkfl
 	req = cloneWorkflowRequest(req, &proto.GetWorkflowProviderDefinitionRequest{}).(*proto.GetWorkflowProviderDefinitionRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetDefinition, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.GetDefinition(ctx, req)
 }
@@ -120,7 +127,10 @@ func (r *remoteWorkflow) ListDefinitions(ctx context.Context, req *proto.ListWor
 	req = cloneWorkflowRequest(req, &proto.ListWorkflowProviderDefinitionsRequest{}).(*proto.ListWorkflowProviderDefinitionsRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationListDefinitions, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.ListDefinitions(ctx, req)
 }
@@ -129,7 +139,10 @@ func (r *remoteWorkflow) SetDefinitionPaused(ctx context.Context, req *proto.Set
 	req = cloneWorkflowRequest(req, &proto.SetWorkflowProviderDefinitionPausedRequest{}).(*proto.SetWorkflowProviderDefinitionPausedRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSetDefinitionPaused, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.SetDefinitionPaused(ctx, req)
 }
@@ -138,7 +151,10 @@ func (r *remoteWorkflow) SetActivationPaused(ctx context.Context, req *proto.Set
 	req = cloneWorkflowRequest(req, &proto.SetWorkflowProviderActivationPausedRequest{}).(*proto.SetWorkflowProviderActivationPausedRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSetActivationPaused, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.SetActivationPaused(ctx, req)
 }
@@ -147,7 +163,10 @@ func (r *remoteWorkflow) DeleteDefinition(ctx context.Context, req *proto.Delete
 	req = cloneWorkflowRequest(req, &proto.DeleteWorkflowProviderDefinitionRequest{}).(*proto.DeleteWorkflowProviderDefinitionRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationDeleteDefinition, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return err
+	}
 	defer cancel()
 	_, err = r.client.DeleteDefinition(ctx, req)
 	return err
@@ -158,7 +177,10 @@ func (r *remoteWorkflow) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	req.ProviderName = r.name
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationStartRun, workflowDims{triggerKind: observability.WorkflowTriggerKindManual})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	run, err = r.client.StartRun(ctx, req)
 	if err != nil {
@@ -178,7 +200,10 @@ func (r *remoteWorkflow) GetRun(ctx context.Context, req *proto.GetWorkflowProvi
 	req = cloneWorkflowRequest(req, &proto.GetWorkflowProviderRunRequest{}).(*proto.GetWorkflowProviderRunRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetRun, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.GetRun(ctx, req)
 }
@@ -187,7 +212,10 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 	req = cloneWorkflowRequest(req, &proto.ListWorkflowProviderRunsRequest{}).(*proto.ListWorkflowProviderRunsRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationListRuns, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.ListRuns(ctx, req)
 }
@@ -196,7 +224,10 @@ func (r *remoteWorkflow) GetRunEvents(ctx context.Context, req *proto.GetWorkflo
 	req = cloneWorkflowRequest(req, &proto.GetWorkflowProviderRunEventsRequest{}).(*proto.GetWorkflowProviderRunEventsRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetRunEvents, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.GetRunEvents(ctx, req)
 }
@@ -205,7 +236,10 @@ func (r *remoteWorkflow) GetRunOutput(ctx context.Context, req *proto.GetWorkflo
 	req = cloneWorkflowRequest(req, &proto.GetWorkflowProviderRunOutputRequest{}).(*proto.GetWorkflowProviderRunOutputRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetRunOutput, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.GetRunOutput(ctx, req)
 }
@@ -214,7 +248,10 @@ func (r *remoteWorkflow) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 	req = cloneWorkflowRequest(req, &proto.CancelWorkflowProviderRunRequest{}).(*proto.CancelWorkflowProviderRunRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationCancelRun, workflowDims{})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.CancelRun(ctx, req)
 }
@@ -223,7 +260,10 @@ func (r *remoteWorkflow) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 	req = cloneWorkflowRequest(req, &proto.SignalWorkflowProviderRunRequest{}).(*proto.SignalWorkflowProviderRunRequest)
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSignalRun, workflowDims{triggerKind: observability.WorkflowTriggerKindSignal})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.SignalRun(ctx, req)
 }
@@ -233,7 +273,10 @@ func (r *remoteWorkflow) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	req.ProviderName = r.name
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSignalOrStartRun, workflowDims{triggerKind: observability.WorkflowTriggerKindSignal})
 	defer func() { end(err) }()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	out, err = r.client.SignalOrStartRun(ctx, req)
 	if err != nil {
@@ -259,7 +302,10 @@ func (r *remoteWorkflow) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 		end(err)
 		observability.RecordWorkflowEventDelivered(metricCtx, err, r.workflowMetricDims(observability.WorkflowOperationDeliverEvent, workflowDims{triggerKind: observability.WorkflowTriggerKindEvent}))
 	}()
-	ctx, cancel := workflowProviderRequestContext(ctx, req)
+	ctx, cancel, err := workflowProviderRequestContext(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	defer cancel()
 	return r.client.DeliverEvent(ctx, req)
 }
@@ -322,9 +368,13 @@ func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
 	return observability.WorkflowTargetKindUnknown
 }
 
-func workflowProviderRequestContext(ctx context.Context, req gproto.Message) (context.Context, context.CancelFunc) {
-	attachWorkflowProviderInvocationToken(ctx, req)
-	return runtimehost.ProviderCallContext(ctx)
+func workflowProviderRequestContext(ctx context.Context, req gproto.Message) (context.Context, context.CancelFunc, error) {
+	if err := attachWorkflowProviderRequestContext(ctx, req); err != nil {
+		cancelCtx, cancel := context.WithCancel(ctx)
+		return cancelCtx, cancel, err
+	}
+	callCtx, cancel := runtimehost.ProviderCallContext(ctx)
+	return callCtx, cancel, nil
 }
 
 func cloneWorkflowRequest(req gproto.Message, empty gproto.Message) gproto.Message {
@@ -334,17 +384,44 @@ func cloneWorkflowRequest(req gproto.Message, empty gproto.Message) gproto.Messa
 	return gproto.Clone(req)
 }
 
-func attachWorkflowProviderInvocationToken(ctx context.Context, req gproto.Message) {
+func attachWorkflowProviderRequestContext(ctx context.Context, req gproto.Message) error {
 	if req == nil {
-		return
+		return nil
 	}
+	attachWorkflowProviderInvocationToken(ctx, req)
+	reqCtx, err := appaccessservice.RequestContextProto(ctx, "", invocation.CallerProvider{})
+	if err != nil {
+		return err
+	}
+	if reqCtx == nil {
+		return nil
+	}
+	msg := req.ProtoReflect()
+	field := msg.Descriptor().Fields().ByName(protoreflect.Name("context"))
+	if field == nil || field.Kind() != protoreflect.MessageKind {
+		return nil
+	}
+	if msg.Has(field) {
+		existing, ok := msg.Get(field).Message().Interface().(*proto.RequestContext)
+		if !ok {
+			return nil
+		}
+		merged := appaccessservice.MergeRequestContext(existing, reqCtx)
+		msg.Set(field, protoreflect.ValueOfMessage(merged.ProtoReflect()))
+		return nil
+	}
+	msg.Set(field, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
+	return nil
+}
+
+func attachWorkflowProviderInvocationToken(ctx context.Context, req gproto.Message) {
 	token := strings.TrimSpace(appaccessservice.InvocationTokenFromContext(ctx))
-	if token == "" {
+	if token == "" || req == nil {
 		return
 	}
 	msg := req.ProtoReflect()
 	field := msg.Descriptor().Fields().ByName(protoreflect.Name("invocation_token"))
-	if field == nil || field.Kind() != protoreflect.StringKind {
+	if field == nil || field.Kind() != protoreflect.StringKind || msg.Get(field).String() != "" {
 		return
 	}
 	msg.Set(field, protoreflect.ValueOfString(token))

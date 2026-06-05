@@ -7,12 +7,12 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type agent struct {
 	client          proto.AgentProviderClient
 	invocationToken string
+	context         *proto.RequestContext
 }
 
 // Agent is the fakeable contract for managing agent sessions, turns, events, and interactions.
@@ -36,6 +36,15 @@ var sharedAgentTransport sharedManagerTransport[proto.AgentProviderClient]
 // NewAgent returns a capability that attaches invocationToken to every request
 // when one is available.
 func NewAgent(invocationToken string) (Agent, error) {
+	return newAgent(nil, strings.TrimSpace(invocationToken))
+}
+
+// NewAgentFromRequest returns an agent capability for the current provider request.
+func NewAgentFromRequest(req Request) (Agent, error) {
+	return newAgent(requestContextForRequest(req), req.InvocationToken())
+}
+
+func newAgent(reqCtx *proto.RequestContext, invocationToken string) (Agent, error) {
 	target, token, err := hostServiceTarget("agent")
 	if err != nil {
 		return nil, err
@@ -49,17 +58,30 @@ func NewAgent(invocationToken string) (Agent, error) {
 		return nil, err
 	}
 
-	return &agent{client: client, invocationToken: strings.TrimSpace(invocationToken)}, nil
+	return &agent{
+		client:          client,
+		invocationToken: strings.TrimSpace(invocationToken),
+		context:         cloneRequestContext(reqCtx),
+	}, nil
 }
 
-// AgentFromContext returns an Agent using the context invocation token.
+// AgentFromContext returns an Agent using the current provider request context.
 func AgentFromContext(ctx context.Context) (Agent, error) {
-	return NewAgent(InvocationTokenFromContext(ctx))
+	return newAgent(requestContextFromContext(ctx), InvocationTokenFromContext(ctx))
 }
 
 // Close is a no-op because this capability uses shared transport.
 func (c *agent) Close() error {
 	return nil
+}
+
+func (c *agent) attachAuth(ctx context.Context, req protoMessage) error {
+	reqCtx, err := requestContextForAgentCall(ctx, c.context)
+	if err != nil {
+		return err
+	}
+	attachHostServiceAuth(req, reqCtx, c.invocationToken)
+	return attachWorkflowContextField(ctx, req)
 }
 
 // CreateSession creates an agent session.
@@ -71,8 +93,7 @@ func (c *agent) CreateSession(ctx context.Context, input AgentCreateSession) (*A
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.CreateSession(ctx, req)
@@ -88,8 +109,7 @@ func (c *agent) GetSession(ctx context.Context, input AgentGetSession) (*AgentSe
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentGetSessionRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.GetSession(ctx, req)
@@ -99,14 +119,13 @@ func (c *agent) GetSession(ctx context.Context, input AgentGetSession) (*AgentSe
 	return agentSessionFromProto(resp), nil
 }
 
-// ListSessions lists agent sessions visible to the invocation token.
+// ListSessions lists agent sessions visible to the current request context.
 func (c *agent) ListSessions(ctx context.Context, input AgentListSessions) (*ListAgentSessionsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentListSessionsRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.ListSessions(ctx, req)
@@ -125,8 +144,7 @@ func (c *agent) UpdateSession(ctx context.Context, input AgentUpdateSession) (*A
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.UpdateSession(ctx, req)
@@ -145,8 +163,7 @@ func (c *agent) CreateTurn(ctx context.Context, input AgentCreateTurn) (*AgentTu
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.CreateTurn(ctx, req)
@@ -162,8 +179,7 @@ func (c *agent) GetTurn(ctx context.Context, input AgentGetTurn) (*AgentTurn, er
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentGetTurnRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.GetTurn(ctx, req)
@@ -179,8 +195,7 @@ func (c *agent) ListTurns(ctx context.Context, input AgentListTurns) (*ListAgent
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentListTurnsRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.ListTurns(ctx, req)
@@ -196,8 +211,7 @@ func (c *agent) CancelTurn(ctx context.Context, input AgentCancelTurn) (*AgentTu
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentCancelTurnRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.CancelTurn(ctx, req)
@@ -213,8 +227,7 @@ func (c *agent) ListTurnEvents(ctx context.Context, input AgentListTurnEvents) (
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentListTurnEventsRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.ListTurnEvents(ctx, req)
@@ -230,8 +243,7 @@ func (c *agent) ListInteractions(ctx context.Context, input AgentListInteraction
 		return nil, fmt.Errorf("agent: client is not initialized")
 	}
 	req := newAgentListInteractionsRequest(input)
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.ListInteractions(ctx, req)
@@ -250,8 +262,7 @@ func (c *agent) ResolveInteraction(ctx context.Context, input AgentResolveIntera
 	if err != nil {
 		return nil, err
 	}
-	req.InvocationToken = c.invocationToken
-	if err := attachAgentWorkflow(ctx, func(workflow *structpb.Struct) { req.Workflow = workflow }); err != nil {
+	if err := c.attachAuth(ctx, req); err != nil {
 		return nil, err
 	}
 	resp, err := c.client.ResolveInteraction(ctx, req)
@@ -261,23 +272,19 @@ func (c *agent) ResolveInteraction(ctx context.Context, input AgentResolveIntera
 	return agentInteractionFromProto(resp), nil
 }
 
-func attachAgentWorkflow(ctx context.Context, set func(*structpb.Struct)) error {
-	workflow, err := agentWorkflowContext(ctx)
-	if err != nil {
-		return err
-	}
-	set(workflow)
-	return nil
-}
-
-func agentWorkflowContext(ctx context.Context) (*structpb.Struct, error) {
+func requestContextForAgentCall(ctx context.Context, base *proto.RequestContext) (*proto.RequestContext, error) {
+	out := cloneRequestContext(base)
 	workflow := WorkflowContextFromContext(ctx)
 	if workflow == nil {
-		return nil, nil
+		return out, nil
 	}
 	msg, err := structFromAny(workflow)
 	if err != nil {
 		return nil, fmt.Errorf("agent: encode workflow context: %w", err)
 	}
-	return msg, nil
+	if out == nil {
+		out = &proto.RequestContext{}
+	}
+	out.Workflow = msg
+	return out, nil
 }

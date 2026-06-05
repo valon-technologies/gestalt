@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -40,19 +41,40 @@ const defaultWorkflowEventSpecVersion = "1.0"
 const workflowRunListDefaultPageSize = 100
 const workflowRunListMaxPageSize = 200
 
-type callerAppNameContextKey struct{}
-
-func WithCallerAppName(ctx context.Context, callerAppName string) context.Context {
-	callerAppName = strings.TrimSpace(callerAppName)
-	if callerAppName == "" {
-		return ctx
+func normalizeWorkflowCaller(caller invocation.CallerProvider) invocation.CallerProvider {
+	caller.Kind = invocation.ProviderKind(strings.TrimSpace(string(caller.Kind)))
+	caller.Name = strings.TrimSpace(caller.Name)
+	if caller.Kind == "" || caller.Name == "" {
+		return invocation.CallerProvider{}
 	}
-	return context.WithValue(ctx, callerAppNameContextKey{}, callerAppName)
+	return caller
 }
 
-func callerAppNameFromContext(ctx context.Context) string {
-	value, _ := ctx.Value(callerAppNameContextKey{}).(string)
-	return strings.TrimSpace(value)
+func workflowCaller(ctx context.Context, requested invocation.CallerProvider) invocation.CallerProvider {
+	if caller := normalizeWorkflowCaller(requested); caller.Kind != "" && caller.Name != "" {
+		return caller
+	}
+	return normalizeWorkflowCaller(invocation.CallerProviderFromContext(ctx))
+}
+
+func withWorkflowCaller(ctx context.Context, caller invocation.CallerProvider) context.Context {
+	caller = normalizeWorkflowCaller(caller)
+	if caller.Kind == "" || caller.Name == "" {
+		return ctx
+	}
+	return invocation.WithCallerProvider(ctx, caller.Kind, caller.Name)
+}
+
+func workflowCallerAuditAppName(caller invocation.CallerProvider) string {
+	caller = normalizeWorkflowCaller(caller)
+	if caller.Kind != invocation.ProviderKindApp {
+		return ""
+	}
+	return caller.Name
+}
+
+func workflowProviderRequestContext(ctx context.Context, p *principal.Principal, caller invocation.CallerProvider) (*proto.RequestContext, error) {
+	return appaccessservice.RequestContextProto(principal.WithPrincipal(ctx, p), "", normalizeWorkflowCaller(caller))
 }
 
 type WorkflowControl interface {
@@ -121,7 +143,7 @@ type DefinitionApply struct {
 	ProviderName   string
 	Spec           coreworkflow.DefinitionSpec
 	IdempotencyKey string
-	CallerAppName  string
+	Caller         invocation.CallerProvider
 }
 
 type RunStart struct {
@@ -131,7 +153,7 @@ type RunStart struct {
 	Input                        map[string]any
 	IdempotencyKey               string
 	WorkflowKey                  string
-	CallerAppName                string
+	Caller                       invocation.CallerProvider
 }
 
 type RunSignal struct {
@@ -147,7 +169,7 @@ type RunSignalOrStart struct {
 	Input                        map[string]any
 	IdempotencyKey               string
 	Signal                       coreworkflow.Signal
-	CallerAppName                string
+	Caller                       invocation.CallerProvider
 }
 
 type EventDeliver struct {
@@ -347,9 +369,14 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 	if m == nil || m.workflow == nil {
 		return nil, ErrWorkflowNotConfigured
 	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	p = principal.Canonicalized(p)
+	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
 		return nil, ErrWorkflowSubjectRequired
+	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
 	}
 	providerNames := m.providerNames()
 	states, err := decodeWorkflowRunListPageToken(req.PageToken, providerNames, req, pageSize)
@@ -395,6 +422,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 				PageToken: providerPageToken,
 				Status:    workflowwire.RunStatusToProto(req.Status),
 				TargetApp: strings.TrimSpace(req.TargetApp),
+				Context:   reqContext,
 			})
 			if err != nil {
 				return nil, err
@@ -850,6 +878,13 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
 	deliveredBySubjectID := workflowSubjectIDFromPrincipal(p)
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{
+		Kind: invocation.ProviderKindApp,
+		Name: appName,
+	})
+	if err != nil {
+		return coreworkflow.Event{}, err
+	}
 
 	if providerSelection != "" {
 		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
@@ -865,6 +900,7 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 			AppName:              appName,
 			Event:                eventProto,
 			DeliveredBySubjectId: deliveredBySubjectID,
+			Context:              reqContext,
 		})
 		if err != nil {
 			return coreworkflow.Event{}, err
@@ -901,6 +937,7 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 			AppName:              appName,
 			Event:                eventProto,
 			DeliveredBySubjectId: deliveredBySubjectID,
+			Context:              reqContext,
 		})
 		if err != nil {
 			providerAudit.finish(ctx, err)

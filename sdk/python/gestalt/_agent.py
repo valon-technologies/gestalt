@@ -8,7 +8,7 @@ from typing import Any, Protocol, TypeAlias
 
 import grpc
 
-from ._api import Subject
+from ._api import Request, Subject, SubjectPermission
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import app_pb2 as _app_pb
@@ -263,6 +263,7 @@ class AgentToolRef:
         self.system = system
         self.run_as = run_as
 
+
 @dataclass(slots=True)
 class AgentProviderCapabilities:
     streaming_text: bool = False
@@ -332,12 +333,14 @@ class CreateAgentProviderSessionRequest:
     subject: Subject | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
 class GetAgentProviderSessionRequest:
     session_id: str = ""
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -347,6 +350,8 @@ class ListAgentProviderSessionsRequest:
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     limit: int = 0
     summary_only: bool = False
+    provider_name: str = ""
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -361,6 +366,7 @@ class UpdateAgentProviderSessionRequest:
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     metadata: JsonObject | None = None
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -450,12 +456,14 @@ class CreateAgentProviderTurnRequest:
     model_options: JsonObject | None = None
     run_grant: str = ""
     timeout_seconds: int = 0
+    context: Any | None = None
 
 
 @dataclass(slots=True)
 class GetAgentProviderTurnRequest:
     turn_id: str = ""
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -466,6 +474,7 @@ class ListAgentProviderTurnsRequest:
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     limit: int = 0
     summary_only: bool = False
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -478,6 +487,7 @@ class CancelAgentProviderTurnRequest:
     turn_id: str = ""
     reason: str = ""
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -499,6 +509,7 @@ class ListAgentProviderTurnEventsRequest:
     after_seq: int = 0
     limit: int = 0
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -525,12 +536,14 @@ class AgentInteraction:
 class GetAgentProviderInteractionRequest:
     interaction_id: str = ""
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderInteractionsRequest:
     turn_id: str = ""
     subject: Subject | None = None
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -545,6 +558,8 @@ class ResolveAgentProviderInteractionRequest:
     interaction_id: str = ""
     resolution: JsonObject | None = None
     subject: Subject | None = None
+    turn_id: str = ""
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -561,6 +576,7 @@ class ExecuteAgentToolRequest:
     arguments: JsonObjectInput | None = None
     idempotency_key: str = ""
     run_grant: str = ""
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -605,6 +621,7 @@ class ListAgentToolsRequest:
     page_token: str = ""
     run_grant: str = ""
     query: str = ""
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -614,6 +631,7 @@ class ResolveAgentConnectionRequest:
     connection: str = ""
     instance: str = ""
     run_grant: str = ""
+    context: Any | None = None
 
 
 @dataclass(slots=True)
@@ -648,6 +666,7 @@ def create_agent_provider_session_request_from_proto(
         prepared_workspace=prepared_workspace_from_proto(request.prepared_workspace)
         if has_field(request, "prepared_workspace")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -659,6 +678,7 @@ def get_agent_provider_session_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -673,6 +693,8 @@ def list_agent_provider_sessions_request_from_proto(
         state=request.state,
         limit=request.limit,
         summary_only=request.summary_only,
+        provider_name=request.provider_name,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -689,6 +711,7 @@ def update_agent_provider_session_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -700,7 +723,6 @@ def create_agent_provider_turn_request_from_proto(
     if request.timeout_seconds < 0:
         raise ValueError("agent create turn timeout_seconds must not be negative")
     return CreateAgentProviderTurnRequest(
-        timeout_seconds=request.timeout_seconds,
         turn_id=request.turn_id,
         session_id=request.session_id,
         idempotency_key=request.idempotency_key,
@@ -722,6 +744,8 @@ def create_agent_provider_turn_request_from_proto(
         if has_field(request, "model_options")
         else None,
         run_grant=request.run_grant,
+        timeout_seconds=request.timeout_seconds,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -733,6 +757,7 @@ def get_agent_provider_turn_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -748,6 +773,7 @@ def list_agent_provider_turns_request_from_proto(
         status=request.status,
         limit=request.limit,
         summary_only=request.summary_only,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -760,6 +786,7 @@ def cancel_agent_provider_turn_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -773,6 +800,7 @@ def list_agent_provider_turn_events_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -784,6 +812,7 @@ def get_agent_provider_interaction_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -795,6 +824,7 @@ def list_agent_provider_interactions_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -809,6 +839,8 @@ def resolve_agent_provider_interaction_request_from_proto(
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
+        turn_id=request.turn_id,
+        context=request.context if has_field(request, "context") else None,
     )
 
 
@@ -822,7 +854,9 @@ def agent_session_to_proto(value: AgentSession | Mapping[str, Any]) -> Any:
         state=_int_field(session.state),
     )
     _copy_struct(out, "metadata", session.metadata)
-    _copy_scalar(out, "created_by_subject_id", (session.created_by_subject_id or "").strip())
+    _copy_scalar(
+        out, "created_by_subject_id", (session.created_by_subject_id or "").strip()
+    )
     _copy_timestamp(out, "created_at", session.created_at)
     _copy_timestamp(out, "updated_at", session.updated_at)
     _copy_timestamp(out, "last_turn_at", session.last_turn_at)
@@ -937,7 +971,9 @@ def agent_turn_to_proto(value: AgentTurn | Mapping[str, Any]) -> Any:
     if output is not None:
         field, message = output
         getattr(out, field).CopyFrom(message)
-    _copy_scalar(out, "created_by_subject_id", (turn.created_by_subject_id or "").strip())
+    _copy_scalar(
+        out, "created_by_subject_id", (turn.created_by_subject_id or "").strip()
+    )
     _copy_timestamp(out, "created_at", turn.created_at)
     _copy_timestamp(out, "started_at", turn.started_at)
     _copy_timestamp(out, "completed_at", turn.completed_at)
@@ -1150,14 +1186,21 @@ def agent_image_ref_to_proto(
     return pb.AgentMessagePartImageRef(uri=image_ref.uri, mime_type=image_ref.mime_type)
 
 
-
-
 def subject_from_proto(value: Any) -> Subject:
     return Subject(
         id=value.id,
         credential_subject_id=value.credential_subject_id,
         email=value.email,
-        display_name=value.display_name,
+        display_name=getattr(value, "display_name", ""),
+        scopes=list(getattr(value, "scopes", ())),
+        permissions=[
+            SubjectPermission(
+                app=getattr(permission, "app", ""),
+                operations=list(getattr(permission, "operations", ())),
+                all_operations=bool(getattr(permission, "all_operations", False)),
+            )
+            for permission in getattr(value, "permissions", ())
+        ],
     )
 
 
@@ -1172,6 +1215,15 @@ def subject_to_proto(
         credential_subject_id=subject.credential_subject_id,
         email=subject.email,
         display_name=subject.display_name,
+        scopes=list(subject.scopes),
+        permissions=[
+            _app_pb.SubjectPermissionContext(
+                app=permission.app,
+                operations=list(permission.operations),
+                all_operations=permission.all_operations,
+            )
+            for permission in subject.permissions
+        ],
     )
 
 
@@ -1222,9 +1274,7 @@ def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:
         title=value.title,
         description=value.description,
         system=value.system,
-        run_as=subject_from_proto(value.run_as)
-        if has_field(value, "run_as")
-        else None,
+        run_as=subject_from_proto(value.run_as) if has_field(value, "run_as") else None,
     )
 
 
@@ -1481,6 +1531,7 @@ def execute_agent_tool_request_to_proto(
         run_grant=request.run_grant,
     )
     _copy_struct(out, "arguments", request.arguments)
+    _copy_message(out, "context", request.context)
     return out
 
 
@@ -1488,7 +1539,7 @@ def list_agent_tools_request_to_proto(
     value: ListAgentToolsRequest | Mapping[str, Any],
 ) -> Any:
     request = _coerce(value, ListAgentToolsRequest, "ListAgentToolsRequest")
-    return pb.ListAgentToolsRequest(
+    out = pb.ListAgentToolsRequest(
         session_id=request.session_id,
         turn_id=request.turn_id,
         page_size=_int_field(request.page_size),
@@ -1496,6 +1547,8 @@ def list_agent_tools_request_to_proto(
         run_grant=request.run_grant,
         query=request.query,
     )
+    _copy_message(out, "context", request.context)
+    return out
 
 
 def resolve_agent_connection_request_to_proto(
@@ -1506,13 +1559,15 @@ def resolve_agent_connection_request_to_proto(
         ResolveAgentConnectionRequest,
         "ResolveAgentConnectionRequest",
     )
-    return pb.ResolveAgentConnectionRequest(
+    out = pb.ResolveAgentConnectionRequest(
         session_id=request.session_id,
         turn_id=request.turn_id,
         connection=request.connection,
         instance=request.instance,
         run_grant=request.run_grant,
     )
+    _copy_message(out, "context", request.context)
+    return out
 
 
 def _coerce(value: Any, cls: type[Any], field_name: str) -> Any:
@@ -1554,15 +1609,27 @@ def _copy_value(target: Any, field: str, value: Any) -> None:
 def subject_to_dict(subject: Any) -> dict[str, Any]:
     """Convert an ``Subject`` value to a dictionary."""
 
-    return _message_fields(
+    out = _message_fields(
         subject,
         (
             "id",
             "credential_subject_id",
             "email",
             "display_name",
+            "scopes",
         ),
     )
+    permissions = [
+        {
+            "app": permission.app,
+            "operations": list(permission.operations),
+            "all_operations": permission.all_operations,
+        }
+        for permission in getattr(subject, "permissions", ())
+    ]
+    if permissions:
+        out["permissions"] = permissions
+    return out
 
 
 def subject_from_dict(value: Mapping[str, Any] | None) -> Any:
@@ -1574,6 +1641,15 @@ def subject_from_dict(value: Mapping[str, Any] | None) -> Any:
         credential_subject_id=data.get("credential_subject_id", ""),
         email=data.get("email", ""),
         display_name=data.get("display_name", ""),
+        scopes=list(data.get("scopes", ())),
+        permissions=[
+            SubjectPermission(
+                app=permission.get("app", ""),
+                operations=list(permission.get("operations", ())),
+                all_operations=bool(permission.get("all_operations", False)),
+            )
+            for permission in data.get("permissions", ())
+        ],
     )
 
 
@@ -1761,6 +1837,7 @@ class AgentHostProtocol(Protocol):
         tool_id: str,
         arguments: Mapping[str, Any] | None = None,
         run_grant: str = "",
+        context: Any | None = None,
         idempotency_key: str = "",
         timeout_seconds: float | None = None,
     ) -> ExecuteAgentToolResponse:
@@ -1780,10 +1857,11 @@ class AgentHostProtocol(Protocol):
         session_id: str,
         turn_id: str,
         *,
-        run_grant: str = "",
         page_size: int = 0,
         page_token: str = "",
+        run_grant: str = "",
         query: str = "",
+        context: Any | None = None,
         timeout_seconds: float | None = None,
     ) -> ListAgentToolsResponse:
         """List host tools for one turn."""
@@ -1805,6 +1883,7 @@ class AgentHostProtocol(Protocol):
         connection: str,
         instance: str = "",
         run_grant: str = "",
+        context: Any | None = None,
         timeout_seconds: float | None = None,
     ) -> ResolvedAgentConnection:
         """Resolve an agent connection for one turn."""
@@ -1855,6 +1934,7 @@ class AgentHost:
         tool_id: str,
         arguments: JsonObjectInput | None = None,
         run_grant: str = "",
+        context: Any | None = None,
         idempotency_key: str = "",
         timeout_seconds: float | None = None,
     ) -> ExecuteAgentToolResponse:
@@ -1868,6 +1948,7 @@ class AgentHost:
                 tool_id=tool_id,
                 arguments=arguments,
                 run_grant=run_grant,
+                context=context,
                 idempotency_key=idempotency_key,
             ),
             timeout_seconds=timeout_seconds,
@@ -1893,10 +1974,11 @@ class AgentHost:
         session_id: str,
         turn_id: str,
         *,
-        run_grant: str = "",
         page_size: int = 0,
         page_token: str = "",
+        run_grant: str = "",
         query: str = "",
+        context: Any | None = None,
         timeout_seconds: float | None = None,
     ) -> ListAgentToolsResponse:
         """List host tools using plain Python request fields."""
@@ -1905,10 +1987,11 @@ class AgentHost:
             ListAgentToolsRequest(
                 session_id=session_id,
                 turn_id=turn_id,
-                run_grant=run_grant,
                 page_size=page_size,
                 page_token=page_token,
+                run_grant=run_grant,
                 query=query,
+                context=context,
             ),
             timeout_seconds=timeout_seconds,
         )
@@ -1936,6 +2019,7 @@ class AgentHost:
         connection: str,
         instance: str = "",
         run_grant: str = "",
+        context: Any | None = None,
         timeout_seconds: float | None = None,
     ) -> ResolvedAgentConnection:
         """Resolve an agent connection using plain Python request fields."""
@@ -1947,6 +2031,7 @@ class AgentHost:
                 connection=connection,
                 instance=instance,
                 run_grant=run_grant,
+                context=context,
             ),
             timeout_seconds=timeout_seconds,
         )
@@ -1993,9 +2078,7 @@ def _agent_workspace_value(value: Any | None) -> Any | None:
     )
 
 
-def _agent_create_session_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
+def _agent_create_session_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.CreateAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2018,9 +2101,7 @@ def _agent_get_session_request(value: Any | None = None, **kwargs: Any) -> Any:
     return pb.GetAgentProviderSessionRequest(session_id=data.get("session_id", ""))
 
 
-def _agent_list_sessions_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
+def _agent_list_sessions_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.ListAgentProviderSessionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2032,9 +2113,7 @@ def _agent_list_sessions_request(
     )
 
 
-def _agent_update_session_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
+def _agent_update_session_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.UpdateAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2107,9 +2186,7 @@ def _agent_cancel_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def _agent_list_turn_events_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
+def _agent_list_turn_events_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.ListAgentProviderTurnEventsRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2120,18 +2197,14 @@ def _agent_list_turn_events_request(
     )
 
 
-def _agent_list_interactions_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
+def _agent_list_interactions_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.ListAgentProviderInteractionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
     return pb.ListAgentProviderInteractionsRequest(turn_id=data.get("turn_id", ""))
 
 
-def _agent_resolve_interaction_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
+def _agent_resolve_interaction_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.ResolveAgentProviderInteractionRequest):
         return _copy(value)
     data = _data(value, kwargs)
@@ -2197,15 +2270,16 @@ class AgentProtocol(Protocol):
 class Agent:
     """Client for managing agent sessions, turns, events, and interactions.
 
-    This capability is for provider code that receives an invocation token and then
-    needs to call the host's agent API. Each request passed to a
-    method is mutated to include that invocation token before the RPC is sent.
+    This capability is for provider code that receives a Gestalt request or
+    legacy invocation token and needs to call the host's agent API.
     """
 
     def __init__(
-        self, invocation_token: str, *, workflow: JsonObjectInput | None = None
+        self,
+        request: Request | str,
+        *,
+        workflow: JsonObjectInput | None = None,
     ) -> None:
-        trimmed_token = invocation_token.strip()
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"agent: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2213,7 +2287,14 @@ class Agent:
 
         self._channel = host_service_channel("agent", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)
-        self._invocation_token = trimmed_token
+        self._invocation_token = ""
+        self._context = None
+        if isinstance(request, Request):
+            self._invocation_token = request.invocation_token.strip()
+            self._context = request.context
+            workflow = request.workflow
+        else:
+            self._invocation_token = request.strip()
         self._workflow = struct_from_dict(workflow) if workflow else None
 
     def close(self) -> None:
@@ -2221,9 +2302,7 @@ class Agent:
 
         self._channel.close()
 
-    def create_session(
-        self, request: Any | None = None, **kwargs: Any
-    ) -> AgentSession:
+    def create_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
         """Create an agent session."""
 
         request = _agent_create_session_request(request, **kwargs)
@@ -2240,7 +2319,7 @@ class Agent:
     def list_sessions(
         self, request: Any | None = None, **kwargs: Any
     ) -> ListAgentSessionsResponse:
-        """List agent sessions visible to the invocation token."""
+        """List agent sessions visible to the request context."""
 
         request = _agent_list_sessions_request(request, **kwargs)
         self._attach_context(request)
@@ -2248,9 +2327,7 @@ class Agent:
             _grpc_call(self._stub.ListSessions, request)
         )
 
-    def update_session(
-        self, request: Any | None = None, **kwargs: Any
-    ) -> AgentSession:
+    def update_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
         """Update mutable fields on an agent session."""
 
         request = _agent_update_session_request(request, **kwargs)
@@ -2323,9 +2400,12 @@ class Agent:
         )
 
     def _attach_context(self, request: Any) -> None:
-        request.invocation_token = self._invocation_token
+        if hasattr(request, "invocation_token"):
+            request.invocation_token = self._invocation_token
         if self._workflow is not None and hasattr(request, "workflow"):
             request.workflow.CopyFrom(self._workflow)
+        if self._context is not None and hasattr(request, "context"):
+            request.context.CopyFrom(self._context)
 
     def __enter__(self) -> Agent:
         """Return the client for ``with`` statements."""

@@ -688,6 +688,27 @@ func (i *relayTestInvoker) snapshot() relayTestInvokerCall {
 	}
 }
 
+type relayAllowAuthorizationProvider struct {
+	core.AuthorizationProvider
+}
+
+func (relayAllowAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{Allowed: true}, nil
+}
+
+func relayAppRequestContext() *proto.RequestContext {
+	return &proto.RequestContext{
+		Caller: &proto.ProviderContext{
+			Kind: string(invocation.ProviderKindApp),
+			Name: "support",
+		},
+		Subject: &proto.SubjectContext{
+			Id:                  "user:test-user",
+			CredentialSubjectId: "user:test-user",
+		},
+	}
+}
+
 type relayTestSessionVerifier struct {
 	mu     sync.Mutex
 	active map[string]bool
@@ -1081,17 +1102,17 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invocationTokens, err := appaccessservice.NewInvocationTokenManager(secret)
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("relay-session")
 	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
 		Name:           "app",
 		MethodPrefixes: []string{"/" + proto.App_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppServer(srv, appaccessservice.NewServer(invoker, invocationTokens))
+			proto.RegisterAppServer(srv, appaccessservice.NewServer(
+				invoker,
+				appaccessservice.WithAuthorizationProvider(relayAllowAuthorizationProvider{}),
+				appaccessservice.WithCallerApp("support", nil),
+			))
 		},
 	})
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
@@ -1117,28 +1138,17 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintToken: %v", err)
 	}
-	principalCtx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user:test-user",
-		UserID:    "test-user",
-		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
-	})
-	invocationToken, err := invocationTokens.MintRootToken(principalCtx, "support", appaccessservice.AllInvocationGrants())
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-
 	conn := newRelayGRPCConn(t, ts)
 	defer func() { _ = conn.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
-		InvocationToken: invocationToken,
-		App:             "slack",
-		Operation:       "events.reply",
-		Instance:        "prod",
-		IdempotencyKey:  "relay-call",
+		Context:        relayAppRequestContext(),
+		App:            "slack",
+		Operation:      "events.reply",
+		Instance:       "prod",
+		IdempotencyKey: "relay-call",
 	})
 	if err != nil {
 		t.Fatalf("AppInvocation.Invoke via registered relay: %v", err)
@@ -1152,9 +1162,9 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 	defer staleCancel()
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 	_, err = proto.NewAppClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
-		InvocationToken: invocationToken,
-		App:             "slack",
-		Operation:       "events.reply",
+		Context:   relayAppRequestContext(),
+		App:       "slack",
+		Operation: "events.reply",
 	})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
 		t.Fatalf("AppInvocation.Invoke stale session code = %v, want %v (err=%v)", grpcstatus.Code(err), codes.Unauthenticated, err)

@@ -23,21 +23,26 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func newServerTestAgentRunGrants(t testing.TB) *agentgrant.Manager {
+func newServerTestAgentToolIDs(t testing.TB) *agenttoolid.Codec {
 	t.Helper()
-	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
+	codec, err := agenttoolid.NewCodec([]byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
-		t.Fatalf("agentgrant.NewManager: %v", err)
+		t.Fatalf("agenttoolid.NewCodec: %v", err)
 	}
-	return grants
+	return codec
+}
+
+func newServerTestAgentTurnScopes() *agentturnscope.Store {
+	return agentturnscope.NewStore()
 }
 
 func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
@@ -60,8 +65,9 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     agentControl,
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      agentControl,
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -122,8 +128,9 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     agentControl,
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      agentControl,
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -826,7 +833,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 					ReadOnly: true,
 				}}},
 			}),
-			RunGrants: newServerTestAgentRunGrants(t),
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1111,8 +1119,9 @@ func TestAgentHarnessResolveUsesDefaultAndNamedHarness(t *testing.T) {
 			},
 		}
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     agentControl,
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      agentControl,
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1200,7 +1209,8 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 					ReadOnly: true,
 				}}},
 			}),
-			RunGrants: newServerTestAgentRunGrants(t),
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1284,8 +1294,9 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     agentControl,
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      agentControl,
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1360,8 +1371,9 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1414,8 +1426,9 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1510,9 +1523,10 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			Providers: testutil.NewProviderRegistry(t),
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			Providers:  testutil.NewProviderRegistry(t),
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1571,8 +1585,9 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 		cfg.Auth = nil
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1629,8 +1644,9 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 		cfg.APIRouteTimeout = 25 * time.Millisecond
 		cfg.AgentStreamHeartbeat = time.Millisecond
@@ -1749,8 +1765,9 @@ func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *test
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -1859,8 +1876,9 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
-			Agent:     &stubAgentControl{defaultProviderName: "managed", provider: provider},
-			RunGrants: newServerTestAgentRunGrants(t),
+			Agent:      &stubAgentControl{defaultProviderName: "managed", provider: provider},
+			TurnScopes: newServerTestAgentTurnScopes(),
+			ToolIDs:    newServerTestAgentToolIDs(t),
 		})
 	})
 	testutil.CloseOnCleanup(t, ts)

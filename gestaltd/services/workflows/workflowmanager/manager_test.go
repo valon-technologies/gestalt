@@ -53,6 +53,23 @@ func testWorkflowManagerPrincipal() *principal.Principal {
 	})
 }
 
+func testWorkflowManagerCaller() invocation.CallerProvider {
+	return invocation.CallerProvider{Kind: invocation.ProviderKindApp, Name: "github"}
+}
+
+func requireWorkflowManagerRequestContext(t *testing.T, reqCtx *proto.RequestContext, kind invocation.ProviderKind, name string) {
+	t.Helper()
+	if got := reqCtx.GetSubject().GetId(); got != principal.UserSubjectID("ada") {
+		t.Fatalf("request context subject = %q, want user:ada", got)
+	}
+	if got := reqCtx.GetCaller().GetKind(); got != string(kind) {
+		t.Fatalf("request context caller kind = %q, want %q", got, kind)
+	}
+	if got := reqCtx.GetCaller().GetName(); got != name {
+		t.Fatalf("request context caller name = %q, want %q", got, name)
+	}
+}
+
 func testWorkflowManagerWithGithub(t *testing.T, provider *testWorkflowProvider) *Manager {
 	return New(Config{
 		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
@@ -78,7 +95,7 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 
 	definition, err := manager.ApplyDefinition(context.Background(), caller, DefinitionApply{
 		ProviderName:   "local",
-		CallerAppName:  "github",
+		Caller:         testWorkflowManagerCaller(),
 		IdempotencyKey: "definition-apply-1",
 		Spec: coreworkflow.DefinitionSpec{
 			ID:     "definition-1",
@@ -101,10 +118,14 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 	if definition == nil || definition.Definition == nil || definition.Definition.ID != "definition-1" || definition.Definition.Generation != 1 {
 		t.Fatalf("definition = %#v", definition)
 	}
+	if len(provider.applyRequests) != 1 {
+		t.Fatalf("apply requests = %#v", provider.applyRequests)
+	}
+	requireWorkflowManagerRequestContext(t, provider.applyRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 
 	run, err := manager.StartRun(context.Background(), caller, RunStart{
 		ProviderName:   "local",
-		CallerAppName:  "github",
+		Caller:         testWorkflowManagerCaller(),
 		DefinitionID:   "definition-1",
 		WorkflowKey:    "github:issues:triage",
 		Input:          map[string]any{"issue": map[string]any{"number": 42}},
@@ -129,6 +150,7 @@ func TestApplyDefinitionAndStartRunUseDefinitionGenerationAndInput(t *testing.T)
 	if len(provider.startRunRequests) != 1 || provider.startRunRequests[0].GetExpectedDefinitionGeneration() != 1 {
 		t.Fatalf("start requests = %#v", provider.startRunRequests)
 	}
+	requireWorkflowManagerRequestContext(t, provider.startRunRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 }
 
 func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
@@ -146,8 +168,8 @@ func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
 	}
 
 	if _, err := manager.ApplyDefinition(context.Background(), caller, DefinitionApply{
-		ProviderName:  "local",
-		CallerAppName: "github",
+		ProviderName: "local",
+		Caller:       testWorkflowManagerCaller(),
 		Spec: coreworkflow.DefinitionSpec{
 			ID:     "definition-1",
 			Target: testWorkflowAppStepTarget("github", "issues.triage", nil),
@@ -157,7 +179,7 @@ func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
 	}
 	signaled, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
 		ProviderName:   "local",
-		CallerAppName:  "github",
+		Caller:         testWorkflowManagerCaller(),
 		WorkflowKey:    "github:issue:42",
 		DefinitionID:   "definition-1",
 		Input:          map[string]any{"issue_number": 42},
@@ -176,9 +198,10 @@ func TestSignalOrStartRunRequiresDefinitionAndCarriesInput(t *testing.T) {
 	if len(provider.signalOrStartRequests) != 1 || provider.signalOrStartRequests[0].GetDefinitionId() != "definition-1" {
 		t.Fatalf("signal requests = %#v", provider.signalOrStartRequests)
 	}
+	requireWorkflowManagerRequestContext(t, provider.signalOrStartRequests[0].GetContext(), invocation.ProviderKindApp, "github")
 }
 
-func TestDeliverEventPreservesCallerAppName(t *testing.T) {
+func TestDeliverEventPreservesCallerApp(t *testing.T) {
 	t.Parallel()
 
 	provider := newTestWorkflowProvider()
@@ -212,12 +235,13 @@ func TestDeliverEventPreservesCallerAppName(t *testing.T) {
 		if req.GetEvent().GetSource() != "github" {
 			t.Fatalf("deliveredEvents[%d].Event.Source = %q, want github", i, req.GetEvent().GetSource())
 		}
+		requireWorkflowManagerRequestContext(t, req.GetContext(), invocation.ProviderKindApp, "github")
 	}
 
 	if _, err := manager.DeliverEvent(context.Background(), caller, EventDeliver{
 		Event: coreworkflow.Event{Type: "issue.deleted"},
 	}); !errors.Is(err, ErrWorkflowEventSourceRequired) {
-		t.Fatalf("DeliverEvent without caller app error = %v, want ErrWorkflowEventSourceRequired", err)
+		t.Fatalf("DeliverEvent without source app error = %v, want ErrWorkflowEventSourceRequired", err)
 	}
 }
 

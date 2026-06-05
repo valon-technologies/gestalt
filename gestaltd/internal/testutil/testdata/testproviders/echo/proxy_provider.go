@@ -22,37 +22,24 @@ type executableProvider interface {
 	Execute(context.Context, string, map[string]any, string) (*gestalt.OperationResult, error)
 }
 
-type invocationTokenContextKey struct{}
-
 type proxyProvider struct {
 	inner executableProvider
 }
 
-func withInvocationToken(ctx context.Context, token string) context.Context {
-	return context.WithValue(ctx, invocationTokenContextKey{}, strings.TrimSpace(token))
-}
-
-func invocationTokenFromContext(ctx context.Context) string {
-	token, _ := ctx.Value(invocationTokenContextKey{}).(string)
-	return strings.TrimSpace(token)
-}
-
 type invokePluginInput struct {
-	App             string         `json:"app"`
-	Operation       string         `json:"operation"`
-	Connection      string         `json:"connection,omitempty"`
-	Instance        string         `json:"instance,omitempty"`
-	InvocationToken string         `json:"invocation_token,omitempty"`
-	Params          map[string]any `json:"params,omitempty"`
+	App        string         `json:"app"`
+	Operation  string         `json:"operation"`
+	Connection string         `json:"connection,omitempty"`
+	Instance   string         `json:"instance,omitempty"`
+	Params     map[string]any `json:"params,omitempty"`
 }
 
 type invokePluginGraphQLInput struct {
-	App             string         `json:"app"`
-	Document        string         `json:"document"`
-	Connection      string         `json:"connection,omitempty"`
-	Instance        string         `json:"instance,omitempty"`
-	InvocationToken string         `json:"invocation_token,omitempty"`
-	Variables       map[string]any `json:"variables,omitempty"`
+	App        string         `json:"app"`
+	Document   string         `json:"document"`
+	Connection string         `json:"connection,omitempty"`
+	Instance   string         `json:"instance,omitempty"`
+	Variables  map[string]any `json:"variables,omitempty"`
 }
 
 type workflowDefinitionStepInput struct {
@@ -86,30 +73,26 @@ type workflowActivationInput struct {
 }
 
 type applyWorkflowDefinitionInput struct {
-	DefinitionID    string                      `json:"definition_id"`
-	ProviderName    string                      `json:"provider_name,omitempty"`
-	Target          workflowDefinitionStepInput `json:"target"`
-	Activations     []workflowActivationInput   `json:"activations,omitempty"`
-	Paused          bool                        `json:"paused,omitempty"`
-	InvocationToken string                      `json:"invocation_token,omitempty"`
+	DefinitionID string                      `json:"definition_id"`
+	ProviderName string                      `json:"provider_name,omitempty"`
+	Target       workflowDefinitionStepInput `json:"target"`
+	Activations  []workflowActivationInput   `json:"activations,omitempty"`
+	Paused       bool                        `json:"paused,omitempty"`
 }
 
 type workflowDefinitionIDInput struct {
-	DefinitionID    string `json:"definition_id"`
-	InvocationToken string `json:"invocation_token,omitempty"`
+	DefinitionID string `json:"definition_id"`
 }
 
 type setWorkflowDefinitionPausedInput struct {
-	DefinitionID    string `json:"definition_id"`
-	Paused          bool   `json:"paused"`
-	InvocationToken string `json:"invocation_token,omitempty"`
+	DefinitionID string `json:"definition_id"`
+	Paused       bool   `json:"paused"`
 }
 
 type setWorkflowActivationPausedInput struct {
-	DefinitionID    string `json:"definition_id"`
-	ActivationID    string `json:"activation_id"`
-	Paused          bool   `json:"paused"`
-	InvocationToken string `json:"invocation_token,omitempty"`
+	DefinitionID string `json:"definition_id"`
+	ActivationID string `json:"activation_id"`
+	Paused       bool   `json:"paused"`
 }
 
 type deliverWorkflowEventInput struct {
@@ -123,7 +106,6 @@ type deliverWorkflowEventInput struct {
 	DataContentType string         `json:"data_content_type,omitempty"`
 	Data            map[string]any `json:"data,omitempty"`
 	Extensions      map[string]any `json:"extensions,omitempty"`
-	InvocationToken string         `json:"invocation_token,omitempty"`
 }
 
 type echoInput struct {
@@ -181,7 +163,7 @@ func proxyOperation[In any](id, method string) gestalt.Registration[proxyProvide
 			if err != nil {
 				return gestalt.Response[json.RawMessage]{}, err
 			}
-			result, err := p.Execute(withInvocationToken(ctx, req.InvocationToken()), id, params, req.Token)
+			result, err := p.Execute(ctx, id, params, req.Token)
 			if err != nil {
 				return gestalt.Response[json.RawMessage]{}, err
 			}
@@ -241,16 +223,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
 
-		invocationToken := input.InvocationToken
-		if invocationToken == "" {
-			invocationToken = invocationTokenFromContext(ctx)
-		}
-		if invocationToken == "" {
-			envelope["error"] = "invocation token is not available"
-			return jsonResult(http.StatusOK, envelope), nil
-		}
-
-		invoker, err := gestalt.NewApp(invocationToken)
+		invoker, err := gestalt.AppFromContext(ctx)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -294,16 +267,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
 
-		invocationToken := input.InvocationToken
-		if invocationToken == "" {
-			invocationToken = invocationTokenFromContext(ctx)
-		}
-		if invocationToken == "" {
-			envelope["error"] = "invocation token is not available"
-			return jsonResult(http.StatusOK, envelope), nil
-		}
-
-		invoker, err := gestalt.NewApp(invocationToken)
+		invoker, err := gestalt.AppFromContext(ctx)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -333,7 +297,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
+		client, err := workflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -365,7 +329,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
+		client, err := workflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -383,7 +347,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
+		client, err := workflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -402,7 +366,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
+		client, err := workflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -422,7 +386,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
+		client, err := workflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -439,7 +403,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx, input.InvocationToken)
+		client, err := workflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -621,12 +585,8 @@ func decodeJSONParams[T any](params map[string]any) (T, error) {
 	return input, nil
 }
 
-func workflowFromContext(ctx context.Context, invocationToken string) (gestalt.Workflow, error) {
-	token := strings.TrimSpace(invocationToken)
-	if token == "" {
-		token = invocationTokenFromContext(ctx)
-	}
-	return gestalt.NewWorkflow(token)
+func workflowFromContext(ctx context.Context) (gestalt.Workflow, error) {
+	return gestalt.WorkflowFromContext(ctx)
 }
 
 func workflowDefinitionTargetInput(target workflowDefinitionStepInput) (*gestalt.BoundWorkflowTarget, error) {
