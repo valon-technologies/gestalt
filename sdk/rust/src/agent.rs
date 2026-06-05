@@ -1266,6 +1266,7 @@ fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject
         id: value.id,
         credential_subject_id: value.credential_subject_id,
         email: value.email,
+        display_name: value.display_name,
     })
 }
 
@@ -1300,6 +1301,7 @@ fn agent_run_as_context_from_proto(value: Option<pb::SubjectContext>) -> Option<
         id: value.id,
         credential_subject_id: value.credential_subject_id,
         email: value.email,
+        display_name: value.display_name,
     })
 }
 
@@ -1308,6 +1310,7 @@ fn agent_run_as_context_to_proto(value: Option<Subject>) -> Option<pb::SubjectCo
         id: value.id,
         credential_subject_id: value.credential_subject_id,
         email: value.email,
+        display_name: value.display_name,
     })
 }
 

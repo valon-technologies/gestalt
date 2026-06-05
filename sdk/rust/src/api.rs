@@ -28,6 +28,8 @@ pub struct Subject {
     pub credential_subject_id: String,
     /// Email address resolved by the Gestalt host for user subjects.
     pub email: String,
+    /// Human-readable display name resolved by the Gestalt host for user subjects.
+    pub display_name: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

@@ -77,6 +77,15 @@ credential subject, including a caller, subject-owned API token owner, or
 Auth types: `oauth2`, `mcp_oauth`, `bearer`, `manual`, `none`. See
 [Config File > connections](/reference/config-file#connections).
 
+## Caller identity on `request.subject`
+
+Executable app handlers receive the authenticated caller on
+`request.subject`. For interactive users, `request.subject.displayName` is
+populated from the platform session (typically the OIDC `name` claim). It is
+not a directory lookup API. `request.subject.email` carries the resolved email
+when the host knows it. Service accounts may populate `displayName` directly on
+the subject id.
+
 ## Filtering operations and egress
 
 ### `allowedOperations`

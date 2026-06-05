@@ -231,6 +231,7 @@ func subjectFromProto(value *proto.SubjectContext) *Subject {
 		ID:                  value.GetId(),
 		CredentialSubjectID: value.GetCredentialSubjectId(),
 		Email:               value.GetEmail(),
+		DisplayName:         value.GetDisplayName(),
 	}
 }
 
@@ -242,6 +243,7 @@ func subjectToProto(value *Subject) *proto.SubjectContext {
 		Id:                  value.ID,
 		CredentialSubjectId: value.CredentialSubjectID,
 		Email:               value.Email,
+		DisplayName:         value.DisplayName,
 	}
 }
 

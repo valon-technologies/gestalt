@@ -93,6 +93,7 @@ type Subject struct {
 	ID                  string
 	CredentialSubjectID string
 	Email               string
+	DisplayName         string
 }
 
 // Credential describes the resolved credential used to authorize a request.

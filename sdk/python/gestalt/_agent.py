@@ -1157,6 +1157,7 @@ def subject_from_proto(value: Any) -> Subject:
         id=value.id,
         credential_subject_id=value.credential_subject_id,
         email=value.email,
+        display_name=value.display_name,
     )
 
 
@@ -1170,6 +1171,7 @@ def subject_to_proto(
         id=subject.id,
         credential_subject_id=subject.credential_subject_id,
         email=subject.email,
+        display_name=subject.display_name,
     )
 
 
@@ -1558,6 +1560,7 @@ def subject_to_dict(subject: Any) -> dict[str, Any]:
             "id",
             "credential_subject_id",
             "email",
+            "display_name",
         ),
     )
 
@@ -1570,6 +1573,7 @@ def subject_from_dict(value: Mapping[str, Any] | None) -> Any:
         id=data.get("id", ""),
         credential_subject_id=data.get("credential_subject_id", ""),
         email=data.get("email", ""),
+        display_name=data.get("display_name", ""),
     )
 
 

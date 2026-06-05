@@ -333,6 +333,7 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 			Id:                  subjectIDForPrincipal(p),
 			CredentialSubjectId: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
 			Email:               subjectEmail(p),
+			DisplayName:         subjectDisplayName(p),
 		}
 	}
 
@@ -389,6 +390,19 @@ func subjectIDForPrincipal(p *principal.Principal) string {
 		return ""
 	}
 	return p.SubjectID
+}
+
+func subjectDisplayName(p *principal.Principal) string {
+	if p == nil {
+		return ""
+	}
+	if displayName := strings.TrimSpace(p.DisplayName); displayName != "" {
+		return displayName
+	}
+	if p.Identity == nil {
+		return ""
+	}
+	return strings.TrimSpace(p.Identity.DisplayName)
 }
 
 func subjectEmail(p *principal.Principal) string {

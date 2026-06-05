@@ -142,6 +142,7 @@ message SubjectContext {
   string id = 1;
   string credential_subject_id = 2;
   string email = 3;
+  string display_name = 4;
 }
 
 message AgentToolRef {

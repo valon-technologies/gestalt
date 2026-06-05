@@ -620,6 +620,7 @@ export function createProviderService(
               id: subject.id,
               credentialSubjectId: subject.credentialSubjectId ?? "",
               email: subject.email ?? "",
+              displayName: subject.displayName ?? "",
             },
           }
         : {});
@@ -835,12 +836,14 @@ function providerRequest(
       id: subject?.id ?? "",
       credentialSubjectId: subject?.credentialSubjectId ?? "",
       email: subject?.email ?? "",
+      displayName: subject?.displayName ?? "",
       kind: subjectKind(subject?.id ?? ""),
     },
     agentSubject: {
       id: agentSubject?.id ?? "",
       credentialSubjectId: agentSubject?.credentialSubjectId ?? "",
       email: agentSubject?.email ?? "",
+      displayName: agentSubject?.displayName ?? "",
       kind: subjectKind(agentSubject?.id ?? ""),
     },
     credential: {

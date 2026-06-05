@@ -344,6 +344,9 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 	if got := reqCtx.GetSubject().GetEmail(); got != "" {
 		t.Fatalf("subject email = %q, want empty", got)
 	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
+		t.Fatalf("subject display_name = %q, want Triage Bot", got)
+	}
 	if reqCtx.GetAccess() == nil || reqCtx.GetAccess().GetPolicy() != "roadmap" || reqCtx.GetAccess().GetRole() != "viewer" {
 		t.Fatalf("unexpected access context: %#v", reqCtx.GetAccess())
 	}
@@ -372,6 +375,9 @@ func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
 	}
 	if got := reqCtx.GetSubject().GetEmail(); got != "ada@example.com" {
 		t.Fatalf("subject email = %q, want ada@example.com", got)
+	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Ada Lovelace" {
+		t.Fatalf("subject display_name = %q, want Ada Lovelace", got)
 	}
 }
 

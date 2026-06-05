@@ -79,6 +79,7 @@ pub fn workflow_subject_from_proto(input: pb::SubjectContext) -> Subject {
         id: input.id,
         credential_subject_id: input.credential_subject_id,
         email: input.email,
+        display_name: input.display_name,
     }
 }
 
@@ -87,6 +88,7 @@ pub fn workflow_subject_to_proto(input: Subject) -> pb::SubjectContext {
         id: input.id,
         credential_subject_id: input.credential_subject_id,
         email: input.email,
+        display_name: input.display_name,
     }
 }
 

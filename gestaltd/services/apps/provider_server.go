@@ -93,7 +93,8 @@ func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.Reso
 	}
 	return &proto.ResolveHTTPSubjectResponse{
 		Subject: &proto.SubjectContext{
-			Id: subject.ID,
+			Id:          subject.ID,
+			DisplayName: subject.DisplayName,
 		},
 	}, nil
 }
@@ -159,20 +160,25 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	if subject == nil {
 		return nil
 	}
+	displayName := strings.TrimSpace(subject.GetDisplayName())
 	email := strings.TrimSpace(subject.GetEmail())
 	p := &principal.Principal{
 		SubjectID:           subject.GetId(),
 		CredentialSubjectID: strings.TrimSpace(subject.GetCredentialSubjectId()),
+		DisplayName:         displayName,
 	}
 	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
 		p.Kind = principal.Kind(kind)
 	}
 	p.UserID = principal.UserIDFromSubjectID(p.SubjectID)
 	p = principal.Canonicalized(p)
-	if p.Kind == principal.KindUser && email != "" {
-		p.Identity = &core.UserIdentity{Email: email}
+	if p.Kind == principal.KindUser && (displayName != "" || email != "") {
+		p.Identity = &core.UserIdentity{
+			Email:       email,
+			DisplayName: displayName,
+		}
 	}
-	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
+	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
 		return &principal.Principal{}
 	}
 	return p
