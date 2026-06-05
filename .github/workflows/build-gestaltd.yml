@@ -7,7 +7,6 @@ on:
     paths:
       - '.dockerignore'
       - '.github/workflows/build-gestaltd.yml'
-      - 'docs/**'
       - 'gestaltd/**'
       - 'sdk/go/**'
       - 'sdk/proto/**'
@@ -15,7 +14,6 @@ on:
     paths:
       - '.dockerignore'
       - '.github/workflows/build-gestaltd.yml'
-      - 'docs/**'
       - 'gestaltd/**'
       - 'sdk/go/**'
       - 'sdk/proto/**'
@@ -251,55 +249,6 @@ jobs:
             go test -race "${parallel_flag[@]}" -timeout=15m "${RACE_PACKAGES}"
           fi
 
-  docs-build:
-    name: Docs Build
-    needs: resolve-ref
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: docs
-
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ needs.resolve-ref.outputs.sha }}
-          fetch-depth: 0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: docs/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build current docs
-        run: npm run build
-
-      - name: Check SDK docs
-        run: npm run test:sdk-docs
-
-      - name: Check SDK API docs publish contract
-        run: npm run test:sdk-api-docs
-
-      - name: Fetch main docs source
-        run: git fetch origin main
-
-      - name: Build versioned docs smoke site
-        run: npm run build:versioned:test
-
-      - name: Test static docs routing
-        run: npm run test:registry
-
-      - name: Test nginx docs routing
-        run: npm run test:nginx-routing
-
-      - name: Test installer
-        run: npm run test:installer
-
   helm-validate:
     name: Helm Chart Validation
     needs: resolve-ref
@@ -406,9 +355,19 @@ jobs:
             --tag gestaltd:ci-alpine \
             .
 
+  docs-build:
+    name: Docs Build
+    needs: resolve-ref
+    if: ${{ needs.resolve-ref.outputs.publish == 'true' && vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED == 'true' }}
+    uses: ./.github/workflows/build-docs.yml
+    with:
+      gestalt_ref: ${{ needs.resolve-ref.outputs.sha }}
+    permissions:
+      contents: read
+
   publish-ci-image:
     name: Publish CI Image
-    needs: [resolve-ref, lint, test, coverage, race, docs-build, helm-validate, docker-build]
+    needs: [resolve-ref, lint, test, coverage, race, helm-validate, docker-build, docs-build]
     if: ${{ needs.resolve-ref.outputs.publish == 'true' && vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
