@@ -6,12 +6,12 @@ pub mod app_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** AppProvider models the shared Gestalt integration-provider protocol.
-*/
+    */
     #[derive(Debug, Clone)]
     pub struct AppProviderClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -50,14 +50,13 @@ pub mod app_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             AppProviderClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -96,139 +95,97 @@ pub mod app_provider_client {
         pub async fn get_metadata(
             &mut self,
             request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::ProviderMetadata>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ProviderMetadata>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AppProvider/GetMetadata",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AppProvider", "GetMetadata"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AppProvider",
+                "GetMetadata",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn start_provider(
             &mut self,
             request: impl tonic::IntoRequest<super::StartProviderRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::StartProviderResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::StartProviderResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AppProvider/StartProvider",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AppProvider", "StartProvider"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AppProvider",
+                "StartProvider",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn execute(
             &mut self,
             request: impl tonic::IntoRequest<super::ExecuteRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::OperationResult>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AppProvider/Execute",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AppProvider/Execute");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.AppProvider", "Execute"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AppProvider",
+                "Execute",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn resolve_http_subject(
             &mut self,
             request: impl tonic::IntoRequest<super::ResolveHttpSubjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ResolveHttpSubjectResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ResolveHttpSubjectResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AppProvider/ResolveHTTPSubject",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AppProvider",
-                        "ResolveHTTPSubject",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AppProvider",
+                "ResolveHTTPSubject",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn get_session_catalog(
             &mut self,
             request: impl tonic::IntoRequest<super::GetSessionCatalogRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetSessionCatalogResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::GetSessionCatalogResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AppProvider/GetSessionCatalog",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AppProvider",
-                        "GetSessionCatalog",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AppProvider",
+                "GetSessionCatalog",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -240,7 +197,7 @@ pub mod app_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AppProviderServer.
@@ -250,18 +207,12 @@ pub mod app_provider_server {
         async fn get_metadata(
             &self,
             request: tonic::Request<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::ProviderMetadata>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ProviderMetadata>, tonic::Status>;
         ///
         async fn start_provider(
             &self,
             request: tonic::Request<super::StartProviderRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::StartProviderResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::StartProviderResponse>, tonic::Status>;
         ///
         async fn execute(
             &self,
@@ -271,21 +222,15 @@ pub mod app_provider_server {
         async fn resolve_http_subject(
             &self,
             request: tonic::Request<super::ResolveHttpSubjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ResolveHttpSubjectResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ResolveHttpSubjectResponse>, tonic::Status>;
         ///
         async fn get_session_catalog(
             &self,
             request: tonic::Request<super::GetSessionCatalogRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetSessionCatalogResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::GetSessionCatalogResponse>, tonic::Status>;
     }
     /** AppProvider models the shared Gestalt integration-provider protocol.
-*/
+    */
     #[derive(Debug)]
     pub struct AppProviderServer<T> {
         inner: Arc<T>,
@@ -307,10 +252,7 @@ pub mod app_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -365,13 +307,9 @@ pub mod app_provider_server {
                 "/gestalt.provider.v1.AppProvider/GetMetadata" => {
                     #[allow(non_camel_case_types)]
                     struct GetMetadataSvc<T: AppProvider>(pub Arc<T>);
-                    impl<T: AppProvider> tonic::server::UnaryService<()>
-                    for GetMetadataSvc<T> {
+                    impl<T: AppProvider> tonic::server::UnaryService<()> for GetMetadataSvc<T> {
                         type Response = super::ProviderMetadata;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -405,15 +343,11 @@ pub mod app_provider_server {
                 "/gestalt.provider.v1.AppProvider/StartProvider" => {
                     #[allow(non_camel_case_types)]
                     struct StartProviderSvc<T: AppProvider>(pub Arc<T>);
-                    impl<
-                        T: AppProvider,
-                    > tonic::server::UnaryService<super::StartProviderRequest>
-                    for StartProviderSvc<T> {
+                    impl<T: AppProvider> tonic::server::UnaryService<super::StartProviderRequest>
+                        for StartProviderSvc<T>
+                    {
                         type Response = super::StartProviderResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StartProviderRequest>,
@@ -450,23 +384,16 @@ pub mod app_provider_server {
                 "/gestalt.provider.v1.AppProvider/Execute" => {
                     #[allow(non_camel_case_types)]
                     struct ExecuteSvc<T: AppProvider>(pub Arc<T>);
-                    impl<
-                        T: AppProvider,
-                    > tonic::server::UnaryService<super::ExecuteRequest>
-                    for ExecuteSvc<T> {
+                    impl<T: AppProvider> tonic::server::UnaryService<super::ExecuteRequest> for ExecuteSvc<T> {
                         type Response = super::OperationResult;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ExecuteRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AppProvider>::execute(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as AppProvider>::execute(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -495,23 +422,19 @@ pub mod app_provider_server {
                 "/gestalt.provider.v1.AppProvider/ResolveHTTPSubject" => {
                     #[allow(non_camel_case_types)]
                     struct ResolveHTTPSubjectSvc<T: AppProvider>(pub Arc<T>);
-                    impl<
-                        T: AppProvider,
-                    > tonic::server::UnaryService<super::ResolveHttpSubjectRequest>
-                    for ResolveHTTPSubjectSvc<T> {
+                    impl<T: AppProvider>
+                        tonic::server::UnaryService<super::ResolveHttpSubjectRequest>
+                        for ResolveHTTPSubjectSvc<T>
+                    {
                         type Response = super::ResolveHttpSubjectResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ResolveHttpSubjectRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AppProvider>::resolve_http_subject(&inner, request)
-                                    .await
+                                <T as AppProvider>::resolve_http_subject(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -541,23 +464,19 @@ pub mod app_provider_server {
                 "/gestalt.provider.v1.AppProvider/GetSessionCatalog" => {
                     #[allow(non_camel_case_types)]
                     struct GetSessionCatalogSvc<T: AppProvider>(pub Arc<T>);
-                    impl<
-                        T: AppProvider,
-                    > tonic::server::UnaryService<super::GetSessionCatalogRequest>
-                    for GetSessionCatalogSvc<T> {
+                    impl<T: AppProvider>
+                        tonic::server::UnaryService<super::GetSessionCatalogRequest>
+                        for GetSessionCatalogSvc<T>
+                    {
                         type Response = super::GetSessionCatalogResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::GetSessionCatalogRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AppProvider>::get_session_catalog(&inner, request)
-                                    .await
+                                <T as AppProvider>::get_session_catalog(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -584,25 +503,19 @@ pub mod app_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -631,10 +544,10 @@ pub mod app_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
     pub struct AppClient<T> {
@@ -666,22 +579,18 @@ pub mod app_client {
             let inner = tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> AppClient<InterceptedService<T, F>>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> AppClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             AppClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -724,45 +633,30 @@ pub mod app_client {
             tonic::Response<super::ExchangeInvocationTokenResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.App/ExchangeInvocationToken",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.App", "ExchangeInvocationToken"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.App",
+                "ExchangeInvocationToken",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn invoke(
             &mut self,
             request: impl tonic::IntoRequest<super::AppInvokeRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::OperationResult>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.App/Invoke",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.App/Invoke");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.App", "Invoke"));
@@ -772,22 +666,13 @@ pub mod app_client {
         pub async fn invoke_graph_ql(
             &mut self,
             request: impl tonic::IntoRequest<super::AppInvokeGraphQlRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::OperationResult>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.App/InvokeGraphQL",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.App/InvokeGraphQL");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.App", "InvokeGraphQL"));
@@ -802,7 +687,7 @@ pub mod app_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AppServer.
@@ -849,10 +734,7 @@ pub mod app_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -907,20 +789,14 @@ pub mod app_server {
                 "/gestalt.provider.v1.App/ExchangeInvocationToken" => {
                     #[allow(non_camel_case_types)]
                     struct ExchangeInvocationTokenSvc<T: App>(pub Arc<T>);
-                    impl<
-                        T: App,
-                    > tonic::server::UnaryService<super::ExchangeInvocationTokenRequest>
-                    for ExchangeInvocationTokenSvc<T> {
+                    impl<T: App> tonic::server::UnaryService<super::ExchangeInvocationTokenRequest>
+                        for ExchangeInvocationTokenSvc<T>
+                    {
                         type Response = super::ExchangeInvocationTokenResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ExchangeInvocationTokenRequest,
-                            >,
+                            request: tonic::Request<super::ExchangeInvocationTokenRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -954,21 +830,15 @@ pub mod app_server {
                 "/gestalt.provider.v1.App/Invoke" => {
                     #[allow(non_camel_case_types)]
                     struct InvokeSvc<T: App>(pub Arc<T>);
-                    impl<T: App> tonic::server::UnaryService<super::AppInvokeRequest>
-                    for InvokeSvc<T> {
+                    impl<T: App> tonic::server::UnaryService<super::AppInvokeRequest> for InvokeSvc<T> {
                         type Response = super::OperationResult;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AppInvokeRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as App>::invoke(&inner, request).await
-                            };
+                            let fut = async move { <T as App>::invoke(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -997,23 +867,16 @@ pub mod app_server {
                 "/gestalt.provider.v1.App/InvokeGraphQL" => {
                     #[allow(non_camel_case_types)]
                     struct InvokeGraphQLSvc<T: App>(pub Arc<T>);
-                    impl<
-                        T: App,
-                    > tonic::server::UnaryService<super::AppInvokeGraphQlRequest>
-                    for InvokeGraphQLSvc<T> {
+                    impl<T: App> tonic::server::UnaryService<super::AppInvokeGraphQlRequest> for InvokeGraphQLSvc<T> {
                         type Response = super::OperationResult;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AppInvokeGraphQlRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as App>::invoke_graph_ql(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as App>::invoke_graph_ql(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1039,25 +902,19 @@ pub mod app_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -1086,15 +943,15 @@ pub mod agent_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** AgentProvider is the authoritative agent data boundary. Read RPCs for
- sessions, turns, turn events, and interactions should use provider-owned
- control-plane state and should not require a live execution sandbox,
- pod-level transport, or cached tunnel.
-*/
+     sessions, turns, turn events, and interactions should use provider-owned
+     control-plane state and should not require a live execution sandbox,
+     pod-level transport, or cached tunnel.
+    */
     #[derive(Debug, Clone)]
     pub struct AgentProviderClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -1133,14 +990,13 @@ pub mod agent_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             AgentProviderClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -1180,23 +1036,18 @@ pub mod agent_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::CreateAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/CreateSession",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "CreateSession"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "CreateSession",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1204,23 +1055,18 @@ pub mod agent_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/GetSession",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "GetSession"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetSession",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1231,23 +1077,18 @@ pub mod agent_provider_client {
             tonic::Response<super::ListAgentProviderSessionsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/ListSessions",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "ListSessions"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListSessions",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1255,23 +1096,18 @@ pub mod agent_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::UpdateAgentProviderSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentSession>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/UpdateSession",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "UpdateSession"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "UpdateSession",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1279,23 +1115,18 @@ pub mod agent_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::CreateAgentProviderTurnRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/CreateTurn",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "CreateTurn"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "CreateTurn",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1303,21 +1134,17 @@ pub mod agent_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderTurnRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/GetTurn",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentProvider/GetTurn");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.AgentProvider", "GetTurn"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetTurn",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1328,23 +1155,18 @@ pub mod agent_provider_client {
             tonic::Response<super::ListAgentProviderTurnsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/ListTurns",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "ListTurns"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListTurns",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1352,23 +1174,18 @@ pub mod agent_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::CancelAgentProviderTurnRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentTurn>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/CancelTurn",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentProvider", "CancelTurn"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "CancelTurn",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1379,56 +1196,37 @@ pub mod agent_provider_client {
             tonic::Response<super::ListAgentProviderTurnEventsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/ListTurnEvents",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AgentProvider",
-                        "ListTurnEvents",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListTurnEvents",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn get_interaction(
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderInteractionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AgentInteraction>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/GetInteraction",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AgentProvider",
-                        "GetInteraction",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetInteraction",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1439,88 +1237,57 @@ pub mod agent_provider_client {
             tonic::Response<super::ListAgentProviderInteractionsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/ListInteractions",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AgentProvider",
-                        "ListInteractions",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ListInteractions",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn resolve_interaction(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::ResolveAgentProviderInteractionRequest,
-            >,
-        ) -> std::result::Result<
-            tonic::Response<super::AgentInteraction>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            request: impl tonic::IntoRequest<super::ResolveAgentProviderInteractionRequest>,
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/ResolveInteraction",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AgentProvider",
-                        "ResolveInteraction",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "ResolveInteraction",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn get_capabilities(
             &mut self,
             request: impl tonic::IntoRequest<super::GetAgentProviderCapabilitiesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AgentProviderCapabilities>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AgentProviderCapabilities>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentProvider/GetCapabilities",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AgentProvider",
-                        "GetCapabilities",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentProvider",
+                "GetCapabilities",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -1532,7 +1299,7 @@ pub mod agent_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AgentProviderServer.
@@ -1596,10 +1363,7 @@ pub mod agent_provider_server {
         async fn get_interaction(
             &self,
             request: tonic::Request<super::GetAgentProviderInteractionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AgentInteraction>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status>;
         ///
         async fn list_interactions(
             &self,
@@ -1612,24 +1376,18 @@ pub mod agent_provider_server {
         async fn resolve_interaction(
             &self,
             request: tonic::Request<super::ResolveAgentProviderInteractionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AgentInteraction>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AgentInteraction>, tonic::Status>;
         ///
         async fn get_capabilities(
             &self,
             request: tonic::Request<super::GetAgentProviderCapabilitiesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AgentProviderCapabilities>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AgentProviderCapabilities>, tonic::Status>;
     }
     /** AgentProvider is the authoritative agent data boundary. Read RPCs for
- sessions, turns, turn events, and interactions should use provider-owned
- control-plane state and should not require a live execution sandbox,
- pod-level transport, or cached tunnel.
-*/
+     sessions, turns, turn events, and interactions should use provider-owned
+     control-plane state and should not require a live execution sandbox,
+     pod-level transport, or cached tunnel.
+    */
     #[derive(Debug)]
     pub struct AgentProviderServer<T> {
         inner: Arc<T>,
@@ -1651,10 +1409,7 @@ pub mod agent_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -1709,21 +1464,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/CreateSession" => {
                     #[allow(non_camel_case_types)]
                     struct CreateSessionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::CreateAgentProviderSessionRequest,
-                    > for CreateSessionSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::CreateAgentProviderSessionRequest>
+                        for CreateSessionSvc<T>
+                    {
                         type Response = super::AgentSession;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::CreateAgentProviderSessionRequest,
-                            >,
+                            request: tonic::Request<super::CreateAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -1757,20 +1506,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/GetSession" => {
                     #[allow(non_camel_case_types)]
                     struct GetSessionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<super::GetAgentProviderSessionRequest>
-                    for GetSessionSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::GetAgentProviderSessionRequest>
+                        for GetSessionSvc<T>
+                    {
                         type Response = super::AgentSession;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::GetAgentProviderSessionRequest,
-                            >,
+                            request: tonic::Request<super::GetAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -1804,21 +1548,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/ListSessions" => {
                     #[allow(non_camel_case_types)]
                     struct ListSessionsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::ListAgentProviderSessionsRequest,
-                    > for ListSessionsSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderSessionsRequest>
+                        for ListSessionsSvc<T>
+                    {
                         type Response = super::ListAgentProviderSessionsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListAgentProviderSessionsRequest,
-                            >,
+                            request: tonic::Request<super::ListAgentProviderSessionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -1852,21 +1590,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/UpdateSession" => {
                     #[allow(non_camel_case_types)]
                     struct UpdateSessionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::UpdateAgentProviderSessionRequest,
-                    > for UpdateSessionSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::UpdateAgentProviderSessionRequest>
+                        for UpdateSessionSvc<T>
+                    {
                         type Response = super::AgentSession;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::UpdateAgentProviderSessionRequest,
-                            >,
+                            request: tonic::Request<super::UpdateAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -1900,20 +1632,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/CreateTurn" => {
                     #[allow(non_camel_case_types)]
                     struct CreateTurnSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<super::CreateAgentProviderTurnRequest>
-                    for CreateTurnSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::CreateAgentProviderTurnRequest>
+                        for CreateTurnSvc<T>
+                    {
                         type Response = super::AgentTurn;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::CreateAgentProviderTurnRequest,
-                            >,
+                            request: tonic::Request<super::CreateAgentProviderTurnRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -1947,15 +1674,12 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/GetTurn" => {
                     #[allow(non_camel_case_types)]
                     struct GetTurnSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<super::GetAgentProviderTurnRequest>
-                    for GetTurnSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::GetAgentProviderTurnRequest>
+                        for GetTurnSvc<T>
+                    {
                         type Response = super::AgentTurn;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::GetAgentProviderTurnRequest>,
@@ -1992,15 +1716,12 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/ListTurns" => {
                     #[allow(non_camel_case_types)]
                     struct ListTurnsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<super::ListAgentProviderTurnsRequest>
-                    for ListTurnsSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderTurnsRequest>
+                        for ListTurnsSvc<T>
+                    {
                         type Response = super::ListAgentProviderTurnsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListAgentProviderTurnsRequest>,
@@ -2037,20 +1758,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/CancelTurn" => {
                     #[allow(non_camel_case_types)]
                     struct CancelTurnSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<super::CancelAgentProviderTurnRequest>
-                    for CancelTurnSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::CancelAgentProviderTurnRequest>
+                        for CancelTurnSvc<T>
+                    {
                         type Response = super::AgentTurn;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::CancelAgentProviderTurnRequest,
-                            >,
+                            request: tonic::Request<super::CancelAgentProviderTurnRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -2084,26 +1800,19 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/ListTurnEvents" => {
                     #[allow(non_camel_case_types)]
                     struct ListTurnEventsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::ListAgentProviderTurnEventsRequest,
-                    > for ListTurnEventsSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderTurnEventsRequest>
+                        for ListTurnEventsSvc<T>
+                    {
                         type Response = super::ListAgentProviderTurnEventsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListAgentProviderTurnEventsRequest,
-                            >,
+                            request: tonic::Request<super::ListAgentProviderTurnEventsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::list_turn_events(&inner, request)
-                                    .await
+                                <T as AgentProvider>::list_turn_events(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2133,21 +1842,15 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/GetInteraction" => {
                     #[allow(non_camel_case_types)]
                     struct GetInteractionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::GetAgentProviderInteractionRequest,
-                    > for GetInteractionSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::GetAgentProviderInteractionRequest>
+                        for GetInteractionSvc<T>
+                    {
                         type Response = super::AgentInteraction;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::GetAgentProviderInteractionRequest,
-                            >,
+                            request: tonic::Request<super::GetAgentProviderInteractionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -2181,26 +1884,19 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/ListInteractions" => {
                     #[allow(non_camel_case_types)]
                     struct ListInteractionsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::ListAgentProviderInteractionsRequest,
-                    > for ListInteractionsSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ListAgentProviderInteractionsRequest>
+                        for ListInteractionsSvc<T>
+                    {
                         type Response = super::ListAgentProviderInteractionsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListAgentProviderInteractionsRequest,
-                            >,
+                            request: tonic::Request<super::ListAgentProviderInteractionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::list_interactions(&inner, request)
-                                    .await
+                                <T as AgentProvider>::list_interactions(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2230,26 +1926,19 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/ResolveInteraction" => {
                     #[allow(non_camel_case_types)]
                     struct ResolveInteractionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::ResolveAgentProviderInteractionRequest,
-                    > for ResolveInteractionSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::ResolveAgentProviderInteractionRequest>
+                        for ResolveInteractionSvc<T>
+                    {
                         type Response = super::AgentInteraction;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ResolveAgentProviderInteractionRequest,
-                            >,
+                            request: tonic::Request<super::ResolveAgentProviderInteractionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::resolve_interaction(&inner, request)
-                                    .await
+                                <T as AgentProvider>::resolve_interaction(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2279,26 +1968,19 @@ pub mod agent_provider_server {
                 "/gestalt.provider.v1.AgentProvider/GetCapabilities" => {
                     #[allow(non_camel_case_types)]
                     struct GetCapabilitiesSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<
-                        T: AgentProvider,
-                    > tonic::server::UnaryService<
-                        super::GetAgentProviderCapabilitiesRequest,
-                    > for GetCapabilitiesSvc<T> {
+                    impl<T: AgentProvider>
+                        tonic::server::UnaryService<super::GetAgentProviderCapabilitiesRequest>
+                        for GetCapabilitiesSvc<T>
+                    {
                         type Response = super::AgentProviderCapabilities;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::GetAgentProviderCapabilitiesRequest,
-                            >,
+                            request: tonic::Request<super::GetAgentProviderCapabilitiesRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::get_capabilities(&inner, request)
-                                    .await
+                                <T as AgentProvider>::get_capabilities(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2325,25 +2007,19 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -2372,10 +2048,10 @@ pub mod agent_host_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
     pub struct AgentHostClient<T> {
@@ -2415,14 +2091,13 @@ pub mod agent_host_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             AgentHostClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -2461,77 +2136,58 @@ pub mod agent_host_client {
         pub async fn list_tools(
             &mut self,
             request: impl tonic::IntoRequest<super::ListAgentToolsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListAgentToolsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ListAgentToolsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentHost/ListTools",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentHost/ListTools");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.AgentHost", "ListTools"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentHost",
+                "ListTools",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn execute_tool(
             &mut self,
             request: impl tonic::IntoRequest<super::ExecuteAgentToolRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ExecuteAgentToolResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ExecuteAgentToolResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentHost/ExecuteTool",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentHost/ExecuteTool");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.AgentHost", "ExecuteTool"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentHost",
+                "ExecuteTool",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn resolve_connection(
             &mut self,
             request: impl tonic::IntoRequest<super::ResolveAgentConnectionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ResolvedAgentConnection>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ResolvedAgentConnection>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AgentHost/ResolveConnection",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.AgentHost", "ResolveConnection"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AgentHost",
+                "ResolveConnection",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -2543,7 +2199,7 @@ pub mod agent_host_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AgentHostServer.
@@ -2553,26 +2209,17 @@ pub mod agent_host_server {
         async fn list_tools(
             &self,
             request: tonic::Request<super::ListAgentToolsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListAgentToolsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ListAgentToolsResponse>, tonic::Status>;
         ///
         async fn execute_tool(
             &self,
             request: tonic::Request<super::ExecuteAgentToolRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ExecuteAgentToolResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ExecuteAgentToolResponse>, tonic::Status>;
         ///
         async fn resolve_connection(
             &self,
             request: tonic::Request<super::ResolveAgentConnectionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ResolvedAgentConnection>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ResolvedAgentConnection>, tonic::Status>;
     }
     ///
     #[derive(Debug)]
@@ -2596,10 +2243,7 @@ pub mod agent_host_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -2654,23 +2298,16 @@ pub mod agent_host_server {
                 "/gestalt.provider.v1.AgentHost/ListTools" => {
                     #[allow(non_camel_case_types)]
                     struct ListToolsSvc<T: AgentHost>(pub Arc<T>);
-                    impl<
-                        T: AgentHost,
-                    > tonic::server::UnaryService<super::ListAgentToolsRequest>
-                    for ListToolsSvc<T> {
+                    impl<T: AgentHost> tonic::server::UnaryService<super::ListAgentToolsRequest> for ListToolsSvc<T> {
                         type Response = super::ListAgentToolsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListAgentToolsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentHost>::list_tools(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as AgentHost>::list_tools(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -2699,15 +2336,11 @@ pub mod agent_host_server {
                 "/gestalt.provider.v1.AgentHost/ExecuteTool" => {
                     #[allow(non_camel_case_types)]
                     struct ExecuteToolSvc<T: AgentHost>(pub Arc<T>);
-                    impl<
-                        T: AgentHost,
-                    > tonic::server::UnaryService<super::ExecuteAgentToolRequest>
-                    for ExecuteToolSvc<T> {
+                    impl<T: AgentHost> tonic::server::UnaryService<super::ExecuteAgentToolRequest>
+                        for ExecuteToolSvc<T>
+                    {
                         type Response = super::ExecuteAgentToolResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ExecuteAgentToolRequest>,
@@ -2744,15 +2377,12 @@ pub mod agent_host_server {
                 "/gestalt.provider.v1.AgentHost/ResolveConnection" => {
                     #[allow(non_camel_case_types)]
                     struct ResolveConnectionSvc<T: AgentHost>(pub Arc<T>);
-                    impl<
-                        T: AgentHost,
-                    > tonic::server::UnaryService<super::ResolveAgentConnectionRequest>
-                    for ResolveConnectionSvc<T> {
+                    impl<T: AgentHost>
+                        tonic::server::UnaryService<super::ResolveAgentConnectionRequest>
+                        for ResolveConnectionSvc<T>
+                    {
                         type Response = super::ResolvedAgentConnection;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ResolveAgentConnectionRequest>,
@@ -2786,25 +2416,19 @@ pub mod agent_host_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -2833,13 +2457,13 @@ pub mod authentication_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** AuthenticationProvider models the shared Gestalt authentication-provider
- protocol.
-*/
+     protocol.
+    */
     #[derive(Debug, Clone)]
     pub struct AuthenticationProviderClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -2878,18 +2502,15 @@ pub mod authentication_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            AuthenticationProviderClient::new(
-                InterceptedService::new(inner, interceptor),
-            )
+            AuthenticationProviderClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -2926,120 +2547,78 @@ pub mod authentication_provider_client {
         pub async fn begin_login(
             &mut self,
             request: impl tonic::IntoRequest<super::BeginLoginRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::BeginLoginResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::BeginLoginResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthenticationProvider/BeginLogin",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthenticationProvider",
-                        "BeginLogin",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "BeginLogin",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn complete_login(
             &mut self,
             request: impl tonic::IntoRequest<super::CompleteLoginRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AuthenticatedUser>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthenticationProvider/CompleteLogin",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthenticationProvider",
-                        "CompleteLogin",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "CompleteLogin",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn validate_external_token(
             &mut self,
             request: impl tonic::IntoRequest<super::ValidateExternalTokenRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AuthenticatedUser>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthenticationProvider",
-                        "ValidateExternalToken",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "ValidateExternalToken",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn get_session_settings(
             &mut self,
             request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::AuthSessionSettings>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AuthSessionSettings>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthenticationProvider",
-                        "GetSessionSettings",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthenticationProvider",
+                "GetSessionSettings",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -3051,7 +2630,7 @@ pub mod authentication_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AuthenticationProviderServer.
@@ -3061,38 +2640,26 @@ pub mod authentication_provider_server {
         async fn begin_login(
             &self,
             request: tonic::Request<super::BeginLoginRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::BeginLoginResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::BeginLoginResponse>, tonic::Status>;
         ///
         async fn complete_login(
             &self,
             request: tonic::Request<super::CompleteLoginRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AuthenticatedUser>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
         ///
         async fn validate_external_token(
             &self,
             request: tonic::Request<super::ValidateExternalTokenRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AuthenticatedUser>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
         ///
         async fn get_session_settings(
             &self,
             request: tonic::Request<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::AuthSessionSettings>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AuthSessionSettings>, tonic::Status>;
     }
     /** AuthenticationProvider models the shared Gestalt authentication-provider
- protocol.
-*/
+     protocol.
+    */
     #[derive(Debug)]
     pub struct AuthenticationProviderServer<T> {
         inner: Arc<T>,
@@ -3114,10 +2681,7 @@ pub mod authentication_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -3152,8 +2716,7 @@ pub mod authentication_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>>
-    for AuthenticationProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for AuthenticationProviderServer<T>
     where
         T: AuthenticationProvider,
         B: Body + std::marker::Send + 'static,
@@ -3173,23 +2736,18 @@ pub mod authentication_provider_server {
                 "/gestalt.provider.v1.AuthenticationProvider/BeginLogin" => {
                     #[allow(non_camel_case_types)]
                     struct BeginLoginSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthenticationProvider,
-                    > tonic::server::UnaryService<super::BeginLoginRequest>
-                    for BeginLoginSvc<T> {
+                    impl<T: AuthenticationProvider>
+                        tonic::server::UnaryService<super::BeginLoginRequest> for BeginLoginSvc<T>
+                    {
                         type Response = super::BeginLoginResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::BeginLoginRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::begin_login(&inner, request)
-                                    .await
+                                <T as AuthenticationProvider>::begin_login(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3219,26 +2777,19 @@ pub mod authentication_provider_server {
                 "/gestalt.provider.v1.AuthenticationProvider/CompleteLogin" => {
                     #[allow(non_camel_case_types)]
                     struct CompleteLoginSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthenticationProvider,
-                    > tonic::server::UnaryService<super::CompleteLoginRequest>
-                    for CompleteLoginSvc<T> {
+                    impl<T: AuthenticationProvider>
+                        tonic::server::UnaryService<super::CompleteLoginRequest>
+                        for CompleteLoginSvc<T>
+                    {
                         type Response = super::AuthenticatedUser;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CompleteLoginRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::complete_login(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as AuthenticationProvider>::complete_login(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3267,18 +2818,13 @@ pub mod authentication_provider_server {
                 }
                 "/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken" => {
                     #[allow(non_camel_case_types)]
-                    struct ValidateExternalTokenSvc<T: AuthenticationProvider>(
-                        pub Arc<T>,
-                    );
-                    impl<
-                        T: AuthenticationProvider,
-                    > tonic::server::UnaryService<super::ValidateExternalTokenRequest>
-                    for ValidateExternalTokenSvc<T> {
+                    struct ValidateExternalTokenSvc<T: AuthenticationProvider>(pub Arc<T>);
+                    impl<T: AuthenticationProvider>
+                        tonic::server::UnaryService<super::ValidateExternalTokenRequest>
+                        for ValidateExternalTokenSvc<T>
+                    {
                         type Response = super::AuthenticatedUser;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ValidateExternalTokenRequest>,
@@ -3286,10 +2832,9 @@ pub mod authentication_provider_server {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as AuthenticationProvider>::validate_external_token(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                    &inner, request,
+                                )
+                                .await
                             };
                             Box::pin(fut)
                         }
@@ -3319,20 +2864,13 @@ pub mod authentication_provider_server {
                 "/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings" => {
                     #[allow(non_camel_case_types)]
                     struct GetSessionSettingsSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<T: AuthenticationProvider> tonic::server::UnaryService<()>
-                    for GetSessionSettingsSvc<T> {
+                    impl<T: AuthenticationProvider> tonic::server::UnaryService<()> for GetSessionSettingsSvc<T> {
                         type Response = super::AuthSessionSettings;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::get_session_settings(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthenticationProvider>::get_session_settings(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -3360,25 +2898,19 @@ pub mod authentication_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -3407,10 +2939,10 @@ pub mod authorization_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
     pub struct AuthorizationProviderClient<T> {
@@ -3450,14 +2982,13 @@ pub mod authorization_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             AuthorizationProviderClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -3496,240 +3027,160 @@ pub mod authorization_provider_client {
         pub async fn check_access(
             &mut self,
             request: impl tonic::IntoRequest<super::CheckAccessRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CheckAccessResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CheckAccessResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/CheckAccess",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "CheckAccess",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "CheckAccess",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn check_access_many(
             &mut self,
             request: impl tonic::IntoRequest<super::CheckAccessManyRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CheckAccessManyResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CheckAccessManyResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "CheckAccessMany",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "CheckAccessMany",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn list_relationships(
             &mut self,
             request: impl tonic::IntoRequest<super::ListRelationshipsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListRelationshipsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ListRelationshipsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/ListRelationships",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "ListRelationships",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "ListRelationships",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn add_relationship(
             &mut self,
             request: impl tonic::IntoRequest<super::AddRelationshipRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AddRelationshipResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AddRelationshipResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/AddRelationship",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "AddRelationship",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "AddRelationship",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn delete_relationship(
             &mut self,
             request: impl tonic::IntoRequest<super::DeleteRelationshipRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::DeleteRelationshipResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::DeleteRelationshipResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "DeleteRelationship",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "DeleteRelationship",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn set_authorization_state(
             &mut self,
             request: impl tonic::IntoRequest<super::SetAuthorizationStateRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SetAuthorizationStateResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::SetAuthorizationStateResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "SetAuthorizationState",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "SetAuthorizationState",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn get_active_model_ref(
             &mut self,
             request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetActiveModelRefResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::GetActiveModelRefResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "GetActiveModelRef",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "GetActiveModelRef",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn set_active_model(
             &mut self,
             request: impl tonic::IntoRequest<super::SetActiveModelRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SetActiveModelResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::SetActiveModelResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "SetActiveModel",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "SetActiveModel",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -3740,26 +3191,18 @@ pub mod authorization_provider_client {
             tonic::Response<super::ListActiveModelResourceTypesResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.AuthorizationProvider",
-                        "ListActiveModelResourceTypes",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.AuthorizationProvider",
+                "ListActiveModelResourceTypes",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -3771,7 +3214,7 @@ pub mod authorization_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AuthorizationProviderServer.
@@ -3781,66 +3224,42 @@ pub mod authorization_provider_server {
         async fn check_access(
             &self,
             request: tonic::Request<super::CheckAccessRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CheckAccessResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CheckAccessResponse>, tonic::Status>;
         ///
         async fn check_access_many(
             &self,
             request: tonic::Request<super::CheckAccessManyRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CheckAccessManyResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CheckAccessManyResponse>, tonic::Status>;
         ///
         async fn list_relationships(
             &self,
             request: tonic::Request<super::ListRelationshipsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListRelationshipsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ListRelationshipsResponse>, tonic::Status>;
         ///
         async fn add_relationship(
             &self,
             request: tonic::Request<super::AddRelationshipRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AddRelationshipResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AddRelationshipResponse>, tonic::Status>;
         ///
         async fn delete_relationship(
             &self,
             request: tonic::Request<super::DeleteRelationshipRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::DeleteRelationshipResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::DeleteRelationshipResponse>, tonic::Status>;
         ///
         async fn set_authorization_state(
             &self,
             request: tonic::Request<super::SetAuthorizationStateRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SetAuthorizationStateResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::SetAuthorizationStateResponse>, tonic::Status>;
         ///
         async fn get_active_model_ref(
             &self,
             request: tonic::Request<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetActiveModelRefResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::GetActiveModelRefResponse>, tonic::Status>;
         ///
         async fn set_active_model(
             &self,
             request: tonic::Request<super::SetActiveModelRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SetActiveModelResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::SetActiveModelResponse>, tonic::Status>;
         ///
         async fn list_active_model_resource_types(
             &self,
@@ -3872,10 +3291,7 @@ pub mod authorization_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -3910,8 +3326,7 @@ pub mod authorization_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>>
-    for AuthorizationProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for AuthorizationProviderServer<T>
     where
         T: AuthorizationProvider,
         B: Body + std::marker::Send + 'static,
@@ -3931,23 +3346,19 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/CheckAccess" => {
                     #[allow(non_camel_case_types)]
                     struct CheckAccessSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::CheckAccessRequest>
-                    for CheckAccessSvc<T> {
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::CheckAccessRequest>
+                        for CheckAccessSvc<T>
+                    {
                         type Response = super::CheckAccessResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CheckAccessRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::check_access(&inner, request)
-                                    .await
+                                <T as AuthorizationProvider>::check_access(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3977,25 +3388,19 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany" => {
                     #[allow(non_camel_case_types)]
                     struct CheckAccessManySvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::CheckAccessManyRequest>
-                    for CheckAccessManySvc<T> {
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::CheckAccessManyRequest>
+                        for CheckAccessManySvc<T>
+                    {
                         type Response = super::CheckAccessManyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CheckAccessManyRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::check_access_many(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthorizationProvider>::check_access_many(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4026,25 +3431,19 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/ListRelationships" => {
                     #[allow(non_camel_case_types)]
                     struct ListRelationshipsSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::ListRelationshipsRequest>
-                    for ListRelationshipsSvc<T> {
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::ListRelationshipsRequest>
+                        for ListRelationshipsSvc<T>
+                    {
                         type Response = super::ListRelationshipsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListRelationshipsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::list_relationships(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthorizationProvider>::list_relationships(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4075,25 +3474,19 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/AddRelationship" => {
                     #[allow(non_camel_case_types)]
                     struct AddRelationshipSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::AddRelationshipRequest>
-                    for AddRelationshipSvc<T> {
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::AddRelationshipRequest>
+                        for AddRelationshipSvc<T>
+                    {
                         type Response = super::AddRelationshipResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddRelationshipRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::add_relationship(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthorizationProvider>::add_relationship(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4124,25 +3517,19 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteRelationshipSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::DeleteRelationshipRequest>
-                    for DeleteRelationshipSvc<T> {
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::DeleteRelationshipRequest>
+                        for DeleteRelationshipSvc<T>
+                    {
                         type Response = super::DeleteRelationshipResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DeleteRelationshipRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::delete_relationship(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthorizationProvider>::delete_relationship(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4172,18 +3559,13 @@ pub mod authorization_provider_server {
                 }
                 "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState" => {
                     #[allow(non_camel_case_types)]
-                    struct SetAuthorizationStateSvc<T: AuthorizationProvider>(
-                        pub Arc<T>,
-                    );
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::SetAuthorizationStateRequest>
-                    for SetAuthorizationStateSvc<T> {
+                    struct SetAuthorizationStateSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::SetAuthorizationStateRequest>
+                        for SetAuthorizationStateSvc<T>
+                    {
                         type Response = super::SetAuthorizationStateResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::SetAuthorizationStateRequest>,
@@ -4191,10 +3573,9 @@ pub mod authorization_provider_server {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as AuthorizationProvider>::set_authorization_state(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                    &inner, request,
+                                )
+                                .await
                             };
                             Box::pin(fut)
                         }
@@ -4224,20 +3605,13 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef" => {
                     #[allow(non_camel_case_types)]
                     struct GetActiveModelRefSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider> tonic::server::UnaryService<()>
-                    for GetActiveModelRefSvc<T> {
+                    impl<T: AuthorizationProvider> tonic::server::UnaryService<()> for GetActiveModelRefSvc<T> {
                         type Response = super::GetActiveModelRefResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::get_active_model_ref(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthorizationProvider>::get_active_model_ref(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4268,25 +3642,19 @@ pub mod authorization_provider_server {
                 "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel" => {
                     #[allow(non_camel_case_types)]
                     struct SetActiveModelSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<super::SetActiveModelRequest>
-                    for SetActiveModelSvc<T> {
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::SetActiveModelRequest>
+                        for SetActiveModelSvc<T>
+                    {
                         type Response = super::SetActiveModelResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::SetActiveModelRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::set_active_model(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as AuthorizationProvider>::set_active_model(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -4316,32 +3684,23 @@ pub mod authorization_provider_server {
                 }
                 "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes" => {
                     #[allow(non_camel_case_types)]
-                    struct ListActiveModelResourceTypesSvc<T: AuthorizationProvider>(
-                        pub Arc<T>,
-                    );
-                    impl<
-                        T: AuthorizationProvider,
-                    > tonic::server::UnaryService<
-                        super::ListActiveModelResourceTypesRequest,
-                    > for ListActiveModelResourceTypesSvc<T> {
+                    struct ListActiveModelResourceTypesSvc<T: AuthorizationProvider>(pub Arc<T>);
+                    impl<T: AuthorizationProvider>
+                        tonic::server::UnaryService<super::ListActiveModelResourceTypesRequest>
+                        for ListActiveModelResourceTypesSvc<T>
+                    {
                         type Response = super::ListActiveModelResourceTypesResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListActiveModelResourceTypesRequest,
-                            >,
+                            request: tonic::Request<super::ListActiveModelResourceTypesRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 <T as AuthorizationProvider>::list_active_model_resource_types(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                    &inner, request,
+                                )
+                                .await
                             };
                             Box::pin(fut)
                         }
@@ -4368,25 +3727,19 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -4415,12 +3768,12 @@ pub mod cache_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** Cache models the shared Gestalt cache-provider protocol.
-*/
+    */
     #[derive(Debug, Clone)]
     pub struct CacheClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -4459,14 +3812,13 @@ pub mod cache_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             CacheClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -4505,22 +3857,12 @@ pub mod cache_client {
         pub async fn get(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheGetRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheGetResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CacheGetResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/Get",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/Get");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "Get"));
@@ -4530,22 +3872,13 @@ pub mod cache_client {
         pub async fn get_many(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheGetManyRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheGetManyResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CacheGetManyResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/GetMany",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/GetMany");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "GetMany"));
@@ -4556,18 +3889,11 @@ pub mod cache_client {
             &mut self,
             request: impl tonic::IntoRequest<super::CacheSetRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/Set",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/Set");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "Set"));
@@ -4578,18 +3904,11 @@ pub mod cache_client {
             &mut self,
             request: impl tonic::IntoRequest<super::CacheSetManyRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/SetMany",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/SetMany");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "SetMany"));
@@ -4599,22 +3918,13 @@ pub mod cache_client {
         pub async fn delete(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheDeleteRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheDeleteResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CacheDeleteResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/Delete",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/Delete");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "Delete"));
@@ -4624,22 +3934,14 @@ pub mod cache_client {
         pub async fn delete_many(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheDeleteManyRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheDeleteManyResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CacheDeleteManyResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/DeleteMany",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/DeleteMany");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "DeleteMany"));
@@ -4649,22 +3951,13 @@ pub mod cache_client {
         pub async fn touch(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheTouchRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheTouchResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CacheTouchResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Cache/Touch",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Cache/Touch");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.Cache", "Touch"));
@@ -4679,7 +3972,7 @@ pub mod cache_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with CacheServer.
@@ -4689,18 +3982,12 @@ pub mod cache_server {
         async fn get(
             &self,
             request: tonic::Request<super::CacheGetRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheGetResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CacheGetResponse>, tonic::Status>;
         ///
         async fn get_many(
             &self,
             request: tonic::Request<super::CacheGetManyRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheGetManyResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CacheGetManyResponse>, tonic::Status>;
         ///
         async fn set(
             &self,
@@ -4715,29 +4002,20 @@ pub mod cache_server {
         async fn delete(
             &self,
             request: tonic::Request<super::CacheDeleteRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheDeleteResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CacheDeleteResponse>, tonic::Status>;
         ///
         async fn delete_many(
             &self,
             request: tonic::Request<super::CacheDeleteManyRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheDeleteManyResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CacheDeleteManyResponse>, tonic::Status>;
         ///
         async fn touch(
             &self,
             request: tonic::Request<super::CacheTouchRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CacheTouchResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CacheTouchResponse>, tonic::Status>;
     }
     /** Cache models the shared Gestalt cache-provider protocol.
-*/
+    */
     #[derive(Debug)]
     pub struct CacheServer<T> {
         inner: Arc<T>,
@@ -4759,10 +4037,7 @@ pub mod cache_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -4817,21 +4092,15 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/Get" => {
                     #[allow(non_camel_case_types)]
                     struct GetSvc<T: Cache>(pub Arc<T>);
-                    impl<T: Cache> tonic::server::UnaryService<super::CacheGetRequest>
-                    for GetSvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheGetRequest> for GetSvc<T> {
                         type Response = super::CacheGetResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheGetRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::get(&inner, request).await
-                            };
+                            let fut = async move { <T as Cache>::get(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -4860,23 +4129,15 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/GetMany" => {
                     #[allow(non_camel_case_types)]
                     struct GetManySvc<T: Cache>(pub Arc<T>);
-                    impl<
-                        T: Cache,
-                    > tonic::server::UnaryService<super::CacheGetManyRequest>
-                    for GetManySvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheGetManyRequest> for GetManySvc<T> {
                         type Response = super::CacheGetManyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheGetManyRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::get_many(&inner, request).await
-                            };
+                            let fut = async move { <T as Cache>::get_many(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -4905,21 +4166,15 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/Set" => {
                     #[allow(non_camel_case_types)]
                     struct SetSvc<T: Cache>(pub Arc<T>);
-                    impl<T: Cache> tonic::server::UnaryService<super::CacheSetRequest>
-                    for SetSvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheSetRequest> for SetSvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheSetRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::set(&inner, request).await
-                            };
+                            let fut = async move { <T as Cache>::set(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -4948,23 +4203,15 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/SetMany" => {
                     #[allow(non_camel_case_types)]
                     struct SetManySvc<T: Cache>(pub Arc<T>);
-                    impl<
-                        T: Cache,
-                    > tonic::server::UnaryService<super::CacheSetManyRequest>
-                    for SetManySvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheSetManyRequest> for SetManySvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheSetManyRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::set_many(&inner, request).await
-                            };
+                            let fut = async move { <T as Cache>::set_many(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -4993,21 +4240,15 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/Delete" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteSvc<T: Cache>(pub Arc<T>);
-                    impl<T: Cache> tonic::server::UnaryService<super::CacheDeleteRequest>
-                    for DeleteSvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheDeleteRequest> for DeleteSvc<T> {
                         type Response = super::CacheDeleteResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheDeleteRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::delete(&inner, request).await
-                            };
+                            let fut = async move { <T as Cache>::delete(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -5036,23 +4277,16 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/DeleteMany" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteManySvc<T: Cache>(pub Arc<T>);
-                    impl<
-                        T: Cache,
-                    > tonic::server::UnaryService<super::CacheDeleteManyRequest>
-                    for DeleteManySvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheDeleteManyRequest> for DeleteManySvc<T> {
                         type Response = super::CacheDeleteManyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheDeleteManyRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::delete_many(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Cache>::delete_many(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -5081,21 +4315,15 @@ pub mod cache_server {
                 "/gestalt.provider.v1.Cache/Touch" => {
                     #[allow(non_camel_case_types)]
                     struct TouchSvc<T: Cache>(pub Arc<T>);
-                    impl<T: Cache> tonic::server::UnaryService<super::CacheTouchRequest>
-                    for TouchSvc<T> {
+                    impl<T: Cache> tonic::server::UnaryService<super::CacheTouchRequest> for TouchSvc<T> {
                         type Response = super::CacheTouchResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CacheTouchRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Cache>::touch(&inner, request).await
-                            };
+                            let fut = async move { <T as Cache>::touch(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -5121,25 +4349,19 @@ pub mod cache_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -5168,12 +4390,12 @@ pub mod indexed_db_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** IndexedDB models the shared Gestalt IndexedDB-provider protocol.
-*/
+    */
     #[derive(Debug, Clone)]
     pub struct IndexedDbClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -5212,14 +4434,13 @@ pub mod indexed_db_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             IndexedDbClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -5255,28 +4476,23 @@ pub mod indexed_db_client {
             self
         }
         /** Lifecycle
-*/
+        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.IndexedDB/CreateObjectStore",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.IndexedDB", "CreateObjectStore"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "CreateObjectStore",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -5284,43 +4500,31 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::DeleteObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.IndexedDB/DeleteObjectStore",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.IndexedDB", "DeleteObjectStore"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "DeleteObjectStore",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /** Primary key CRUD
-*/
+        */
         pub async fn get(
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<super::RecordResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Get",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Get");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Get"));
@@ -5331,18 +4535,12 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<super::KeyResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/GetKey",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/GetKey");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "GetKey"));
@@ -5353,18 +4551,11 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RecordRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Add",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Add");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Add"));
@@ -5375,18 +4566,11 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RecordRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Put",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Put");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Put"));
@@ -5397,41 +4581,28 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Delete",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Delete");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Delete"));
             self.inner.unary(req, path, codec).await
         }
         /** Bulk operations (with optional key range)
-*/
+        */
         pub async fn clear(
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreNameRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Clear",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Clear");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Clear"));
@@ -5441,22 +4612,13 @@ pub mod indexed_db_client {
         pub async fn get_all(
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRangeRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::RecordsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::RecordsResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/GetAll",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/GetAll");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "GetAll"));
@@ -5467,21 +4629,17 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRangeRequest>,
         ) -> std::result::Result<tonic::Response<super::KeysResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/GetAllKeys",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/GetAllKeys");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "GetAllKeys"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "GetAllKeys",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -5489,18 +4647,11 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRangeRequest>,
         ) -> std::result::Result<tonic::Response<super::CountResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Count",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Count");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Count"));
@@ -5511,41 +4662,31 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::ObjectStoreRangeRequest>,
         ) -> std::result::Result<tonic::Response<super::DeleteResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/DeleteRange",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/DeleteRange");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "DeleteRange"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "DeleteRange",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /** Index queries
-*/
+        */
         pub async fn index_get(
             &mut self,
             request: impl tonic::IntoRequest<super::IndexQueryRequest>,
         ) -> std::result::Result<tonic::Response<super::RecordResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/IndexGet",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/IndexGet");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "IndexGet"));
@@ -5556,46 +4697,35 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::IndexQueryRequest>,
         ) -> std::result::Result<tonic::Response<super::KeyResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/IndexGetKey",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/IndexGetKey");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "IndexGetKey"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "IndexGetKey",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn index_get_all(
             &mut self,
             request: impl tonic::IntoRequest<super::IndexQueryRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::RecordsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::RecordsResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/IndexGetAll",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/IndexGetAll");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "IndexGetAll"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "IndexGetAll",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -5603,23 +4733,18 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::IndexQueryRequest>,
         ) -> std::result::Result<tonic::Response<super::KeysResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.IndexedDB", "IndexGetAllKeys"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "IndexGetAllKeys",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -5627,21 +4752,17 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::IndexQueryRequest>,
         ) -> std::result::Result<tonic::Response<super::CountResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/IndexCount",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/IndexCount");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "IndexCount"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "IndexCount",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -5649,78 +4770,62 @@ pub mod indexed_db_client {
             &mut self,
             request: impl tonic::IntoRequest<super::IndexQueryRequest>,
         ) -> std::result::Result<tonic::Response<super::DeleteResponse>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/IndexDelete",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/IndexDelete");
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "IndexDelete"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "IndexDelete",
+            ));
             self.inner.unary(req, path, codec).await
         }
         /** Cursor iteration (bidirectional stream)
-*/
+        */
         pub async fn open_cursor(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<
-                Message = super::CursorClientMessage,
-            >,
+            request: impl tonic::IntoStreamingRequest<Message = super::CursorClientMessage>,
         ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::CursorResponse>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/OpenCursor",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/OpenCursor");
             let mut req = request.into_streaming_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "OpenCursor"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "OpenCursor",
+            ));
             self.inner.streaming(req, path, codec).await
         }
         /** Transaction stream. The first client message must be
- BeginTransactionRequest. Stream close before commit aborts the transaction.
-*/
+         BeginTransactionRequest. Stream close before commit aborts the transaction.
+        */
         pub async fn transaction(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<
-                Message = super::TransactionClientMessage,
-            >,
+            request: impl tonic::IntoStreamingRequest<Message = super::TransactionClientMessage>,
         ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::TransactionServerMessage>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.IndexedDB/Transaction",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Transaction");
             let mut req = request.into_streaming_request();
-            req.extensions_mut()
-                .insert(GrpcMethod::new("gestalt.provider.v1.IndexedDB", "Transaction"));
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "Transaction",
+            ));
             self.inner.streaming(req, path, codec).await
         }
     }
@@ -5732,14 +4837,14 @@ pub mod indexed_db_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
         /** Lifecycle
-*/
+        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,
@@ -5750,7 +4855,7 @@ pub mod indexed_db_server {
             request: tonic::Request<super::DeleteObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
         /** Primary key CRUD
-*/
+        */
         async fn get(
             &self,
             request: tonic::Request<super::ObjectStoreRequest>,
@@ -5776,7 +4881,7 @@ pub mod indexed_db_server {
             request: tonic::Request<super::ObjectStoreRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status>;
         /** Bulk operations (with optional key range)
-*/
+        */
         async fn clear(
             &self,
             request: tonic::Request<super::ObjectStoreNameRequest>,
@@ -5802,7 +4907,7 @@ pub mod indexed_db_server {
             request: tonic::Request<super::ObjectStoreRangeRequest>,
         ) -> std::result::Result<tonic::Response<super::DeleteResponse>, tonic::Status>;
         /** Index queries
-*/
+        */
         async fn index_get(
             &self,
             request: tonic::Request<super::IndexQueryRequest>,
@@ -5835,37 +4940,29 @@ pub mod indexed_db_server {
         /// Server streaming response type for the OpenCursor method.
         type OpenCursorStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::CursorResponse, tonic::Status>,
-            >
-            + std::marker::Send
+            > + std::marker::Send
             + 'static;
         /** Cursor iteration (bidirectional stream)
-*/
+        */
         async fn open_cursor(
             &self,
             request: tonic::Request<tonic::Streaming<super::CursorClientMessage>>,
         ) -> std::result::Result<tonic::Response<Self::OpenCursorStream>, tonic::Status>;
         /// Server streaming response type for the Transaction method.
         type TransactionStream: tonic::codegen::tokio_stream::Stream<
-                Item = std::result::Result<
-                    super::TransactionServerMessage,
-                    tonic::Status,
-                >,
-            >
-            + std::marker::Send
+                Item = std::result::Result<super::TransactionServerMessage, tonic::Status>,
+            > + std::marker::Send
             + 'static;
         /** Transaction stream. The first client message must be
- BeginTransactionRequest. Stream close before commit aborts the transaction.
-*/
+         BeginTransactionRequest. Stream close before commit aborts the transaction.
+        */
         async fn transaction(
             &self,
             request: tonic::Request<tonic::Streaming<super::TransactionClientMessage>>,
-        ) -> std::result::Result<
-            tonic::Response<Self::TransactionStream>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<Self::TransactionStream>, tonic::Status>;
     }
     /** IndexedDB models the shared Gestalt IndexedDB-provider protocol.
-*/
+    */
     #[derive(Debug)]
     pub struct IndexedDbServer<T> {
         inner: Arc<T>,
@@ -5887,10 +4984,7 @@ pub mod indexed_db_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -5945,15 +5039,11 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/CreateObjectStore" => {
                     #[allow(non_camel_case_types)]
                     struct CreateObjectStoreSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::CreateObjectStoreRequest>
-                    for CreateObjectStoreSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::CreateObjectStoreRequest>
+                        for CreateObjectStoreSvc<T>
+                    {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CreateObjectStoreRequest>,
@@ -5990,15 +5080,11 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/DeleteObjectStore" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteObjectStoreSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::DeleteObjectStoreRequest>
-                    for DeleteObjectStoreSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::DeleteObjectStoreRequest>
+                        for DeleteObjectStoreSvc<T>
+                    {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DeleteObjectStoreRequest>,
@@ -6035,23 +5121,15 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Get" => {
                     #[allow(non_camel_case_types)]
                     struct GetSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRequest>
-                    for GetSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRequest> for GetSvc<T> {
                         type Response = super::RecordResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::get(&inner, request).await
-                            };
+                            let fut = async move { <T as IndexedDb>::get(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6080,23 +5158,16 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/GetKey" => {
                     #[allow(non_camel_case_types)]
                     struct GetKeySvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRequest>
-                    for GetKeySvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRequest> for GetKeySvc<T> {
                         type Response = super::KeyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::get_key(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::get_key(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6125,21 +5196,15 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Add" => {
                     #[allow(non_camel_case_types)]
                     struct AddSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<T: IndexedDb> tonic::server::UnaryService<super::RecordRequest>
-                    for AddSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::RecordRequest> for AddSvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RecordRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::add(&inner, request).await
-                            };
+                            let fut = async move { <T as IndexedDb>::add(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6168,21 +5233,15 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Put" => {
                     #[allow(non_camel_case_types)]
                     struct PutSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<T: IndexedDb> tonic::server::UnaryService<super::RecordRequest>
-                    for PutSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::RecordRequest> for PutSvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RecordRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::put(&inner, request).await
-                            };
+                            let fut = async move { <T as IndexedDb>::put(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6211,23 +5270,16 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Delete" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRequest>
-                    for DeleteSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRequest> for DeleteSvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::delete(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::delete(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6256,23 +5308,15 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Clear" => {
                     #[allow(non_camel_case_types)]
                     struct ClearSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreNameRequest>
-                    for ClearSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreNameRequest> for ClearSvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreNameRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::clear(&inner, request).await
-                            };
+                            let fut = async move { <T as IndexedDb>::clear(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6301,23 +5345,16 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/GetAll" => {
                     #[allow(non_camel_case_types)]
                     struct GetAllSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRangeRequest>
-                    for GetAllSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRangeRequest> for GetAllSvc<T> {
                         type Response = super::RecordsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRangeRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::get_all(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::get_all(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6346,15 +5383,11 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/GetAllKeys" => {
                     #[allow(non_camel_case_types)]
                     struct GetAllKeysSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRangeRequest>
-                    for GetAllKeysSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRangeRequest>
+                        for GetAllKeysSvc<T>
+                    {
                         type Response = super::KeysResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRangeRequest>,
@@ -6391,23 +5424,15 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Count" => {
                     #[allow(non_camel_case_types)]
                     struct CountSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRangeRequest>
-                    for CountSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRangeRequest> for CountSvc<T> {
                         type Response = super::CountResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRangeRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::count(&inner, request).await
-                            };
+                            let fut = async move { <T as IndexedDb>::count(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6436,15 +5461,11 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/DeleteRange" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteRangeSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::ObjectStoreRangeRequest>
-                    for DeleteRangeSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::ObjectStoreRangeRequest>
+                        for DeleteRangeSvc<T>
+                    {
                         type Response = super::DeleteResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ObjectStoreRangeRequest>,
@@ -6481,23 +5502,16 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/IndexGet" => {
                     #[allow(non_camel_case_types)]
                     struct IndexGetSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::IndexQueryRequest>
-                    for IndexGetSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::IndexQueryRequest> for IndexGetSvc<T> {
                         type Response = super::RecordResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::IndexQueryRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::index_get(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::index_get(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6526,15 +5540,9 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/IndexGetKey" => {
                     #[allow(non_camel_case_types)]
                     struct IndexGetKeySvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::IndexQueryRequest>
-                    for IndexGetKeySvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::IndexQueryRequest> for IndexGetKeySvc<T> {
                         type Response = super::KeyResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::IndexQueryRequest>,
@@ -6571,15 +5579,9 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/IndexGetAll" => {
                     #[allow(non_camel_case_types)]
                     struct IndexGetAllSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::IndexQueryRequest>
-                    for IndexGetAllSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::IndexQueryRequest> for IndexGetAllSvc<T> {
                         type Response = super::RecordsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::IndexQueryRequest>,
@@ -6616,15 +5618,9 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys" => {
                     #[allow(non_camel_case_types)]
                     struct IndexGetAllKeysSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::IndexQueryRequest>
-                    for IndexGetAllKeysSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::IndexQueryRequest> for IndexGetAllKeysSvc<T> {
                         type Response = super::KeysResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::IndexQueryRequest>,
@@ -6661,23 +5657,16 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/IndexCount" => {
                     #[allow(non_camel_case_types)]
                     struct IndexCountSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::IndexQueryRequest>
-                    for IndexCountSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::IndexQueryRequest> for IndexCountSvc<T> {
                         type Response = super::CountResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::IndexQueryRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::index_count(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::index_count(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6706,15 +5695,9 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/IndexDelete" => {
                     #[allow(non_camel_case_types)]
                     struct IndexDeleteSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::UnaryService<super::IndexQueryRequest>
-                    for IndexDeleteSvc<T> {
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::IndexQueryRequest> for IndexDeleteSvc<T> {
                         type Response = super::DeleteResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::IndexQueryRequest>,
@@ -6751,26 +5734,20 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/OpenCursor" => {
                     #[allow(non_camel_case_types)]
                     struct OpenCursorSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::StreamingService<super::CursorClientMessage>
-                    for OpenCursorSvc<T> {
+                    impl<T: IndexedDb> tonic::server::StreamingService<super::CursorClientMessage>
+                        for OpenCursorSvc<T>
+                    {
                         type Response = super::CursorResponse;
                         type ResponseStream = T::OpenCursorStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                tonic::Streaming<super::CursorClientMessage>,
-                            >,
+                            request: tonic::Request<tonic::Streaming<super::CursorClientMessage>>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::open_cursor(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::open_cursor(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6799,16 +5776,14 @@ pub mod indexed_db_server {
                 "/gestalt.provider.v1.IndexedDB/Transaction" => {
                     #[allow(non_camel_case_types)]
                     struct TransactionSvc<T: IndexedDb>(pub Arc<T>);
-                    impl<
-                        T: IndexedDb,
-                    > tonic::server::StreamingService<super::TransactionClientMessage>
-                    for TransactionSvc<T> {
+                    impl<T: IndexedDb>
+                        tonic::server::StreamingService<super::TransactionClientMessage>
+                        for TransactionSvc<T>
+                    {
                         type Response = super::TransactionServerMessage;
                         type ResponseStream = T::TransactionStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<
@@ -6816,9 +5791,8 @@ pub mod indexed_db_server {
                             >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as IndexedDb>::transaction(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as IndexedDb>::transaction(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6844,25 +5818,19 @@ pub mod indexed_db_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -6891,13 +5859,13 @@ pub mod provider_lifecycle_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** ProviderLifecycle is the common lifecycle protocol shared by every provider
- kind.
-*/
+     kind.
+    */
     #[derive(Debug, Clone)]
     pub struct ProviderLifecycleClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -6936,14 +5904,13 @@ pub mod provider_lifecycle_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             ProviderLifecycleClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -6982,120 +5949,79 @@ pub mod provider_lifecycle_client {
         pub async fn get_provider_identity(
             &mut self,
             request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::ProviderIdentity>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ProviderIdentity>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.ProviderLifecycle/GetProviderIdentity",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.ProviderLifecycle",
-                        "GetProviderIdentity",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.ProviderLifecycle",
+                "GetProviderIdentity",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn configure_provider(
             &mut self,
             request: impl tonic::IntoRequest<super::ConfigureProviderRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ConfigureProviderResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ConfigureProviderResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.ProviderLifecycle/ConfigureProvider",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.ProviderLifecycle",
-                        "ConfigureProvider",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.ProviderLifecycle",
+                "ConfigureProvider",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn health_check(
             &mut self,
             request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::HealthCheckResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.ProviderLifecycle/HealthCheck",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.ProviderLifecycle",
-                        "HealthCheck",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.ProviderLifecycle",
+                "HealthCheck",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn start_provider(
             &mut self,
             request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::StartRuntimeProviderResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::StartRuntimeProviderResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.ProviderLifecycle/StartProvider",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.ProviderLifecycle",
-                        "StartProvider",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.ProviderLifecycle",
+                "StartProvider",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -7107,7 +6033,7 @@ pub mod provider_lifecycle_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ProviderLifecycleServer.
@@ -7117,38 +6043,26 @@ pub mod provider_lifecycle_server {
         async fn get_provider_identity(
             &self,
             request: tonic::Request<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::ProviderIdentity>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ProviderIdentity>, tonic::Status>;
         ///
         async fn configure_provider(
             &self,
             request: tonic::Request<super::ConfigureProviderRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ConfigureProviderResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ConfigureProviderResponse>, tonic::Status>;
         ///
         async fn health_check(
             &self,
             request: tonic::Request<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::HealthCheckResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>;
         ///
         async fn start_provider(
             &self,
             request: tonic::Request<()>,
-        ) -> std::result::Result<
-            tonic::Response<super::StartRuntimeProviderResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::StartRuntimeProviderResponse>, tonic::Status>;
     }
     /** ProviderLifecycle is the common lifecycle protocol shared by every provider
- kind.
-*/
+     kind.
+    */
     #[derive(Debug)]
     pub struct ProviderLifecycleServer<T> {
         inner: Arc<T>,
@@ -7170,10 +6084,7 @@ pub mod provider_lifecycle_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -7228,20 +6139,13 @@ pub mod provider_lifecycle_server {
                 "/gestalt.provider.v1.ProviderLifecycle/GetProviderIdentity" => {
                     #[allow(non_camel_case_types)]
                     struct GetProviderIdentitySvc<T: ProviderLifecycle>(pub Arc<T>);
-                    impl<T: ProviderLifecycle> tonic::server::UnaryService<()>
-                    for GetProviderIdentitySvc<T> {
+                    impl<T: ProviderLifecycle> tonic::server::UnaryService<()> for GetProviderIdentitySvc<T> {
                         type Response = super::ProviderIdentity;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as ProviderLifecycle>::get_provider_identity(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as ProviderLifecycle>::get_provider_identity(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -7272,26 +6176,19 @@ pub mod provider_lifecycle_server {
                 "/gestalt.provider.v1.ProviderLifecycle/ConfigureProvider" => {
                     #[allow(non_camel_case_types)]
                     struct ConfigureProviderSvc<T: ProviderLifecycle>(pub Arc<T>);
-                    impl<
-                        T: ProviderLifecycle,
-                    > tonic::server::UnaryService<super::ConfigureProviderRequest>
-                    for ConfigureProviderSvc<T> {
+                    impl<T: ProviderLifecycle>
+                        tonic::server::UnaryService<super::ConfigureProviderRequest>
+                        for ConfigureProviderSvc<T>
+                    {
                         type Response = super::ConfigureProviderResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ConfigureProviderRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as ProviderLifecycle>::configure_provider(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as ProviderLifecycle>::configure_provider(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -7321,18 +6218,13 @@ pub mod provider_lifecycle_server {
                 "/gestalt.provider.v1.ProviderLifecycle/HealthCheck" => {
                     #[allow(non_camel_case_types)]
                     struct HealthCheckSvc<T: ProviderLifecycle>(pub Arc<T>);
-                    impl<T: ProviderLifecycle> tonic::server::UnaryService<()>
-                    for HealthCheckSvc<T> {
+                    impl<T: ProviderLifecycle> tonic::server::UnaryService<()> for HealthCheckSvc<T> {
                         type Response = super::HealthCheckResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as ProviderLifecycle>::health_check(&inner, request)
-                                    .await
+                                <T as ProviderLifecycle>::health_check(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -7362,18 +6254,13 @@ pub mod provider_lifecycle_server {
                 "/gestalt.provider.v1.ProviderLifecycle/StartProvider" => {
                     #[allow(non_camel_case_types)]
                     struct StartProviderSvc<T: ProviderLifecycle>(pub Arc<T>);
-                    impl<T: ProviderLifecycle> tonic::server::UnaryService<()>
-                    for StartProviderSvc<T> {
+                    impl<T: ProviderLifecycle> tonic::server::UnaryService<()> for StartProviderSvc<T> {
                         type Response = super::StartRuntimeProviderResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as ProviderLifecycle>::start_provider(&inner, request)
-                                    .await
+                                <T as ProviderLifecycle>::start_provider(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -7400,25 +6287,19 @@ pub mod provider_lifecycle_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -7447,10 +6328,10 @@ pub mod runtime_log_host_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
     pub struct RuntimeLogHostClient<T> {
@@ -7490,14 +6371,13 @@ pub mod runtime_log_host_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             RuntimeLogHostClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -7536,27 +6416,20 @@ pub mod runtime_log_host_client {
         pub async fn append_logs(
             &mut self,
             request: impl tonic::IntoRequest<super::AppendRuntimeLogsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendRuntimeLogsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::AppendRuntimeLogsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeLogHost/AppendLogs",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.RuntimeLogHost", "AppendLogs"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeLogHost",
+                "AppendLogs",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -7568,7 +6441,7 @@ pub mod runtime_log_host_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with RuntimeLogHostServer.
@@ -7578,10 +6451,7 @@ pub mod runtime_log_host_server {
         async fn append_logs(
             &self,
             request: tonic::Request<super::AppendRuntimeLogsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AppendRuntimeLogsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::AppendRuntimeLogsResponse>, tonic::Status>;
     }
     ///
     #[derive(Debug)]
@@ -7605,10 +6475,7 @@ pub mod runtime_log_host_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -7663,15 +6530,12 @@ pub mod runtime_log_host_server {
                 "/gestalt.provider.v1.RuntimeLogHost/AppendLogs" => {
                     #[allow(non_camel_case_types)]
                     struct AppendLogsSvc<T: RuntimeLogHost>(pub Arc<T>);
-                    impl<
-                        T: RuntimeLogHost,
-                    > tonic::server::UnaryService<super::AppendRuntimeLogsRequest>
-                    for AppendLogsSvc<T> {
+                    impl<T: RuntimeLogHost>
+                        tonic::server::UnaryService<super::AppendRuntimeLogsRequest>
+                        for AppendLogsSvc<T>
+                    {
                         type Response = super::AppendRuntimeLogsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AppendRuntimeLogsRequest>,
@@ -7705,25 +6569,19 @@ pub mod runtime_log_host_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -7752,10 +6610,10 @@ pub mod runtime_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
     pub struct RuntimeProviderClient<T> {
@@ -7795,14 +6653,13 @@ pub mod runtime_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             RuntimeProviderClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -7842,23 +6699,18 @@ pub mod runtime_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<()>,
         ) -> std::result::Result<tonic::Response<super::RuntimeSupport>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/GetSupport",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.RuntimeProvider", "GetSupport"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "GetSupport",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -7866,26 +6718,18 @@ pub mod runtime_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StartRuntimeSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::RuntimeSession>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/StartSession",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.RuntimeProvider",
-                        "StartSession",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "StartSession",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -7893,53 +6737,38 @@ pub mod runtime_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::GetRuntimeSessionRequest>,
         ) -> std::result::Result<tonic::Response<super::RuntimeSession>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/GetSession",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.RuntimeProvider", "GetSession"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "GetSession",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn list_sessions(
             &mut self,
             request: impl tonic::IntoRequest<super::ListRuntimeSessionsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListRuntimeSessionsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ListRuntimeSessionsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/ListSessions",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.RuntimeProvider",
-                        "ListSessions",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "ListSessions",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -7947,23 +6776,18 @@ pub mod runtime_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StopRuntimeSessionRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/StopSession",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.RuntimeProvider", "StopSession"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "StopSession",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -7974,26 +6798,18 @@ pub mod runtime_provider_client {
             tonic::Response<super::PrepareRuntimeWorkspaceResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.RuntimeProvider",
-                        "PrepareWorkspace",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "PrepareWorkspace",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8001,26 +6817,18 @@ pub mod runtime_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::RemoveRuntimeWorkspaceRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.RuntimeProvider",
-                        "RemoveWorkspace",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "RemoveWorkspace",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8028,23 +6836,18 @@ pub mod runtime_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StartHostedAppRequest>,
         ) -> std::result::Result<tonic::Response<super::HostedApp>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.RuntimeProvider/StartApp",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.RuntimeProvider", "StartApp"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.RuntimeProvider",
+                "StartApp",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -8056,7 +6859,7 @@ pub mod runtime_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with RuntimeProviderServer.
@@ -8081,10 +6884,7 @@ pub mod runtime_provider_server {
         async fn list_sessions(
             &self,
             request: tonic::Request<super::ListRuntimeSessionsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListRuntimeSessionsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ListRuntimeSessionsResponse>, tonic::Status>;
         ///
         async fn stop_session(
             &self,
@@ -8131,10 +6931,7 @@ pub mod runtime_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -8189,13 +6986,9 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/GetSupport" => {
                     #[allow(non_camel_case_types)]
                     struct GetSupportSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider> tonic::server::UnaryService<()>
-                    for GetSupportSvc<T> {
+                    impl<T: RuntimeProvider> tonic::server::UnaryService<()> for GetSupportSvc<T> {
                         type Response = super::RuntimeSupport;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -8229,15 +7022,12 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/StartSession" => {
                     #[allow(non_camel_case_types)]
                     struct StartSessionSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::StartRuntimeSessionRequest>
-                    for StartSessionSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::StartRuntimeSessionRequest>
+                        for StartSessionSvc<T>
+                    {
                         type Response = super::RuntimeSession;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StartRuntimeSessionRequest>,
@@ -8274,15 +7064,12 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/GetSession" => {
                     #[allow(non_camel_case_types)]
                     struct GetSessionSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::GetRuntimeSessionRequest>
-                    for GetSessionSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::GetRuntimeSessionRequest>
+                        for GetSessionSvc<T>
+                    {
                         type Response = super::RuntimeSession;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::GetRuntimeSessionRequest>,
@@ -8319,15 +7106,12 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/ListSessions" => {
                     #[allow(non_camel_case_types)]
                     struct ListSessionsSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::ListRuntimeSessionsRequest>
-                    for ListSessionsSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::ListRuntimeSessionsRequest>
+                        for ListSessionsSvc<T>
+                    {
                         type Response = super::ListRuntimeSessionsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListRuntimeSessionsRequest>,
@@ -8364,15 +7148,12 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/StopSession" => {
                     #[allow(non_camel_case_types)]
                     struct StopSessionSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::StopRuntimeSessionRequest>
-                    for StopSessionSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::StopRuntimeSessionRequest>
+                        for StopSessionSvc<T>
+                    {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StopRuntimeSessionRequest>,
@@ -8409,25 +7190,19 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace" => {
                     #[allow(non_camel_case_types)]
                     struct PrepareWorkspaceSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::PrepareRuntimeWorkspaceRequest>
-                    for PrepareWorkspaceSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::PrepareRuntimeWorkspaceRequest>
+                        for PrepareWorkspaceSvc<T>
+                    {
                         type Response = super::PrepareRuntimeWorkspaceResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::PrepareRuntimeWorkspaceRequest,
-                            >,
+                            request: tonic::Request<super::PrepareRuntimeWorkspaceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as RuntimeProvider>::prepare_workspace(&inner, request)
-                                    .await
+                                <T as RuntimeProvider>::prepare_workspace(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -8457,23 +7232,19 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace" => {
                     #[allow(non_camel_case_types)]
                     struct RemoveWorkspaceSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::RemoveRuntimeWorkspaceRequest>
-                    for RemoveWorkspaceSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::RemoveRuntimeWorkspaceRequest>
+                        for RemoveWorkspaceSvc<T>
+                    {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::RemoveRuntimeWorkspaceRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as RuntimeProvider>::remove_workspace(&inner, request)
-                                    .await
+                                <T as RuntimeProvider>::remove_workspace(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -8503,15 +7274,12 @@ pub mod runtime_provider_server {
                 "/gestalt.provider.v1.RuntimeProvider/StartApp" => {
                     #[allow(non_camel_case_types)]
                     struct StartAppSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<
-                        T: RuntimeProvider,
-                    > tonic::server::UnaryService<super::StartHostedAppRequest>
-                    for StartAppSvc<T> {
+                    impl<T: RuntimeProvider>
+                        tonic::server::UnaryService<super::StartHostedAppRequest>
+                        for StartAppSvc<T>
+                    {
                         type Response = super::HostedApp;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StartHostedAppRequest>,
@@ -8545,25 +7313,19 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -8592,12 +7354,12 @@ pub mod s3_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** S3 models the shared Gestalt S3-provider protocol.
-*/
+    */
     #[derive(Debug, Clone)]
     pub struct S3Client<T> {
         inner: tonic::client::Grpc<T>,
@@ -8628,22 +7390,18 @@ pub mod s3_client {
             let inner = tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> S3Client<InterceptedService<T, F>>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> S3Client<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             S3Client::new(InterceptedService::new(inner, interceptor))
         }
@@ -8682,30 +7440,21 @@ pub mod s3_client {
         pub async fn head_object(
             &mut self,
             request: impl tonic::IntoRequest<super::HeadObjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::HeadObjectResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::HeadObjectResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/HeadObject",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/HeadObject");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "HeadObject"));
             self.inner.unary(req, path, codec).await
         }
         /** The first response frame carries object metadata. All subsequent frames
- carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-*/
+         carry byte chunks. Zero-byte objects therefore emit exactly one frame.
+        */
         pub async fn read_object(
             &mut self,
             request: impl tonic::IntoRequest<super::ReadObjectRequest>,
@@ -8713,48 +7462,30 @@ pub mod s3_client {
             tonic::Response<tonic::codec::Streaming<super::ReadObjectChunk>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/ReadObject",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/ReadObject");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "ReadObject"));
             self.inner.server_streaming(req, path, codec).await
         }
         /** The first request frame must carry WriteObjectOpen metadata. All
- subsequent frames carry raw bytes. The response is emitted only after the
- object has been durably committed by the provider.
-*/
+         subsequent frames carry raw bytes. The response is emitted only after the
+         object has been durably committed by the provider.
+        */
         pub async fn write_object(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<
-                Message = super::WriteObjectRequest,
-            >,
-        ) -> std::result::Result<
-            tonic::Response<super::WriteObjectResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            request: impl tonic::IntoStreamingRequest<Message = super::WriteObjectRequest>,
+        ) -> std::result::Result<tonic::Response<super::WriteObjectResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/WriteObject",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/WriteObject");
             let mut req = request.into_streaming_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "WriteObject"));
@@ -8765,18 +7496,11 @@ pub mod s3_client {
             &mut self,
             request: impl tonic::IntoRequest<super::DeleteObjectRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/DeleteObject",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/DeleteObject");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "DeleteObject"));
@@ -8786,22 +7510,13 @@ pub mod s3_client {
         pub async fn list_objects(
             &mut self,
             request: impl tonic::IntoRequest<super::ListObjectsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListObjectsResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::ListObjectsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/ListObjects",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/ListObjects");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "ListObjects"));
@@ -8811,22 +7526,13 @@ pub mod s3_client {
         pub async fn copy_object(
             &mut self,
             request: impl tonic::IntoRequest<super::CopyObjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CopyObjectResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CopyObjectResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/CopyObject",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/CopyObject");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "CopyObject"));
@@ -8836,22 +7542,14 @@ pub mod s3_client {
         pub async fn presign_object(
             &mut self,
             request: impl tonic::IntoRequest<super::PresignObjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PresignObjectResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::PresignObjectResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.S3/PresignObject",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.S3/PresignObject");
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "PresignObject"));
@@ -8866,7 +7564,7 @@ pub mod s3_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with S3Server.
@@ -8876,34 +7574,27 @@ pub mod s3_server {
         async fn head_object(
             &self,
             request: tonic::Request<super::HeadObjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::HeadObjectResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::HeadObjectResponse>, tonic::Status>;
         /// Server streaming response type for the ReadObject method.
         type ReadObjectStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::ReadObjectChunk, tonic::Status>,
-            >
-            + std::marker::Send
+            > + std::marker::Send
             + 'static;
         /** The first response frame carries object metadata. All subsequent frames
- carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-*/
+         carry byte chunks. Zero-byte objects therefore emit exactly one frame.
+        */
         async fn read_object(
             &self,
             request: tonic::Request<super::ReadObjectRequest>,
         ) -> std::result::Result<tonic::Response<Self::ReadObjectStream>, tonic::Status>;
         /** The first request frame must carry WriteObjectOpen metadata. All
- subsequent frames carry raw bytes. The response is emitted only after the
- object has been durably committed by the provider.
-*/
+         subsequent frames carry raw bytes. The response is emitted only after the
+         object has been durably committed by the provider.
+        */
         async fn write_object(
             &self,
             request: tonic::Request<tonic::Streaming<super::WriteObjectRequest>>,
-        ) -> std::result::Result<
-            tonic::Response<super::WriteObjectResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::WriteObjectResponse>, tonic::Status>;
         ///
         async fn delete_object(
             &self,
@@ -8913,29 +7604,20 @@ pub mod s3_server {
         async fn list_objects(
             &self,
             request: tonic::Request<super::ListObjectsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListObjectsResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::ListObjectsResponse>, tonic::Status>;
         ///
         async fn copy_object(
             &self,
             request: tonic::Request<super::CopyObjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CopyObjectResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CopyObjectResponse>, tonic::Status>;
         ///
         async fn presign_object(
             &self,
             request: tonic::Request<super::PresignObjectRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::PresignObjectResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::PresignObjectResponse>, tonic::Status>;
     }
     /** S3 models the shared Gestalt S3-provider protocol.
-*/
+    */
     #[derive(Debug)]
     pub struct S3Server<T> {
         inner: Arc<T>,
@@ -8957,10 +7639,7 @@ pub mod s3_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -9015,21 +7694,15 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/HeadObject" => {
                     #[allow(non_camel_case_types)]
                     struct HeadObjectSvc<T: S3>(pub Arc<T>);
-                    impl<T: S3> tonic::server::UnaryService<super::HeadObjectRequest>
-                    for HeadObjectSvc<T> {
+                    impl<T: S3> tonic::server::UnaryService<super::HeadObjectRequest> for HeadObjectSvc<T> {
                         type Response = super::HeadObjectResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::HeadObjectRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::head_object(&inner, request).await
-                            };
+                            let fut = async move { <T as S3>::head_object(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9058,24 +7731,17 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/ReadObject" => {
                     #[allow(non_camel_case_types)]
                     struct ReadObjectSvc<T: S3>(pub Arc<T>);
-                    impl<
-                        T: S3,
-                    > tonic::server::ServerStreamingService<super::ReadObjectRequest>
-                    for ReadObjectSvc<T> {
+                    impl<T: S3> tonic::server::ServerStreamingService<super::ReadObjectRequest> for ReadObjectSvc<T> {
                         type Response = super::ReadObjectChunk;
                         type ResponseStream = T::ReadObjectStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ReadObjectRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::read_object(&inner, request).await
-                            };
+                            let fut = async move { <T as S3>::read_object(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9104,25 +7770,15 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/WriteObject" => {
                     #[allow(non_camel_case_types)]
                     struct WriteObjectSvc<T: S3>(pub Arc<T>);
-                    impl<
-                        T: S3,
-                    > tonic::server::ClientStreamingService<super::WriteObjectRequest>
-                    for WriteObjectSvc<T> {
+                    impl<T: S3> tonic::server::ClientStreamingService<super::WriteObjectRequest> for WriteObjectSvc<T> {
                         type Response = super::WriteObjectResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                tonic::Streaming<super::WriteObjectRequest>,
-                            >,
+                            request: tonic::Request<tonic::Streaming<super::WriteObjectRequest>>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::write_object(&inner, request).await
-                            };
+                            let fut = async move { <T as S3>::write_object(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9151,21 +7807,16 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/DeleteObject" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteObjectSvc<T: S3>(pub Arc<T>);
-                    impl<T: S3> tonic::server::UnaryService<super::DeleteObjectRequest>
-                    for DeleteObjectSvc<T> {
+                    impl<T: S3> tonic::server::UnaryService<super::DeleteObjectRequest> for DeleteObjectSvc<T> {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DeleteObjectRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::delete_object(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as S3>::delete_object(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9194,21 +7845,15 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/ListObjects" => {
                     #[allow(non_camel_case_types)]
                     struct ListObjectsSvc<T: S3>(pub Arc<T>);
-                    impl<T: S3> tonic::server::UnaryService<super::ListObjectsRequest>
-                    for ListObjectsSvc<T> {
+                    impl<T: S3> tonic::server::UnaryService<super::ListObjectsRequest> for ListObjectsSvc<T> {
                         type Response = super::ListObjectsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListObjectsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::list_objects(&inner, request).await
-                            };
+                            let fut = async move { <T as S3>::list_objects(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9237,21 +7882,15 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/CopyObject" => {
                     #[allow(non_camel_case_types)]
                     struct CopyObjectSvc<T: S3>(pub Arc<T>);
-                    impl<T: S3> tonic::server::UnaryService<super::CopyObjectRequest>
-                    for CopyObjectSvc<T> {
+                    impl<T: S3> tonic::server::UnaryService<super::CopyObjectRequest> for CopyObjectSvc<T> {
                         type Response = super::CopyObjectResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CopyObjectRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::copy_object(&inner, request).await
-                            };
+                            let fut = async move { <T as S3>::copy_object(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9280,21 +7919,16 @@ pub mod s3_server {
                 "/gestalt.provider.v1.S3/PresignObject" => {
                     #[allow(non_camel_case_types)]
                     struct PresignObjectSvc<T: S3>(pub Arc<T>);
-                    impl<T: S3> tonic::server::UnaryService<super::PresignObjectRequest>
-                    for PresignObjectSvc<T> {
+                    impl<T: S3> tonic::server::UnaryService<super::PresignObjectRequest> for PresignObjectSvc<T> {
                         type Response = super::PresignObjectResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::PresignObjectRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as S3>::presign_object(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as S3>::presign_object(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9320,25 +7954,19 @@ pub mod s3_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -9367,14 +7995,14 @@ pub mod s3_object_access_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** S3ObjectAccess models host-mediated object access for plugin-scoped S3
- bindings. It is registered by gestaltd for apps and is not implemented by
- S3 providers.
-*/
+     bindings. It is registered by gestaltd for apps and is not implemented by
+     S3 providers.
+    */
     #[derive(Debug, Clone)]
     pub struct S3ObjectAccessClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -9413,14 +8041,13 @@ pub mod s3_object_access_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             S3ObjectAccessClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -9459,30 +8086,20 @@ pub mod s3_object_access_client {
         pub async fn create_object_access_url(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectAccessUrlRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CreateObjectAccessUrlResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::CreateObjectAccessUrlResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.S3ObjectAccess/CreateObjectAccessURL",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.S3ObjectAccess",
-                        "CreateObjectAccessURL",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.S3ObjectAccess",
+                "CreateObjectAccessURL",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -9494,7 +8111,7 @@ pub mod s3_object_access_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with S3ObjectAccessServer.
@@ -9504,15 +8121,12 @@ pub mod s3_object_access_server {
         async fn create_object_access_url(
             &self,
             request: tonic::Request<super::CreateObjectAccessUrlRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CreateObjectAccessUrlResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::CreateObjectAccessUrlResponse>, tonic::Status>;
     }
     /** S3ObjectAccess models host-mediated object access for plugin-scoped S3
- bindings. It is registered by gestaltd for apps and is not implemented by
- S3 providers.
-*/
+     bindings. It is registered by gestaltd for apps and is not implemented by
+     S3 providers.
+    */
     #[derive(Debug)]
     pub struct S3ObjectAccessServer<T> {
         inner: Arc<T>,
@@ -9534,10 +8148,7 @@ pub mod s3_object_access_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -9592,25 +8203,19 @@ pub mod s3_object_access_server {
                 "/gestalt.provider.v1.S3ObjectAccess/CreateObjectAccessURL" => {
                     #[allow(non_camel_case_types)]
                     struct CreateObjectAccessURLSvc<T: S3ObjectAccess>(pub Arc<T>);
-                    impl<
-                        T: S3ObjectAccess,
-                    > tonic::server::UnaryService<super::CreateObjectAccessUrlRequest>
-                    for CreateObjectAccessURLSvc<T> {
+                    impl<T: S3ObjectAccess>
+                        tonic::server::UnaryService<super::CreateObjectAccessUrlRequest>
+                        for CreateObjectAccessURLSvc<T>
+                    {
                         type Response = super::CreateObjectAccessUrlResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CreateObjectAccessUrlRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as S3ObjectAccess>::create_object_access_url(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as S3ObjectAccess>::create_object_access_url(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -9638,25 +8243,19 @@ pub mod s3_object_access_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -9685,12 +8284,12 @@ pub mod secrets_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /** SecretsProvider models the shared Gestalt secrets-provider protocol.
-*/
+    */
     #[derive(Debug, Clone)]
     pub struct SecretsProviderClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -9729,14 +8328,13 @@ pub mod secrets_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             SecretsProviderClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -9775,27 +8373,19 @@ pub mod secrets_provider_client {
         pub async fn get_secret(
             &mut self,
             request: impl tonic::IntoRequest<super::GetSecretRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetSecretResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::GetSecretResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.SecretsProvider/GetSecret",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.SecretsProvider", "GetSecret"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.SecretsProvider",
+                "GetSecret",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -9807,7 +8397,7 @@ pub mod secrets_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with SecretsProviderServer.
@@ -9817,13 +8407,10 @@ pub mod secrets_provider_server {
         async fn get_secret(
             &self,
             request: tonic::Request<super::GetSecretRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::GetSecretResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::GetSecretResponse>, tonic::Status>;
     }
     /** SecretsProvider models the shared Gestalt secrets-provider protocol.
-*/
+    */
     #[derive(Debug)]
     pub struct SecretsProviderServer<T> {
         inner: Arc<T>,
@@ -9845,10 +8432,7 @@ pub mod secrets_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -9903,15 +8487,9 @@ pub mod secrets_provider_server {
                 "/gestalt.provider.v1.SecretsProvider/GetSecret" => {
                     #[allow(non_camel_case_types)]
                     struct GetSecretSvc<T: SecretsProvider>(pub Arc<T>);
-                    impl<
-                        T: SecretsProvider,
-                    > tonic::server::UnaryService<super::GetSecretRequest>
-                    for GetSecretSvc<T> {
+                    impl<T: SecretsProvider> tonic::server::UnaryService<super::GetSecretRequest> for GetSecretSvc<T> {
                         type Response = super::GetSecretResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::GetSecretRequest>,
@@ -9945,25 +8523,19 @@ pub mod secrets_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
@@ -9992,10 +8564,10 @@ pub mod workflow_provider_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
     pub struct WorkflowProviderClient<T> {
@@ -10035,14 +8607,13 @@ pub mod workflow_provider_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             WorkflowProviderClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -10080,188 +8651,122 @@ pub mod workflow_provider_client {
         ///
         pub async fn apply_definition(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::ApplyWorkflowProviderDefinitionRequest,
-            >,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            request: impl tonic::IntoRequest<super::ApplyWorkflowProviderDefinitionRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/ApplyDefinition",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "ApplyDefinition",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "ApplyDefinition",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn get_definition(
             &mut self,
             request: impl tonic::IntoRequest<super::GetWorkflowProviderDefinitionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/GetDefinition",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "GetDefinition",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "GetDefinition",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn list_definitions(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::ListWorkflowProviderDefinitionsRequest,
-            >,
+            request: impl tonic::IntoRequest<super::ListWorkflowProviderDefinitionsRequest>,
         ) -> std::result::Result<
             tonic::Response<super::ListWorkflowProviderDefinitionsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/ListDefinitions",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "ListDefinitions",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "ListDefinitions",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn set_definition_paused(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::SetWorkflowProviderDefinitionPausedRequest,
-            >,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            request: impl tonic::IntoRequest<super::SetWorkflowProviderDefinitionPausedRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/SetDefinitionPaused",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "SetDefinitionPaused",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "SetDefinitionPaused",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn set_activation_paused(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::SetWorkflowProviderActivationPausedRequest,
-            >,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            request: impl tonic::IntoRequest<super::SetWorkflowProviderActivationPausedRequest>,
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/SetActivationPaused",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "SetActivationPaused",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "SetActivationPaused",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn delete_definition(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::DeleteWorkflowProviderDefinitionRequest,
-            >,
+            request: impl tonic::IntoRequest<super::DeleteWorkflowProviderDefinitionRequest>,
         ) -> std::result::Result<tonic::Response<()>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/DeleteDefinition",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "DeleteDefinition",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "DeleteDefinition",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10269,23 +8774,18 @@ pub mod workflow_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::StartWorkflowProviderRunRequest>,
         ) -> std::result::Result<tonic::Response<super::WorkflowRun>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/StartRun",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.WorkflowProvider", "StartRun"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "StartRun",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10296,23 +8796,18 @@ pub mod workflow_provider_client {
             tonic::Response<super::ListWorkflowProviderRunsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/ListRuns",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.WorkflowProvider", "ListRuns"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "ListRuns",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10320,23 +8815,18 @@ pub mod workflow_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::GetWorkflowProviderRunRequest>,
         ) -> std::result::Result<tonic::Response<super::WorkflowRun>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/GetRun",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.WorkflowProvider", "GetRun"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "GetRun",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10347,26 +8837,18 @@ pub mod workflow_provider_client {
             tonic::Response<super::GetWorkflowProviderRunEventsResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/GetRunEvents",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "GetRunEvents",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "GetRunEvents",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10377,26 +8859,18 @@ pub mod workflow_provider_client {
             tonic::Response<super::GetWorkflowProviderRunOutputResponse>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/GetRunOutput",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "GetRunOutput",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "GetRunOutput",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10404,82 +8878,58 @@ pub mod workflow_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::CancelWorkflowProviderRunRequest>,
         ) -> std::result::Result<tonic::Response<super::WorkflowRun>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/CancelRun",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.WorkflowProvider", "CancelRun"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "CancelRun",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn signal_run(
             &mut self,
             request: impl tonic::IntoRequest<super::SignalWorkflowProviderRunRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SignalWorkflowRunResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/SignalRun",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new("gestalt.provider.v1.WorkflowProvider", "SignalRun"),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "SignalRun",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
         pub async fn signal_or_start_run(
             &mut self,
-            request: impl tonic::IntoRequest<
-                super::SignalOrStartWorkflowProviderRunRequest,
-            >,
-        ) -> std::result::Result<
-            tonic::Response<super::SignalWorkflowRunResponse>,
-            tonic::Status,
-        > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            request: impl tonic::IntoRequest<super::SignalOrStartWorkflowProviderRunRequest>,
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "SignalOrStartRun",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "SignalOrStartRun",
+            ));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -10487,26 +8937,18 @@ pub mod workflow_provider_client {
             &mut self,
             request: impl tonic::IntoRequest<super::DeliverWorkflowProviderEventRequest>,
         ) -> std::result::Result<tonic::Response<super::WorkflowEvent>, tonic::Status> {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/gestalt.provider.v1.WorkflowProvider/DeliverEvent",
             );
             let mut req = request.into_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "gestalt.provider.v1.WorkflowProvider",
-                        "DeliverEvent",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.WorkflowProvider",
+                "DeliverEvent",
+            ));
             self.inner.unary(req, path, codec).await
         }
     }
@@ -10518,7 +8960,7 @@ pub mod workflow_provider_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with WorkflowProviderServer.
@@ -10528,18 +8970,12 @@ pub mod workflow_provider_server {
         async fn apply_definition(
             &self,
             request: tonic::Request<super::ApplyWorkflowProviderDefinitionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>;
         ///
         async fn get_definition(
             &self,
             request: tonic::Request<super::GetWorkflowProviderDefinitionRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>;
         ///
         async fn list_definitions(
             &self,
@@ -10552,18 +8988,12 @@ pub mod workflow_provider_server {
         async fn set_definition_paused(
             &self,
             request: tonic::Request<super::SetWorkflowProviderDefinitionPausedRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>;
         ///
         async fn set_activation_paused(
             &self,
             request: tonic::Request<super::SetWorkflowProviderActivationPausedRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::WorkflowDefinition>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::WorkflowDefinition>, tonic::Status>;
         ///
         async fn delete_definition(
             &self,
@@ -10612,18 +9042,12 @@ pub mod workflow_provider_server {
         async fn signal_run(
             &self,
             request: tonic::Request<super::SignalWorkflowProviderRunRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SignalWorkflowRunResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>;
         ///
         async fn signal_or_start_run(
             &self,
             request: tonic::Request<super::SignalOrStartWorkflowProviderRunRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::SignalWorkflowRunResponse>,
-            tonic::Status,
-        >;
+        ) -> std::result::Result<tonic::Response<super::SignalWorkflowRunResponse>, tonic::Status>;
         ///
         async fn deliver_event(
             &self,
@@ -10652,10 +9076,7 @@ pub mod workflow_provider_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -10710,26 +9131,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/ApplyDefinition" => {
                     #[allow(non_camel_case_types)]
                     struct ApplyDefinitionSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::ApplyWorkflowProviderDefinitionRequest,
-                    > for ApplyDefinitionSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::ApplyWorkflowProviderDefinitionRequest>
+                        for ApplyDefinitionSvc<T>
+                    {
                         type Response = super::WorkflowDefinition;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ApplyWorkflowProviderDefinitionRequest,
-                            >,
+                            request: tonic::Request<super::ApplyWorkflowProviderDefinitionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::apply_definition(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::apply_definition(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -10759,26 +9173,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/GetDefinition" => {
                     #[allow(non_camel_case_types)]
                     struct GetDefinitionSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::GetWorkflowProviderDefinitionRequest,
-                    > for GetDefinitionSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::GetWorkflowProviderDefinitionRequest>
+                        for GetDefinitionSvc<T>
+                    {
                         type Response = super::WorkflowDefinition;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::GetWorkflowProviderDefinitionRequest,
-                            >,
+                            request: tonic::Request<super::GetWorkflowProviderDefinitionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::get_definition(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::get_definition(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -10808,26 +9215,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/ListDefinitions" => {
                     #[allow(non_camel_case_types)]
                     struct ListDefinitionsSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::ListWorkflowProviderDefinitionsRequest,
-                    > for ListDefinitionsSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::ListWorkflowProviderDefinitionsRequest>
+                        for ListDefinitionsSvc<T>
+                    {
                         type Response = super::ListWorkflowProviderDefinitionsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListWorkflowProviderDefinitionsRequest,
-                            >,
+                            request: tonic::Request<super::ListWorkflowProviderDefinitionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::list_definitions(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::list_definitions(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -10857,16 +9257,13 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/SetDefinitionPaused" => {
                     #[allow(non_camel_case_types)]
                     struct SetDefinitionPausedSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::SetWorkflowProviderDefinitionPausedRequest,
-                    > for SetDefinitionPausedSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<
+                            super::SetWorkflowProviderDefinitionPausedRequest,
+                        > for SetDefinitionPausedSvc<T>
+                    {
                         type Response = super::WorkflowDefinition;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<
@@ -10875,10 +9272,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::set_definition_paused(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as WorkflowProvider>::set_definition_paused(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -10909,16 +9303,13 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/SetActivationPaused" => {
                     #[allow(non_camel_case_types)]
                     struct SetActivationPausedSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::SetWorkflowProviderActivationPausedRequest,
-                    > for SetActivationPausedSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<
+                            super::SetWorkflowProviderActivationPausedRequest,
+                        > for SetActivationPausedSvc<T>
+                    {
                         type Response = super::WorkflowDefinition;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<
@@ -10927,10 +9318,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::set_activation_paused(
-                                        &inner,
-                                        request,
-                                    )
+                                <T as WorkflowProvider>::set_activation_paused(&inner, request)
                                     .await
                             };
                             Box::pin(fut)
@@ -10961,26 +9349,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/DeleteDefinition" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteDefinitionSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::DeleteWorkflowProviderDefinitionRequest,
-                    > for DeleteDefinitionSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::DeleteWorkflowProviderDefinitionRequest>
+                        for DeleteDefinitionSvc<T>
+                    {
                         type Response = ();
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::DeleteWorkflowProviderDefinitionRequest,
-                            >,
+                            request: tonic::Request<super::DeleteWorkflowProviderDefinitionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::delete_definition(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::delete_definition(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -11010,20 +9391,15 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/StartRun" => {
                     #[allow(non_camel_case_types)]
                     struct StartRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<super::StartWorkflowProviderRunRequest>
-                    for StartRunSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::StartWorkflowProviderRunRequest>
+                        for StartRunSvc<T>
+                    {
                         type Response = super::WorkflowRun;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::StartWorkflowProviderRunRequest,
-                            >,
+                            request: tonic::Request<super::StartWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -11057,20 +9433,15 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/ListRuns" => {
                     #[allow(non_camel_case_types)]
                     struct ListRunsSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<super::ListWorkflowProviderRunsRequest>
-                    for ListRunsSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::ListWorkflowProviderRunsRequest>
+                        for ListRunsSvc<T>
+                    {
                         type Response = super::ListWorkflowProviderRunsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::ListWorkflowProviderRunsRequest,
-                            >,
+                            request: tonic::Request<super::ListWorkflowProviderRunsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -11104,15 +9475,12 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/GetRun" => {
                     #[allow(non_camel_case_types)]
                     struct GetRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<super::GetWorkflowProviderRunRequest>
-                    for GetRunSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::GetWorkflowProviderRunRequest>
+                        for GetRunSvc<T>
+                    {
                         type Response = super::WorkflowRun;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::GetWorkflowProviderRunRequest>,
@@ -11149,26 +9517,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/GetRunEvents" => {
                     #[allow(non_camel_case_types)]
                     struct GetRunEventsSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::GetWorkflowProviderRunEventsRequest,
-                    > for GetRunEventsSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::GetWorkflowProviderRunEventsRequest>
+                        for GetRunEventsSvc<T>
+                    {
                         type Response = super::GetWorkflowProviderRunEventsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::GetWorkflowProviderRunEventsRequest,
-                            >,
+                            request: tonic::Request<super::GetWorkflowProviderRunEventsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::get_run_events(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::get_run_events(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -11198,26 +9559,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/GetRunOutput" => {
                     #[allow(non_camel_case_types)]
                     struct GetRunOutputSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::GetWorkflowProviderRunOutputRequest,
-                    > for GetRunOutputSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::GetWorkflowProviderRunOutputRequest>
+                        for GetRunOutputSvc<T>
+                    {
                         type Response = super::GetWorkflowProviderRunOutputResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::GetWorkflowProviderRunOutputRequest,
-                            >,
+                            request: tonic::Request<super::GetWorkflowProviderRunOutputRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::get_run_output(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::get_run_output(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -11247,21 +9601,15 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/CancelRun" => {
                     #[allow(non_camel_case_types)]
                     struct CancelRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::CancelWorkflowProviderRunRequest,
-                    > for CancelRunSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::CancelWorkflowProviderRunRequest>
+                        for CancelRunSvc<T>
+                    {
                         type Response = super::WorkflowRun;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::CancelWorkflowProviderRunRequest,
-                            >,
+                            request: tonic::Request<super::CancelWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -11295,21 +9643,15 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/SignalRun" => {
                     #[allow(non_camel_case_types)]
                     struct SignalRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::SignalWorkflowProviderRunRequest,
-                    > for SignalRunSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::SignalWorkflowProviderRunRequest>
+                        for SignalRunSvc<T>
+                    {
                         type Response = super::SignalWorkflowRunResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::SignalWorkflowProviderRunRequest,
-                            >,
+                            request: tonic::Request<super::SignalWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -11343,29 +9685,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun" => {
                     #[allow(non_camel_case_types)]
                     struct SignalOrStartRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::SignalOrStartWorkflowProviderRunRequest,
-                    > for SignalOrStartRunSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::SignalOrStartWorkflowProviderRunRequest>
+                        for SignalOrStartRunSvc<T>
+                    {
                         type Response = super::SignalWorkflowRunResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::SignalOrStartWorkflowProviderRunRequest,
-                            >,
+                            request: tonic::Request<super::SignalOrStartWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::signal_or_start_run(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as WorkflowProvider>::signal_or_start_run(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -11395,26 +9727,19 @@ pub mod workflow_provider_server {
                 "/gestalt.provider.v1.WorkflowProvider/DeliverEvent" => {
                     #[allow(non_camel_case_types)]
                     struct DeliverEventSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<
-                        T: WorkflowProvider,
-                    > tonic::server::UnaryService<
-                        super::DeliverWorkflowProviderEventRequest,
-                    > for DeliverEventSvc<T> {
+                    impl<T: WorkflowProvider>
+                        tonic::server::UnaryService<super::DeliverWorkflowProviderEventRequest>
+                        for DeliverEventSvc<T>
+                    {
                         type Response = super::WorkflowEvent;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                super::DeliverWorkflowProviderEventRequest,
-                            >,
+                            request: tonic::Request<super::DeliverWorkflowProviderEventRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::deliver_event(&inner, request)
-                                    .await
+                                <T as WorkflowProvider>::deliver_event(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -11441,25 +9766,19 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }
