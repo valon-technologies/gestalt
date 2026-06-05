@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -112,7 +113,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	result, err := g.inner.Invoke(ctx, p, providerName, instance, operation, params)
 	if err != nil {
 		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+		if errors.Is(err, access.ErrDenied) || errors.Is(err, access.ErrScopeDenied) || errors.Is(err, access.ErrNotAuthenticated) {
 			entry.Allowed = false
 		}
 	}
@@ -164,7 +165,7 @@ func (g *GuardedInvoker) InvokeGraphQL(ctx context.Context, p *principal.Princip
 	result, err := graphqlInvoker.InvokeGraphQL(ctx, p, providerName, instance, request)
 	if err != nil {
 		entry.Error = err.Error()
-		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+		if errors.Is(err, access.ErrDenied) || errors.Is(err, access.ErrScopeDenied) || errors.Is(err, access.ErrNotAuthenticated) {
 			entry.Allowed = false
 		}
 	}

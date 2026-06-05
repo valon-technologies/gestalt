@@ -42,6 +42,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
@@ -4444,7 +4445,7 @@ func TestPluginInvokesPreserveCallerScopes(t *testing.T) {
 	if got.OK {
 		t.Fatalf("expected scope denial envelope, got success: %+v", got)
 	}
-	if !strings.Contains(got.Error, invocation.ErrScopeDenied.Error()) || !strings.Contains(got.Error, "example") {
+	if !strings.Contains(got.Error, access.ErrScopeDenied.Error()) || !strings.Contains(got.Error, "example") {
 		t.Fatalf("scope denial error = %q, want token scope denied for example", got.Error)
 	}
 }

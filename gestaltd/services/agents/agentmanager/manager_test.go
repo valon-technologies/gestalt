@@ -2891,7 +2891,7 @@ func TestNormalizeToolRefsRejectsProviderRunAsDelegation(t *testing.T) {
 			t.Parallel()
 
 			_, err := normalizeToolRefs([]coreagent.ToolRef{tc.ref})
-			if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+			if !errors.Is(err, access.ErrDenied) {
 				t.Fatalf("normalizeToolRefs error = %v, want authorization denied", err)
 			}
 		})

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -109,9 +110,11 @@ func OperationErrorHTTPStatus(err error) int {
 		return 0
 	case errors.Is(err, ErrProviderNotFound), errors.Is(err, ErrOperationNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, ErrNotAuthenticated):
+	case errors.Is(err, access.ErrNotAuthenticated):
 		return http.StatusUnauthorized
-	case errors.Is(err, ErrAuthorizationDenied), errors.Is(err, ErrScopeDenied):
+	case access.IsPolicyUnavailable(err):
+		return http.StatusServiceUnavailable
+	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
 		return http.StatusForbidden
 	case errors.Is(err, ErrNoCredential), errors.Is(err, ErrReconnectRequired):
 		return http.StatusPreconditionFailed

@@ -225,6 +225,7 @@ type Result struct {
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.AuthenticationProvider
 	Authorization        map[string]core.AuthorizationProvider
+	Access               *access.Enforcer
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -990,6 +991,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	} else {
 		deps.Authorization = authorizationProvider
+		deps.Access = access.NewEnforcer(authorizationProvider)
 	}
 	closeExternalCredentialsOnError := true
 	defer func() {
@@ -1135,16 +1137,15 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
-	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, prepared.Authorization)
-	if err != nil {
-		failPendingStartupProviders(prepared.Deps, err)
-		return nil, err
+	platformAccess := prepared.Deps.Access
+	if platformAccess == nil {
+		platformAccess = access.NewEnforcer(nil)
 	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
-		invocation.WithAuthorizationProvider(authorizationProvider),
+		invocation.WithEnforcer(platformAccess),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -1163,6 +1164,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
+		Access:            platformAccess,
 		Audit:             audit,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
@@ -1233,6 +1235,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
 		Authorization:                prepared.Authorization,
+		Access:                       platformAccess,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		ExtraCaches:                  prepared.ExtraCaches,

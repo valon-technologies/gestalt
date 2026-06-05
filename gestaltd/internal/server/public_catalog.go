@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	declarative "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/mcphttp"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -67,10 +68,10 @@ func (s *Server) publicCatalog(integration string, prov core.Provider, cat *cata
 func (s *Server) validatePublicOperationInvocation(integration string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error {
 	projector, hasProjector := s.operationConnectionProjection(integration)
 	if _, ok := s.projectPublicOperation(prov, op, projector, hasProjector); !ok {
-		return fmt.Errorf("%w: %s.%s uses an internal connection", invocation.ErrAuthorizationDenied, integration, op.ID)
+		return fmt.Errorf("%w: %s.%s uses an internal connection", access.ErrDenied, integration, op.ID)
 	}
 	if explicitConnection != "" && hasProjector && !publicConnection(projector.plan, explicitConnection) {
-		return fmt.Errorf("%w: %s connection %q is internal", invocation.ErrAuthorizationDenied, integration, explicitConnection)
+		return fmt.Errorf("%w: %s connection %q is internal", access.ErrDenied, integration, explicitConnection)
 	}
 	for _, param := range op.Parameters {
 		if !param.Internal {
@@ -86,7 +87,7 @@ func (s *Server) validatePublicOperationInvocation(integration string, prov core
 				value := strings.TrimSpace(fmt.Sprint(raw))
 				connection := selector.Values[value]
 				if connection != "" && !publicConnection(projector.plan, connection) {
-					return fmt.Errorf("%w: %s.%s selector value %q uses an internal connection", invocation.ErrAuthorizationDenied, integration, op.ID, value)
+					return fmt.Errorf("%w: %s.%s selector value %q uses an internal connection", access.ErrDenied, integration, op.ID, value)
 				}
 			}
 		}

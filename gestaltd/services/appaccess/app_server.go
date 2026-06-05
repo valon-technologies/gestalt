@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -605,9 +606,11 @@ func invocationStatusError(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, invocation.ErrNotAuthenticated):
+	case errors.Is(err, access.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())
-	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
+	case access.IsPolicyUnavailable(err):
+		return status.Error(codes.Unavailable, err.Error())
+	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound):
 		return status.Error(codes.NotFound, err.Error())

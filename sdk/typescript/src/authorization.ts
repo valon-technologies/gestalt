@@ -71,7 +71,7 @@ import {
   type SetAuthorizationStateRequest as ProtoSetAuthorizationStateRequest,
   type SubjectSet as ProtoSubjectSet,
 } from "./internal/gen/v1/authorization_pb.ts";
-import { errorMessage, type MaybePromise } from "./api.ts";
+import { errorMessage, type MaybePromise, type Request } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import {
   dateFromTimestamp,
@@ -86,6 +86,7 @@ import {
   parseHostServiceTarget,
   requireHostServiceTarget,
 } from "./host-service.ts";
+import { hostInvocationContext } from "./invocation-context.ts";
 
 export const RelationshipTargetType = {
   UNSPECIFIED: ProtoRelationshipTargetType.UNSPECIFIED,
@@ -312,13 +313,13 @@ export interface Authorization {
 class AuthorizationImpl implements Authorization {
   private readonly client: Client<typeof AuthorizationProviderService>;
 
-  constructor(target?: string, relayToken?: string) {
+  constructor(target?: string, relayToken?: string, invocationToken = "") {
     const host = target
       ? { target, token: relayToken?.trim() ?? "" }
       : requireHostServiceTarget("authorization");
     const transport = createHostServiceGrpcTransport(
       parseHostServiceTarget("authorization", host.target),
-      hostServiceMetadataInterceptors(host.token, ""),
+      hostServiceMetadataInterceptors(host.token, "", invocationToken),
     );
     this.client = createClient(AuthorizationProviderService, transport);
   }
@@ -400,7 +401,14 @@ let sharedAuthorization:
   | { target: string; token: string; client: Authorization }
   | undefined;
 
-export function Authorization(): Authorization {
+export function Authorization(): Authorization;
+export function Authorization(request: Request): Authorization;
+export function Authorization(invocationToken: string): Authorization;
+export function Authorization(requestOrToken?: Request | string): Authorization {
+  if (requestOrToken !== undefined) {
+    const { invocationToken } = hostInvocationContext(requestOrToken);
+    return new AuthorizationImpl(undefined, undefined, invocationToken);
+  }
   const { target, token } = requireHostServiceTarget("authorization");
   if (
     sharedAuthorization &&

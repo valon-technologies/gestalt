@@ -37,6 +37,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
@@ -3271,8 +3272,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
 		Output:         bootstrapTextAgentOutput(),
 	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, invocation.ErrAuthorizationDenied)
+	if !errors.Is(err, access.ErrScopeDenied) {
+		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, access.ErrScopeDenied)
 	}
 
 	provider.mu.Lock()

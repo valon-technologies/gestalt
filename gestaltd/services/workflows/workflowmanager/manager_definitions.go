@@ -30,6 +30,9 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
+	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationDefinitionApply); err != nil {
+		return nil, err
+	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		return nil, err
@@ -105,7 +108,11 @@ func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) (
 				Definition:   definition,
 				provider:     provider,
 			}
-			if m.definitionAccessible(ctx, p, managed) {
+			accessible, err := m.definitionAccessible(ctx, p, managed)
+			if err != nil {
+				return nil, err
+			}
+			if accessible {
 				out = append(out, managed)
 			}
 		}
@@ -195,6 +202,9 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 	}()
 	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
 	if err != nil {
+		return err
+	}
+	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationDefinitionDelete); err != nil {
 		return err
 	}
 	audit.setProvider(existing.ProviderName)
@@ -350,17 +360,24 @@ func (m *Manager) requireOwnedDefinition(ctx context.Context, p *principal.Princ
 	if err != nil {
 		return nil, err
 	}
-	if !m.definitionAccessible(ctx, p, definition) {
+	accessible, err := m.definitionAccessible(ctx, p, definition)
+	if err != nil {
+		return nil, err
+	}
+	if !accessible {
 		return nil, core.ErrNotFound
 	}
 	return definition, nil
 }
 
-func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) bool {
+func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) (bool, error) {
 	if definition == nil || definition.Definition == nil {
-		return false
+		return false, nil
 	}
-	return workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, definition.Definition.Target)
+	if !workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) {
+		return false, nil
+	}
+	return m.storedTargetAccessible(ctx, p, definition.Definition.Target)
 }
 
 func (m *Manager) providerNames() []string {

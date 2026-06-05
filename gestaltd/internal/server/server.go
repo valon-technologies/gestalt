@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
@@ -84,7 +85,7 @@ type Server struct {
 	auth                   core.AuthenticationProvider
 	authProviders          map[string]core.AuthenticationProvider
 	serverAuthProvider     string
-	authorization          core.AuthorizationProvider
+	access                 *access.Enforcer
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
@@ -148,7 +149,7 @@ type Config struct {
 	Auth                 core.AuthenticationProvider
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.AuthenticationProvider
-	Authorization        core.AuthorizationProvider
+	Access               *access.Enforcer
 	AuditSink            core.AuditSink
 	Services             *coredata.Services
 	Providers            *registry.ProviderMap[core.Provider]
@@ -234,7 +235,7 @@ func New(cfg Config) (*Server, error) {
 		agentStreamHeartbeat = defaultAgentTurnEventStreamHeartbeatInterval
 	}
 	defaultAdminResource := ""
-	if !noAuth && cfg.Authorization != nil {
+	if !noAuth && cfg.Access != nil && cfg.Access.HasProvider() {
 		defaultAdminResource = defaultAdminAuthorizationResource
 	}
 	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin, defaultAdminResource)
@@ -339,7 +340,7 @@ func New(cfg Config) (*Server, error) {
 		auth:                   cfg.Auth,
 		authProviders:          authProviders,
 		serverAuthProvider:     serverAuthProvider,
-		authorization:          cfg.Authorization,
+		access:                 cfg.Access,
 		auditSink:              cfg.AuditSink,
 		users:                  users,
 		externalCredentials:    externalCredentials,
@@ -392,6 +393,7 @@ func New(cfg Config) (*Server, error) {
 		Agent:             cfg.Agent,
 		AgentManager:      cfg.AgentManager,
 		Invoker:           cfg.Invoker,
+		Access:            cfg.Access,
 		Audit:             cfg.AuditSink,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
@@ -403,6 +405,13 @@ func New(cfg Config) (*Server, error) {
 
 	s.routes()
 	return s, nil
+}
+
+func (s *Server) enforcer() *access.Enforcer {
+	if s == nil || s.access == nil {
+		return access.NewEnforcer(nil)
+	}
+	return s.access
 }
 
 func (s *Server) issueSessionToken(provider core.AuthenticationProvider, identity *core.UserIdentity) (string, error) {

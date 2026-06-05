@@ -8,6 +8,7 @@ export const ENV_HOST_SERVICE_TOKEN = "GESTALT_HOST_SERVICE_TOKEN";
 export const HOST_SERVICE_RELAY_TOKEN_HEADER =
   "x-gestalt-host-service-relay-token";
 export const HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding";
+export const INVOCATION_TOKEN_HEADER = "x-gestalt-invocation-token";
 
 export type HostServiceTransportOptions = {
   baseUrl: string;
@@ -65,10 +66,12 @@ export function parseHostServiceTarget(
 export function hostServiceMetadataInterceptors(
   token: string,
   binding: string,
+  invocationToken = "",
 ): Interceptor[] {
   const normalizedToken = token.trim();
   const normalizedBinding = binding.trim();
-  if (!normalizedToken && !normalizedBinding) {
+  const normalizedInvocationToken = invocationToken.trim();
+  if (!normalizedToken && !normalizedBinding && !normalizedInvocationToken) {
     return [];
   }
   return [
@@ -78,6 +81,9 @@ export function hostServiceMetadataInterceptors(
       }
       if (normalizedBinding) {
         req.header.set(HOST_SERVICE_BINDING_HEADER, normalizedBinding);
+      }
+      if (normalizedInvocationToken) {
+        req.header.set(INVOCATION_TOKEN_HEADER, normalizedInvocationToken);
       }
       return await next(req);
     },

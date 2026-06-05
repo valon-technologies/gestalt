@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -459,8 +460,13 @@ func (s *Server) resolveAgentHarness(w http.ResponseWriter, r *http.Request) {
 		s.writeAgentManagerError(w, r, "provider", "", nil, err)
 		return
 	}
-	if !s.allowsAgentProvider(r.Context(), p, providerName) {
-		s.writeAgentManagerError(w, r, "provider", providerName, nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName))
+	allowed, err := s.agentProviderAccess(r.Context(), p, providerName)
+	if err != nil {
+		s.writeAgentManagerError(w, r, "provider", providerName, nil, err)
+		return
+	}
+	if !allowed {
+		s.writeAgentManagerError(w, r, "provider", providerName, nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName))
 		return
 	}
 	entry := s.agentDefs[providerName]
@@ -1038,8 +1044,15 @@ func (s *Server) resolveAgentActor(w http.ResponseWriter, r *http.Request) (*pri
 	return p, true
 }
 
-func (s *Server) allowsAgentProvider(ctx context.Context, p *principal.Principal, providerName string) bool {
-	return principal.AllowsProviderPermission(p, providerName)
+func (s *Server) agentProviderAccess(ctx context.Context, p *principal.Principal, providerName string) (bool, error) {
+	err := s.enforcer().RequireProvider(ctx, p, providerName)
+	if err == nil {
+		return true, nil
+	}
+	if access.IsPolicyUnavailable(err) {
+		return false, err
+	}
+	return false, nil
 }
 
 func resolveAgentIdempotencyKey(w http.ResponseWriter, r *http.Request, bodyValue string) (string, bool) {
@@ -1718,9 +1731,9 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusNotFound, "agent interaction not found")
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),
-		errors.Is(err, invocation.ErrNotAuthenticated),
-		errors.Is(err, invocation.ErrAuthorizationDenied),
-		errors.Is(err, invocation.ErrScopeDenied),
+		errors.Is(err, access.ErrNotAuthenticated),
+		errors.Is(err, access.ErrDenied),
+		errors.Is(err, access.ErrScopeDenied),
 		errors.Is(err, invocation.ErrNoCredential),
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),
@@ -1740,9 +1753,9 @@ func (s *Server) writeAgentTargetError(w http.ResponseWriter, r *http.Request, p
 	switch {
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),
-		errors.Is(err, invocation.ErrNotAuthenticated),
-		errors.Is(err, invocation.ErrAuthorizationDenied),
-		errors.Is(err, invocation.ErrScopeDenied),
+		errors.Is(err, access.ErrNotAuthenticated),
+		errors.Is(err, access.ErrDenied),
+		errors.Is(err, access.ErrScopeDenied),
 		errors.Is(err, invocation.ErrNoCredential),
 		errors.Is(err, invocation.ErrReconnectRequired),
 		errors.Is(err, invocation.ErrAmbiguousInstance),

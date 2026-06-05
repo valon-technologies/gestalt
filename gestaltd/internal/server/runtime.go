@@ -68,19 +68,11 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	managementAddr := cfg.Server.ManagementAddr()
 	mcpSlot := &switchableHandler{}
 	workflowProvidersReady := make(chan struct{})
-	authorizationName, authorizationEntry, err := cfg.SelectedAuthorizationProvider()
-	if err != nil {
-		return err
-	}
-	var authorizationProvider core.AuthorizationProvider
-	if authorizationEntry != nil {
-		authorizationProvider = result.Authorization[authorizationName]
-	}
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
 		AuthProviders:        result.AuthProviders,
-		Authorization:        authorizationProvider,
+		Access:               result.Access,
 		AuditSink:            result.AuditSink,
 		Services:             result.Services,
 		Providers:            result.Providers,

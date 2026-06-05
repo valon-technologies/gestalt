@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/apps/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -62,7 +63,7 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 		if err := validateToolInvocation(ctx, cfg, provName, opName, validationOp, hasValidationOp, args); err != nil {
-			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrScopeDenied) {
+			if errors.Is(err, access.ErrDenied) || errors.Is(err, access.ErrScopeDenied) {
 				return mcpgo.NewToolResultError("operation access denied"), nil
 			}
 			return mcpgo.NewToolResultError(err.Error()), nil
@@ -70,7 +71,7 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 		ctx = mcpupstream.WithCallToolMeta(ctx, req.Params.Meta)
 		result, err := cfg.Invoker.Invoke(ctx, p, provName, instance, opName, args)
 		if err != nil {
-			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrScopeDenied) {
+			if errors.Is(err, access.ErrDenied) || errors.Is(err, access.ErrScopeDenied) {
 				return mcpgo.NewToolResultError("operation access denied"), nil
 			}
 			return mcpgo.NewToolResultError(err.Error()), nil

@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -677,11 +678,13 @@ func workflowManagerStatusError(err error) error {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, workflowmanager.ErrWorkflowEventMatchRequired), errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired), errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired), errors.Is(err, workflowmanager.ErrWorkflowKeyRequired), errors.Is(err, workflowmanager.ErrWorkflowSignalNameRequired), errors.Is(err, invocation.ErrInvalidInvocation):
 		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired), errors.Is(err, invocation.ErrNotAuthenticated):
+	case errors.Is(err, workflowmanager.ErrWorkflowSubjectRequired), errors.Is(err, access.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, workflowmanager.ErrDuplicateWorkflowObjects), errors.Is(err, invocation.ErrInternal):
 		return status.Error(codes.Internal, err.Error())
-	case errors.Is(err, invocation.ErrAuthorizationDenied), errors.Is(err, invocation.ErrScopeDenied):
+	case access.IsPolicyUnavailable(err):
+		return status.Error(codes.Unavailable, err.Error())
+	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound), errors.Is(err, core.ErrNotFound):
 		return status.Error(codes.NotFound, err.Error())

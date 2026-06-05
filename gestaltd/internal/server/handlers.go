@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/apps/mcphttp"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -782,11 +783,13 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", providerName))
 	case errors.Is(err, invocation.ErrOperationNotFound):
 		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
-	case errors.Is(err, invocation.ErrNotAuthenticated):
+	case errors.Is(err, access.ErrNotAuthenticated):
 		writeError(w, http.StatusUnauthorized, "not authenticated")
-	case errors.Is(err, invocation.ErrAuthorizationDenied):
+	case access.IsPolicyUnavailable(err):
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, access.ErrDenied):
 		writeError(w, http.StatusForbidden, err.Error())
-	case errors.Is(err, invocation.ErrScopeDenied):
+	case errors.Is(err, access.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrNoCredential):
 		writeTypedError(

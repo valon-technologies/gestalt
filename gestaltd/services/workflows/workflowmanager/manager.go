@@ -19,6 +19,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -119,6 +120,7 @@ type Config struct {
 	Agent             AgentControl
 	AgentManager      agentmanager.Service
 	Invoker           invocation.Invoker
+	Access            *access.Enforcer
 	Audit             core.AuditSink
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
@@ -132,6 +134,7 @@ type Manager struct {
 	agent             AgentControl
 	agentManager      agentmanager.Service
 	invoker           invocation.Invoker
+	access            *access.Enforcer
 	audit             core.AuditSink
 	defaultConnection map[string]string
 	catalogConnection map[string]string
@@ -235,6 +238,7 @@ func New(cfg Config) *Manager {
 		agent:             cfg.Agent,
 		agentManager:      cfg.AgentManager,
 		invoker:           cfg.Invoker,
+		access:            cfg.Access,
 		audit:             cfg.Audit,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
@@ -309,17 +313,6 @@ func (a *workflowAuditEvent) setWorkflowTarget(target coreworkflow.Target) {
 	}
 }
 
-func (a *workflowAuditEvent) setWorkflowTargetAuthorizationFailure(target coreworkflow.Target, failure targetAuthorizationFailure) {
-	if a == nil {
-		return
-	}
-	a.entry.AuthorizationDecision = workflowAuditTargetAuthorizationDecision(failure)
-	a.entry.WorkflowTargetKind = workflowAuditTargetKind(target)
-	a.entry.WorkflowTargetComponent = strings.TrimSpace(failure.component)
-	a.entry.WorkflowTargetProvider = strings.TrimSpace(failure.provider)
-	a.entry.WorkflowTargetOperation = strings.TrimSpace(failure.operation)
-}
-
 func (a *workflowAuditEvent) clone() *workflowAuditEvent {
 	if a == nil {
 		return nil
@@ -344,14 +337,6 @@ func workflowAuditTargetKind(target coreworkflow.Target) string {
 		return "steps"
 	}
 	return ""
-}
-
-func workflowAuditTargetAuthorizationDecision(failure targetAuthorizationFailure) string {
-	reason := strings.TrimSpace(failure.reason)
-	if reason == "" {
-		return ""
-	}
-	return "workflow_target_" + reason
 }
 
 func workflowRunID(run *coreworkflow.Run) string {
@@ -468,7 +453,11 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 					Run:          run,
 					provider:     provider,
 				}
-				if !m.runAccessible(ctx, p, managed) {
+				accessible, err := m.runAccessible(ctx, p, managed)
+				if err != nil {
+					return nil, err
+				}
+				if !accessible {
 					continue
 				}
 				if !providerStateSet {
@@ -876,6 +865,9 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 	event = normalizePublishedEvent(event, m.now())
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
+	}
+	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationEventDeliver); err != nil {
+		return coreworkflow.Event{}, err
 	}
 	deliveredBySubjectID := workflowSubjectIDFromPrincipal(p)
 	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{

@@ -313,10 +313,16 @@ class Authorization:
         cls,
         socket_target: str | None = None,
         relay_token: str | None = None,
+        invocation_token: str = "",
         *,
         _shared: bool = False,
     ) -> "Authorization":
-        if not _shared and socket_target is None and relay_token is None:
+        if (
+            not _shared
+            and socket_target is None
+            and relay_token is None
+            and not invocation_token.strip()
+        ):
             return _shared_authorization_client()
         return super().__new__(cls)
 
@@ -324,6 +330,7 @@ class Authorization:
         self,
         socket_target: str | None = None,
         relay_token: str | None = None,
+        invocation_token: str = "",
         *,
         _shared: bool = False,
     ) -> None:
@@ -335,7 +342,12 @@ class Authorization:
             if relay_token is not None
             else os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         ).strip()
-        self._channel = host_service_channel("authorization", target, token=token)
+        self._channel = host_service_channel(
+            "authorization",
+            target,
+            token=token,
+            invocation_token=invocation_token.strip(),
+        )
         self._stub = pb_grpc.AuthorizationProviderStub(self._channel)
         self._closed = False
         self._shared = _shared

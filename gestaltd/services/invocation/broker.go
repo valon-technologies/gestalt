@@ -13,7 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -115,7 +115,7 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
-	authorization     core.AuthorizationProvider
+	access            *access.Enforcer
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -134,8 +134,8 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 	return func(b *Broker) { b.connectionRuntime = r }
 }
 
-func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
-	return func(b *Broker) { b.authorization = provider }
+func WithEnforcer(enforcer *access.Enforcer) BrokerOption {
+	return func(b *Broker) { b.access = enforcer }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -166,6 +166,13 @@ func (b *Broker) tracer() trace.Tracer {
 		return b.tracerProvider.Tracer(tracerName)
 	}
 	return otel.Tracer(tracerName)
+}
+
+func (b *Broker) enforcer() *access.Enforcer {
+	if b == nil || b.access == nil {
+		return access.NewEnforcer(nil)
+	}
+	return b.access
 }
 
 func (b *Broker) ListProviders() []string {
@@ -249,12 +256,12 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	metricProvider = providerName
 
 	if p == nil {
-		return fail(ErrNotAuthenticated)
+		return fail(access.ErrNotAuthenticated)
 	}
 	setSubjectAttribute(p)
 
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
+	if err := b.enforcer().RequireProviderScope(p, providerName); err != nil {
+		return fail(err)
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return fail(err)
@@ -266,10 +273,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
-	}
-	if err := b.checkAuthorizationAccess(ctx, p, providerName, opMeta.ID); err != nil {
+	if err := b.enforcer().RequireAppOperation(ctx, p, providerName, opMeta.ID); err != nil {
 		return fail(err)
 	}
 	metricOperation = operation
@@ -443,22 +447,19 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	metricProvider = providerName
 
 	if p == nil {
-		return fail(ErrNotAuthenticated)
+		return fail(access.ErrNotAuthenticated)
 	}
 	setSubjectAttribute(p)
 
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
-	}
-	if !principal.AllowsOperationPermission(p, providerName, graphQLOperationID) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, graphQLOperationID))
+	if err := b.enforcer().RequireProviderScope(p, providerName); err != nil {
+		return fail(err)
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return fail(err)
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
-	if err := b.checkAuthorizationAccess(ctx, p, providerName, graphQLOperationID); err != nil {
+	if err := b.enforcer().RequireAppOperation(ctx, p, providerName, graphQLOperationID); err != nil {
 		return fail(err)
 	}
 
@@ -509,8 +510,8 @@ func (b *Broker) MCPConnection(providerName string) string {
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
+	if err := b.enforcer().RequireProviderScope(p, providerName); err != nil {
+		return ctx, "", err
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return ctx, "", err
@@ -524,38 +525,6 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
 	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
-}
-
-func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Principal, providerName, operationID string) error {
-	if b == nil || b.authorization == nil {
-		return nil
-	}
-	req := authorizationAccessRequest(p, providerName, operationID)
-	resp, err := b.authorization.CheckAccess(ctx, req)
-	if err != nil {
-		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
-	}
-	if resp == nil || !resp.GetAllowed() {
-		return fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operationID)
-	}
-	return nil
-}
-
-func authorizationAccessRequest(p *principal.Principal, providerName, operationID string) *proto.CheckAccessRequest {
-	p = principal.Canonicalized(p)
-	subjectID := principal.EffectiveCredentialSubjectID(p)
-	providerName = strings.TrimSpace(providerName)
-	return &proto.CheckAccessRequest{
-		Subject: &proto.Subject{
-			Type: "subject",
-			Id:   subjectID,
-		},
-		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
-		Resource: &proto.Resource{
-			Type: providerName,
-			Id:   providerName,
-		},
-	}
 }
 
 func (b *Broker) resolveConnectionMode(ctx context.Context, prov core.Provider, providerName, connection string) core.ConnectionMode {
@@ -588,8 +557,8 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
 	}
-	if !principal.AllowsProviderPermission(p, providerName) {
-		return nil, fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
+	if err := b.enforcer().RequireProviderScope(p, providerName); err != nil {
+		return nil, err
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return nil, err
@@ -701,7 +670,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 
 func (b *Broker) ResolveRuntimeConnectionCredential(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, ConnectionRuntimeCredential, ConnectionRuntimeInfo, error) {
 	if !InternalConnectionAccessFromContext(ctx) {
-		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: runtime connection credential resolution requires internal access", ErrAuthorizationDenied)
+		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: runtime connection credential resolution requires internal access", access.ErrDenied)
 	}
 	if b == nil || b.connectionRuntime == nil {
 		return ctx, ConnectionRuntimeCredential{}, ConnectionRuntimeInfo{}, fmt.Errorf("%w: runtime connection resolver is not configured", ErrNoCredential)

@@ -12,6 +12,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -283,7 +284,7 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		nil,
 		nil,
-		WithAuthorizationProvider(authz),
+		WithEnforcer(access.NewEnforcer(authz)),
 	)
 
 	result, err := broker.Invoke(
@@ -343,7 +344,7 @@ func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *tes
 		testutil.NewProviderRegistry(t, provider),
 		nil,
 		nil,
-		WithAuthorizationProvider(authz),
+		WithEnforcer(access.NewEnforcer(authz)),
 	)
 
 	_, err := broker.InvokeGraphQL(
@@ -356,8 +357,8 @@ func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *tes
 	if err == nil {
 		t.Fatal("InvokeGraphQL succeeded, want authorization denied")
 	}
-	if !errors.Is(err, ErrAuthorizationDenied) {
-		t.Fatalf("InvokeGraphQL error = %v, want ErrAuthorizationDenied", err)
+	if !errors.Is(err, access.ErrDenied) {
+		t.Fatalf("InvokeGraphQL error = %v, want access.ErrDenied", err)
 	}
 	if graphQLInvoked {
 		t.Fatal("InvokeGraphQL provider was called after authorization denial")
