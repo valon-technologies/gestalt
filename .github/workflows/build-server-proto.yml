@@ -1,0 +1,63 @@
+name: Build Server Proto
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/scripts/check-go-proto-split.sh'
+      - '.github/workflows/build-server-proto.yml'
+      - 'gestaltd/go.mod'
+      - 'gestaltd/go.sum'
+      - 'gestaltd/rpc/protov1/**'
+      - 'sdk/proto/**'
+  pull_request:
+    paths:
+      - '.github/scripts/check-go-proto-split.sh'
+      - '.github/workflows/build-server-proto.yml'
+      - 'gestaltd/go.mod'
+      - 'gestaltd/go.sum'
+      - 'gestaltd/rpc/protov1/**'
+      - 'sdk/proto/**'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server-proto:
+    name: Server Proto Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: gestaltd
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
+
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+
+      - name: Verify checked-in generated server bindings
+        run: |
+          repo_root="$(git rev-parse --show-toplevel)"
+          cd "$repo_root/sdk/proto"
+          "$(go env GOPATH)/bin/buf" generate --template buf.go.server.gen.yaml
+          cd "$repo_root"
+          git diff --exit-code -- gestaltd/rpc/protov1/v1/*.pb.go gestaltd/rpc/protov1/v1/*_grpc.pb.go
+
+      - name: Check generated proto package split
+        run: |
+          repo_root="$(git rev-parse --show-toplevel)"
+          bash "$repo_root/.github/scripts/check-go-proto-split.sh" "$repo_root/gestaltd"
+
+      - name: Compile server packages
+        run: go test ./... -run '^$'
