@@ -120,25 +120,50 @@ func materializedCacheKeyForRequest(req materializedCacheRequest) (materializedC
 	}
 	resolvedHash := sha256Hex([]byte(req.ResolvedKey))
 	platformPath := strings.ReplaceAll(req.Platform, "/", "_")
-	display := strings.Join([]string{materializedCacheBucketVersion, platformPath, "sha256", sha[:2], sha, resolvedHash}, "/")
-	return materializedCacheKey{
-		Path:                filepath.Join(platformPath, "sha256", sha[:2], sha, resolvedHash),
-		Display:             display,
-		ArchiveSHA256:       sha,
-		ResolvedKeyHash:     resolvedHash,
-		Platform:            req.Platform,
-		MaterializerVersion: materializedCacheVersion,
-	}, true, nil
+	return materializedCacheKeyForParts(req.Platform, platformPath, sha, resolvedHash), true, nil
 }
 
-func (c materializedCache) Restore(ctx context.Context, req materializedCacheRequest) (*materializedCacheRestore, error) {
+func materializedCacheKeyFromDisplay(display string) (materializedCacheKey, bool) {
+	display = strings.TrimSpace(filepath.ToSlash(display))
+	parts := strings.Split(display, "/")
+	if len(parts) != 7 || parts[0]+"/"+parts[1] != materializedCacheBucketVersion || parts[3] != "sha256" {
+		return materializedCacheKey{}, false
+	}
+	platformPath := parts[2]
+	sha, ok := canonicalArchiveSHA256(parts[5])
+	if !ok || parts[4] != sha[:2] {
+		return materializedCacheKey{}, false
+	}
+	resolvedHash, ok := canonicalArchiveSHA256(parts[6])
+	if !ok {
+		return materializedCacheKey{}, false
+	}
+	key := materializedCacheKeyForParts(strings.ReplaceAll(platformPath, "_", "/"), platformPath, sha, resolvedHash)
+	if clean, err := validateMaterializedCachePath(filepath.ToSlash(key.Path)); err != nil || clean != filepath.ToSlash(key.Path) || key.Display != strings.Join(parts, "/") {
+		return materializedCacheKey{}, false
+	}
+	return key, true
+}
+
+func materializedCacheKeyForParts(platform, platformPath, sha, resolvedHash string) materializedCacheKey {
+	return materializedCacheKey{
+		Path:                filepath.Join(platformPath, "sha256", sha[:2], sha, resolvedHash),
+		Display:             strings.Join([]string{materializedCacheBucketVersion, platformPath, "sha256", sha[:2], sha, resolvedHash}, "/"),
+		ArchiveSHA256:       sha,
+		ResolvedKeyHash:     resolvedHash,
+		Platform:            platform,
+		MaterializerVersion: materializedCacheVersion,
+	}
+}
+
+func (c materializedCache) Restore(req materializedCacheRequest) (*materializedCacheRestore, error) {
 	key, eligible, err := materializedCacheKeyForRequest(req)
 	if err != nil || !eligible {
 		return nil, err
 	}
 	entryDir := c.entryDir(key)
 	fallback := materializedCacheMiss
-	entry, err := c.readEntry(entryDir, req, key)
+	entry, err := c.readEntryForKey(entryDir, key)
 	if err == nil {
 		restore, err := c.stageRestore(entryDir, req.DestinationDir, entry)
 		if err == nil {
@@ -150,60 +175,7 @@ func (c materializedCache) Restore(ctx context.Context, req materializedCacheReq
 	} else if !os.IsNotExist(err) {
 		fallback = materializedCacheInvalid
 	}
-	if c.remote != nil {
-		return c.restoreFromRemote(ctx, req, key, fallback)
-	}
 	return materializedCacheRestoreResult(key, fallback)
-}
-
-func (c materializedCache) restoreFromRemote(ctx context.Context, req materializedCacheRequest, key materializedCacheKey, fallback materializedCacheLookupResult) (*materializedCacheRestore, error) {
-	entryDir := c.entryDir(key)
-	parentDir := filepath.Dir(entryDir)
-	if err := os.MkdirAll(parentDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create materialized cache parent: %w", err)
-	}
-	archiveReader, hit, err := c.remote.Get(ctx, key)
-	if err != nil {
-		return materializedCacheRestoreResult(key, fallback)
-	}
-	if !hit {
-		return materializedCacheRestoreResult(key, fallback)
-	}
-	defer func() { _ = archiveReader.Close() }()
-
-	tmpDir, err := os.MkdirTemp(parentDir, "."+filepath.Base(entryDir)+".remote-*")
-	if err != nil {
-		return nil, fmt.Errorf("create remote materialized cache temp entry: %w", err)
-	}
-	keepTmp := false
-	defer func() {
-		if !keepTmp {
-			_ = os.RemoveAll(tmpDir)
-		}
-	}()
-	if err := extractMaterializedCacheEntryArchive(archiveReader, tmpDir); err != nil {
-		return materializedCacheRestoreResult(key, materializedCacheInvalid)
-	}
-	entry, err := c.readEntry(tmpDir, req, key)
-	if err != nil {
-		return materializedCacheRestoreResult(key, materializedCacheInvalid)
-	}
-	restore, err := c.stageRestore(tmpDir, req.DestinationDir, entry)
-	if err != nil {
-		return materializedCacheRestoreResult(key, materializedCacheInvalid)
-	}
-	if err := os.RemoveAll(entryDir); err != nil {
-		_ = restore.cleanup()
-		return nil, fmt.Errorf("remove stale materialized cache entry: %w", err)
-	}
-	if err := os.Rename(tmpDir, entryDir); err != nil {
-		_ = restore.cleanup()
-		return nil, fmt.Errorf("commit remote materialized cache entry: %w", err)
-	}
-	keepTmp = true
-	restore.Result = materializedCacheHit
-	restore.Key = key
-	return restore, nil
 }
 
 func materializedCacheRestoreResult(key materializedCacheKey, result materializedCacheLookupResult) (*materializedCacheRestore, error) {
@@ -327,7 +299,7 @@ func (c materializedCache) entryDir(key materializedCacheKey) string {
 	return filepath.Join(c.dir, materializedCacheBucketVersion, key.Path)
 }
 
-func (c materializedCache) readEntry(entryDir string, req materializedCacheRequest, key materializedCacheKey) (*materializedCacheEntry, error) {
+func (c materializedCache) readEntryForKey(entryDir string, key materializedCacheKey) (*materializedCacheEntry, error) {
 	data, err := os.ReadFile(filepath.Join(entryDir, materializedCacheEntryFile))
 	if err != nil {
 		return nil, err
@@ -344,8 +316,12 @@ func (c materializedCache) readEntry(entryDir string, req materializedCacheReque
 		entry.ResolvedKeyHash != key.ResolvedKeyHash {
 		return nil, fmt.Errorf("materialized cache entry metadata mismatch")
 	}
-	if _, _, err := materializedCacheOutputDigest(entry.Files); err != nil {
+	_, digest, err := materializedCacheOutputDigest(entry.Files)
+	if err != nil {
 		return nil, err
+	}
+	if entry.OutputDigest != digest {
+		return nil, fmt.Errorf("materialized cache entry output digest mismatch")
 	}
 	return &entry, nil
 }
@@ -513,22 +489,34 @@ func copyMaterializedFiles(sourceRoot, destRoot string, files []materializedCach
 	return nil
 }
 
-func copyMaterializedFile(source, dest string, file materializedCacheFile) error {
-	if file.Type != "file" {
-		return fmt.Errorf("materialized cache entry %s is %q, want file", file.Path, file.Type)
+func validateMaterializedCacheEntryFiles(entryDir string, entry *materializedCacheEntry) error {
+	for _, file := range entry.Files {
+		rel, err := validateMaterializedCachePath(file.Path)
+		if err != nil {
+			return err
+		}
+		source := filepath.Join(entryDir, materializedCacheRootDir, filepath.FromSlash(rel))
+		if file.Type == "dir" {
+			info, err := os.Lstat(source)
+			if err != nil {
+				return err
+			}
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return fmt.Errorf("materialized cache directory %s is invalid", file.Path)
+			}
+			continue
+		}
+		if err := validateMaterializedFile(source, file); err != nil {
+			return err
+		}
 	}
-	info, err := os.Lstat(source)
+	return nil
+}
+
+func copyMaterializedFile(source, dest string, file materializedCacheFile) error {
+	want, err := validateMaterializedFileMetadata(source, file)
 	if err != nil {
 		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("materialized cache file %s is a symlink", file.Path)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("materialized cache file %s is not regular", file.Path)
-	}
-	if info.Size() != file.Size {
-		return fmt.Errorf("materialized cache file %s size mismatch", file.Path)
 	}
 	in, err := os.Open(source)
 	if err != nil {
@@ -549,10 +537,6 @@ func copyMaterializedFile(source, dest string, file materializedCacheFile) error
 		return closeErr
 	}
 	got := hex.EncodeToString(h.Sum(nil))
-	want, ok := canonicalArchiveSHA256(file.SHA256)
-	if !ok {
-		return fmt.Errorf("invalid materialized cache file sha256 for %s", file.Path)
-	}
 	if got != want {
 		return fmt.Errorf("materialized cache file %s digest mismatch", file.Path)
 	}
@@ -560,6 +544,45 @@ func copyMaterializedFile(source, dest string, file materializedCacheFile) error
 		return err
 	}
 	return nil
+}
+
+func validateMaterializedFile(source string, file materializedCacheFile) error {
+	want, err := validateMaterializedFileMetadata(source, file)
+	if err != nil {
+		return err
+	}
+	got, err := fileSHA256Hex(source)
+	if err != nil {
+		return err
+	}
+	if got != want {
+		return fmt.Errorf("materialized cache file %s digest mismatch", file.Path)
+	}
+	return nil
+}
+
+func validateMaterializedFileMetadata(source string, file materializedCacheFile) (string, error) {
+	if file.Type != "file" {
+		return "", fmt.Errorf("materialized cache entry %s is %q, want file", file.Path, file.Type)
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("materialized cache file %s is a symlink", file.Path)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("materialized cache file %s is not regular", file.Path)
+	}
+	if info.Size() != file.Size {
+		return "", fmt.Errorf("materialized cache file %s size mismatch", file.Path)
+	}
+	want, ok := canonicalArchiveSHA256(file.SHA256)
+	if !ok {
+		return "", fmt.Errorf("invalid materialized cache file sha256 for %s", file.Path)
+	}
+	return want, nil
 }
 
 func validateMaterializedCachePath(path string) (string, error) {

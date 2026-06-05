@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,7 +19,8 @@ const materializedCacheRemoteEnv = "GESTALTD_SYNC_CACHE_REMOTE"
 const materializedCacheRemoteScope = "https://www.googleapis.com/auth/devstorage.read_write"
 
 type materializedCacheRemote interface {
-	Get(context.Context, materializedCacheKey) (io.ReadCloser, bool, error)
+	List(context.Context) ([]string, error)
+	Get(context.Context, string) (io.ReadCloser, error)
 	Exists(context.Context, materializedCacheKey) (bool, error)
 	Put(context.Context, materializedCacheKey, string) error
 }
@@ -68,30 +70,71 @@ func newGCSMaterializedCacheRemote(raw string) (materializedCacheRemote, error) 
 	}, nil
 }
 
-func (r *gcsMaterializedCacheRemote) Get(ctx context.Context, key materializedCacheKey) (io.ReadCloser, bool, error) {
-	object := r.objectName(key)
+func (r *gcsMaterializedCacheRemote) List(ctx context.Context) ([]string, error) {
 	client, err := r.httpClient(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, err
+	}
+	var objects []string
+	pageToken := ""
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.listURL(pageToken), nil)
+		if err != nil {
+			return nil, fmt.Errorf("build materialized cache remote list request: %w", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("list materialized cache remote objects: %w", err)
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			err := gcsMaterializedCacheStatusError("list", r.listPrefix(), resp)
+			_ = resp.Body.Close()
+			return nil, err
+		}
+		var page struct {
+			Items []struct {
+				Name string `json:"name"`
+			} `json:"items"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("decode materialized cache remote list response: %w", err)
+		}
+		_ = resp.Body.Close()
+		for _, item := range page.Items {
+			display, ok := r.displayName(item.Name)
+			if ok {
+				objects = append(objects, display)
+			}
+		}
+		if page.NextPageToken == "" {
+			return objects, nil
+		}
+		pageToken = page.NextPageToken
+	}
+}
+
+func (r *gcsMaterializedCacheRemote) Get(ctx context.Context, display string) (io.ReadCloser, error) {
+	object := r.displayObjectName(display)
+	client, err := r.httpClient(ctx)
+	if err != nil {
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.downloadURL(object), nil)
 	if err != nil {
-		return nil, false, fmt.Errorf("build materialized cache remote read request: %w", err)
+		return nil, fmt.Errorf("build materialized cache remote read request: %w", err)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, false, fmt.Errorf("read materialized cache remote object %s: %w", object, err)
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		_ = resp.Body.Close()
-		return nil, false, nil
+		return nil, fmt.Errorf("read materialized cache remote object %s: %w", object, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		err := gcsMaterializedCacheStatusError("read", object, resp)
 		_ = resp.Body.Close()
-		return nil, false, err
+		return nil, err
 	}
-	return resp.Body, true, nil
+	return resp.Body, nil
 }
 
 func (r *gcsMaterializedCacheRemote) Exists(ctx context.Context, key materializedCacheKey) (bool, error) {
@@ -164,10 +207,52 @@ func (r *gcsMaterializedCacheRemote) httpClient(ctx context.Context) (*http.Clie
 }
 
 func (r *gcsMaterializedCacheRemote) objectName(key materializedCacheKey) string {
+	return r.displayObjectName(key.Display)
+}
+
+func (r *gcsMaterializedCacheRemote) displayObjectName(display string) string {
 	if r.prefix == "" {
-		return key.Display + ".tar"
+		return display + ".tar"
 	}
-	return path.Join(r.prefix, key.Display+".tar")
+	return path.Join(r.prefix, display+".tar")
+}
+
+func (r *gcsMaterializedCacheRemote) listPrefix() string {
+	if r.prefix == "" {
+		return materializedCacheBucketVersion + "/"
+	}
+	return path.Join(r.prefix, materializedCacheBucketVersion) + "/"
+}
+
+func (r *gcsMaterializedCacheRemote) displayName(object string) (string, bool) {
+	prefix := strings.TrimSuffix(r.prefix, "/")
+	if prefix != "" {
+		prefix += "/"
+		if !strings.HasPrefix(object, prefix) {
+			return "", false
+		}
+		object = strings.TrimPrefix(object, prefix)
+	}
+	if !strings.HasPrefix(object, materializedCacheBucketVersion+"/") || !strings.HasSuffix(object, ".tar") {
+		return "", false
+	}
+	return strings.TrimSuffix(object, ".tar"), true
+}
+
+func (r *gcsMaterializedCacheRemote) listURL(pageToken string) string {
+	u := url.URL{
+		Scheme: "https",
+		Host:   "storage.googleapis.com",
+		Path:   "/storage/v1/b/" + url.PathEscape(r.bucket) + "/o",
+	}
+	q := u.Query()
+	q.Set("prefix", r.listPrefix())
+	q.Set("fields", "nextPageToken,items/name")
+	if pageToken != "" {
+		q.Set("pageToken", pageToken)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (r *gcsMaterializedCacheRemote) downloadURL(object string) string {
