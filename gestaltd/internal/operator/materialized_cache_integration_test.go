@@ -1,11 +1,179 @@
 package operator
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
+
+func TestSyncPrefetchesRequestedRemoteMaterializedCache(t *testing.T) {
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/alpha"
+	version := "1.2.3"
+	archivePath := buildV2Archive(t, dir, packageSource, version, "provider-package-alpha")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHAHex := hex.EncodeToString(archiveSum[:])
+
+	var archiveCount atomic.Int64
+	indexPath := "/provider-index.yaml"
+	metadataPath := "/providers/alpha/v1.2.3/provider-release.yaml"
+	archiveURLPath := "/providers/alpha/v1.2.3/alpha.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case indexPath:
+			index := fmt.Sprintf(`
+schema: gestaltd-provider-index
+schemaVersion: 1
+packages:
+  github.com/acme/tools/alpha:
+    versions:
+      %s:
+        metadata: providers/alpha/v1.2.3/provider-release.yaml
+        kind: app
+        runtime: executable
+        platforms:
+          - %s
+`, version, providerpkg.CurrentPlatformString())
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte(index))
+		case metadataPath:
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archiveURLPath),
+						SHA256: archiveSHAHex,
+					},
+				},
+			}
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
+			}
+		case archiveURLPath:
+			archiveCount.Add(1)
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersion,
+		"providerRepositories:",
+		"  local:",
+		"    url: " + srv.URL + indexPath,
+		strings.TrimSuffix(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), "\n"),
+		"apps:",
+		"  alpha:",
+		"    source:",
+		"      repo: local",
+		"      package: " + packageSource,
+		"      version: \">= 1.0.0, < 2.0.0\"",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, err := lc.PrepareAtPath(configPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
+	}
+
+	remote := newFakeMaterializedCacheRemote()
+	const remoteURL = "gs://cache-bucket/prefix"
+	oldFactory := newMaterializedCacheRemote
+	newMaterializedCacheRemote = func(raw string) (materializedCacheRemote, error) {
+		if raw != remoteURL {
+			return nil, fmt.Errorf("remote url = %q, want %q", raw, remoteURL)
+		}
+		return remote, nil
+	}
+	t.Cleanup(func() { newMaterializedCacheRemote = oldFactory })
+	t.Setenv(materializedCacheRemoteEnv, remoteURL)
+
+	appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	if err := os.RemoveAll(appRoot); err != nil {
+		t.Fatalf("remove prepared app before seed sync: %v", err)
+	}
+	archiveBeforeSeed := archiveCount.Load()
+	seedCacheDir := filepath.Join(dir, "seed-cache")
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{CacheDir: seedCacheDir}); err != nil {
+		t.Fatalf("seed sync: %v", err)
+	}
+	if got := archiveCount.Load(); got != archiveBeforeSeed+1 {
+		t.Fatalf("archive requests after seed sync = %d, want %d", got, archiveBeforeSeed+1)
+	}
+	if remote.puts != 1 {
+		t.Fatalf("remote puts after seed sync = %d, want 1", remote.puts)
+	}
+
+	if err := os.RemoveAll(appRoot); err != nil {
+		t.Fatalf("remove prepared app before prefetch sync: %v", err)
+	}
+	prefetchMetrics := NewSyncMetricsRecorder()
+	archiveBeforePrefetch := archiveCount.Load()
+	prefetchCacheDir := filepath.Join(dir, "prefetch-cache")
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{
+		CacheDir:      prefetchCacheDir,
+		Observability: SyncObservability{Recorder: prefetchMetrics},
+	}); err != nil {
+		t.Fatalf("prefetch sync: %v", err)
+	}
+	if got := archiveCount.Load(); got != archiveBeforePrefetch {
+		t.Fatalf("archive requests after remote prefetch sync = %d, want %d", got, archiveBeforePrefetch)
+	}
+	prefetch := prefetchMetrics.Snapshot().Cache.Prefetch
+	if prefetch.Requests == 0 || prefetch.RemoteHits != 1 || prefetch.Failures != 0 || prefetch.Bytes == 0 {
+		t.Fatalf("cache.prefetch metrics = %+v, want one remote hit and no failures", prefetch)
+	}
+
+	remoteGetsBeforeFreshSync := remote.gets
+	archiveBeforeFreshSync := archiveCount.Load()
+	freshMetrics := NewSyncMetricsRecorder()
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{
+		CacheDir:      filepath.Join(dir, "fresh-cache"),
+		Observability: SyncObservability{Recorder: freshMetrics},
+	}); err != nil {
+		t.Fatalf("fresh sync: %v", err)
+	}
+	if got := archiveCount.Load(); got != archiveBeforeFreshSync {
+		t.Fatalf("archive requests after fresh sync = %d, want %d", got, archiveBeforeFreshSync)
+	}
+	if got := remote.gets; got != remoteGetsBeforeFreshSync {
+		t.Fatalf("remote cache reads after fresh sync = %d, want %d", got, remoteGetsBeforeFreshSync)
+	}
+	if prefetch := freshMetrics.Snapshot().Cache.Prefetch; prefetch.Requests != 0 || prefetch.RemoteHits != 0 || prefetch.LocalHits != 0 {
+		t.Fatalf("fresh sync cache.prefetch metrics = %+v, want no prefetch work", prefetch)
+	}
+}
 
 func assertCheckSyncDoesNotPopulateMaterializedCache(t *testing.T, lc *Lifecycle, configPath, cacheDir string, resetArtifacts func() error) {
 	t.Helper()

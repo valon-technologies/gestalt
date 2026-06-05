@@ -81,6 +81,10 @@ outputs whose locked archive identity changes; unchanged entries can be restored
 without re-downloading or reinstalling the package. Omitting `--cache-dir`
 disables the cache, and `sync --locked --check` remains read-only and does not
 populate it.
+Set `GESTALTD_SYNC_CACHE_REMOTE=gs://bucket/prefix` during sync to share sparse
+per-artifact cache objects across machines. Gestalt prefetches only cache objects
+for locked packages requested by the current sync that need materialization, then
+uploads entries materialized during that sync.
 Use a private cache location. Any principal that can write this cache can
 influence restored prepared artifacts.
 

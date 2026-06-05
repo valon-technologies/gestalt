@@ -21,27 +21,14 @@ func TestGCSMaterializedCacheRemoteHTTPContracts(t *testing.T) {
 	}
 
 	objectName := "prefix/" + key.Display + ".tar"
-	var sawList bool
 	var sawDownload bool
+	var sawDownloadMiss bool
 	var sawExists bool
 	var sawUpload bool
 	remote := &gcsMaterializedCacheRemote{
 		client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			switch r.Method {
 			case http.MethodGet:
-				if r.URL.EscapedPath() == "/storage/v1/b/cache-bucket/o" {
-					sawList = true
-					if got := r.URL.Query().Get("prefix"); got != "prefix/materialized/v1/" {
-						t.Fatalf("list prefix = %q, want materialized cache prefix", got)
-					}
-					if got := r.URL.Query().Get("fields"); got != "nextPageToken,items/name" {
-						t.Fatalf("list fields = %q, want narrow object projection", got)
-					}
-					return &http.Response{
-						StatusCode: http.StatusOK,
-						Body:       io.NopCloser(strings.NewReader(`{"items":[{"name":"` + objectName + `"}]}`)),
-					}, nil
-				}
 				if r.URL.Query().Get("alt") == "" {
 					sawExists = true
 					if got := r.URL.EscapedPath(); got != "/storage/v1/b/cache-bucket/o/"+escapeGCSPathSegment(objectName) {
@@ -81,18 +68,19 @@ func TestGCSMaterializedCacheRemoteHTTPContracts(t *testing.T) {
 		prefix: "prefix",
 	}
 
-	objects, err := remote.List(context.Background())
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(objects) != 1 || objects[0] != key.Display {
-		t.Fatalf("List objects = %#v, want listed cache object", objects)
-	}
-	reader, err := remote.Get(context.Background(), objects[0])
+	reader, err := remote.Get(context.Background(), key)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
 	_ = reader.Close()
+	missingRemote := *remote
+	missingRemote.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		sawDownloadMiss = true
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(http.NoBody)}, nil
+	})}
+	if _, err := missingRemote.Get(context.Background(), key); !os.IsNotExist(err) {
+		t.Fatalf("Get missing error = %v, want os.ErrNotExist", err)
+	}
 	exists, err := remote.Exists(context.Background(), key)
 	if err != nil {
 		t.Fatalf("Exists: %v", err)
@@ -108,8 +96,8 @@ func TestGCSMaterializedCacheRemoteHTTPContracts(t *testing.T) {
 	if err := remote.Put(context.Background(), key, archivePath); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	if !sawList || !sawDownload || !sawExists || !sawUpload {
-		t.Fatalf("saw list/download/exists/upload = %t/%t/%t/%t, want all", sawList, sawDownload, sawExists, sawUpload)
+	if !sawDownload || !sawDownloadMiss || !sawExists || !sawUpload {
+		t.Fatalf("saw download/download-miss/exists/upload = %t/%t/%t/%t, want all", sawDownload, sawDownloadMiss, sawExists, sawUpload)
 	}
 }
 

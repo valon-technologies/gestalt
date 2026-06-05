@@ -1080,12 +1080,6 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if recorder != nil {
 		recorder.FinishLoadPhase()
 	}
-	if paths.syncCache.remote != nil {
-		restoreStats := paths.syncCache.HydrateRemote(context.Background(), opts.Parallelism)
-		if recorder != nil {
-			recorder.RecordCacheRestore(restoreStats)
-		}
-	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, opts); err != nil {
 		return err
 	}
@@ -3365,6 +3359,7 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 	if paths.syncMetrics != nil {
 		paths.syncMetrics.SetArtifactRoots(preparedArtifactRoots(paths, cfg))
 	}
+	l.prefetchComponentMaterializedCache(paths, lock, cfg, mode, opts.Parallelism)
 	for _, collection := range hostProviderCollections(cfg) {
 		lockEntries := lockEntriesForKind(lock, collection.kind)
 		for name, entry := range collection.entries {
@@ -4240,6 +4235,7 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 			localWork = append(localWork, work)
 		}
 	}
+	l.prefetchAppMaterializedCache(paths, lock, ordered, mode, opts.Parallelism)
 	for _, work := range ordered {
 		if work.localParallel || !sourceBacked(work.entry) {
 			continue

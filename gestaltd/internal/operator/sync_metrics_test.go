@@ -103,6 +103,41 @@ func TestSyncMetricsRecorderCountsCacheLookupAndPutSeparately(t *testing.T) {
 	}
 }
 
+func TestSyncMetricsRecorderAggregatesCachePrefetchAcrossPhases(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewSyncMetricsRecorder()
+	recorder.RecordCachePrefetch(materializedCachePrefetchStats{
+		Duration:   1200 * time.Millisecond,
+		Requests:   2,
+		Eligible:   2,
+		RemoteHits: 1,
+		Keys:       []string{"a", "b"},
+		Bytes:      100,
+	})
+	recorder.RecordCachePrefetch(materializedCachePrefetchStats{
+		Duration:     300 * time.Millisecond,
+		Requests:     2,
+		Eligible:     2,
+		LocalHits:    1,
+		RemoteMisses: 1,
+		Keys:         []string{"b", "c"},
+	})
+
+	prefetch := recorder.Snapshot().Cache.Prefetch
+	if prefetch.DurationSeconds != 1.5 ||
+		prefetch.Requests != 4 ||
+		prefetch.Eligible != 4 ||
+		prefetch.UniqueKeys != 3 ||
+		prefetch.LocalHits != 1 ||
+		prefetch.RemoteHits != 1 ||
+		prefetch.RemoteMisses != 1 ||
+		prefetch.Failures != 0 ||
+		prefetch.Bytes != 100 {
+		t.Fatalf("prefetch metrics = %+v, want aggregated counters with unique keys deduped", prefetch)
+	}
+}
+
 func TestRecordOutputStatsRecordsAllRoots(t *testing.T) {
 	t.Parallel()
 
