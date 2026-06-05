@@ -99,6 +99,13 @@ func TestMaterializedCacheHydratesRemoteEntriesBeforeRestore(t *testing.T) {
 		t.Fatalf("remote list/get calls after local hydrate = %d/%d, want 2/1", remote.listCalls, remote.gets)
 	}
 
+	remote.listErr = errors.New("remote list unavailable")
+	stats = warm.HydrateRemote(context.Background(), 2)
+	if stats.Failures != 1 || stats.Error != "remote list unavailable" || stats.Duration <= 0 {
+		t.Fatalf("HydrateRemote list error stats = %+v, want failure, error, and duration", stats)
+	}
+	remote.listErr = nil
+
 	restore, err := warm.Restore(req)
 	if err != nil {
 		t.Fatalf("Restore hydrated entry: %v", err)

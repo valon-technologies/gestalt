@@ -121,6 +121,7 @@ type SyncMetricsCacheRestore struct {
 	Restored        int     `json:"restored"`
 	Failures        int     `json:"failures"`
 	Bytes           int64   `json:"bytes"`
+	Error           string  `json:"error,omitempty"`
 }
 
 type SyncMetricsCachePut struct {
@@ -468,6 +469,7 @@ func (r *SyncMetricsRecorder) RecordCacheRestore(stats materializedCacheHydrateS
 		Restored:        stats.Restored,
 		Failures:        stats.Failures,
 		Bytes:           stats.Bytes,
+		Error:           stats.Error,
 	}
 }
 
