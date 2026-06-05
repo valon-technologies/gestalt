@@ -65,7 +65,6 @@ func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
 	}
 	deps.Caches = scopedCacheBindings(entry.Cache, deps.Caches)
 	deps.S3 = scopedS3Bindings(entry.S3, deps.S3)
-	deps.WorkflowManagerGrants = appWorkflowGrants(entry.Capabilities)
 	return deps
 }
 
@@ -458,7 +457,7 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 		Name:           "workflow_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, deps.WorkflowManagerGrants))
+			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, deps.Authorization))
 		},
 	}
 }

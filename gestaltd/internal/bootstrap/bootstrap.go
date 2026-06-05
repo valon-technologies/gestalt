@@ -25,8 +25,9 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
@@ -36,7 +37,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
@@ -168,13 +168,13 @@ type Deps struct {
 	Authorization         core.AuthorizationProvider
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
-	AgentRunGrants        *agentgrant.Manager
+	AgentTurnScopes       *agentturnscope.Store
+	AgentToolIDs          *agenttoolid.Codec
 	WorkflowManager       workflowmanager.Service
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
 	AppInvocation         invocation.Invoker
 	AppAccessProfiles     map[string]appaccessservice.AppAccessProfiles
-	WorkflowManagerGrants workflowgrants.Grants
 	Runtime               runtimeprovider.Provider
 	RuntimeRegistry       *runtimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
@@ -830,10 +830,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if requireEncryptionKey && encKey == nil {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required")
 	}
-	agentRunGrants, err := agentgrant.NewManager(encKey)
+	agentToolIDs, err := agenttoolid.NewCodec(encKey)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: agent run grants: %w", err)
+		return nil, fmt.Errorf("bootstrap: agent tool ids: %w", err)
 	}
+	agentTurnScopes := agentturnscope.NewStore()
 	hostServiceTLSCAFile, hostServiceTLSCAPEM, err := hostServiceTLSCAFromEnv()
 	if err != nil {
 		return nil, err
@@ -845,7 +846,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		RuntimeRelayBaseURL:  cfg.Server.Runtime.RelayBaseURL,
 		SecretManager:        sm,
 		Telemetry:            tp,
-		AgentRunGrants:       agentRunGrants,
+		AgentTurnScopes:      agentTurnScopes,
+		AgentToolIDs:         agentToolIDs,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
@@ -869,7 +871,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AgentRuntime = agentRuntime
-	deps.AgentRuntime.SetRunGrants(agentRunGrants)
+	deps.AgentRuntime.SetTurnScopes(agentTurnScopes)
+	deps.AgentRuntime.SetToolIDCodec(agentToolIDs)
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -1173,7 +1176,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Providers:                     providers,
 		Agent:                         prepared.Deps.AgentRuntime,
 		WorkflowTools:                 workflowTools,
-		RunGrants:                     prepared.Deps.AgentRunGrants,
+		TurnScopes:                    prepared.Deps.AgentTurnScopes,
+		ToolIDs:                       prepared.Deps.AgentToolIDs,
 		Invoker:                       sharedInvoker,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,

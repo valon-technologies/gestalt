@@ -1,9 +1,10 @@
 package agent
 
+import proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+
 type ResolveToolsRequest struct {
-	ToolRefs      []ToolRef
-	ToolSource    ToolSourceMode
-	CallerAppName string
+	ToolRefs   []ToolRef
+	ToolSource ToolSourceMode
 }
 
 type ExecuteToolRequest struct {
@@ -13,8 +14,8 @@ type ExecuteToolRequest struct {
 	ToolCallID     string
 	ToolID         string
 	Arguments      map[string]any
-	RunGrant       string
 	IdempotencyKey string
+	Context        *proto.RequestContext
 }
 
 type ExecuteToolResponse struct {
@@ -31,7 +32,7 @@ type ListToolsRequest struct {
 	Query        string
 	ToolRefs     []ToolRef
 	ToolSource   ToolSourceMode
-	RunGrant     string
+	Context      *proto.RequestContext
 }
 
 type ListToolsResponse struct {
@@ -45,5 +46,5 @@ type ResolveConnectionRequest struct {
 	TurnID       string
 	Connection   string
 	Instance     string
-	RunGrant     string
+	Context      *proto.RequestContext
 }

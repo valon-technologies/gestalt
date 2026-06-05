@@ -464,7 +464,6 @@ class CreateAgentProviderTurnRequest(_message.Message):
     TOOL_SOURCE_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
-    RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
@@ -482,12 +481,11 @@ class CreateAgentProviderTurnRequest(_message.Message):
     tool_source: AgentToolSourceMode
     subject: _app_pb2.SubjectContext
     model_options: _struct_pb2.Struct
-    run_grant: str
     timeout_seconds: int
     context: _app_pb2.RequestContext
     tool_refs_set: bool
     output: AgentOutput
-    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ...) -> None: ...
+    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ...) -> None: ...
 
 class AgentTextOutput(_message.Message):
     __slots__ = ()
@@ -643,15 +641,15 @@ class ExecuteAgentToolRequest(_message.Message):
     TOOL_ID_FIELD_NUMBER: _ClassVar[int]
     ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     turn_id: str
     tool_call_id: str
     tool_id: str
     arguments: _struct_pb2.Struct
     idempotency_key: str
-    run_grant: str
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_id: _Optional[str] = ..., arguments: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., run_grant: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_id: _Optional[str] = ..., arguments: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ExecuteAgentToolResponse(_message.Message):
     __slots__ = ()
@@ -691,15 +689,15 @@ class ListAgentToolsRequest(_message.Message):
     TURN_ID_FIELD_NUMBER: _ClassVar[int]
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     turn_id: str
     page_size: int
     page_token: str
-    run_grant: str
     query: str
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., run_grant: _Optional[str] = ..., query: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., query: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentToolsResponse(_message.Message):
     __slots__ = ()
@@ -715,13 +713,13 @@ class ResolveAgentConnectionRequest(_message.Message):
     TURN_ID_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     turn_id: str
     connection: str
     instance: str
-    run_grant: str
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., run_grant: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ResolvedAgentConnection(_message.Message):
     __slots__ = ()

@@ -50,8 +50,8 @@ pub struct AgentHostListToolsInput {
     pub session_id: String,
     /// Agent turn ID.
     pub turn_id: String,
-    /// Optional run grant scoped to this turn.
-    pub run_grant: String,
+    /// Host request context scoped to this turn.
+    pub context: Option<pb::RequestContext>,
     /// Maximum number of tools to return.
     pub page_size: i32,
     /// Opaque page token returned by a previous list call.
@@ -73,8 +73,8 @@ pub struct AgentHostExecuteToolInput {
     pub tool_id: String,
     /// JSON object to pass as tool arguments.
     pub arguments: Option<serde_json::Value>,
-    /// Optional run grant scoped to this turn.
-    pub run_grant: String,
+    /// Host request context scoped to this turn.
+    pub context: Option<pb::RequestContext>,
     /// Caller-supplied idempotency key for retries.
     pub idempotency_key: String,
 }
@@ -104,8 +104,8 @@ pub struct AgentHostResolveConnectionInput {
     pub connection: String,
     /// Optional connection instance.
     pub instance: String,
-    /// Optional run grant scoped to this turn.
-    pub run_grant: String,
+    /// Host request context scoped to this turn.
+    pub context: Option<pb::RequestContext>,
 }
 
 /// Native JSON object used by authored agent providers.
@@ -545,6 +545,7 @@ pub struct CreateAgentProviderSessionRequest {
     pub metadata: Option<AgentJson>,
     pub created_by_subject_id: Option<String>,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
     pub session_start: Option<AgentSessionStartConfig>,
     pub prepared_workspace: Option<AgentPreparedWorkspace>,
 }
@@ -571,15 +572,18 @@ pub struct AgentSessionStartHookOutput {
     pub metadata: bool,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct GetAgentProviderSessionRequest {
     pub session_id: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListAgentProviderSessionsRequest {
+    pub provider_name: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
     pub session_ids: Vec<String>,
     pub state: AgentSessionState,
     pub limit: i32,
@@ -598,6 +602,7 @@ pub struct UpdateAgentProviderSessionRequest {
     pub state: AgentSessionState,
     pub metadata: Option<AgentJson>,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -666,7 +671,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub tool_source: AgentToolSourceMode,
     pub subject: Option<Subject>,
     pub model_options: Option<AgentJson>,
-    pub run_grant: String,
+    pub context: Option<pb::RequestContext>,
     pub timeout_seconds: i32,
 }
 
@@ -698,16 +703,18 @@ impl AgentOutput {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct GetAgentProviderTurnRequest {
     pub turn_id: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListAgentProviderTurnsRequest {
     pub session_id: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
     pub turn_ids: Vec<String>,
     pub status: AgentExecutionStatus,
     pub limit: i32,
@@ -719,11 +726,12 @@ pub struct ListAgentProviderTurnsResponse {
     pub turns: Vec<AgentTurn>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct CancelAgentProviderTurnRequest {
     pub turn_id: String,
     pub reason: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -739,12 +747,13 @@ pub struct AgentTurnEvent {
     pub display: Option<AgentTurnDisplay>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListAgentProviderTurnEventsRequest {
     pub turn_id: String,
     pub after_seq: i64,
     pub limit: i32,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -752,16 +761,18 @@ pub struct ListAgentProviderTurnEventsResponse {
     pub events: Vec<AgentTurnEvent>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct GetAgentProviderInteractionRequest {
     pub interaction_id: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListAgentProviderInteractionsRequest {
     pub turn_id: String,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -771,9 +782,11 @@ pub struct ListAgentProviderInteractionsResponse {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ResolveAgentProviderInteractionRequest {
+    pub turn_id: String,
     pub interaction_id: String,
     pub resolution: Option<AgentJson>,
     pub subject: Option<Subject>,
+    pub context: Option<pb::RequestContext>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1022,7 +1035,7 @@ impl AgentHost {
                 .arguments
                 .map(protocol::struct_from_json)
                 .transpose()?,
-            run_grant: input.run_grant,
+            context: input.context,
             idempotency_key: input.idempotency_key,
         };
         Ok(execute_tool_response_from_proto(
@@ -1046,7 +1059,7 @@ impl AgentHost {
         let request = pb::ListAgentToolsRequest {
             session_id: input.session_id,
             turn_id: input.turn_id,
-            run_grant: input.run_grant,
+            context: input.context,
             page_size: input.page_size,
             page_token: input.page_token,
             query: input.query,
@@ -1074,7 +1087,7 @@ impl AgentHost {
             turn_id: input.turn_id,
             connection: input.connection,
             instance: input.instance,
-            run_grant: input.run_grant,
+            context: input.context,
         };
         resolved_connection_from_proto(self.client.resolve_connection(request).await?.into_inner())
             .map_err(AgentHostError::Input)
@@ -1686,6 +1699,7 @@ fn create_session_request_from_proto(
             .filter(|value| !value.trim().is_empty())
             .map(|value| value.to_string()),
         subject: agent_subject_from_proto(value.subject),
+        context: value.context,
         session_start: value.session_start.map(|value| AgentSessionStartConfig {
             hooks: value
                 .hooks
@@ -1751,7 +1765,7 @@ fn create_turn_request_from_proto(
         tool_source: AgentToolSourceMode::from_i32_lossy(value.tool_source),
         subject: agent_subject_from_proto(value.subject),
         model_options: json_from_struct(value.model_options),
-        run_grant: value.run_grant,
+        context: value.context,
         timeout_seconds: value.timeout_seconds,
     })
 }
@@ -2016,6 +2030,7 @@ where
                 GetAgentProviderSessionRequest {
                     session_id: request.session_id,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2034,7 +2049,9 @@ where
             .list_sessions({
                 let request = request.into_inner();
                 ListAgentProviderSessionsRequest {
+                    provider_name: request.provider_name,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                     session_ids: request.session_ids,
                     state: AgentSessionState::from_i32_lossy(request.state),
                     limit: request.limit,
@@ -2067,6 +2084,7 @@ where
                     state: AgentSessionState::from_i32_lossy(request.state),
                     metadata: json_from_struct(request.metadata),
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2104,6 +2122,7 @@ where
                 GetAgentProviderTurnRequest {
                     turn_id: request.turn_id,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2124,6 +2143,7 @@ where
                 ListAgentProviderTurnsRequest {
                     session_id: request.session_id,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                     turn_ids: request.turn_ids,
                     status: AgentExecutionStatus::from_i32_lossy(request.status),
                     limit: request.limit,
@@ -2154,6 +2174,7 @@ where
                     turn_id: request.turn_id,
                     reason: request.reason,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2176,6 +2197,7 @@ where
                     after_seq: request.after_seq,
                     limit: request.limit,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2201,6 +2223,7 @@ where
                 GetAgentProviderInteractionRequest {
                     interaction_id: request.interaction_id,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2222,6 +2245,7 @@ where
                 ListAgentProviderInteractionsRequest {
                     turn_id: request.turn_id,
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await
@@ -2247,9 +2271,11 @@ where
             .resolve_interaction({
                 let request = request.into_inner();
                 ResolveAgentProviderInteractionRequest {
+                    turn_id: request.turn_id,
                     interaction_id: request.interaction_id,
                     resolution: json_from_struct(request.resolution),
                     subject: agent_subject_from_proto(request.subject),
+                    context: request.context,
                 }
             })
             .await

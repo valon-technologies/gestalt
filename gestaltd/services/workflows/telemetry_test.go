@@ -18,7 +18,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -271,7 +270,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	) (any, error) {
 		return handler(metricutil.WithMeterProvider(ctx, metrics.Provider), req)
 	}))
-	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}}))
+	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, &managerServerAuthorizationProvider{allowed: true}))
 	go func() {
 		_ = srv.Serve(lis)
 	}()

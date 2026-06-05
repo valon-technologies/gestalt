@@ -150,8 +150,10 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 		TurnId:    "turn-1",
 		PageSize:  10,
 		PageToken: " 0 ",
-		RunGrant:  " grant-token ",
 		Query:     " issue ticket ",
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "user:agent-host"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -159,8 +161,8 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 	if captured.ProviderName != "agent-provider" || captured.SessionID != "session-1" || captured.TurnID != "turn-1" {
 		t.Fatalf("captured request = %#v", captured)
 	}
-	if captured.PageSize != 10 || captured.PageToken != "0" || captured.RunGrant != "grant-token" {
-		t.Fatalf("captured paging/grant = %#v", captured)
+	if captured.PageSize != 10 || captured.PageToken != "0" || captured.Context.GetSubject().GetId() != "user:agent-host" {
+		t.Fatalf("captured paging/context = %#v", captured)
 	}
 	if captured.Query != "issue ticket" {
 		t.Fatalf("captured query = %q, want issue ticket", captured.Query)

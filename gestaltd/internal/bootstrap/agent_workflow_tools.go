@@ -263,7 +263,7 @@ func (t *workflowSystemTools) executeApplyDefinition(ctx context.Context, req ag
 		ProviderName:   workflowSystemToolStringArg(args, "provider"),
 		Spec:           coreworkflow.DefinitionSpec{ID: definitionID, Target: target, Paused: workflowSystemToolBoolArg(args, "paused")},
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CallerAppName:  workflowSystemToolCallerScope(req),
+		Caller:         workflowSystemToolCaller(req),
 	})
 	if err != nil {
 		return nil, err
@@ -384,7 +384,7 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		DefinitionID:   definitionID,
 		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:    workflowSystemToolStringArg(args, "workflowKey"),
-		CallerAppName:  workflowSystemToolCallerScope(req),
+		Caller:         workflowSystemToolCaller(req),
 	})
 	if err != nil {
 		return nil, err
@@ -396,7 +396,8 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 func workflowSystemToolBaseLogAttrs(req agentSystemToolExecutionRequest) []any {
 	attrs := []any{
 		"agent_provider", strings.TrimSpace(req.ProviderName),
-		"agent_caller_app", strings.TrimSpace(req.CallerAppName),
+		"agent_caller_kind", strings.TrimSpace(string(req.CallerKind)),
+		"agent_caller_name", strings.TrimSpace(req.CallerName),
 		"agent_session_id", strings.TrimSpace(req.SessionID),
 		"agent_turn_id", strings.TrimSpace(req.TurnID),
 		"agent_tool_call_id", strings.TrimSpace(req.ToolCallID),
@@ -445,15 +446,17 @@ func workflowSystemToolRunLogAttrs(req agentSystemToolExecutionRequest, run *wor
 	return attrs
 }
 
-func workflowSystemToolCallerScope(req agentSystemToolExecutionRequest) string {
-	if callerAppName := strings.TrimSpace(req.CallerAppName); callerAppName != "" {
-		return callerAppName
+func workflowSystemToolCaller(req agentSystemToolExecutionRequest) invocation.CallerProvider {
+	callerKind := invocation.ProviderKind(strings.TrimSpace(string(req.CallerKind)))
+	callerName := strings.TrimSpace(req.CallerName)
+	if callerKind != "" && callerName != "" {
+		return invocation.CallerProvider{Kind: callerKind, Name: callerName}
 	}
 	providerName := strings.TrimSpace(req.ProviderName)
 	if providerName == "" {
-		return "agent"
+		providerName = "agent"
 	}
-	return "agent:" + providerName
+	return invocation.CallerProvider{Kind: invocation.ProviderKindAgent, Name: providerName}
 }
 
 func workflowSystemToolManagementPrincipal(req agentSystemToolExecutionRequest) *principal.Principal {

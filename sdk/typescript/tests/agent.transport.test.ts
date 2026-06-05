@@ -128,9 +128,11 @@ test("AgentProvider rejects structured output without a schema", async () => {
 
 test("AgentProvider forwards request context subjects to handlers", async () => {
   const seenSubjectIds: string[] = [];
+  const seenContextSubjectIds: string[] = [];
   const provider = defineAgentProvider({
     createSession(request) {
       seenSubjectIds.push(request.subject?.id ?? "");
+      seenContextSubjectIds.push(request.context?.subject?.id ?? "");
       return {
         id: request.sessionId,
         model: request.model,
@@ -138,6 +140,7 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
     },
     createTurn(request) {
       seenSubjectIds.push(request.subject?.id ?? "");
+      seenContextSubjectIds.push(request.context?.subject?.id ?? "");
       return {
         id: request.turnId,
         sessionId: request.sessionId,
@@ -174,6 +177,7 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
   );
 
   expect(seenSubjectIds).toEqual(["user:session", "user:turn"]);
+  expect(seenContextSubjectIds).toEqual(["user:session", "user:turn"]);
 });
 
 async function reserveTCPAddress(): Promise<string> {
@@ -281,7 +285,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     toolCallId: string;
     toolId: string;
     arguments: unknown;
-    runGrant: string;
+    subjectId: string;
     idempotencyKey: string;
   }> = [];
   const lists: Array<{
@@ -289,14 +293,19 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     pageSize: number;
     pageToken: string;
     query: string;
-    runGrant: string;
+    subjectId: string;
   }> = [];
   const connections: Array<{
     turnId: string;
     connection: string;
     instance: string;
-    runGrant: string;
+    subjectId: string;
   }> = [];
+  const requestContext = create(RequestContextSchema, {
+    subject: create(SubjectContextSchema, {
+      id: "user:agent-host",
+    }),
+  });
 
   const handler = connectNodeAdapter({
     grpc: true,
@@ -310,7 +319,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             toolCallId: input.toolCallId,
             toolId: input.toolId,
             arguments: input.arguments,
-            runGrant: input.runGrant,
+            subjectId: input.context?.subject?.id ?? "",
             idempotencyKey: input.idempotencyKey,
           });
           return create(ExecuteAgentToolResponseSchema, {
@@ -327,7 +336,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             pageSize: input.pageSize,
             pageToken: input.pageToken,
             query: input.query,
-            runGrant: input.runGrant,
+            subjectId: input.context?.subject?.id ?? "",
           });
           return create(ListAgentToolsResponseSchema, {
             tools: [
@@ -351,7 +360,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
             turnId: input.turnId,
             connection: input.connection,
             instance: input.instance,
-            runGrant: input.runGrant,
+            subjectId: input.context?.subject?.id ?? "",
           });
           return create(ResolvedAgentConnectionSchema, {
             connectionId: "vertex-ai",
@@ -392,7 +401,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         deployment: "blue",
         metadata: Object.freeze({ owner: "runtime" }),
       },
-      runGrant: "grant-token",
+      context: requestContext,
       idempotencyKey: "tool-call-key-123",
     });
 
@@ -414,7 +423,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
           deployment: "blue",
           metadata: { owner: "runtime" },
         },
-        runGrant: "grant-token",
+        subjectId: "user:agent-host",
         idempotencyKey: "tool-call-key-123",
       },
     ]);
@@ -425,7 +434,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       pageSize: 10,
       pageToken: "page-0",
       query: "slack",
-      runGrant: "grant-token",
+      context: requestContext,
     });
 
     expect(listResponse.tools).toHaveLength(1);
@@ -437,7 +446,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         pageSize: 10,
         pageToken: "page-0",
         query: "slack",
-        runGrant: "grant-token",
+        subjectId: "user:agent-host",
       },
     ]);
 
@@ -446,7 +455,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       turnId: "turn-123",
       connection: "model",
       instance: "default",
-      runGrant: "grant-token",
+      context: requestContext,
     });
 
     expect(resolvedConnection.connectionId).toBe("vertex-ai");
@@ -457,7 +466,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
         turnId: "turn-123",
         connection: "model",
         instance: "default",
-        runGrant: "grant-token",
+        subjectId: "user:agent-host",
       },
     ]);
   } finally {

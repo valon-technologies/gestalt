@@ -8,34 +8,39 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 )
 
-func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *testing.T) {
+func TestManagerServerMissingOrDeniedAuthorizationDenyWorkflowManagerMethods(t *testing.T) {
 	t.Parallel()
 
-	for name, grants := range map[string]workflowgrants.Grants{
-		"missing grants": nil,
-		"empty grants":   {},
+	for _, tc := range []struct {
+		name string
+		auth core.AuthorizationProvider
+		code codes.Code
+	}{
+		{name: "missing authorization", code: codes.FailedPrecondition},
+		{name: "denied authorization", auth: &managerServerAuthorizationProvider{}, code: codes.PermissionDenied},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			server := NewProviderServer("caller", nil, grants)
+			server := NewProviderServer("caller", nil, tc.auth)
 			_, err := server.ApplyDefinition(context.Background(), &proto.ApplyWorkflowProviderDefinitionRequest{
 				Context: managerServerRequestContext("caller"),
 			})
-			if status.Code(err) != codes.PermissionDenied {
-				t.Fatalf("ApplyDefinition error = %v, want PermissionDenied", err)
+			if status.Code(err) != tc.code {
+				t.Fatalf("ApplyDefinition error = %v, want %s", err, tc.code)
 			}
 		})
 	}
@@ -44,11 +49,7 @@ func TestManagerServerMissingOrEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *
 func TestManagerServerRejectsCallerSuppliedRunAs(t *testing.T) {
 	t.Parallel()
 
-	server := NewProviderServer("caller", nil, workflowgrants.Grants{
-		workflowgrants.OperationDefinitionsApply:  {},
-		workflowgrants.OperationRunsStart:         {},
-		workflowgrants.OperationRunsSignalOrStart: {},
-	})
+	server := NewProviderServer("caller", nil, &managerServerAuthorizationProvider{allowed: true})
 	runAs := &proto.SubjectContext{Id: "user:ada"}
 
 	for name, call := range map[string]func() error{
@@ -100,7 +101,8 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 		},
 		Audit: invocation.NewSlogAuditSink(&auditBuf),
 	})
-	server := NewProviderServer("sourceApp", manager, workflowgrants.Grants{workflowgrants.OperationEventsDeliver: {}})
+	authz := &managerServerAuthorizationProvider{allowed: true}
+	server := NewProviderServer("sourceApp", manager, authz)
 
 	delivered, err := server.DeliverEvent(context.Background(), &proto.DeliverWorkflowProviderEventRequest{
 		ProviderName: "selected",
@@ -124,6 +126,12 @@ func TestManagerServerDeliverEventThreadsCallerAppToSelectedProvider(t *testing.
 	}
 	if len(other.deliverReqs) != 0 {
 		t.Fatalf("other deliver requests = %d, want 0", len(other.deliverReqs))
+	}
+	if len(authz.requests) != 1 {
+		t.Fatalf("authorization checks = %d, want 1", len(authz.requests))
+	}
+	if got := authz.requests[0].GetResource().GetId(); got != workflowauth.OperationResourceID("sourceApp", workflowauth.OperationEventsDeliver) {
+		t.Fatalf("authorization resource = %q, want deliver event resource", got)
 	}
 	assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
 		"level":          "INFO",
@@ -227,6 +235,18 @@ func managerServerRequestContext(callerApp string) *proto.RequestContext {
 			CredentialSubjectId: "user:user-123",
 		},
 	}
+}
+
+type managerServerAuthorizationProvider struct {
+	core.AuthorizationProvider
+
+	allowed  bool
+	requests []*proto.CheckAccessRequest
+}
+
+func (p *managerServerAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.requests = append(p.requests, gproto.Clone(req).(*proto.CheckAccessRequest))
+	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
 }
 
 type managerServerWorkflowControl struct {

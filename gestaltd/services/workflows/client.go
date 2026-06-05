@@ -400,6 +400,15 @@ func attachWorkflowProviderRequestContext(ctx context.Context, req gproto.Messag
 	if field == nil || field.Kind() != protoreflect.MessageKind {
 		return nil
 	}
+	if msg.Has(field) {
+		existing, ok := msg.Get(field).Message().Interface().(*proto.RequestContext)
+		if !ok {
+			return nil
+		}
+		merged := appaccessservice.MergeRequestContext(existing, reqCtx)
+		msg.Set(field, protoreflect.ValueOfMessage(merged.ProtoReflect()))
+		return nil
+	}
 	msg.Set(field, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
 	return nil
 }

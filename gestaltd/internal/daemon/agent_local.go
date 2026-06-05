@@ -341,7 +341,7 @@ func printAgentLaunchUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd agent launch [--config PATH]... [--provider NAME] [--harness NAME] [--dry-run]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the selected provider's configured agent harness.")
-	writeUsageLine(w, "No server, session, persistence, runtime, tool grant,")
+	writeUsageLine(w, "No server, session, persistence, runtime, turn scope,")
 	writeUsageLine(w, "or AgentProvider RPC stack is started.")
 }
 

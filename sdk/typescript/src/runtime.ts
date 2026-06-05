@@ -162,7 +162,7 @@ export const ENV_WRITE_CATALOG = "GESTALT_APP_WRITE_CATALOG";
 /**
  * Protocol version currently implemented by the TypeScript runtime.
  */
-export const CURRENT_PROTOCOL_VERSION = 4;
+export const CURRENT_PROTOCOL_VERSION = 5;
 /**
  * Command-line usage for the runtime entrypoint.
  */

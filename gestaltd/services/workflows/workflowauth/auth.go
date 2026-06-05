@@ -1,9 +1,18 @@
-package workflowgrants
+package workflowauth
 
 import (
 	"maps"
 	"slices"
 	"strings"
+
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+)
+
+const (
+	SubjectTypeApp        = "app"
+	ResourceTypeOperation = "gestalt.workflow.operation"
+	RelationInvoker       = "invoker"
+	ActionInvoke          = "invoke"
 )
 
 const (
@@ -25,8 +34,6 @@ const (
 	OperationDefinitionsSetActivationPaused = "definitions.setActivationPaused"
 	OperationDefinitionsDelete              = "definitions.delete"
 )
-
-type Grants map[string]struct{}
 
 var supportedOperations = map[string]struct{}{
 	OperationRunsStart:         {},
@@ -57,46 +64,24 @@ func SupportedOperations() []string {
 	return slices.Sorted(maps.Keys(supportedOperations))
 }
 
-func All() Grants {
-	return maps.Clone(supportedOperations)
+func OperationResourceID(appName, operation string) string {
+	return strings.TrimSpace(appName) + "/operations/" + strings.TrimSpace(operation)
 }
 
-func Clone(src Grants) Grants {
-	if src == nil {
-		return nil
+func OperationResourceType() *proto.AuthorizationModelResourceType {
+	return &proto.AuthorizationModelResourceType{
+		Name:                ResourceTypeOperation,
+		SourceLayer:         proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
+		DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+		Relations: []*proto.ModelRelation{{
+			Name: RelationInvoker,
+			AllowedTargets: []*proto.ModelAllowedTarget{{
+				Kind: &proto.ModelAllowedTarget_SubjectType{SubjectType: SubjectTypeApp},
+			}},
+		}},
+		Actions: []*proto.ModelAction{{
+			Name:      ActionInvoke,
+			Relations: []string{RelationInvoker},
+		}},
 	}
-	return maps.Clone(src)
-}
-
-func EncodeClaims(src Grants) []string {
-	if src == nil {
-		return nil
-	}
-	if len(src) == 0 {
-		return []string{}
-	}
-	return slices.Sorted(maps.Keys(src))
-}
-
-func DecodeClaims(src []string) Grants {
-	if src == nil {
-		return nil
-	}
-	out := make(Grants, len(src))
-	for _, operation := range src {
-		operation = strings.TrimSpace(operation)
-		if operation == "" {
-			continue
-		}
-		out[operation] = struct{}{}
-	}
-	return out
-}
-
-func (g Grants) Allows(operation string) bool {
-	if g == nil {
-		return false
-	}
-	_, ok := g[strings.TrimSpace(operation)]
-	return ok
 }

@@ -95,6 +95,12 @@ _manager_workflows: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
+def _native_context_subject_id(context: Any) -> str:
+    if context is None or not context.HasField("subject"):
+        return ""
+    return context.subject.id
+
+
 @dataclass
 class ToolArguments:
     query: str
@@ -103,6 +109,7 @@ class ToolArguments:
 class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def __init__(self) -> None:
         self.configured: list[tuple[str, dict[str, object]]] = []
+        self.context_subject_ids: list[str] = []
 
     def configure(self, name: str, config: dict[str, Any]) -> None:
         self.configured.append((name, dict(config)))
@@ -120,6 +127,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         return ["set OPENAI_API_KEY"]
 
     def create_session(self, request: Any) -> Any:
+        self.context_subject_ids.append(_native_context_subject_id(request.context))
         return AgentSession(
             id=request.session_id,
             provider_name="py-agent",
@@ -166,6 +174,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         )
 
     def create_turn(self, request: Any) -> Any:
+        self.context_subject_ids.append(_native_context_subject_id(request.context))
         return AgentTurn(
             id=request.turn_id,
             session_id=request.session_id,
@@ -298,7 +307,9 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                 "turn_id": request.turn_id,
                 "page_size": request.page_size,
                 "page_token": request.page_token,
-                "run_grant": request.run_grant,
+                "subject_id": request.context.subject.id
+                if request.HasField("context")
+                else "",
                 "query": request.query,
             }
         )
@@ -346,7 +357,9 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                 if request.HasField("arguments")
                 else {},
                 "idempotency_key": request.idempotency_key,
-                "run_grant": request.run_grant,
+                "subject_id": request.context.subject.id
+                if request.HasField("context")
+                else "",
             }
         )
         return agent_pb2.ExecuteAgentToolResponse(
@@ -362,7 +375,9 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                 "turn_id": request.turn_id,
                 "connection": request.connection,
                 "instance": request.instance,
-                "run_grant": request.run_grant,
+                "subject_id": request.context.subject.id
+                if request.HasField("context")
+                else "",
             }
         )
         return agent_pb2.ResolvedAgentConnection(
@@ -677,6 +692,7 @@ def tearDownModule() -> None:
 class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
+        _provider.context_subject_ids.clear()
         _host_relay_tokens.clear()
         _host_list_requests.clear()
         _host_execute_requests.clear()
@@ -876,6 +892,9 @@ class AgentTransportTests(unittest.TestCase):
             model="gpt-5.1",
             client_ref="cli-session-1",
             created_by_subject_id="user:session-owner",
+            context=app_pb2.RequestContext(
+                subject=app_pb2.SubjectContext(id="user:session")
+            ),
         )
         create_session_metadata = struct_pb2.Struct()
         create_session_metadata.update({"source": "py-test"})
@@ -918,7 +937,12 @@ class AgentTransportTests(unittest.TestCase):
                 ],
                 created_by_subject_id="user:turn-owner",
                 execution_ref="exec-turn-1",
-                output=agent_pb2.AgentOutput(text={}),
+                context=app_pb2.RequestContext(
+                    subject=app_pb2.SubjectContext(id="user:turn")
+                ),
+                output=agent_pb2.AgentOutput(
+                    text=agent_pb2.AgentTextOutput(),
+                ),
             )
         )
         listed_turns = provider_client.ListTurns(
@@ -968,6 +992,7 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(updated_session.client_ref, "cli-session-2")
         self.assertEqual(created_turn.id, "turn-1")
         self.assertEqual(created_turn.created_by_subject_id, "user:turn-owner")
+        self.assertEqual(_provider.context_subject_ids, ["user:session", "user:turn"])
         self.assertEqual(
             created_turn.status,
             agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
@@ -1036,14 +1061,17 @@ class AgentTransportTests(unittest.TestCase):
                 os.remove(socket_path)
 
     def test_agent_host_roundtrip(self) -> None:
+        request_context = app_pb2.RequestContext(
+            subject=app_pb2.SubjectContext(id="user:agent-host")
+        )
         with AgentHost() as host:
             list_response = host.list_tools_for_turn(
                 "session-1",
                 "turn-1",
                 page_size=10,
                 page_token="page-0",
-                run_grant="grant-token",
                 query="person",
+                context=request_context,
             )
             response = host.execute_tool_for_turn(
                 "session-1",
@@ -1051,7 +1079,7 @@ class AgentTransportTests(unittest.TestCase):
                 tool_call_id="call-7",
                 tool_id="lookup",
                 arguments=ToolArguments(query="Ada Lovelace"),
-                run_grant="grant-token",
+                context=request_context,
                 idempotency_key="tool-call-key-7",
             )
             connection = host.resolve_connection_for_turn(
@@ -1059,7 +1087,7 @@ class AgentTransportTests(unittest.TestCase):
                 "turn-1",
                 connection="model",
                 instance="default",
-                run_grant="grant-token",
+                context=request_context,
             )
 
         self.assertEqual(len(list_response.tools), 1)
@@ -1083,7 +1111,7 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "turn-1",
                     "page_size": 10,
                     "page_token": "page-0",
-                    "run_grant": "grant-token",
+                    "subject_id": "user:agent-host",
                     "query": "person",
                 }
             ],
@@ -1098,7 +1126,7 @@ class AgentTransportTests(unittest.TestCase):
                     "tool_id": "lookup",
                     "arguments": {"query": "Ada Lovelace"},
                     "idempotency_key": "tool-call-key-7",
-                    "run_grant": "grant-token",
+                    "subject_id": "user:agent-host",
                 }
             ],
         )
@@ -1110,7 +1138,7 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "turn-1",
                     "connection": "model",
                     "instance": "default",
-                    "run_grant": "grant-token",
+                    "subject_id": "user:agent-host",
                 }
             ],
         )

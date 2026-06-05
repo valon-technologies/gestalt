@@ -6,5 +6,5 @@ const (
 	EnvProviderName      = "GESTALT_APP_NAME"
 	EnvProviderTelemetry = "GESTALT_PROVIDER_TELEMETRY"
 
-	CurrentProtocolVersion int32 = 4
+	CurrentProtocolVersion int32 = 5
 )

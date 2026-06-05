@@ -4,7 +4,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
 func appAccessDependenciesFromInvokes(invokes []config.AppInvocationDependency) []appaccessservice.AppAccessDependency {
@@ -43,15 +42,4 @@ func appAccessProfiles(apps map[string]*config.ProviderEntry) map[string]appacce
 		return nil
 	}
 	return out
-}
-
-func appWorkflowGrants(capabilities *config.AppCapabilitiesConfig) workflowgrants.Grants {
-	if capabilities == nil || capabilities.Workflow == nil || len(capabilities.Workflow.Operations) == 0 {
-		return nil
-	}
-	grants := make(workflowgrants.Grants, len(capabilities.Workflow.Operations))
-	for _, operation := range capabilities.Workflow.Operations {
-		grants[operation] = struct{}{}
-	}
-	return grants
 }

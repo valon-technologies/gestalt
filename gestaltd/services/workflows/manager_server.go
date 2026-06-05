@@ -14,7 +14,7 @@ import (
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,22 +26,28 @@ type ManagerService = workflowmanager.Service
 type ProviderServer struct {
 	proto.UnimplementedWorkflowProviderServer
 
-	appName        string
-	manager        ManagerService
-	workflowGrants workflowgrants.Grants
+	appName       string
+	manager       ManagerService
+	authorization core.AuthorizationProvider
 }
 
-func NewProviderServer(appName string, manager ManagerService, grants workflowgrants.Grants) *ProviderServer {
+func NewProviderServer(appName string, manager ManagerService, authorization core.AuthorizationProvider) *ProviderServer {
 	return &ProviderServer{
-		appName:        strings.TrimSpace(appName),
-		manager:        manager,
-		workflowGrants: workflowgrants.Clone(grants),
+		appName:       strings.TrimSpace(appName),
+		manager:       manager,
+		authorization: authorization,
 	}
 }
 
 func (s *ProviderServer) managerContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {
-	ctx = reqCtx.Restore(ctx, "")
-	return workflowmanager.WithCallerAppName(ctx, reqCtx.CallerName())
+	return reqCtx.Restore(ctx, "")
+}
+
+func workflowManagerCaller(reqCtx appaccessservice.ProviderRequestContext) invocation.CallerProvider {
+	return invocation.CallerProvider{
+		Kind: reqCtx.CallerKind(),
+		Name: reqCtx.CallerName(),
+	}
 }
 
 func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
@@ -52,7 +58,7 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationDefinitionsApply); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationDefinitionsApply); err != nil {
 		return nil, err
 	}
 	if req.GetSpec().GetRunAs() != nil {
@@ -66,7 +72,7 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 		ProviderName:   strings.TrimSpace(req.GetProviderName()),
 		Spec:           *spec,
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerAppName:  reqCtx.CallerName(),
+		Caller:         workflowManagerCaller(reqCtx),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -86,7 +92,7 @@ func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkfl
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationDefinitionsGet); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationDefinitionsGet); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
@@ -112,7 +118,7 @@ func (s *ProviderServer) ListDefinitions(ctx context.Context, req *proto.ListWor
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationDefinitionsList); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationDefinitionsList); err != nil {
 		return nil, err
 	}
 	managed, err := s.manager.ListDefinitions(s.managerContext(ctx, reqCtx), reqCtx.Principal())
@@ -138,7 +144,7 @@ func (s *ProviderServer) SetDefinitionPaused(ctx context.Context, req *proto.Set
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationDefinitionsSetPaused); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationDefinitionsSetPaused); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
@@ -164,7 +170,7 @@ func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.Set
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationDefinitionsSetActivationPaused); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationDefinitionsSetActivationPaused); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
@@ -194,7 +200,7 @@ func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.Delete
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationDefinitionsDelete); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationDefinitionsDelete); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
@@ -215,7 +221,7 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsStart); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsStart); err != nil {
 		return nil, err
 	}
 	if req.GetRunAs() != nil {
@@ -228,7 +234,7 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
 		IdempotencyKey:               strings.TrimSpace(req.GetIdempotencyKey()),
 		WorkflowKey:                  strings.TrimSpace(req.GetWorkflowKey()),
-		CallerAppName:                reqCtx.CallerName(),
+		Caller:                       workflowManagerCaller(reqCtx),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -248,7 +254,7 @@ func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsList); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsList); err != nil {
 		return nil, err
 	}
 	statusFilter, err := workflowwire.RunStatusFromProto(req.GetStatus())
@@ -285,7 +291,7 @@ func (s *ProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProvi
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsGet); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsGet); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
@@ -311,7 +317,7 @@ func (s *ProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflo
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsGetEvents); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsGetEvents); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
@@ -333,7 +339,7 @@ func (s *ProviderServer) GetRunOutput(ctx context.Context, req *proto.GetWorkflo
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsGetOutput); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsGetOutput); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
@@ -355,7 +361,7 @@ func (s *ProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsCancel); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsCancel); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
@@ -381,7 +387,7 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsSignal); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsSignal); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
@@ -420,7 +426,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationRunsSignalOrStart); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationRunsSignalOrStart); err != nil {
 		return nil, err
 	}
 	if req.GetRunAs() != nil {
@@ -434,7 +440,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
 		IdempotencyKey:               strings.TrimSpace(req.GetIdempotencyKey()),
 		Signal:                       workflowwire.SignalFromProto(req.GetSignal()),
-		CallerAppName:                reqCtx.CallerName(),
+		Caller:                       workflowManagerCaller(reqCtx),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -454,7 +460,7 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(reqCtx, workflowgrants.OperationEventsDeliver); err != nil {
+	if err := s.requireWorkflowAccess(ctx, reqCtx, workflowauth.OperationEventsDeliver); err != nil {
 		return nil, err
 	}
 	event, err := workflowwire.EventFromProto(req.GetEvent())
@@ -480,11 +486,28 @@ func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccess
 	return appaccessservice.ProviderRequestContextFromProto(reqCtx, invocation.ProviderKindApp, s.appName)
 }
 
-func (s *ProviderServer) requireWorkflowGrant(reqCtx appaccessservice.ProviderRequestContext, operation string) error {
-	if s != nil && s.workflowGrants.Allows(operation) {
-		return nil
+func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext, operation string) error {
+	if s == nil || s.authorization == nil {
+		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow manager operation")
 	}
-	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, reqCtx.CallerName())
+	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+		Subject: &proto.Subject{
+			Type: workflowauth.SubjectTypeApp,
+			Id:   reqCtx.CallerName(),
+		},
+		Action: &proto.Action{Name: workflowauth.ActionInvoke},
+		Resource: &proto.Resource{
+			Type: workflowauth.ResourceTypeOperation,
+			Id:   workflowauth.OperationResourceID(s.appName, operation),
+		},
+	})
+	if err != nil {
+		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q: %v", operation, reqCtx.CallerName(), err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, reqCtx.CallerName())
+	}
+	return nil
 }
 
 func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {

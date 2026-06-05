@@ -22,9 +22,10 @@ import (
 
 func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunStart) (out *ManagedRun, err error) {
 	p = principal.Canonicalized(p)
-	ctx = WithCallerAppName(ctx, req.CallerAppName)
+	caller := workflowCaller(ctx, req.Caller)
+	ctx = withWorkflowCaller(ctx, caller)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationRunStart)
-	audit.setCallerApp(req.CallerAppName)
+	audit.setCallerApp(workflowCallerAuditAppName(caller))
 	audit.setWorkflowKey(req.WorkflowKey)
 	audit.setObjectTarget(workflowAuditTargetRun, "", "")
 	defer func() {
@@ -40,7 +41,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, target, definitionGeneration, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, req.CallerAppName)
+	providerName, provider, target, definitionGeneration, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +52,10 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if err != nil {
 		return nil, err
 	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, caller)
+	if err != nil {
+		return nil, err
+	}
 	runProto, err := provider.StartRun(ctx, &proto.StartWorkflowProviderRunRequest{
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
 		ExpectedDefinitionGeneration: expectedDefinitionGeneration(req.ExpectedDefinitionGeneration, definitionGeneration),
@@ -58,6 +63,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 		IdempotencyKey:               strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:                  strings.TrimSpace(req.WorkflowKey),
 		CreatedBySubjectId:           workflowSubjectIDFromPrincipal(p),
+		Context:                      reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -78,8 +84,13 @@ func (m *Manager) GetRunEvents(ctx context.Context, p *principal.Principal, runI
 	if err != nil {
 		return nil, err
 	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
+	}
 	return value.provider.GetRunEvents(ctx, &proto.GetWorkflowProviderRunEventsRequest{
-		RunId: strings.TrimSpace(runID),
+		RunId:   strings.TrimSpace(runID),
+		Context: reqContext,
 	})
 }
 
@@ -88,8 +99,13 @@ func (m *Manager) GetRunOutput(ctx context.Context, p *principal.Principal, runI
 	if err != nil {
 		return nil, err
 	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
+	}
 	return value.provider.GetRunOutput(ctx, &proto.GetWorkflowProviderRunOutputRequest{
-		RunId: strings.TrimSpace(runID),
+		RunId:   strings.TrimSpace(runID),
+		Context: reqContext,
 	})
 }
 
@@ -115,9 +131,14 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if value.Run != nil {
 		audit.setWorkflowTarget(value.Run.Target)
 	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
+	}
 	runProto, err := value.provider.CancelRun(ctx, &proto.CancelWorkflowProviderRunRequest{
-		RunId:  strings.TrimSpace(runID),
-		Reason: strings.TrimSpace(reason),
+		RunId:   strings.TrimSpace(runID),
+		Reason:  strings.TrimSpace(reason),
+		Context: reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -161,9 +182,14 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if err != nil {
 		return nil, err
 	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
+	}
 	respProto, err := value.provider.SignalRun(ctx, &proto.SignalWorkflowProviderRunRequest{
-		RunId:  strings.TrimSpace(req.RunID),
-		Signal: signalProto,
+		RunId:   strings.TrimSpace(req.RunID),
+		Signal:  signalProto,
+		Context: reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -181,9 +207,10 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	var target coreworkflow.Target
 	var targetAuthFailure *targetAuthorizationFailure
 	p = principal.Canonicalized(p)
-	ctx = WithCallerAppName(ctx, req.CallerAppName)
+	caller := workflowCaller(ctx, req.Caller)
+	ctx = withWorkflowCaller(ctx, caller)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationRunSignalOrStart)
-	audit.setCallerApp(req.CallerAppName)
+	audit.setCallerApp(workflowCallerAuditAppName(caller))
 	audit.setWorkflowKey(req.WorkflowKey)
 	audit.setObjectTarget(workflowAuditTargetRun, "", "")
 	defer func() {
@@ -211,7 +238,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	phase = "resolve_provider_target"
 	var provider coreworkflow.Provider
 	var definitionGeneration int64
-	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, req.CallerAppName)
+	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller)
 	if err != nil {
 		if failure, ok := workflowTargetAuthorizationFailure(err); ok {
 			phase = "authorize_target"
@@ -238,6 +265,10 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
+	reqContext, err := workflowProviderRequestContext(ctx, p, caller)
+	if err != nil {
+		return nil, err
+	}
 	respProto, err := provider.SignalOrStartRun(ctx, &proto.SignalOrStartWorkflowProviderRunRequest{
 		WorkflowKey:                  workflowKey,
 		DefinitionId:                 strings.TrimSpace(req.DefinitionID),
@@ -246,6 +277,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		IdempotencyKey:               strings.TrimSpace(req.IdempotencyKey),
 		CreatedBySubjectId:           workflowSubjectIDFromPrincipal(p),
 		Signal:                       signalProto,
+		Context:                      reqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -354,17 +386,24 @@ func workflowManagerErrorType(err error) string {
 	return "unknown"
 }
 
-func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) (*ManagedRun, error) {
+func (m *Manager) findRun(ctx context.Context, p *principal.Principal, runID, providerSelection string) (*ManagedRun, error) {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
 		return nil, core.ErrNotFound
+	}
+	reqContext, err := workflowProviderRequestContext(ctx, principal.Canonicalized(p), invocation.CallerProvider{})
+	if err != nil {
+		return nil, err
 	}
 	if providerSelection = strings.TrimSpace(providerSelection); providerSelection != "" {
 		providerName, provider, err := m.resolveProvider(ctx, providerSelection)
 		if err != nil {
 			return nil, err
 		}
-		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{RunId: runID})
+		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{
+			RunId:   runID,
+			Context: reqContext,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -381,7 +420,10 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 		if err != nil {
 			return nil, err
 		}
-		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{RunId: runID})
+		runProto, err := provider.GetRun(ctx, &proto.GetWorkflowProviderRunRequest{
+			RunId:   runID,
+			Context: reqContext,
+		})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
@@ -410,7 +452,7 @@ func (m *Manager) findRun(ctx context.Context, runID, providerSelection string) 
 }
 
 func (m *Manager) requireOwnedRun(ctx context.Context, p *principal.Principal, runID, providerSelection string) (*ManagedRun, error) {
-	run, err := m.findRun(ctx, runID, providerSelection)
+	run, err := m.findRun(ctx, p, runID, providerSelection)
 	if err != nil {
 		return nil, err
 	}

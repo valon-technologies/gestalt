@@ -280,8 +280,8 @@ message AgentTurnDisplay {
 }
 
 message CreateAgentProviderTurnRequest {
-  reserved 9, 15;
-  reserved "provider_options", "tool_grant";
+  reserved 9, 15, 17;
+  reserved "provider_options", "tool_grant", "run_grant";
 
   string turn_id = 1;
   string session_id = 2;
@@ -296,7 +296,6 @@ message CreateAgentProviderTurnRequest {
   AgentToolSourceMode tool_source = 13;
   SubjectContext subject = 14;
   google.protobuf.Struct model_options = 16;
-  string run_grant = 17;
   // Optional provider-owned turn execution budget, in seconds.
   // If unset or zero, the provider chooses its own execution timeout. This does
   // not control the CreateTurn RPC deadline.
@@ -414,8 +413,8 @@ message ResolveAgentProviderInteractionRequest {
 }
 
 message ExecuteAgentToolRequest {
-  reserved 6;
-  reserved "tool_grant";
+  reserved 6, 8;
+  reserved "tool_grant", "run_grant";
 
   string session_id = 1;
   string turn_id = 2;
@@ -423,7 +422,7 @@ message ExecuteAgentToolRequest {
   string tool_id = 4;
   google.protobuf.Struct arguments = 5;
   string idempotency_key = 7;
-  string run_grant = 8;
+  RequestContext context = 9;
 }
 
 message ExecuteAgentToolResponse {
@@ -445,15 +444,15 @@ message ListedAgentTool {
 }
 
 message ListAgentToolsRequest {
-  reserved 5;
-  reserved "tool_grant";
+  reserved 5, 6;
+  reserved "tool_grant", "run_grant";
 
   string session_id = 1;
   string turn_id = 2;
   int32 page_size = 3;
   string page_token = 4;
-  string run_grant = 6;
   string query = 7;
+  RequestContext context = 8;
 }
 
 message ListAgentToolsResponse {
@@ -462,11 +461,14 @@ message ListAgentToolsResponse {
 }
 
 message ResolveAgentConnectionRequest {
+  reserved 5;
+  reserved "run_grant";
+
   string session_id = 1;
   string turn_id = 2;
   string connection = 3;
   string instance = 4;
-  string run_grant = 5;
+  RequestContext context = 6;
 }
 
 message ResolvedAgentConnection {

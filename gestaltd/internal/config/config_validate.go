@@ -21,7 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 )
 
 // ValidateStructure checks config shape: integration references, app
@@ -941,8 +941,8 @@ func validateAppCapabilities(path string, capabilities *AppCapabilitiesConfig) e
 		switch {
 		case operation == "":
 			return fmt.Errorf("config validation: %s.workflow.operations[%d] is required", path, i)
-		case !workflowgrants.IsSupportedOperation(operation):
-			return fmt.Errorf("config validation: %s.workflow.operations[%d] %q is not supported; supported operations: %s", path, i, operation, strings.Join(workflowgrants.SupportedOperations(), ", "))
+		case !workflowauth.IsSupportedOperation(operation):
+			return fmt.Errorf("config validation: %s.workflow.operations[%d] %q is not supported; supported operations: %s", path, i, operation, strings.Join(workflowauth.SupportedOperations(), ", "))
 		}
 		if prev, ok := seen[operation]; ok {
 			return fmt.Errorf("config validation: %s.workflow.operations[%d] duplicates operations[%d]", path, i, prev)

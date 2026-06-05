@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -120,6 +121,53 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 		return nil, nil
 	}
 	return &out, nil
+}
+
+func MergeRequestContext(existing, fallback *proto.RequestContext) *proto.RequestContext {
+	if existing == nil {
+		if fallback == nil {
+			return nil
+		}
+		return gproto.Clone(fallback).(*proto.RequestContext)
+	}
+	if fallback == nil {
+		return gproto.Clone(existing).(*proto.RequestContext)
+	}
+	merged := gproto.Clone(existing).(*proto.RequestContext)
+	if merged.GetSubject().GetId() == "" && fallback.GetSubject() != nil {
+		merged.Subject = fallback.GetSubject()
+	}
+	if caller := merged.GetCaller(); caller == nil || strings.TrimSpace(caller.GetKind()) == "" || strings.TrimSpace(caller.GetName()) == "" {
+		if fallback.GetCaller() != nil {
+			merged.Caller = fallback.GetCaller()
+		}
+	}
+	if merged.GetCredential() == nil && fallback.GetCredential() != nil {
+		merged.Credential = fallback.GetCredential()
+	}
+	if merged.GetAccess() == nil && fallback.GetAccess() != nil {
+		merged.Access = fallback.GetAccess()
+	}
+	if merged.GetWorkflow() == nil && fallback.GetWorkflow() != nil {
+		merged.Workflow = fallback.GetWorkflow()
+	}
+	if !merged.GetToolRefsSet() && fallback.GetToolRefsSet() {
+		merged.ToolRefs = append([]*proto.AgentToolRef(nil), fallback.GetToolRefs()...)
+		merged.ToolRefsSet = true
+	}
+	if merged.GetHost() == nil && fallback.GetHost() != nil {
+		merged.Host = fallback.GetHost()
+	}
+	if merged.GetAgentSubject() == nil && fallback.GetAgentSubject() != nil {
+		merged.AgentSubject = fallback.GetAgentSubject()
+	}
+	if merged.GetInvocation() == nil && fallback.GetInvocation() != nil {
+		merged.Invocation = fallback.GetInvocation()
+	}
+	if merged.GetRequestMeta() == nil && fallback.GetRequestMeta() != nil {
+		merged.RequestMeta = fallback.GetRequestMeta()
+	}
+	return merged
 }
 
 func ProviderRequestContextFromProto(reqCtx *proto.RequestContext, expectedKind invocation.ProviderKind, expectedName string) (ProviderRequestContext, error) {

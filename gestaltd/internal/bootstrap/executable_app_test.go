@@ -53,7 +53,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -110,6 +110,11 @@ func newAppInvocationTestAuthorizationProvider(t *testing.T, cfg *config.Config)
 	if err != nil {
 		t.Fatalf("appInvocationAuthorizationRelationships: %v", err)
 	}
+	workflowRelationships, err := workflowAuthorizationRelationships(cfg)
+	if err != nil {
+		t.Fatalf("workflowAuthorizationRelationships: %v", err)
+	}
+	relationships = append(relationships, workflowRelationships...)
 	provider := &appInvocationTestAuthorizationProvider{allowed: map[string]struct{}{}}
 	for _, relationship := range relationships {
 		tuple := relationship.GetTuple()
@@ -3731,14 +3736,16 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	agentProvider := newStubAgentTurnManagerProvider()
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
 	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.ExternalCredentials)
-	runGrants := newTestAgentRunGrants(t)
-	agentRuntime.SetRunGrants(runGrants)
+	turnScopes := newTestAgentTurnScopes()
+	agentRuntime.SetTurnScopes(turnScopes)
+	agentRuntime.SetToolIDCodec(newTestAgentToolIDs(t))
 	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: &pluginProviders.Providers,
-		Agent:     agentRuntime,
-		RunGrants: runGrants,
-		Invoker:   broker,
+		Providers:  &pluginProviders.Providers,
+		Agent:      agentRuntime,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    broker,
 	})
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
@@ -3912,12 +3919,12 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Workflow manager definitions")
 	manager := newStubWorkflowManager()
 	workflowManagerOperations := []string{
-		workflowgrants.OperationDefinitionsApply,
-		workflowgrants.OperationDefinitionsGet,
-		workflowgrants.OperationDefinitionsSetPaused,
-		workflowgrants.OperationDefinitionsSetActivationPaused,
-		workflowgrants.OperationDefinitionsDelete,
-		workflowgrants.OperationEventsDeliver,
+		workflowauth.OperationDefinitionsApply,
+		workflowauth.OperationDefinitionsGet,
+		workflowauth.OperationDefinitionsSetPaused,
+		workflowauth.OperationDefinitionsSetActivationPaused,
+		workflowauth.OperationDefinitionsDelete,
+		workflowauth.OperationEventsDeliver,
 	}
 
 	cfg := &config.Config{
@@ -3940,6 +3947,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey:   secret,
 		WorkflowManager: manager,
+		Authorization:   newAppInvocationTestAuthorizationProvider(t, cfg),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -4140,7 +4148,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	}
 }
 
-func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
+func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4163,7 +4171,7 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Capabilities: &config.AppCapabilitiesConfig{
 					Workflow: &config.AppWorkflowCapabilitiesConfig{
-						Operations: []string{workflowgrants.OperationEventsDeliver},
+						Operations: []string{workflowauth.OperationEventsDeliver},
 					},
 				},
 			},
@@ -4174,6 +4182,7 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey:   secret,
 		WorkflowManager: manager,
+		Authorization:   newAppInvocationTestAuthorizationProvider(t, cfg),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -6890,8 +6899,8 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 				Capabilities: &config.AppCapabilitiesConfig{
 					Workflow: &config.AppWorkflowCapabilitiesConfig{
 						Operations: []string{
-							workflowgrants.OperationDefinitionsApply,
-							workflowgrants.OperationDefinitionsGet,
+							workflowauth.OperationDefinitionsApply,
+							workflowauth.OperationDefinitionsGet,
 						},
 					},
 				},
@@ -6910,6 +6919,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		EncryptionKey:      secret,
 		WorkflowManager:    manager,
 		PublicHostServices: publicHostServices,
+		Authorization:      newAppInvocationTestAuthorizationProvider(t, cfg),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 

@@ -6,6 +6,10 @@ import (
 
 const AppAccessAllApps = "*"
 
+// AppAccessProfiles are execution-shaping metadata, not an authorization
+// source. App invocation authorization is checked through AuthorizationProvider;
+// these profiles only carry declarative credential-mode and runAs defaults for
+// calls that have already been authorized.
 type AppAccessProfile struct {
 	Operations           map[string]core.ConnectionMode
 	Surfaces             map[string]core.ConnectionMode

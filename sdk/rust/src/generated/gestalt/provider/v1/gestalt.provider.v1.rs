@@ -824,8 +824,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "16")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "17")]
-    pub run_grant: ::prost::alloc::string::String,
     /// Optional provider-owned turn execution budget, in seconds.
     /// If unset or zero, the provider chooses its own execution timeout. This does
     /// not control the CreateTurn RPC deadline.
@@ -996,8 +994,8 @@ pub struct ExecuteAgentToolRequest {
     pub arguments: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub run_grant: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecuteAgentToolResponse {
@@ -1029,7 +1027,7 @@ pub struct ListedAgentTool {
     #[prost(string, tag = "10")]
     pub search_text: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
@@ -1039,10 +1037,10 @@ pub struct ListAgentToolsRequest {
     pub page_size: i32,
     #[prost(string, tag = "4")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub run_grant: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub query: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsResponse {
@@ -1051,7 +1049,7 @@ pub struct ListAgentToolsResponse {
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolveAgentConnectionRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
@@ -1061,8 +1059,8 @@ pub struct ResolveAgentConnectionRequest {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub run_grant: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentConnection {

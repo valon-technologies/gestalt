@@ -288,15 +288,11 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 }
 
 func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
-	return appaccessservice.ProviderRequestContextFromProto(reqCtx, "", s.pluginName)
+	return appaccessservice.ProviderRequestContextFromProto(reqCtx, invocation.ProviderKindApp, s.pluginName)
 }
 
 func (s *ProviderServer) restoreRequestContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {
-	ctx = reqCtx.Restore(ctx, "")
-	if caller := reqCtx.CallerName(); caller != "" {
-		ctx = agentmanager.WithCallerAppName(ctx, caller)
-	}
-	return ctx
+	return reqCtx.Restore(ctx, "")
 }
 
 func agentManagerStatusError(err error) error {
@@ -309,7 +305,7 @@ func agentManagerStatusError(err error) error {
 	switch {
 	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentCallerAppRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired), errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid), errors.Is(err, agentmanager.ErrAgentWorkspaceInvalid):
+	case errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired), errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid), errors.Is(err, agentmanager.ErrAgentWorkspaceInvalid):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInvalidListRequest), errors.Is(err, invocation.ErrInvalidInvocation):
 		return status.Error(codes.InvalidArgument, err.Error())
