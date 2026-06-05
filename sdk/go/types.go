@@ -35,6 +35,9 @@ const (
 	ProviderKindExternalCredential ProviderKind = "externalcredentials"
 	// ProviderKindRuntime serves hosted executable-runtime management.
 	ProviderKindRuntime ProviderKind = "runtime"
+	// ProviderKindTest serves the minimal provider surface used to validate
+	// provider registration and invocation.
+	ProviderKindTest ProviderKind = "test"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete
