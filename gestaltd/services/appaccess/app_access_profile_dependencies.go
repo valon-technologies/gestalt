@@ -23,15 +23,25 @@ func ExactAppAccessProfilesFromDependencies(dependencies []AppAccessDependency) 
 	for _, dependency := range dependencies {
 		app := strings.TrimSpace(dependency.App)
 		operation := strings.TrimSpace(dependency.Operation)
-		if app == "" || operation == "" {
+		surface := strings.ToLower(strings.TrimSpace(dependency.Surface))
+		if app == "" || (operation == "" && surface == "") {
 			continue
 		}
 		profile := profiles[app]
-		if profile.Operations == nil {
-			profile.Operations = make(map[string]core.ConnectionMode)
+		mode := core.NormalizeOptionalConnectionMode(dependency.CredentialMode)
+		if operation != "" {
+			if profile.Operations == nil {
+				profile.Operations = make(map[string]core.ConnectionMode)
+			}
+			profile.Operations[operation] = mode
 		}
-		profile.Operations[operation] = core.NormalizeOptionalConnectionMode(dependency.CredentialMode)
-		if dependency.ApplyByDefault {
+		if surface != "" {
+			if profile.Surfaces == nil {
+				profile.Surfaces = make(map[string]core.ConnectionMode)
+			}
+			profile.Surfaces[surface] = mode
+		}
+		if operation != "" && dependency.ApplyByDefault {
 			delegation := normalizeAppAccessDelegation(AppAccessDelegation{
 				RunAs: dependency.RunAs,
 			})

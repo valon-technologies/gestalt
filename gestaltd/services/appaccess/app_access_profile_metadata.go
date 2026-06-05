@@ -11,6 +11,10 @@ type AppOperationProfile struct {
 	Delegation     AppAccessDelegation
 }
 
+type AppSurfaceProfile struct {
+	CredentialMode core.ConnectionMode
+}
+
 func EffectiveAppOperationProfile(profiles AppAccessProfiles, app, operation string) (AppOperationProfile, bool) {
 	operation = strings.TrimSpace(operation)
 	if operation == "" {
@@ -27,6 +31,24 @@ func EffectiveAppOperationProfile(profiles AppAccessProfiles, app, operation str
 	return AppOperationProfile{
 		CredentialMode: core.NormalizeOptionalConnectionMode(mode),
 		Delegation:     normalizeAppAccessDelegation(profile.OperationDelegations[operation]),
+	}, true
+}
+
+func EffectiveAppSurfaceProfile(profiles AppAccessProfiles, app, surface string) (AppSurfaceProfile, bool) {
+	surface = strings.ToLower(strings.TrimSpace(surface))
+	if surface == "" {
+		return AppSurfaceProfile{}, false
+	}
+	profile, ok := appAccessProfileForApp(profiles, app)
+	if !ok {
+		return AppSurfaceProfile{}, false
+	}
+	mode, ok := profile.Surfaces[surface]
+	if !ok {
+		return AppSurfaceProfile{}, false
+	}
+	return AppSurfaceProfile{
+		CredentialMode: core.NormalizeOptionalConnectionMode(mode),
 	}, true
 }
 
@@ -71,6 +93,17 @@ func mergeAppAccessProfile(base, override AppAccessProfile) AppAccessProfile {
 		for operation, mode := range override.Operations {
 			if existing, ok := merged.Operations[operation]; !ok || mode != "" || existing == "" {
 				merged.Operations[operation] = mode
+			}
+		}
+	}
+	if len(base.Surfaces) > 0 || len(override.Surfaces) > 0 {
+		merged.Surfaces = make(map[string]core.ConnectionMode, len(base.Surfaces)+len(override.Surfaces))
+		for surface, mode := range base.Surfaces {
+			merged.Surfaces[surface] = mode
+		}
+		for surface, mode := range override.Surfaces {
+			if existing, ok := merged.Surfaces[surface]; !ok || mode != "" || existing == "" {
+				merged.Surfaces[surface] = mode
 			}
 		}
 	}

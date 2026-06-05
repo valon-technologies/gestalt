@@ -69,7 +69,8 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
 }
 
-func (i *recordingAppInvocation) InvokeGraphQL(_ context.Context, _ *principal.Principal, providerName, _ string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
+func (i *recordingAppInvocation) InvokeGraphQL(ctx context.Context, _ *principal.Principal, providerName, _ string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
+	i.credentialMode = invocation.CredentialModeOverrideFromContext(ctx)
 	i.graphQLProviderName = providerName
 	i.graphQLDocument = request.Document
 	i.graphQLVariables = request.Variables
@@ -198,7 +199,11 @@ func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
 
 	authz := &recordingAuthorizationProvider{allowed: true}
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithAuthorizationProvider(authz), WithCallerApp("caller", nil))
+	server := NewAppServer(invoker, WithAuthorizationProvider(authz), WithCallerApp("caller", AppAccessProfiles{
+		"graph": {
+			Surfaces: map[string]core.ConnectionMode{"graphql": core.ConnectionModeSubject},
+		},
+	}))
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -221,6 +226,9 @@ func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
 	}
 	if got := authz.requests[0].GetResource().GetType() + ":" + authz.requests[0].GetResource().GetId(); got != "gestalt.app.surface:graph/surfaces/graphql" {
 		t.Fatalf("authorization resource = %q", got)
+	}
+	if invoker.credentialMode != core.ConnectionModeSubject {
+		t.Fatalf("credential mode = %q, want subject", invoker.credentialMode)
 	}
 	if invoker.graphQLProviderName != "graph" || invoker.graphQLDocument != "query Viewer { viewer { id } }" || invoker.graphQLVariables["team"] != "eng" {
 		t.Fatalf("graphql request = %s %q %v", invoker.graphQLProviderName, invoker.graphQLDocument, invoker.graphQLVariables)

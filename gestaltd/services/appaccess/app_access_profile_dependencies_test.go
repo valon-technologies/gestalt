@@ -11,38 +11,47 @@ func TestExactAppAccessProfilesFromDependencies(t *testing.T) {
 
 	profiles := ExactAppAccessProfilesFromDependencies([]AppAccessDependency{
 		{
-			App:            "frontPorchRestApi",
-			Operation:      "vds.schemaVersions",
+			App:            "documents",
+			Operation:      "documents.read",
 			CredentialMode: core.ConnectionModeSubject,
 			RunAs: &core.RunAsSubject{
-				SubjectID: "service_account:data-schema-explorer",
+				SubjectID: "service_account:document-reader",
 			},
 			ApplyByDefault: true,
 		},
 		{
-			App:            "frontPorchRestApi",
-			Operation:      "vds.dataExport",
+			App:            "documents",
+			Operation:      "documents.export",
 			CredentialMode: core.ConnectionModeNone,
 			RunAs:          &core.RunAsSubject{SubjectID: "service_account:ignored"},
 			ApplyByDefault: false,
+		},
+		{
+			App:            "graph",
+			Surface:        " GraphQL ",
+			CredentialMode: core.ConnectionModeSubject,
 		},
 	})
 
 	if _, ok := profiles[AppAccessAllApps]; ok {
 		t.Fatalf("exact profiles included wildcard profile: %#v", profiles)
 	}
-	frontPorch := profiles["frontPorchRestApi"]
-	if got := frontPorch.Operations["vds.schemaVersions"]; got != core.ConnectionModeSubject {
-		t.Fatalf("schemaVersions credential mode = %q, want subject", got)
+	documents := profiles["documents"]
+	if got := documents.Operations["documents.read"]; got != core.ConnectionModeSubject {
+		t.Fatalf("documents.read credential mode = %q, want subject", got)
 	}
-	if got := frontPorch.Operations["vds.dataExport"]; got != core.ConnectionModeNone {
-		t.Fatalf("dataExport credential mode = %q, want none", got)
+	if got := documents.Operations["documents.export"]; got != core.ConnectionModeNone {
+		t.Fatalf("documents.export credential mode = %q, want none", got)
 	}
-	delegation := frontPorch.OperationDelegations["vds.schemaVersions"]
-	if delegation.RunAs == nil || delegation.RunAs.SubjectID != "service_account:data-schema-explorer" {
-		t.Fatalf("schemaVersions delegation = %#v, want data-schema-explorer service account", delegation)
+	delegation := documents.OperationDelegations["documents.read"]
+	if delegation.RunAs == nil || delegation.RunAs.SubjectID != "service_account:document-reader" {
+		t.Fatalf("documents.read delegation = %#v, want document-reader service account", delegation)
 	}
-	if _, ok := frontPorch.OperationDelegations["vds.dataExport"]; ok {
+	if _, ok := documents.OperationDelegations["documents.export"]; ok {
 		t.Fatal("ApplyByDefault=false should not attach default delegation")
+	}
+	graph := profiles["graph"]
+	if got := graph.Surfaces["graphql"]; got != core.ConnectionModeSubject {
+		t.Fatalf("graphql surface credential mode = %q, want subject", got)
 	}
 }

@@ -8,6 +8,7 @@ const AppAccessAllApps = "*"
 
 type AppAccessProfile struct {
 	Operations           map[string]core.ConnectionMode
+	Surfaces             map[string]core.ConnectionMode
 	OperationDelegations map[string]AppAccessDelegation
 }
 
@@ -28,6 +29,12 @@ func cloneAppAccessProfiles(src AppAccessProfiles) AppAccessProfiles {
 			cloned.Operations = make(map[string]core.ConnectionMode, len(profile.Operations))
 			for operation, mode := range profile.Operations {
 				cloned.Operations[operation] = mode
+			}
+		}
+		if len(profile.Surfaces) > 0 {
+			cloned.Surfaces = make(map[string]core.ConnectionMode, len(profile.Surfaces))
+			for surface, mode := range profile.Surfaces {
+				cloned.Surfaces[surface] = mode
 			}
 		}
 		if len(profile.OperationDelegations) > 0 {

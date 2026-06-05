@@ -192,8 +192,11 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *
 	if err := s.authorizeAppInvocation(ctx, callCtx, appInvocationAuthorizationResourceTypeSurface, appInvocationSurfaceResourceID(targetApp, surface), targetApp, surface); err != nil {
 		return requestInvocationContext{}, err
 	}
-	// Surface invocations do not carry operation delegation metadata. Config
-	// validation rejects runAs on surfaces so GraphQL cannot silently ignore it.
+	if profile, ok := EffectiveAppSurfaceProfile(s.accessProfiles, targetApp, surface); ok {
+		callCtx.credentialModeOverride = profile.CredentialMode
+	}
+	// Surface invocations do not carry delegation metadata. Config validation
+	// rejects runAs on surfaces so GraphQL cannot silently ignore it.
 	return callCtx, nil
 }
 
