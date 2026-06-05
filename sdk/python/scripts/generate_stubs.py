@@ -15,6 +15,7 @@ PROTO_MODULES = (
     "runtime",
     "s3",
     "secrets",
+    "test",
     "workflow",
 )
 GRPC_RUNTIME_IMPORT_PREFIX = "from v1 import "
