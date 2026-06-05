@@ -378,11 +378,13 @@ fn subject_to_proto(subject: Subject) -> SubjectContext {
         permissions: subject
             .permissions
             .into_iter()
-            .map(|permission| crate::generated::v1::SubjectPermissionContext {
-                app: permission.app,
-                operations: permission.operations,
-                all_operations: permission.all_operations,
-            })
+            .map(
+                |permission| crate::generated::v1::SubjectPermissionContext {
+                    app: permission.app,
+                    operations: permission.operations,
+                    all_operations: permission.all_operations,
+                },
+            )
             .collect(),
     }
 }

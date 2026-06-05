@@ -1,14 +1,13 @@
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
+use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
-use tonic::Request as GrpcRequest;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
-use crate::{Request, Subject};
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{
     self as pb, workflow_provider_client::WorkflowProviderClient as ProtoWorkflowProviderClient,
@@ -18,6 +17,7 @@ use crate::workflow::{
     WorkflowRunStatus, WorkflowSignal, workflow_event_from_proto, workflow_run_from_proto,
     workflow_run_signal_from_proto, workflow_subject_to_proto,
 };
+use crate::{Request, Subject};
 
 type WorkflowTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 

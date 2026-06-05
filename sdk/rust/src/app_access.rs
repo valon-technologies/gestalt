@@ -1,16 +1,16 @@
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::UnixStream;
+use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
-use tonic::Request as GrpcRequest;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
-use crate::api::Request;
 use crate::OperationResult;
+use crate::api::Request;
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{self as pb, app_client::AppClient as ProtoAppClient};
 use crate::protocol;
@@ -228,7 +228,6 @@ impl App {
             body: response.body,
         })
     }
-
 }
 
 #[async_trait]
@@ -252,7 +251,6 @@ impl AppContract for App {
     ) -> std::result::Result<OperationResult, AppError> {
         App::invoke_graphql(self, &plugin, &document, variables, options).await
     }
-
 }
 
 enum AppTarget {

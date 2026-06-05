@@ -379,9 +379,7 @@ async fn app_invokes_graphql_surface() {
         context: Some(request_context("user:graphql-app-access")),
         ..Default::default()
     };
-    let mut app = App::connect(&request)
-        .await
-        .expect("connect app");
+    let mut app = App::connect(&request).await.expect("connect app");
     let response = app
         .invoke_graphql(
             "linear",

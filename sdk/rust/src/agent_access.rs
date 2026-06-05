@@ -1,8 +1,8 @@
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
+use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
-use tonic::Request as GrpcRequest;
 use tonic::service::Interceptor;
 use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
@@ -12,7 +12,6 @@ use crate::generated::v1::{
     self as pb, agent_provider_client::AgentProviderClient as ProtoAgentProviderClient,
 };
 use crate::{
-    api::Request,
     agent::{
         AgentExecutionStatus, AgentInteraction, AgentMessage, AgentOutput, AgentSession,
         AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
@@ -20,6 +19,7 @@ use crate::{
         new_agent_messages, new_agent_tool_refs, new_agent_workspace, session_from_proto,
         turn_from_proto,
     },
+    api::Request,
     env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN},
     protocol,
 };

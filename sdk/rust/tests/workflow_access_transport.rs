@@ -464,9 +464,7 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
         idempotency_key: "default-key".to_string(),
         ..Default::default()
     };
-    let mut workflow = Workflow::connect(&request)
-        .await
-        .expect("connect workflow");
+    let mut workflow = Workflow::connect(&request).await.expect("connect workflow");
 
     let definition = workflow
         .apply_definition(WorkflowApplyDefinition {
