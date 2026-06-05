@@ -224,10 +224,12 @@ class SubjectContext(_message.Message):
     ID_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     id: str
     credential_subject_id: str
     email: str
-    def __init__(self, id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
+    display_name: str
+    def __init__(self, id: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., email: _Optional[str] = ..., display_name: _Optional[str] = ...) -> None: ...
 
 class AgentToolRef(_message.Message):
     __slots__ = ()
