@@ -11,6 +11,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"gopkg.in/yaml.v3"
@@ -287,28 +288,23 @@ func ManifestReferencesPackageFiles(manifest *providermanifestv1.Manifest) bool 
 	if manifest == nil {
 		return false
 	}
-	if packageFileReference(manifest.IconFile) {
+	if packageio.IsLocalPackageReference(manifest.IconFile) {
 		return true
 	}
 	spec := manifest.Spec
 	if spec == nil {
 		return false
 	}
-	if packageFileReference(spec.ConfigSchemaPath) {
+	if packageio.IsLocalPackageReference(spec.ConfigSchemaPath) {
 		return true
 	}
-	if spec.UI != nil && packageFileReference(spec.UI.Path) {
+	if spec.UI != nil && packageio.IsLocalPackageReference(spec.UI.Path) {
 		return true
 	}
 	if spec.Surfaces == nil {
 		return false
 	}
-	return (spec.Surfaces.OpenAPI != nil && packageFileReference(spec.Surfaces.OpenAPI.Document)) ||
-		(spec.Surfaces.GraphQL != nil && packageFileReference(spec.Surfaces.GraphQL.URL)) ||
-		(spec.Surfaces.MCP != nil && packageFileReference(spec.Surfaces.MCP.URL))
-}
-
-func packageFileReference(raw string) bool {
-	value := strings.TrimSpace(raw)
-	return value != "" && (strings.HasPrefix(value, "file://") || !strings.Contains(value, "://"))
+	return (spec.Surfaces.OpenAPI != nil && packageio.IsLocalPackageReference(spec.Surfaces.OpenAPI.Document)) ||
+		(spec.Surfaces.GraphQL != nil && packageio.IsLocalPackageReference(spec.Surfaces.GraphQL.URL)) ||
+		(spec.Surfaces.MCP != nil && packageio.IsLocalPackageReference(spec.Surfaces.MCP.URL))
 }

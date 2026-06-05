@@ -28,6 +28,25 @@ func ProjectManifest(manifest *providermanifestv1.Manifest, manifestPath string,
 				ui.Path = ""
 				spec.UI = &ui
 			}
+			if spec.Surfaces != nil {
+				surfaces := *spec.Surfaces
+				if surfaces.OpenAPI != nil && packageio.IsLocalPackageReference(surfaces.OpenAPI.Document) {
+					openapi := *surfaces.OpenAPI
+					openapi.Document = ""
+					surfaces.OpenAPI = &openapi
+				}
+				if surfaces.GraphQL != nil && packageio.IsLocalPackageReference(surfaces.GraphQL.URL) {
+					graphql := *surfaces.GraphQL
+					graphql.URL = ""
+					surfaces.GraphQL = &graphql
+				}
+				if surfaces.MCP != nil && packageio.IsLocalPackageReference(surfaces.MCP.URL) {
+					mcp := *surfaces.MCP
+					mcp.URL = ""
+					surfaces.MCP = &mcp
+				}
+				spec.Surfaces = &surfaces
+			}
 			cloned.Spec = &spec
 		}
 		return RelativizeManifest(cloned, manifestPath), nil

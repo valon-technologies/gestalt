@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
@@ -306,22 +308,35 @@ func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, ar
 	}
 	var firstCatalog *catalog.Catalog
 	var firstData []byte
-	for i, archive := range archives {
+	firstPath := ""
+	found := false
+	for _, archive := range archives {
 		cat, err := staticValidationCatalogFromArchive(manifest, archive)
 		if err != nil {
 			return nil, err
+		}
+		if cat == nil {
+			cat, err = staticValidationCatalogFromArchiveManifest(archive)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if cat == nil {
+			continue
 		}
 		data, err := yaml.Marshal(cat)
 		if err != nil {
 			return nil, fmt.Errorf("encode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 		}
-		if i == 0 {
+		if !found {
 			firstData = data
 			firstCatalog = cat
+			firstPath = archive.Path
+			found = true
 			continue
 		}
 		if !bytes.Equal(bytes.TrimSpace(firstData), bytes.TrimSpace(data)) {
-			return nil, fmt.Errorf("static validation catalog in %s does not match %s", filepath.Base(archive.Path), filepath.Base(archives[0].Path))
+			return nil, fmt.Errorf("static validation catalog in %s does not match %s", filepath.Base(archive.Path), filepath.Base(firstPath))
 		}
 	}
 	return firstCatalog, nil
@@ -348,6 +363,32 @@ func staticValidationCatalogFromArchive(manifest *providermanifestv1.Manifest, a
 		return nil, fmt.Errorf("validate static validation catalog from %s: %w", filepath.Base(archive.Path), err)
 	}
 	return &cat, nil
+}
+
+func staticValidationCatalogFromArchiveManifest(archive releaseArchive) (*catalog.Catalog, error) {
+	tmpDir, err := os.MkdirTemp("", "gestalt-provider-release-catalog-*")
+	if err != nil {
+		return nil, fmt.Errorf("create static validation catalog temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	if err := packageio.ExtractPackage(archive.Path, tmpDir); err != nil {
+		return nil, fmt.Errorf("extract static validation catalog source from %s: %w", filepath.Base(archive.Path), err)
+	}
+	_, manifest, manifestPath, err := packageio.LoadManifestFromPath(tmpDir)
+	if err != nil {
+		return nil, fmt.Errorf("read static validation catalog manifest from %s: %w", filepath.Base(archive.Path), err)
+	}
+	if providermanifestv1.NormalizeKind(manifest.Kind) != providermanifestv1.KindApp || manifest.Spec == nil || !manifest.Spec.IsManifestBacked() {
+		return nil, nil
+	}
+	cat, sessionOnly, err := appservice.EffectiveCatalog(context.Background(), manifest.Source, appservice.ValidationAppFromManifest(manifestPath, manifest))
+	if err != nil {
+		return nil, fmt.Errorf("derive static validation catalog from %s: %w", filepath.Base(archive.Path), err)
+	}
+	if sessionOnly {
+		return nil, nil
+	}
+	return cat, nil
 }
 
 func printProviderReleaseUsage(w io.Writer) {
