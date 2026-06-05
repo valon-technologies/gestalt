@@ -24,7 +24,6 @@ import (
 
 const browserLoginPath = "/api/v1/auth/login"
 const adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
-const defaultAdminAuthorizationResource = "gestaltAdmin"
 
 type mountedUINavigationPathResolver interface {
 	NavigationPathForRequest(string) (string, bool)
@@ -32,11 +31,8 @@ type mountedUINavigationPathResolver interface {
 
 type protectedUILoginRedirect func(http.ResponseWriter, *http.Request) error
 
-func normalizeAdminRouteConfig(admin AdminRouteConfig, defaultAuthorizationResource string) (AdminRouteConfig, error) {
+func normalizeAdminRouteConfig(admin AdminRouteConfig) (AdminRouteConfig, error) {
 	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
-	if admin.AuthorizationPolicy == "" {
-		admin.AuthorizationPolicy = strings.TrimSpace(defaultAuthorizationResource)
-	}
 	if admin.AuthorizationPolicy == "" {
 		if len(admin.AllowedRoles) > 0 {
 			return AdminRouteConfig{}, fmt.Errorf("admin allowedRoles requires AuthorizationPolicy")
@@ -432,6 +428,9 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 		return invocation.AccessContext{}, true, nil
 	}
 	enforcer := s.access
+	if enforcer == nil {
+		return invocation.AccessContext{}, false, nil
+	}
 	resourceName := mountedUIAuthorizationResourceName(mounted)
 	if resourceName == "" {
 		return invocation.AccessContext{}, false, nil

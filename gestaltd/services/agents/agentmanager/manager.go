@@ -155,7 +155,7 @@ func New(cfg Config) *Manager {
 		turnScopes:        cfg.TurnScopes,
 		toolIDs:           cfg.ToolIDs,
 		invoker:           cfg.Invoker,
-		access:            access.OrDefault(cfg.Access),
+		access:            cfg.Access,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
@@ -625,7 +625,10 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	if len(req.GetSessionIds()) > 0 {
 		return m.listExactSessions(ctx, p, providerName, req.GetSessionIds(), state, limit, req.GetSummaryOnly(), req.GetContext())
 	}
-	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
+	candidates, err := m.providerCandidates(ctx, providerName)
+	if err == nil {
+		candidates, err = m.filterProviderCandidatesByAccess(ctx, p, candidates, providerName)
+	}
 	if err != nil {
 		if !errors.Is(err, access.ErrDenied) {
 			return nil, err

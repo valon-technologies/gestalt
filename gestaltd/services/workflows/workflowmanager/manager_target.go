@@ -202,13 +202,6 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
 	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType:    target.ProviderName,
-		Action:          "provider.access",
-		CredentialScope: access.ProviderCredentialScope,
-	}); err != nil {
-		return coreworkflow.AgentTurn{}, err
-	}
 	target.Model = strings.TrimSpace(target.Model)
 	target.SessionKey = strings.TrimSpace(target.SessionKey)
 	target.ToolRefs = append([]coreagent.ToolRef(nil), target.ToolRefs...)
@@ -272,7 +265,7 @@ func workflowTargetAccessErrorCause(err error) error {
 }
 
 func (m *Manager) storedTargetAllowed(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (bool, error) {
-	if err := m.validateTargetAuthorized(ctx, p, target, callerAppNameFromContext(ctx)); err != nil {
+	if err := m.authorizeWorkflowTarget(ctx, p, target, callerAppNameFromContext(ctx)); err != nil {
 		if access.IsPolicyUnavailable(err) {
 			return false, err
 		}

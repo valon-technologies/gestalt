@@ -993,7 +993,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		deps.Authorization = authorizationProvider
 	}
 	deps.Access = access.NewEnforcer(deps.Authorization)
-	deps.AgentRuntime.access = deps.Access
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {

@@ -16,13 +16,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type forwardingServer struct {
+type hostServer struct {
 	proto.UnimplementedAuthorizationProviderServer
 	provider core.AuthorizationProvider
-}
-
-type hostServer struct {
-	*forwardingServer
 	enforcer *access.Enforcer
 	tokens   *appaccess.InvocationTokenManager
 }
@@ -32,30 +28,21 @@ func NewHostServer(provider core.AuthorizationProvider, enforcer *access.Enforce
 		enforcer = access.NewEnforcer(provider)
 	}
 	return &hostServer{
-		forwardingServer: &forwardingServer{provider: provider},
-		enforcer:         enforcer,
-		tokens:           tokens,
+		provider: provider,
+		enforcer: enforcer,
+		tokens:   tokens,
 	}
 }
 
-func (s *forwardingServer) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	if err := s.requireProvider(); err != nil {
-		return nil, err
-	}
+func (s *hostServer) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	return s.provider.CheckAccess(ctx, req)
 }
 
-func (s *forwardingServer) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	if err := s.requireProvider(); err != nil {
-		return nil, err
-	}
+func (s *hostServer) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
 	return s.provider.CheckAccessMany(ctx, req)
 }
 
-func (s *forwardingServer) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	if err := s.requireProvider(); err != nil {
-		return nil, err
-	}
+func (s *hostServer) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	return s.provider.ListRelationships(ctx, req)
 }
 
@@ -80,10 +67,7 @@ func (s *hostServer) SetAuthorizationState(ctx context.Context, req *proto.SetAu
 	return s.provider.SetAuthorizationState(ctx, req)
 }
 
-func (s *forwardingServer) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
-	if err := s.requireProvider(); err != nil {
-		return nil, err
-	}
+func (s *hostServer) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
 	return s.provider.GetActiveModelRef(ctx)
 }
 
@@ -94,24 +78,11 @@ func (s *hostServer) SetActiveModel(ctx context.Context, req *proto.SetActiveMod
 	return s.provider.SetActiveModel(ctx, req)
 }
 
-func (s *forwardingServer) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	if err := s.requireProvider(); err != nil {
-		return nil, err
-	}
+func (s *hostServer) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
 	return s.provider.ListActiveModelResourceTypes(ctx, req)
 }
 
-func (s *forwardingServer) requireProvider() error {
-	if s == nil || s.provider == nil {
-		return status.Error(codes.FailedPrecondition, "authorization provider is not configured")
-	}
-	return nil
-}
-
 func (s *hostServer) requireMutation(ctx context.Context, method string) error {
-	if err := s.requireProvider(); err != nil {
-		return err
-	}
 	p, err := s.principal(ctx)
 	if err != nil {
 		return err
@@ -121,16 +92,32 @@ func (s *hostServer) requireMutation(ctx context.Context, method string) error {
 		ResourceID:   "authorization",
 		Action:       method,
 	}); err != nil {
-		return accessStatusError(err)
+		switch {
+		case errors.Is(err, access.ErrNotAuthenticated):
+			return status.Error(codes.Unauthenticated, err.Error())
+		case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
+			return status.Error(codes.PermissionDenied, err.Error())
+		case access.IsPolicyUnavailable(err):
+			return status.Error(codes.Unavailable, err.Error())
+		default:
+			return status.Error(codes.Internal, err.Error())
+		}
 	}
 	return nil
 }
 
 func (s *hostServer) principal(ctx context.Context) (*principal.Principal, error) {
-	if p := principal.FromContext(ctx); p != nil && access.SubjectFromPrincipal(p) != nil {
+	if p := principal.FromContext(ctx); strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)) != "" {
 		return p, nil
 	}
-	token := invocationTokenFromMetadata(ctx)
+	token := ""
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		for _, value := range md.Get(appaccess.InvocationTokenMetadataKey) {
+			if token = strings.TrimSpace(value); token != "" {
+				break
+			}
+		}
+	}
 	if token == "" {
 		return nil, status.Error(codes.Unauthenticated, access.ErrNotAuthenticated.Error())
 	}
@@ -142,34 +129,8 @@ func (s *hostServer) principal(ctx context.Context) (*principal.Principal, error
 		return nil, status.Error(codes.Unauthenticated, err.Error())
 	}
 	p := tokenCtx.Principal()
-	if access.SubjectFromPrincipal(p) == nil {
+	if strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)) == "" {
 		return nil, status.Error(codes.Unauthenticated, access.ErrNotAuthenticated.Error())
 	}
 	return p, nil
-}
-
-func invocationTokenFromMetadata(ctx context.Context) string {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return ""
-	}
-	for _, value := range md.Get(appaccess.InvocationTokenMetadataKey) {
-		if token := strings.TrimSpace(value); token != "" {
-			return token
-		}
-	}
-	return ""
-}
-
-func accessStatusError(err error) error {
-	switch {
-	case errors.Is(err, access.ErrNotAuthenticated):
-		return status.Error(codes.Unauthenticated, err.Error())
-	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
-		return status.Error(codes.PermissionDenied, err.Error())
-	case access.IsPolicyUnavailable(err):
-		return status.Error(codes.Unavailable, err.Error())
-	default:
-		return status.Error(codes.Internal, err.Error())
-	}
 }

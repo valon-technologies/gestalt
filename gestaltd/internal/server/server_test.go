@@ -2354,6 +2354,7 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 		}
 		cfg.Services = svc
 		cfg.Access = access.NewEnforcer(authz)
+		cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "gestaltAdmin"}
 		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:    "deal-hub-ui",
@@ -2401,15 +2402,6 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	if !bytes.Contains(body, []byte("deal-hub-shell")) {
 		t.Fatalf("protected mounted UI body = %q, want shell", body)
 	}
-	if len(authz.checkAccessRequests) == 0 {
-		t.Fatal("authorization CheckAccess was not called")
-	}
-	if got := authz.checkAccessRequests[0].GetResource().GetType(); got != "dealHub" {
-		t.Fatalf("CheckAccess resource type = %q, want app resource type dealHub", got)
-	}
-	if got := authz.checkAccessRequests[0].GetAction().GetName(); got != "admin" {
-		t.Fatalf("CheckAccess action = %q, want admin", got)
-	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
@@ -2424,9 +2416,6 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	}
 	if !bytes.Contains(body, []byte("brain-shell")) {
 		t.Fatalf("viewer mounted UI body = %q, want shell", body)
-	}
-	if got := authz.checkAccessRequests[len(authz.checkAccessRequests)-1].GetResource().GetType(); got != "brainPolicy" {
-		t.Fatalf("CheckAccess resource type = %q, want explicit AuthorizationPolicy brainPolicy", got)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/admin/settings", nil)
@@ -2457,70 +2446,15 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	if !bytes.Contains(body, []byte("admin-shell")) {
 		t.Fatalf("admin UI body = %q, want shell", body)
 	}
-	if len(authz.checkAccessRequests) < 2 {
-		t.Fatalf("authorization CheckAccess calls = %d, want at least 2", len(authz.checkAccessRequests))
-	}
-	if got := authz.checkAccessRequests[len(authz.checkAccessRequests)-1].GetResource().GetType(); got != "gestaltAdmin" {
-		t.Fatalf("CheckAccess resource type = %q, want gestaltAdmin", got)
-	}
-}
-
-func TestPolicyBoundMountedUINilAccessProviderAllowsAuthenticatedUser(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUserRecord(t, svc, "ui-user", "ui-user@example.test", time.Now())
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "ui-user@example.test"}, nil
-			},
-		}
-		cfg.Services = svc
-		cfg.MountedUIs = []server.MountedUI{{
-			Name:    "deal-hub-ui",
-			Path:    "/deal-hub",
-			AppName: "dealHub",
-			Routes: []server.MountedUIRoute{{
-				Path:         "/*",
-				AllowedRoles: []string{"viewer"},
-			}},
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				_, _ = w.Write([]byte("deal-hub-shell"))
-			}),
-		}}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/deal-hub/", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("GET mounted UI: %v", err)
-	}
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("mounted UI status = %d, want 200: %s", resp.StatusCode, body)
-	}
-	if !bytes.Contains(body, []byte("deal-hub-shell")) {
-		t.Fatalf("mounted UI body = %q, want shell", body)
-	}
 }
 
 type serverTestAuthorizationProvider struct {
 	core.AuthorizationProvider
 
-	relationships       []*proto.Relationship
-	checkAccessRequests []*proto.CheckAccessRequest
+	relationships []*proto.Relationship
 }
 
 func (p *serverTestAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	p.checkAccessRequests = append(p.checkAccessRequests, req)
 	for _, relationship := range p.relationships {
 		tuple := relationship.GetTuple()
 		target := tuple.GetTarget().GetSubject()

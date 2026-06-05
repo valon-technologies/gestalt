@@ -18,7 +18,6 @@ type Request struct {
 	ResourceID      string
 	Action          string
 	CredentialScope CredentialScope
-	ScopeOnly       bool
 }
 
 func (r Request) resource() *proto.Resource {
@@ -28,8 +27,4 @@ func (r Request) resource() *proto.Resource {
 		resourceID = resourceType
 	}
 	return &proto.Resource{Type: resourceType, Id: resourceID}
-}
-
-func (r Request) action() *proto.Action {
-	return &proto.Action{Name: strings.TrimSpace(r.Action)}
 }

@@ -234,11 +234,7 @@ func New(cfg Config) (*Server, error) {
 	if agentStreamHeartbeat <= 0 {
 		agentStreamHeartbeat = defaultAgentTurnEventStreamHeartbeatInterval
 	}
-	defaultAdminResource := ""
-	if !noAuth && cfg.Access != nil && cfg.Access.HasProvider() {
-		defaultAdminResource = defaultAdminAuthorizationResource
-	}
-	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin, defaultAdminResource)
+	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin)
 	if err != nil {
 		return nil, fmt.Errorf("normalize admin route: %w", err)
 	}

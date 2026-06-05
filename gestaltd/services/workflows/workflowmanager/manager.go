@@ -238,7 +238,7 @@ func New(cfg Config) *Manager {
 		agent:             cfg.Agent,
 		agentManager:      cfg.AgentManager,
 		invoker:           cfg.Invoker,
-		access:            access.OrDefault(cfg.Access),
+		access:            cfg.Access,
 		audit:             cfg.Audit,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),

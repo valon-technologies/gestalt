@@ -1,45 +1,29 @@
 package bootstrap
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-type agentToolAuthorizer struct {
-	ctx       context.Context
-	enforcer  *access.Enforcer
-	principal *principal.Principal
-}
-
-func newAgentToolAuthorizer(ctx context.Context, enforcer *access.Enforcer, p *principal.Principal) agentToolAuthorizer {
-	return agentToolAuthorizer{ctx: ctx, enforcer: enforcer, principal: p}
-}
-
-func (a agentToolAuthorizer) validateForGrant(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
-	if a.principal == nil {
-		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
-	}
+func validateAgentToolForGrant(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
 	if err := validateGrantScope(grant.ToolSource, grant.ToolRefs); err != nil {
 		return err
 	}
 	if len(grant.ToolRefs) == 0 {
 		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", access.ErrDenied, rawToolID)
 	}
-	appTarget, err := a.validateConcreteTarget(target, grant.ToolRefs, rawToolID, "agent")
-	if err != nil {
+	if err := validateConcreteAgentToolTarget(target, grant.ToolRefs, rawToolID); err != nil {
 		return err
 	}
-	if !appTarget {
+	if strings.TrimSpace(target.System) != "" {
 		return nil
 	}
-	if err := validateGrantedCredentialMode(target, grant.ToolRefs, grant.Tools, rawToolID, "agent"); err != nil {
+	if err := validateGrantedCredentialMode(target, grant.ToolRefs, grant.Tools, rawToolID); err != nil {
 		return err
 	}
 	if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
@@ -48,21 +32,14 @@ func (a agentToolAuthorizer) validateForGrant(grant agentgrant.Grant, target cor
 	return nil
 }
 
-func (a agentToolAuthorizer) validateUnavailableForGrant(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
-	if err := validateAgentRunGrantForToolTarget(grant, target, rawToolID); err != nil {
-		return err
-	}
-	return a.validateUnavailableTarget(grant.ToolRefs, target, rawToolID)
-}
-
-func validateAgentRunGrantForToolTarget(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
+func validateUnavailableAgentToolForGrant(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
 	if err := validateGrantScope(grant.ToolSource, grant.ToolRefs); err != nil {
 		return err
 	}
-	if len(grant.ToolRefs) == 0 || !agentToolMatchesRefs(target, grant.ToolRefs) {
-		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", access.ErrDenied, rawToolID)
+	if err := validateGrantedCredentialMode(target, grant.ToolRefs, grant.Tools, rawToolID); err != nil {
+		return err
 	}
-	return validateGrantedCredentialMode(target, grant.ToolRefs, grant.Tools, rawToolID, "agent")
+	return validateUnavailableAgentToolTarget(grant.ToolRefs, target, rawToolID)
 }
 
 func validateGrantScope(sourceMode coreagent.ToolSourceMode, refs []coreagent.ToolRef) error {
@@ -76,17 +53,7 @@ func validateGrantScope(sourceMode coreagent.ToolSourceMode, refs []coreagent.To
 	return nil
 }
 
-func (a agentToolAuthorizer) validateListedUnavailable(refs []coreagent.ToolRef, target coreagent.ToolTarget, rawToolID string) error {
-	if len(refs) == 0 || !agentToolMatchesRefs(target, refs) {
-		return fmt.Errorf("%w: listed agent tool %q is outside the turn tool scope", access.ErrDenied, rawToolID)
-	}
-	return a.validateUnavailableTarget(refs, target, rawToolID)
-}
-
-func (a agentToolAuthorizer) validateUnavailableTarget(refs []coreagent.ToolRef, target coreagent.ToolTarget, rawToolID string) error {
-	if a.principal == nil {
-		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
-	}
+func validateUnavailableAgentToolTarget(refs []coreagent.ToolRef, target coreagent.ToolTarget, rawToolID string) error {
 	if target.Unavailable == nil || strings.TrimSpace(target.Unavailable.Reason) == "" {
 		return fmt.Errorf("%w: unavailable agent tool %q is incomplete", access.ErrDenied, rawToolID)
 	}
@@ -97,23 +64,16 @@ func (a agentToolAuthorizer) validateUnavailableTarget(refs []coreagent.ToolRef,
 	if appName == "" {
 		return fmt.Errorf("%w: unavailable agent tool %q app is required", access.ErrDenied, rawToolID)
 	}
-	if err := a.enforcer.Require(a.ctx, a.principal, access.Request{
-		ResourceType:    appName,
-		Action:          "provider.access",
-		CredentialScope: access.ProviderCredentialScope,
-	}); err != nil {
-		return fmt.Errorf("%w: unavailable agent tool %q is not authorized", err, rawToolID)
-	}
 	if !agentUnavailableReasonAllowed(strings.TrimSpace(target.Unavailable.Reason)) {
 		return fmt.Errorf("%w: unavailable agent tool %q reason is invalid", access.ErrDenied, rawToolID)
 	}
-	if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
+	if len(refs) == 0 || !agentToolMatchesRefs(target, refs) {
 		return fmt.Errorf("%w: unavailable agent tool %q is outside the turn tool scope", access.ErrDenied, rawToolID)
 	}
 	return nil
 }
 
-func (a agentToolAuthorizer) validateListed(refs []coreagent.ToolRef, source coreagent.ToolSourceMode, tools []coreagent.ListedTool) error {
+func validateListedAgentTools(refs []coreagent.ToolRef, source coreagent.ToolSourceMode, tools []coreagent.ListedTool) error {
 	if err := validateGrantScope(source, refs); err != nil {
 		return err
 	}
@@ -126,16 +86,15 @@ func (a agentToolAuthorizer) validateListed(refs []coreagent.ToolRef, source cor
 		}
 		target := tools[i].Target
 		if target.Unavailable != nil {
-			if err := a.validateListedUnavailable(refs, target, tools[i].ToolID); err != nil {
+			if err := validateUnavailableAgentToolTarget(refs, target, tools[i].ToolID); err != nil {
 				return err
 			}
 			continue
 		}
-		appTarget, err := a.validateConcreteTarget(target, refs, tools[i].ToolID, "listed agent")
-		if err != nil {
+		if err := validateConcreteAgentToolTarget(target, refs, tools[i].ToolID); err != nil {
 			return err
 		}
-		if !appTarget {
+		if strings.TrimSpace(target.System) != "" {
 			continue
 		}
 		if tools[i].Hidden && !agentToolHiddenExplicitlyGranted(target, tools[i].ToolID, refs, nil) {
@@ -148,37 +107,30 @@ func (a agentToolAuthorizer) validateListed(refs []coreagent.ToolRef, source cor
 	return nil
 }
 
-func (a agentToolAuthorizer) validateConcreteTarget(target coreagent.ToolTarget, refs []coreagent.ToolRef, rawToolID, label string) (bool, error) {
+func validateConcreteAgentToolTarget(target coreagent.ToolTarget, refs []coreagent.ToolRef, rawToolID string) error {
 	operation := strings.TrimSpace(target.Operation)
 	if systemName := strings.TrimSpace(target.System); systemName != "" {
 		if systemName != coreagent.SystemToolWorkflow || operation == "" {
-			return false, fmt.Errorf("%w: %s system tool target is incomplete", access.ErrDenied, label)
+			return fmt.Errorf("%w: agent system tool target is incomplete", access.ErrDenied)
 		}
 		if !agentToolMatchesRefs(target, refs) {
-			return false, fmt.Errorf("%w: %s tool %q is outside the turn tool scope", access.ErrDenied, label, rawToolID)
+			return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", access.ErrDenied, rawToolID)
 		}
-		return false, nil
+		return nil
 	}
 	appName := strings.TrimSpace(target.App)
 	if appName == "" || operation == "" {
-		return false, fmt.Errorf("%w: %s tool target is incomplete", access.ErrDenied, label)
-	}
-	if err := a.enforcer.Require(a.ctx, a.principal, access.Request{
-		ResourceType:    appName,
-		Action:          operation,
-		CredentialScope: access.OperationCredentialScope,
-	}); err != nil {
-		return true, fmt.Errorf("%w: %s tool %q is not authorized", err, label, rawToolID)
+		return fmt.Errorf("%w: agent tool target is incomplete", access.ErrDenied)
 	}
 	if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
-		return true, fmt.Errorf("%w: %s tool %q is outside the turn tool scope", access.ErrDenied, label, rawToolID)
+		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", access.ErrDenied, rawToolID)
 	}
-	return true, nil
+	return nil
 }
 
-func validateGrantedCredentialMode(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool, rawToolID, label string) error {
+func validateGrantedCredentialMode(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool, rawToolID string) error {
 	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyGranted(target, refs, tools) {
-		return fmt.Errorf("%w: %s tool %q credential mode was not granted to this turn", access.ErrDenied, label, rawToolID)
+		return fmt.Errorf("%w: agent tool %q credential mode was not granted to this turn", access.ErrDenied, rawToolID)
 	}
 	return nil
 }

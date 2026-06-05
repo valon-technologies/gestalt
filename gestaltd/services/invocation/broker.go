@@ -151,7 +151,6 @@ func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, 
 	for _, o := range opts {
 		o(b)
 	}
-	b.access = access.OrDefault(b.access)
 	return b
 }
 
@@ -509,7 +508,6 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 	if err := b.access.Require(ctx, p, access.Request{
 		ResourceType:    providerName,
 		CredentialScope: access.ProviderCredentialScope,
-		ScopeOnly:       true,
 	}); err != nil {
 		return ctx, "", err
 	}
@@ -560,7 +558,6 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if err := b.access.Require(ctx, p, access.Request{
 		ResourceType:    providerName,
 		CredentialScope: access.ProviderCredentialScope,
-		ScopeOnly:       true,
 	}); err != nil {
 		return nil, err
 	}
