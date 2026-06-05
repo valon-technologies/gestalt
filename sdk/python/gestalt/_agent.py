@@ -873,13 +873,13 @@ def _agent_output_to_proto(value: AgentOutput | Mapping[str, Any] | None) -> Any
     if text_set == structured_set:
         raise ValueError("exactly one of output.text or output.structured is required")
     if text_set:
-        return pb.AgentOutput(text=pb.AgentTextOutput())
+        return pb.AgentOutput(text={})
     structured = _coerce(
         output.structured, AgentStructuredOutput, "AgentStructuredOutput"
     )
     if structured.schema is None:
         raise ValueError("output.structured.schema is required")
-    proto = pb.AgentOutput(structured=pb.AgentStructuredOutput())
+    proto = pb.AgentOutput(structured={})
     proto.structured.schema.CopyFrom(struct_from_dict(structured.schema))
     return proto
 

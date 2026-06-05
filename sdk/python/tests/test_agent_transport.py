@@ -978,9 +978,7 @@ class AgentTransportTests(unittest.TestCase):
                 ],
                 created_by_subject_id="user:turn-owner",
                 execution_ref="exec-turn-1",
-                output=agent_pb2.AgentOutput(
-                    text=agent_pb2.AgentTextOutput(),
-                ),
+                output=agent_pb2.AgentOutput(text={}),
             )
         )
         listed_turns = provider_client.ListTurns(
@@ -1231,9 +1229,7 @@ class AgentTransportTests(unittest.TestCase):
                     ],
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     output=agent_pb2.AgentOutput(
-                        structured=agent_pb2.AgentStructuredOutput(
-                            schema={"type": "object"},
-                        ),
+                        structured={"schema": {"type": "object"}},
                     ),
                 )
             )
