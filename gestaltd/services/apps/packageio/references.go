@@ -35,18 +35,23 @@ func LocalPackageReferences(manifest *providermanifestv1.Manifest) []LocalPackag
 
 	if manifest.Spec != nil {
 		add(manifest.Spec.ConfigSchemaPath, "provider config schema")
-		if doc := manifest.Spec.OpenAPIDocument(); doc != "" && !strings.Contains(doc, "://") {
+		if doc := manifest.Spec.OpenAPIDocument(); IsLocalPackageReference(doc) {
 			add(doc, "provider openapi document")
 		}
-		if url := manifest.Spec.GraphQLURL(); url != "" && !strings.Contains(url, "://") {
+		if url := manifest.Spec.GraphQLURL(); IsLocalPackageReference(url) {
 			add(url, "provider graphql document")
 		}
-		if url := manifest.Spec.MCPURL(); url != "" && !strings.Contains(url, "://") {
+		if url := manifest.Spec.MCPURL(); IsLocalPackageReference(url) {
 			add(url, "provider mcp document")
 		}
 	}
 	add(manifest.IconFile, "icon_file")
 	return refs
+}
+
+func IsLocalPackageReference(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && (strings.HasPrefix(value, "file://") || !strings.Contains(value, "://"))
 }
 
 func ResolveManifestLocalReferences(manifest *providermanifestv1.Manifest, manifestPath string) *providermanifestv1.Manifest {

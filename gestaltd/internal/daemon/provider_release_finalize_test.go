@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -158,6 +159,104 @@ func TestProviderReleaseMetadataAllowsMCPOnlyWithoutCatalog(t *testing.T) {
 	}
 }
 
+func TestProviderReleaseMetadataBuildsOpenAPICatalogSidecar(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     "1.0.0",
+		DisplayName: "OpenAPI App",
+		IconFile:    "assets/icon.svg",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				OpenAPI: &providermanifestv1.OpenAPISurface{
+					Connection: "default",
+					Document:   "openapi.yaml",
+				},
+			},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {Mode: providermanifestv1.ConnectionModeNone, Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone}},
+			},
+		},
+	}
+	metadata, manifestData, catalogData, err := buildProviderReleaseBundleForManifest(t, manifest, map[string]string{
+		"assets/icon.svg": "<svg/>",
+		"openapi.yaml": `openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+servers:
+  - url: https://api.example.test
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        "200":
+          description: ok
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
+		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
+	}
+	if strings.Contains(string(manifestData), "openapi.yaml") || strings.Contains(string(manifestData), "assets/icon.svg") {
+		t.Fatalf("validation manifest retained package-local references:\n%s", manifestData)
+	}
+	cat, err := providerrelease.DecodeCatalog(catalogData)
+	if err != nil {
+		t.Fatalf("DecodeCatalog: %v", err)
+	}
+	if _, ok := catalog.OperationByID(cat, "listPets"); !ok {
+		t.Fatalf("catalog operations = %#v, want listPets", cat.Operations)
+	}
+}
+
+func TestProviderReleaseMetadataBuildsGraphQLMCPCatalogSidecar(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     "1.0.0",
+		DisplayName: "GraphQL MCP",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				GraphQL: &providermanifestv1.GraphQLSurface{Connection: "default", URL: "https://graphql.example.test/graphql"},
+				MCP:     &providermanifestv1.MCPSurface{Connection: "default", URL: "https://mcp.example.test/mcp"},
+			},
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"default": {Mode: providermanifestv1.ConnectionModeNone, Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone}},
+			},
+			AllowedOperations: map[string]*providermanifestv1.ManifestOperationOverride{
+				"viewer": {
+					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+						OperationName: "Viewer",
+						Document:      "query Viewer { viewer { id } }",
+					},
+				},
+			},
+		},
+	}
+	metadata, _, catalogData, err := buildProviderReleaseBundleForManifest(t, manifest, nil)
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
+		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
+	}
+	cat, err := providerrelease.DecodeCatalog(catalogData)
+	if err != nil {
+		t.Fatalf("DecodeCatalog: %v", err)
+	}
+	if _, ok := catalog.OperationByID(cat, "viewer"); !ok {
+		t.Fatalf("catalog operations = %#v, want viewer", cat.Operations)
+	}
+}
+
 func TestProviderReleaseMetadataRejectsMCPAppWithoutStaticCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -178,7 +277,7 @@ func TestProviderReleaseMetadataRejectsMCPAppWithoutStaticCatalog(t *testing.T) 
 	}
 }
 
-func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
+func buildProviderReleaseBundleForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, []byte, []byte, error) {
 	t.Helper()
 
 	packageDir := t.TempDir()
@@ -190,7 +289,11 @@ func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providerman
 		t.Fatalf("write manifest: %v", err)
 	}
 	for name, contents := range files {
-		if err := os.WriteFile(filepath.Join(packageDir, name), []byte(contents), 0o644); err != nil {
+		path := filepath.Join(packageDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
 	}
@@ -204,11 +307,17 @@ func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providerman
 		t.Fatalf("ArchiveDigest: %v", err)
 	}
 
-	metadata, _, _, err := buildProviderReleaseMetadataAndSidecars(
+	return buildProviderReleaseMetadataAndSidecars(
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
 	)
+}
+
+func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
+	t.Helper()
+
+	metadata, _, _, err := buildProviderReleaseBundleForManifest(t, manifest, files)
 	return metadata, err
 }
 

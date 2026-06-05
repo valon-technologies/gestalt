@@ -3374,8 +3374,8 @@ func TestPortableStaticValidationManifestProjectsPlatformNeutralRuntimeFields(t 
 	if darwinProjected.Entrypoint != nil {
 		t.Fatalf("projected entrypoint = %+v, want nil", darwinProjected.Entrypoint)
 	}
-	if darwinProjected.Spec.Surfaces.OpenAPI.Document != "openapi.yaml" {
-		t.Fatalf("projected OpenAPI document = %q, want openapi.yaml", darwinProjected.Spec.Surfaces.OpenAPI.Document)
+	if darwinProjected.Spec.Surfaces.OpenAPI.Document != "" {
+		t.Fatalf("projected OpenAPI document = %q, want package-local reference stripped", darwinProjected.Spec.Surfaces.OpenAPI.Document)
 	}
 	darwinJSON, err := json.Marshal(darwinProjected)
 	if err != nil {
