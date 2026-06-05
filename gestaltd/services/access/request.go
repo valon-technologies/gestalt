@@ -8,10 +8,19 @@ import (
 
 const ProviderAccessAction = "provider.access"
 
+type scopeKind uint8
+
+const (
+	scopeProvider scopeKind = iota + 1
+	scopeOperation
+)
+
 type Request struct {
-	Subject  *proto.Subject
-	Action   *proto.Action
-	Resource *proto.Resource
+	Subject   *proto.Subject
+	Action    *proto.Action
+	Resource  *proto.Resource
+	scope     scopeKind
+	scopeOnly bool
 }
 
 func AppOperation(provider, operation string) Request {
@@ -20,6 +29,7 @@ func AppOperation(provider, operation string) Request {
 	return Request{
 		Action:   &proto.Action{Name: operation},
 		Resource: &proto.Resource{Type: provider, Id: provider},
+		scope:    scopeOperation,
 	}
 }
 
@@ -28,6 +38,16 @@ func Provider(provider string) Request {
 	return Request{
 		Action:   &proto.Action{Name: ProviderAccessAction},
 		Resource: &proto.Resource{Type: provider, Id: provider},
+		scope:    scopeProvider,
+	}
+}
+
+func ProviderScope(provider string) Request {
+	provider = strings.TrimSpace(provider)
+	return Request{
+		Resource:  &proto.Resource{Type: provider, Id: provider},
+		scope:     scopeProvider,
+		scopeOnly: true,
 	}
 }
 

@@ -67,12 +67,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		failPendingStartupProviders(prepared.Deps, err)
 		return warnings, err
 	}
-	platformAccess := prepared.Deps.Access
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
-		invocation.WithEnforcer(platformAccess),
+		invocation.WithEnforcer(prepared.Deps.Access),
 	)
 	workflowTools := newWorkflowSystemTools(prepared.WorkflowManager, prepared.Deps.WorkflowRuntime)
 	prepared.WorkflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
@@ -81,7 +80,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      prepared.AgentManager,
 		Invoker:           sharedInvoker,
-		Access:            platformAccess,
+		Access:            prepared.Deps.Access,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 	}))

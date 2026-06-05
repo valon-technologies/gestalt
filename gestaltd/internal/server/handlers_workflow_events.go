@@ -11,6 +11,7 @@ import (
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
@@ -45,7 +46,7 @@ func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 
 	appName := strings.TrimSpace(req.Source)
 	if appName != "" {
-		if err := s.access.RequireProvider(r.Context(), p, appName); err != nil {
+		if err := s.access.Require(r.Context(), p, access.Provider(appName)); err != nil {
 			s.writeInvocationError(w, r, appName, "workflow.events.deliver", err)
 			return
 		}

@@ -25,15 +25,15 @@ func (p *recordingAuthorizationProvider) CheckAccess(ctx context.Context, req *p
 	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
 }
 
-func TestRequireAppOperationComposesScopeAndPolicy(t *testing.T) {
+func TestRequireAppRequestComposesScopeAndPolicy(t *testing.T) {
 	t.Parallel()
 
 	authz := &recordingAuthorizationProvider{allowed: true}
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "example.read")
 
-	if err := enforcer.RequireAppOperation(context.Background(), p, "example", "read"); err != nil {
-		t.Fatalf("RequireAppOperation error = %v", err)
+	if err := enforcer.Require(context.Background(), p, AppOperation("example", "read")); err != nil {
+		t.Fatalf("Require error = %v", err)
 	}
 	if len(authz.requests) != 1 {
 		t.Fatalf("CheckAccess requests = %d, want 1", len(authz.requests))
@@ -50,14 +50,14 @@ func TestRequireAppOperationComposesScopeAndPolicy(t *testing.T) {
 	}
 }
 
-func TestRequireAppOperationScopeDeniedBeforePolicy(t *testing.T) {
+func TestRequireAppRequestScopeDeniedBeforePolicy(t *testing.T) {
 	t.Parallel()
 
 	authz := &recordingAuthorizationProvider{allowed: true}
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "other.read")
 
-	err := enforcer.RequireAppOperation(context.Background(), p, "example", "read")
+	err := enforcer.Require(context.Background(), p, AppOperation("example", "read"))
 	if !errors.Is(err, ErrScopeDenied) || !IsOperationScopeDenied(err) {
 		t.Fatalf("error = %v, want operation scope denied", err)
 	}
@@ -66,20 +66,39 @@ func TestRequireAppOperationScopeDeniedBeforePolicy(t *testing.T) {
 	}
 }
 
-func TestRequireAppOperationPolicyDenied(t *testing.T) {
+func TestAllowedScopeDeniedReturnsFalseWithoutPolicy(t *testing.T) {
+	t.Parallel()
+
+	authz := &recordingAuthorizationProvider{allowed: true}
+	enforcer := NewEnforcer(authz)
+	p := scopedPrincipal("subject:user:123", "other.read")
+
+	allowed, err := enforcer.Allowed(context.Background(), p, AppOperation("example", "read"))
+	if err != nil {
+		t.Fatalf("Allowed error = %v", err)
+	}
+	if allowed {
+		t.Fatal("Allowed = true, want false")
+	}
+	if len(authz.requests) != 0 {
+		t.Fatalf("CheckAccess requests = %d, want 0", len(authz.requests))
+	}
+}
+
+func TestRequireAppRequestPolicyDenied(t *testing.T) {
 	t.Parallel()
 
 	authz := &recordingAuthorizationProvider{allowed: false}
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "example.read")
 
-	err := enforcer.RequireAppOperation(context.Background(), p, "example", "read")
+	err := enforcer.Require(context.Background(), p, AppOperation("example", "read"))
 	if !errors.Is(err, ErrDenied) {
 		t.Fatalf("error = %v, want policy denied", err)
 	}
 }
 
-func TestRequireAppOperationPolicyUnavailable(t *testing.T) {
+func TestRequireAppRequestPolicyUnavailable(t *testing.T) {
 	t.Parallel()
 
 	backendErr := errors.New("backend unavailable")
@@ -87,7 +106,7 @@ func TestRequireAppOperationPolicyUnavailable(t *testing.T) {
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "example.read")
 
-	err := enforcer.RequireAppOperation(context.Background(), p, "example", "read")
+	err := enforcer.Require(context.Background(), p, AppOperation("example", "read"))
 	if !IsPolicyUnavailable(err) || !errors.Is(err, backendErr) {
 		t.Fatalf("error = %v, want policy unavailable wrapping backend error", err)
 	}
@@ -96,7 +115,7 @@ func TestRequireAppOperationPolicyUnavailable(t *testing.T) {
 	}
 }
 
-func TestRequireAppOperationNilProviderAppliesScopeOnly(t *testing.T) {
+func TestRequireAppRequestNilProviderAppliesScopeOnly(t *testing.T) {
 	t.Parallel()
 
 	enforcer := NewEnforcer(nil)
@@ -105,8 +124,23 @@ func TestRequireAppOperationNilProviderAppliesScopeOnly(t *testing.T) {
 	}
 	p := scopedPrincipal("subject:user:123", "example.read")
 
-	if err := enforcer.RequireAppOperation(context.Background(), p, "example", "read"); err != nil {
-		t.Fatalf("RequireAppOperation error = %v", err)
+	if err := enforcer.Require(context.Background(), p, AppOperation("example", "read")); err != nil {
+		t.Fatalf("Require error = %v", err)
+	}
+}
+
+func TestProviderScopeRequestSkipsPolicy(t *testing.T) {
+	t.Parallel()
+
+	authz := &recordingAuthorizationProvider{allowed: false}
+	enforcer := NewEnforcer(authz)
+	p := scopedPrincipal("subject:user:123", "example.read")
+
+	if err := enforcer.Require(context.Background(), p, ProviderScope("example")); err != nil {
+		t.Fatalf("Require error = %v", err)
+	}
+	if len(authz.requests) != 0 {
+		t.Fatalf("CheckAccess requests = %d, want 0", len(authz.requests))
 	}
 }
 

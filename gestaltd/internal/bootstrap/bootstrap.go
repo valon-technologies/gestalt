@@ -1138,12 +1138,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
-	platformAccess := prepared.Deps.Access
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
-		invocation.WithEnforcer(platformAccess),
+		invocation.WithEnforcer(prepared.Deps.Access),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -1162,7 +1161,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
-		Access:            platformAccess,
+		Access:            prepared.Deps.Access,
 		Audit:             audit,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
@@ -1233,7 +1232,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
 		Authorization:                prepared.Authorization,
-		Access:                       platformAccess,
+		Access:                       prepared.Deps.Access,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		ExtraCaches:                  prepared.ExtraCaches,

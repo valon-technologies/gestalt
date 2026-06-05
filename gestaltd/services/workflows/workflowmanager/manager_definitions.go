@@ -109,7 +109,7 @@ func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) (
 				Definition:   definition,
 				provider:     provider,
 			}
-			accessible, err := m.definitionDeniedAsFalse(ctx, p, managed)
+			accessible, err := m.definitionAccessible(ctx, p, managed)
 			if err != nil {
 				return nil, err
 			}
@@ -361,7 +361,7 @@ func (m *Manager) requireOwnedDefinition(ctx context.Context, p *principal.Princ
 	if err != nil {
 		return nil, err
 	}
-	accessible, err := m.definitionDeniedAsFalse(ctx, p, definition)
+	accessible, err := m.definitionAccessible(ctx, p, definition)
 	if err != nil {
 		return nil, err
 	}
@@ -371,14 +371,14 @@ func (m *Manager) requireOwnedDefinition(ctx context.Context, p *principal.Princ
 	return definition, nil
 }
 
-func (m *Manager) definitionDeniedAsFalse(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) (bool, error) {
+func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) (bool, error) {
 	if definition == nil || definition.Definition == nil {
 		return false, nil
 	}
 	if !workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) {
 		return false, nil
 	}
-	return m.storedTargetDeniedAsFalse(ctx, p, definition.Definition.Target)
+	return m.storedTargetAllowed(ctx, p, definition.Definition.Target)
 }
 
 func (m *Manager) providerNames() []string {

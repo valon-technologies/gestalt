@@ -253,9 +253,6 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	setSubjectAttribute(p)
 
-	if err := b.access.RequireProviderScope(p, providerName); err != nil {
-		return fail(err)
-	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return fail(err)
 	}
@@ -266,7 +263,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	if err := b.access.RequireAppOperation(ctx, p, providerName, opMeta.ID); err != nil {
+	if err := b.access.Require(ctx, p, access.AppOperation(providerName, opMeta.ID)); err != nil {
 		return fail(err)
 	}
 	metricOperation = operation
@@ -444,15 +441,12 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	setSubjectAttribute(p)
 
-	if err := b.access.RequireProviderScope(p, providerName); err != nil {
-		return fail(err)
-	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
 		return fail(err)
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
-	if err := b.access.RequireAppOperation(ctx, p, providerName, graphQLOperationID); err != nil {
+	if err := b.access.Require(ctx, p, access.AppOperation(providerName, graphQLOperationID)); err != nil {
 		return fail(err)
 	}
 
@@ -503,7 +497,7 @@ func (b *Broker) MCPConnection(providerName string) string {
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-	if err := b.access.RequireProviderScope(p, providerName); err != nil {
+	if err := b.access.Require(ctx, p, access.ProviderScope(providerName)); err != nil {
 		return ctx, "", err
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -550,7 +544,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
 	}
-	if err := b.access.RequireProviderScope(p, providerName); err != nil {
+	if err := b.access.Require(ctx, p, access.ProviderScope(providerName)); err != nil {
 		return nil, err
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {

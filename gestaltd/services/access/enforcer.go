@@ -2,6 +2,7 @@ package access
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -22,6 +23,60 @@ func (e *Enforcer) HasProvider() bool {
 }
 
 func (e *Enforcer) Allowed(ctx context.Context, p *principal.Principal, req Request) (bool, error) {
+	if err := scopeError(p, req); err != nil {
+		if errors.Is(err, ErrScopeDenied) {
+			return false, nil
+		}
+		return false, err
+	}
+	return e.policyAllowed(ctx, p, req)
+}
+
+func (e *Enforcer) Require(ctx context.Context, p *principal.Principal, req Request) error {
+	if err := scopeError(p, req); err != nil {
+		return err
+	}
+	allowed, err := e.policyAllowed(ctx, p, req)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return &accessError{
+			cause:    causePolicyDenied,
+			resource: resourceName(req.Resource),
+			action:   actionName(req.Action),
+		}
+	}
+	return nil
+}
+
+func scopeError(p *principal.Principal, req Request) error {
+	switch req.scope {
+	case scopeProvider:
+		provider := resourceName(req.Resource)
+		if p == nil {
+			return &accessError{cause: causeNotAuthenticated, provider: provider}
+		}
+		if !principal.AllowsProviderPermission(p, provider) {
+			return &accessError{cause: causeScopeProvider, provider: provider}
+		}
+	case scopeOperation:
+		provider := resourceName(req.Resource)
+		operation := actionName(req.Action)
+		if p == nil {
+			return &accessError{cause: causeNotAuthenticated, provider: provider, operation: operation}
+		}
+		if !principal.AllowsOperationPermission(p, provider, operation) {
+			return &accessError{cause: causeScopeOperation, provider: provider, operation: operation}
+		}
+	}
+	return nil
+}
+
+func (e *Enforcer) policyAllowed(ctx context.Context, p *principal.Principal, req Request) (bool, error) {
+	if req.scopeOnly {
+		return true, nil
+	}
 	if e == nil || e.provider == nil {
 		return true, nil
 	}
@@ -51,58 +106,6 @@ func (e *Enforcer) Allowed(ctx context.Context, p *principal.Principal, req Requ
 		return false, nil
 	}
 	return true, nil
-}
-
-func (e *Enforcer) Require(ctx context.Context, p *principal.Principal, req Request) error {
-	allowed, err := e.Allowed(ctx, p, req)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return &accessError{
-			cause:    causePolicyDenied,
-			resource: resourceName(req.Resource),
-			action:   actionName(req.Action),
-		}
-	}
-	return nil
-}
-
-func (e *Enforcer) RequireProviderScope(p *principal.Principal, provider string) error {
-	provider = strings.TrimSpace(provider)
-	if p == nil {
-		return &accessError{cause: causeNotAuthenticated, provider: provider}
-	}
-	if !principal.AllowsProviderPermission(p, provider) {
-		return &accessError{cause: causeScopeProvider, provider: provider}
-	}
-	return nil
-}
-
-func (e *Enforcer) RequireOperationScope(p *principal.Principal, provider, operation string) error {
-	provider = strings.TrimSpace(provider)
-	operation = strings.TrimSpace(operation)
-	if p == nil {
-		return &accessError{cause: causeNotAuthenticated, provider: provider, operation: operation}
-	}
-	if !principal.AllowsOperationPermission(p, provider, operation) {
-		return &accessError{cause: causeScopeOperation, provider: provider, operation: operation}
-	}
-	return nil
-}
-
-func (e *Enforcer) RequireAppOperation(ctx context.Context, p *principal.Principal, provider, operation string) error {
-	if err := e.RequireOperationScope(p, provider, operation); err != nil {
-		return err
-	}
-	return e.Require(ctx, p, AppOperation(provider, operation))
-}
-
-func (e *Enforcer) RequireProvider(ctx context.Context, p *principal.Principal, provider string) error {
-	if err := e.RequireProviderScope(p, provider); err != nil {
-		return err
-	}
-	return e.Require(ctx, p, Provider(provider))
 }
 
 func resourceName(resource *proto.Resource) string {

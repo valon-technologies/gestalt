@@ -50,7 +50,7 @@ func (a agentToolAuthorizer) validateForGrant(grant agentgrant.Grant, target cor
 	if appName == "" || operation == "" {
 		return fmt.Errorf("%w: agent tool target is incomplete", access.ErrDenied)
 	}
-	if err := a.enforcer.RequireAppOperation(a.ctx, a.principal, appName, operation); err != nil {
+	if err := a.enforcer.Require(a.ctx, a.principal, access.AppOperation(appName, operation)); err != nil {
 		return fmt.Errorf("%w: agent tool %q is not authorized", err, rawToolID)
 	}
 	if len(grant.ToolRefs) > 0 && !agentToolMatchesRefs(target, grant.ToolRefs) {
@@ -110,7 +110,7 @@ func (a agentToolAuthorizer) validateUnavailable(refs []coreagent.ToolRef, targe
 	if appName == "" {
 		return fmt.Errorf("%w: unavailable agent tool %q app is required", access.ErrDenied, rawToolID)
 	}
-	if err := a.enforcer.RequireProvider(a.ctx, a.principal, appName); err != nil {
+	if err := a.enforcer.Require(a.ctx, a.principal, access.Provider(appName)); err != nil {
 		return fmt.Errorf("%w: unavailable agent tool %q is not authorized", err, rawToolID)
 	}
 	if !agentUnavailableReasonAllowed(strings.TrimSpace(target.Unavailable.Reason)) {
@@ -154,7 +154,7 @@ func (a agentToolAuthorizer) validateListed(refs []coreagent.ToolRef, source cor
 		if appName == "" || operation == "" {
 			return fmt.Errorf("%w: listed agent tool target is incomplete", access.ErrDenied)
 		}
-		if err := a.enforcer.RequireAppOperation(a.ctx, a.principal, appName, operation); err != nil {
+		if err := a.enforcer.Require(a.ctx, a.principal, access.AppOperation(appName, operation)); err != nil {
 			return fmt.Errorf("%w: listed agent tool %q is not authorized", err, tools[i].ToolID)
 		}
 		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {

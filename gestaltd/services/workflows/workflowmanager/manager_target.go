@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -132,9 +133,6 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		}
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 	}
-	if err := m.access.RequireProviderScope(p, appName); err != nil {
-		return coreworkflow.AppCall{}, err
-	}
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
@@ -205,7 +203,7 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
 	}
-	if err := m.access.RequireProvider(ctx, p, target.ProviderName); err != nil {
+	if err := m.access.Require(ctx, p, access.Provider(target.ProviderName)); err != nil {
 		return coreworkflow.AgentTurn{}, err
 	}
 	target.Model = strings.TrimSpace(target.Model)
@@ -270,7 +268,7 @@ func workflowTargetAccessErrorCause(err error) error {
 	return nil
 }
 
-func (m *Manager) storedTargetDeniedAsFalse(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (bool, error) {
+func (m *Manager) storedTargetAllowed(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (bool, error) {
 	if err := m.validateTargetAuthorized(ctx, p, target, callerAppNameFromContext(ctx)); err != nil {
 		if access.IsPolicyUnavailable(err) {
 			return false, err
@@ -321,7 +319,7 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			if agentProviderName == "" {
 				return fmt.Errorf("%w: workflow agent provider is required", access.ErrDenied)
 			}
-			if err := m.access.RequireProvider(ctx, p, agentProviderName); err != nil {
+			if err := m.access.Require(ctx, p, access.Provider(agentProviderName)); err != nil {
 				return err
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
@@ -370,7 +368,7 @@ func (m *Manager) validateWorkflowAgentToolAuthorizationForCaller(ctx context.Co
 		return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation", access.ErrDenied, index)
 	}
 	if operation == "" {
-		return m.access.RequireProvider(ctx, p, appName)
+		return m.access.Require(ctx, p, access.Provider(appName))
 	}
 	return m.requireWorkflowAppOperationForCaller(ctx, p, callerAppName, appName, operation)
 }
