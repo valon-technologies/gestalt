@@ -222,6 +222,8 @@ pub struct AgentToolRef {
     pub title: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub description: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub credential_mode: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub system: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "9")]

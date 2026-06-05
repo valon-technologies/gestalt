@@ -240,6 +240,7 @@ class AgentToolRef:
     instance: str = ""
     title: str = ""
     description: str = ""
+    credential_mode: str = ""
     system: str = ""
     run_as: Subject | None = None
 
@@ -251,6 +252,7 @@ class AgentToolRef:
         instance: str = "",
         title: str = "",
         description: str = "",
+        credential_mode: str = "",
         system: str = "",
         run_as: Subject | None = None,
     ) -> None:
@@ -260,6 +262,7 @@ class AgentToolRef:
         self.instance = instance
         self.title = title
         self.description = description
+        self.credential_mode = credential_mode
         self.system = system
         self.run_as = run_as
 
@@ -1221,6 +1224,7 @@ def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:
         instance=value.instance,
         title=value.title,
         description=value.description,
+        credential_mode=value.credential_mode,
         system=value.system,
         run_as=subject_from_proto(value.run_as)
         if has_field(value, "run_as")
@@ -1241,6 +1245,7 @@ def agent_tool_ref_to_proto(
         instance=ref.instance,
         title=ref.title,
         description=ref.description,
+        credential_mode=ref.credential_mode,
         system=ref.system,
     )
     _copy_message(message, "run_as", subject_to_proto(ref.run_as))
@@ -1607,6 +1612,7 @@ def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
             "instance",
             "title",
             "description",
+            "credential_mode",
             "system",
         ),
     )
@@ -1629,6 +1635,7 @@ def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
         instance=data.get("instance", ""),
         title=data.get("title", ""),
         description=data.get("description", ""),
+        credential_mode=data.get("credential_mode", ""),
         system=data.get("system", ""),
         run_as=subject_from_dict(data.get("run_as"))
         if data.get("run_as") is not None

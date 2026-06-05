@@ -1154,17 +1154,18 @@ func (x *SubjectContext) GetDisplayName() string {
 }
 
 type AgentToolRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	App           string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
-	Operation     string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
-	Connection    string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
-	Instance      string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
-	Title         string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
-	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
-	System        string                 `protobuf:"bytes,8,opt,name=system,proto3" json:"system,omitempty"`
-	RunAs         *SubjectContext        `protobuf:"bytes,9,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	App            string                 `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Operation      string                 `protobuf:"bytes,2,opt,name=operation,proto3" json:"operation,omitempty"`
+	Connection     string                 `protobuf:"bytes,3,opt,name=connection,proto3" json:"connection,omitempty"`
+	Instance       string                 `protobuf:"bytes,4,opt,name=instance,proto3" json:"instance,omitempty"`
+	Title          string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
+	Description    string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	CredentialMode string                 `protobuf:"bytes,7,opt,name=credential_mode,json=credentialMode,proto3" json:"credential_mode,omitempty"`
+	System         string                 `protobuf:"bytes,8,opt,name=system,proto3" json:"system,omitempty"`
+	RunAs          *SubjectContext        `protobuf:"bytes,9,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *AgentToolRef) Reset() {
@@ -1235,6 +1236,13 @@ func (x *AgentToolRef) GetTitle() string {
 func (x *AgentToolRef) GetDescription() string {
 	if x != nil {
 		return x.Description
+	}
+	return ""
+}
+
+func (x *AgentToolRef) GetCredentialMode() string {
+	if x != nil {
+		return x.CredentialMode
 	}
 	return ""
 }
@@ -2257,7 +2265,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15credential_subject_id\x18\x02 \x01(\tR\x13credentialSubjectId\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12!\n" +
-	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\"\x86\x02\n" +
+	"\fdisplay_name\x18\x04 \x01(\tR\vdisplayName\"\xaf\x02\n" +
 	"\fAgentToolRef\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1c\n" +
 	"\toperation\x18\x02 \x01(\tR\toperation\x12\x1e\n" +
@@ -2266,7 +2274,8 @@ const file_v1_app_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12\x14\n" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x16\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12'\n" +
+	"\x0fcredential_mode\x18\a \x01(\tR\x0ecredentialMode\x12\x16\n" +
 	"\x06system\x18\b \x01(\tR\x06system\x12:\n" +
 	"\x06run_as\x18\t \x01(\v2#.gestalt.provider.v1.SubjectContextR\x05runAs\"$\n" +
 	"\n" +

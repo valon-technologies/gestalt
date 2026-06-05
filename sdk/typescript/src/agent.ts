@@ -205,6 +205,7 @@ export interface AgentToolRef {
   instance?: string | undefined;
   title?: string | undefined;
   description?: string | undefined;
+  credentialMode?: string | undefined;
   system?: string | undefined;
   runAs?: SubjectInput | undefined;
 }

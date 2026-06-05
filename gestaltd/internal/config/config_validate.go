@@ -2295,6 +2295,12 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 		tool.Operation = strings.TrimSpace(tool.Operation)
 		tool.Connection = strings.TrimSpace(tool.Connection)
 		tool.Instance = strings.TrimSpace(tool.Instance)
+		tool.CredentialMode = string(core.NormalizeOptionalConnectionMode(core.ConnectionMode(tool.CredentialMode)))
+		switch core.ConnectionMode(tool.CredentialMode) {
+		case "", core.ConnectionModeNone, core.ConnectionModeSubject:
+		default:
+			return fmt.Errorf("config validation: %s[%d].credentialMode %q is not supported", path, i, tool.CredentialMode)
+		}
 		tool.Title = strings.TrimSpace(tool.Title)
 		tool.Description = strings.TrimSpace(tool.Description)
 		if tool.System != "" {
@@ -2304,8 +2310,8 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 			if tool.Operation == "" {
 				return fmt.Errorf("config validation: %s[%d].operation is required for system tool refs", path, i)
 			}
-			if tool.Connection != "" || tool.Instance != "" {
-				return fmt.Errorf("config validation: %s[%d] system refs cannot include connection or instance", path, i)
+			if tool.Connection != "" || tool.Instance != "" || tool.CredentialMode != "" {
+				return fmt.Errorf("config validation: %s[%d] system refs cannot include connection, instance, or credentialMode", path, i)
 			}
 			continue
 		}

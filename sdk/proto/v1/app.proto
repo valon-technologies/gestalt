@@ -152,6 +152,7 @@ message AgentToolRef {
   string instance = 4;
   string title = 5;
   string description = 6;
+  string credential_mode = 7;
   string system = 8;
   SubjectContext run_as = 9;
 }

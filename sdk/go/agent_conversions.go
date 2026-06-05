@@ -291,6 +291,7 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		Instance:    value.GetInstance(),
 		Title:       value.GetTitle(),
 		Description: value.GetDescription(),
+		CredentialMode: value.GetCredentialMode(),
 		System:      value.GetSystem(),
 		RunAs:       subjectFromProto(value.GetRunAs()),
 	}
@@ -315,6 +316,7 @@ func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 		Instance:    value.Instance,
 		Title:       value.Title,
 		Description: value.Description,
+		CredentialMode: value.CredentialMode,
 		System:      value.System,
 		RunAs:       subjectToProto(value.RunAs),
 	}
