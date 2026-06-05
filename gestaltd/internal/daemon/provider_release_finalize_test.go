@@ -154,12 +154,18 @@ func TestProviderReleaseMetadataAllowsMCPOnlyWithoutCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	if metadata.ValidationCatalogSHA256 != "" {
-		t.Fatalf("catalog sha256 = %q, want empty for MCP-only release", metadata.ValidationCatalogSHA256)
+	if metadata.StaticValidation == nil {
+		t.Fatal("static validation metadata missing")
+	}
+	if metadata.StaticValidation.Catalog != nil {
+		t.Fatalf("catalog = %#v, want nil for MCP-only release", metadata.StaticValidation.Catalog)
+	}
+	if !metadata.StaticValidation.CatalogSessionOnly {
+		t.Fatal("catalogSessionOnly = false, want true for MCP-only release")
 	}
 }
 
-func TestProviderReleaseMetadataBuildsOpenAPICatalogSidecar(t *testing.T) {
+func TestProviderReleaseMetadataBuildsOpenAPICatalog(t *testing.T) {
 	t.Parallel()
 
 	manifest := &providermanifestv1.Manifest{
@@ -180,7 +186,7 @@ func TestProviderReleaseMetadataBuildsOpenAPICatalogSidecar(t *testing.T) {
 			},
 		},
 	}
-	metadata, manifestData, catalogData, err := buildProviderReleaseBundleForManifest(t, manifest, map[string]string{
+	metadata, err := buildProviderReleaseMetadataForManifest(t, manifest, map[string]string{
 		"assets/icon.svg": "<svg/>",
 		"openapi.yaml": `openapi: 3.0.0
 info:
@@ -200,25 +206,21 @@ paths:
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
-		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Catalog == nil {
+		t.Fatalf("catalog metadata missing: %#v", metadata.StaticValidation)
 	}
-	if strings.Contains(string(manifestData), "openapi.yaml") || strings.Contains(string(manifestData), "assets/icon.svg") {
-		t.Fatalf("validation manifest retained package-local references:\n%s", manifestData)
+	if providerrelease.ManifestReferencesPackageFiles(metadata.StaticValidation.Manifest) {
+		t.Fatalf("validation manifest retained package-local references: %#v", metadata.StaticValidation.Manifest)
 	}
-	cat, err := providerrelease.DecodeCatalog(catalogData)
-	if err != nil {
-		t.Fatalf("DecodeCatalog: %v", err)
-	}
-	if _, ok := catalog.OperationByID(cat, "listPets"); !ok {
-		t.Fatalf("catalog operations = %#v, want listPets", cat.Operations)
+	if _, ok := catalog.OperationByID(metadata.StaticValidation.Catalog, "listPets"); !ok {
+		t.Fatalf("catalog operations = %#v, want listPets", metadata.StaticValidation.Catalog.Operations)
 	}
 }
 
 func TestProviderReleaseMetadataMergesExecutableStaticAndAPICatalogs(t *testing.T) {
 	t.Parallel()
 
-	metadata, _, catalogData, err := buildProviderReleaseBundleForRawManifest(t, `kind: app
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
 source: github.com/testowner/apps/catalog/release-test
 version: 1.0.0
 displayName: Mixed App
@@ -254,12 +256,9 @@ operations:
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
-		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
-	}
-	cat, err := providerrelease.DecodeCatalog(catalogData)
-	if err != nil {
-		t.Fatalf("DecodeCatalog: %v", err)
+	cat := metadata.StaticValidation.Catalog
+	if cat == nil {
+		t.Fatalf("catalog metadata missing: %#v", metadata.StaticValidation)
 	}
 	if _, ok := catalog.OperationByID(cat, "pluginOp"); !ok {
 		t.Fatalf("catalog operations = %#v, want pluginOp", cat.Operations)
@@ -272,7 +271,7 @@ operations:
 func TestProviderReleaseMetadataMergesExecutableStaticAndOpenAPICatalogs(t *testing.T) {
 	t.Parallel()
 
-	metadata, _, catalogData, err := buildProviderReleaseBundleForRawManifest(t, `kind: app
+	metadata, err := buildProviderReleaseMetadataForRawManifest(t, `kind: app
 source: github.com/testowner/apps/catalog/release-test
 version: 1.0.0
 displayName: Mixed OpenAPI App
@@ -316,12 +315,9 @@ paths:
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
-		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
-	}
-	cat, err := providerrelease.DecodeCatalog(catalogData)
-	if err != nil {
-		t.Fatalf("DecodeCatalog: %v", err)
+	cat := metadata.StaticValidation.Catalog
+	if cat == nil {
+		t.Fatalf("catalog metadata missing: %#v", metadata.StaticValidation)
 	}
 	if _, ok := catalog.OperationByID(cat, "pluginOp"); !ok {
 		t.Fatalf("catalog operations = %#v, want pluginOp", cat.Operations)
@@ -331,7 +327,7 @@ paths:
 	}
 }
 
-func TestProviderReleaseMetadataBuildsGraphQLMCPCatalogSidecar(t *testing.T) {
+func TestProviderReleaseMetadataBuildsGraphQLMCPCatalog(t *testing.T) {
 	t.Parallel()
 
 	manifest := &providermanifestv1.Manifest{
@@ -357,19 +353,15 @@ func TestProviderReleaseMetadataBuildsGraphQLMCPCatalogSidecar(t *testing.T) {
 			},
 		},
 	}
-	metadata, _, catalogData, err := buildProviderReleaseBundleForManifest(t, manifest, nil)
+	metadata, err := buildProviderReleaseMetadataForManifest(t, manifest, nil)
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
-		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Catalog == nil {
+		t.Fatalf("catalog metadata missing: %#v", metadata.StaticValidation)
 	}
-	cat, err := providerrelease.DecodeCatalog(catalogData)
-	if err != nil {
-		t.Fatalf("DecodeCatalog: %v", err)
-	}
-	if _, ok := catalog.OperationByID(cat, "viewer"); !ok {
-		t.Fatalf("catalog operations = %#v, want viewer", cat.Operations)
+	if _, ok := catalog.OperationByID(metadata.StaticValidation.Catalog, "viewer"); !ok {
+		t.Fatalf("catalog operations = %#v, want viewer", metadata.StaticValidation.Catalog.Operations)
 	}
 }
 
@@ -393,7 +385,7 @@ func TestProviderReleaseMetadataRejectsMCPAppWithoutStaticCatalog(t *testing.T) 
 	}
 }
 
-func buildProviderReleaseBundleForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, []byte, []byte, error) {
+func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
 	t.Helper()
 
 	packageDir := t.TempDir()
@@ -423,14 +415,14 @@ func buildProviderReleaseBundleForManifest(t *testing.T, manifest *providermanif
 		t.Fatalf("ArchiveDigest: %v", err)
 	}
 
-	return buildProviderReleaseMetadataAndSidecars(
+	return buildProviderReleaseMetadata(
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
 	)
 }
 
-func buildProviderReleaseBundleForRawManifest(t *testing.T, rawManifest string, files map[string]string) (*providerrelease.Metadata, []byte, []byte, error) {
+func buildProviderReleaseMetadataForRawManifest(t *testing.T, rawManifest string, files map[string]string) (*providerrelease.Metadata, error) {
 	t.Helper()
 
 	packageDir := t.TempDir()
@@ -460,18 +452,11 @@ func buildProviderReleaseBundleForRawManifest(t *testing.T, rawManifest string, 
 		t.Fatalf("ArchiveDigest: %v", err)
 	}
 
-	return buildProviderReleaseMetadataAndSidecars(
+	return buildProviderReleaseMetadata(
 		manifest,
 		"1.0.0",
 		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
 	)
-}
-
-func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
-	t.Helper()
-
-	metadata, _, _, err := buildProviderReleaseBundleForManifest(t, manifest, files)
-	return metadata, err
 }
 
 func providerReleaseManifestForTest(version, displayName, goos, goarch string) *providermanifestv1.Manifest {

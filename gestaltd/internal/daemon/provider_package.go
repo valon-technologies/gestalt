@@ -116,11 +116,9 @@ func runProviderPackage(args []string) (err error) {
 }
 
 func removeStaleReleaseFinalizationFiles(outputDir string) error {
-	for _, name := range []string{providerrelease.MetadataFile, providerrelease.ValidationManifestFile, providerrelease.ValidationCatalogFile} {
-		p := filepath.Join(outputDir, name)
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove stale %s: %w", name, err)
-		}
+	p := filepath.Join(outputDir, providerrelease.MetadataFile)
+	if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("remove stale %s: %w", providerrelease.MetadataFile, err)
 	}
 	return nil
 }

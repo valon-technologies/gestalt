@@ -188,24 +188,23 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 	if err != nil {
 		return err
 	}
-	staticManifestData, err := yaml.Marshal(staticManifest)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, providerrelease.ValidationManifestFile), staticManifestData, 0o644); err != nil {
-		return err
-	}
 	metadata := providerrelease.Metadata{
-		Package:                  manifest.Source,
-		Kind:                     manifest.Kind,
-		Version:                  manifest.Version,
-		ValidationManifestSHA256: providerrelease.SHA256Hex(staticManifestData),
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       manifest.Source,
+		Kind:          manifest.Kind,
+		Version:       manifest.Version,
+		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, staticManifest),
 		Artifacts: providerrelease.Artifacts{
 			providerpkg.CurrentPlatformString(): {
 				Path:   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
 				SHA256: digest,
 			},
 		},
+		StaticValidation: &providerrelease.StaticValidation{Manifest: staticManifest},
+	}
+	if err := providerrelease.ValidateMetadata(&metadata); err != nil {
+		return err
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {

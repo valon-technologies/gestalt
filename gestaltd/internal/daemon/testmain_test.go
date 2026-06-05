@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -366,39 +367,42 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 	if err != nil {
 		return err
 	}
-	manifestSidecar, err := yaml.Marshal(staticManifest)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, providerrelease.ValidationManifestFile), manifestSidecar, 0o644); err != nil {
-		return err
-	}
-	manifestSHA := sha256.Sum256(manifestSidecar)
-	var catalogSHA string
+	var staticCatalog *catalog.Catalog
 	if catalogData, err := os.ReadFile(filepath.Join(dir, providerpkg.StaticCatalogFile)); err == nil {
-		if err := os.WriteFile(filepath.Join(dir, providerrelease.ValidationCatalogFile), catalogData, 0o644); err != nil {
+		var cat catalog.Catalog
+		if err := yaml.Unmarshal(catalogData, &cat); err != nil {
 			return err
 		}
-		sum := sha256.Sum256(catalogData)
-		catalogSHA = fmt.Sprintf("%x", sum[:])
+		staticCatalog = &cat
 	}
 
-	metadata := map[string]any{
-		"package":                  manifest.Source,
-		"kind":                     manifest.Kind,
-		"version":                  manifest.Version,
-		"validationManifestSHA256": fmt.Sprintf("%x", manifestSHA[:]),
-		"validationCatalogSHA256":  catalogSHA,
-		"artifacts": map[string]any{
-			providerpkg.CurrentPlatformString(): map[string]any{
-				"path":   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
-				"sha256": digest,
+	metadata := providerrelease.Metadata{
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       manifest.Source,
+		Kind:          manifest.Kind,
+		Version:       manifest.Version,
+		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, staticManifest),
+		Artifacts: providerrelease.Artifacts{
+			providerpkg.CurrentPlatformString(): {
+				Path:   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
+				SHA256: digest,
 			},
 		},
+		StaticValidation: &providerrelease.StaticValidation{
+			Manifest: staticManifest,
+			Catalog:  staticCatalog,
+		},
+	}
+	if staticCatalog == nil && providerrelease.CatalogSessionModeAllowed(manifest.Kind, staticManifest) {
+		metadata.StaticValidation.CatalogSessionOnly = true
+	}
+	if err := providerrelease.ValidateMetadata(&metadata); err != nil {
+		return err
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "provider-release.yaml"), data, 0o644)
+	return os.WriteFile(filepath.Join(dir, providerrelease.MetadataFile), data, 0o644)
 }

@@ -3,7 +3,6 @@ package operator
 import (
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -32,8 +31,6 @@ type providerReleaseMetadataFixture struct {
 
 type providerReleaseFixtureFiles struct {
 	Metadata []byte
-	Manifest []byte
-	Catalog  []byte
 }
 
 func newProviderReleaseFixtureFiles(t *testing.T, fixture providerReleaseMetadataFixture) providerReleaseFixtureFiles {
@@ -51,11 +48,6 @@ func newProviderReleaseFixtureFiles(t *testing.T, fixture providerReleaseMetadat
 			Spec:    &providermanifestv1.Spec{},
 		}
 	}
-	manifestData, err := yaml.Marshal(manifest)
-	if err != nil {
-		t.Fatalf("encode validation manifest: %v", err)
-	}
-
 	staticCatalog := fixture.Catalog
 	if staticCatalog == nil && !fixture.NoCatalog && providerrelease.CatalogRequired(fixture.Kind, manifest) && !providerrelease.CatalogSessionModeAllowed(fixture.Kind, manifest) {
 		staticCatalog = &catalog.Catalog{
@@ -65,36 +57,34 @@ func newProviderReleaseFixtureFiles(t *testing.T, fixture providerReleaseMetadat
 			},
 		}
 	}
-	var catalogData []byte
-	if staticCatalog != nil {
-		catalogData, err = yaml.Marshal(staticCatalog)
-		if err != nil {
-			t.Fatalf("encode validation catalog: %v", err)
-		}
-	}
 
 	metadata := &providerrelease.Metadata{
-		Package:                  fixture.Package,
-		Kind:                     fixture.Kind,
-		Version:                  fixture.Version,
-		Artifacts:                providerrelease.Artifacts{},
-		ValidationManifestSHA256: providerrelease.SHA256Hex(manifestData),
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       fixture.Package,
+		Kind:          fixture.Kind,
+		Version:       fixture.Version,
+		Runtime:       providerrelease.RuntimeForManifest(fixture.Kind, manifest),
+		Artifacts:     providerrelease.Artifacts{},
+		StaticValidation: &providerrelease.StaticValidation{
+			Manifest: manifest,
+			Catalog:  staticCatalog,
+		},
 	}
 	for target, artifact := range fixture.Artifacts {
 		metadata.Artifacts[strings.TrimSpace(target)] = artifact
 	}
-	switch {
-	case staticCatalog != nil:
-		metadata.ValidationCatalogSHA256 = providerrelease.SHA256Hex(catalogData)
+	if staticCatalog == nil && providerrelease.CatalogSessionModeAllowed(fixture.Kind, manifest) {
+		metadata.StaticValidation.CatalogSessionOnly = true
 	}
-	if err := providerrelease.ValidateBundle(metadata, manifest, staticCatalog); err != nil && !fixture.AllowInvalid {
+	if err := providerrelease.ValidateMetadata(metadata); err != nil && !fixture.AllowInvalid {
 		t.Fatalf("validate provider release fixture: %v", err)
 	}
 	metadataData, err := yaml.Marshal(metadata)
 	if err != nil {
 		t.Fatalf("encode provider release metadata: %v", err)
 	}
-	return providerReleaseFixtureFiles{Metadata: metadataData, Manifest: manifestData, Catalog: catalogData}
+	return providerReleaseFixtureFiles{Metadata: metadataData}
 }
 
 func writeProviderReleaseMetadataFileWithStaticValidation(t *testing.T, metadataPath string, fixture providerReleaseMetadataFixture) {
@@ -106,10 +96,6 @@ func writeProviderReleaseMetadataFileWithStaticValidation(t *testing.T, metadata
 		t.Fatalf("create metadata dir: %v", err)
 	}
 	writeProviderReleaseFile(t, metadataPath, files.Metadata)
-	writeProviderReleaseFile(t, filepath.Join(filepath.Dir(metadataPath), providerrelease.ValidationManifestFile), files.Manifest)
-	if len(files.Catalog) != 0 {
-		writeProviderReleaseFile(t, filepath.Join(filepath.Dir(metadataPath), providerrelease.ValidationCatalogFile), files.Catalog)
-	}
 }
 
 func deriveProviderReleaseFixtureFromArchive(t *testing.T, metadataPath string, fixture *providerReleaseMetadataFixture) {
@@ -149,11 +135,14 @@ func deriveProviderReleaseFixtureFromArchive(t *testing.T, metadataPath string, 
 		if err != nil {
 			return
 		}
-		staticCatalog, err := providerrelease.DecodeCatalog(data)
-		if err != nil {
+		var staticCatalog catalog.Catalog
+		if err := yaml.Unmarshal(data, &staticCatalog); err != nil {
 			t.Fatalf("decode fixture archive catalog: %v", err)
 		}
-		fixture.Catalog = staticCatalog
+		if err := staticCatalog.Validate(); err != nil {
+			t.Fatalf("validate fixture archive catalog: %v", err)
+		}
+		fixture.Catalog = &staticCatalog
 	}
 }
 
@@ -165,11 +154,11 @@ func readInvalidFixtureArchiveManifest(t *testing.T, archivePath string) *provid
 		if err != nil {
 			continue
 		}
-		manifest, err := providerrelease.DecodeManifest(data)
-		if err != nil {
+		var manifest providermanifestv1.Manifest
+		if err := yaml.Unmarshal(data, &manifest); err != nil {
 			t.Fatalf("decode invalid fixture archive manifest %s: %v", name, err)
 		}
-		return manifest
+		return &manifest
 	}
 	t.Fatalf("read invalid fixture archive manifest: no root manifest found")
 	return nil
@@ -188,22 +177,10 @@ func serveProviderReleaseFixture(t *testing.T, w httpResponseWriter, requestPath
 
 	deriveProviderReleaseFixtureFromArchive(t, metadataPath, &fixture)
 	files := newProviderReleaseFixtureFiles(t, fixture)
-	base := path.Dir(metadataPath)
 	switch requestPath {
 	case metadataPath:
 		setYAMLContentType(w)
 		_, _ = w.Write(files.Metadata)
-		return true
-	case base + "/" + providerrelease.ValidationManifestFile:
-		setYAMLContentType(w)
-		_, _ = w.Write(files.Manifest)
-		return true
-	case base + "/" + providerrelease.ValidationCatalogFile:
-		if len(files.Catalog) == 0 {
-			return false
-		}
-		setYAMLContentType(w)
-		_, _ = w.Write(files.Catalog)
 		return true
 	default:
 		return false
@@ -213,11 +190,7 @@ func serveProviderReleaseFixture(t *testing.T, w httpResponseWriter, requestPath
 func serveProviderReleaseFixtureForRequest(t *testing.T, w httpResponseWriter, requestPath string, fixture providerReleaseMetadataFixture) bool {
 	t.Helper()
 
-	metadataPath := requestPath
-	if strings.HasSuffix(requestPath, "/"+providerrelease.ValidationManifestFile) || strings.HasSuffix(requestPath, "/"+providerrelease.ValidationCatalogFile) {
-		metadataPath = path.Dir(requestPath) + "/" + providerrelease.MetadataFile
-	}
-	return serveProviderReleaseFixture(t, w, requestPath, metadataPath, fixture)
+	return serveProviderReleaseFixture(t, w, requestPath, requestPath, fixture)
 }
 
 type httpResponseWriter interface {
@@ -227,12 +200,4 @@ type httpResponseWriter interface {
 
 func setYAMLContentType(w httpResponseWriter) {
 	w.Header()["Content-Type"] = []string{"application/yaml"}
-}
-
-func providerReleaseManifestSidecarPath(metadataPath string) string {
-	return path.Dir(metadataPath) + "/" + providerrelease.ValidationManifestFile
-}
-
-func providerReleaseCatalogSidecarPath(metadataPath string) string {
-	return path.Dir(metadataPath) + "/" + providerrelease.ValidationCatalogFile
 }

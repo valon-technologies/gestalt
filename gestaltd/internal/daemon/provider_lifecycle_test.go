@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
@@ -493,24 +494,30 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 	if err != nil {
 		t.Fatalf("ProjectManifest: %v", err)
 	}
-	manifestData, err = yaml.Marshal(staticManifest)
-	if err != nil {
-		t.Fatalf("Marshal validation manifest: %v", err)
+	var staticCatalog catalog.Catalog
+	if err := yaml.Unmarshal(catalogData, &staticCatalog); err != nil {
+		t.Fatalf("Unmarshal static catalog: %v", err)
 	}
-	manifestSHA := sha256.Sum256(manifestData)
-	catalogSHA := sha256.Sum256(catalogData)
-	metadata := map[string]any{
-		"package":                  pkg,
-		"kind":                     providermanifestv1.KindApp,
-		"version":                  version,
-		"validationManifestSHA256": fmt.Sprintf("%x", manifestSHA[:]),
-		"validationCatalogSHA256":  fmt.Sprintf("%x", catalogSHA[:]),
-		"artifacts": map[string]any{
-			providerpkg.CurrentPlatformString(): map[string]any{
-				"path":   archiveName,
-				"sha256": archiveDigest,
+	metadata := providerrelease.Metadata{
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       pkg,
+		Kind:          providermanifestv1.KindApp,
+		Version:       version,
+		Runtime:       providerrelease.RuntimeForManifest(providermanifestv1.KindApp, staticManifest),
+		Artifacts: providerrelease.Artifacts{
+			providerpkg.CurrentPlatformString(): {
+				Path:   archiveName,
+				SHA256: archiveDigest,
 			},
 		},
+		StaticValidation: &providerrelease.StaticValidation{
+			Manifest: staticManifest,
+			Catalog:  &staticCatalog,
+		},
+	}
+	if err := providerrelease.ValidateMetadata(&metadata); err != nil {
+		t.Fatalf("ValidateMetadata: %v", err)
 	}
 	metadataData, err := yaml.Marshal(metadata)
 	if err != nil {
@@ -519,8 +526,6 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 	metadataRel := filepath.ToSlash(filepath.Join("releases", version, "provider-release.yaml"))
 	metadataPath := filepath.Join(dir, filepath.FromSlash(metadataRel))
 	writeProviderLifecycleTestFile(t, metadataPath, string(metadataData))
-	writeProviderLifecycleTestFile(t, filepath.Join(filepath.Dir(metadataPath), providerrelease.ValidationManifestFile), string(manifestData))
-	writeProviderLifecycleTestFile(t, filepath.Join(filepath.Dir(metadataPath), providerrelease.ValidationCatalogFile), string(catalogData))
 	return metadataRel
 }
 

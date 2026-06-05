@@ -27,7 +27,6 @@ import (
 
 const providerPublishPlanSchema = "gestaltd.provider.publish.plan.v1"
 const providerPublishFileKindArchive = "archive"
-const providerPublishFileKindValidation = "validation"
 const providerPublishFileKindMetadata = "metadata"
 const providerPublishFormatText = "text"
 const providerPublishFormatJSON = "json"
@@ -70,7 +69,6 @@ type providerPublishPlan struct {
 	ManifestPath      string                `json:"manifestPath"`
 	Version           string                `json:"version"`
 	Metadata          providerPublishFile   `json:"metadata"`
-	Validation        []providerPublishFile `json:"validation"`
 	Artifacts         []providerPublishFile `json:"artifacts"`
 	Files             []providerPublishFile `json:"files"`
 }
@@ -226,22 +224,9 @@ func providerPublishFiles(repo config.ProviderSnapshotRepositoryConfig, manifest
 	sort.Slice(sortedArchives, func(i, j int) bool {
 		return filepath.Base(sortedArchives[i].Path) < filepath.Base(sortedArchives[j].Path)
 	})
-	files := make([]providerPublishFile, 0, len(sortedArchives)+3)
+	files := make([]providerPublishFile, 0, len(sortedArchives)+1)
 	for _, archive := range sortedArchives {
 		file, err := newProviderPublishFile(providerPublishFileKindArchive, archive.Target, archive.Path, storageRoot, publicRoot, sourceInfo.RelRoot, filepath.Base(archive.Path))
-		if err != nil {
-			return nil, providerPublishSourceRefInfo{}, err
-		}
-		files = append(files, file)
-	}
-	for _, name := range []string{providerrelease.ValidationManifestFile, providerrelease.ValidationCatalogFile} {
-		localPath := filepath.Join(metadataDir, name)
-		if _, err := os.Stat(localPath); os.IsNotExist(err) {
-			continue
-		} else if err != nil {
-			return nil, providerPublishSourceRefInfo{}, fmt.Errorf("stat %s: %w", localPath, err)
-		}
-		file, err := newProviderPublishFile(providerPublishFileKindValidation, "", localPath, storageRoot, publicRoot, sourceInfo.RelRoot, name)
 		if err != nil {
 			return nil, providerPublishSourceRefInfo{}, err
 		}
@@ -358,7 +343,6 @@ func newProviderPublishPlan(publishRepository string, sourceInfo providerPublish
 		ManifestPath:      sourceInfo.ManifestPath,
 		Version:           version,
 		Artifacts:         []providerPublishFile{},
-		Validation:        []providerPublishFile{},
 		Files:             make([]providerPublishFile, 0, len(files)),
 	}
 	for _, file := range files {
@@ -366,8 +350,6 @@ func newProviderPublishPlan(publishRepository string, sourceInfo providerPublish
 		switch file.Kind {
 		case providerPublishFileKindArchive:
 			plan.Artifacts = append(plan.Artifacts, file)
-		case providerPublishFileKindValidation:
-			plan.Validation = append(plan.Validation, file)
 		case providerPublishFileKindMetadata:
 			plan.Metadata = file
 		}
@@ -375,19 +357,7 @@ func newProviderPublishPlan(publishRepository string, sourceInfo providerPublish
 	if plan.Metadata.PublicURL == "" {
 		return providerPublishPlan{}, fmt.Errorf("provider publish plan is missing %s", providerrelease.MetadataFile)
 	}
-	if !providerPublishPlanHasFile(plan.Validation, providerrelease.ValidationManifestFile) {
-		return providerPublishPlan{}, fmt.Errorf("provider publish plan is missing %s", providerrelease.ValidationManifestFile)
-	}
 	return plan, nil
-}
-
-func providerPublishPlanHasFile(files []providerPublishFile, name string) bool {
-	for _, file := range files {
-		if filepath.Base(file.LocalPath) == name {
-			return true
-		}
-	}
-	return false
 }
 
 func preflightProviderPublishFiles(files []providerPublishFile) error {
@@ -410,14 +380,14 @@ func validateProviderPublishMetadataFile(file providerPublishFile) error {
 	if file.Kind != providerPublishFileKindMetadata {
 		return nil
 	}
-	if err := providerrelease.ValidateLocalBundle(file.LocalPath); err != nil {
+	if err := providerrelease.ValidateLocalMetadata(file.LocalPath); err != nil {
 		return fmt.Errorf("provider release metadata %s: %w", file.LocalPath, err)
 	}
 	return nil
 }
 
 func uploadProviderPublishFiles(files []providerPublishFile, sourceRef string) error {
-	for _, kind := range []string{providerPublishFileKindArchive, providerPublishFileKindValidation, providerPublishFileKindMetadata} {
+	for _, kind := range []string{providerPublishFileKindArchive, providerPublishFileKindMetadata} {
 		for _, file := range files {
 			if file.Kind != kind {
 				continue
@@ -500,8 +470,8 @@ func printProviderPublishUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Publish finalized provider release artifacts to a configured artifact repository.")
 	writeUsageLine(w, "Reads .tar.gz archives from each --dist-dir, validates one release bundle,")
-	writeUsageLine(w, "generates provider-release.yaml and validation sidecars, then uploads archives")
-	writeUsageLine(w, "and sidecars before provider-release.yaml. Destination paths use the configured repository")
+	writeUsageLine(w, "generates provider-release.yaml, then uploads archives before provider-release.yaml.")
+	writeUsageLine(w, "Destination paths use the configured repository")
 	writeUsageLine(w, "publish.pathLayout and the manifest source plus --ref.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")

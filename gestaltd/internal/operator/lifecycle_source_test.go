@@ -1013,7 +1013,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	metadataPath := "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/provider-release.yaml"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			metadata := providerReleaseMetadataFixture{
 				Package:     packageSource,
 				Kind:        providermanifestv1.KindApp,
@@ -1128,7 +1128,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 	metadataPath := "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/provider-release.yaml"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			metadata := providerReleaseMetadataFixture{
 				Package:     packageSource,
 				Kind:        providermanifestv1.KindSecrets,
@@ -2191,7 +2191,7 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			} else {
 				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
-					case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+					case metadataPath:
 						if r.URL.Path == metadataPath {
 							metadataCount.Add(1)
 						}
@@ -2579,7 +2579,7 @@ packages:
 `, version, providerpkg.CurrentPlatformString())
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte(index))
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -2821,7 +2821,7 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 		}
 		for _, rel := range releases {
 			switch r.URL.Path {
-			case rel.metadataPath, providerReleaseManifestSidecarPath(rel.metadataPath), providerReleaseCatalogSidecarPath(rel.metadataPath):
+			case rel.metadataPath:
 				if r.URL.Path == rel.metadataPath {
 					metadataCount.Add(1)
 				}
@@ -2959,7 +2959,7 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	archivePathURL := "/providers/workflow/workflow-runner.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -3129,7 +3129,7 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 	archivePathURL := "/providers/external-credentials/external-credentials-runner.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -3303,7 +3303,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	archivePathURL := "/providers/roadmap/roadmap-ui.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -3468,7 +3468,7 @@ func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	archivePathURL := "/providers/gadget/gadget-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			metadata := providerReleaseMetadataFixture{
 				Package:      packageSource,
 				Kind:         providermanifestv1.KindApp,
@@ -3518,8 +3518,8 @@ func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 		t.Fatal("PrepareAtPath unexpectedly succeeded")
 		return
 	}
-	if !strings.Contains(err.Error(), `provider release validation manifest package "github.com/acme/tools/other-gadget" does not match "github.com/acme/tools/gadget"`) {
-		t.Fatalf("PrepareAtPath error = %v, want release validation manifest package mismatch", err)
+	if !strings.Contains(err.Error(), `provider "gadget" manifest source "github.com/acme/tools/other-gadget" does not match metadata package "github.com/acme/tools/gadget"`) {
+		t.Fatalf("PrepareAtPath error = %v, want installed manifest package mismatch", err)
 	}
 }
 
@@ -3558,7 +3558,7 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	var currentMu sync.RWMutex
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -3706,13 +3706,9 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 		repo         = "valon-technologies/toolshed"
 		tag          = "apps/workplace-hub/v0.0.1-alpha.1"
 		metadataID   = int64(101)
-		manifestID   = int64(102)
-		catalogID    = int64(103)
 		archiveID    = int64(202)
 		metadataName = "provider-release.yaml"
 		archiveName  = "alpha-current.tar.gz"
-		manifestName = providerrelease.ValidationManifestFile
-		catalogName  = providerrelease.ValidationCatalogFile
 	)
 
 	archiveAssetURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", repo, archiveID)
@@ -3762,10 +3758,8 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"},{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`,
+			_, _ = fmt.Fprintf(w, `{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`,
 				metadataID, metadataName,
-				manifestID, manifestName,
-				catalogID, catalogName,
 				archiveID, archiveName,
 			)
 		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, metadataID):
@@ -3782,17 +3776,6 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 			}
 			setYAMLContentType(w)
 			_, _ = w.Write(releaseFixture().Metadata)
-		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, manifestID):
-			setYAMLContentType(w)
-			_, _ = w.Write(releaseFixture().Manifest)
-		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, catalogID):
-			files := releaseFixture()
-			if len(files.Catalog) == 0 {
-				http.NotFound(w, r)
-				return
-			}
-			setYAMLContentType(w)
-			_, _ = w.Write(files.Catalog)
 		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, archiveID):
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3908,7 +3891,7 @@ func TestSourceAppMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T)
 	const archivePathURL = "/providers/alpha/alpha-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			count := metadataCount.Load()
 			if r.URL.Path == metadataPath {
 				count = metadataCount.Add(1)
@@ -4109,7 +4092,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	currentArchivePathURL := "/providers/alpha/alpha-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -4325,7 +4308,7 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	archivePathURL := "/providers/gadget/gadget-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			metadata := providerReleaseMetadataFixture{
 				Package:     source,
 				Kind:        providermanifestv1.KindApp,
@@ -4451,7 +4434,7 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	archivePathURL := "/providers/auth/auth-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -4626,7 +4609,7 @@ func TestSourceAuthAppPrepareAllowsMissingEnvPlaceholderInNonStringField(t *test
 	archivePathURL := "/providers/auth/auth-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -4993,7 +4976,7 @@ packages:
 `, secretsSource, secretsVersion, strings.TrimPrefix(secretsMetadataPath, "/"), providerpkg.CurrentPlatformString())
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte(index))
-		case secretsMetadataPath, providerReleaseManifestSidecarPath(secretsMetadataPath), providerReleaseCatalogSidecarPath(secretsMetadataPath):
+		case secretsMetadataPath:
 			if r.URL.Path == secretsMetadataPath {
 				secretsMetadataCount.Add(1)
 			}
@@ -5016,7 +4999,7 @@ packages:
 			secretsArchiveCount.Add(1)
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(secretsArchiveData)
-		case appMetadataPath, providerReleaseManifestSidecarPath(appMetadataPath), providerReleaseCatalogSidecarPath(appMetadataPath):
+		case appMetadataPath:
 			if r.URL.Path == appMetadataPath {
 				appMetadataCount.Add(1)
 			}
@@ -5546,7 +5529,7 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			} else {
 				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
-					case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+					case metadataPath:
 						metadata := providerReleaseMetadataFixture{
 							Package:     cacheSource,
 							Kind:        providermanifestv1.KindCache,
@@ -5751,7 +5734,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authArchivePathURL := "/providers/auth/auth.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case secretsMetadataPath, providerReleaseManifestSidecarPath(secretsMetadataPath), providerReleaseCatalogSidecarPath(secretsMetadataPath):
+		case secretsMetadataPath:
 			if r.URL.Path == secretsMetadataPath {
 				secretsMetadataCount.Add(1)
 			}
@@ -5782,7 +5765,7 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(secretsArchiveData)
-		case authMetadataPath, providerReleaseManifestSidecarPath(authMetadataPath), providerReleaseCatalogSidecarPath(authMetadataPath):
+		case authMetadataPath:
 			if r.URL.Path == authMetadataPath {
 				authMetadataCount.Add(1)
 			}
@@ -6016,7 +5999,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 	archivePathURL := "/providers/auth/auth-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}
@@ -6154,7 +6137,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 	archivePathURL := "/providers/secrets/secrets-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+		case metadataPath:
 			if r.URL.Path == metadataPath {
 				metadataCount.Add(1)
 			}

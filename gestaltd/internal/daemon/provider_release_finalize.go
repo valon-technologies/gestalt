@@ -215,17 +215,9 @@ func releaseArchiveTargetFromManifest(manifest *providermanifestv1.Manifest) (st
 }
 
 func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive, verbose bool) error {
-	metadata, manifestData, catalogData, err := buildProviderReleaseMetadataAndSidecars(manifest, version, archives)
+	metadata, err := buildProviderReleaseMetadata(manifest, version, archives)
 	if err != nil {
 		return err
-	}
-	if err := writeProviderReleaseSidecar(dir, providerrelease.ValidationManifestFile, manifestData, verbose); err != nil {
-		return err
-	}
-	if len(catalogData) != 0 {
-		if err := writeProviderReleaseSidecar(dir, providerrelease.ValidationCatalogFile, catalogData, verbose); err != nil {
-			return err
-		}
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {
@@ -241,50 +233,34 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 	return nil
 }
 
-func writeProviderReleaseSidecar(dir, name string, data []byte, verbose bool) error {
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return err
-	}
-	if verbose {
-		_, _ = fmt.Fprintf(os.Stdout, "created %s\n", path)
-	}
-	return nil
-}
-
-func buildProviderReleaseMetadataAndSidecars(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) (*providerrelease.Metadata, []byte, []byte, error) {
+func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) (*providerrelease.Metadata, error) {
 	if manifest == nil {
-		return nil, nil, nil, fmt.Errorf("manifest is required")
+		return nil, fmt.Errorf("manifest is required")
 	}
 	staticManifest, err := staticvalidation.ProjectManifest(manifest, "", true)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("project static validation manifest: %w", err)
+		return nil, fmt.Errorf("project static validation manifest: %w", err)
 	}
 	staticCatalog, err := staticValidationCatalogForRelease(manifest, archives)
 	if err != nil {
-		return nil, nil, nil, err
-	}
-	manifestData, err := yaml.Marshal(staticManifest)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("encode %s: %w", providerrelease.ValidationManifestFile, err)
-	}
-	var catalogData []byte
-	var catalogSHA string
-	if staticCatalog != nil {
-		catalogData, err = yaml.Marshal(staticCatalog)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("encode %s: %w", providerrelease.ValidationCatalogFile, err)
-		}
-		catalogSHA = providerrelease.SHA256Hex(catalogData)
+		return nil, err
 	}
 
 	metadata := &providerrelease.Metadata{
-		Package:                  manifest.Source,
-		Kind:                     manifest.Kind,
-		Version:                  version,
-		Artifacts:                providerrelease.Artifacts{},
-		ValidationManifestSHA256: providerrelease.SHA256Hex(manifestData),
-		ValidationCatalogSHA256:  catalogSHA,
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       manifest.Source,
+		Kind:          manifest.Kind,
+		Version:       version,
+		Runtime:       providerrelease.RuntimeForManifest(manifest.Kind, staticManifest),
+		Artifacts:     providerrelease.Artifacts{},
+		StaticValidation: &providerrelease.StaticValidation{
+			Manifest: staticManifest,
+			Catalog:  staticCatalog,
+		},
+	}
+	if staticCatalog == nil && providerrelease.CatalogSessionModeAllowed(manifest.Kind, staticManifest) {
+		metadata.StaticValidation.CatalogSessionOnly = true
 	}
 	for _, archive := range archives {
 		target := strings.TrimSpace(archive.Target)
@@ -293,10 +269,10 @@ func buildProviderReleaseMetadataAndSidecars(manifest *providermanifestv1.Manife
 		}
 		metadata.Artifacts[target] = providerrelease.Artifact{Path: filepath.Base(archive.Path), SHA256: archive.SHA256}
 	}
-	if err := providerrelease.ValidateBundle(metadata, staticManifest, staticCatalog); err != nil {
-		return nil, nil, nil, fmt.Errorf("validate provider release metadata: %w", err)
+	if err := providerrelease.ValidateMetadata(metadata); err != nil {
+		return nil, fmt.Errorf("validate provider release metadata: %w", err)
 	}
-	return metadata, manifestData, catalogData, nil
+	return metadata, nil
 }
 
 func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, archives []releaseArchive) (*catalog.Catalog, error) {
@@ -368,7 +344,7 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Finalize provider release metadata from already-built archives.")
 	writeUsageLine(w, "Reads all .tar.gz archives in --dist-dir, validates package contents, and")
-	writeUsageLine(w, "writes provider-release.yaml plus validation sidecars in the same directory.")
+	writeUsageLine(w, "writes provider-release.yaml in the same directory.")
 	writeUsageLine(w, "Run this after one or more provider package jobs have produced archives.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
