@@ -8,15 +8,13 @@ on:
       - '.dockerignore'
       - '.github/workflows/build-gestaltd.yml'
       - 'gestaltd/**'
-      - 'sdk/go/**'
-      - 'sdk/proto/**'
+      - '!gestaltd/rpc/protov1/**'
   pull_request:
     paths:
       - '.dockerignore'
       - '.github/workflows/build-gestaltd.yml'
       - 'gestaltd/**'
-      - 'sdk/go/**'
-      - 'sdk/proto/**'
+      - '!gestaltd/rpc/protov1/**'
 
   workflow_dispatch:
     inputs:
