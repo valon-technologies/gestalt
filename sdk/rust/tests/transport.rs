@@ -141,6 +141,7 @@ impl Provider for TestProvider {
                         context.access.role.as_str(),
                         context.host.public_base_url.as_str(),
                     ),
+                    display_name: String::new(),
                 }))
             }
             "none" => Ok(None),
@@ -408,6 +409,7 @@ async fn serves_provider_requests_over_unix_socket() {
                         id: "service_account:review-worker".to_string(),
                         credential_subject_id: "service_account:review-worker".to_string(),
                         email: String::new(),
+                        display_name: String::new(),
                     }),
                     ..Default::default()
                 }],
