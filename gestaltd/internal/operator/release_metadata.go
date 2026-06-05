@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -20,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -56,6 +58,16 @@ type providerReleaseValidationBundle struct {
 	Metadata *providerrelease.Metadata
 	Manifest *providermanifestv1.Manifest
 	Catalog  *catalog.Catalog
+}
+
+type sidecarProviderReleaseMetadata struct {
+	Package                      string                    `yaml:"package"`
+	Kind                         string                    `yaml:"kind"`
+	Version                      string                    `yaml:"version"`
+	Artifacts                    providerrelease.Artifacts `yaml:"artifacts"`
+	ValidationManifestSHA256     string                    `yaml:"validationManifestSHA256"`
+	ValidationCatalogSHA256      string                    `yaml:"validationCatalogSHA256"`
+	ValidationCatalogSessionOnly bool                      `yaml:"validationCatalogSessionOnly,omitempty"`
 }
 
 func sourceAuthToken(entry *config.ProviderEntry) string {
@@ -100,6 +112,13 @@ func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metada
 	}
 	metadata, err := providerrelease.Decode(data)
 	if err != nil {
+		sidecarBundle, sidecarErr := fetchSidecarProviderReleaseBundle(ctx, client, resolvedMetadataLocation, token, data)
+		if sidecarErr == nil {
+			return sidecarBundle, resolvedMetadataLocation, gitHubReleaseAssets, nil
+		}
+		if looksLikeSidecarProviderReleaseMetadata(data) {
+			return providerReleaseValidationBundle{}, "", nil, sidecarErr
+		}
 		return providerReleaseValidationBundle{}, "", nil, err
 	}
 	return providerReleaseValidationBundle{
@@ -107,6 +126,122 @@ func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metada
 		Manifest: metadata.StaticValidation.Manifest,
 		Catalog:  metadata.StaticValidation.Catalog,
 	}, resolvedMetadataLocation, gitHubReleaseAssets, nil
+}
+
+func fetchSidecarProviderReleaseBundle(ctx context.Context, client *http.Client, metadataLocation, token string, metadataData []byte) (providerReleaseValidationBundle, error) {
+	sidecarMetadata, err := decodeSidecarProviderReleaseMetadata(metadataData)
+	if err != nil {
+		return providerReleaseValidationBundle{}, err
+	}
+	manifestData, err := fetchProviderReleaseSidecar(ctx, client, metadataLocation, token, "validation-manifest.yaml", sidecarMetadata.ValidationManifestSHA256)
+	if err != nil {
+		return providerReleaseValidationBundle{}, fmt.Errorf("fetch provider release validation manifest: %w", err)
+	}
+	var manifest providermanifestv1.Manifest
+	if err := yaml.Unmarshal(manifestData, &manifest); err != nil {
+		return providerReleaseValidationBundle{}, fmt.Errorf("decode provider release validation manifest: %w", err)
+	}
+
+	var staticCatalog *catalog.Catalog
+	if strings.TrimSpace(sidecarMetadata.ValidationCatalogSHA256) != "" {
+		catalogData, err := fetchProviderReleaseSidecar(ctx, client, metadataLocation, token, "validation-catalog.yaml", sidecarMetadata.ValidationCatalogSHA256)
+		if err != nil {
+			return providerReleaseValidationBundle{}, fmt.Errorf("fetch provider release validation catalog: %w", err)
+		}
+		var decoded catalog.Catalog
+		if err := yaml.Unmarshal(catalogData, &decoded); err != nil {
+			return providerReleaseValidationBundle{}, fmt.Errorf("decode provider release validation catalog: %w", err)
+		}
+		staticCatalog = &decoded
+	}
+
+	metadata := &providerrelease.Metadata{
+		Schema:        providerrelease.SchemaName,
+		SchemaVersion: providerrelease.SchemaVersion,
+		Package:       sidecarMetadata.Package,
+		Kind:          sidecarMetadata.Kind,
+		Version:       sidecarMetadata.Version,
+		Runtime:       providerrelease.RuntimeForManifest(sidecarMetadata.Kind, &manifest),
+		Artifacts:     sidecarMetadata.Artifacts,
+		StaticValidation: &providerrelease.StaticValidation{
+			Manifest:           &manifest,
+			Catalog:            staticCatalog,
+			CatalogSessionOnly: sidecarMetadata.ValidationCatalogSessionOnly,
+		},
+	}
+	if err := providerrelease.ValidateMetadata(metadata); err != nil {
+		return providerReleaseValidationBundle{}, err
+	}
+	return providerReleaseValidationBundle{
+		Metadata: metadata,
+		Manifest: metadata.StaticValidation.Manifest,
+		Catalog:  metadata.StaticValidation.Catalog,
+	}, nil
+}
+
+func decodeSidecarProviderReleaseMetadata(data []byte) (sidecarProviderReleaseMetadata, error) {
+	var metadata sidecarProviderReleaseMetadata
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&metadata); err != nil {
+		return sidecarProviderReleaseMetadata{}, fmt.Errorf("decode sidecar provider release metadata: %w", err)
+	}
+	if strings.TrimSpace(metadata.ValidationManifestSHA256) == "" {
+		return sidecarProviderReleaseMetadata{}, fmt.Errorf("sidecar provider release validation manifest sha256 is required")
+	}
+	return metadata, nil
+}
+
+func looksLikeSidecarProviderReleaseMetadata(data []byte) bool {
+	var metadata struct {
+		ValidationManifestSHA256 string `yaml:"validationManifestSHA256"`
+		ValidationCatalogSHA256  string `yaml:"validationCatalogSHA256"`
+	}
+	if err := yaml.Unmarshal(data, &metadata); err != nil {
+		return false
+	}
+	return strings.TrimSpace(metadata.ValidationManifestSHA256) != "" ||
+		strings.TrimSpace(metadata.ValidationCatalogSHA256) != ""
+}
+
+func fetchProviderReleaseSidecar(ctx context.Context, client *http.Client, metadataLocation, token, filename, expectedSHA string) ([]byte, error) {
+	sidecarLocation, err := resolveArchiveSourceLocation(metadataLocation, filename, nil)
+	if err != nil {
+		return nil, err
+	}
+	var data []byte
+	if !isRemoteReleaseMetadataLocation(sidecarLocation) {
+		data, err = providerrelease.ReadLocalFile(sidecarLocation)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if client == nil {
+			client = http.DefaultClient
+		}
+		resp, err := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
+			return newAuthenticatedFetchRequest(ctx, sidecarLocation, token)
+		})
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("unexpected status %d fetching %s", resp.StatusCode, sidecarLocation)
+		}
+		data, err = io.ReadAll(io.LimitReader(resp.Body, providerrelease.MaxBytes+1))
+		if err != nil {
+			return nil, fmt.Errorf("read provider release sidecar: %w", err)
+		}
+		if len(data) > providerrelease.MaxBytes {
+			return nil, fmt.Errorf("provider release sidecar exceeds %d byte limit", providerrelease.MaxBytes)
+		}
+	}
+	sum := sha256.Sum256(data)
+	if err := verifyArchiveSHA256(hex.EncodeToString(sum[:]), expectedSHA); err != nil {
+		return nil, fmt.Errorf("sidecar digest mismatch: %w", err)
+	}
+	return data, nil
 }
 
 func doProviderReleaseHTTPRequestWithRetry(ctx context.Context, client *http.Client, newRequest func(context.Context) (*http.Request, error)) (*http.Response, error) {
