@@ -66,6 +66,24 @@ func TestRequireAppRequestScopeDeniedBeforePolicy(t *testing.T) {
 	}
 }
 
+func TestAppOperationPolicyOnlySkipsScopeAndChecksPolicy(t *testing.T) {
+	t.Parallel()
+
+	authz := &recordingAuthorizationProvider{allowed: true}
+	enforcer := NewEnforcer(authz)
+	p := scopedPrincipal("subject:user:123", "other.read")
+
+	if err := enforcer.Require(context.Background(), p, AppOperationPolicyOnly("example", "read")); err != nil {
+		t.Fatalf("Require error = %v", err)
+	}
+	if len(authz.requests) != 1 {
+		t.Fatalf("CheckAccess requests = %d, want 1", len(authz.requests))
+	}
+	if got := authz.requests[0].GetAction().GetName(); got != "read" {
+		t.Fatalf("action = %q, want read", got)
+	}
+}
+
 func TestAllowedScopeDeniedReturnsFalseWithoutPolicy(t *testing.T) {
 	t.Parallel()
 

@@ -436,6 +436,8 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 	if resourceName == "" {
 		return invocation.AccessContext{}, false, nil
 	}
+	// Mounted UI route role lists are expected to be small; batch CheckAccess if
+	// routes start carrying broad role fan-out.
 	for _, allowedRole := range route.AllowedRoles {
 		role := strings.TrimSpace(allowedRole)
 		if role == "" {

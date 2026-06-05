@@ -33,6 +33,15 @@ func AppOperation(provider, operation string) Request {
 	}
 }
 
+func AppOperationPolicyOnly(provider, operation string) Request {
+	provider = strings.TrimSpace(provider)
+	operation = strings.TrimSpace(operation)
+	return Request{
+		Action:   &proto.Action{Name: operation},
+		Resource: &proto.Resource{Type: provider, Id: provider},
+	}
+}
+
 func Provider(provider string) Request {
 	provider = strings.TrimSpace(provider)
 	return Request{

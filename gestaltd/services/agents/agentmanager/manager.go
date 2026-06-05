@@ -155,7 +155,7 @@ func New(cfg Config) *Manager {
 		turnScopes:        cfg.TurnScopes,
 		toolIDs:           cfg.ToolIDs,
 		invoker:           cfg.Invoker,
-		access:            cfg.Access,
+		access:            access.OrDefault(cfg.Access),
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
@@ -1522,6 +1522,9 @@ func (m *Manager) filterProviderCandidatesByAccess(ctx context.Context, p *princ
 		}
 		denied = true
 	}
+	// Denied provider candidates fail closed here; later not-found responses
+	// only mean the caller could search the candidate set and the object was
+	// absent.
 	if len(filtered) == 0 && denied {
 		if providerName = strings.TrimSpace(providerName); providerName != "" {
 			return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)

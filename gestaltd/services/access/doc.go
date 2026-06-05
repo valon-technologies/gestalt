@@ -7,6 +7,12 @@
 //
 // AppOperation and Provider requests include credential-scope requirements.
 // ProviderScope is scope-only for token and catalog plumbing before an
-// operation is known. A nil Enforcer or nil AuthorizationProvider is
-// intentionally policy-allow, but request scopes are still enforced.
+// operation is known. AppOperationPolicyOnly deliberately skips credential
+// scope for caller-app delegation while still checking model policy.
+//
+// Allowed returns false without an error for scope or policy denial; use it
+// for list/filter paths where denied and absent are equivalent. Require
+// returns typed access errors for the same denials. A nil Enforcer or nil
+// AuthorizationProvider is intentionally policy-allow, but request scopes are
+// still enforced.
 package access

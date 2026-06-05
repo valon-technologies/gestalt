@@ -18,6 +18,13 @@ func NewEnforcer(provider core.AuthorizationProvider) *Enforcer {
 	return &Enforcer{provider: provider}
 }
 
+func OrDefault(e *Enforcer) *Enforcer {
+	if e != nil {
+		return e
+	}
+	return NewEnforcer(nil)
+}
+
 func (e *Enforcer) HasProvider() bool {
 	return e != nil && e.provider != nil
 }

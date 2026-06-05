@@ -151,6 +151,7 @@ func NewBroker(providers *registry.ProviderMap[core.Provider], users UserStore, 
 	for _, o := range opts {
 		o(b)
 	}
+	b.access = access.OrDefault(b.access)
 	return b
 }
 
