@@ -98,27 +98,30 @@ type SyncMetricsArchives struct {
 }
 
 type SyncMetricsCache struct {
-	Configured    bool                    `json:"configured"`
-	Enabled       bool                    `json:"enabled"`
-	Dir           string                  `json:"dir"`
-	Mode          string                  `json:"mode,omitempty"`
-	BucketVersion string                  `json:"bucket_version,omitempty"`
-	Eligible      int                     `json:"eligible"`
-	Disabled      int                     `json:"disabled"`
-	Uncacheable   int                     `json:"uncacheable"`
-	Hits          int                     `json:"hits"`
-	Misses        int                     `json:"misses"`
-	Invalid       int                     `json:"invalid"`
-	Restore       SyncMetricsCacheRestore `json:"restore"`
-	Put           SyncMetricsCachePut     `json:"put"`
-	Entries       []SyncMetricsCacheEntry `json:"entries"`
+	Configured    bool                     `json:"configured"`
+	Enabled       bool                     `json:"enabled"`
+	Dir           string                   `json:"dir"`
+	Mode          string                   `json:"mode,omitempty"`
+	BucketVersion string                   `json:"bucket_version,omitempty"`
+	Eligible      int                      `json:"eligible"`
+	Disabled      int                      `json:"disabled"`
+	Uncacheable   int                      `json:"uncacheable"`
+	Hits          int                      `json:"hits"`
+	Misses        int                      `json:"misses"`
+	Invalid       int                      `json:"invalid"`
+	Prefetch      SyncMetricsCachePrefetch `json:"prefetch"`
+	Put           SyncMetricsCachePut      `json:"put"`
+	Entries       []SyncMetricsCacheEntry  `json:"entries"`
 }
 
-type SyncMetricsCacheRestore struct {
+type SyncMetricsCachePrefetch struct {
 	DurationSeconds float64 `json:"duration_seconds"`
-	ListSeconds     float64 `json:"list_seconds"`
-	Entries         int     `json:"entries"`
-	Restored        int     `json:"restored"`
+	Requests        int     `json:"requests"`
+	Eligible        int     `json:"eligible"`
+	UniqueKeys      int     `json:"unique_keys"`
+	LocalHits       int     `json:"local_hits"`
+	RemoteHits      int     `json:"remote_hits"`
+	RemoteMisses    int     `json:"remote_misses"`
 	Failures        int     `json:"failures"`
 	Bytes           int64   `json:"bytes"`
 	Error           string  `json:"error,omitempty"`
@@ -187,14 +190,15 @@ type SyncMetricsOutputRoot struct {
 }
 
 type SyncMetricsRecorder struct {
-	mu         sync.Mutex
-	metrics    SyncMetrics
-	seenSHA    map[string]struct{}
-	fetches    []SyncMetricsArchiveFetch
-	cache      []SyncMetricsCacheEntry
-	artifacts  []SyncMetricsArtifactRecord
-	totalStart time.Time
-	phaseStart time.Time
+	mu           sync.Mutex
+	metrics      SyncMetrics
+	seenSHA      map[string]struct{}
+	prefetchKeys map[string]struct{}
+	fetches      []SyncMetricsArchiveFetch
+	cache        []SyncMetricsCacheEntry
+	artifacts    []SyncMetricsArtifactRecord
+	totalStart   time.Time
+	phaseStart   time.Time
 }
 
 type syncArtifactMetricsEvent struct {
@@ -238,7 +242,8 @@ type syncCacheMetricsEvent struct {
 
 func NewSyncMetricsRecorder() *SyncMetricsRecorder {
 	return &SyncMetricsRecorder{
-		seenSHA: make(map[string]struct{}),
+		seenSHA:      make(map[string]struct{}),
+		prefetchKeys: make(map[string]struct{}),
 	}
 }
 
@@ -456,20 +461,27 @@ func (r *SyncMetricsRecorder) RecordCacheEntry(event syncCacheMetricsEvent) {
 	r.metrics.Cache.Entries = append([]SyncMetricsCacheEntry(nil), r.cache...)
 }
 
-func (r *SyncMetricsRecorder) RecordCacheRestore(stats materializedCacheHydrateStats) {
+func (r *SyncMetricsRecorder) RecordCachePrefetch(stats materializedCachePrefetchStats) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.metrics.Cache.Restore = SyncMetricsCacheRestore{
-		DurationSeconds: roundedSeconds(stats.Duration),
-		ListSeconds:     roundedSeconds(stats.List),
-		Entries:         stats.Entries,
-		Restored:        stats.Restored,
-		Failures:        stats.Failures,
-		Bytes:           stats.Bytes,
-		Error:           stats.Error,
+	for _, key := range stats.Keys {
+		r.prefetchKeys[key] = struct{}{}
+	}
+	prefetch := &r.metrics.Cache.Prefetch
+	prefetch.DurationSeconds = roundedSeconds(secondsDuration(prefetch.DurationSeconds) + stats.Duration)
+	prefetch.Requests += stats.Requests
+	prefetch.Eligible += stats.Eligible
+	prefetch.UniqueKeys = len(r.prefetchKeys)
+	prefetch.LocalHits += stats.LocalHits
+	prefetch.RemoteHits += stats.RemoteHits
+	prefetch.RemoteMisses += stats.RemoteMisses
+	prefetch.Failures += stats.Failures
+	prefetch.Bytes += stats.Bytes
+	if prefetch.Error == "" {
+		prefetch.Error = stats.Error
 	}
 }
 

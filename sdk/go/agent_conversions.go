@@ -232,6 +232,8 @@ func subjectFromProto(value *proto.SubjectContext) *Subject {
 		CredentialSubjectID: value.GetCredentialSubjectId(),
 		Email:               value.GetEmail(),
 		DisplayName:         value.GetDisplayName(),
+		Scopes:              cloneStrings(value.GetScopes()),
+		Permissions:         subjectPermissionsFromProto(value.GetPermissions()),
 	}
 }
 
@@ -244,6 +246,8 @@ func subjectToProto(value *Subject) *proto.SubjectContext {
 		CredentialSubjectId: value.CredentialSubjectID,
 		Email:               value.Email,
 		DisplayName:         value.DisplayName,
+		Scopes:              cloneStrings(value.Scopes),
+		Permissions:         subjectPermissionsToProto(value.Permissions),
 	}
 }
 
@@ -450,16 +454,16 @@ func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
 		return nil, err
 	}
 	return &proto.AgentSession{
-		Id:           value.ID,
-		ProviderName: value.ProviderName,
-		Model:        value.Model,
-		ClientRef:    value.ClientRef,
-		State:        proto.AgentSessionState(value.State),
-		Metadata:     metadata,
+		Id:                 value.ID,
+		ProviderName:       value.ProviderName,
+		Model:              value.Model,
+		ClientRef:          value.ClientRef,
+		State:              proto.AgentSessionState(value.State),
+		Metadata:           metadata,
 		CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
-		CreatedAt:    timestampFromNonZeroTime(value.CreatedAt),
-		UpdatedAt:    timestampFromNonZeroTime(value.UpdatedAt),
-		LastTurnAt:   timestampFromOptionalTime(value.LastTurnAt),
+		CreatedAt:          timestampFromNonZeroTime(value.CreatedAt),
+		UpdatedAt:          timestampFromNonZeroTime(value.UpdatedAt),
+		LastTurnAt:         timestampFromOptionalTime(value.LastTurnAt),
 	}, nil
 }
 
@@ -483,16 +487,16 @@ func agentSessionFromProto(value *proto.AgentSession) *AgentSession {
 		return nil
 	}
 	return &AgentSession{
-		ID:           value.GetId(),
-		ProviderName: value.GetProviderName(),
-		Model:        value.GetModel(),
-		ClientRef:    value.GetClientRef(),
-		State:        AgentSessionState(value.GetState()),
-		Metadata:     mapFromStruct(value.GetMetadata()),
+		ID:                 value.GetId(),
+		ProviderName:       value.GetProviderName(),
+		Model:              value.GetModel(),
+		ClientRef:          value.GetClientRef(),
+		State:              AgentSessionState(value.GetState()),
+		Metadata:           mapFromStruct(value.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
-		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
-		LastTurnAt:   timePtrFromTimestampUnchecked(value.GetLastTurnAt()),
+		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
+		UpdatedAt:          timeFromTimestamp(value.GetUpdatedAt()),
+		LastTurnAt:         timePtrFromTimestampUnchecked(value.GetLastTurnAt()),
 	}
 }
 
@@ -523,17 +527,18 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		return &CreateAgentProviderSessionRequest{}
 	}
 	return &CreateAgentProviderSessionRequest{
-		ProviderName:      req.GetProviderName(),
-		SessionID:         req.GetSessionId(),
-		IdempotencyKey:    req.GetIdempotencyKey(),
-		Model:             req.GetModel(),
-		ClientRef:         req.GetClientRef(),
-		Metadata:          mapFromStruct(req.GetMetadata()),
+		ProviderName:       req.GetProviderName(),
+		SessionID:          req.GetSessionId(),
+		IdempotencyKey:     req.GetIdempotencyKey(),
+		Model:              req.GetModel(),
+		ClientRef:          req.GetClientRef(),
+		Metadata:           mapFromStruct(req.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
-		Subject:           subjectFromProto(req.GetSubject()),
-		SessionStart:      agentSessionStartConfigFromProto(req.GetSessionStart()),
-		PreparedWorkspace: agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
-		Workspace:         agentWorkspaceFromProto(req.GetWorkspace()),
+		Subject:            subjectFromProto(req.GetSubject()),
+		Context:            cloneRequestContext(req.GetContext()),
+		SessionStart:       agentSessionStartConfigFromProto(req.GetSessionStart()),
+		PreparedWorkspace:  agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
+		Workspace:          agentWorkspaceFromProto(req.GetWorkspace()),
 	}
 }
 
@@ -580,6 +585,7 @@ func getAgentProviderSessionRequestFromProto(req *proto.GetAgentProviderSessionR
 	return &GetAgentProviderSessionRequest{
 		SessionID: req.GetSessionId(),
 		Subject:   subjectFromProto(req.GetSubject()),
+		Context:   cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -590,6 +596,7 @@ func listAgentProviderSessionsRequestFromProto(req *proto.ListAgentProviderSessi
 	return &ListAgentProviderSessionsRequest{
 		ProviderName: req.GetProviderName(),
 		Subject:      subjectFromProto(req.GetSubject()),
+		Context:      cloneRequestContext(req.GetContext()),
 		SessionIDs:   append([]string(nil), req.GetSessionIds()...),
 		State:        AgentSessionState(req.GetState()),
 		Limit:        req.GetLimit(),
@@ -618,6 +625,7 @@ func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSe
 		State:     AgentSessionState(req.GetState()),
 		Metadata:  mapFromStruct(req.GetMetadata()),
 		Subject:   subjectFromProto(req.GetSubject()),
+		Context:   cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -630,18 +638,18 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 		return nil, err
 	}
 	out := &proto.AgentTurn{
-		Id:            value.ID,
-		SessionId:     value.SessionID,
-		ProviderName:  value.ProviderName,
-		Model:         value.Model,
-		Status:        proto.AgentExecutionStatus(value.Status),
-		Messages:      messages,
-		StatusMessage: value.StatusMessage,
+		Id:                 value.ID,
+		SessionId:          value.SessionID,
+		ProviderName:       value.ProviderName,
+		Model:              value.Model,
+		Status:             proto.AgentExecutionStatus(value.Status),
+		Messages:           messages,
+		StatusMessage:      value.StatusMessage,
 		CreatedBySubjectId: strings.TrimSpace(value.CreatedBySubjectID),
-		CreatedAt:     timestampFromNonZeroTime(value.CreatedAt),
-		StartedAt:     timestampFromOptionalTime(value.StartedAt),
-		CompletedAt:   timestampFromOptionalTime(value.CompletedAt),
-		ExecutionRef:  value.ExecutionRef,
+		CreatedAt:          timestampFromNonZeroTime(value.CreatedAt),
+		StartedAt:          timestampFromOptionalTime(value.StartedAt),
+		CompletedAt:        timestampFromOptionalTime(value.CompletedAt),
+		ExecutionRef:       value.ExecutionRef,
 	}
 	if err := applyAgentTurnOutputToProto(out, value.Output); err != nil {
 		return nil, err
@@ -669,19 +677,19 @@ func agentTurnFromProto(value *proto.AgentTurn) *AgentTurn {
 		return nil
 	}
 	return &AgentTurn{
-		ID:            value.GetId(),
-		SessionID:     value.GetSessionId(),
-		ProviderName:  value.GetProviderName(),
-		Model:         value.GetModel(),
-		Status:        AgentExecutionStatus(value.GetStatus()),
-		Messages:      agentMessagesFromProto(value.GetMessages()),
-		Output:        agentTurnOutputFromProto(value),
-		StatusMessage: value.GetStatusMessage(),
+		ID:                 value.GetId(),
+		SessionID:          value.GetSessionId(),
+		ProviderName:       value.GetProviderName(),
+		Model:              value.GetModel(),
+		Status:             AgentExecutionStatus(value.GetStatus()),
+		Messages:           agentMessagesFromProto(value.GetMessages()),
+		Output:             agentTurnOutputFromProto(value),
+		StatusMessage:      value.GetStatusMessage(),
 		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
-		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
-		StartedAt:     timePtrFromTimestampUnchecked(value.GetStartedAt()),
-		CompletedAt:   timePtrFromTimestampUnchecked(value.GetCompletedAt()),
-		ExecutionRef:  value.GetExecutionRef(),
+		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
+		StartedAt:          timePtrFromTimestampUnchecked(value.GetStartedAt()),
+		CompletedAt:        timePtrFromTimestampUnchecked(value.GetCompletedAt()),
+		ExecutionRef:       value.GetExecutionRef(),
 	}
 }
 
@@ -715,22 +723,22 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
 	}
 	return &CreateAgentProviderTurnRequest{
-		TurnID:         req.GetTurnId(),
-		SessionID:      req.GetSessionId(),
-		IdempotencyKey: req.GetIdempotencyKey(),
-		Model:          req.GetModel(),
-		Messages:       agentMessagesFromProto(req.GetMessages()),
-		Tools:          resolvedAgentToolsFromProto(req.GetTools()),
-		Output:         agentOutputFromProto(req.GetOutput()),
-		Metadata:       mapFromStruct(req.GetMetadata()),
+		TurnID:             req.GetTurnId(),
+		SessionID:          req.GetSessionId(),
+		IdempotencyKey:     req.GetIdempotencyKey(),
+		Model:              req.GetModel(),
+		Messages:           agentMessagesFromProto(req.GetMessages()),
+		Tools:              resolvedAgentToolsFromProto(req.GetTools()),
+		Output:             agentOutputFromProto(req.GetOutput()),
+		Metadata:           mapFromStruct(req.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
-		ExecutionRef:   req.GetExecutionRef(),
-		ToolRefs:       agentToolRefsFromProto(req.GetToolRefs()),
-		ToolSource:     AgentToolSourceMode(req.GetToolSource()),
-		Subject:        subjectFromProto(req.GetSubject()),
-		ModelOptions:   mapFromStruct(req.GetModelOptions()),
-		RunGrant:       req.GetRunGrant(),
-		TimeoutSeconds: req.GetTimeoutSeconds(),
+		ExecutionRef:       req.GetExecutionRef(),
+		ToolRefs:           agentToolRefsFromProto(req.GetToolRefs()),
+		ToolSource:         AgentToolSourceMode(req.GetToolSource()),
+		Subject:            subjectFromProto(req.GetSubject()),
+		ModelOptions:       mapFromStruct(req.GetModelOptions()),
+		Context:            cloneRequestContext(req.GetContext()),
+		TimeoutSeconds:     req.GetTimeoutSeconds(),
 	}, nil
 }
 
@@ -741,6 +749,7 @@ func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest
 	return &GetAgentProviderTurnRequest{
 		TurnID:  req.GetTurnId(),
 		Subject: subjectFromProto(req.GetSubject()),
+		Context: cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -751,6 +760,7 @@ func listAgentProviderTurnsRequestFromProto(req *proto.ListAgentProviderTurnsReq
 	return &ListAgentProviderTurnsRequest{
 		SessionID:   req.GetSessionId(),
 		Subject:     subjectFromProto(req.GetSubject()),
+		Context:     cloneRequestContext(req.GetContext()),
 		TurnIDs:     append([]string(nil), req.GetTurnIds()...),
 		Status:      AgentExecutionStatus(req.GetStatus()),
 		Limit:       req.GetLimit(),
@@ -777,6 +787,7 @@ func cancelAgentProviderTurnRequestFromProto(req *proto.CancelAgentProviderTurnR
 		TurnID:  req.GetTurnId(),
 		Reason:  req.GetReason(),
 		Subject: subjectFromProto(req.GetSubject()),
+		Context: cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -916,6 +927,7 @@ func listAgentProviderTurnEventsRequestFromProto(req *proto.ListAgentProviderTur
 		AfterSeq: req.GetAfterSeq(),
 		Limit:    req.GetLimit(),
 		Subject:  subjectFromProto(req.GetSubject()),
+		Context:  cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -937,6 +949,7 @@ func getAgentProviderInteractionRequestFromProto(req *proto.GetAgentProviderInte
 	return &GetAgentProviderInteractionRequest{
 		InteractionID: req.GetInteractionId(),
 		Subject:       subjectFromProto(req.GetSubject()),
+		Context:       cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -947,6 +960,7 @@ func listAgentProviderInteractionsRequestFromProto(req *proto.ListAgentProviderI
 	return &ListAgentProviderInteractionsRequest{
 		TurnID:  req.GetTurnId(),
 		Subject: subjectFromProto(req.GetSubject()),
+		Context: cloneRequestContext(req.GetContext()),
 	}
 }
 
@@ -1053,6 +1067,7 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 		InteractionID: req.GetInteractionId(),
 		Resolution:    mapFromStruct(req.GetResolution()),
 		Subject:       subjectFromProto(req.GetSubject()),
+		Context:       cloneRequestContext(req.GetContext()),
 	}
 }
 

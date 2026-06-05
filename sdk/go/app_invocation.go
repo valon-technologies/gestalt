@@ -7,6 +7,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -49,6 +50,7 @@ type InvocationGrant struct {
 type appClient struct {
 	client          proto.AppClient
 	invocationToken string
+	context         *proto.RequestContext
 }
 
 // App is the fakeable contract for app invocation calls.
@@ -63,6 +65,16 @@ var sharedAppTransport sharedManagerTransport[proto.AppClient]
 // NewApp returns a capability that attaches invocationToken to every request
 // when one is available.
 func NewApp(invocationToken string) (App, error) {
+	return newApp(nil, strings.TrimSpace(invocationToken))
+}
+
+// NewAppFromRequest returns an app invocation capability for the current
+// provider request.
+func NewAppFromRequest(req Request) (App, error) {
+	return newApp(requestContextForRequest(req), req.InvocationToken())
+}
+
+func newApp(reqCtx *proto.RequestContext, invocationToken string) (App, error) {
 	target, token, err := hostServiceTarget("app")
 	if err != nil {
 		return nil, err
@@ -79,12 +91,13 @@ func NewApp(invocationToken string) (App, error) {
 	return &appClient{
 		client:          client,
 		invocationToken: strings.TrimSpace(invocationToken),
+		context:         cloneRequestContext(reqCtx),
 	}, nil
 }
 
-// AppFromContext returns an App using the context invocation token.
+// AppFromContext returns an App using the current provider request context.
 func AppFromContext(ctx context.Context) (App, error) {
-	return NewApp(InvocationTokenFromContext(ctx))
+	return newApp(requestContextFromContext(ctx), InvocationTokenFromContext(ctx))
 }
 
 // Close is a no-op because this capability uses shared transport.
@@ -113,6 +126,7 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 		App:             app,
 		Operation:       operation,
 		Params:          msg,
+		Context:         cloneRequestContext(c.context),
 	}
 	if opts != nil {
 		req.Connection = opts.Connection
@@ -124,7 +138,11 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 			if err != nil {
 				return nil, fmt.Errorf("app: encode workflow context: %w", err)
 			}
-			req.Workflow = workflow
+			if req.Context == nil {
+				req.Workflow = workflow
+			} else {
+				req.Context.Workflow = workflow
+			}
 		}
 	}
 
@@ -166,6 +184,7 @@ func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, var
 		App:             app,
 		Document:        document,
 		Variables:       msg,
+		Context:         cloneRequestContext(c.context),
 	}
 	if opts != nil {
 		req.Connection = opts.Connection
@@ -237,4 +256,12 @@ func encodeInvocationGrants(grants []InvocationGrant) []*proto.AppInvocationGran
 		return nil
 	}
 	return out
+}
+
+func cloneRequestContext(reqCtx *proto.RequestContext) *proto.RequestContext {
+	if reqCtx == nil {
+		return nil
+	}
+	cloned, _ := gproto.Clone(reqCtx).(*proto.RequestContext)
+	return cloned
 }

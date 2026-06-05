@@ -64,7 +64,6 @@ export const app = defineApp({
         credentialMode: s.string(),
         accessPolicy: s.string(),
         accessRole: s.string(),
-        invocationToken: s.string(),
         idempotencyKey: s.string(),
       }),
       handler(input, request) {
@@ -80,7 +79,6 @@ export const app = defineApp({
           credentialMode: request.credential.mode,
           accessPolicy: request.access.policy,
           accessRole: request.access.role,
-          invocationToken: request.invocationToken,
           idempotencyKey: request.idempotencyKey,
         });
       },

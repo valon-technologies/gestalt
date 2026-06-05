@@ -86,7 +86,7 @@ func TestWorkflowRuntimeSkipsConfiguredProviderPublishAfterFailure(t *testing.T)
 func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testing.T) {
 	t.Parallel()
 
-	hostServices, invTokens, err := buildProviderHostServices("metadata", Deps{
+	hostServices, _, err := buildProviderHostServices("metadata", Deps{
 		Authorization: &recordingAuthorizationProvider{},
 		Services: &coredata.Services{
 			ExternalCredentials: coretesting.NewStubExternalCredentialProvider(),
@@ -94,9 +94,6 @@ func TestBuildProviderHostServicesDoesNotRequireConfiguredEncryptionKey(t *testi
 	})
 	if err != nil {
 		t.Fatalf("buildProviderHostServices: %v", err)
-	}
-	if invTokens == nil {
-		t.Fatal("invocation token manager is nil")
 	}
 
 	names := hostServiceNames(hostServices)

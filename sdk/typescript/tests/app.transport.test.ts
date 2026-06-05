@@ -10,55 +10,36 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  ExchangeInvocationTokenResponseSchema,
-  OperationResultSchema,
   App as AppService,
+  OperationResultSchema,
+  RequestContextSchema,
+  SubjectContextSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
+  App,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
-  App,
   request,
 } from "../src/index.ts";
+import { structFromObject } from "../src/protocol.ts";
 import { removeTempDir } from "./helpers.ts";
 
-interface IssueLookupParams {
-  issue_number: number;
-}
-
-test("App forwards invocation tokens from strings and Request objects", async () => {
+test("App forwards request context to operation and GraphQL calls", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-app-"));
   const socketPath = join(tempDir, "plugin-app.sock");
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
-    invocationToken: string;
     app: string;
     operation: string;
-    params: Record<string, unknown>;
-    connection: string;
-    instance: string;
-    idempotencyKey: string;
+    subjectId: string;
     workflowRunId?: string;
-    workflowKeys?: string[];
+    idempotencyKey: string;
   }> = [];
   const graphqlCalls: Array<{
-    invocationToken: string;
     app: string;
     document: string;
-    variables: Record<string, unknown>;
-    connection: string;
-    instance: string;
+    subjectId: string;
     idempotencyKey: string;
-  }> = [];
-  const exchanges: Array<{
-    parentInvocationToken: string;
-    grants: Array<{
-      app: string;
-      operations: string[];
-      surfaces: string[];
-      allOperations: boolean;
-    }>;
-    ttlSeconds: bigint;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -69,33 +50,15 @@ test("App forwards invocation tokens from strings and Request objects", async ()
       router.service(
         AppService,
         {
-          async exchangeInvocationToken(input) {
-            exchanges.push({
-              parentInvocationToken: input.parentInvocationToken,
-              grants: input.grants.map((grant) => ({
-                app: grant.app,
-                operations: [...grant.operations],
-                surfaces: [...grant.surfaces],
-                allOperations: grant.allOperations,
-              })),
-              ttlSeconds: input.ttlSeconds,
-            });
-            return create(ExchangeInvocationTokenResponseSchema, {
-              invocationToken: `${input.parentInvocationToken}:child`,
-            });
-          },
           async invoke(input) {
-            const params = Object.fromEntries(Object.entries(input.params ?? {}));
             calls.push({
-              invocationToken: input.invocationToken,
               app: input.app,
               operation: input.operation,
-              params,
-              connection: input.connection,
-              instance: input.instance,
+              subjectId: input.context?.subject?.id ?? "",
+              ...(typeof input.context?.workflow?.runId === "string"
+                ? { workflowRunId: input.context.workflow.runId }
+                : {}),
               idempotencyKey: input.idempotencyKey,
-              ...(typeof input.workflow?.runId === "string" ? { workflowRunId: input.workflow.runId } : {}),
-              ...(input.workflow !== undefined ? { workflowKeys: Object.keys(input.workflow).sort() } : {}),
             });
             return create(OperationResultSchema, {
               status: 207,
@@ -105,36 +68,26 @@ test("App forwards invocation tokens from strings and Request objects", async ()
                 },
               },
               body: JSON.stringify({
-                invocationToken: input.invocationToken,
                 app: input.app,
                 operation: input.operation,
-                params,
-                connection: input.connection,
-                instance: input.instance,
+                subjectId: input.context?.subject?.id ?? "",
                 idempotencyKey: input.idempotencyKey,
               }),
             });
           },
           async invokeGraphQL(input) {
-            const variables = Object.fromEntries(Object.entries(input.variables ?? {}));
             graphqlCalls.push({
-              invocationToken: input.invocationToken,
               app: input.app,
               document: input.document,
-              variables,
-              connection: input.connection,
-              instance: input.instance,
+              subjectId: input.context?.subject?.id ?? "",
               idempotencyKey: input.idempotencyKey,
             });
             return create(OperationResultSchema, {
               status: 208,
               body: JSON.stringify({
-                invocationToken: input.invocationToken,
                 app: input.app,
                 document: input.document,
-                variables,
-                connection: input.connection,
-                instance: input.instance,
+                subjectId: input.context?.subject?.id ?? "",
                 idempotencyKey: input.idempotencyKey,
               }),
             });
@@ -155,193 +108,69 @@ test("App forwards invocation tokens from strings and Request objects", async ()
     });
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
-
-    const fromHandle = new App("invocation-token-123");
-    const childToken = await fromHandle.exchangeInvocationToken({
-      grants: [
-        {
-          app: "github",
-          operations: ["get_issue"],
-        },
-        {
-          app: "linear",
-          surfaces: ["graphql"],
-        },
-        {
-          app: "google_sheets",
-          allOperations: true,
-        },
-      ],
-      ttlSeconds: 45,
+    const context = create(RequestContextSchema, {
+      subject: create(SubjectContextSchema, {
+        id: "user:user-123",
+      }),
+      workflow: structFromObject({
+        provider: "local",
+        runId: "run-123",
+      }),
     });
-    expect(childToken).toBe("invocation-token-123:child");
+    const app = new App(
+      request("", {}, {}, {}, {}, {}, "", "request-key", {}, {}, [], false, context),
+    );
 
-    const issueLookupParams: IssueLookupParams = {
-      issue_number: 42,
-    };
-    const first = await fromHandle.invoke(
+    const first = await app.invoke(
       "github",
       "get_issue",
-      issueLookupParams,
+      { issue_number: 42 },
       {
         connection: "work",
         instance: "secondary",
         idempotencyKey: " issue-42-create ",
       },
     );
-
     expect(first.status).toBe(207);
     expect(first.headers).toEqual({
       Location: ["https://example.test/created"],
     });
     expect(JSON.parse(first.body)).toEqual({
-      invocationToken: "invocation-token-123",
       app: "github",
       operation: "get_issue",
-      params: {
-        issue_number: 42,
-      },
-      connection: "work",
-      instance: "secondary",
+      subjectId: "user:user-123",
       idempotencyKey: "issue-42-create",
     });
 
-    const fromRequest = new App(
-      request("tok", {}, {}, {}, {}, {}, "invocation-token-456"),
-    );
-    const second = await fromRequest.invoke("slack", "post_message", {
-      channel: "eng",
-      text: "hello",
-      nested: Object.freeze({ urgent: true }),
-    });
-
-    expect(second.status).toBe(207);
-    expect(JSON.parse(second.body)).toEqual({
-      invocationToken: "invocation-token-456",
-      app: "slack",
-      operation: "post_message",
-      params: {
-        channel: "eng",
-        text: "hello",
-        nested: { urgent: true },
-      },
-      connection: "",
-      instance: "",
-      idempotencyKey: "",
-    });
-
-    await expect(
-      fromRequest.invoke("slack", "bad", { when: new Date() } as any),
-    ).rejects.toThrow(TypeError);
-
-    const fromWorkflow = new App(
-      request("", {}, {}, {}, {}, {
-        provider: "local",
-        runId: "run-123",
-        runAs: { id: "service_account:caller-supplied" },
-        trigger: { event: { data: { ignored: true } } },
-      }),
-    );
-    await fromWorkflow.invoke("testApp", "runWorkflowStep");
-
-    const graphql = await fromRequest.invokeGraphQL(
+    const graphql = await app.invokeGraphQL(
       "linear",
-      "query Viewer($team: String!) { viewer(team: $team) { id } }",
+      "query Viewer { viewer { id } }",
       {
-        variables: { team: "eng" },
-        connection: "workspace",
         idempotencyKey: " graphql-call-42 ",
       },
     );
-
     expect(graphql.status).toBe(208);
     expect(JSON.parse(graphql.body)).toEqual({
-      invocationToken: "invocation-token-456",
       app: "linear",
-      document: "query Viewer($team: String!) { viewer(team: $team) { id } }",
-      variables: {
-        team: "eng",
-      },
-      connection: "workspace",
-      instance: "",
+      document: "query Viewer { viewer { id } }",
+      subjectId: "user:user-123",
       idempotencyKey: "graphql-call-42",
     });
 
-    expect(exchanges).toEqual([
-      {
-        parentInvocationToken: "invocation-token-123",
-        grants: [
-          {
-            app: "github",
-            operations: ["get_issue"],
-            surfaces: [],
-            allOperations: false,
-          },
-          {
-            app: "linear",
-            operations: [],
-            surfaces: ["graphql"],
-            allOperations: false,
-          },
-          {
-            app: "google_sheets",
-            operations: [],
-            surfaces: [],
-            allOperations: true,
-          },
-        ],
-        ttlSeconds: 45n,
-      },
-    ]);
-
     expect(calls).toEqual([
       {
-        invocationToken: "invocation-token-123",
         app: "github",
         operation: "get_issue",
-        params: {
-          issue_number: 42,
-        },
-        connection: "work",
-        instance: "secondary",
+        subjectId: "user:user-123",
+        workflowRunId: "run-123",
         idempotencyKey: "issue-42-create",
       },
-      {
-        invocationToken: "invocation-token-456",
-        app: "slack",
-        operation: "post_message",
-        params: {
-          channel: "eng",
-          text: "hello",
-          nested: { urgent: true },
-        },
-        connection: "",
-        instance: "",
-        idempotencyKey: "",
-      },
-      {
-        invocationToken: "",
-        app: "testApp",
-        operation: "runWorkflowStep",
-        params: {},
-        connection: "",
-        instance: "",
-        idempotencyKey: "",
-        workflowRunId: "run-123",
-        workflowKeys: ["provider", "providerName", "runId"],
-      },
     ]);
-
     expect(graphqlCalls).toEqual([
       {
-        invocationToken: "invocation-token-456",
         app: "linear",
-        document: "query Viewer($team: String!) { viewer(team: $team) { id } }",
-        variables: {
-          team: "eng",
-        },
-        connection: "workspace",
-        instance: "",
+        document: "query Viewer { viewer { id } }",
+        subjectId: "user:user-123",
         idempotencyKey: "graphql-call-42",
       },
     ]);
@@ -365,7 +194,7 @@ test("App still requires host service socket configuration", () => {
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new App("   ")).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
+    expect(() => new App(request())).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];
@@ -414,9 +243,9 @@ test("App honors tcp target env and relay token env", async () => {
           return create(OperationResultSchema, {
             status: 204,
             body: JSON.stringify({
-              invocationToken: input.invocationToken,
               app: input.app,
               operation: input.operation,
+              subjectId: input.context?.subject?.id ?? "",
             }),
           });
         },
@@ -443,14 +272,18 @@ test("App honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const app = new App("invoke-token");
+    const app = new App(request("", {}, {}, {}, {}, {}, "", "", {}, {}, [], false, create(RequestContextSchema, {
+      subject: create(SubjectContextSchema, {
+        id: "user:user-123",
+      }),
+    })));
     const response = await app.invoke("github", "get_issue");
 
     expect(response.status).toBe(204);
     expect(JSON.parse(response.body)).toEqual({
-      invocationToken: "invoke-token",
       app: "github",
       operation: "get_issue",
+      subjectId: "user:user-123",
     });
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {

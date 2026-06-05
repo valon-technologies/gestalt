@@ -26,6 +26,7 @@ type AgentHostListToolsInput struct {
 	SessionID string
 	TurnID    string
 	RunGrant  string
+	Context   *proto.RequestContext
 	PageSize  int32
 	PageToken string
 	Query     string
@@ -41,6 +42,7 @@ type AgentHostExecuteToolInput struct {
 	Arguments      any
 	RunGrant       string
 	IdempotencyKey string
+	Context        *proto.RequestContext
 }
 
 // AgentHostResolveConnectionInput contains plain fields for resolving a
@@ -51,6 +53,7 @@ type AgentHostResolveConnectionInput struct {
 	Connection string
 	Instance   string
 	RunGrant   string
+	Context    *proto.RequestContext
 }
 
 var sharedAgentHostTransport sharedManagerTransport[proto.AgentHostClient]
@@ -97,6 +100,7 @@ func (c *agentHost) ExecuteTool(ctx context.Context, input AgentHostExecuteToolI
 		Arguments:      arguments,
 		RunGrant:       input.RunGrant,
 		IdempotencyKey: input.IdempotencyKey,
+		Context:        agentHostRequestContext(ctx, input.Context),
 	})
 	if err != nil {
 		return nil, err
@@ -114,6 +118,7 @@ func (c *agentHost) ListTools(ctx context.Context, input AgentHostListToolsInput
 		PageSize:  input.PageSize,
 		PageToken: input.PageToken,
 		Query:     input.Query,
+		Context:   agentHostRequestContext(ctx, input.Context),
 	})
 	if err != nil {
 		return nil, err
@@ -130,9 +135,17 @@ func (c *agentHost) ResolveConnection(ctx context.Context, input AgentHostResolv
 		Connection: input.Connection,
 		Instance:   input.Instance,
 		RunGrant:   input.RunGrant,
+		Context:    agentHostRequestContext(ctx, input.Context),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return resolvedAgentConnectionFromProto(resp), nil
+}
+
+func agentHostRequestContext(ctx context.Context, explicit *proto.RequestContext) *proto.RequestContext {
+	if explicit != nil {
+		return cloneRequestContext(explicit)
+	}
+	return requestContextFromContext(ctx)
 }

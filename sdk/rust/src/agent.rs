@@ -13,7 +13,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
-use crate::api::{RuntimeMetadata, Subject};
+use crate::api::{RuntimeMetadata, Subject, current_request_context, scope_request_context};
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
@@ -50,7 +50,7 @@ pub struct AgentHostListToolsInput {
     pub session_id: String,
     /// Agent turn ID.
     pub turn_id: String,
-    /// Optional run grant scoped to this turn.
+    /// Legacy host grant scoped to this turn.
     pub run_grant: String,
     /// Maximum number of tools to return.
     pub page_size: i32,
@@ -73,7 +73,7 @@ pub struct AgentHostExecuteToolInput {
     pub tool_id: String,
     /// JSON object to pass as tool arguments.
     pub arguments: Option<serde_json::Value>,
-    /// Optional run grant scoped to this turn.
+    /// Legacy host grant scoped to this turn.
     pub run_grant: String,
     /// Caller-supplied idempotency key for retries.
     pub idempotency_key: String,
@@ -104,7 +104,7 @@ pub struct AgentHostResolveConnectionInput {
     pub connection: String,
     /// Optional connection instance.
     pub instance: String,
-    /// Optional run grant scoped to this turn.
+    /// Legacy host grant scoped to this turn.
     pub run_grant: String,
 }
 
@@ -992,6 +992,7 @@ pub trait AgentHostApi: Send {
 /// Client for the agent host service available inside agent providers.
 pub struct AgentHost {
     client: ProtoAgentHostClient<AgentHostTransport>,
+    context: Option<pb::RequestContext>,
 }
 
 impl AgentHost {
@@ -1019,7 +1020,14 @@ impl AgentHost {
                 channel,
                 agent_host_relay_token_interceptor(relay_token.trim())?,
             ),
+            context: current_request_context(),
         })
+    }
+
+    /// Returns a copy of this client that forwards the supplied request context on host calls.
+    pub fn with_request_context(mut self, context: Option<pb::RequestContext>) -> Self {
+        self.context = context;
+        self
     }
 
     /// Executes a host tool using native request fields.
@@ -1037,6 +1045,7 @@ impl AgentHost {
                 .map(protocol::struct_from_json)
                 .transpose()?,
             run_grant: input.run_grant,
+            context: self.context.clone(),
             idempotency_key: input.idempotency_key,
         };
         Ok(execute_tool_response_from_proto(
@@ -1061,6 +1070,7 @@ impl AgentHost {
             session_id: input.session_id,
             turn_id: input.turn_id,
             run_grant: input.run_grant,
+            context: self.context.clone(),
             page_size: input.page_size,
             page_token: input.page_token,
             query: input.query,
@@ -1089,6 +1099,7 @@ impl AgentHost {
             connection: input.connection,
             instance: input.instance,
             run_grant: input.run_grant,
+            context: self.context.clone(),
         };
         resolved_connection_from_proto(self.client.resolve_connection(request).await?.into_inner())
             .map_err(AgentHostError::Input)
@@ -1315,6 +1326,7 @@ fn agent_run_as_context_to_proto(value: Option<Subject>) -> Option<pb::SubjectCo
         credential_subject_id: value.credential_subject_id,
         email: value.email,
         display_name: value.display_name,
+        ..Default::default()
     })
 }
 
@@ -1986,11 +1998,15 @@ where
         &self,
         request: GrpcRequest<pb::CreateAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        let session = self
-            .provider
-            .create_session(create_session_request_from_proto(request.into_inner()))
-            .await
-            .map_err(|error| rpc_status("agent create session", error))?;
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let session = scope_request_context(
+            context,
+            self.provider
+                .create_session(create_session_request_from_proto(request)),
+        )
+        .await
+        .map_err(|error| rpc_status("agent create session", error))?;
         Ok(GrpcResponse::new(session_to_proto(session).map_err(
             |error| rpc_status("agent create session", error),
         )?))
@@ -2000,18 +2016,18 @@ where
         &self,
         request: GrpcRequest<pb::GetAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        let session = self
-            .provider
-            .get_session({
-                let request = request.into_inner();
-                GetAgentProviderSessionRequest {
-                    session_id: request.session_id,
-                    subject: agent_subject_from_proto(request.subject),
-                    invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent get session", error))?;
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let session = scope_request_context(
+            context,
+            self.provider.get_session(GetAgentProviderSessionRequest {
+                session_id: request.session_id,
+                subject: agent_subject_from_proto(request.subject),
+                invocation_token: request.invocation_token,
+            }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent get session", error))?;
         Ok(GrpcResponse::new(
             session_to_proto(session).map_err(|error| rpc_status("agent get session", error))?,
         ))
@@ -2021,21 +2037,22 @@ where
         &self,
         request: GrpcRequest<pb::ListAgentProviderSessionsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderSessionsResponse>, Status> {
-        let response = self
-            .provider
-            .list_sessions({
-                let request = request.into_inner();
-                ListAgentProviderSessionsRequest {
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let response = scope_request_context(
+            context,
+            self.provider
+                .list_sessions(ListAgentProviderSessionsRequest {
                     subject: agent_subject_from_proto(request.subject),
                     session_ids: request.session_ids,
                     state: AgentSessionState::from_i32_lossy(request.state),
                     limit: request.limit,
                     summary_only: request.summary_only,
                     invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent list sessions", error))?;
+                }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent list sessions", error))?;
         Ok(GrpcResponse::new(pb::ListAgentProviderSessionsResponse {
             sessions: response
                 .sessions
@@ -2050,21 +2067,22 @@ where
         &self,
         request: GrpcRequest<pb::UpdateAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentSession>, Status> {
-        let session = self
-            .provider
-            .update_session({
-                let request = request.into_inner();
-                UpdateAgentProviderSessionRequest {
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let session = scope_request_context(
+            context,
+            self.provider
+                .update_session(UpdateAgentProviderSessionRequest {
                     session_id: request.session_id,
                     client_ref: request.client_ref,
                     state: AgentSessionState::from_i32_lossy(request.state),
                     metadata: json_from_struct(request.metadata),
                     subject: agent_subject_from_proto(request.subject),
                     invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent update session", error))?;
+                }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent update session", error))?;
         Ok(GrpcResponse::new(session_to_proto(session).map_err(
             |error| rpc_status("agent update session", error),
         )?))
@@ -2074,14 +2092,17 @@ where
         &self,
         request: GrpcRequest<pb::CreateAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        let turn = self
-            .provider
-            .create_turn(
-                create_turn_request_from_proto(request.into_inner())
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let turn = scope_request_context(
+            context,
+            self.provider.create_turn(
+                create_turn_request_from_proto(request)
                     .map_err(|error| rpc_status("agent create turn", error))?,
-            )
-            .await
-            .map_err(|error| rpc_status("agent create turn", error))?;
+            ),
+        )
+        .await
+        .map_err(|error| rpc_status("agent create turn", error))?;
         Ok(GrpcResponse::new(
             turn_to_proto(turn).map_err(|error| rpc_status("agent create turn", error))?,
         ))
@@ -2091,18 +2112,18 @@ where
         &self,
         request: GrpcRequest<pb::GetAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        let turn = self
-            .provider
-            .get_turn({
-                let request = request.into_inner();
-                GetAgentProviderTurnRequest {
-                    turn_id: request.turn_id,
-                    subject: agent_subject_from_proto(request.subject),
-                    invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent get turn", error))?;
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let turn = scope_request_context(
+            context,
+            self.provider.get_turn(GetAgentProviderTurnRequest {
+                turn_id: request.turn_id,
+                subject: agent_subject_from_proto(request.subject),
+                invocation_token: request.invocation_token,
+            }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent get turn", error))?;
         Ok(GrpcResponse::new(
             turn_to_proto(turn).map_err(|error| rpc_status("agent get turn", error))?,
         ))
@@ -2112,22 +2133,22 @@ where
         &self,
         request: GrpcRequest<pb::ListAgentProviderTurnsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnsResponse>, Status> {
-        let response = self
-            .provider
-            .list_turns({
-                let request = request.into_inner();
-                ListAgentProviderTurnsRequest {
-                    session_id: request.session_id,
-                    subject: agent_subject_from_proto(request.subject),
-                    turn_ids: request.turn_ids,
-                    status: AgentExecutionStatus::from_i32_lossy(request.status),
-                    limit: request.limit,
-                    summary_only: request.summary_only,
-                    invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent list turns", error))?;
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let response = scope_request_context(
+            context,
+            self.provider.list_turns(ListAgentProviderTurnsRequest {
+                session_id: request.session_id,
+                subject: agent_subject_from_proto(request.subject),
+                turn_ids: request.turn_ids,
+                status: AgentExecutionStatus::from_i32_lossy(request.status),
+                limit: request.limit,
+                summary_only: request.summary_only,
+                invocation_token: request.invocation_token,
+            }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent list turns", error))?;
         Ok(GrpcResponse::new(pb::ListAgentProviderTurnsResponse {
             turns: response
                 .turns
@@ -2142,19 +2163,19 @@ where
         &self,
         request: GrpcRequest<pb::CancelAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentTurn>, Status> {
-        let turn = self
-            .provider
-            .cancel_turn({
-                let request = request.into_inner();
-                CancelAgentProviderTurnRequest {
-                    turn_id: request.turn_id,
-                    reason: request.reason,
-                    subject: agent_subject_from_proto(request.subject),
-                    invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent cancel turn", error))?;
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let turn = scope_request_context(
+            context,
+            self.provider.cancel_turn(CancelAgentProviderTurnRequest {
+                turn_id: request.turn_id,
+                reason: request.reason,
+                subject: agent_subject_from_proto(request.subject),
+                invocation_token: request.invocation_token,
+            }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent cancel turn", error))?;
         Ok(GrpcResponse::new(
             turn_to_proto(turn).map_err(|error| rpc_status("agent cancel turn", error))?,
         ))
@@ -2164,20 +2185,21 @@ where
         &self,
         request: GrpcRequest<pb::ListAgentProviderTurnEventsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderTurnEventsResponse>, Status> {
-        let response = self
-            .provider
-            .list_turn_events({
-                let request = request.into_inner();
-                ListAgentProviderTurnEventsRequest {
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let response = scope_request_context(
+            context,
+            self.provider
+                .list_turn_events(ListAgentProviderTurnEventsRequest {
                     turn_id: request.turn_id,
                     after_seq: request.after_seq,
                     limit: request.limit,
                     subject: agent_subject_from_proto(request.subject),
                     invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent list turn events", error))?;
+                }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent list turn events", error))?;
         Ok(GrpcResponse::new(pb::ListAgentProviderTurnEventsResponse {
             events: response
                 .events
@@ -2192,18 +2214,19 @@ where
         &self,
         request: GrpcRequest<pb::GetAgentProviderInteractionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        let interaction = self
-            .provider
-            .get_interaction({
-                let request = request.into_inner();
-                GetAgentProviderInteractionRequest {
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let interaction = scope_request_context(
+            context,
+            self.provider
+                .get_interaction(GetAgentProviderInteractionRequest {
                     interaction_id: request.interaction_id,
                     subject: agent_subject_from_proto(request.subject),
                     invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent get interaction", error))?;
+                }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent get interaction", error))?;
         Ok(GrpcResponse::new(
             interaction_to_proto(interaction)
                 .map_err(|error| rpc_status("agent get interaction", error))?,
@@ -2214,18 +2237,19 @@ where
         &self,
         request: GrpcRequest<pb::ListAgentProviderInteractionsRequest>,
     ) -> std::result::Result<GrpcResponse<pb::ListAgentProviderInteractionsResponse>, Status> {
-        let response = self
-            .provider
-            .list_interactions({
-                let request = request.into_inner();
-                ListAgentProviderInteractionsRequest {
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let response = scope_request_context(
+            context,
+            self.provider
+                .list_interactions(ListAgentProviderInteractionsRequest {
                     turn_id: request.turn_id,
                     subject: agent_subject_from_proto(request.subject),
                     invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent list interactions", error))?;
+                }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent list interactions", error))?;
         Ok(GrpcResponse::new(
             pb::ListAgentProviderInteractionsResponse {
                 interactions: response
@@ -2242,19 +2266,20 @@ where
         &self,
         request: GrpcRequest<pb::ResolveAgentProviderInteractionRequest>,
     ) -> std::result::Result<GrpcResponse<pb::AgentInteraction>, Status> {
-        let interaction = self
-            .provider
-            .resolve_interaction({
-                let request = request.into_inner();
-                ResolveAgentProviderInteractionRequest {
+        let request = request.into_inner();
+        let context = request.context.clone();
+        let interaction = scope_request_context(
+            context,
+            self.provider
+                .resolve_interaction(ResolveAgentProviderInteractionRequest {
                     interaction_id: request.interaction_id,
                     resolution: json_from_struct(request.resolution),
                     subject: agent_subject_from_proto(request.subject),
                     invocation_token: request.invocation_token,
-                }
-            })
-            .await
-            .map_err(|error| rpc_status("agent resolve interaction", error))?;
+                }),
+        )
+        .await
+        .map_err(|error| rpc_status("agent resolve interaction", error))?;
         Ok(GrpcResponse::new(
             interaction_to_proto(interaction)
                 .map_err(|error| rpc_status("agent resolve interaction", error))?,

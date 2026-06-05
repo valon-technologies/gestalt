@@ -9,32 +9,28 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
 type ExecConfig struct {
-	Command          string
-	Args             []string
-	Workdir          string
-	Env              map[string]string
-	StaticSpec       StaticProviderSpec
-	Config           map[string]any
-	Egress           egress.Policy
-	HostBinary       string
-	Cleanup          func()
-	HostServices     []runtimehost.HostService
-	PublicBaseURL    string
-	InvocationTokens *appaccessservice.InvocationTokenManager
-	InvocationGrants appaccessservice.InvocationGrants
-	WorkflowGrants   workflowgrants.Grants
-	ProviderName     string
-	Telemetry        metricutil.TelemetryProviders
+	Command       string
+	Args          []string
+	Workdir       string
+	Env           map[string]string
+	StaticSpec    StaticProviderSpec
+	Config        map[string]any
+	Egress        egress.Policy
+	HostBinary    string
+	Cleanup       func()
+	HostServices  []runtimehost.HostService
+	PublicBaseURL string
+	ProviderName  string
+	Telemetry     metricutil.TelemetryProviders
 }
 
 func NewExecutable(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
@@ -46,13 +42,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
 	opts := []RemoteProviderOption{
 		WithCloser(process),
 		WithHostContext(cfg.PublicBaseURL),
-	}
-	if cfg.InvocationTokens != nil {
-		opts = append(opts,
-			WithInvocationTokens(cfg.InvocationTokens),
-			WithInvocationTokenSubject(cfg.StaticSpec.Name, cfg.InvocationGrants),
-			WithWorkflowManagerGrants(cfg.WorkflowGrants),
-		)
+		WithCallerProvider(invocation.ProviderKindApp, cfg.StaticSpec.Name),
 	}
 	prov, err := NewRemote(
 		ctx,

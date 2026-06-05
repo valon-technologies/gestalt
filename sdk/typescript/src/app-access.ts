@@ -27,6 +27,7 @@ export interface AppInvokeOptions {
   /** Credential mode requested for the target operation. */
   credentialMode?: ConnectionMode;
 }
+
 /** Grant included when exchanging an invocation token for a child token. */
 export interface AppInvocationGrant {
   /** App name that the child token may invoke. */
@@ -68,8 +69,9 @@ export interface App {
 /**
  * Transport-backed implementation for invoking sibling app operations.
  *
- * The constructor accepts either a Gestalt request or an invocation token. The
- * token is attached to every operation, GraphQL, and token-exchange request.
+ * The constructor accepts either a Gestalt request or an invocation token. A
+ * request forwards both its host request context and legacy invocation token
+ * when available.
  */
 class AppImpl implements App {
   private readonly client: Client<typeof AppService>;
@@ -125,6 +127,7 @@ class AppImpl implements App {
 
     const response = await this.client.invokeGraphQL({
       invocationToken: this.invocationContext.invocationToken,
+      context: this.invocationContext.context,
       app,
       document: trimmedDocument,
       ...(options?.variables !== undefined

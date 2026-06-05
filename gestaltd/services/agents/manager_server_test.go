@@ -5,9 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -16,15 +14,6 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
-
-type staticWorkflowRunResolver struct {
-	run *coreworkflow.Run
-	err error
-}
-
-func (r staticWorkflowRunResolver) ResolveWorkflowRun(context.Context, string, string) (*coreworkflow.Run, error) {
-	return r.run, r.err
-}
 
 type recordingManagerService struct {
 	createSession func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
@@ -92,27 +81,15 @@ func (s *recordingManagerService) ResolveInteraction(context.Context, *principal
 func TestManagerServerMapsSessionStartUnsupportedToFailedPrecondition(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-session-start-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user-1",
-		Kind:      principal.KindUser,
-	})
-	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createSession: func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 			return nil, agentmanager.ErrAgentSessionStartUnsupported
 		},
-	}, tokens)
+	})
 
-	_, err = server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		InvocationToken: token,
-		ProviderName:    "managed",
+	_, err := server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		Context:      agentManagerRequestContext("caller-plugin", "user-1", nil),
+		ProviderName: "managed",
 	})
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("CreateSession code = %v, want %v", status.Code(err), codes.FailedPrecondition)
@@ -122,27 +99,15 @@ func TestManagerServerMapsSessionStartUnsupportedToFailedPrecondition(t *testing
 func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-metadata-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user-1",
-		Kind:      principal.KindUser,
-	})
-	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createSession: func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 			return nil, agentmanager.ErrAgentSessionMetadataInvalid
 		},
-	}, tokens)
+	})
 
-	_, err = server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		InvocationToken: token,
-		ProviderName:    "managed",
+	_, err := server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		Context:      agentManagerRequestContext("caller-plugin", "user-1", nil),
+		ProviderName: "managed",
 	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("CreateSession code = %v, want %v", status.Code(err), codes.InvalidArgument)
@@ -152,24 +117,9 @@ func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) 
 func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	t.Parallel()
 
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-turn-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user-1",
-		Kind:      principal.KindUser,
-	})
-	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-	workflow, err := structpb.NewStruct(map[string]any{
+	workflow := map[string]any{
 		"providerName": "indexeddb",
 		"runId":        "run-123",
-	})
-	if err != nil {
-		t.Fatalf("NewStruct: %v", err)
 	}
 	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createTurn: func(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -194,18 +144,17 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 				Status:    coreagent.ExecutionStatusRunning,
 			}, nil
 		},
-	}, tokens)
+	})
 
 	schema, err := structpb.NewStruct(map[string]any{"type": "object"})
 	if err != nil {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	_, err = server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds:  1,
-		SessionId:       "session-1",
-		InvocationToken: token,
-		Workflow:        workflow,
-		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+		Context:        agentManagerRequestContext("caller-plugin", "user-1", workflow),
+		TimeoutSeconds: 1,
+		SessionId:      "session-1",
+		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 		Output: &proto.AgentOutput{Kind: &proto.AgentOutput_Structured{
 			Structured: &proto.AgentStructuredOutput{Schema: schema},
 		}},
@@ -215,189 +164,8 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
-func TestManagerServerCreateTurnUsesWorkflowRunAsWithoutInvocationTokenFromAppStep(t *testing.T) {
-	t.Parallel()
-
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-workflow-runas-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	workflow, err := structpb.NewStruct(map[string]any{
-		"providerName": "indexeddb",
-		"runId":        "run-123",
-		"runAs": map[string]any{
-			"id":   "user:forged",
-			"kind": "user",
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewStruct: %v", err)
-	}
-	server := NewProviderServer("agent-host", &recordingManagerService{
-		createSession: func(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
-			if p == nil || p.SubjectID != "user:workflow-runner" {
-				t.Fatalf("principal = %#v, want workflow runner", p)
-			}
-			if p.TokenPermissions != nil {
-				t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", p.TokenPermissions)
-			}
-			if got := invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "runId"); got != "run-123" {
-				t.Fatalf("workflow run id = %q, want run-123", got)
-			}
-			if req.GetProviderName() != "managed" {
-				t.Fatalf("provider = %q, want managed", req.GetProviderName())
-			}
-			return &coreagent.Session{
-				ID:           "session-1",
-				ProviderName: req.GetProviderName(),
-				State:        coreagent.SessionStateActive,
-			}, nil
-		},
-		createTurn: func(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-			if p == nil || p.SubjectID != "user:workflow-runner" {
-				t.Fatalf("principal = %#v, want workflow runner", p)
-			}
-			if p.TokenPermissions != nil {
-				t.Fatalf("token permissions = %#v, want unrestricted workflow runAs principal", p.TokenPermissions)
-			}
-			if p.CredentialSubjectID != "user:workflow-runner" {
-				t.Fatalf("credential subject = %q, want workflow runner", p.CredentialSubjectID)
-			}
-			if req.GetSessionId() != "session-1" {
-				t.Fatalf("session id = %q, want session-1", req.GetSessionId())
-			}
-			if got := invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "runId"); got != "run-123" {
-				t.Fatalf("workflow run id = %q, want run-123", got)
-			}
-			return &coreagent.Turn{
-				ID:        "turn-1",
-				SessionID: req.GetSessionId(),
-				Status:    coreagent.ExecutionStatusRunning,
-			}, nil
-		},
-	}, tokens, WithWorkflowRunResolver(staticWorkflowRunResolver{
-		run: &coreworkflow.Run{
-			ID: "run-123",
-			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
-				ID: "app",
-				App: &coreworkflow.AppCall{
-					Name:      "reviewer",
-					Operation: "run",
-				},
-			}}},
-			RunAs: &core.RunAsSubject{
-				SubjectID:           "user:workflow-runner",
-				CredentialSubjectID: "user:workflow-runner",
-			},
-		},
-	}))
-
-	if _, err := server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Workflow:     workflow,
-	}); err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      "session-1",
-		Workflow:       workflow,
-	}); err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-}
-
-func TestManagerServerCreateTurnRequiresTokenOrPersistedWorkflowRunAs(t *testing.T) {
-	t.Parallel()
-
-	server := NewProviderServer("agent-host", &recordingManagerService{
-		createTurn: func(_ context.Context, _ *principal.Principal, _ *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-			t.Fatal("CreateTurn should not reach manager")
-			return nil, nil
-		},
-	}, nil)
-
-	for _, tc := range []struct {
-		name     string
-		workflow map[string]any
-	}{
-		{name: "missing workflow"},
-		{name: "missing resolver", workflow: map[string]any{"providerName": "indexeddb", "runId": "run-123"}},
-		{name: "missing provider", workflow: map[string]any{"runId": "run-123", "runAs": map[string]any{"id": "service_account:workflow-runner"}}},
-		{name: "missing run id", workflow: map[string]any{"providerName": "indexeddb", "runAs": map[string]any{"id": "service_account:workflow-runner"}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			var workflow *structpb.Struct
-			if tc.workflow != nil {
-				var err error
-				workflow, err = structpb.NewStruct(tc.workflow)
-				if err != nil {
-					t.Fatalf("NewStruct: %v", err)
-				}
-			}
-			_, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-				TimeoutSeconds: 1,
-				SessionId:      "session-1",
-				Workflow:       workflow,
-			})
-			if status.Code(err) != codes.FailedPrecondition {
-				t.Fatalf("CreateTurn code = %v, want %v (err=%v)", status.Code(err), codes.FailedPrecondition, err)
-			}
-		})
-	}
-}
-
-func TestManagerServerCreateTurnRequiresInvocationTokenCallerApp(t *testing.T) {
-	t.Parallel()
-
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-empty-caller-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user-1",
-		Kind:      principal.KindUser,
-	})
-	token, err := tokens.MintRootToken(ctx, "", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
-	server := NewProviderServer("agent-host", &recordingManagerService{
-		createTurn: func(_ context.Context, _ *principal.Principal, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
-			return &coreagent.Turn{
-				ID:        "turn-1",
-				SessionID: req.GetSessionId(),
-				Status:    coreagent.ExecutionStatusRunning,
-			}, nil
-		},
-	}, tokens)
-
-	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds:  1,
-		SessionId:       "session-1",
-		InvocationToken: token,
-	}); status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("CreateTurn status = %s, want %s (err=%v)", status.Code(err), codes.FailedPrecondition, err)
-	}
-}
-
 func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 	t.Parallel()
-
-	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-test-secret"))
-	if err != nil {
-		t.Fatalf("NewInvocationTokenManager: %v", err)
-	}
-	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID: "user-1",
-		Kind:      principal.KindUser,
-	})
-	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
-	if err != nil {
-		t.Fatalf("MintRootToken: %v", err)
-	}
 
 	service := &recordingManagerService{
 		listSessions: func(_ context.Context, p *principal.Principal, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error) {
@@ -434,22 +202,22 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 			}}, nil
 		},
 	}
-	server := NewProviderServer("caller-plugin", service, tokens)
+	server := NewProviderServer("caller-plugin", service)
 
 	if _, err := server.ListSessions(context.Background(), &proto.ListAgentProviderSessionsRequest{
-		InvocationToken: token,
-		Limit:           -1,
-		SummaryOnly:     true,
+		Context:     agentManagerRequestContext("caller-plugin", "user-1", nil),
+		Limit:       -1,
+		SummaryOnly: true,
 	}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("ListSessions negative limit code = %v, want %v", status.Code(err), codes.InvalidArgument)
 	}
 
 	sessions, err := server.ListSessions(context.Background(), &proto.ListAgentProviderSessionsRequest{
-		ProviderName:    " managed ",
-		InvocationToken: token,
-		State:           proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
-		Limit:           7,
-		SummaryOnly:     true,
+		Context:      agentManagerRequestContext("caller-plugin", "user-1", nil),
+		ProviderName: " managed ",
+		State:        proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
+		Limit:        7,
+		SummaryOnly:  true,
 	})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
@@ -461,20 +229,20 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 	}
 
 	if _, err := server.ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{
-		SessionId:       "session-1",
-		InvocationToken: token,
-		Limit:           -1,
-		SummaryOnly:     true,
+		Context:     agentManagerRequestContext("caller-plugin", "user-1", nil),
+		SessionId:   "session-1",
+		Limit:       -1,
+		SummaryOnly: true,
 	}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("ListTurns negative limit code = %v, want %v", status.Code(err), codes.InvalidArgument)
 	}
 
 	turns, err := server.ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{
-		SessionId:       "session-1",
-		InvocationToken: token,
-		Status:          proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
-		Limit:           3,
-		SummaryOnly:     true,
+		Context:     agentManagerRequestContext("caller-plugin", "user-1", nil),
+		SessionId:   "session-1",
+		Status:      proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,
+		Limit:       3,
+		SummaryOnly: true,
 	})
 	if err != nil {
 		t.Fatalf("ListTurns: %v", err)
@@ -487,4 +255,25 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 			t.Fatalf("summary turn = %#v, want manager result preserved", turn)
 		}
 	}
+}
+
+func agentManagerRequestContext(callerApp, subjectID string, workflow map[string]any) *proto.RequestContext {
+	ctx := &proto.RequestContext{
+		Caller: &proto.ProviderContext{
+			Kind: string(invocation.ProviderKindApp),
+			Name: callerApp,
+		},
+		Subject: &proto.SubjectContext{
+			Id:                  subjectID,
+			CredentialSubjectId: subjectID,
+		},
+	}
+	if workflow != nil {
+		value, err := structpb.NewStruct(workflow)
+		if err != nil {
+			panic(err)
+		}
+		ctx.Workflow = value
+	}
+	return ctx
 }

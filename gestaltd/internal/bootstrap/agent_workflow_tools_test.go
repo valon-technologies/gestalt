@@ -8,6 +8,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
@@ -27,7 +28,8 @@ func TestWorkflowSystemToolApplyDefinitionCallsManager(t *testing.T) {
 	tool := mustWorkflowTool(t, workflowSystemToolDefinitionsApply)
 	resp, err := tools.ExecuteSystemTool(context.Background(), agentSystemToolExecutionRequest{
 		Principal:      workflowToolPrincipal(),
-		CallerAppName:  "slack",
+		CallerKind:     invocation.ProviderKindApp,
+		CallerName:     "slack",
 		ProviderName:   "agent",
 		Tool:           tool,
 		ToolRefs:       []coreagent.ToolRef{{App: "github", Operation: "issues.triage"}},
@@ -60,6 +62,9 @@ func TestWorkflowSystemToolApplyDefinitionCallsManager(t *testing.T) {
 	if len(manager.applied.Spec.Target.Steps) != 1 || manager.applied.Spec.Target.Steps[0].App == nil {
 		t.Fatalf("target = %#v, want one app step", manager.applied.Spec.Target)
 	}
+	if manager.applied.Caller.Kind != invocation.ProviderKindApp || manager.applied.Caller.Name != "slack" {
+		t.Fatalf("caller = %#v, want app/slack", manager.applied.Caller)
+	}
 }
 
 func TestWorkflowSystemToolStartRunRequiresDefinitionID(t *testing.T) {
@@ -82,7 +87,8 @@ func TestWorkflowSystemToolStartRunRequiresDefinitionID(t *testing.T) {
 	tool := mustWorkflowTool(t, workflowSystemToolRunsStart)
 	resp, err := tools.ExecuteSystemTool(context.Background(), agentSystemToolExecutionRequest{
 		Principal:      workflowToolPrincipal(),
-		CallerAppName:  "slack",
+		CallerKind:     invocation.ProviderKindApp,
+		CallerName:     "slack",
 		ProviderName:   "agent",
 		Tool:           tool,
 		ToolRefs:       []coreagent.ToolRef{{App: "github", Operation: "issues.triage"}},
@@ -104,6 +110,9 @@ func TestWorkflowSystemToolStartRunRequiresDefinitionID(t *testing.T) {
 	}
 	if len(manager.started.Input) != 0 {
 		t.Fatalf("start input = %#v, want empty", manager.started.Input)
+	}
+	if manager.started.Caller.Kind != invocation.ProviderKindApp || manager.started.Caller.Name != "slack" {
+		t.Fatalf("caller = %#v, want app/slack", manager.started.Caller)
 	}
 }
 

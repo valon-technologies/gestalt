@@ -273,6 +273,7 @@ class CreateAgentProviderSessionRequest(_message.Message):
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKSPACE_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     idempotency_key: str
     model: str
@@ -286,7 +287,8 @@ class CreateAgentProviderSessionRequest(_message.Message):
     invocation_token: str
     workspace: AgentWorkspace
     workflow: _struct_pb2.Struct
-    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class AgentSessionStartConfig(_message.Message):
     __slots__ = ()
@@ -333,11 +335,13 @@ class GetAgentProviderSessionRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     subject: _app_pb2.SubjectContext
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, session_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderSessionsRequest(_message.Message):
     __slots__ = ()
@@ -349,6 +353,7 @@ class ListAgentProviderSessionsRequest(_message.Message):
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     subject: _app_pb2.SubjectContext
     session_ids: _containers.RepeatedScalarFieldContainer[str]
     state: AgentSessionState
@@ -357,7 +362,8 @@ class ListAgentProviderSessionsRequest(_message.Message):
     provider_name: str
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_ids: _Optional[_Iterable[str]] = ..., state: _Optional[_Union[AgentSessionState, str]] = ..., limit: _Optional[int] = ..., summary_only: _Optional[bool] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_ids: _Optional[_Iterable[str]] = ..., state: _Optional[_Union[AgentSessionState, str]] = ..., limit: _Optional[int] = ..., summary_only: _Optional[bool] = ..., provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderSessionsResponse(_message.Message):
     __slots__ = ()
@@ -374,6 +380,7 @@ class UpdateAgentProviderSessionRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     client_ref: str
     state: AgentSessionState
@@ -381,7 +388,8 @@ class UpdateAgentProviderSessionRequest(_message.Message):
     subject: _app_pb2.SubjectContext
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, session_id: _Optional[str] = ..., client_ref: _Optional[str] = ..., state: _Optional[_Union[AgentSessionState, str]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., client_ref: _Optional[str] = ..., state: _Optional[_Union[AgentSessionState, str]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class AgentTurn(_message.Message):
     __slots__ = ()
@@ -478,6 +486,7 @@ class CreateAgentProviderTurnRequest(_message.Message):
     TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     session_id: str
     idempotency_key: str
@@ -497,7 +506,8 @@ class CreateAgentProviderTurnRequest(_message.Message):
     tool_refs_set: bool
     output: AgentOutput
     workflow: _struct_pb2.Struct
-    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., invocation_token: _Optional[str] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ..., timeout_seconds: _Optional[int] = ..., invocation_token: _Optional[str] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class AgentTextOutput(_message.Message):
     __slots__ = ()
@@ -523,11 +533,13 @@ class GetAgentProviderTurnRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     subject: _app_pb2.SubjectContext
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, turn_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, turn_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderTurnsRequest(_message.Message):
     __slots__ = ()
@@ -539,6 +551,7 @@ class ListAgentProviderTurnsRequest(_message.Message):
     SUMMARY_ONLY_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     subject: _app_pb2.SubjectContext
     turn_ids: _containers.RepeatedScalarFieldContainer[str]
@@ -547,7 +560,8 @@ class ListAgentProviderTurnsRequest(_message.Message):
     summary_only: bool
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, session_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., turn_ids: _Optional[_Iterable[str]] = ..., status: _Optional[_Union[AgentExecutionStatus, str]] = ..., limit: _Optional[int] = ..., summary_only: _Optional[bool] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., turn_ids: _Optional[_Iterable[str]] = ..., status: _Optional[_Union[AgentExecutionStatus, str]] = ..., limit: _Optional[int] = ..., summary_only: _Optional[bool] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderTurnsResponse(_message.Message):
     __slots__ = ()
@@ -562,12 +576,14 @@ class CancelAgentProviderTurnRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     reason: str
     subject: _app_pb2.SubjectContext
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, turn_id: _Optional[str] = ..., reason: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, turn_id: _Optional[str] = ..., reason: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class AgentTurnEvent(_message.Message):
     __slots__ = ()
@@ -599,13 +615,15 @@ class ListAgentProviderTurnEventsRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     after_seq: int
     limit: int
     subject: _app_pb2.SubjectContext
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, turn_id: _Optional[str] = ..., after_seq: _Optional[int] = ..., limit: _Optional[int] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, turn_id: _Optional[str] = ..., after_seq: _Optional[int] = ..., limit: _Optional[int] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderTurnEventsResponse(_message.Message):
     __slots__ = ()
@@ -618,10 +636,12 @@ class GetAgentProviderInteractionRequest(_message.Message):
     INTERACTION_ID_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     interaction_id: str
     subject: _app_pb2.SubjectContext
     invocation_token: str
-    def __init__(self, interaction_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, interaction_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderInteractionsRequest(_message.Message):
     __slots__ = ()
@@ -629,11 +649,13 @@ class ListAgentProviderInteractionsRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     subject: _app_pb2.SubjectContext
     invocation_token: str
     workflow: _struct_pb2.Struct
-    def __init__(self, turn_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, turn_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentProviderInteractionsResponse(_message.Message):
     __slots__ = ()
@@ -649,13 +671,15 @@ class ResolveAgentProviderInteractionRequest(_message.Message):
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     TURN_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     interaction_id: str
     resolution: _struct_pb2.Struct
     subject: _app_pb2.SubjectContext
     invocation_token: str
     turn_id: str
     workflow: _struct_pb2.Struct
-    def __init__(self, interaction_id: _Optional[str] = ..., resolution: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., turn_id: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, interaction_id: _Optional[str] = ..., resolution: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., turn_id: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ExecuteAgentToolRequest(_message.Message):
     __slots__ = ()
@@ -666,6 +690,7 @@ class ExecuteAgentToolRequest(_message.Message):
     ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     turn_id: str
     tool_call_id: str
@@ -673,7 +698,8 @@ class ExecuteAgentToolRequest(_message.Message):
     arguments: _struct_pb2.Struct
     idempotency_key: str
     run_grant: str
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_id: _Optional[str] = ..., arguments: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., run_grant: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_id: _Optional[str] = ..., arguments: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., run_grant: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ExecuteAgentToolResponse(_message.Message):
     __slots__ = ()
@@ -715,13 +741,15 @@ class ListAgentToolsRequest(_message.Message):
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
     QUERY_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     turn_id: str
     page_size: int
     page_token: str
     run_grant: str
     query: str
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., run_grant: _Optional[str] = ..., query: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., run_grant: _Optional[str] = ..., query: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ListAgentToolsResponse(_message.Message):
     __slots__ = ()
@@ -738,12 +766,14 @@ class ResolveAgentConnectionRequest(_message.Message):
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
     RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     turn_id: str
     connection: str
     instance: str
     run_grant: str
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., run_grant: _Optional[str] = ...) -> None: ...
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., run_grant: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class ResolvedAgentConnection(_message.Message):
     __slots__ = ()

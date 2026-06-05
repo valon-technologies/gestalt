@@ -1055,6 +1055,7 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 			cleanup:      cleanup,
 		}),
 		appservice.WithHostContext(deps.BaseURL),
+		appservice.WithCallerProvider(invocation.ProviderKindApp, name),
 	}
 	if invTokens != nil {
 		opts = append(opts,

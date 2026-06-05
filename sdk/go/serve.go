@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -66,20 +65,6 @@ func withProviderCloser(ctx context.Context, provider any) context.Context {
 	return ctx
 }
 
-type providerInvocationTokenRequest interface {
-	GetInvocationToken() string
-}
-
-func providerInvocationUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if tokenReq, ok := req.(providerInvocationTokenRequest); ok {
-		token := tokenReq.GetInvocationToken()
-		if strings.TrimSpace(token) != "" {
-			ctx = withInvocationToken(ctx, token)
-		}
-	}
-	return handler(ctx, req)
-}
-
 func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grpc.ServerOption) error {
 	socket := os.Getenv(proto.EnvProviderSocket)
 	if socket == "" {
@@ -134,6 +119,17 @@ func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grp
 		return nil
 	}
 	return err
+}
+
+type providerInvocationTokenRequest interface {
+	GetInvocationToken() string
+}
+
+func providerInvocationUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	if tokenReq, ok := req.(providerInvocationTokenRequest); ok {
+		ctx = withInvocationToken(ctx, tokenReq.GetInvocationToken())
+	}
+	return handler(ctx, req)
 }
 
 func providerParentPID() int {

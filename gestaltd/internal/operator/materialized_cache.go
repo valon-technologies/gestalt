@@ -123,28 +123,6 @@ func materializedCacheKeyForRequest(req materializedCacheRequest) (materializedC
 	return materializedCacheKeyForParts(req.Platform, platformPath, sha, resolvedHash), true, nil
 }
 
-func materializedCacheKeyFromDisplay(display string) (materializedCacheKey, bool) {
-	display = strings.TrimSpace(filepath.ToSlash(display))
-	parts := strings.Split(display, "/")
-	if len(parts) != 7 || parts[0]+"/"+parts[1] != materializedCacheBucketVersion || parts[3] != "sha256" {
-		return materializedCacheKey{}, false
-	}
-	platformPath := parts[2]
-	sha, ok := canonicalArchiveSHA256(parts[5])
-	if !ok || parts[4] != sha[:2] {
-		return materializedCacheKey{}, false
-	}
-	resolvedHash, ok := canonicalArchiveSHA256(parts[6])
-	if !ok {
-		return materializedCacheKey{}, false
-	}
-	key := materializedCacheKeyForParts(strings.ReplaceAll(platformPath, "_", "/"), platformPath, sha, resolvedHash)
-	if clean, err := validateMaterializedCachePath(filepath.ToSlash(key.Path)); err != nil || clean != filepath.ToSlash(key.Path) || key.Display != strings.Join(parts, "/") {
-		return materializedCacheKey{}, false
-	}
-	return key, true
-}
-
 func materializedCacheKeyForParts(platform, platformPath, sha, resolvedHash string) materializedCacheKey {
 	return materializedCacheKey{
 		Path:                filepath.Join(platformPath, "sha256", sha[:2], sha, resolvedHash),

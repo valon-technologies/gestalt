@@ -94,6 +94,15 @@ type Subject struct {
 	CredentialSubjectID string
 	Email               string
 	DisplayName         string
+	Scopes              []string
+	Permissions         []SubjectPermission
+}
+
+// SubjectPermission bounds which provider operations the current caller can
+// reach. An empty Operations list means every operation for the app.
+type SubjectPermission struct {
+	App        string
+	Operations []string
 }
 
 // Credential describes the resolved credential used to authorize a request.

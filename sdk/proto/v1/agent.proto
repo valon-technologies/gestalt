@@ -177,6 +177,7 @@ message CreateAgentProviderSessionRequest {
   string invocation_token = 12;
   AgentWorkspace workspace = 13;
   google.protobuf.Struct workflow = 14;
+  RequestContext context = 15;
 }
 
 message AgentSessionStartConfig {
@@ -203,6 +204,7 @@ message GetAgentProviderSessionRequest {
   SubjectContext subject = 2;
   string invocation_token = 3;
   google.protobuf.Struct workflow = 4;
+  RequestContext context = 5;
 }
 
 message ListAgentProviderSessionsRequest {
@@ -218,6 +220,7 @@ message ListAgentProviderSessionsRequest {
   string provider_name = 6;
   string invocation_token = 7;
   google.protobuf.Struct workflow = 8;
+  RequestContext context = 9;
 }
 
 message ListAgentProviderSessionsResponse {
@@ -232,6 +235,7 @@ message UpdateAgentProviderSessionRequest {
   SubjectContext subject = 5;
   string invocation_token = 6;
   google.protobuf.Struct workflow = 7;
+  RequestContext context = 8;
 }
 
 message AgentTurn {
@@ -303,6 +307,7 @@ message CreateAgentProviderTurnRequest {
   bool tool_refs_set = 20;
   AgentOutput output = 21;
   google.protobuf.Struct workflow = 22;
+  RequestContext context = 23;
 }
 
 message AgentTextOutput {}
@@ -323,6 +328,7 @@ message GetAgentProviderTurnRequest {
   SubjectContext subject = 2;
   string invocation_token = 3;
   google.protobuf.Struct workflow = 4;
+  RequestContext context = 5;
 }
 
 message ListAgentProviderTurnsRequest {
@@ -339,6 +345,7 @@ message ListAgentProviderTurnsRequest {
   bool summary_only = 6;
   string invocation_token = 7;
   google.protobuf.Struct workflow = 8;
+  RequestContext context = 9;
 }
 
 message ListAgentProviderTurnsResponse {
@@ -351,6 +358,7 @@ message CancelAgentProviderTurnRequest {
   SubjectContext subject = 3;
   string invocation_token = 4;
   google.protobuf.Struct workflow = 5;
+  RequestContext context = 6;
 }
 
 message AgentTurnEvent {
@@ -372,6 +380,7 @@ message ListAgentProviderTurnEventsRequest {
   SubjectContext subject = 4;
   string invocation_token = 5;
   google.protobuf.Struct workflow = 6;
+  RequestContext context = 7;
 }
 
 message ListAgentProviderTurnEventsResponse {
@@ -382,6 +391,7 @@ message GetAgentProviderInteractionRequest {
   string interaction_id = 1;
   SubjectContext subject = 2;
   string invocation_token = 3;
+  RequestContext context = 4;
 }
 
 message ListAgentProviderInteractionsRequest {
@@ -389,6 +399,7 @@ message ListAgentProviderInteractionsRequest {
   SubjectContext subject = 2;
   string invocation_token = 3;
   google.protobuf.Struct workflow = 4;
+  RequestContext context = 5;
 }
 
 message ListAgentProviderInteractionsResponse {
@@ -402,6 +413,7 @@ message ResolveAgentProviderInteractionRequest {
   string invocation_token = 4;
   string turn_id = 5;
   google.protobuf.Struct workflow = 6;
+  RequestContext context = 7;
 }
 
 message ExecuteAgentToolRequest {
@@ -415,6 +427,7 @@ message ExecuteAgentToolRequest {
   google.protobuf.Struct arguments = 5;
   string idempotency_key = 7;
   string run_grant = 8;
+  RequestContext context = 9;
 }
 
 message ExecuteAgentToolResponse {
@@ -445,6 +458,7 @@ message ListAgentToolsRequest {
   string page_token = 4;
   string run_grant = 6;
   string query = 7;
+  RequestContext context = 8;
 }
 
 message ListAgentToolsResponse {
@@ -458,6 +472,7 @@ message ResolveAgentConnectionRequest {
   string connection = 3;
   string instance = 4;
   string run_grant = 5;
+  RequestContext context = 6;
 }
 
 message ResolvedAgentConnection {

@@ -579,7 +579,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
           role: "admin",
         }),
       }),
-      invocationToken: "invocation-token-123",
       idempotencyKey: " tool-call-123 ",
     }),
   );
@@ -594,7 +593,6 @@ test("integration provider service exposes metadata, configure, execute, and ses
     credentialMode: "subject",
     accessPolicy: "sample_policy",
     accessRole: "admin",
-    invocationToken: "invocation-token-123",
     idempotencyKey: "tool-call-123",
   });
 
@@ -776,6 +774,8 @@ test("integration provider service resolves hosted HTTP subjects through the app
       email: "",
       displayName: "",
       kind: "system",
+      scopes: [],
+      permissions: [],
     },
     credential: {
       mode: "none",
@@ -2026,6 +2026,9 @@ test("integration provider request context includes workflow metadata", async ()
           id: "service_account:github-review",
           credentialSubjectId: "service_account:github-review",
           email: "",
+          displayName: "",
+          scopes: [],
+          permissions: [],
         },
       },
     ],

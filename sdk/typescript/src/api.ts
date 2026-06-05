@@ -2,14 +2,22 @@
  * Common request and response types shared across authored Gestalt providers.
  */
 import type { AgentToolRef } from "./agent.ts";
+import type { RequestContext as ProtoRequestContext } from "./internal/gen/v1/app_pb.ts";
 
 export interface Subject {
   id: string;
   credentialSubjectId: string;
   email: string;
+  scopes?: string[] | undefined;
+  permissions?: SubjectPermission[] | undefined;
   kind?: string | undefined;
   displayName?: string | undefined;
   authSource?: string | undefined;
+}
+
+export interface SubjectPermission {
+  app: string;
+  operations: string[];
 }
 
 /**
@@ -20,6 +28,8 @@ export interface SubjectInput {
   credentialSubjectId?: string | undefined;
   email?: string | undefined;
   displayName?: string | undefined;
+  scopes?: readonly string[] | undefined;
+  permissions?: readonly SubjectPermission[] | undefined;
 }
 
 /**
@@ -65,6 +75,7 @@ export interface Request {
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;
   invocationToken: string;
+  __requestContext?: ProtoRequestContext | undefined;
 }
 
 /**
@@ -163,6 +174,7 @@ export function request(
   agentSubject: Partial<Subject> = {},
   toolRefs: readonly AgentToolRef[] = [],
   toolRefsSet = false,
+  requestContext?: ProtoRequestContext,
 ): Request {
   return {
     token,
@@ -173,6 +185,8 @@ export function request(
       id: subject.id ?? "",
       credentialSubjectId: subject.credentialSubjectId ?? "",
       email: subject.email ?? "",
+      scopes: [...(subject.scopes ?? [])],
+      permissions: cloneSubjectPermissions(subject.permissions),
       kind: subject.kind,
       displayName: subject.displayName,
       authSource: subject.authSource,
@@ -181,6 +195,8 @@ export function request(
       id: agentSubject.id ?? "",
       credentialSubjectId: agentSubject.credentialSubjectId ?? "",
       email: agentSubject.email ?? "",
+      scopes: [...(agentSubject.scopes ?? [])],
+      permissions: cloneSubjectPermissions(agentSubject.permissions),
       kind: agentSubject.kind,
       displayName: agentSubject.displayName,
       authSource: agentSubject.authSource,
@@ -200,15 +216,33 @@ export function request(
     },
     toolRefs: toolRefs.map((ref) => ({
       ...ref,
-      runAs: ref.runAs === undefined ? undefined : { ...ref.runAs },
+      runAs: ref.runAs === undefined ? undefined : cloneSubjectInput(ref.runAs),
     })),
     toolRefsSet,
     host: {
       publicBaseUrl: host.publicBaseUrl ?? "",
     },
     invocationToken,
+    __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
   };
+}
+
+export function cloneSubjectInput<T extends SubjectInput | Subject>(subject: T): T {
+  return {
+    ...subject,
+    scopes: [...(subject.scopes ?? [])],
+    permissions: cloneSubjectPermissions(subject.permissions),
+  };
+}
+
+export function cloneSubjectPermissions(
+  permissions?: readonly SubjectPermission[] | undefined,
+): SubjectPermission[] {
+  return permissions?.map((permission) => ({
+    app: permission.app,
+    operations: [...permission.operations],
+  })) ?? [];
 }
 
 /**

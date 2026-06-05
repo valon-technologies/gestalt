@@ -18,6 +18,9 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -36,13 +39,16 @@ type agentRuntime struct {
 	invoker                invocation.Invoker
 	systemTools            agentSystemToolExecutor
 	runGrants              *agentgrant.Manager
+	turnScopes             *agentturnscope.Store
+	toolIDs                *agenttoolid.Codec
 	toolSearcher           agentToolResolver
 }
 
 type agentSystemToolExecutionRequest struct {
 	Principal      *principal.Principal
 	ProviderName   string
-	CallerAppName  string
+	CallerKind     invocation.ProviderKind
+	CallerName     string
 	SessionID      string
 	TurnID         string
 	ToolCallID     string
@@ -228,6 +234,15 @@ func (r *agentRuntime) SetInvoker(invoker invocation.Invoker) {
 	r.invoker = invoker
 }
 
+func (r *agentRuntime) SetTurnScopes(scopes *agentturnscope.Store) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.turnScopes = scopes
+}
+
 func (r *agentRuntime) SetRunGrants(grants *agentgrant.Manager) {
 	if r == nil {
 		return
@@ -235,6 +250,15 @@ func (r *agentRuntime) SetRunGrants(grants *agentgrant.Manager) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.runGrants = grants
+}
+
+func (r *agentRuntime) SetToolIDCodec(codec *agenttoolid.Codec) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.toolIDs = codec
 }
 
 func (r *agentRuntime) SetToolSearcher(searcher agentToolResolver) {
@@ -394,29 +418,35 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	invoker := r.invoker
 	systemTools := r.systemTools
 	grants := r.runGrants
+	scopes := r.turnScopes
+	toolIDs := r.toolIDs
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	grant, err := resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	scope, reqCtx, legacyScope, err := resolveAgentRuntimeScope(scopes, grants, req.Context, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
+	ctx = restoreAgentRuntimeScopeContext(ctx, scope, reqCtx, legacyScope)
+	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, agentTurnValidationRequestContext(req.Context, legacyScope)); err != nil {
 		return nil, err
 	}
-	if source := normalizeAgentToolSource(grant.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
+	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
 		return nil, fmt.Errorf("%w: agent tool execution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
 	}
-	toolTarget, err := grants.ResolveToolID(req.ToolID)
+	if toolIDs == nil {
+		return nil, fmt.Errorf("%w: agent tool id codec is not configured", invocation.ErrInternal)
+	}
+	toolTarget, err := resolveAgentToolTarget(toolIDs, grants, req.ToolID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: agent tool id is invalid", invocation.ErrAuthorizationDenied)
 	}
-	principalValue := agentRunGrantPrincipal(grant)
+	principalValue := agentTurnScopePrincipal(scope)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	if toolTarget.Unavailable != nil {
-		if err := validateUnavailableAgentToolTargetForGrant(grant, principalValue, toolTarget, req.ToolID); err != nil {
+		if err := validateUnavailableAgentToolTargetForScope(scope, principalValue, toolTarget, req.ToolID); err != nil {
 			return nil, err
 		}
 		return executeUnavailableAgentTool(toolTarget)
@@ -436,10 +466,10 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if err != nil {
 		return nil, err
 	}
-	if resolvedTool.Hidden && !agentToolHiddenExplicitlyGranted(resolvedTool.Target, resolvedTool.ID, grant.ToolRefs, grant.Tools) {
-		return nil, fmt.Errorf("%w: hidden agent tool %q was not granted to this turn", invocation.ErrAuthorizationDenied, resolvedTool.ID)
+	if resolvedTool.Hidden && !agentToolHiddenExplicitlyInScope(resolvedTool.Target, resolvedTool.ID, scope.ToolRefs, scope.Tools) {
+		return nil, fmt.Errorf("%w: hidden agent tool %q is not in the turn scope", invocation.ErrAuthorizationDenied, resolvedTool.ID)
 	}
-	if err := validateAgentToolTargetForGrant(grant, principalValue, resolvedTool.Target, resolvedTool.ID); err != nil {
+	if err := validateAgentToolTargetForScope(scope, principalValue, resolvedTool.Target, resolvedTool.ID); err != nil {
 		return nil, err
 	}
 	idempotencyKey := agentToolIdempotencyKey(req)
@@ -449,8 +479,9 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		}
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
 			Principal:      principalValue,
-			ProviderName:   strings.TrimSpace(grant.ProviderName),
-			CallerAppName:  strings.TrimSpace(grant.CallerAppName),
+			ProviderName:   strings.TrimSpace(scope.ProviderName),
+			CallerKind:     scope.CallerKind,
+			CallerName:     strings.TrimSpace(scope.CallerName),
 			SessionID:      strings.TrimSpace(req.SessionID),
 			TurnID:         strings.TrimSpace(req.TurnID),
 			ToolCallID:     strings.TrimSpace(req.ToolCallID),
@@ -458,9 +489,9 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			Tool:           resolvedTool,
 			Arguments:      maps.Clone(req.Arguments),
 			IdempotencyKey: idempotencyKey,
-			ToolRefs:       append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-			Tools:          append([]coreagent.Tool(nil), grant.Tools...),
-			Permissions:    append([]core.AccessPermission(nil), grant.Permissions...),
+			ToolRefs:       append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+			Tools:          append([]coreagent.Tool(nil), scope.Tools...),
+			Permissions:    append([]core.AccessPermission(nil), scope.Permissions...),
 		})
 	}
 	if invoker == nil {
@@ -478,8 +509,8 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	params := maps.Clone(req.Arguments)
 	invokePrincipal := principalValue
 	ctx, invokePrincipal = invocation.ApplyDelegation(ctx, invokePrincipal, resolvedTool.Target.RunAs)
-	if grant.ToolRefsSet {
-		ctx = invocation.WithToolRefsContext(ctx, grant.ToolRefs)
+	if scope.ToolRefsSet {
+		ctx = invocation.WithToolRefsContext(ctx, scope.ToolRefs)
 	}
 	result, err := invoker.Invoke(ctx, invokePrincipal, resolvedTool.Target.App, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {
@@ -494,51 +525,70 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	}, nil
 }
 
+func resolveAgentToolTarget(toolIDs *agenttoolid.Codec, grants *agentgrant.Manager, toolID string) (coreagent.ToolTarget, error) {
+	target, err := toolIDs.Resolve(toolID)
+	if err == nil {
+		return target, nil
+	}
+	if grants == nil {
+		return coreagent.ToolTarget{}, err
+	}
+	legacyTarget, legacyErr := grants.ResolveToolID(toolID)
+	if legacyErr == nil {
+		return legacyTarget, nil
+	}
+	return coreagent.ToolTarget{}, err
+}
+
 func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	var grant agentgrant.Grant
+	var scope agentturnscope.Scope
 	defer func() {
-		logAgentRuntimeListTools(ctx, req, requestedTurnID, grant, resp, err)
+		logAgentRuntimeListTools(ctx, req, requestedTurnID, scope, resp, err)
 	}()
 	if r == nil {
 		return nil, fmt.Errorf("agent runtime is not configured")
 	}
 	r.mu.RLock()
 	grants := r.runGrants
+	scopes := r.turnScopes
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
-	grant, err = resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	var reqCtx appaccessservice.ProviderRequestContext
+	legacyScope := false
+	scope, reqCtx, legacyScope, err = resolveAgentRuntimeScope(scopes, grants, req.Context, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
+	ctx = restoreAgentRuntimeScopeContext(ctx, scope, reqCtx, legacyScope)
+	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, agentTurnValidationRequestContext(req.Context, legacyScope)); err != nil {
 		return nil, err
 	}
-	principalValue := agentRunGrantPrincipal(grant)
+	principalValue := agentTurnScopePrincipal(scope)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
-	toolSource := normalizeAgentToolSource(grant.ToolSource)
+	toolSource := normalizeAgentToolSource(scope.ToolSource)
 	if toolSource != coreagent.ToolSourceModeMCPCatalog {
 		return nil, fmt.Errorf("%w: agent tool listing requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
 	}
 	if searcher == nil {
 		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
 	}
-	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
+	if err := validateAgentMCPCatalogToolRefs(scope.ToolRefs); err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
-	if len(grant.ToolRefs) == 0 {
+	if len(scope.ToolRefs) == 0 {
 		return &coreagent.ListToolsResponse{}, nil
 	}
 	listResp, err := searcher.ListTools(ctx, principalValue, coreagent.ListToolsRequest{
-		ProviderName: strings.TrimSpace(grant.ProviderName),
-		SessionID:    strings.TrimSpace(grant.SessionID),
+		ProviderName: strings.TrimSpace(scope.ProviderName),
+		SessionID:    strings.TrimSpace(scope.SessionID),
 		TurnID:       requestedTurnID,
 		PageSize:     req.PageSize,
 		PageToken:    strings.TrimSpace(req.PageToken),
 		Query:        strings.TrimSpace(req.Query),
-		ToolRefs:     append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+		ToolRefs:     append([]coreagent.ToolRef(nil), scope.ToolRefs...),
 		ToolSource:   toolSource,
 	})
 	if err != nil {
@@ -547,7 +597,7 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	if listResp == nil {
 		return &coreagent.ListToolsResponse{}, nil
 	}
-	if err := validateAgentListedTools(principalValue, grant.ToolRefs, toolSource, listResp.Tools); err != nil {
+	if err := validateAgentListedTools(principalValue, scope.ToolRefs, toolSource, listResp.Tools); err != nil {
 		return nil, err
 	}
 	return &coreagent.ListToolsResponse{
@@ -556,7 +606,7 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	}, nil
 }
 
-func logAgentRuntimeListTools(ctx context.Context, req coreagent.ListToolsRequest, requestedTurnID string, grant agentgrant.Grant, resp *coreagent.ListToolsResponse, err error) {
+func logAgentRuntimeListTools(ctx context.Context, req coreagent.ListToolsRequest, requestedTurnID string, scope agentturnscope.Scope, resp *coreagent.ListToolsResponse, err error) {
 	attrs := []any{
 		"provider", strings.TrimSpace(req.ProviderName),
 		"session_id", strings.TrimSpace(req.SessionID),
@@ -564,9 +614,9 @@ func logAgentRuntimeListTools(ctx context.Context, req coreagent.ListToolsReques
 		"page_size", req.PageSize,
 		"page_token", strings.TrimSpace(req.PageToken),
 		"query_present", strings.TrimSpace(req.Query) != "",
-		"grant_provider", strings.TrimSpace(grant.ProviderName),
-		"grant_tool_source", strings.TrimSpace(string(grant.ToolSource)),
-		"grant_tool_refs", agentToolRefsLogValue(grant.ToolRefs),
+		"scope_provider", strings.TrimSpace(scope.ProviderName),
+		"scope_tool_source", strings.TrimSpace(string(scope.ToolSource)),
+		"scope_tool_refs", agentToolRefsLogValue(scope.ToolRefs),
 	}
 	if resp != nil {
 		attrs = append(attrs,
@@ -661,35 +711,37 @@ func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.Reso
 	}
 	r.mu.RLock()
 	grants := r.runGrants
+	scopes := r.turnScopes
 	invoker := r.invoker
 	r.mu.RUnlock()
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	grant, err := resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	scope, reqCtx, legacyScope, err := resolveAgentRuntimeScope(scopes, grants, req.Context, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
+	ctx = restoreAgentRuntimeScopeContext(ctx, scope, reqCtx, legacyScope)
+	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, agentTurnValidationRequestContext(req.Context, legacyScope)); err != nil {
 		return nil, err
 	}
-	if source := normalizeAgentToolSource(grant.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
+	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
 		return nil, fmt.Errorf("%w: agent connection resolution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
 	}
 	connection := config.ResolveConnectionAlias(req.Connection)
 	if connection == "" {
 		connection = config.AppConnectionName
 	}
-	if !agentRunGrantAllowsConnection(grant, connection) {
+	if !agentTurnScopeAllowsConnection(scope, connection) {
 		return nil, fmt.Errorf("%w: agent connection %q is outside the run scope", invocation.ErrAuthorizationDenied, connection)
 	}
 	credentialResolver, ok := invoker.(invocation.RuntimeCredentialResolver)
 	if !ok || credentialResolver == nil {
 		return nil, fmt.Errorf("%w: agent connection credential resolver is not configured", invocation.ErrInternal)
 	}
-	principalValue := agentRunGrantPrincipal(grant)
+	principalValue := agentTurnScopePrincipal(scope)
 	if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
-	providerName := strings.TrimSpace(grant.ProviderName)
+	providerName := strings.TrimSpace(scope.ProviderName)
 	_, credential, info, err := credentialResolver.ResolveRuntimeConnectionCredential(invocation.WithInternalConnectionAccess(ctx), principalValue, providerName, connection, strings.TrimSpace(req.Instance))
 	if err != nil {
 		return nil, err
@@ -709,9 +761,9 @@ func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.Reso
 	}, nil
 }
 
-func agentRunGrantAllowsConnection(grant agentgrant.Grant, connection string) bool {
+func agentTurnScopeAllowsConnection(scope agentturnscope.Scope, connection string) bool {
 	connection = config.ResolveConnectionAlias(connection)
-	for _, binding := range grant.Connections {
+	for _, binding := range scope.Connections {
 		if config.ResolveConnectionAlias(binding.Connection) == connection {
 			return true
 		}
@@ -738,6 +790,48 @@ func materializeAgentConnectionHeaders(token string, info invocation.ConnectionR
 		return nil, nil
 	}
 	return map[string]string{"Authorization": core.BearerScheme + token}, nil
+}
+
+func resolveAgentRuntimeScope(scopes *agentturnscope.Store, grants *agentgrant.Manager, reqCtx *proto.RequestContext, runGrant, providerName, sessionID, turnID string) (agentturnscope.Scope, appaccessservice.ProviderRequestContext, bool, error) {
+	if strings.TrimSpace(runGrant) != "" {
+		grant, err := resolveAgentRunGrant(grants, runGrant, providerName, sessionID, turnID)
+		if err != nil {
+			return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, false, err
+		}
+		// Mixed-version providers may still send a request context alongside
+		// the run grant, but the grant is the trusted authorization boundary.
+		return agentTurnScopeFromRunGrant(grant), appaccessservice.ProviderRequestContext{}, true, nil
+	}
+	if reqCtx != nil {
+		scope, parsed, err := resolveAgentTurnScope(scopes, reqCtx, providerName, sessionID, turnID)
+		return scope, parsed, false, err
+	}
+	grant, err := resolveAgentRunGrant(grants, runGrant, providerName, sessionID, turnID)
+	if err != nil {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, false, err
+	}
+	return agentTurnScopeFromRunGrant(grant), appaccessservice.ProviderRequestContext{}, true, nil
+}
+
+func restoreAgentRuntimeScopeContext(ctx context.Context, scope agentturnscope.Scope, reqCtx appaccessservice.ProviderRequestContext, legacy bool) context.Context {
+	if !legacy {
+		return reqCtx.Restore(ctx, "")
+	}
+	p := agentTurnScopePrincipal(scope)
+	if p != nil {
+		ctx = principal.WithPrincipal(ctx, p)
+	}
+	if scope.CallerKind != "" && strings.TrimSpace(scope.CallerName) != "" {
+		ctx = invocation.WithCallerProvider(ctx, scope.CallerKind, strings.TrimSpace(scope.CallerName))
+	}
+	return ctx
+}
+
+func agentTurnValidationRequestContext(reqCtx *proto.RequestContext, legacy bool) *proto.RequestContext {
+	if legacy {
+		return nil
+	}
+	return reqCtx
 }
 
 func resolveAgentRunGrant(grants *agentgrant.Manager, token, providerName, sessionID, turnID string) (agentgrant.Grant, error) {
@@ -769,14 +863,100 @@ func resolveAgentRunGrant(grants *agentgrant.Manager, token, providerName, sessi
 	return grant, nil
 }
 
-func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agentgrant.Grant, turnID string) error {
+func agentTurnScopeFromRunGrant(grant agentgrant.Grant) agentturnscope.Scope {
+	callerKind, callerName := agentTurnScopeCallerFromRunGrant(grant)
+	return agentturnscope.Scope{
+		ProviderName:        strings.TrimSpace(grant.ProviderName),
+		SessionID:           strings.TrimSpace(grant.SessionID),
+		TurnID:              strings.TrimSpace(grant.TurnID),
+		CallerKind:          callerKind,
+		CallerName:          callerName,
+		SubjectID:           strings.TrimSpace(grant.SubjectID),
+		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
+		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
+		ToolRefs:            append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+		ToolRefsSet:         grant.ToolRefsSet,
+		Tools:               append([]coreagent.Tool(nil), grant.Tools...),
+		ToolSource:          grant.ToolSource,
+		Connections:         agentTurnScopeConnectionsFromRunGrant(grant.Connections),
+	}
+}
+
+func agentTurnScopeCallerFromRunGrant(grant agentgrant.Grant) (invocation.ProviderKind, string) {
+	callerKind := invocation.ProviderKind(strings.TrimSpace(string(grant.CallerKind)))
+	callerName := strings.TrimSpace(grant.CallerName)
+	if callerName == "" {
+		callerName = strings.TrimSpace(grant.CallerAppName)
+	}
+	if callerKind == "" && callerName != "" {
+		callerKind = invocation.ProviderKindApp
+	}
+	return callerKind, callerName
+}
+
+func agentTurnScopeConnectionsFromRunGrant(src []agentgrant.ConnectionBinding) []agentturnscope.ConnectionBinding {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]agentturnscope.ConnectionBinding, 0, len(src))
+	for _, binding := range src {
+		if connection := strings.TrimSpace(binding.Connection); connection != "" {
+			out = append(out, agentturnscope.ConnectionBinding{Connection: connection})
+		}
+	}
+	return out
+}
+
+func resolveAgentTurnScope(scopes *agentturnscope.Store, reqCtx *proto.RequestContext, providerName, sessionID, turnID string) (agentturnscope.Scope, appaccessservice.ProviderRequestContext, error) {
+	if scopes == nil {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
+	}
+	if strings.TrimSpace(providerName) == "" {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent provider is required", invocation.ErrAuthorizationDenied)
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent session is required", invocation.ErrAuthorizationDenied)
+	}
+	if strings.TrimSpace(turnID) == "" {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn is required", invocation.ErrAuthorizationDenied)
+	}
+	scope, ok := scopes.Get(providerName, sessionID, turnID)
+	if !ok {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scope was not found", invocation.ErrAuthorizationDenied)
+	}
+	if scope.Revoked {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scope is revoked", invocation.ErrAuthorizationDenied)
+	}
+	expectedKind := scope.CallerKind
+	expectedName := strings.TrimSpace(scope.CallerName)
+	if expectedKind == "" || expectedName == "" {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scope caller context is required", invocation.ErrInternal)
+	}
+	parsed, err := appaccessservice.ProviderRequestContextFromProto(reqCtx, expectedKind, expectedName)
+	if err != nil {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, err
+	}
+	if strings.TrimSpace(scope.SubjectID) == "" {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scope has no subject", invocation.ErrAuthorizationDenied)
+	}
+	p := parsed.Principal()
+	if p == nil || strings.TrimSpace(p.SubjectID) != strings.TrimSpace(scope.SubjectID) {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent request context subject does not match turn scope", invocation.ErrAuthorizationDenied)
+	}
+	if credentialSubjectID := strings.TrimSpace(scope.CredentialSubjectID); credentialSubjectID != "" && strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)) != credentialSubjectID {
+		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent request context credential subject does not match turn scope", invocation.ErrAuthorizationDenied)
+	}
+	return scope, parsed, nil
+}
+
+func (r *agentRuntime) validateAgentTurnScopeTurn(ctx context.Context, scope agentturnscope.Scope, turnID string, reqCtx *proto.RequestContext) error {
 	r.mu.RLock()
-	provider := r.providers[strings.TrimSpace(grant.ProviderName)]
-	handle := r.pendingProviders[strings.TrimSpace(grant.ProviderName)]
+	provider := r.providers[strings.TrimSpace(scope.ProviderName)]
+	handle := r.pendingProviders[strings.TrimSpace(scope.ProviderName)]
 	r.mu.RUnlock()
 	if provider == nil {
 		if handle == nil {
-			return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
+			return fmt.Errorf("%w: agent provider %q is not available for turn scope", invocation.ErrAuthorizationDenied, strings.TrimSpace(scope.ProviderName))
 		}
 		resolved, err := handle.await(ctx)
 		if err != nil {
@@ -784,15 +964,16 @@ func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agen
 		}
 		provider = resolved
 		if provider == nil {
-			return fmt.Errorf("%w: agent provider %q is not available for run grant", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.ProviderName))
+			return fmt.Errorf("%w: agent provider %q is not available for turn scope", invocation.ErrAuthorizationDenied, strings.TrimSpace(scope.ProviderName))
 		}
 	}
 	turnID = strings.TrimSpace(turnID)
 	turn, err := provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-		TurnId: turnID,
+		TurnId:  turnID,
+		Context: reqCtx,
 		Subject: &proto.SubjectContext{
-			Id:                  strings.TrimSpace(grant.SubjectID),
-			CredentialSubjectId: strings.TrimSpace(grant.CredentialSubjectID),
+			Id:                  strings.TrimSpace(scope.SubjectID),
+			CredentialSubjectId: strings.TrimSpace(scope.CredentialSubjectID),
 		},
 	})
 	if err != nil {
@@ -804,15 +985,17 @@ func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agen
 	if turn == nil {
 		return fmt.Errorf("%w: agent turn %q was not found", invocation.ErrAuthorizationDenied, turnID)
 	}
-	if strings.TrimSpace(turn.ID) != turnID {
-		return fmt.Errorf("%w: agent provider returned turn %q for requested turn %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(turn.ID), turnID)
+	scopeTurnID := strings.TrimSpace(scope.TurnID)
+	returnedTurnID := strings.TrimSpace(turn.ID)
+	executionRef := strings.TrimSpace(turn.ExecutionRef)
+	if returnedTurnID != turnID && returnedTurnID != scopeTurnID {
+		return fmt.Errorf("%w: agent provider returned turn %q for requested turn %q", invocation.ErrAuthorizationDenied, returnedTurnID, turnID)
 	}
-	if strings.TrimSpace(turn.SessionID) != strings.TrimSpace(grant.SessionID) {
-		return fmt.Errorf("%w: agent run grant is not valid for session %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(grant.SessionID))
+	if strings.TrimSpace(turn.SessionID) != strings.TrimSpace(scope.SessionID) {
+		return fmt.Errorf("%w: agent turn scope is not valid for session %q", invocation.ErrAuthorizationDenied, strings.TrimSpace(scope.SessionID))
 	}
-	grantTurnID := strings.TrimSpace(grant.TurnID)
-	if grantTurnID != turnID && grantTurnID != strings.TrimSpace(turn.ExecutionRef) {
-		return fmt.Errorf("%w: agent run grant is not valid for turn %q", invocation.ErrAuthorizationDenied, turnID)
+	if scopeTurnID != turnID && scopeTurnID != executionRef {
+		return fmt.Errorf("%w: agent turn scope is not valid for turn %q", invocation.ErrAuthorizationDenied, turnID)
 	}
 	if !coreagent.ExecutionStatusIsLive(turn.Status) {
 		return fmt.Errorf("%w: agent turn %q is not active", invocation.ErrAuthorizationDenied, turnID)
@@ -820,11 +1003,11 @@ func (r *agentRuntime) validateAgentRunGrantTurn(ctx context.Context, grant agen
 	return nil
 }
 
-func agentRunGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
-	compiled := principal.CompilePermissions(grant.Permissions)
+func agentTurnScopePrincipal(scope agentturnscope.Scope) *principal.Principal {
+	compiled := principal.CompilePermissions(scope.Permissions)
 	value := &principal.Principal{
-		SubjectID:           strings.TrimSpace(grant.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
+		SubjectID:           strings.TrimSpace(scope.SubjectID),
+		CredentialSubjectID: strings.TrimSpace(scope.CredentialSubjectID),
 		Scopes:              principal.PermissionApps(compiled),
 		TokenPermissions:    compiled,
 	}
@@ -837,18 +1020,18 @@ func agentRunGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
 	return principal.Canonicalize(value)
 }
 
-func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {
+func validateAgentToolTargetForScope(scope agentturnscope.Scope, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {
 	if principalValue == nil {
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
-	source := normalizeAgentToolSource(grant.ToolSource)
+	source := normalizeAgentToolSource(scope.ToolSource)
 	if source != coreagent.ToolSourceModeMCPCatalog {
-		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, grant.ToolSource)
+		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, scope.ToolSource)
 	}
-	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
+	if err := validateAgentMCPCatalogToolRefs(scope.ToolRefs); err != nil {
 		return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
-	if len(grant.ToolRefs) == 0 {
+	if len(scope.ToolRefs) == 0 {
 		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	operation := strings.TrimSpace(target.Operation)
@@ -856,7 +1039,7 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 		if systemName != coreagent.SystemToolWorkflow || operation == "" {
 			return fmt.Errorf("%w: agent system tool target is incomplete", invocation.ErrAuthorizationDenied)
 		}
-		if !agentToolMatchesRefs(target, grant.ToolRefs) {
+		if !agentToolMatchesRefs(target, scope.ToolRefs) {
 			return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
 		}
 		return nil
@@ -868,38 +1051,38 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 	if !principal.AllowsProviderPermission(principalValue, appName) || !principal.AllowsOperationPermission(principalValue, appName, operation) {
 		return fmt.Errorf("%w: agent tool %q is not authorized", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	if len(grant.ToolRefs) > 0 && !agentToolMatchesRefs(target, grant.ToolRefs) {
+	if len(scope.ToolRefs) > 0 && !agentToolMatchesRefs(target, scope.ToolRefs) {
 		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
-		return fmt.Errorf("%w: agent tool %q credential mode was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyInScope(target, scope.ToolRefs, scope.Tools) {
+		return fmt.Errorf("%w: agent tool %q credential mode is not in the turn scope", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
-		return fmt.Errorf("%w: agent tool %q runAs delegation was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	if target.RunAs != nil && !agentToolRunAsExplicitlyInScope(target, scope.ToolRefs, scope.Tools) {
+		return fmt.Errorf("%w: agent tool %q runAs delegation is not in the turn scope", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	return nil
 }
 
-func validateUnavailableAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {
-	if err := validateAgentRunGrantForToolTarget(grant, target, rawToolID); err != nil {
+func validateUnavailableAgentToolTargetForScope(scope agentturnscope.Scope, principalValue *principal.Principal, target coreagent.ToolTarget, rawToolID string) error {
+	if err := validateAgentTurnScopeForToolTarget(scope, target, rawToolID); err != nil {
 		return err
 	}
-	return validateUnavailableAgentToolTarget(principalValue, grant.ToolRefs, target, rawToolID)
+	return validateUnavailableAgentToolTarget(principalValue, scope.ToolRefs, target, rawToolID)
 }
 
-func validateAgentRunGrantForToolTarget(grant agentgrant.Grant, target coreagent.ToolTarget, rawToolID string) error {
-	source := normalizeAgentToolSource(grant.ToolSource)
+func validateAgentTurnScopeForToolTarget(scope agentturnscope.Scope, target coreagent.ToolTarget, rawToolID string) error {
+	source := normalizeAgentToolSource(scope.ToolSource)
 	if source != coreagent.ToolSourceModeMCPCatalog {
-		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, grant.ToolSource)
+		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, scope.ToolSource)
 	}
-	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
+	if err := validateAgentMCPCatalogToolRefs(scope.ToolRefs); err != nil {
 		return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
-	if len(grant.ToolRefs) == 0 || !agentToolMatchesRefs(target, grant.ToolRefs) {
+	if len(scope.ToolRefs) == 0 || !agentToolMatchesRefs(target, scope.ToolRefs) {
 		return fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyGranted(target, grant.ToolRefs, grant.Tools) {
-		return fmt.Errorf("%w: agent tool %q credential mode was not granted to this turn", invocation.ErrAuthorizationDenied, rawToolID)
+	if target.CredentialMode != "" && !agentToolCredentialModeExplicitlyInScope(target, scope.ToolRefs, scope.Tools) {
+		return fmt.Errorf("%w: agent tool %q credential mode is not in the turn scope", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	return nil
 }
@@ -1038,11 +1221,11 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {
 			return fmt.Errorf("%w: listed agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
-		if tools[i].Hidden && !agentToolHiddenExplicitlyGranted(target, tools[i].ToolID, refs, nil) {
-			return fmt.Errorf("%w: listed hidden agent tool %q was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		if tools[i].Hidden && !agentToolHiddenExplicitlyInScope(target, tools[i].ToolID, refs, nil) {
+			return fmt.Errorf("%w: listed hidden agent tool %q is not in the turn scope", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
-		if target.RunAs != nil && !agentToolRunAsExplicitlyGranted(target, refs, nil) {
-			return fmt.Errorf("%w: listed agent tool %q runAs delegation was not explicitly granted", invocation.ErrAuthorizationDenied, tools[i].ToolID)
+		if target.RunAs != nil && !agentToolRunAsExplicitlyInScope(target, refs, nil) {
+			return fmt.Errorf("%w: listed agent tool %q runAs delegation is not in the turn scope", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
 	}
 	return nil
@@ -1117,7 +1300,7 @@ func agentToolMatchesResolvedTools(target coreagent.ToolTarget, rawToolID string
 	return false
 }
 
-func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID string, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+func agentToolHiddenExplicitlyInScope(target coreagent.ToolTarget, rawToolID string, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
 	if agentToolMatchesResolvedTools(target, rawToolID, tools) {
 		return true
 	}
@@ -1164,7 +1347,7 @@ func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID str
 	return false
 }
 
-func agentToolCredentialModeExplicitlyGranted(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+func agentToolCredentialModeExplicitlyInScope(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
 	if target.CredentialMode == "" {
 		return true
 	}
@@ -1196,7 +1379,7 @@ func agentToolCredentialModeExplicitlyGranted(target coreagent.ToolTarget, refs 
 	return false
 }
 
-func agentToolRunAsExplicitlyGranted(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+func agentToolRunAsExplicitlyInScope(target coreagent.ToolTarget, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
 	if target.RunAs == nil {
 		return true
 	}

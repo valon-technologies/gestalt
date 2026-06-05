@@ -36,33 +36,12 @@ class IssueParams:
 _server: grpc.Server | None = None
 _socket_path: str = ""
 _previous_socket_env: str | None = None
-_exchange_requests: list[dict[str, Any]] = []
 _graphql_requests: list[dict[str, Any]] = []
-_invoke_workflows: list[dict[str, Any]] = []
+_invoke_contexts: list[dict[str, Any]] = []
 _relay_tokens: list[str] = []
 
 
 class _AppServicer(app_pb2_grpc.AppServicer):
-    def ExchangeInvocationToken(self, request, context):
-        _exchange_requests.append(
-            {
-                "parent_invocation_token": request.parent_invocation_token,
-                "grants": [
-                    {
-                        "app": grant.app,
-                        "operations": list(grant.operations),
-                        "surfaces": list(grant.surfaces),
-                        "all_operations": grant.all_operations,
-                    }
-                    for grant in request.grants
-                ],
-                "ttl_seconds": request.ttl_seconds,
-            }
-        )
-        return app_pb2.ExchangeInvocationTokenResponse(
-            invocation_token=f"{request.parent_invocation_token}:child"
-        )
-
     def Invoke(self, request, context):
         _relay_tokens.extend(
             value
@@ -83,14 +62,15 @@ class _AppServicer(app_pb2_grpc.AppServicer):
             if request.HasField("params")
             else {}
         )
-        _invoke_workflows.append(
+        request_context = (
             json_format.MessageToDict(
-                request.workflow,
+                request.context,
                 preserving_proto_field_name=True,
             )
-            if request.HasField("workflow")
+            if request.HasField("context")
             else {}
         )
+        _invoke_contexts.append(request_context)
         return app_pb2.OperationResult(
             status=200,
             headers={
@@ -100,7 +80,6 @@ class _AppServicer(app_pb2_grpc.AppServicer):
             },
             body=json.dumps(
                 {
-                    "invocation_token": request.invocation_token,
                     "app": request.app,
                     "operation": request.operation,
                     "params": params,
@@ -108,6 +87,7 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                     "connection": request.connection,
                     "instance": request.instance,
                     "idempotency_key": request.idempotency_key,
+                    "context": request_context,
                 }
             ),
         )
@@ -121,9 +101,16 @@ class _AppServicer(app_pb2_grpc.AppServicer):
             if request.HasField("variables")
             else {}
         )
+        request_context = (
+            json_format.MessageToDict(
+                request.context,
+                preserving_proto_field_name=True,
+            )
+            if request.HasField("context")
+            else {}
+        )
         _graphql_requests.append(
             {
-                "invocation_token": request.invocation_token,
                 "app": request.app,
                 "document": request.document,
                 "variables": variables,
@@ -131,13 +118,13 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                 "connection": request.connection,
                 "instance": request.instance,
                 "idempotency_key": request.idempotency_key,
+                "context": request_context,
             }
         )
         return app_pb2.OperationResult(
             status=208,
             body=json.dumps(
                 {
-                    "invocation_token": request.invocation_token,
                     "app": request.app,
                     "document": request.document,
                     "variables": variables,
@@ -145,6 +132,7 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                     "connection": request.connection,
                     "instance": request.instance,
                     "idempotency_key": request.idempotency_key,
+                    "context": request_context,
                 }
             ),
         )
@@ -182,24 +170,26 @@ def tearDownModule() -> None:
 
 class AppTransportTests(unittest.TestCase):
     def setUp(self) -> None:
-        _exchange_requests.clear()
         _graphql_requests.clear()
-        _invoke_workflows.clear()
+        _invoke_contexts.clear()
         _relay_tokens.clear()
 
-    def test_request_helper_roundtrip(self) -> None:
-        request = Request(invocation_token="invoke-123")
+    def test_request_helper_forwards_context(self) -> None:
+        context = app_pb2.RequestContext(
+            subject=app_pb2.SubjectContext(
+                id="user:ada",
+                email="ada@example.com",
+            ),
+        )
+        context.workflow.update(
+            {
+                "runId": "run-python-app",
+                "runAs": {"id": "service_account:workflow-test"},
+            }
+        )
+        request = Request(context=context)
 
         with request.app() as client:
-            child_token = client.exchange_invocation_token(
-                grants=[
-                    {"app": "github", "operations": ["get_issue", " "]},
-                    {"app": "linear", "surfaces": [" GraphQL ", " "]},
-                    {"app": "google_sheets", "all_operations": True},
-                    {"app": "   ", "operations": ["ignored"]},
-                ],
-                ttl_seconds=45,
-            )
             response = client.invoke(
                 "github",
                 "get_issue",
@@ -209,36 +199,6 @@ class AppTransportTests(unittest.TestCase):
                 idempotency_key=" issue-1026-create ",
             )
 
-        self.assertEqual(child_token, "invoke-123:child")
-        self.assertEqual(
-            _exchange_requests,
-            [
-                {
-                    "parent_invocation_token": "invoke-123",
-                    "grants": [
-                        {
-                            "app": "github",
-                            "operations": ["get_issue"],
-                            "surfaces": [],
-                            "all_operations": False,
-                        },
-                        {
-                            "app": "linear",
-                            "operations": [],
-                            "surfaces": ["graphql"],
-                            "all_operations": False,
-                        },
-                        {
-                            "app": "google_sheets",
-                            "operations": [],
-                            "surfaces": [],
-                            "all_operations": True,
-                        },
-                    ],
-                    "ttl_seconds": 45,
-                }
-            ],
-        )
         self.assertEqual(response.status, 200)
         self.assertEqual(
             response.headers,
@@ -247,7 +207,6 @@ class AppTransportTests(unittest.TestCase):
         self.assertEqual(
             json.loads(response.body),
             {
-                "invocation_token": "invoke-123",
                 "app": "github",
                 "operation": "get_issue",
                 "params": {
@@ -258,6 +217,16 @@ class AppTransportTests(unittest.TestCase):
                 "connection": "work",
                 "instance": "prod",
                 "idempotency_key": "issue-1026-create",
+                "context": {
+                    "subject": {
+                        "id": "user:ada",
+                        "email": "ada@example.com",
+                    },
+                    "workflow": {
+                        "runId": "run-python-app",
+                        "runAs": {"id": "service_account:workflow-test"},
+                    },
+                },
             },
         )
 
@@ -266,7 +235,7 @@ class AppTransportTests(unittest.TestCase):
         class BadParams:
             created_at: datetime
 
-        with _AppClient("invoke-bad") as client:
+        with _AppClient(Request()) as client:
             with self.assertRaisesRegex(TypeError, "timestamp helpers"):
                 client.invoke(
                     "github",
@@ -275,12 +244,15 @@ class AppTransportTests(unittest.TestCase):
                 )
 
     def test_invoke_rejects_dataclass_types(self) -> None:
-        with _AppClient("invoke-bad-type") as client:
+        with _AppClient(Request()) as client:
             with self.assertRaisesRegex(TypeError, "dataclass instance"):
                 client.invoke("github", "bad", IssueParams)
 
     def test_invoke_graphql_roundtrip(self) -> None:
-        with _AppClient("invoke-graphql") as client:
+        context = app_pb2.RequestContext(
+            subject=app_pb2.SubjectContext(id="user:graphql")
+        )
+        with _AppClient(Request(context=context)) as client:
             response = client.invoke_graphql(
                 "linear",
                 "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
@@ -293,7 +265,6 @@ class AppTransportTests(unittest.TestCase):
         self.assertEqual(
             json.loads(response.body),
             {
-                "invocation_token": "invoke-graphql",
                 "app": "linear",
                 "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
                 "variables": {
@@ -303,13 +274,15 @@ class AppTransportTests(unittest.TestCase):
                 "connection": "workspace",
                 "instance": "",
                 "idempotency_key": "graphql-call-123",
+                "context": {
+                    "subject": {"id": "user:graphql"},
+                },
             },
         )
         self.assertEqual(
             _graphql_requests,
             [
                 {
-                    "invocation_token": "invoke-graphql",
                     "app": "linear",
                     "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
                     "variables": {
@@ -319,33 +292,35 @@ class AppTransportTests(unittest.TestCase):
                     "connection": "workspace",
                     "instance": "",
                     "idempotency_key": "graphql-call-123",
+                    "context": {
+                        "subject": {"id": "user:graphql"},
+                    },
                 }
             ],
         )
 
-    def test_invocation_token_constructor_roundtrip(self) -> None:
-        with _AppClient("invoke-456") as client:
+    def test_direct_client_roundtrip(self) -> None:
+        with _AppClient(Request()) as client:
             response = client.invoke("slack", "plain_text")
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.body, "plain response")
 
     def test_invoke_graphql_requires_nonempty_document(self) -> None:
-        with _AppClient("invoke-graphql-empty") as client:
+        with _AppClient(Request()) as client:
             with self.assertRaisesRegex(
                 RuntimeError, "app: graphql document is required"
             ):
                 client.invoke_graphql("linear", "   ")
 
     def test_empty_dict_params_are_preserved_as_present(self) -> None:
-        with _AppClient("invoke-789") as client:
+        with _AppClient(Request()) as client:
             response = client.invoke("github", "get_issue", {})
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
             json.loads(response.body),
             {
-                "invocation_token": "invoke-789",
                 "app": "github",
                 "operation": "get_issue",
                 "params": {},
@@ -353,28 +328,26 @@ class AppTransportTests(unittest.TestCase):
                 "connection": "",
                 "instance": "",
                 "idempotency_key": "",
+                "context": {},
             },
         )
 
-    def test_request_app_forwards_workflow_without_invocation_token(self) -> None:
+    def test_request_app_forwards_empty_context(self) -> None:
         request = Request(
-            workflow={
-                "runId": "run-python-app",
-                "runAs": {"id": "service_account:workflow-test"},
-            }
+            context=app_pb2.RequestContext(
+                subject=app_pb2.SubjectContext(id="user:empty-context")
+            )
         )
 
         with request.app() as client:
             response = client.invoke("github", "get_issue", {})
 
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.body)["invocation_token"], "")
         self.assertEqual(
-            _invoke_workflows,
+            _invoke_contexts,
             [
                 {
-                    "runId": "run-python-app",
-                    "runAs": {"id": "service_account:workflow-test"},
+                    "subject": {"id": "user:empty-context"},
                 }
             ],
         )
@@ -392,7 +365,7 @@ class AppTransportTests(unittest.TestCase):
         os.environ[ENV_HOST_SERVICE_SOCKET] = f"tcp://127.0.0.1:{port}"
         os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-python"
         try:
-            with _AppClient("invoke-tcp") as client:
+            with _AppClient(Request()) as client:
                 response = client.invoke("github", "plain_text")
 
             self.assertEqual(response.status, 200)
@@ -426,7 +399,7 @@ class AppTransportTests(unittest.TestCase):
         os.environ["http_proxy"] = "http://127.0.0.1:1"
         os.environ["https_proxy"] = "http://127.0.0.1:1"
         try:
-            with _AppClient("invoke-proxy") as client:
+            with _AppClient(Request()) as client:
                 response = client.invoke("github", "plain_text")
 
             self.assertEqual(response.status, 200)

@@ -155,6 +155,7 @@ the action is `check`, cache writes remain zero, and `output.measured` is
 | `cache.mode` | Cache mode. Currently `materialized`. |
 | `cache.bucket_version` | Cache bucket version. Currently `materialized/v1`. |
 | `cache.hits`, `cache.misses`, `cache.invalid` | Materialized cache lookup counters. |
+| `cache.prefetch.*` | Sparse remote-cache prefetch counters: duration, requests, eligible requests, unique keys, local hits, remote hits, remote misses, failures, and bytes read. |
 | `cache.put.successes`, `cache.put.failures` | Materialized cache write counters. Write failures do not fail sync. |
 | `cache.entries` | Cache events recorded by the run. |
 | `archives.requests` | Current-platform archive acquisition attempts made by this run. |

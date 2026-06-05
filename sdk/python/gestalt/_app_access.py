@@ -7,7 +7,7 @@ from urllib import parse as _urlparse
 
 import grpc
 
-from ._api import Response, ResponseHeaders
+from ._api import Request, Response, ResponseHeaders
 from ._gen.v1 import app_pb2 as _pb
 from ._gen.v1 import app_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
@@ -83,19 +83,26 @@ class _AppClient:
     """
 
     def __init__(
-        self, invocation_token: str, *, workflow: JsonObjectInput | None = None
+        self,
+        request: Request | str,
+        *,
+        workflow: JsonObjectInput | None = None,
     ) -> None:
-        trimmed_token = invocation_token.strip()
         socket_path = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not socket_path:
-            raise RuntimeError(
-                f"app: {ENV_HOST_SERVICE_SOCKET} is not set"
-            )
+            raise RuntimeError(f"app: {ENV_HOST_SERVICE_SOCKET} is not set")
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
         self._channel = _app_channel(socket_path, token=relay_token)
         self._stub = pb_grpc.AppStub(self._channel)
-        self._invocation_token = trimmed_token
+        self._invocation_token = ""
+        self._context = None
+        if isinstance(request, Request):
+            self._invocation_token = request.invocation_token.strip()
+            self._context = request.context
+            workflow = request.workflow
+        else:
+            self._invocation_token = request.strip()
         self._workflow = _struct_from_dict_optional(
             workflow, preserve_empty=False, path="app workflow"
         )
@@ -133,6 +140,8 @@ class _AppClient:
         message = _struct_from_dict(params)
         if message is not None:
             request.params.CopyFrom(message)
+        if self._context is not None:
+            request.context.CopyFrom(self._context)
         if self._workflow is not None:
             request.workflow.CopyFrom(self._workflow)
 
@@ -167,6 +176,8 @@ class _AppClient:
         )
         if message is not None:
             request.variables.CopyFrom(message)
+        if self._context is not None:
+            request.context.CopyFrom(self._context)
 
         return _response_from_proto(self._stub.InvokeGraphQL(request))
 
@@ -197,13 +208,12 @@ class _AppClient:
 
         self.close()
 
+
 def _struct_from_dict(values: JsonObjectInput | None) -> Any:
     if values is None:
         return None
 
-    return _struct_from_dict_optional(
-        values, preserve_empty=True, path="app params"
-    )
+    return _struct_from_dict_optional(values, preserve_empty=True, path="app params")
 
 
 def _struct_from_dict_optional(
@@ -284,9 +294,7 @@ def _app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     if target.startswith("tcp://"):
         address = target[len("tcp://") :].strip()
         if not address:
-            raise RuntimeError(
-                f"app: tcp target {raw_target!r} is missing host:port"
-            )
+            raise RuntimeError(f"app: tcp target {raw_target!r} is missing host:port")
         return _with_app_relay_token(
             insecure_internal_channel(internal_channel_target("tcp", address)),
             token,
@@ -294,9 +302,7 @@ def _app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
     if target.startswith("tls://"):
         address = target[len("tls://") :].strip()
         if not address:
-            raise RuntimeError(
-                f"app: tls target {raw_target!r} is missing host:port"
-            )
+            raise RuntimeError(f"app: tls target {raw_target!r} is missing host:port")
         return _with_app_relay_token(
             secure_internal_channel(internal_channel_target("tls", address)),
             token,
@@ -313,9 +319,7 @@ def _app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
         )
     if "://" in target:
         parsed = _urlparse.urlparse(target)
-        raise RuntimeError(
-            f"app: unsupported target scheme {parsed.scheme!r}"
-        )
+        raise RuntimeError(f"app: unsupported target scheme {parsed.scheme!r}")
     return _with_app_relay_token(
         insecure_internal_channel(internal_channel_target("unix", target)),
         token,

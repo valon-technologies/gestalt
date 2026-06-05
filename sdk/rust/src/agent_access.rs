@@ -1,6 +1,7 @@
 use hyper_util::rt::TokioIo;
+use prost_types::Struct;
 use tokio::net::UnixStream;
-use tonic::Request;
+use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
@@ -19,6 +20,7 @@ use crate::{
         new_agent_messages, new_agent_tool_refs, new_agent_workspace, session_from_proto,
         turn_from_proto,
     },
+    api::{Request, current_request_context},
     env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN},
     protocol,
 };
@@ -45,6 +47,57 @@ pub enum AgentError {
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
+}
+
+/// Source used to connect an agent host-service client.
+pub trait AgentConnectionSource {
+    /// Legacy invocation token to forward, when available.
+    fn agent_invocation_token(&self) -> &str;
+
+    /// Request context to forward on new host-service calls.
+    fn agent_request_context(&self) -> Option<pb::RequestContext> {
+        None
+    }
+
+    /// Legacy workflow context to forward with invocation-token calls.
+    fn agent_workflow(&self) -> crate::Result<Option<Struct>> {
+        Ok(None)
+    }
+
+    /// Whether an empty invocation token should fail connection.
+    fn agent_requires_invocation_token(&self) -> bool {
+        true
+    }
+}
+
+impl AgentConnectionSource for &Request {
+    fn agent_invocation_token(&self) -> &str {
+        self.invocation_token()
+    }
+
+    fn agent_request_context(&self) -> Option<pb::RequestContext> {
+        current_request_context()
+    }
+
+    fn agent_workflow(&self) -> crate::Result<Option<Struct>> {
+        if self.workflow.is_empty() {
+            return Ok(None);
+        }
+        protocol::struct_from_json(serde_json::Value::Object(self.workflow.clone())).map(Some)
+    }
+
+    fn agent_requires_invocation_token(&self) -> bool {
+        false
+    }
+}
+
+impl<T> AgentConnectionSource for T
+where
+    T: AsRef<str>,
+{
+    fn agent_invocation_token(&self) -> &str {
+        self.as_ref()
+    }
 }
 
 /// Input for creating an agent session.
@@ -251,7 +304,6 @@ pub(crate) fn new_agent_create_session_request(
         client_ref: input.client_ref,
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
         idempotency_key: input.idempotency_key,
-        invocation_token: String::new(),
         workspace: input.workspace.map(new_agent_workspace),
         ..Default::default()
     })
@@ -262,7 +314,6 @@ pub(crate) fn new_agent_get_session_request(
 ) -> pb::GetAgentProviderSessionRequest {
     pb::GetAgentProviderSessionRequest {
         session_id: input.session_id,
-        invocation_token: String::new(),
         ..Default::default()
     }
 }
@@ -272,7 +323,6 @@ pub(crate) fn new_agent_list_sessions_request(
 ) -> pb::ListAgentProviderSessionsRequest {
     pb::ListAgentProviderSessionsRequest {
         provider_name: input.provider_name,
-        invocation_token: String::new(),
         state: input.state.as_i32(),
         limit: input.limit,
         summary_only: input.summary_only,
@@ -288,7 +338,6 @@ pub(crate) fn new_agent_update_session_request(
         client_ref: input.client_ref,
         state: input.state.as_i32(),
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
-        invocation_token: String::new(),
         ..Default::default()
     })
 }
@@ -310,7 +359,6 @@ pub(crate) fn new_agent_create_turn_request(
         output: agent_output_to_proto(Some(input.output))?,
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
         idempotency_key: input.idempotency_key,
-        invocation_token: String::new(),
         model_options: input
             .model_options
             .map(protocol::struct_from_json)
@@ -323,7 +371,6 @@ pub(crate) fn new_agent_create_turn_request(
 pub(crate) fn new_agent_get_turn_request(input: AgentGetTurn) -> pb::GetAgentProviderTurnRequest {
     pb::GetAgentProviderTurnRequest {
         turn_id: input.turn_id,
-        invocation_token: String::new(),
         ..Default::default()
     }
 }
@@ -333,7 +380,6 @@ pub(crate) fn new_agent_list_turns_request(
 ) -> pb::ListAgentProviderTurnsRequest {
     pb::ListAgentProviderTurnsRequest {
         session_id: input.session_id,
-        invocation_token: String::new(),
         status: input.status.as_i32(),
         limit: input.limit,
         summary_only: input.summary_only,
@@ -347,7 +393,6 @@ pub(crate) fn new_agent_cancel_turn_request(
     pb::CancelAgentProviderTurnRequest {
         turn_id: input.turn_id,
         reason: input.reason,
-        invocation_token: String::new(),
         ..Default::default()
     }
 }
@@ -359,7 +404,6 @@ pub(crate) fn new_agent_list_turn_events_request(
         turn_id: input.turn_id,
         after_seq: input.after_seq,
         limit: input.limit,
-        invocation_token: String::new(),
         ..Default::default()
     }
 }
@@ -369,7 +413,6 @@ pub(crate) fn new_agent_list_interactions_request(
 ) -> pb::ListAgentProviderInteractionsRequest {
     pb::ListAgentProviderInteractionsRequest {
         turn_id: input.turn_id,
-        invocation_token: String::new(),
         ..Default::default()
     }
 }
@@ -384,7 +427,6 @@ pub(crate) fn new_agent_resolve_interaction_request(
             .resolution
             .map(protocol::struct_from_json)
             .transpose()?,
-        invocation_token: String::new(),
         ..Default::default()
     })
 }
@@ -393,18 +435,19 @@ pub(crate) fn new_agent_resolve_interaction_request(
 pub struct Agent {
     client: ProtoAgentProviderClient<AgentTransport>,
     invocation_token: String,
+    workflow: Option<Struct>,
+    context: Option<pb::RequestContext>,
 }
 
 impl Agent {
-    /// Connects to the agent with an invocation token from the host.
+    /// Connects to the agent service with request context or a legacy invocation token.
     pub async fn connect(
-        invocation_token: impl AsRef<str>,
+        source: impl AgentConnectionSource,
     ) -> std::result::Result<Self, AgentError> {
-        let invocation_token = invocation_token.as_ref().trim().to_owned();
-        if invocation_token.is_empty() {
+        let invocation_token = source.agent_invocation_token().trim().to_owned();
+        if invocation_token.is_empty() && source.agent_requires_invocation_token() {
             return Err(AgentError::MissingInvocationToken);
         }
-
         let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| AgentError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
@@ -436,6 +479,8 @@ impl Agent {
                 relay_token_interceptor(relay_token.trim())?,
             ),
             invocation_token,
+            workflow: source.agent_workflow()?,
+            context: source.agent_request_context(),
         })
     }
 
@@ -445,7 +490,7 @@ impl Agent {
         input: AgentCreateSession,
     ) -> std::result::Result<AgentSession, AgentError> {
         let mut request = new_agent_create_session_request(input)?;
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(session_from_proto(
             self.client.create_session(request).await?.into_inner(),
         )?)
@@ -457,19 +502,19 @@ impl Agent {
         input: AgentGetSession,
     ) -> std::result::Result<AgentSession, AgentError> {
         let mut request = new_agent_get_session_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(session_from_proto(
             self.client.get_session(request).await?.into_inner(),
         )?)
     }
 
-    /// Lists agent sessions visible to the invocation token.
+    /// Lists agent sessions visible to the request context.
     pub async fn list_sessions(
         &mut self,
         input: AgentListSessions,
     ) -> std::result::Result<AgentListSessionsResponse, AgentError> {
         let mut request = new_agent_list_sessions_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         let response = self.client.list_sessions(request).await?.into_inner();
         Ok(AgentListSessionsResponse {
             sessions: response
@@ -486,7 +531,7 @@ impl Agent {
         input: AgentUpdateSession,
     ) -> std::result::Result<AgentSession, AgentError> {
         let mut request = new_agent_update_session_request(input)?;
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(session_from_proto(
             self.client.update_session(request).await?.into_inner(),
         )?)
@@ -498,7 +543,7 @@ impl Agent {
         input: AgentCreateTurn,
     ) -> std::result::Result<AgentTurn, AgentError> {
         let mut request = new_agent_create_turn_request(input)?;
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(turn_from_proto(
             self.client.create_turn(request).await?.into_inner(),
         )?)
@@ -510,7 +555,7 @@ impl Agent {
         input: AgentGetTurn,
     ) -> std::result::Result<AgentTurn, AgentError> {
         let mut request = new_agent_get_turn_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(turn_from_proto(
             self.client.get_turn(request).await?.into_inner(),
         )?)
@@ -522,7 +567,7 @@ impl Agent {
         input: AgentListTurns,
     ) -> std::result::Result<AgentListTurnsResponse, AgentError> {
         let mut request = new_agent_list_turns_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         let response = self.client.list_turns(request).await?.into_inner();
         Ok(AgentListTurnsResponse {
             turns: response
@@ -539,7 +584,7 @@ impl Agent {
         input: AgentCancelTurn,
     ) -> std::result::Result<AgentTurn, AgentError> {
         let mut request = new_agent_cancel_turn_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(turn_from_proto(
             self.client.cancel_turn(request).await?.into_inner(),
         )?)
@@ -551,7 +596,7 @@ impl Agent {
         input: AgentListTurnEvents,
     ) -> std::result::Result<AgentListTurnEventsResponse, AgentError> {
         let mut request = new_agent_list_turn_events_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         let response = self.client.list_turn_events(request).await?.into_inner();
         Ok(AgentListTurnEventsResponse {
             events: response
@@ -568,7 +613,7 @@ impl Agent {
         input: AgentListInteractions,
     ) -> std::result::Result<AgentListInteractionsResponse, AgentError> {
         let mut request = new_agent_list_interactions_request(input);
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         let response = self.client.list_interactions(request).await?.into_inner();
         Ok(AgentListInteractionsResponse {
             interactions: response
@@ -585,12 +630,62 @@ impl Agent {
         input: AgentResolveInteraction,
     ) -> std::result::Result<AgentInteraction, AgentError> {
         let mut request = new_agent_resolve_interaction_request(input)?;
-        request.invocation_token = self.invocation_token.clone();
+        self.attach_context(&mut request);
         Ok(interaction_from_proto(
             self.client.resolve_interaction(request).await?.into_inner(),
         )?)
     }
+
+    fn attach_context<T: HasAgentRequestContext>(&self, request: &mut T) {
+        request.set_auth(
+            self.invocation_token.clone(),
+            self.workflow.clone(),
+            self.context.clone(),
+        );
+    }
 }
+
+trait HasAgentRequestContext {
+    fn set_auth(
+        &mut self,
+        invocation_token: String,
+        workflow: Option<Struct>,
+        context: Option<pb::RequestContext>,
+    );
+}
+
+macro_rules! impl_agent_request_context {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl HasAgentRequestContext for $ty {
+                fn set_auth(
+                    &mut self,
+                    invocation_token: String,
+                    workflow: Option<Struct>,
+                    context: Option<pb::RequestContext>,
+                ) {
+                    self.invocation_token = invocation_token;
+                    self.workflow = workflow;
+                    self.context = context;
+                }
+            }
+        )+
+    };
+}
+
+impl_agent_request_context!(
+    pb::CreateAgentProviderSessionRequest,
+    pb::GetAgentProviderSessionRequest,
+    pb::ListAgentProviderSessionsRequest,
+    pb::UpdateAgentProviderSessionRequest,
+    pb::CreateAgentProviderTurnRequest,
+    pb::GetAgentProviderTurnRequest,
+    pb::ListAgentProviderTurnsRequest,
+    pb::CancelAgentProviderTurnRequest,
+    pb::ListAgentProviderTurnEventsRequest,
+    pb::ListAgentProviderInteractionsRequest,
+    pb::ResolveAgentProviderInteractionRequest,
+);
 
 #[async_trait]
 impl AgentContract for Agent {
@@ -680,8 +775,8 @@ struct RelayTokenInterceptor {
 impl Interceptor for RelayTokenInterceptor {
     fn call(
         &mut self,
-        mut request: Request<()>,
-    ) -> std::result::Result<Request<()>, tonic::Status> {
+        mut request: GrpcRequest<()>,
+    ) -> std::result::Result<GrpcRequest<()>, tonic::Status> {
         if let Some(token) = self.token.clone() {
             request
                 .metadata_mut()

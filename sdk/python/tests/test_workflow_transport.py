@@ -28,25 +28,28 @@ from gestalt import (
     WorkflowStepAppCall,
     WorkflowValue,
 )
+from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
+app_pb2: Any = _app_pb2
 workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc
 _server: grpc.Server | None = None
 _socket_path: str = ""
 _manager_requests: list[dict[str, str]] = []
+_manager_contexts: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
 class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
     def ApplyDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
+        _record_manager_context(request)
         spec = request.spec
         _manager_requests.append(
             {
                 "method": "apply_definition",
-                "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
                 "definition_id": spec.id,
@@ -64,10 +67,10 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
 
     def StartRun(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
+        _record_manager_context(request)
         _manager_requests.append(
             {
                 "method": "start_run",
-                "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
                 "definition_id": request.definition_id,
@@ -85,10 +88,10 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
 
     def SignalOrStartRun(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
+        _record_manager_context(request)
         _manager_requests.append(
             {
                 "method": "signal_or_start_run",
-                "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
                 "definition_id": request.definition_id,
@@ -112,12 +115,12 @@ class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
 
     def DeliverEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
+        _record_manager_context(request)
         event = workflow_pb2.WorkflowEvent()
         event.CopyFrom(request.event)
         _manager_requests.append(
             {
                 "method": "deliver_event",
-                "invocation_token": request.invocation_token,
                 "event_id": event.id,
                 "event_type": event.type,
                 "event_source": event.source,
@@ -136,6 +139,16 @@ def _record_manager_relay_tokens(context: grpc.ServicerContext) -> None:
         value
         for key, value in context.invocation_metadata()
         if key == "x-gestalt-host-service-relay-token"
+    )
+
+
+def _record_manager_context(request: Any) -> None:
+    _manager_contexts.append(
+        {
+            "subject_id": request.context.subject.id,
+        }
+        if request.HasField("context")
+        else {}
     )
 
 
@@ -168,6 +181,7 @@ def tearDownModule() -> None:
 class WorkflowTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _manager_requests.clear()
+        _manager_contexts.clear()
         _manager_relay_tokens.clear()
 
     def test_workflow_deliver_event_roundtrip(self) -> None:
@@ -180,7 +194,13 @@ class WorkflowTransportTests(unittest.TestCase):
         )
         event.data.update({"github_event": "pull_request", "github_action": "opened"})
 
-        with Workflow("token-123") as manager:
+        with Workflow(
+            Request(
+                context=app_pb2.RequestContext(
+                    subject=app_pb2.SubjectContext(id="user:workflow-direct")
+                )
+            )
+        ) as manager:
             delivered = manager.deliver_event(
                 WorkflowDeliverEvent(
                     app_name="github",
@@ -193,12 +213,12 @@ class WorkflowTransportTests(unittest.TestCase):
         self.assertEqual(delivered.id, "delivery-123")
         self.assertEqual(delivered.type, "github.app.webhook")
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
+        self.assertEqual(_manager_contexts, [{"subject_id": "user:workflow-direct"}])
         self.assertEqual(
             _manager_requests,
             [
                 {
                     "method": "deliver_event",
-                    "invocation_token": "token-123",
                     "event_id": "delivery-123",
                     "event_type": "github.app.webhook",
                     "event_source": "github",
@@ -211,7 +231,9 @@ class WorkflowTransportTests(unittest.TestCase):
 
     def test_request_workflow_roundtrip(self) -> None:
         request = Request(
-            invocation_token="token-embedded",
+            context=app_pb2.RequestContext(
+                subject=app_pb2.SubjectContext(id="user:workflow-request")
+            ),
             idempotency_key="workflow-request-key-py",
         )
 
@@ -288,11 +310,14 @@ class WorkflowTransportTests(unittest.TestCase):
             ["relay-token-py", "relay-token-py", "relay-token-py", "relay-token-py"],
         )
         self.assertEqual(
+            _manager_contexts,
+            [{"subject_id": "user:workflow-request"}] * 4,
+        )
+        self.assertEqual(
             _manager_requests,
             [
                 {
                     "method": "apply_definition",
-                    "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
                     "definition_id": "def-managed",
@@ -300,7 +325,6 @@ class WorkflowTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "start_run",
-                    "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
                     "definition_id": "def-managed",
@@ -308,7 +332,6 @@ class WorkflowTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "signal_or_start_run",
-                    "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
                     "definition_id": "def-managed",
@@ -317,7 +340,6 @@ class WorkflowTransportTests(unittest.TestCase):
                 },
                 {
                     "method": "deliver_event",
-                    "invocation_token": "token-embedded",
                     "event_id": "",
                     "event_type": "github.app.webhook",
                     "event_source": "github",
