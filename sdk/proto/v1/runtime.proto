@@ -26,6 +26,7 @@ enum ProviderKind {
   PROVIDER_KIND_RUNTIME = 10;
   PROVIDER_KIND_AGENT = 11;
   PROVIDER_KIND_EXTERNAL_CREDENTIAL = 12;
+  PROVIDER_KIND_TEST = 13;
 }
 
 // ProviderIdentity describes a provider surface and the protocol versions it

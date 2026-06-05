@@ -24,6 +24,7 @@ class ProviderKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PROVIDER_KIND_RUNTIME: _ClassVar[ProviderKind]
     PROVIDER_KIND_AGENT: _ClassVar[ProviderKind]
     PROVIDER_KIND_EXTERNAL_CREDENTIAL: _ClassVar[ProviderKind]
+    PROVIDER_KIND_TEST: _ClassVar[ProviderKind]
 PROVIDER_KIND_UNSPECIFIED: ProviderKind
 PROVIDER_KIND_APP: ProviderKind
 PROVIDER_KIND_AUTHENTICATION: ProviderKind
@@ -37,6 +38,7 @@ PROVIDER_KIND_AUTHORIZATION: ProviderKind
 PROVIDER_KIND_RUNTIME: ProviderKind
 PROVIDER_KIND_AGENT: ProviderKind
 PROVIDER_KIND_EXTERNAL_CREDENTIAL: ProviderKind
+PROVIDER_KIND_TEST: ProviderKind
 
 class ProviderIdentity(_message.Message):
     __slots__ = ()

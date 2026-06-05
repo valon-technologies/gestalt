@@ -39,6 +39,7 @@ const (
 	ProviderKind_PROVIDER_KIND_RUNTIME             ProviderKind = 10
 	ProviderKind_PROVIDER_KIND_AGENT               ProviderKind = 11
 	ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL ProviderKind = 12
+	ProviderKind_PROVIDER_KIND_TEST                ProviderKind = 13
 )
 
 // Enum value maps for ProviderKind.
@@ -57,6 +58,7 @@ var (
 		10: "PROVIDER_KIND_RUNTIME",
 		11: "PROVIDER_KIND_AGENT",
 		12: "PROVIDER_KIND_EXTERNAL_CREDENTIAL",
+		13: "PROVIDER_KIND_TEST",
 	}
 	ProviderKind_value = map[string]int32{
 		"PROVIDER_KIND_UNSPECIFIED":         0,
@@ -72,6 +74,7 @@ var (
 		"PROVIDER_KIND_RUNTIME":             10,
 		"PROVIDER_KIND_AGENT":               11,
 		"PROVIDER_KIND_EXTERNAL_CREDENTIAL": 12,
+		"PROVIDER_KIND_TEST":                13,
 	}
 )
 
@@ -436,7 +439,7 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"I\n" +
 	"\x1cStartRuntimeProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*\x82\x03\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*\x9a\x03\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11PROVIDER_KIND_APP\x10\x01\x12 \n" +
@@ -451,7 +454,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x15PROVIDER_KIND_RUNTIME\x10\n" +
 	"\x12\x17\n" +
 	"\x13PROVIDER_KIND_AGENT\x10\v\x12%\n" +
-	"!PROVIDER_KIND_EXTERNAL_CREDENTIAL\x10\f2\x8a\x03\n" +
+	"!PROVIDER_KIND_EXTERNAL_CREDENTIAL\x10\f\x12\x16\n" +
+	"\x12PROVIDER_KIND_TEST\x10\r2\x8a\x03\n" +
 	"\x11ProviderLifecycle\x12T\n" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +
