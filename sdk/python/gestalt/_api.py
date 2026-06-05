@@ -61,6 +61,7 @@ class Subject:
     id: str = ""
     credential_subject_id: str = ""
     email: str = ""
+    display_name: str = ""
 
 
 

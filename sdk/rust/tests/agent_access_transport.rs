@@ -735,6 +735,7 @@ async fn agent_create_turn_accepts_native_values() {
                     id: "service_account:gestalt-support-github".to_string(),
                     credential_subject_id: "service_account:github-credential".to_string(),
                     email: String::new(),
+                    display_name: String::new(),
                 }),
                 ..Default::default()
             }],

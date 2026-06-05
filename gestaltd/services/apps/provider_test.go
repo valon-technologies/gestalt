@@ -211,8 +211,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user||false||subject|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
-			wantSessionCatalog: "token-123|user:user-123|user||false||subject|roadmap|admin|https://gestalt.example.test",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true||subject|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|user:user-123|user|Ada|true||subject|roadmap|admin|https://gestalt.example.test",
 		},
 		{
 			name: "service account subject",
@@ -222,8 +222,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.Kind("service_account"),
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account||false||subject|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
-			wantSessionCatalog: "token-123|service_account:triage-bot|service_account||false||subject|roadmap|admin|https://gestalt.example.test",
+			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false||subject|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false||subject|roadmap|admin|https://gestalt.example.test",
 		},
 	}
 
@@ -344,6 +344,9 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 	if got := reqCtx.GetSubject().GetEmail(); got != "" {
 		t.Fatalf("subject email = %q, want empty", got)
 	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
+		t.Fatalf("subject display_name = %q, want Triage Bot", got)
+	}
 	if reqCtx.GetAccess() == nil || reqCtx.GetAccess().GetPolicy() != "roadmap" || reqCtx.GetAccess().GetRole() != "viewer" {
 		t.Fatalf("unexpected access context: %#v", reqCtx.GetAccess())
 	}
@@ -372,6 +375,9 @@ func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
 	}
 	if got := reqCtx.GetSubject().GetEmail(); got != "ada@example.com" {
 		t.Fatalf("subject email = %q, want ada@example.com", got)
+	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Ada Lovelace" {
+		t.Fatalf("subject display_name = %q, want Ada Lovelace", got)
 	}
 }
 

@@ -745,6 +745,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
   expect(resolved.subject).toMatchObject({
     id: "user:user-456",
     email: "",
+    displayName: "Slack User",
   });
   expect(seenRequest).toEqual({
     binding: "command",
@@ -773,6 +774,7 @@ test("integration provider service resolves hosted HTTP subjects through the app
       id: "system:http_binding:agent:command",
       credentialSubjectId: "",
       email: "",
+      displayName: "",
       kind: "system",
     },
     credential: {

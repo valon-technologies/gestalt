@@ -129,6 +129,7 @@ func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.Reso
 			Id:                  subject.ID,
 			CredentialSubjectId: subject.CredentialSubjectID,
 			Email:               subject.Email,
+			DisplayName:         subject.DisplayName,
 		},
 	}, nil
 }
@@ -238,6 +239,7 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			ID:                  subject.GetId(),
 			CredentialSubjectID: subject.GetCredentialSubjectId(),
 			Email:               subject.GetEmail(),
+			DisplayName:         subject.GetDisplayName(),
 		})
 	}
 	if subject := reqCtx.GetAgentSubject(); subject != nil {
@@ -245,6 +247,7 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			ID:                  subject.GetId(),
 			CredentialSubjectID: subject.GetCredentialSubjectId(),
 			Email:               subject.GetEmail(),
+			DisplayName:         subject.GetDisplayName(),
 		})
 	}
 	if credential := reqCtx.GetCredential(); credential != nil {
