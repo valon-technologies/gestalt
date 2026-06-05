@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -286,18 +285,6 @@ func newManagedMetadataServer(t *testing.T, releases []managedMetadataRelease) *
 			contentType: "application/yaml",
 			token:       release.token,
 			body:        fixture.Metadata,
-		}
-		routes[path.Dir(release.metadataPath)+"/"+providerrelease.ValidationManifestFile] = response{
-			contentType: "application/yaml",
-			token:       release.token,
-			body:        fixture.Manifest,
-		}
-		if len(fixture.Catalog) != 0 {
-			routes[path.Dir(release.metadataPath)+"/"+providerrelease.ValidationCatalogFile] = response{
-				contentType: "application/yaml",
-				token:       release.token,
-				body:        fixture.Catalog,
-			}
 		}
 		routes[release.archiveURLPath] = response{
 			contentType: "application/octet-stream",
@@ -2457,7 +2444,7 @@ server:
 		t.Fatal("expected provider kind validation error")
 		return
 	}
-	if !strings.Contains(err.Error(), `provider release validation manifest kind "authentication" does not match "app"`) {
+	if !strings.Contains(err.Error(), `app "example" manifest has kind "authentication", want "app"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

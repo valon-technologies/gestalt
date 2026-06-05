@@ -123,12 +123,6 @@ providerSnapshotRepositories:
 	if plan.Metadata.PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/provider-release.yaml" {
 		t.Fatalf("metadata public URL = %q", plan.Metadata.PublicURL)
 	}
-	if len(plan.Validation) != 1 {
-		t.Fatalf("validation len = %d, want 1: %#v", len(plan.Validation), plan.Validation)
-	}
-	if plan.Validation[0].PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/"+providerrelease.ValidationManifestFile {
-		t.Fatalf("validation manifest public URL = %q", plan.Validation[0].PublicURL)
-	}
 	if len(plan.Artifacts) != 1 {
 		t.Fatalf("artifacts len = %d, want 1: %#v", len(plan.Artifacts), plan.Artifacts)
 	}
@@ -139,8 +133,8 @@ providerSnapshotRepositories:
 	if artifact.PublicURL != "https://storage.example.test/providers/github.com/testowner/apps/"+ref+"/ui-test/gestalt-app-ui-test_v"+version+".tar.gz" {
 		t.Fatalf("artifact public URL = %q", artifact.PublicURL)
 	}
-	if len(plan.Files) != 3 {
-		t.Fatalf("files len = %d, want 3: %#v", len(plan.Files), plan.Files)
+	if len(plan.Files) != 2 {
+		t.Fatalf("files len = %d, want 2: %#v", len(plan.Files), plan.Files)
 	}
 }
 
@@ -398,13 +392,12 @@ exit 1
 	}
 	got := string(calls)
 	archiveUpload := strings.Index(got, "gestalt-app-ui-test_v"+version+".tar.gz gs://provider-snapshots")
-	validationUpload := strings.Index(got, providerrelease.ValidationManifestFile+" gs://provider-snapshots")
 	metadataUpload := strings.Index(got, "provider-release.yaml gs://provider-snapshots")
-	if archiveUpload < 0 || validationUpload < 0 || metadataUpload < 0 {
+	if archiveUpload < 0 || metadataUpload < 0 {
 		t.Fatalf("missing expected upload calls:\n%s", got)
 	}
-	if archiveUpload >= validationUpload || validationUpload >= metadataUpload {
-		t.Fatalf("uploads are not phased archive -> validation -> metadata:\n%s", got)
+	if archiveUpload >= metadataUpload {
+		t.Fatalf("uploads are not phased archive -> metadata:\n%s", got)
 	}
 }
 

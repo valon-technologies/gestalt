@@ -492,24 +492,16 @@ func TestRun_ProviderPackageDoesNotWriteReleaseFinalizationFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(outputDir, providerrelease.MetadataFile), []byte("stale\n"), 0o644); err != nil {
 		t.Fatalf("write stale metadata: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(outputDir, providerrelease.ValidationManifestFile), []byte("stale\n"), 0o644); err != nil {
-		t.Fatalf("write stale validation manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(outputDir, providerrelease.ValidationCatalogFile), []byte("stale\n"), 0o644); err != nil {
-		t.Fatalf("write stale validation catalog: %v", err)
-	}
 
 	runProviderPackageCommand(t, pluginDir,
 		"--version", "1.0.0",
 		"--output", outputDir,
 	)
 
-	for _, name := range []string{providerrelease.MetadataFile, providerrelease.ValidationManifestFile, providerrelease.ValidationCatalogFile} {
-		if _, err := os.Stat(filepath.Join(outputDir, name)); err == nil {
-			t.Fatalf("provider package unexpectedly wrote %s", name)
-		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat %s: %v", name, err)
-		}
+	if _, err := os.Stat(filepath.Join(outputDir, providerrelease.MetadataFile)); err == nil {
+		t.Fatalf("provider package unexpectedly wrote %s", providerrelease.MetadataFile)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", providerrelease.MetadataFile, err)
 	}
 }
 

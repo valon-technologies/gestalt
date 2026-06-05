@@ -518,8 +518,8 @@ gestaltd provider release --dist-dir dist --version 0.0.1-alpha.1
 ```
 
 The release step validates the packaged archives, writes `provider-release.yaml`
-plus validation sidecars next to the archives, and records archive hashes in the
-release metadata. It does not run source build commands and can run after
+next to the archives, and records archive hashes plus static validation metadata
+in that file. It does not run source build commands and can run after
 multiple platform-specific package jobs have collected their archives into one
 dist directory.
 

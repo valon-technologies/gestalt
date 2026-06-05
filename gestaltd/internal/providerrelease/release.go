@@ -2,11 +2,8 @@ package providerrelease
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -18,23 +15,25 @@ import (
 )
 
 const (
-	MetadataFile           = "provider-release.yaml"
-	ValidationManifestFile = "validation-manifest.yaml"
-	ValidationCatalogFile  = "validation-catalog.yaml"
-	RuntimeExecutable      = "executable"
-	RuntimeDeclarative     = "declarative"
-	RuntimeUI              = "ui"
-	GenericTarget          = "generic"
-	MaxBytes               = 4 << 20
+	MetadataFile       = "provider-release.yaml"
+	SchemaName         = "gestaltd-provider-release"
+	SchemaVersion      = 1
+	RuntimeExecutable  = "executable"
+	RuntimeDeclarative = "declarative"
+	RuntimeUI          = "ui"
+	GenericTarget      = "generic"
+	MaxBytes           = 16 << 20 // One file carries descriptor, validation manifest, and optional catalog.
 )
 
 type Metadata struct {
-	Package                  string    `yaml:"package"`
-	Kind                     string    `yaml:"kind"`
-	Version                  string    `yaml:"version"`
-	Artifacts                Artifacts `yaml:"artifacts"`
-	ValidationManifestSHA256 string    `yaml:"validationManifestSHA256"`
-	ValidationCatalogSHA256  string    `yaml:"validationCatalogSHA256,omitempty"`
+	Schema           string            `yaml:"schema"`
+	SchemaVersion    int               `yaml:"schemaVersion"`
+	Package          string            `yaml:"package"`
+	Kind             string            `yaml:"kind"`
+	Version          string            `yaml:"version"`
+	Runtime          string            `yaml:"runtime"`
+	Artifacts        Artifacts         `yaml:"artifacts"`
+	StaticValidation *StaticValidation `yaml:"staticValidation,omitempty"`
 }
 
 type Artifacts map[string]Artifact
@@ -44,9 +43,27 @@ type Artifact struct {
 	SHA256 string `yaml:"sha256"`
 }
 
-func SHA256Hex(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
+type StaticValidation struct {
+	Manifest           *providermanifestv1.Manifest `yaml:"manifest,omitempty"`
+	Catalog            *catalog.Catalog             `yaml:"catalog,omitempty"`
+	CatalogSessionOnly bool                         `yaml:"catalogSessionOnly,omitempty"`
+}
+
+type staticValidationYAML struct {
+	Manifest           *staticValidationManifestYAML `yaml:"manifest,omitempty"`
+	Catalog            *catalog.Catalog              `yaml:"catalog,omitempty"`
+	CatalogSessionOnly bool                          `yaml:"catalogSessionOnly,omitempty"`
+}
+
+type staticValidationManifestYAML struct {
+	DisplayName string                          `yaml:"displayName,omitempty"`
+	Description string                          `yaml:"description,omitempty"`
+	IconFile    string                          `yaml:"iconFile,omitempty"`
+	Build       *providermanifestv1.SourceBuild `yaml:"build,omitempty"`
+	Run         []string                        `yaml:"run,omitempty"`
+	Artifacts   []providermanifestv1.Artifact   `yaml:"artifacts,omitempty"`
+	Entrypoint  *providermanifestv1.Entrypoint  `yaml:"entrypoint,omitempty"`
+	Spec        *providermanifestv1.Spec        `yaml:"spec,omitempty"`
 }
 
 func Decode(data []byte) (*Metadata, error) {
@@ -56,84 +73,43 @@ func Decode(data []byte) (*Metadata, error) {
 	if err := decoder.Decode(&metadata); err != nil {
 		return nil, fmt.Errorf("decode provider release metadata: %w", err)
 	}
-	if err := validateDescriptor(&metadata); err != nil {
+	if err := ValidateMetadata(&metadata); err != nil {
 		return nil, err
 	}
 	return &metadata, nil
 }
 
-func DecodeManifest(data []byte) (*providermanifestv1.Manifest, error) {
-	var manifest providermanifestv1.Manifest
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&manifest); err != nil {
-		return nil, err
-	}
-	return &manifest, nil
+func (s StaticValidation) MarshalYAML() (any, error) {
+	return staticValidationYAML{
+		Manifest:           staticValidationManifestForYAML(s.Manifest),
+		Catalog:            s.Catalog,
+		CatalogSessionOnly: s.CatalogSessionOnly,
+	}, nil
 }
 
-func DecodeCatalog(data []byte) (*catalog.Catalog, error) {
-	var cat catalog.Catalog
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&cat); err != nil {
-		return nil, err
+func staticValidationManifestForYAML(manifest *providermanifestv1.Manifest) *staticValidationManifestYAML {
+	if manifest == nil {
+		return nil
 	}
-	return &cat, nil
+	return &staticValidationManifestYAML{
+		DisplayName: manifest.DisplayName,
+		Description: manifest.Description,
+		IconFile:    manifest.IconFile,
+		Build:       manifest.Build,
+		Run:         manifest.Run,
+		Artifacts:   manifest.Artifacts,
+		Entrypoint:  manifest.Entrypoint,
+		Spec:        manifest.Spec,
+	}
 }
 
-func ValidateLocalBundle(metadataPath string) error {
-	metadata, manifestData, catalogData, err := readLocalValidationFiles(metadataPath)
+func ValidateLocalMetadata(metadataPath string) error {
+	data, err := ReadLocalFile(metadataPath)
 	if err != nil {
 		return err
 	}
-	manifest, err := DecodeManifest(manifestData)
-	if err != nil {
-		return fmt.Errorf("decode %s: %w", ValidationManifestFile, err)
-	}
-	var staticCatalog *catalog.Catalog
-	if len(catalogData) != 0 {
-		staticCatalog, err = DecodeCatalog(catalogData)
-		if err != nil {
-			return fmt.Errorf("decode %s: %w", ValidationCatalogFile, err)
-		}
-	}
-	return ValidateBundle(metadata, manifest, staticCatalog)
-}
-
-func readLocalValidationFiles(metadataPath string) (*Metadata, []byte, []byte, error) {
-	data, err := ReadLocalFile(metadataPath)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	metadata, err := Decode(data)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	dir := filepath.Dir(metadataPath)
-	manifestData, err := readVerifiedLocalSidecar(filepath.Join(dir, ValidationManifestFile), metadata.ValidationManifestSHA256)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	var catalogData []byte
-	if metadata.ValidationCatalogSHA256 != "" {
-		catalogData, err = readVerifiedLocalSidecar(filepath.Join(dir, ValidationCatalogFile), metadata.ValidationCatalogSHA256)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
-	return metadata, manifestData, catalogData, nil
-}
-
-func readVerifiedLocalSidecar(path, wantSHA string) ([]byte, error) {
-	data, err := ReadLocalFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if got := SHA256Hex(data); got != strings.TrimSpace(wantSHA) {
-		return nil, fmt.Errorf("provider release validation sidecar %s sha256 %q does not match %q", filepath.Base(path), got, strings.TrimSpace(wantSHA))
-	}
-	return data, nil
+	_, err = Decode(data)
+	return err
 }
 
 func ReadLocalFile(path string) ([]byte, error) {
@@ -147,11 +123,17 @@ func ReadLocalFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-func validateDescriptor(metadata *Metadata) error {
+func ValidateMetadata(metadata *Metadata) error {
 	if metadata == nil {
 		return fmt.Errorf("provider release metadata is required")
 	}
 	metadata.Kind = providermanifestv1.NormalizeKind(metadata.Kind)
+	if metadata.Schema != SchemaName {
+		return fmt.Errorf("unsupported provider release schema %q", metadata.Schema)
+	}
+	if metadata.SchemaVersion != SchemaVersion {
+		return fmt.Errorf("unsupported provider release schema version %d", metadata.SchemaVersion)
+	}
 	if _, err := source.Parse(strings.TrimSpace(metadata.Package)); err != nil {
 		return fmt.Errorf("provider release package: %w", err)
 	}
@@ -166,10 +148,83 @@ func validateDescriptor(metadata *Metadata) error {
 	if _, err := ArtifactsByTarget(metadata.Artifacts); err != nil {
 		return err
 	}
-	if strings.TrimSpace(metadata.ValidationManifestSHA256) == "" {
-		return fmt.Errorf("provider release validation manifest sha256 is required")
+	switch metadata.Runtime {
+	case RuntimeExecutable:
+		if metadata.Kind == providermanifestv1.KindUI {
+			return fmt.Errorf("provider release runtime %q is invalid for kind %q", metadata.Runtime, metadata.Kind)
+		}
+	case RuntimeDeclarative:
+		if metadata.Kind != providermanifestv1.KindApp {
+			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
+		}
+	case RuntimeUI:
+		if metadata.Kind != providermanifestv1.KindUI {
+			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindUI)
+		}
+	default:
+		return fmt.Errorf("provider release runtime %q is not supported", metadata.Runtime)
+	}
+	if metadata.StaticValidation == nil || metadata.StaticValidation.Manifest == nil {
+		return fmt.Errorf("provider release validation manifest is required")
+	}
+	manifest := metadata.StaticValidation.Manifest
+	inheritValidationManifestIdentity(metadata, manifest)
+	staticCatalog := metadata.StaticValidation.Catalog
+	metadataKind := providermanifestv1.NormalizeKind(metadata.Kind)
+	manifestKind := providermanifestv1.NormalizeKind(manifest.Kind)
+	if manifestKind != metadataKind {
+		return fmt.Errorf("provider release validation manifest kind %q does not match %q", manifestKind, metadataKind)
+	}
+	if source := strings.TrimSpace(manifest.Source); source != "" && source != strings.TrimSpace(metadata.Package) {
+		return fmt.Errorf("provider release validation manifest package %q does not match %q", source, metadata.Package)
+	}
+	if version := strings.TrimSpace(manifest.Version); version != "" && version != strings.TrimSpace(metadata.Version) {
+		return fmt.Errorf("provider release validation manifest version %q does not match %q", version, metadata.Version)
+	}
+	if runtime := RuntimeForManifest(metadataKind, manifest); metadata.Runtime != runtime {
+		return fmt.Errorf("provider release runtime %q does not match validation manifest runtime %q", metadata.Runtime, runtime)
+	}
+	if len(manifest.Artifacts) != 0 {
+		return fmt.Errorf("provider release validation manifest must not include platform artifacts")
+	}
+	if manifest.Entrypoint != nil {
+		return fmt.Errorf("provider release validation manifest must not include entrypoint")
+	}
+	if ManifestReferencesPackageFiles(manifest) {
+		return fmt.Errorf("provider release validation manifest must be self-contained")
+	}
+	if staticCatalog != nil {
+		if err := staticCatalog.Validate(); err != nil {
+			return fmt.Errorf("provider release validation catalog: %w", err)
+		}
+	}
+	switch {
+	case staticCatalog != nil && metadata.StaticValidation.CatalogSessionOnly:
+		return fmt.Errorf("provider release staticValidation.catalogSessionOnly must not be set when catalog metadata is present")
+	case staticCatalog == nil && metadata.StaticValidation.CatalogSessionOnly && !CatalogSessionModeAllowed(metadataKind, manifest):
+		return fmt.Errorf("provider release staticValidation.catalogSessionOnly is only valid for MCP-only validation manifests")
+	case CatalogRequired(metadataKind, manifest) && staticCatalog == nil && !metadata.StaticValidation.CatalogSessionOnly && !CatalogSessionModeAllowed(metadataKind, manifest):
+		return fmt.Errorf("provider release validation for package %q must include catalog metadata unless the validation manifest is MCP-only", metadata.Package)
+	}
+	if _, ok := metadata.Artifacts[GenericTarget]; ok && metadataKind == providermanifestv1.KindApp && RuntimeForManifest(metadataKind, manifest) != RuntimeDeclarative {
+		return fmt.Errorf("provider release generic app artifact requires declarative-only validation manifest")
 	}
 	return nil
+}
+
+func inheritValidationManifestIdentity(metadata *Metadata, manifest *providermanifestv1.Manifest) {
+	if metadata == nil || manifest == nil {
+		return
+	}
+	if strings.TrimSpace(manifest.Kind) == "" {
+		manifest.Kind = metadata.Kind
+	}
+	if strings.TrimSpace(manifest.Source) == "" {
+		manifest.Source = strings.TrimSpace(metadata.Package)
+	}
+	if strings.TrimSpace(manifest.Version) == "" {
+		manifest.Version = strings.TrimSpace(metadata.Version)
+	}
 }
 
 func ArtifactsByTarget(artifacts Artifacts) (map[string]Artifact, error) {
@@ -207,52 +262,6 @@ func ArtifactsByTarget(artifacts Artifacts) (map[string]Artifact, error) {
 		return nil, fmt.Errorf("provider release generic artifact must not be mixed with platform artifacts")
 	}
 	return byTarget, nil
-}
-
-func ValidateBundle(metadata *Metadata, manifest *providermanifestv1.Manifest, staticCatalog *catalog.Catalog) error {
-	if err := validateDescriptor(metadata); err != nil {
-		return err
-	}
-	if manifest == nil {
-		return fmt.Errorf("provider release validation manifest is required")
-	}
-	metadataKind := providermanifestv1.NormalizeKind(metadata.Kind)
-	manifestKind := providermanifestv1.NormalizeKind(manifest.Kind)
-	if manifestKind != metadataKind {
-		return fmt.Errorf("provider release validation manifest kind %q does not match %q", manifestKind, metadataKind)
-	}
-	if source := strings.TrimSpace(manifest.Source); source != "" && source != strings.TrimSpace(metadata.Package) {
-		return fmt.Errorf("provider release validation manifest package %q does not match %q", source, metadata.Package)
-	}
-	if version := strings.TrimSpace(manifest.Version); version != "" && version != strings.TrimSpace(metadata.Version) {
-		return fmt.Errorf("provider release validation manifest version %q does not match %q", version, metadata.Version)
-	}
-	if len(manifest.Artifacts) != 0 {
-		return fmt.Errorf("provider release validation manifest must not include platform artifacts")
-	}
-	if manifest.Entrypoint != nil {
-		return fmt.Errorf("provider release validation manifest must not include entrypoint")
-	}
-	if ManifestReferencesPackageFiles(manifest) {
-		return fmt.Errorf("provider release validation manifest must be self-contained")
-	}
-	if staticCatalog != nil {
-		if err := staticCatalog.Validate(); err != nil {
-			return fmt.Errorf("provider release validation catalog: %w", err)
-		}
-	}
-	switch {
-	case strings.TrimSpace(metadata.ValidationCatalogSHA256) != "" && staticCatalog == nil:
-		return fmt.Errorf("provider release validation catalog sidecar is required")
-	case strings.TrimSpace(metadata.ValidationCatalogSHA256) == "" && staticCatalog != nil:
-		return fmt.Errorf("provider release validation catalog sha256 is required")
-	case CatalogRequired(metadataKind, manifest) && staticCatalog == nil && !CatalogSessionModeAllowed(metadataKind, manifest):
-		return fmt.Errorf("provider release validation for package %q must include catalog metadata unless the validation manifest is MCP-only", metadata.Package)
-	}
-	if _, ok := metadata.Artifacts[GenericTarget]; ok && metadataKind == providermanifestv1.KindApp && RuntimeForManifest(metadataKind, manifest) != RuntimeDeclarative {
-		return fmt.Errorf("provider release generic app artifact requires declarative-only validation manifest")
-	}
-	return nil
 }
 
 func RuntimeForManifest(kind string, manifest *providermanifestv1.Manifest) string {

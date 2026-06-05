@@ -102,83 +102,11 @@ func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metada
 	if err != nil {
 		return providerReleaseValidationBundle{}, "", nil, err
 	}
-	manifest, cat, err := fetchProviderReleaseSidecars(ctx, client, resolvedMetadataLocation, token, metadata, gitHubReleaseAssets)
-	if err != nil {
-		return providerReleaseValidationBundle{}, "", nil, err
-	}
-	if err := providerrelease.ValidateBundle(metadata, manifest, cat); err != nil {
-		return providerReleaseValidationBundle{}, "", nil, err
-	}
-	return providerReleaseValidationBundle{Metadata: metadata, Manifest: manifest, Catalog: cat}, resolvedMetadataLocation, gitHubReleaseAssets, nil
-}
-
-func fetchProviderReleaseSidecars(ctx context.Context, client *http.Client, metadataLocation, token string, metadata *providerrelease.Metadata, gitHubReleaseAssets map[string]string) (*providermanifestv1.Manifest, *catalog.Catalog, error) {
-	if metadata == nil {
-		return nil, nil, fmt.Errorf("provider release metadata is required")
-	}
-	manifestData, err := fetchProviderReleaseSidecar(ctx, client, metadataLocation, token, gitHubReleaseAssets, providerrelease.ValidationManifestFile, metadata.ValidationManifestSHA256)
-	if err != nil {
-		return nil, nil, err
-	}
-	manifest, err := providerrelease.DecodeManifest(manifestData)
-	if err != nil {
-		return nil, nil, fmt.Errorf("decode %s: %w", providerrelease.ValidationManifestFile, err)
-	}
-	var staticCatalog *catalog.Catalog
-	if metadata.ValidationCatalogSHA256 != "" {
-		catalogData, err := fetchProviderReleaseSidecar(ctx, client, metadataLocation, token, gitHubReleaseAssets, providerrelease.ValidationCatalogFile, metadata.ValidationCatalogSHA256)
-		if err != nil {
-			return nil, nil, err
-		}
-		cat, err := providerrelease.DecodeCatalog(catalogData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("decode %s: %w", providerrelease.ValidationCatalogFile, err)
-		}
-		staticCatalog = cat
-	}
-	return manifest, staticCatalog, nil
-}
-
-func fetchProviderReleaseSidecar(ctx context.Context, client *http.Client, metadataLocation, token string, gitHubReleaseAssets map[string]string, name, wantSHA string) ([]byte, error) {
-	sidecarLocation, err := resolveArchiveSourceLocation(metadataLocation, name, gitHubReleaseAssets)
-	if err != nil {
-		return nil, fmt.Errorf("resolve provider release validation sidecar %s: %w", name, err)
-	}
-	data, err := readProviderReleaseSidecar(ctx, client, token, sidecarLocation)
-	if err != nil {
-		return nil, err
-	}
-	if got := providerrelease.SHA256Hex(data); got != strings.TrimSpace(wantSHA) {
-		return nil, fmt.Errorf("provider release validation sidecar %s sha256 %q does not match %q", name, got, strings.TrimSpace(wantSHA))
-	}
-	return data, nil
-}
-
-func readProviderReleaseSidecar(ctx context.Context, client *http.Client, token, location string) ([]byte, error) {
-	if !isRemoteReleaseMetadataLocation(location) {
-		return providerrelease.ReadLocalFile(location)
-	}
-	if client == nil {
-		client = http.DefaultClient
-	}
-	resp, err := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
-		return newAuthenticatedFetchRequest(ctx, location, token)
-	})
-	if err != nil {
-		return nil, fmt.Errorf("fetch provider release validation sidecar %s: %w", location, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status %d fetching provider release validation sidecar from %s", resp.StatusCode, location)
-	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, providerrelease.MaxBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read provider release validation sidecar: %w", err)
-	}
-	if len(data) > providerrelease.MaxBytes {
-		return nil, fmt.Errorf("provider release validation sidecar exceeds %d byte limit", providerrelease.MaxBytes)
-	}
-	return data, nil
+	return providerReleaseValidationBundle{
+		Metadata: metadata,
+		Manifest: metadata.StaticValidation.Manifest,
+		Catalog:  metadata.StaticValidation.Catalog,
+	}, resolvedMetadataLocation, gitHubReleaseAssets, nil
 }
 
 func doProviderReleaseHTTPRequestWithRetry(ctx context.Context, client *http.Client, newRequest func(context.Context) (*http.Request, error)) (*http.Response, error) {
