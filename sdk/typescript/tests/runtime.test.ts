@@ -2020,6 +2020,7 @@ test("integration provider request context includes workflow metadata", async ()
         instance: "",
         title: "",
         description: "",
+        credentialMode: "",
         system: "",
         runAs: {
           id: "service_account:github-review",

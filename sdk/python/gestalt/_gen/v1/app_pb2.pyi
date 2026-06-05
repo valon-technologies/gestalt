@@ -257,6 +257,7 @@ class AgentToolRef(_message.Message):
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
     TITLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
     SYSTEM_FIELD_NUMBER: _ClassVar[int]
     RUN_AS_FIELD_NUMBER: _ClassVar[int]
     app: str
@@ -265,9 +266,10 @@ class AgentToolRef(_message.Message):
     instance: str
     title: str
     description: str
+    credential_mode: str
     system: str
     run_as: SubjectContext
-    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., credential_mode: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ()

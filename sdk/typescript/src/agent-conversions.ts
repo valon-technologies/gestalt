@@ -273,6 +273,7 @@ export function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
     instance: ref.instance,
     title: ref.title,
     description: ref.description,
+    credentialMode: ref.credentialMode,
     system: ref.system,
     runAs: agentRunAsSubjectFromProto(ref.runAs),
   };
@@ -286,6 +287,7 @@ export function agentToolRefToProto(ref: AgentToolRef): ProtoAgentToolRef {
     instance: ref.instance ?? "",
     title: ref.title ?? "",
     description: ref.description ?? "",
+    credentialMode: ref.credentialMode ?? "",
     system: ref.system ?? "",
     runAs: agentRunAsSubjectToProto(ref.runAs),
   });

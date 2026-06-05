@@ -263,10 +263,11 @@ func workflowConfigValidateExecutionTarget(cfg *config.Config, target coreworkfl
 					continue
 				}
 				if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.AppCall{
-					Name:       strings.TrimSpace(tool.App),
-					Operation:  strings.TrimSpace(tool.Operation),
-					Connection: strings.TrimSpace(tool.Connection),
-					Instance:   strings.TrimSpace(tool.Instance),
+					Name:           strings.TrimSpace(tool.App),
+					Operation:      strings.TrimSpace(tool.Operation),
+					Connection:     strings.TrimSpace(tool.Connection),
+					Instance:       strings.TrimSpace(tool.Instance),
+					CredentialMode: core.NormalizeOptionalConnectionMode(tool.CredentialMode),
 				}, hasRunAs); err != nil {
 					return err
 				}

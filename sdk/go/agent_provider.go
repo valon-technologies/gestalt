@@ -159,6 +159,7 @@ type AgentToolRef struct {
 	Instance    string
 	Title       string
 	Description string
+	CredentialMode string
 	System      string
 	RunAs       *Subject
 }

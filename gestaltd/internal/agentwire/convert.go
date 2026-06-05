@@ -69,27 +69,29 @@ func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		return coreagent.ToolRef{}
 	}
 	return coreagent.ToolRef{
-		System:      ref.GetSystem(),
-		App:         ref.GetApp(),
-		Operation:   ref.GetOperation(),
-		Connection:  ref.GetConnection(),
-		Instance:    ref.GetInstance(),
-		Title:       ref.GetTitle(),
-		Description: ref.GetDescription(),
-		RunAs:       RunAsSubjectFromProto(ref.GetRunAs()),
+		System:         ref.GetSystem(),
+		App:            ref.GetApp(),
+		Operation:      ref.GetOperation(),
+		Connection:     ref.GetConnection(),
+		Instance:       ref.GetInstance(),
+		Title:          ref.GetTitle(),
+		Description:    ref.GetDescription(),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(ref.GetCredentialMode())),
+		RunAs:          RunAsSubjectFromProto(ref.GetRunAs()),
 	}
 }
 
 func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		System:      ref.System,
-		App:         ref.App,
-		Operation:   ref.Operation,
-		Connection:  ref.Connection,
-		Instance:    ref.Instance,
-		Title:       ref.Title,
-		Description: ref.Description,
-		RunAs:       RunAsSubjectToProto(ref.RunAs),
+		System:         ref.System,
+		App:            ref.App,
+		Operation:      ref.Operation,
+		Connection:     ref.Connection,
+		Instance:       ref.Instance,
+		Title:          ref.Title,
+		Description:    ref.Description,
+		CredentialMode: string(ref.CredentialMode),
+		RunAs:          RunAsSubjectToProto(ref.RunAs),
 	}
 }
 

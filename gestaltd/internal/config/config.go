@@ -1136,13 +1136,14 @@ func workflowValuePathSource(node *yaml.Node, target *string) error {
 }
 
 type WorkflowAgentToolRef struct {
-	System      string `yaml:"system,omitempty"`
-	App         string `yaml:"app,omitempty"`
-	Operation   string `yaml:"operation,omitempty"`
-	Connection  string `yaml:"connection,omitempty"`
-	Instance    string `yaml:"instance,omitempty"`
-	Title       string `yaml:"title,omitempty"`
-	Description string `yaml:"description,omitempty"`
+	System         string `yaml:"system,omitempty"`
+	App            string `yaml:"app,omitempty"`
+	Operation      string `yaml:"operation,omitempty"`
+	Connection     string `yaml:"connection,omitempty"`
+	Instance       string `yaml:"instance,omitempty"`
+	CredentialMode string `yaml:"credentialMode,omitempty"`
+	Title          string `yaml:"title,omitempty"`
+	Description    string `yaml:"description,omitempty"`
 }
 
 type WorkflowEventMatch struct {

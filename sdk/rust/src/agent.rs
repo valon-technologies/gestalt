@@ -427,6 +427,7 @@ pub struct AgentToolRef {
     pub instance: String,
     pub title: String,
     pub description: String,
+    pub credential_mode: String,
     pub system: String,
     pub run_as: Option<Subject>,
 }
@@ -903,6 +904,7 @@ pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
         instance: input.instance,
         title: input.title,
         description: input.description,
+        credential_mode: input.credential_mode,
         system: input.system,
         run_as: input.run_as,
     }
@@ -1289,6 +1291,7 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
         instance: value.instance,
         title: value.title,
         description: value.description,
+        credential_mode: value.credential_mode,
         system: value.system,
         run_as: agent_run_as_context_from_proto(value.run_as),
     }
@@ -1302,6 +1305,7 @@ pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
         instance: value.instance,
         title: value.title,
         description: value.description,
+        credential_mode: value.credential_mode,
         system: value.system,
         run_as: agent_run_as_context_to_proto(value.run_as),
     }

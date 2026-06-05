@@ -126,15 +126,17 @@ func workflowAgentTurnToCore(agent *WorkflowStepAgentConfig) *coreworkflow.Agent
 		})
 	}
 	tools := make([]coreagent.ToolRef, 0, len(agent.Tools))
-	for _, tool := range agent.Tools {
+	for i := range agent.Tools {
+		tool := &agent.Tools[i]
 		tools = append(tools, coreagent.ToolRef{
-			System:      strings.TrimSpace(tool.System),
-			App:         strings.TrimSpace(tool.App),
-			Operation:   strings.TrimSpace(tool.Operation),
-			Connection:  strings.TrimSpace(tool.Connection),
-			Instance:    strings.TrimSpace(tool.Instance),
-			Title:       strings.TrimSpace(tool.Title),
-			Description: strings.TrimSpace(tool.Description),
+			System:         strings.TrimSpace(tool.System),
+			App:            strings.TrimSpace(tool.App),
+			Operation:      strings.TrimSpace(tool.Operation),
+			Connection:     strings.TrimSpace(tool.Connection),
+			Instance:       strings.TrimSpace(tool.Instance),
+			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(tool.CredentialMode)),
+			Title:          strings.TrimSpace(tool.Title),
+			Description:    strings.TrimSpace(tool.Description),
 		})
 	}
 	return &coreworkflow.AgentTurn{
