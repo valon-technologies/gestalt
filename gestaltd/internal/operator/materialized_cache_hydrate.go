@@ -16,10 +16,10 @@ type materializedCacheHydrateStats struct {
 	Restored int
 	Failures int
 	Bytes    int64
+	Error    string
 }
 
-func (c materializedCache) HydrateRemote(ctx context.Context, parallelism int) materializedCacheHydrateStats {
-	var stats materializedCacheHydrateStats
+func (c materializedCache) HydrateRemote(ctx context.Context, parallelism int) (stats materializedCacheHydrateStats) {
 	start := time.Now()
 	defer func() {
 		stats.Duration = time.Since(start)
@@ -34,6 +34,7 @@ func (c materializedCache) HydrateRemote(ctx context.Context, parallelism int) m
 	stats.Entries = len(objects)
 	if err != nil {
 		stats.Failures++
+		stats.Error = err.Error()
 		return stats
 	}
 	if len(objects) == 0 {
