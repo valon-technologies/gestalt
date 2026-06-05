@@ -318,7 +318,7 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.access.role, "")
         self.assertEqual(request.workflow, {})
         self.assertEqual(request.idempotency_key, "")
-        self.assertEqual(request.invocation_token, "")
+        self.assertIsNone(request.context)
 
     def test_authorization_requires_host_service_socket(self) -> None:
         request = Request()
@@ -386,7 +386,6 @@ class MainEntrypointTests(unittest.TestCase):
                 "access_role": request.access.role,
                 "host_base_url": request.host.public_base_url,
                 "idempotency_key": request.idempotency_key,
-                "invocation_token": request.invocation_token,
                 "workflow_run_id": str(request.workflow.get("runId", "")),
                 "workflow_trigger_kind": str(workflow_trigger_kind),
                 "workflow": request.workflow,
@@ -477,7 +476,6 @@ class MainEntrypointTests(unittest.TestCase):
                 operation="whoami",
                 token="secret-token",
                 idempotency_key=" tool-call-123 ",
-                invocation_token="opaque-invocation-token",
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(
                         id="user:user-123",
@@ -591,7 +589,6 @@ class MainEntrypointTests(unittest.TestCase):
                 "tool_ref_app": "github",
                 "tool_ref_operation": "bot.getPullRequest",
                 "tool_ref_run_as": "service_account:github-review",
-                "invocation_token": "opaque-invocation-token",
             },
         )
         catalog = response.catalog

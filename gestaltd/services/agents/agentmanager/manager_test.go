@@ -17,7 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -67,21 +68,51 @@ func agentCatalogTestProvider(name, displayName string, operations ...string) *c
 	}
 }
 
-func newAgentManagerTestRunGrants(t testing.TB) *agentgrant.Manager {
+func newAgentManagerTestToolIDs(t testing.TB) *agenttoolid.Codec {
 	t.Helper()
-	grants, err := agentgrant.NewManager([]byte("0123456789abcdef0123456789abcdef"))
+	codec, err := agenttoolid.NewCodec([]byte("0123456789abcdef0123456789abcdef"))
 	if err != nil {
-		t.Fatalf("agentgrant.NewManager: %v", err)
+		t.Fatalf("agenttoolid.NewCodec: %v", err)
 	}
-	return grants
+	return codec
+}
+
+func newAgentManagerTestTurnScopes() *agentturnscope.Store {
+	return agentturnscope.NewStore()
 }
 
 func newTestManager(t testing.TB, cfg Config) *Manager {
 	t.Helper()
-	if cfg.RunGrants == nil {
-		cfg.RunGrants = newAgentManagerTestRunGrants(t)
+	if cfg.TurnScopes == nil {
+		cfg.TurnScopes = newAgentManagerTestTurnScopes()
+	}
+	if cfg.ToolIDs == nil {
+		cfg.ToolIDs = newAgentManagerTestToolIDs(t)
 	}
 	return New(cfg)
+}
+
+func requireAgentManagerTurnScope(t testing.TB, scopes *agentturnscope.Store, providerName, sessionID, turnID string) agentturnscope.Scope {
+	t.Helper()
+	scope, ok := scopes.Get(providerName, sessionID, turnID)
+	if !ok {
+		t.Fatalf("turn scope %s/%s/%s not found", providerName, sessionID, turnID)
+	}
+	return scope
+}
+
+func requireAgentManagerRequestContextCaller(t testing.TB, reqCtx *proto.RequestContext, kind invocation.ProviderKind, name string) {
+	t.Helper()
+	caller := reqCtx.GetCaller()
+	if caller == nil {
+		t.Fatalf("request context caller is nil, want %s/%s", kind, name)
+	}
+	if got := invocation.ProviderKind(strings.TrimSpace(caller.GetKind())); got != kind {
+		t.Fatalf("request context caller kind = %q, want %q", got, kind)
+	}
+	if got := strings.TrimSpace(caller.GetName()); got != name {
+		t.Fatalf("request context caller name = %q, want %q", got, name)
+	}
 }
 
 func mustProtoStruct(t testing.TB, values map[string]any) *structpb.Struct {
@@ -445,6 +476,7 @@ func TestCreateSessionForwardsSessionStartWhenProviderSupportsIt(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("SessionStart = %#v, want %#v", got, want)
 	}
+	requireAgentManagerRequestContextCaller(t, provider.createSessionReqs[0].GetContext(), invocation.ProviderKindAgent, "alpha")
 }
 
 func TestCreateSessionRejectsSessionStartWhenProviderDoesNotSupportIt(t *testing.T) {
@@ -827,7 +859,7 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 				"alpha": alpha,
 			},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	owner := &principal.Principal{SubjectID: principal.UserSubjectID("owner")}
 	viewer := &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}
@@ -894,7 +926,7 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 				"alpha": alpha,
 			},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -944,7 +976,7 @@ func TestManagerListSessionsRequiresBoundedHydrationForLimitedLists(t *testing.T
 				"unbounded": provider,
 			},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 
 	_, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: subjectID}, &proto.ListAgentProviderSessionsRequest{
@@ -970,7 +1002,7 @@ func TestManagerListSessionsReturnsCapabilityErrorWhenCapabilityReadUnavailable(
 			names:       []string{"alpha"},
 			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	if _, err := manager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
@@ -1049,7 +1081,7 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 				"unbounded": provider,
 			},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	p := &principal.Principal{SubjectID: subjectID}
 
@@ -1076,7 +1108,7 @@ func TestManagerListTurnsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *
 			names:       []string{"alpha"},
 			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	session, err := manager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
@@ -1125,7 +1157,7 @@ func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T
 				"alpha": alpha,
 			},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -1155,16 +1187,13 @@ func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T
 	if got := alpha.createTurnReqs[0].Tools; len(got) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", got)
 	}
-	if got := alpha.createTurnReqs[0].RunGrant; got == "" {
-		t.Fatal("CreateTurn run grant is empty")
-	}
 }
 
 func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -1173,7 +1202,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 				"alpha": alpha,
 			},
 		},
-		RunGrants: grants,
+		TurnScopes: scopes,
 	})
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
@@ -1194,6 +1223,9 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: principal.UserSubjectID("user-1")},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1208,18 +1240,19 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	if got := req.GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want global broad catalog ref", got)
 	}
-	if strings.TrimSpace(req.GetRunGrant()) == "" {
-		t.Fatal("CreateTurn run grant is empty")
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
+	if scope.ToolSource != coreagent.ToolSourceModeMCPCatalog {
+		t.Fatalf("scope tool source = %q, want mcp_catalog", scope.ToolSource)
 	}
-	grant, err := grants.Resolve(req.GetRunGrant())
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
+	if got := scope.ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
+		t.Fatalf("scope tool refs = %#v, want global broad catalog ref", got)
 	}
-	if grant.ToolSource != coreagent.ToolSourceModeMCPCatalog {
-		t.Fatalf("grant tool source = %q, want mcp_catalog", grant.ToolSource)
+	requireAgentManagerRequestContextCaller(t, req.GetContext(), invocation.ProviderKindAgent, "alpha")
+	if got := req.GetContext().GetSubject().GetId(); got != principal.UserSubjectID("user-1") {
+		t.Fatalf("request context subject = %q, want user:user-1", got)
 	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
-		t.Fatalf("grant tool refs = %#v, want global broad catalog ref", got)
+	if scope.CallerKind != invocation.ProviderKindAgent || scope.CallerName != "alpha" {
+		t.Fatalf("scope caller = %s/%q, want agent/alpha", scope.CallerKind, scope.CallerName)
 	}
 }
 
@@ -1230,7 +1263,7 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 	linear := agentCatalogTestProvider("linear", "Linear", "issues")
 	github := agentCatalogTestProvider("github", "GitHub", "issues", "pull_requests")
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, linear, github),
 		Agent: &routeCountingAgentControl{
@@ -1240,7 +1273,7 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 				"alpha": alpha,
 			},
 		},
-		RunGrants:                     grants,
+		TurnScopes:                    scopes,
 		DefaultToolNarrowingThreshold: &threshold,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
@@ -1272,23 +1305,20 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 	if got := req.GetToolRefs(); len(got) != 1 || got[0].GetApp() != "linear" || got[0].GetOperation() != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want linear provider ref", got)
 	}
-	grant, err := grants.Resolve(req.GetRunGrant())
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
-	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].App != "linear" || got[0].Operation != "" {
-		t.Fatalf("grant tool refs = %#v, want linear provider ref", got)
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
+	if got := scope.ToolRefs; len(got) != 1 || got[0].App != "linear" || got[0].Operation != "" {
+		t.Fatalf("scope tool refs = %#v, want linear provider ref", got)
 	}
 
 	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: grant.ToolSource,
-		ToolRefs:   grant.ToolRefs,
+		ToolSource: scope.ToolSource,
+		ToolRefs:   scope.ToolRefs,
 	})
 	if err != nil {
-		t.Fatalf("ListTools narrowed grant: %v", err)
+		t.Fatalf("ListTools narrowed scope: %v", err)
 	}
 	if len(listed.Tools) != 1 || listed.Tools[0].Target.App != "linear" || listed.Tools[0].Target.Operation != "issues" {
-		t.Fatalf("ListTools narrowed grant = %#v, want only linear issues", listed.Tools)
+		t.Fatalf("ListTools narrowed scope = %#v, want only linear issues", listed.Tools)
 	}
 }
 
@@ -1421,13 +1451,13 @@ func TestManagerCreateTurnDoesNotStemProviderMentionsForImplicitNarrowing(t *tes
 	}
 }
 
-func TestManagerCreateTurnKeepsImplicitWildcardForCallerAppDefaults(t *testing.T) {
+func TestManagerCreateTurnKeepsImplicitWildcardForHTTPAppCallerDefaults(t *testing.T) {
 	t.Parallel()
 
 	threshold := 0
 	linear := agentCatalogTestProvider("linear", "Linear", "issues")
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, linear),
 		Agent: &routeCountingAgentControl{
@@ -1437,10 +1467,13 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerAppDefaults(t *testing.T
 				"alpha": alpha,
 			},
 		},
-		RunGrants:                     grants,
+		TurnScopes:                    scopes,
 		DefaultToolNarrowingThreshold: &threshold,
 	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	p := &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+		Kind:      principal.KindUser,
+	}
 
 	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "alpha",
@@ -1449,29 +1482,32 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerAppDefaults(t *testing.T
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	ctx := WithCallerAppName(context.Background(), "slack")
+	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 	_, err = manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
 		Output:         agentTextOutputProto(),
+		Context: &proto.RequestContext{
+			Caller: &proto.ProviderContext{
+				Kind: string(invocation.ProviderKindApp),
+				Name: "slack",
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
 	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for caller app default", got)
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for app caller default", got)
 	}
-	grant, err := grants.Resolve(alpha.createTurnReqs[0].GetRunGrant())
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
-	}
-	if grant.CallerAppName != "slack" {
-		t.Fatalf("grant caller app = %q, want slack", grant.CallerAppName)
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, alpha.createTurnReqs[0].GetTurnId())
+	if scope.CallerKind != invocation.ProviderKindApp || scope.CallerName != "slack" {
+		t.Fatalf("scope caller = %s/%q, want app/slack", scope.CallerKind, scope.CallerName)
 	}
 	if linear.catalogCalls != 0 {
-		t.Fatalf("linear catalog calls = %d, want caller app default to skip narrowing probes", linear.catalogCalls)
+		t.Fatalf("linear catalog calls = %d, want app caller default to skip narrowing probes", linear.catalogCalls)
 	}
 }
 
@@ -1722,9 +1758,6 @@ func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T
 	if got := req.GetToolRefs(); len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty catalog source", got)
 	}
-	if strings.TrimSpace(req.GetRunGrant()) == "" {
-		t.Fatal("CreateTurn run grant is empty")
-	}
 }
 
 func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
@@ -1736,7 +1769,7 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 			coreagent.ToolSourceModeNone,
 		},
 	}
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -1745,7 +1778,7 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 				"alpha": alpha,
 			},
 		},
-		RunGrants:        grants,
+		TurnScopes:       scopes,
 		AgentConnections: map[string][]string{"alpha": {"anthropic"}},
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
@@ -1777,18 +1810,15 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
 	}
-	grant, err := grants.Resolve(req.GetRunGrant())
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
+	if scope.ToolSource != coreagent.ToolSourceModeNone {
+		t.Fatalf("scope tool source = %q, want none", scope.ToolSource)
 	}
-	if grant.ToolSource != coreagent.ToolSourceModeNone {
-		t.Fatalf("grant tool source = %q, want none", grant.ToolSource)
+	if scope.ToolRefsSet {
+		t.Fatalf("scope tool refs set = true, want false for unset tool refs")
 	}
-	if grant.ToolRefsSet {
-		t.Fatalf("grant tool refs set = true, want false for unset tool refs")
-	}
-	if len(grant.ToolRefs) != 0 || len(grant.Tools) != 0 || len(grant.Connections) != 0 {
-		t.Fatalf("grant scope = refs:%#v tools:%#v connections:%#v, want no tool or connection scope", grant.ToolRefs, grant.Tools, grant.Connections)
+	if len(scope.ToolRefs) != 0 || len(scope.Tools) != 0 || len(scope.Connections) != 0 {
+		t.Fatalf("turn scope = refs:%#v tools:%#v connections:%#v, want no tool or connection scope", scope.ToolRefs, scope.Tools, scope.Connections)
 	}
 }
 
@@ -1902,7 +1932,7 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 						"alpha": alpha,
 					},
 				},
-				RunGrants: newAgentManagerTestRunGrants(t),
+				TurnScopes: newAgentManagerTestTurnScopes(),
 			})
 			p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 			session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
@@ -1949,7 +1979,7 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -1958,7 +1988,7 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 				"alpha": alpha,
 			},
 		},
-		RunGrants: grants,
+		TurnScopes: scopes,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -1989,24 +2019,18 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	if got := req.GetToolRefs(); len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
 	}
-	if strings.TrimSpace(req.GetRunGrant()) == "" {
-		t.Fatal("CreateTurn run grant is empty")
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
+	if scope.ToolSource != coreagent.ToolSourceModeUnspecified {
+		t.Fatalf("scope tool source = %q, want empty", scope.ToolSource)
 	}
-	grant, err := grants.Resolve(req.GetRunGrant())
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
+	if !scope.ToolRefsSet {
+		t.Fatalf("scope tool refs set = false, want true for explicit empty tool refs")
 	}
-	if grant.ToolSource != coreagent.ToolSourceModeUnspecified {
-		t.Fatalf("grant tool source = %q, want empty", grant.ToolSource)
+	if got := scope.ToolRefs; len(got) != 0 {
+		t.Fatalf("scope tool refs = %#v, want none for explicit empty tool refs", got)
 	}
-	if !grant.ToolRefsSet {
-		t.Fatalf("grant tool refs set = false, want true for explicit empty tool refs")
-	}
-	if got := grant.ToolRefs; len(got) != 0 {
-		t.Fatalf("grant tool refs = %#v, want none for explicit empty tool refs", got)
-	}
-	if got := grant.Tools; len(got) != 0 {
-		t.Fatalf("grant tools = %#v, want none for explicit empty tool refs", got)
+	if got := scope.Tools; len(got) != 0 {
+		t.Fatalf("scope tools = %#v, want none for explicit empty tool refs", got)
 	}
 }
 
@@ -2032,7 +2056,7 @@ func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
 				"alpha": alpha,
 			},
 		},
-		RunGrants: newAgentManagerTestRunGrants(t),
+		TurnScopes: newAgentManagerTestTurnScopes(),
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -2056,11 +2080,11 @@ func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
 	}
 }
 
-func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
+func TestManagerCancelTurnRevokesTurnScopeWithoutBootstrapWrapper(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -2069,7 +2093,7 @@ func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 				"alpha": alpha,
 			},
 		},
-		RunGrants: grants,
+		TurnScopes: scopes,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -2089,35 +2113,24 @@ func TestManagerCancelTurnRevokesRunGrantWithoutBootstrapWrapper(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	grant, err := grants.Mint(agentgrant.Grant{
-		ProviderName: "alpha",
-		SessionID:    session.ID,
-		TurnID:       turn.ID,
-		SubjectID:    principal.UserSubjectID("user-1"),
-	})
-	if err != nil {
-		t.Fatalf("Mint: %v", err)
-	}
-	if _, err := grants.Resolve(grant); err != nil {
-		t.Fatalf("Resolve before cancel: %v", err)
+	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID); scope.Revoked {
+		t.Fatalf("scope before cancel is revoked")
 	}
 
 	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "done"}); err != nil {
 		t.Fatalf("CancelTurn: %v", err)
 	}
-	if _, err := grants.Resolve(grant); err == nil {
-		t.Fatal("Resolve after cancel error = nil, want revoked grant")
-	} else if !strings.Contains(err.Error(), "revoked") {
-		t.Fatalf("Resolve after cancel error = %v, want revoked grant", err)
+	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID); !scope.Revoked {
+		t.Fatalf("scope after cancel is not revoked")
 	}
 }
 
-func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *testing.T) {
+func TestManagerCancelTurnRevokesExecutionRefScopeWithoutBootstrapWrapper(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
 	alpha.turnIDOverride = "provider-turn-1"
-	grants := newAgentManagerTestRunGrants(t)
+	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
@@ -2126,7 +2139,7 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 				"alpha": alpha,
 			},
 		},
-		RunGrants: grants,
+		TurnScopes: scopes,
 	})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
@@ -2153,30 +2166,19 @@ func TestManagerCancelTurnRevokesExecutionRefGrantWithoutBootstrapWrapper(t *tes
 	if strings.TrimSpace(turn.ExecutionRef) == "" || turn.ExecutionRef == turn.ID {
 		t.Fatalf("CreateTurn ExecutionRef = %q, want generated requested ID distinct from provider turn ID %q", turn.ExecutionRef, turn.ID)
 	}
-	grant, err := grants.Mint(agentgrant.Grant{
-		ProviderName: "alpha",
-		SessionID:    session.ID,
-		TurnID:       turn.ExecutionRef,
-		SubjectID:    principal.UserSubjectID("user-1"),
-	})
-	if err != nil {
-		t.Fatalf("Mint: %v", err)
-	}
-	if _, err := grants.Resolve(grant); err != nil {
-		t.Fatalf("Resolve before cancel: %v", err)
+	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ExecutionRef); scope.Revoked {
+		t.Fatalf("execution-ref scope before cancel is revoked")
 	}
 
 	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "done"}); err != nil {
 		t.Fatalf("CancelTurn: %v", err)
 	}
-	if _, err := grants.Resolve(grant); err == nil {
-		t.Fatal("Resolve after cancel error = nil, want revoked grant")
-	} else if !strings.Contains(err.Error(), "revoked") {
-		t.Fatalf("Resolve after cancel error = %v, want revoked grant", err)
+	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ExecutionRef); !scope.Revoked {
+		t.Fatalf("execution-ref scope after cancel is not revoked")
 	}
 }
 
-func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.T) {
+func TestAgentTurnPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
@@ -2193,13 +2195,13 @@ func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{App: "*"}})
+	got := agentTurnPermissions(ctx, p, invocation.ProviderKindApp, "slack", []coreagent.ToolRef{{App: "*"}})
 	if len(got) != 1 || got[0].App != "linear" || len(got[0].Operations) != 1 || got[0].Operations[0] != "issues" {
-		t.Fatalf("agentRunPermissions = %#v, want API token permissions preserved", got)
+		t.Fatalf("agentTurnPermissions = %#v, want API token permissions preserved", got)
 	}
 }
 
-func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
+func TestAgentTurnPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
@@ -2217,7 +2219,7 @@ func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{
+	got := agentTurnPermissions(ctx, p, "", "", []coreagent.ToolRef{
 		{App: "slack", Operation: "chat.postMessage"},
 		{App: "linear", Operation: "viewer"},
 		{App: "slack", Operation: "chat.postMessage"},
@@ -2228,11 +2230,11 @@ func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 		{App: "slack", Operations: []string{"chat.postMessage"}},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
+		t.Fatalf("agentTurnPermissions = %#v, want %#v", got, want)
 	}
 }
 
-func TestAgentRunPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
+func TestAgentTurnPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
@@ -2249,14 +2251,14 @@ func TestAgentRunPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{{App: "linear", Operation: "viewer"}})
+	got := agentTurnPermissions(ctx, p, "", "", []coreagent.ToolRef{{App: "linear", Operation: "viewer"}})
 	want := []core.AccessPermission{{App: "linear", Operations: []string{"viewer"}}}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
+		t.Fatalf("agentTurnPermissions = %#v, want %#v", got, want)
 	}
 }
 
-func TestAgentRunPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
+func TestAgentTurnPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
@@ -2273,17 +2275,17 @@ func TestAgentRunPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{
+	got := agentTurnPermissions(ctx, p, "", "", []coreagent.ToolRef{
 		{App: "linear", Operation: "viewer"},
 		{App: "linear"},
 	})
 	want := []core.AccessPermission{{App: "linear", Operations: []string{"viewer"}}}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
+		t.Fatalf("agentTurnPermissions = %#v, want %#v", got, want)
 	}
 }
 
-func TestAgentRunPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testing.T) {
+func TestAgentTurnPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
@@ -2299,8 +2301,8 @@ func TestAgentRunPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testin
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	if got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{App: "*"}}); got != nil {
-		t.Fatalf("agentRunPermissions = %#v, want nil permissions for resolved user wildcard search", got)
+	if got := agentTurnPermissions(ctx, p, invocation.ProviderKindApp, "slack", []coreagent.ToolRef{{App: "*"}}); got != nil {
+		t.Fatalf("agentTurnPermissions = %#v, want nil permissions for resolved user wildcard search", got)
 	}
 }
 
@@ -2577,7 +2579,7 @@ func TestManagerProjectsAgentFacingAppToolSchemas(t *testing.T) {
 					{
 						ID:          "hidden_admin",
 						Title:       "Hidden admin",
-						Description: "Hidden exact-grant operation",
+						Description: "Hidden exact operation",
 						Visible:     &hidden,
 						InputSchema: json.RawMessage(`{
 							"type":"object",

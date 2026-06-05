@@ -43,7 +43,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -54,7 +53,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -93,12 +92,108 @@ type requestContextBody struct {
 		Policy string `json:"policy"`
 		Role   string `json:"role"`
 	} `json:"access"`
-	InvocationToken string `json:"invocation_token"`
 }
 
 type nestedInvokeHarness struct {
 	invoker  invocation.Invoker
 	services *coredata.Services
+}
+
+type appInvocationTestAuthorizationProvider struct {
+	allowed map[string]struct{}
+}
+
+func newAppInvocationTestAuthorizationProvider(t *testing.T, cfg *config.Config) core.AuthorizationProvider {
+	t.Helper()
+
+	relationships, err := appInvocationAuthorizationRelationships(cfg)
+	if err != nil {
+		t.Fatalf("appInvocationAuthorizationRelationships: %v", err)
+	}
+	workflowRelationships, err := workflowAuthorizationRelationships(cfg)
+	if err != nil {
+		t.Fatalf("workflowAuthorizationRelationships: %v", err)
+	}
+	relationships = append(relationships, workflowRelationships...)
+	provider := &appInvocationTestAuthorizationProvider{allowed: map[string]struct{}{}}
+	for _, relationship := range relationships {
+		tuple := relationship.GetTuple()
+		if tuple == nil {
+			continue
+		}
+		subject := tuple.GetTarget().GetSubject()
+		if subject == nil {
+			continue
+		}
+		provider.allowed[appInvocationTestAuthorizationKey(
+			subject.GetType(),
+			subject.GetId(),
+			appInvocationAuthorizationActionInvoke,
+			tuple.GetResource().GetType(),
+			tuple.GetResource().GetId(),
+		)] = struct{}{}
+	}
+	return provider
+}
+
+func (p *appInvocationTestAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	if p == nil {
+		return &proto.CheckAccessResponse{}, nil
+	}
+	_, ok := p.allowed[appInvocationTestAuthorizationKey(
+		req.GetSubject().GetType(),
+		req.GetSubject().GetId(),
+		req.GetAction().GetName(),
+		req.GetResource().GetType(),
+		req.GetResource().GetId(),
+	)]
+	return &proto.CheckAccessResponse{Allowed: ok}, nil
+}
+
+func (p *appInvocationTestAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	resp := &proto.CheckAccessManyResponse{Decisions: make([]*proto.CheckAccessResponse, 0, len(req.GetRequests()))}
+	for _, check := range req.GetRequests() {
+		result, err := p.CheckAccess(ctx, check)
+		if err != nil {
+			return nil, err
+		}
+		resp.Decisions = append(resp.Decisions, result)
+	}
+	return resp, nil
+}
+
+func (p *appInvocationTestAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	return &proto.ListRelationshipsResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return &proto.AddRelationshipResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return &proto.DeleteRelationshipResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	return &proto.SetAuthorizationStateResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return &proto.SetActiveModelResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return &proto.ListActiveModelResourceTypesResponse{}, nil
+}
+func (p *appInvocationTestAuthorizationProvider) Ping(context.Context) error { return nil }
+func (p *appInvocationTestAuthorizationProvider) Close() error               { return nil }
+
+func appInvocationTestAuthorizationKey(subjectType, subjectID, actionName, resourceType, resourceID string) string {
+	return strings.Join([]string{
+		strings.TrimSpace(subjectType),
+		strings.TrimSpace(subjectID),
+		strings.TrimSpace(actionName),
+		strings.TrimSpace(resourceType),
+		strings.TrimSpace(resourceID),
+	}, "\x00")
 }
 
 type capturingRuntime struct {
@@ -526,7 +621,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 			case "invoke_plugin":
 				targetApp, _ := params["app"].(string)
 				targetOperation, _ := params["operation"].(string)
-				envelope, err := fakeHostedInvokePlugin(targetApp, targetOperation, appaccessservice.InvocationTokenFromContext(ctx), env)
+				envelope, err := fakeHostedInvokePlugin(ctx, targetApp, targetOperation, env)
 				if err != nil {
 					envelope = invokePluginEnvelope{
 						OK:              false,
@@ -541,7 +636,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "workflow_manager_roundtrip":
-				record, err := fakeHostedWorkflowManagerRoundTrip(appaccessservice.InvocationTokenFromContext(ctx), env)
+				record, err := fakeHostedWorkflowManagerRoundTrip(fakeHostedAppRequestContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -551,7 +646,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				}
 				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 			case "agent_manager_roundtrip":
-				record, err := fakeHostedAgentManagerRoundTrip(appaccessservice.InvocationTokenFromContext(ctx), env)
+				record, err := fakeHostedAgentManagerRoundTrip(fakeHostedAppRequestContext(ctx), env)
 				if err != nil {
 					return nil, err
 				}
@@ -845,7 +940,7 @@ func fakeHostedS3RoundTrip(key, value, binding string, env map[string]string) (m
 	}, nil
 }
 
-func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
+func fakeHostedWorkflowManagerRoundTrip(reqCtx *proto.RequestContext, env map[string]string) (map[string]any, error) {
 	address, token, err := fakeHostedHostServiceRelay("workflow manager", env)
 	if err != nil {
 		return nil, err
@@ -869,9 +964,9 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 
 	client := proto.NewWorkflowProviderClient(conn)
 	applied, err := client.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
-		InvocationToken: invocationToken,
-		ProviderName:    "managed",
-		IdempotencyKey:  "workflow-manager-roundtrip",
+		Context:        reqCtx,
+		ProviderName:   "managed",
+		IdempotencyKey: "workflow-manager-roundtrip",
 		Spec: &proto.WorkflowDefinitionSpec{
 			Id: "workflow-manager-roundtrip",
 			Target: &proto.BoundWorkflowTarget{
@@ -900,8 +995,8 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		return nil, fmt.Errorf("workflow manager apply did not return a definition id")
 	}
 	fetched, err := client.GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{
-		InvocationToken: invocationToken,
-		DefinitionId:    definitionID,
+		Context:      reqCtx,
+		DefinitionId: definitionID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get workflow definition: %w", err)
@@ -916,7 +1011,7 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	}, nil
 }
 
-func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
+func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[string]string) (map[string]any, error) {
 	address, token, err := fakeHostedHostServiceRelay("agent manager", env)
 	if err != nil {
 		return nil, err
@@ -940,11 +1035,11 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 
 	client := proto.NewAgentProviderClient(conn)
 	session, err := client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		InvocationToken: invocationToken,
-		ProviderName:    "managed",
-		Model:           "gpt-test",
-		ClientRef:       "plugin-session",
-		IdempotencyKey:  "plugin-agent-session",
+		Context:        reqCtx,
+		ProviderName:   "managed",
+		Model:          "gpt-test",
+		ClientRef:      "plugin-session",
+		IdempotencyKey: "plugin-agent-session",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create agent session: %w", err)
@@ -962,12 +1057,12 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	}
 
 	turn, err := client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds:  1,
-		InvocationToken: invocationToken,
-		SessionId:       sessionID,
-		Model:           "gpt-test",
-		IdempotencyKey:  "plugin-agent-turn",
-		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+		Context:        reqCtx,
+		TimeoutSeconds: 1,
+		SessionId:      sessionID,
+		Model:          "gpt-test",
+		IdempotencyKey: "plugin-agent-turn",
+		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
 		Output: &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Text{
 				Text: &proto.AgentTextOutput{},
@@ -992,8 +1087,8 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	}
 
 	interactions, err := client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
-		InvocationToken: invocationToken,
-		TurnId:          turnID,
+		Context: reqCtx,
+		TurnId:  turnID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list agent interactions: %w", err)
@@ -1013,28 +1108,28 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		return nil, fmt.Errorf("build interaction resolution: %w", err)
 	}
 	resolved, err := client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
-		InvocationToken: invocationToken,
-		TurnId:          turnID,
-		InteractionId:   interactionID,
-		Resolution:      resolution,
+		Context:       reqCtx,
+		TurnId:        turnID,
+		InteractionId: interactionID,
+		Resolution:    resolution,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("resolve agent interaction: %w", err)
 	}
 
 	fetched, err := client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-		InvocationToken: invocationToken,
-		TurnId:          turnID,
+		Context: reqCtx,
+		TurnId:  turnID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get agent turn: %w", err)
 	}
 
 	events, err := client.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
-		InvocationToken: invocationToken,
-		TurnId:          turnID,
-		AfterSeq:        0,
-		Limit:           10,
+		Context:  reqCtx,
+		TurnId:   turnID,
+		AfterSeq: 0,
+		Limit:    10,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list agent turn events: %w", err)
@@ -1054,7 +1149,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	}, nil
 }
 
-func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, env map[string]string) (invokePluginEnvelope, error) {
+func fakeHostedInvokePlugin(providerCtx context.Context, targetApp, targetOperation string, env map[string]string) (invokePluginEnvelope, error) {
 	envelope := invokePluginEnvelope{
 		OK:              false,
 		TargetApp:       targetApp,
@@ -1082,9 +1177,9 @@ func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, 
 	defer cancel()
 
 	resp, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
-		InvocationToken: invocationToken,
-		App:             targetApp,
-		Operation:       targetOperation,
+		Context:   fakeHostedAppRequestContext(providerCtx),
+		App:       targetApp,
+		Operation: targetOperation,
 	})
 	if err != nil {
 		return envelope, err
@@ -1096,6 +1191,53 @@ func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, 
 		return envelope, fmt.Errorf("decode nested invoke body: %w", err)
 	}
 	return envelope, nil
+}
+
+func fakeHostedAppRequestContext(ctx context.Context) *proto.RequestContext {
+	caller := invocation.CallerProviderFromContext(ctx)
+	out := &proto.RequestContext{}
+	if caller.Kind != "" && caller.Name != "" {
+		out.Caller = &proto.ProviderContext{
+			Kind: string(caller.Kind),
+			Name: caller.Name,
+		}
+	}
+	if p := principal.FromContext(ctx); p != nil {
+		p = principal.Canonicalized(p)
+		out.Subject = &proto.SubjectContext{
+			Id:                  p.SubjectID,
+			CredentialSubjectId: principal.EffectiveCredentialSubjectID(p),
+		}
+	}
+	if cred := invocation.CredentialContextFromContext(ctx); cred != (invocation.CredentialContext{}) {
+		out.Credential = &proto.CredentialContext{
+			Mode:       string(cred.Mode),
+			SubjectId:  cred.SubjectID,
+			Connection: cred.Connection,
+			Instance:   cred.Instance,
+		}
+	}
+	if meta := invocation.MetaFromContext(ctx); meta != nil {
+		out.Invocation = &proto.InvocationContext{
+			RequestId: meta.RequestID,
+			Depth:     int32(meta.Depth),
+			CallChain: append([]string(nil), meta.CallChain...),
+		}
+	}
+	if out.Invocation == nil {
+		out.Invocation = &proto.InvocationContext{}
+	}
+	out.Invocation.Connection = invocation.ConnectionFromContext(ctx)
+	if access := invocation.AccessContextFromContext(ctx); access != (invocation.AccessContext{}) {
+		out.Access = &proto.AccessContext{
+			Policy: access.Policy,
+			Role:   access.Role,
+		}
+	}
+	if out.Caller == nil && out.Subject == nil && out.Credential == nil && out.Invocation.GetConnection() == "" && out.Access == nil {
+		return nil
+	}
+	return out
 }
 
 func (r *capturingBundleRuntime) startAppRequestsCopy() []*proto.StartHostedAppRequest {
@@ -2699,6 +2841,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
 		AppInvocation: bridge,
+		Authorization: newAppInvocationTestAuthorizationProvider(t, cfg),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -2829,6 +2972,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
 		AppInvocation: bridge,
+		Authorization: newAppInvocationTestAuthorizationProvider(t, cfg),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3592,14 +3736,16 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	agentProvider := newStubAgentTurnManagerProvider()
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
 	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.ExternalCredentials)
-	runGrants := newTestAgentRunGrants(t)
-	agentRuntime.SetRunGrants(runGrants)
+	turnScopes := newTestAgentTurnScopes()
+	agentRuntime.SetTurnScopes(turnScopes)
+	agentRuntime.SetToolIDCodec(newTestAgentToolIDs(t))
 	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
-		Providers: &pluginProviders.Providers,
-		Agent:     agentRuntime,
-		RunGrants: runGrants,
-		Invoker:   broker,
+		Providers:  &pluginProviders.Providers,
+		Agent:      agentRuntime,
+		TurnScopes: turnScopes,
+		ToolIDs:    newTestAgentToolIDs(t),
+		Invoker:    broker,
 	})
 	relaySrv := httptest.NewUnstartedServer(newRuntimeRelayTestHandler(t, secret, publicHostServices))
 	relaySrv.EnableHTTP2 = true
@@ -3773,12 +3919,12 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Workflow manager definitions")
 	manager := newStubWorkflowManager()
 	workflowManagerOperations := []string{
-		workflowgrants.OperationDefinitionsApply,
-		workflowgrants.OperationDefinitionsGet,
-		workflowgrants.OperationDefinitionsSetPaused,
-		workflowgrants.OperationDefinitionsSetActivationPaused,
-		workflowgrants.OperationDefinitionsDelete,
-		workflowgrants.OperationEventsDeliver,
+		workflowauth.OperationDefinitionsApply,
+		workflowauth.OperationDefinitionsGet,
+		workflowauth.OperationDefinitionsSetPaused,
+		workflowauth.OperationDefinitionsSetActivationPaused,
+		workflowauth.OperationDefinitionsDelete,
+		workflowauth.OperationEventsDeliver,
 	}
 
 	cfg := &config.Config{
@@ -3801,6 +3947,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey:   secret,
 		WorkflowManager: manager,
+		Authorization:   newAppInvocationTestAuthorizationProvider(t, cfg),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -4001,7 +4148,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	}
 }
 
-func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
+func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
 	bin := buildEchoPluginBinary(t)
@@ -4024,7 +4171,7 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Capabilities: &config.AppCapabilitiesConfig{
 					Workflow: &config.AppWorkflowCapabilitiesConfig{
-						Operations: []string{workflowgrants.OperationEventsDeliver},
+						Operations: []string{workflowauth.OperationEventsDeliver},
 					},
 				},
 			},
@@ -4035,6 +4182,7 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey:   secret,
 		WorkflowManager: manager,
+		Authorization:   newAppInvocationTestAuthorizationProvider(t, cfg),
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -4094,68 +4242,6 @@ func TestAppWorkflowManagerHostMethodsUseProviderTokenGrants(t *testing.T) {
 	}
 	if !strings.Contains(applyBody.Error, `workflow manager operation "definitions.apply" is not allowed`) {
 		t.Fatalf("apply workflow definition error = %q, want definitions.apply permission denied", applyBody.Error)
-	}
-}
-
-func TestAppWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echo",
-		Operations: []catalog.CatalogOperation{
-			{ID: "apply_workflow_definition", Method: http.MethodPost},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Workflow manager invalid handle")
-
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"echo": {
-				Command:              bin,
-				Args:                 []string{"provider"},
-				ResolvedManifest:     manifest,
-				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-			},
-		},
-	}
-
-	manager := newStubWorkflowManager()
-	secret := []byte("0123456789abcdef0123456789abcdef")
-	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
-		EncryptionKey:   secret,
-		WorkflowManager: manager,
-	}))
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	defer func() { _ = CloseProviders(providers) }()
-
-	prov, err := providers.Get("echo")
-	if err != nil {
-		t.Fatalf("providers.Get(echo): %v", err)
-	}
-
-	result, err := prov.Execute(context.Background(), "apply_workflow_definition", map[string]any{
-		"definition_id":    "roadmap_sync",
-		"invocation_token": "forged-token",
-		"target": map[string]any{
-			"app":       "roadmap",
-			"operation": "sync",
-		},
-	}, "")
-	if err != nil {
-		t.Fatalf("Execute(apply_workflow_definition): %v", err)
-	}
-
-	var body struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if !strings.Contains(body.Error, "invalid or expired") {
-		t.Fatalf("invalid invocation token error = %q, want invalid or expired", body.Error)
 	}
 }
 
@@ -4396,9 +4482,6 @@ func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if got.InvocationToken == "" {
-		t.Fatalf("nested invocation_token = %q, want non-empty", got.InvocationToken)
-	}
 	if got.Credential.Connection != "work" {
 		t.Fatalf("nested credential.connection = %q, want %q", got.Credential.Connection, "work")
 	}
@@ -4600,79 +4683,6 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 	}
 }
 
-func TestPluginInvokesAllowGraphQLSurfaceThroughProviderToken(t *testing.T) {
-	t.Parallel()
-
-	var nonIntrospectionCalls atomic.Int32
-	schema := pluginInvokeGraphQLSchema()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			Query string `json:"query"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if strings.Contains(payload.Query, "__schema") {
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"data": map[string]any{
-					"__schema": schema,
-				},
-			})
-			return
-		}
-		nonIntrospectionCalls.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{"ok": true},
-		})
-	}))
-	t.Cleanup(srv.Close)
-
-	harness := newGraphQLSurfaceInvokeHarness(t, srv.URL, false, config.AuthorizationConfig{})
-	ctx := context.Background()
-	user := newNestedInvokeUser(t, harness, ctx, "nested-graphql-surface-denied@test.com")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
-	storeNestedInvokeToken(t, harness, ctx, user.ID, "linear", "work", "default")
-
-	result, err := harness.invoker.Invoke(
-		invocation.WithConnection(context.Background(), "work"),
-		&principal.Principal{
-			UserID: user.ID,
-			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
-			Scopes: []string{"caller", "linear"},
-		},
-		"caller",
-		"",
-		"invoke_plugin_graphql",
-		map[string]any{
-			"app":      "linear",
-			"document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
-			"variables": map[string]any{
-				"team": "eng",
-			},
-		},
-	)
-	if err != nil {
-		t.Fatalf("Invoke(caller.invoke_plugin_graphql): %v", err)
-	}
-
-	var got struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	if !got.OK {
-		t.Fatalf("expected graphql surface success, got error: %q", got.Error)
-	}
-	if got := nonIntrospectionCalls.Load(); got != 1 {
-		t.Fatalf("non-introspection graphql calls = %d, want 1", got)
-	}
-}
-
 func TestPluginInvokesDoNotLeakCallerAccessToPolicylessTargets(t *testing.T) {
 	t.Parallel()
 
@@ -4740,20 +4750,6 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 		wantBodySubstring string
 		wantError         string
 	}{
-		{
-			name:  "invalid invocation token",
-			email: "nested-invalid-handle@test.com",
-			tokens: []tokenSpec{
-				{plugin: "caller", connection: "work", instance: "default"},
-				{plugin: "example", connection: "work", instance: "default"},
-			},
-			params: map[string]any{
-				"app":              "example",
-				"operation":        "request_context",
-				"invocation_token": "forged-token",
-			},
-			wantError: "invalid or expired",
-		},
 		{
 			name:  "missing target credential returns operation result",
 			email: "nested-no-target-token@test.com",
@@ -6159,6 +6155,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 		EncryptionKey:      secret,
 		AppInvocation:      bridge,
 		PublicHostServices: publicHostServices,
+		Authorization:      newAppInvocationTestAuthorizationProvider(t, cfg),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 
@@ -6902,8 +6899,8 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 				Capabilities: &config.AppCapabilitiesConfig{
 					Workflow: &config.AppWorkflowCapabilitiesConfig{
 						Operations: []string{
-							workflowgrants.OperationDefinitionsApply,
-							workflowgrants.OperationDefinitionsGet,
+							workflowauth.OperationDefinitionsApply,
+							workflowauth.OperationDefinitionsGet,
 						},
 					},
 				},
@@ -6922,6 +6919,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		EncryptionKey:      secret,
 		WorkflowManager:    manager,
 		PublicHostServices: publicHostServices,
+		Authorization:      newAppInvocationTestAuthorizationProvider(t, cfg),
 	}
 	deps.RuntimeRegistry = newRuntimeRegistry(cfg, factories.Runtime, deps)
 

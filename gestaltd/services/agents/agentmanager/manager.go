@@ -22,6 +22,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -38,7 +41,6 @@ var (
 	ErrAgentProviderRequired           = errors.New("agent provider is required")
 	ErrAgentProviderNotAvailable       = errors.New("agent provider is not available")
 	ErrAgentSubjectRequired            = errors.New("agent subject is required")
-	ErrAgentCallerAppRequired          = errors.New("agent caller app is required for inherited tools")
 	ErrAgentInheritedSurfaceTool       = errors.New("agent inherited surface tools are not supported")
 	ErrAgentInteractionRequired        = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound        = errors.New("agent interaction is not found")
@@ -61,21 +63,6 @@ const (
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
 )
-
-type callerAppNameContextKey struct{}
-
-func WithCallerAppName(ctx context.Context, callerAppName string) context.Context {
-	callerAppName = strings.TrimSpace(callerAppName)
-	if callerAppName == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, callerAppNameContextKey{}, callerAppName)
-}
-
-func callerAppNameFromContext(ctx context.Context) string {
-	value, _ := ctx.Value(callerAppNameContextKey{}).(string)
-	return strings.TrimSpace(value)
-}
 
 type AgentProviderNotAvailableError struct {
 	Name string
@@ -132,13 +119,15 @@ type Config struct {
 	Agent             AgentControl
 	WorkflowTools     WorkflowSystemTools
 	RunGrants         *agentgrant.Manager
+	TurnScopes        *agentturnscope.Store
+	ToolIDs           *agenttoolid.Codec
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
 	// DefaultToolNarrowingThreshold controls when implicit default wildcard
-	// catalog grants are narrowed to exactly mentioned providers. Nil uses the
+	// catalog scopes are narrowed to exactly mentioned providers. Nil uses the
 	// package default; zero means narrow whenever any visible catalog candidate
 	// exists.
 	DefaultToolNarrowingThreshold *int
@@ -149,6 +138,8 @@ type Manager struct {
 	agent                         AgentControl
 	workflowTools                 WorkflowSystemTools
 	runGrants                     *agentgrant.Manager
+	turnScopes                    *agentturnscope.Store
+	toolIDs                       *agenttoolid.Codec
 	invoker                       invocation.Invoker
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
@@ -163,6 +154,8 @@ func New(cfg Config) *Manager {
 		agent:             cfg.Agent,
 		workflowTools:     cfg.WorkflowTools,
 		runGrants:         cfg.RunGrants,
+		turnScopes:        cfg.TurnScopes,
+		toolIDs:           cfg.ToolIDs,
 		invoker:           cfg.Invoker,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
@@ -257,8 +250,51 @@ func cloneAgentRequest[T interface {
 	return gproto.Clone(req).(T)
 }
 
-func agentCallerAppName(ctx context.Context) string {
-	return callerAppNameFromContext(ctx)
+func agentCaller(ctx context.Context, reqCtx *proto.RequestContext, providerName string) (invocation.ProviderKind, string) {
+	if caller := reqCtx.GetCaller(); caller != nil {
+		kind := invocation.ProviderKind(strings.TrimSpace(caller.GetKind()))
+		name := strings.TrimSpace(caller.GetName())
+		if kind != "" && name != "" {
+			return kind, name
+		}
+	}
+	caller := invocation.CallerProviderFromContext(ctx)
+	if caller.Kind != "" && caller.Name != "" {
+		return caller.Kind, caller.Name
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return "", ""
+	}
+	return invocation.ProviderKindAgent, providerName
+}
+
+func agentRequestContext(ctx context.Context, p *principal.Principal, existing *proto.RequestContext, callerKind invocation.ProviderKind, callerName string) (*proto.RequestContext, error) {
+	callerKind = invocation.ProviderKind(strings.TrimSpace(string(callerKind)))
+	callerName = strings.TrimSpace(callerName)
+	base, err := appaccessservice.RequestContextProto(principal.WithPrincipal(ctx, p), "", invocation.CallerProvider{
+		Kind: callerKind,
+		Name: callerName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return appaccessservice.MergeRequestContext(existing, base), nil
+	}
+	if callerKind == "" || callerName == "" {
+		return base, nil
+	}
+	return base, nil
+}
+
+func agentProviderRequestContext(ctx context.Context, p *principal.Principal, existing *proto.RequestContext, providerName string) (context.Context, *proto.RequestContext, error) {
+	callerKind, callerName := agentCaller(ctx, existing, providerName)
+	if callerKind != "" && callerName != "" {
+		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
+	}
+	reqCtx, err := agentRequestContext(ctx, p, existing, callerKind, callerName)
+	return ctx, reqCtx, err
 }
 
 func agentSubjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
@@ -486,13 +522,16 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
 	providerReq.PreparedWorkspace = nil
-	providerReq.InvocationToken = ""
+	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), providerName)
+	if err != nil {
+		return nil, err
+	}
 	session, err = provider.CreateSession(ctx, providerReq)
 	if err != nil {
 		if sessionStart != nil || workspace != nil {
 			return nil, err
 		}
-		session, err = m.getCreatedSessionAfterCreateError(ctx, p, provider, sessionID)
+		session, err = m.getCreatedSessionAfterCreateError(ctx, p, provider, sessionID, providerReq.Context)
 		if err != nil {
 			return nil, err
 		}
@@ -510,10 +549,11 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	return normalized, nil
 }
 
-func (m *Manager) getCreatedSessionAfterCreateError(ctx context.Context, p *principal.Principal, provider coreagent.Provider, sessionID string) (*coreagent.Session, error) {
+func (m *Manager) getCreatedSessionAfterCreateError(ctx context.Context, p *principal.Principal, provider coreagent.Provider, sessionID string, reqContext *proto.RequestContext) (*coreagent.Session, error) {
 	return provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
 		SessionId: sessionID,
 		Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context:   reqContext,
 	})
 }
 
@@ -524,7 +564,7 @@ func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, req *p
 	if req == nil {
 		req = &proto.GetAgentProviderSessionRequest{}
 	}
-	owned, err := m.findAccessibleSession(ctx, p, req.GetSessionId(), "")
+	owned, err := m.findAccessibleSession(ctx, p, req.GetSessionId(), "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +592,7 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 		return nil, err
 	}
 	if len(req.GetSessionIds()) > 0 {
-		return m.listExactSessions(ctx, p, providerName, req.GetSessionIds(), state, limit, req.GetSummaryOnly())
+		return m.listExactSessions(ctx, p, providerName, req.GetSessionIds(), state, limit, req.GetSummaryOnly(), req.GetContext())
 	}
 	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
 	if err != nil {
@@ -570,8 +610,13 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 				return nil, err
 			}
 		}
-		sessions, err := candidate.provider.ListSessions(ctx, &proto.ListAgentProviderSessionsRequest{
+		callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), candidate.name)
+		if err != nil {
+			return nil, err
+		}
+		sessions, err := candidate.provider.ListSessions(callCtx, &proto.ListAgentProviderSessionsRequest{
 			Subject:     agentSubjectToProto(agentSubjectFromPrincipal(p)),
+			Context:     providerReqContext,
 			State:       req.GetState(),
 			Limit:       int32(limit),
 			SummaryOnly: req.GetSummaryOnly(),
@@ -616,7 +661,7 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	return out, nil
 }
 
-func (m *Manager) listExactSessions(ctx context.Context, p *principal.Principal, providerName string, sessionIDs []string, state coreagent.SessionState, limit int, summaryOnly bool) ([]*coreagent.Session, error) {
+func (m *Manager) listExactSessions(ctx context.Context, p *principal.Principal, providerName string, sessionIDs []string, state coreagent.SessionState, limit int, summaryOnly bool, reqContext *proto.RequestContext) ([]*coreagent.Session, error) {
 	out := make([]*coreagent.Session, 0, len(sessionIDs))
 	seen := map[string]struct{}{}
 	for _, sessionID := range sessionIDs {
@@ -628,7 +673,7 @@ func (m *Manager) listExactSessions(ctx context.Context, p *principal.Principal,
 			continue
 		}
 		seen[sessionID] = struct{}{}
-		owned, err := m.findAccessibleSession(ctx, p, sessionID, providerName)
+		owned, err := m.findAccessibleSession(ctx, p, sessionID, providerName, reqContext)
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
 				continue
@@ -671,7 +716,7 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrInvalidInvocation, err)
 	}
-	owned, err := m.findOwnedSession(ctx, p, req.GetSessionId(), "")
+	owned, err := m.findOwnedSession(ctx, p, req.GetSessionId(), "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -691,7 +736,10 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.State = req.GetState()
 	providerReq.Metadata = providerMetadata
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.InvocationToken = ""
+	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
+	if err != nil {
+		return nil, err
+	}
 	session, err = owned.provider.UpdateSession(ctx, providerReq)
 	if err != nil {
 		return nil, err
@@ -719,7 +767,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if subjectID == "" {
 		return nil, ErrAgentSubjectRequired
 	}
-	ownedSession, err := m.findOwnedSession(ctx, p, req.GetSessionId(), "")
+	ownedSession, err := m.findOwnedSession(ctx, p, req.GetSessionId(), "", req.GetContext())
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return nil, fmt.Errorf("%w: %w", ErrAgentSessionNotFound, err)
@@ -731,7 +779,10 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err != nil {
 		return nil, err
 	}
-	callerAppName := agentCallerAppName(ctx)
+	callerKind, callerName := agentCaller(ctx, req.GetContext(), ownedSession.providerName)
+	if callerKind != "" && callerName != "" {
+		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
+	}
 	toolSource, err := validateProviderTurnToolSource(agentToolSourceModeFromProtoStrict(req.GetToolSource()))
 	if err != nil {
 		return nil, err
@@ -741,7 +792,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !req.GetToolRefsSet() && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
 		toolSource = coreagent.ToolSourceModeMCPCatalog
-		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, callerAppName, agentwire.MessagesFromProto(req.GetMessages()))
+		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, callerKind, callerName, agentwire.MessagesFromProto(req.GetMessages()))
 	}
 	toolRefsSet := req.GetToolRefsSet() || len(toolRefs) > 0
 	requestedOutput := agentOutputFromProto(req.GetOutput())
@@ -780,10 +831,22 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, callerAppName, toolRefs, toolRefsSet, tools, toolSource)
-	if err != nil {
+	runGrant := ""
+	if err := m.storeTurnScope(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource); err != nil {
 		return nil, err
 	}
+	if m.runGrants != nil {
+		runGrant, err = m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource)
+		if err != nil {
+			return nil, err
+		}
+	}
+	scopeCommitted := false
+	defer func() {
+		if !scopeCommitted {
+			m.deleteTurnScope(ownedSession.providerName, ownedSession.session.ID, turnID)
+		}
+	}()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
 	providerReq.TurnId = turnID
 	providerReq.SessionId = ownedSession.session.ID
@@ -797,7 +860,10 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.RunGrant = runGrant
-	providerReq.InvocationToken = ""
+	providerReq.Context, err = agentRequestContext(ctx, p, req.GetContext(), callerKind, callerName)
+	if err != nil {
+		return nil, err
+	}
 	turn, err = ownedSession.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
 		return nil, err
@@ -812,6 +878,12 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err := validateAgentTurnOutput(requestedOutput, normalized); err != nil {
 		return nil, err
 	}
+	if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
+		if err := m.turnScopes.Alias(ownedSession.providerName, normalized.SessionID, executionRef, normalized.ID); err != nil {
+			return nil, fmt.Errorf("%w: alias agent turn scope: %v", invocation.ErrInternal, err)
+		}
+	}
+	scopeCommitted = true
 	return normalized, nil
 }
 
@@ -822,7 +894,7 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, req *prot
 	if req == nil {
 		req = &proto.GetAgentProviderTurnRequest{}
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "")
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -845,7 +917,7 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req *pr
 	if err != nil {
 		return nil, err
 	}
-	ownedSession, err := m.findAccessibleSession(ctx, p, req.GetSessionId(), "")
+	ownedSession, err := m.findAccessibleSession(ctx, p, req.GetSessionId(), "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -855,9 +927,14 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req *pr
 			return nil, err
 		}
 	}
-	turns, err = ownedSession.provider.ListTurns(ctx, &proto.ListAgentProviderTurnsRequest{
+	callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), ownedSession.providerName)
+	if err != nil {
+		return nil, err
+	}
+	turns, err = ownedSession.provider.ListTurns(callCtx, &proto.ListAgentProviderTurnsRequest{
 		SessionId:   ownedSession.session.ID,
 		Subject:     agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context:     providerReqContext,
 		TurnIds:     append([]string(nil), req.GetTurnIds()...),
 		Status:      req.GetStatus(),
 		Limit:       int32(limit),
@@ -904,7 +981,7 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	if req == nil {
 		req = &proto.CancelAgentProviderTurnRequest{}
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "")
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -916,7 +993,10 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.TurnId = strings.TrimSpace(req.GetTurnId())
 	providerReq.Reason = strings.TrimSpace(req.GetReason())
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.InvocationToken = ""
+	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
+	if err != nil {
+		return nil, err
+	}
 	turn, err = owned.provider.CancelTurn(ctx, providerReq)
 	if err != nil {
 		return nil, err
@@ -927,6 +1007,12 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	if coreagent.ExecutionStatusIsLive(normalized.Status) {
 		return nil, fmt.Errorf("%w: agent provider %q returned live turn %q after cancel", invocation.ErrInternal, owned.providerName, strings.TrimSpace(normalized.ID))
+	}
+	if m.turnScopes != nil {
+		m.turnScopes.Revoke(owned.providerName, normalized.SessionID, normalized.ID)
+		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
+			m.turnScopes.Revoke(owned.providerName, normalized.SessionID, executionRef)
+		}
 	}
 	if m.runGrants != nil {
 		m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, normalized.ID)
@@ -944,16 +1030,21 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, re
 	if req == nil {
 		req = &proto.ListAgentProviderTurnEventsRequest{}
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "")
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
-	events, err = owned.provider.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
+	callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
+	if err != nil {
+		return nil, err
+	}
+	events, err = owned.provider.ListTurnEvents(callCtx, &proto.ListAgentProviderTurnEventsRequest{
 		TurnId:   owned.turn.ID,
 		AfterSeq: req.GetAfterSeq(),
 		Limit:    req.GetLimit(),
 		Subject:  agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context:  providerReqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -968,14 +1059,19 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	if req == nil {
 		req = &proto.ListAgentProviderInteractionsRequest{}
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "")
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
-	interactions, err := owned.provider.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
+	callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
+	if err != nil {
+		return nil, err
+	}
+	interactions, err := owned.provider.ListInteractions(callCtx, &proto.ListAgentProviderInteractionsRequest{
 		TurnId:  owned.turn.ID,
 		Subject: agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context: providerReqContext,
 	})
 	if err != nil {
 		return nil, err
@@ -1003,7 +1099,7 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	if req == nil {
 		req = &proto.ResolveAgentProviderInteractionRequest{}
 	}
-	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "")
+	owned, err := m.findAccessibleTurn(ctx, p, req.GetTurnId(), "", "", req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -1019,7 +1115,10 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	providerReq.InteractionId = interactionID
 	providerReq.TurnId = owned.turn.ID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.InvocationToken = ""
+	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
+	if err != nil {
+		return nil, err
+	}
 	interaction, err = owned.provider.ResolveInteraction(ctx, providerReq)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -1159,15 +1258,15 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	return authorized, nil
 }
 
-func (m *Manager) findAccessibleSession(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*accessibleAgentSession, error) {
+func (m *Manager) findAccessibleSession(ctx context.Context, p *principal.Principal, sessionID, providerName string, reqContext *proto.RequestContext) (*accessibleAgentSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, core.ErrNotFound
 	}
-	return m.findAccessibleSessionInProviders(ctx, p, sessionID, providerName)
+	return m.findAccessibleSessionInProviders(ctx, p, sessionID, providerName, reqContext)
 }
 
-func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*accessibleAgentSession, error) {
+func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string, reqContext *proto.RequestContext) (*accessibleAgentSession, error) {
 	candidates, retainedErr, err := m.directReadProviderCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
@@ -1183,9 +1282,14 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 			authDenied = true
 			continue
 		}
-		session, err := candidate.provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, reqContext, candidate.name)
+		if err != nil {
+			return nil, err
+		}
+		session, err := candidate.provider.GetSession(callCtx, &proto.GetAgentProviderSessionRequest{
 			SessionId: sessionID,
 			Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+			Context:   providerReqContext,
 		})
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
@@ -1226,15 +1330,15 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 	return found, nil
 }
 
-func (m *Manager) findAccessibleTurn(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string) (*accessibleAgentTurn, error) {
+func (m *Manager) findAccessibleTurn(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string, reqContext *proto.RequestContext) (*accessibleAgentTurn, error) {
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
 		return nil, core.ErrNotFound
 	}
-	return m.findAccessibleTurnInProviders(ctx, p, turnID, providerName, expectedSessionID)
+	return m.findAccessibleTurnInProviders(ctx, p, turnID, providerName, expectedSessionID, reqContext)
 }
 
-func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string) (*accessibleAgentTurn, error) {
+func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string, reqContext *proto.RequestContext) (*accessibleAgentTurn, error) {
 	candidates, retainedErr, err := m.directReadProviderCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
@@ -1250,9 +1354,14 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 			authDenied = true
 			continue
 		}
-		turn, err := candidate.provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
+		callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, reqContext, candidate.name)
+		if err != nil {
+			return nil, err
+		}
+		turn, err := candidate.provider.GetTurn(callCtx, &proto.GetAgentProviderTurnRequest{
 			TurnId:  turnID,
 			Subject: agentSubjectToProto(agentSubjectFromPrincipal(p)),
+			Context: providerReqContext,
 		})
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
@@ -1275,7 +1384,7 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 		if err != nil {
 			return nil, err
 		}
-		session, err := m.findAccessibleSessionInProviders(ctx, p, normalized.SessionID, candidate.name)
+		session, err := m.findAccessibleSessionInProviders(ctx, p, normalized.SessionID, candidate.name, reqContext)
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
 				continue
@@ -1331,15 +1440,15 @@ func filterProviderCandidatesByTokenPermission(p *principal.Principal, candidate
 	return filtered, nil
 }
 
-func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
+func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, sessionID, providerName string, reqContext *proto.RequestContext) (*ownedAgentSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, core.ErrNotFound
 	}
-	return m.findOwnedSessionInProviders(ctx, p, sessionID, providerName)
+	return m.findOwnedSessionInProviders(ctx, p, sessionID, providerName, reqContext)
 }
 
-func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
+func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string, reqContext *proto.RequestContext) (*ownedAgentSession, error) {
 	candidates, retainedErr, err := m.directReadProviderCandidates(ctx, providerName)
 	if err != nil {
 		return nil, err
@@ -1355,9 +1464,14 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 			authDenied = true
 			continue
 		}
-		session, err := candidate.provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, reqContext, candidate.name)
+		if err != nil {
+			return nil, err
+		}
+		session, err := candidate.provider.GetSession(callCtx, &proto.GetAgentProviderSessionRequest{
 			SessionId: sessionID,
 			Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+			Context:   providerReqContext,
 		})
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
@@ -1441,21 +1555,22 @@ func agentProviderReadFallbackAllowed(err error) bool {
 	return false
 }
 
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerAppName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
-	if m == nil || m.runGrants == nil {
-		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
+func (m *Manager) storeTurnScope(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) error {
+	if m == nil || m.turnScopes == nil {
+		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
 	}
 	subject := agentSubjectFromPrincipal(p)
-	permissions := agentRunPermissions(ctx, p, callerAppName, toolRefs)
+	permissions := agentTurnPermissions(ctx, p, callerKind, callerName, toolRefs)
 	connections := m.agentConnectionBindings(providerName)
 	if toolSource == coreagent.ToolSourceModeNone {
 		connections = nil
 	}
-	return m.runGrants.Mint(agentgrant.Grant{
+	return m.turnScopes.Put(agentturnscope.Scope{
 		ProviderName:        providerName,
 		SessionID:           sessionID,
 		TurnID:              turnID,
-		CallerAppName:       strings.TrimSpace(callerAppName),
+		CallerKind:          callerKind,
+		CallerName:          callerName,
 		SubjectID:           subject.SubjectID,
 		CredentialSubjectID: subject.CredentialSubjectID,
 		Permissions:         permissions,
@@ -1467,7 +1582,61 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 	})
 }
 
-func (m *Manager) agentConnectionBindings(providerName string) []agentgrant.ConnectionBinding {
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
+	if m == nil || m.runGrants == nil {
+		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
+	}
+	callerKind = invocation.ProviderKind(strings.TrimSpace(string(callerKind)))
+	callerName = strings.TrimSpace(callerName)
+	subject := agentSubjectFromPrincipal(p)
+	permissions := agentTurnPermissions(ctx, p, callerKind, callerName, toolRefs)
+	connections := agentGrantConnectionBindings(m.agentConnectionBindings(providerName))
+	if toolSource == coreagent.ToolSourceModeNone {
+		connections = nil
+	}
+	legacyCallerAppName := ""
+	if callerKind == invocation.ProviderKindApp {
+		legacyCallerAppName = callerName
+	}
+	return m.runGrants.Mint(agentgrant.Grant{
+		ProviderName:        providerName,
+		SessionID:           sessionID,
+		TurnID:              turnID,
+		CallerAppName:       legacyCallerAppName,
+		CallerKind:          callerKind,
+		CallerName:          callerName,
+		SubjectID:           subject.SubjectID,
+		CredentialSubjectID: subject.CredentialSubjectID,
+		Permissions:         permissions,
+		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolRefsSet:         toolRefsSet,
+		Tools:               append([]coreagent.Tool(nil), tools...),
+		ToolSource:          toolSource,
+		Connections:         connections,
+	})
+}
+
+func agentGrantConnectionBindings(src []agentturnscope.ConnectionBinding) []agentgrant.ConnectionBinding {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]agentgrant.ConnectionBinding, 0, len(src))
+	for _, binding := range src {
+		if connection := strings.TrimSpace(binding.Connection); connection != "" {
+			out = append(out, agentgrant.ConnectionBinding{Connection: connection})
+		}
+	}
+	return out
+}
+
+func (m *Manager) deleteTurnScope(providerName, sessionID, turnID string) {
+	if m == nil || m.turnScopes == nil {
+		return
+	}
+	m.turnScopes.Delete(providerName, sessionID, turnID)
+}
+
+func (m *Manager) agentConnectionBindings(providerName string) []agentturnscope.ConnectionBinding {
 	if m == nil {
 		return nil
 	}
@@ -1475,11 +1644,11 @@ func (m *Manager) agentConnectionBindings(providerName string) []agentgrant.Conn
 	if len(names) == 0 {
 		return nil
 	}
-	out := make([]agentgrant.ConnectionBinding, 0, len(names))
+	out := make([]agentturnscope.ConnectionBinding, 0, len(names))
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		if name != "" {
-			out = append(out, agentgrant.ConnectionBinding{Connection: name})
+			out = append(out, agentturnscope.ConnectionBinding{Connection: name})
 		}
 	}
 	return out
@@ -3194,10 +3363,10 @@ func sanitizeMCPNamePart(value string) string {
 }
 
 func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
-	if m == nil || m.runGrants == nil {
-		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
+	if m == nil || m.toolIDs == nil {
+		return "", fmt.Errorf("%w: agent tool ids are not configured", invocation.ErrInternal)
 	}
-	id, err := m.runGrants.MintToolID(target)
+	id, err := m.toolIDs.Mint(target)
 	if err != nil {
 		return "", fmt.Errorf("%w: mint agent tool id: %v", invocation.ErrInternal, err)
 	}
@@ -3335,12 +3504,12 @@ func defaultAgentTurnToolSource(ctx context.Context, provider coreagent.Provider
 	return coreagent.ToolSourceModeUnspecified
 }
 
-func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Principal, callerAppName string, messages []coreagent.Message) []coreagent.ToolRef {
+func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Principal, callerKind invocation.ProviderKind, callerName string, messages []coreagent.Message) []coreagent.ToolRef {
 	broadRefs := []coreagent.ToolRef{{App: agentToolSearchAllApp}}
 	if m == nil || m.providers == nil {
 		return broadRefs
 	}
-	if strings.TrimSpace(callerAppName) != "" {
+	if shouldUseResolvedUserToolScope(ctx, p, callerKind, callerName, broadRefs) {
 		return broadRefs
 	}
 	latestUserText := latestAgentUserMessageText(messages)
@@ -3509,7 +3678,7 @@ func (m *Manager) agentToolVisibleCandidateCountExceeds(ctx context.Context, p *
 	return exceeded, nil
 }
 
-func agentRunPermissions(ctx context.Context, p *principal.Principal, callerAppName string, refs []coreagent.ToolRef) []core.AccessPermission {
+func agentTurnPermissions(ctx context.Context, p *principal.Principal, callerKind invocation.ProviderKind, callerName string, refs []coreagent.ToolRef) []core.AccessPermission {
 	p = principal.Canonicalized(p)
 	if p == nil {
 		return nil
@@ -3517,7 +3686,7 @@ func agentRunPermissions(ctx context.Context, p *principal.Principal, callerAppN
 	if permissions, ok := compactAgentRunPermissionsForRefs(p, refs); ok {
 		return permissions
 	}
-	if shouldUseResolvedUserToolScope(ctx, p, callerAppName, refs) {
+	if shouldUseResolvedUserToolScope(ctx, p, callerKind, callerName, refs) {
 		return nil
 	}
 	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
@@ -3606,8 +3775,8 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 	return out, true
 }
 
-func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal, callerAppName string, refs []coreagent.ToolRef) bool {
-	if strings.TrimSpace(callerAppName) == "" {
+func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal, callerKind invocation.ProviderKind, callerName string, refs []coreagent.ToolRef) bool {
+	if callerKind != invocation.ProviderKindApp || strings.TrimSpace(callerName) == "" {
 		return false
 	}
 	if invocation.InvocationSurfaceFromContext(ctx) != invocation.InvocationSurfaceHTTP {

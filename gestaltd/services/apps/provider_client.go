@@ -9,11 +9,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"google.golang.org/grpc/codes"
@@ -49,8 +47,9 @@ type remoteProviderBase struct {
 	discovery      *core.DiscoveryConfig
 	closer         io.Closer
 	publicBaseURL  string
+	callerKind     invocation.ProviderKind
+	callerName     string
 	invTokens      *appaccessservice.InvocationTokenManager
-	callerApp      string
 	invokeGrants   appaccessservice.InvocationGrants
 	workflowGrants workflowgrants.Grants
 }
@@ -80,9 +79,10 @@ func WithInvocationTokens(tokens *appaccessservice.InvocationTokenManager) Remot
 	return func(b *remoteProviderBase) { b.invTokens = tokens }
 }
 
-func WithInvocationTokenSubject(pluginName string, grants appaccessservice.InvocationGrants) RemoteProviderOption {
+func WithInvocationTokenSubject(appName string, grants appaccessservice.InvocationGrants) RemoteProviderOption {
 	return func(b *remoteProviderBase) {
-		b.callerApp = strings.TrimSpace(pluginName)
+		b.callerName = strings.TrimSpace(appName)
+		b.callerKind = invocation.ProviderKindApp
 		b.invokeGrants = appaccessservice.CloneInvocationGrants(grants)
 	}
 }
@@ -90,6 +90,13 @@ func WithInvocationTokenSubject(pluginName string, grants appaccessservice.Invoc
 func WithWorkflowManagerGrants(grants workflowgrants.Grants) RemoteProviderOption {
 	return func(b *remoteProviderBase) {
 		b.workflowGrants = workflowgrants.Clone(grants)
+	}
+}
+
+func WithCallerProvider(kind invocation.ProviderKind, name string) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		b.callerKind = invocation.ProviderKind(strings.TrimSpace(string(kind)))
+		b.callerName = strings.TrimSpace(name)
 	}
 }
 
@@ -176,17 +183,17 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	if err != nil {
 		return nil, err
 	}
-	requestToken := ""
-	if p != nil && p.invTokens != nil && p.callerApp != "" {
-		mintCtx := invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, p.callerApp)
-		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(mintCtx, p.callerApp, p.invokeGrants, p.workflowGrants)
-		if err != nil {
-			return nil, err
-		}
-	}
 	reqCtx, err := p.requestContextProto(ctx)
 	if err != nil {
 		return nil, err
+	}
+	requestToken := ""
+	if p != nil && p.invTokens != nil && p.callerName != "" {
+		mintCtx := invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, p.callerName)
+		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(mintCtx, p.callerName, p.invokeGrants, p.workflowGrants)
+		if err != nil {
+			return nil, err
+		}
 	}
 	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
 		Operation:        operation,
@@ -194,9 +201,9 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
 		InvocationId:     invocationIDFromContext(ctx),
-		InvocationToken:  requestToken,
 		IdempotencyKey:   invocation.IdempotencyKeyFromContext(ctx),
 		Context:          reqCtx,
+		InvocationToken:  requestToken,
 	})
 	if err != nil {
 		return nil, remoteProviderExecuteError(err)
@@ -320,94 +327,15 @@ func invocationIDFromContext(ctx context.Context) string {
 
 func (p *remoteProviderBase) requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
 	if p == nil {
-		return requestContextProto(ctx, "")
+		return requestContextProto(ctx, "", invocation.CallerProvider{})
 	}
-	return requestContextProto(ctx, p.publicBaseURL)
+	return requestContextProto(ctx, p.publicBaseURL, invocation.CallerProvider{Kind: p.callerKind, Name: p.callerName})
 }
 
-func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.RequestContext, error) {
-	var out proto.RequestContext
-
-	if p := principal.FromContext(ctx); p != nil {
-		out.Subject = &proto.SubjectContext{
-			Id:                  subjectIDForPrincipal(p),
-			CredentialSubjectId: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-			Email:               subjectEmail(p),
-			DisplayName:         subjectDisplayName(p),
-		}
-	}
-
-	if cred := invocation.CredentialContextFromContext(ctx); cred.Mode != "" || cred.SubjectID != "" || cred.Connection != "" || cred.Instance != "" {
-		out.Credential = &proto.CredentialContext{
-			Mode:       string(cred.Mode),
-			SubjectId:  cred.SubjectID,
-			Connection: cred.Connection,
-			Instance:   cred.Instance,
-		}
-	}
-
-	if access := invocation.AccessContextFromContext(ctx); access.Policy != "" || access.Role != "" {
-		out.Access = &proto.AccessContext{
-			Policy: access.Policy,
-			Role:   access.Role,
-		}
-	}
-	if workflow := invocation.WorkflowContextFromContext(ctx); workflow != nil {
-		value, err := protoutil.StructFromMap(workflow)
-		if err != nil {
-			return nil, fmt.Errorf("workflow request context: %w", err)
-		}
-		out.Workflow = value
-	}
-	if toolRefs := invocation.ToolRefsContextFromContext(ctx); toolRefs.Set {
-		out.ToolRefs = agentwire.ToolRefsToProto(toolRefs.Refs)
-		out.ToolRefsSet = true
-	}
-
-	if publicBaseURL = normalizePublicBaseURL(publicBaseURL); publicBaseURL == "" {
-		publicBaseURL = normalizePublicBaseURL(invocation.HostContextFromContext(ctx).PublicBaseURL)
-	}
-	if publicBaseURL != "" {
-		out.Host = &proto.HostContext{PublicBaseUrl: publicBaseURL}
-	}
-	if audit := invocation.RunAsAuditFromContext(ctx); audit.AgentSubject != nil {
-		out.AgentSubject = agentwire.RunAsSubjectToProto(audit.AgentSubject)
-	}
-
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil {
-		return nil, nil
-	}
-	return &out, nil
+func requestContextProto(ctx context.Context, publicBaseURL string, caller invocation.CallerProvider) (*proto.RequestContext, error) {
+	return appaccessservice.RequestContextProto(ctx, publicBaseURL, caller)
 }
 
 func normalizePublicBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
-}
-
-func subjectIDForPrincipal(p *principal.Principal) string {
-	p = principal.Canonicalized(p)
-	if p == nil {
-		return ""
-	}
-	return p.SubjectID
-}
-
-func subjectDisplayName(p *principal.Principal) string {
-	if p == nil {
-		return ""
-	}
-	if displayName := strings.TrimSpace(p.DisplayName); displayName != "" {
-		return displayName
-	}
-	if p.Identity == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.Identity.DisplayName)
-}
-
-func subjectEmail(p *principal.Principal) string {
-	if p == nil || p.Identity == nil {
-		return ""
-	}
-	return strings.TrimSpace(p.Identity.Email)
 }

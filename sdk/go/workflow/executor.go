@@ -23,7 +23,6 @@ type Request struct {
 	Metadata           map[string]any
 	CreatedBySubjectID string
 	RunAs              *gestalt.Subject
-	InvocationToken    string
 	Signals            []gestalt.WorkflowSignal
 }
 
@@ -58,7 +57,6 @@ type StepResponse struct {
 }
 
 type AppInvocation struct {
-	Token           string
 	App             string
 	Operation       string
 	Params          map[string]any
@@ -88,14 +86,14 @@ type AgentClient interface {
 
 type Config struct {
 	AppInvoker        AppInvoker
-	NewApp            func(string) (gestalt.App, error)
-	NewAgent          func(string) (AgentClient, error)
+	NewApp            func(gestalt.Request) (gestalt.App, error)
+	NewAgent          func(gestalt.Request) (AgentClient, error)
 	AgentPollInterval time.Duration
 }
 
 type Executor struct {
 	appInvoker        AppInvoker
-	newAgent          func(string) (AgentClient, error)
+	newAgent          func(gestalt.Request) (AgentClient, error)
 	agentPollInterval time.Duration
 }
 
@@ -104,13 +102,13 @@ func New(cfg Config) *Executor {
 	if appInvoker == nil {
 		newApp := cfg.NewApp
 		if newApp == nil {
-			newApp = gestalt.NewApp
+			newApp = gestalt.NewAppFromRequest
 		}
 		appInvoker = appClientInvoker{newApp: newApp}
 	}
 	newAgent := cfg.NewAgent
 	if newAgent == nil {
-		newAgent = func(token string) (AgentClient, error) { return gestalt.NewAgent(token) }
+		newAgent = func(req gestalt.Request) (AgentClient, error) { return gestalt.NewAgentFromRequest(req) }
 	}
 	poll := cfg.AgentPollInterval
 	if poll <= 0 {
@@ -237,7 +235,6 @@ func (e *Executor) ExecuteStep(ctx context.Context, stepReq StepRequest) (*StepR
 	if step.TimeoutSeconds > 0 {
 		stepCtx, cancelStep = context.WithTimeout(ctx, time.Duration(step.TimeoutSeconds)*time.Second)
 	}
-	token := strings.TrimSpace(req.InvocationToken)
 	scope := WorkflowStepInvocationScope(req)
 	var output any
 	var turnID string
@@ -246,9 +243,9 @@ func (e *Executor) ExecuteStep(ctx context.Context, stepReq StepRequest) (*StepR
 		cancelStep()
 		return failedStepResponse(stepID, "invalid_step", "workflow step cannot set both app and agent", "", inputs, outputs, stepInputs), nil
 	case step.App != nil:
-		output, err = e.invokeAppStep(stepCtx, req, token, step.App, inputs, outputs, stepInputs, scope, stepID)
+		output, err = e.invokeAppStep(stepCtx, req, step.App, inputs, outputs, stepInputs, scope, stepID)
 	case step.Agent != nil:
-		output, turnID, err = e.invokeAgentStep(stepCtx, req, token, step.Agent, inputs, outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
+		output, turnID, err = e.invokeAgentStep(stepCtx, req, step.Agent, inputs, outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
 	default:
 		err = fmt.Errorf("workflow step must set app or agent")
 	}

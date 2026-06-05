@@ -37,7 +37,6 @@ import {
   dateFromTimestamp,
   type JsonObjectInput,
 } from "./protocol.ts";
-import { hostInvocationContext } from "./invocation-context.ts";
 import {
   optionalObjectFromStruct,
   optionalStruct,
@@ -49,6 +48,7 @@ import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
 } from "./host-service.ts";
+import { hostInvocationContext } from "./invocation-context.ts";
 
 export interface AgentWorkspaceGitCheckout {
   url?: string | undefined;
@@ -165,9 +165,6 @@ export interface Agent {
 
 /**
  * Client for managing agent sessions, turns, events, and interactions.
- *
- * The constructor accepts either a Gestalt request or an invocation token. Each
- * agent call forwards that token to the agent-provider facade.
  */
 class AgentImpl implements Agent {
   private readonly client: Client<typeof AgentProviderService>;
@@ -219,7 +216,7 @@ class AgentImpl implements Agent {
     );
   }
 
-  /** Lists agent sessions visible to the invocation token. */
+  /** Lists agent sessions visible to the request context. */
   async listSessions(
     request: AgentListSessions = {},
   ): Promise<AgentSession[]> {

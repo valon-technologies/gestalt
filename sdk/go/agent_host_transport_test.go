@@ -109,7 +109,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 		ToolCallID:     "call-1",
 		ToolID:         "tool-1",
 		Arguments:      agentToolArguments{Query: "Ada Lovelace"},
-		RunGrant:       "run-grant-1",
+		Context:        agentHostRequestContext(),
 		IdempotencyKey: "tool-call-key-1",
 	})
 	if err != nil {
@@ -124,7 +124,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 		PageSize:  25,
 		PageToken: "page-1",
 		Query:     "slack",
-		RunGrant:  "run-grant-1",
+		Context:   agentHostRequestContext(),
 	})
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -137,7 +137,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 		TurnID:     "turn-1",
 		Connection: "model",
 		Instance:   "default",
-		RunGrant:   "run-grant-1",
+		Context:    agentHostRequestContext(),
 	})
 	if err != nil {
 		t.Fatalf("ResolveConnection: %v", err)
@@ -151,7 +151,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(harness.toolRequests) != 1 {
 		t.Fatalf("toolRequests len = %d, want 1", len(harness.toolRequests))
 	}
-	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" || harness.toolRequests[0].GetRunGrant() != "run-grant-1" || harness.toolRequests[0].GetIdempotencyKey() != "tool-call-key-1" {
+	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" || harness.toolRequests[0].GetContext().GetSubject().GetId() != "user:agent-host" || harness.toolRequests[0].GetIdempotencyKey() != "tool-call-key-1" {
 		t.Fatalf("tool request = %#v", harness.toolRequests[0])
 	}
 	if got := harness.toolRequests[0].GetArguments().AsMap(); got["query"] != "Ada Lovelace" {
@@ -160,16 +160,22 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if len(harness.listRequests) != 1 {
 		t.Fatalf("listRequests len = %d, want 1", len(harness.listRequests))
 	}
-	if harness.listRequests[0].GetSessionId() != "session-1" || harness.listRequests[0].GetTurnId() != "turn-1" || harness.listRequests[0].GetPageSize() != 25 || harness.listRequests[0].GetPageToken() != "page-1" || harness.listRequests[0].GetQuery() != "slack" || harness.listRequests[0].GetRunGrant() != "run-grant-1" {
+	if harness.listRequests[0].GetSessionId() != "session-1" || harness.listRequests[0].GetTurnId() != "turn-1" || harness.listRequests[0].GetPageSize() != 25 || harness.listRequests[0].GetPageToken() != "page-1" || harness.listRequests[0].GetQuery() != "slack" || harness.listRequests[0].GetContext().GetSubject().GetId() != "user:agent-host" {
 		t.Fatalf("list request = %#v", harness.listRequests[0])
 	}
 	if len(harness.connRequests) != 1 {
 		t.Fatalf("connRequests len = %d, want 1", len(harness.connRequests))
 	}
-	if harness.connRequests[0].GetSessionId() != "session-1" || harness.connRequests[0].GetTurnId() != "turn-1" || harness.connRequests[0].GetConnection() != "model" || harness.connRequests[0].GetInstance() != "default" || harness.connRequests[0].GetRunGrant() != "run-grant-1" {
+	if harness.connRequests[0].GetSessionId() != "session-1" || harness.connRequests[0].GetTurnId() != "turn-1" || harness.connRequests[0].GetConnection() != "model" || harness.connRequests[0].GetInstance() != "default" || harness.connRequests[0].GetContext().GetSubject().GetId() != "user:agent-host" {
 		t.Fatalf("connection request = %#v", harness.connRequests[0])
 	}
 	if len(harness.tokens) != 3 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" || harness.tokens[2] != "relay-token-go" {
 		t.Fatalf("relay tokens = %#v, want three relay-token-go values", harness.tokens)
+	}
+}
+
+func agentHostRequestContext() *proto.RequestContext {
+	return &proto.RequestContext{
+		Subject: &proto.SubjectContext{Id: "user:agent-host"},
 	}
 }

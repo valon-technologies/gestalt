@@ -27,6 +27,8 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
@@ -151,34 +153,36 @@ func (m providerMetadata) descriptionOr(v string) string {
 type Deps struct {
 	// EncryptionKey is the derived 32-byte key from server.encryptionKey, not the
 	// raw config value.
-	EncryptionKey               []byte
-	BaseURL                     string
-	RuntimeRelayBaseURL         string
-	SecretManager               core.SecretManager
-	Services                    *coredata.Services
-	SelectedIndexedDBName       string
-	IndexedDBs                  map[string]indexeddb.IndexedDB
-	IndexedDBDefs               map[string]*config.ProviderEntry
-	IndexedDBFactory            IndexedDBFactory
-	Caches                      map[string]corecache.Cache
-	CacheDefs                   map[string]*config.ProviderEntry
-	CacheFactory                CacheFactory
-	S3                          map[string]s3sdk.S3
-	Authorization               core.AuthorizationProvider
-	WorkflowRuntime             *workflowRuntime
-	AgentRuntime                *agentRuntime
-	AgentRunGrants              *agentgrant.Manager
-	WorkflowManager             workflowmanager.Service
-	AgentManager                agentmanager.Service
-	Egress                      EgressDeps
-	AppInvocation               invocation.Invoker
-	WorkflowAppInvocationGrants map[string]appaccessservice.InvocationGrants
-	Runtime                     runtimeprovider.Provider
-	RuntimeRegistry             *runtimeRegistry
-	PublicHostServices          *runtimehost.PublicHostServiceRegistry
-	HostServiceTLSCAFile        string
-	HostServiceTLSCAPEM         string
-	Telemetry                   core.TelemetryProvider
+	EncryptionKey         []byte
+	BaseURL               string
+	RuntimeRelayBaseURL   string
+	SecretManager         core.SecretManager
+	Services              *coredata.Services
+	SelectedIndexedDBName string
+	IndexedDBs            map[string]indexeddb.IndexedDB
+	IndexedDBDefs         map[string]*config.ProviderEntry
+	IndexedDBFactory      IndexedDBFactory
+	Caches                map[string]corecache.Cache
+	CacheDefs             map[string]*config.ProviderEntry
+	CacheFactory          CacheFactory
+	S3                    map[string]s3sdk.S3
+	Authorization         core.AuthorizationProvider
+	WorkflowRuntime       *workflowRuntime
+	AgentRuntime          *agentRuntime
+	AgentRunGrants        *agentgrant.Manager
+	AgentTurnScopes       *agentturnscope.Store
+	AgentToolIDs          *agenttoolid.Codec
+	WorkflowManager       workflowmanager.Service
+	AgentManager          agentmanager.Service
+	Egress                EgressDeps
+	AppInvocation         invocation.Invoker
+	AppAccessProfiles     map[string]appaccessservice.AppAccessProfiles
+	Runtime               runtimeprovider.Provider
+	RuntimeRegistry       *runtimeRegistry
+	PublicHostServices    *runtimehost.PublicHostServiceRegistry
+	HostServiceTLSCAFile  string
+	HostServiceTLSCAPEM   string
+	Telemetry             core.TelemetryProvider
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
@@ -828,10 +832,15 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if requireEncryptionKey && encKey == nil {
 		return nil, fmt.Errorf("bootstrap: server.encryption_key is required")
 	}
+	agentToolIDs, err := agenttoolid.NewCodec(encKey)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: agent tool ids: %w", err)
+	}
 	agentRunGrants, err := agentgrant.NewManager(encKey)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: agent run grants: %w", err)
 	}
+	agentTurnScopes := agentturnscope.NewStore()
 	hostServiceTLSCAFile, hostServiceTLSCAPEM, err := hostServiceTLSCAFromEnv()
 	if err != nil {
 		return nil, err
@@ -844,6 +853,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		SecretManager:        sm,
 		Telemetry:            tp,
 		AgentRunGrants:       agentRunGrants,
+		AgentTurnScopes:      agentTurnScopes,
+		AgentToolIDs:         agentToolIDs,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
 		HostServiceTLSCAPEM:  hostServiceTLSCAPEM,
 	}
@@ -868,6 +879,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	deps.AgentRuntime = agentRuntime
 	deps.AgentRuntime.SetRunGrants(agentRunGrants)
+	deps.AgentRuntime.SetTurnScopes(agentTurnScopes)
+	deps.AgentRuntime.SetToolIDCodec(agentToolIDs)
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -967,6 +980,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
+	deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1171,6 +1185,8 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Agent:                         prepared.Deps.AgentRuntime,
 		WorkflowTools:                 workflowTools,
 		RunGrants:                     prepared.Deps.AgentRunGrants,
+		TurnScopes:                    prepared.Deps.AgentTurnScopes,
+		ToolIDs:                       prepared.Deps.AgentToolIDs,
 		Invoker:                       sharedInvoker,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,

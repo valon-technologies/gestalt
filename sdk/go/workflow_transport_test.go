@@ -87,7 +87,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewWorkflow("parent-token")
+	client, err := gestalt.NewWorkflowFromRequest(workflowTransportRequest())
 	if err != nil {
 		t.Fatalf("Workflow: %v", err)
 	}
@@ -129,8 +129,8 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.definitions) != 1 {
 		t.Fatalf("definition requests len = %d, want 1", len(harness.definitions))
 	}
-	if harness.definitions[0].GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want parent-token", harness.definitions[0].GetInvocationToken())
+	if got := harness.definitions[0].GetContext().GetSubject().GetId(); got != "user:transport" {
+		t.Fatalf("subject = %q, want user:transport", got)
 	}
 	if harness.definitions[0].GetProviderName() != "managed" || harness.definitions[0].GetSpec().GetId() != "definition-1" {
 		t.Fatalf("apply definition request = %+v", harness.definitions[0])
@@ -140,7 +140,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
-func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) {
+func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -159,7 +159,7 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewWorkflow("parent-token")
+	client, err := gestalt.NewWorkflowFromRequest(workflowTransportRequest())
 	if err != nil {
 		t.Fatalf("Workflow: %v", err)
 	}
@@ -196,8 +196,8 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 		t.Fatalf("signal requests len = %d, want 1", len(harness.signals))
 	}
 	got := harness.signals[0]
-	if got.GetInvocationToken() != "parent-token" {
-		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
+	if got.GetContext().GetSubject().GetId() != "user:transport" {
+		t.Fatalf("subject = %q, want user:transport", got.GetContext().GetSubject().GetId())
 	}
 	if got.GetDefinitionId() != "definition-1" || got.GetExpectedDefinitionGeneration() != 9 {
 		t.Fatalf("definition pin = %q/%d", got.GetDefinitionId(), got.GetExpectedDefinitionGeneration())
@@ -223,5 +223,15 @@ func TestTransport_WorkflowSignalOrStartRunInjectsInvocationToken(t *testing.T) 
 	}
 	if err := (&timestamppb.Timestamp{Nanos: -1}).CheckValid(); err == nil {
 		t.Fatal("invalid timestamp CheckValid() = nil, want error")
+	}
+}
+
+func workflowTransportRequest() gestalt.Request {
+	return gestalt.Request{
+		Subject: gestalt.Subject{
+			ID:                  "user:transport",
+			CredentialSubjectID: "user:transport",
+			Email:               "transport@example.test",
+		},
 	}
 }

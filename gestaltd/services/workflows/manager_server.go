@@ -12,52 +12,118 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
-type InvocationTokenManager = appaccessservice.InvocationTokenManager
 type ManagerService = workflowmanager.Service
-
-func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
-	return appaccessservice.NewInvocationTokenManager(secret)
-}
 
 type ProviderServer struct {
 	proto.UnimplementedWorkflowProviderServer
 
-	appName string
-	manager ManagerService
-	tokens  *InvocationTokenManager
+	appName       string
+	manager       ManagerService
+	authorization core.AuthorizationProvider
+	tokens        *appaccessservice.InvocationTokenManager
 }
 
-func NewProviderServer(appName string, manager ManagerService, tokens *InvocationTokenManager) *ProviderServer {
-	return &ProviderServer{
-		appName: strings.TrimSpace(appName),
-		manager: manager,
-		tokens:  tokens,
+type ProviderServerOption func(*ProviderServer)
+
+func WithInvocationTokenManager(tokens *appaccessservice.InvocationTokenManager) ProviderServerOption {
+	return func(s *ProviderServer) {
+		s.tokens = tokens
 	}
 }
 
-func (s *ProviderServer) managerContext(ctx context.Context, tokenCtx appaccessservice.TokenContext) context.Context {
-	ctx = appaccessservice.RestoreTokenContext(ctx, tokenCtx, "")
-	return workflowmanager.WithCallerAppName(ctx, tokenCtx.CallerApp())
+func NewProviderServer(appName string, manager ManagerService, authorization core.AuthorizationProvider, opts ...ProviderServerOption) *ProviderServer {
+	s := &ProviderServer{
+		appName:       strings.TrimSpace(appName),
+		manager:       manager,
+		authorization: authorization,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	return s
+}
+
+type workflowProviderAuthRequest interface {
+	GetContext() *proto.RequestContext
+	GetInvocationToken() string
+}
+
+type workflowProviderWorkflowRequest interface {
+	GetWorkflow() *structpb.Struct
+}
+
+type workflowManagerAuthContext struct {
+	request         appaccessservice.ProviderRequestContext
+	token           appaccessservice.TokenContext
+	invocationToken string
+	legacy          bool
+}
+
+func (c workflowManagerAuthContext) Principal() *principal.Principal {
+	if c.legacy {
+		return c.token.Principal()
+	}
+	return c.request.Principal()
+}
+
+func (c workflowManagerAuthContext) Caller() invocation.CallerProvider {
+	if c.legacy {
+		return c.token.CallerProvider()
+	}
+	return invocation.CallerProvider{Kind: c.request.CallerKind(), Name: c.request.CallerName()}
+}
+
+func (c workflowManagerAuthContext) CallerName() string {
+	if c.legacy {
+		return c.token.CallerApp()
+	}
+	return c.request.CallerName()
+}
+
+func (c workflowManagerAuthContext) Restore(ctx context.Context) context.Context {
+	if c.legacy {
+		if c.request.CallerName() != "" {
+			ctx = c.request.Restore(ctx, "")
+		}
+		return appaccessservice.RestoreTokenContext(ctx, c.token, "")
+	}
+	ctx = c.request.Restore(ctx, "")
+	if token := strings.TrimSpace(c.invocationToken); token != "" {
+		ctx = appaccessservice.WithInvocationToken(ctx, token)
+	}
+	return ctx
+}
+
+func (s *ProviderServer) managerContext(ctx context.Context, authCtx workflowManagerAuthContext) context.Context {
+	return authCtx.Restore(ctx)
+}
+
+func workflowManagerCaller(authCtx workflowManagerAuthContext) invocation.CallerProvider {
+	return authCtx.Caller()
 }
 
 func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWorkflowProviderDefinitionRequest) (*proto.WorkflowDefinition, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsApply); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsApply); err != nil {
 		return nil, err
 	}
 	if req.GetSpec().GetRunAs() != nil {
@@ -67,11 +133,11 @@ func (s *ProviderServer) ApplyDefinition(ctx context.Context, req *proto.ApplyWo
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "definition spec: %v", err)
 	}
-	managed, err := s.manager.ApplyDefinition(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.DefinitionApply{
+	managed, err := s.manager.ApplyDefinition(s.managerContext(ctx, authCtx), authCtx.Principal(), workflowmanager.DefinitionApply{
 		ProviderName:   strings.TrimSpace(req.GetProviderName()),
 		Spec:           *spec,
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerAppName:  tokenCtx.CallerApp(),
+		Caller:         workflowManagerCaller(authCtx),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -87,18 +153,18 @@ func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkfl
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsGet); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsGet); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
 	if definitionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
-	managed, err := s.manager.GetDefinition(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), definitionID)
+	managed, err := s.manager.GetDefinition(s.managerContext(ctx, authCtx), authCtx.Principal(), definitionID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -113,14 +179,14 @@ func (s *ProviderServer) ListDefinitions(ctx context.Context, req *proto.ListWor
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsList); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsList); err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.ListDefinitions(s.managerContext(ctx, tokenCtx), tokenCtx.Principal())
+	managed, err := s.manager.ListDefinitions(s.managerContext(ctx, authCtx), authCtx.Principal())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -139,18 +205,18 @@ func (s *ProviderServer) SetDefinitionPaused(ctx context.Context, req *proto.Set
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsSetPaused); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsSetPaused); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
 	if definitionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
-	managed, err := s.manager.SetDefinitionPaused(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), definitionID, req.GetPaused())
+	managed, err := s.manager.SetDefinitionPaused(s.managerContext(ctx, authCtx), authCtx.Principal(), definitionID, req.GetPaused())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -165,11 +231,11 @@ func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.Set
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsSetActivationPaused); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsSetActivationPaused); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
@@ -180,7 +246,7 @@ func (s *ProviderServer) SetActivationPaused(ctx context.Context, req *proto.Set
 	if activationID == "" {
 		return nil, status.Error(codes.InvalidArgument, "activation_id is required")
 	}
-	managed, err := s.manager.SetActivationPaused(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), definitionID, activationID, req.GetPaused())
+	managed, err := s.manager.SetActivationPaused(s.managerContext(ctx, authCtx), authCtx.Principal(), definitionID, activationID, req.GetPaused())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -195,18 +261,18 @@ func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.Delete
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsDelete); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationDefinitionsDelete); err != nil {
 		return nil, err
 	}
 	definitionID := strings.TrimSpace(req.GetDefinitionId())
 	if definitionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "definition_id is required")
 	}
-	if err := s.manager.DeleteDefinition(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), definitionID); err != nil {
+	if err := s.manager.DeleteDefinition(s.managerContext(ctx, authCtx), authCtx.Principal(), definitionID); err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -216,24 +282,24 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsStart); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsStart); err != nil {
 		return nil, err
 	}
 	if req.GetRunAs() != nil {
 		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
 	}
-	managed, err := s.manager.StartRun(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.RunStart{
+	managed, err := s.manager.StartRun(s.managerContext(ctx, authCtx), authCtx.Principal(), workflowmanager.RunStart{
 		ProviderName:                 strings.TrimSpace(req.GetProviderName()),
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
 		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
 		IdempotencyKey:               strings.TrimSpace(req.GetIdempotencyKey()),
 		WorkflowKey:                  strings.TrimSpace(req.GetWorkflowKey()),
-		CallerAppName:                tokenCtx.CallerApp(),
+		Caller:                       workflowManagerCaller(authCtx),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -249,18 +315,18 @@ func (s *ProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowPr
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsList); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsList); err != nil {
 		return nil, err
 	}
 	statusFilter, err := workflowwire.RunStatusFromProto(req.GetStatus())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "status: %v", err)
 	}
-	managed, err := s.manager.ListRuns(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), coreworkflow.ListRunsRequest{
+	managed, err := s.manager.ListRuns(s.managerContext(ctx, authCtx), authCtx.Principal(), coreworkflow.ListRunsRequest{
 		PageSize:  int(req.GetPageSize()),
 		PageToken: strings.TrimSpace(req.GetPageToken()),
 		TargetApp: strings.TrimSpace(req.GetTargetApp()),
@@ -286,18 +352,18 @@ func (s *ProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProvi
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsGet); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsGet); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
-	managed, err := s.manager.GetRun(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), runID)
+	managed, err := s.manager.GetRun(s.managerContext(ctx, authCtx), authCtx.Principal(), runID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -312,18 +378,18 @@ func (s *ProviderServer) GetRunEvents(ctx context.Context, req *proto.GetWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsGetEvents); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsGetEvents); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
-	out, err := s.manager.GetRunEvents(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), runID)
+	out, err := s.manager.GetRunEvents(s.managerContext(ctx, authCtx), authCtx.Principal(), runID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -334,18 +400,18 @@ func (s *ProviderServer) GetRunOutput(ctx context.Context, req *proto.GetWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsGetOutput); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsGetOutput); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
-	out, err := s.manager.GetRunOutput(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), runID)
+	out, err := s.manager.GetRunOutput(s.managerContext(ctx, authCtx), authCtx.Principal(), runID)
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -356,18 +422,18 @@ func (s *ProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsCancel); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsCancel); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
-	managed, err := s.manager.CancelRun(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), runID, req.GetReason())
+	managed, err := s.manager.CancelRun(s.managerContext(ctx, authCtx), authCtx.Principal(), runID, req.GetReason())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -382,18 +448,18 @@ func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflo
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsSignal); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsSignal); err != nil {
 		return nil, err
 	}
 	runID := strings.TrimSpace(req.GetRunId())
 	if runID == "" {
 		return nil, status.Error(codes.InvalidArgument, "run_id is required")
 	}
-	managed, err := s.manager.SignalRun(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.RunSignal{
+	managed, err := s.manager.SignalRun(s.managerContext(ctx, authCtx), authCtx.Principal(), workflowmanager.RunSignal{
 		RunID:  runID,
 		Signal: workflowwire.SignalFromProto(req.GetSignal()),
 	})
@@ -421,17 +487,17 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationRunsSignalOrStart); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationRunsSignalOrStart); err != nil {
 		return nil, err
 	}
 	if req.GetRunAs() != nil {
 		return nil, status.Error(codes.PermissionDenied, "workflow run_as is only supported for config-managed workflows")
 	}
-	managed, err = s.manager.SignalOrStartRun(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
+	managed, err = s.manager.SignalOrStartRun(s.managerContext(ctx, authCtx), authCtx.Principal(), workflowmanager.RunSignalOrStart{
 		ProviderName:                 strings.TrimSpace(req.GetProviderName()),
 		WorkflowKey:                  strings.TrimSpace(req.GetWorkflowKey()),
 		DefinitionID:                 strings.TrimSpace(req.GetDefinitionId()),
@@ -439,7 +505,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		Input:                        protoutil.MapFromStruct(req.GetInput()),
 		IdempotencyKey:               strings.TrimSpace(req.GetIdempotencyKey()),
 		Signal:                       workflowwire.SignalFromProto(req.GetSignal()),
-		CallerAppName:                tokenCtx.CallerApp(),
+		Caller:                       workflowManagerCaller(authCtx),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -455,20 +521,20 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
+	authCtx, err := s.requestContext(req)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventsDeliver); err != nil {
+	if err := s.requireWorkflowAccess(ctx, authCtx, workflowauth.OperationEventsDeliver); err != nil {
 		return nil, err
 	}
 	event, err := workflowwire.EventFromProto(req.GetEvent())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
-	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, tokenCtx), tokenCtx.Principal(), workflowmanager.EventDeliver{
+	delivered, err := s.manager.DeliverEvent(s.managerContext(ctx, authCtx), authCtx.Principal(), workflowmanager.EventDeliver{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      tokenCtx.CallerApp(),
+		AppName:      authCtx.CallerName(),
 		Event:        event,
 	})
 	if err != nil {
@@ -481,22 +547,83 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 	return out, nil
 }
 
-func (s *ProviderServer) tokenContext(token string) (appaccessservice.TokenContext, error) {
-	tokenCtx, err := s.tokens.ResolveToken(token, "")
+func (s *ProviderServer) requestContext(req workflowProviderAuthRequest) (workflowManagerAuthContext, error) {
+	if req.GetContext() != nil {
+		invocationToken := strings.TrimSpace(req.GetInvocationToken())
+		if invocationToken != "" {
+			if s == nil || s.tokens == nil {
+				return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
+			}
+			tokenCtx, err := s.tokens.ResolveToken(invocationToken, "")
+			if err != nil {
+				return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, err.Error())
+			}
+			if tokenCtx.CallerApp() == "" {
+				return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
+			}
+			if workflowReq, ok := req.(workflowProviderWorkflowRequest); ok {
+				tokenCtx = appaccessservice.TokenContextWithWorkflow(tokenCtx, workflowReq.GetWorkflow())
+			}
+			out := workflowManagerAuthContext{
+				token:           tokenCtx,
+				invocationToken: invocationToken,
+				legacy:          true,
+			}
+			if authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.appName); err == nil {
+				out.request = authCtx
+			}
+			return out, nil
+		}
+		authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.appName)
+		if err != nil {
+			return workflowManagerAuthContext{}, err
+		}
+		return workflowManagerAuthContext{request: authCtx}, nil
+	}
+	if s == nil || s.tokens == nil {
+		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
+	}
+	tokenCtx, err := s.tokens.ResolveToken(req.GetInvocationToken(), "")
 	if err != nil {
-		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
+		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
 	if tokenCtx.CallerApp() == "" {
-		return appaccessservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
+		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
 	}
-	return tokenCtx, nil
+	if workflowReq, ok := req.(workflowProviderWorkflowRequest); ok {
+		tokenCtx = appaccessservice.TokenContextWithWorkflow(tokenCtx, workflowReq.GetWorkflow())
+	}
+	return workflowManagerAuthContext{token: tokenCtx, legacy: true}, nil
 }
 
-func (s *ProviderServer) requireWorkflowGrant(tokenCtx appaccessservice.TokenContext, operation string) error {
-	if tokenCtx.AllowsWorkflowManagerOperation(operation) {
-		return nil
+func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation string) error {
+	if authCtx.legacy {
+		if authCtx.token.AllowsWorkflowManagerOperation(operation) {
+			return nil
+		}
+		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, authCtx.CallerName())
 	}
-	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, tokenCtx.CallerApp())
+	if s == nil || s.authorization == nil {
+		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow manager operation")
+	}
+	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+		Subject: &proto.Subject{
+			Type: workflowauth.SubjectTypeApp,
+			Id:   authCtx.CallerName(),
+		},
+		Action: &proto.Action{Name: workflowauth.ActionInvoke},
+		Resource: &proto.Resource{
+			Type: workflowauth.ResourceTypeOperation,
+			Id:   workflowauth.OperationResourceID(s.appName, operation),
+		},
+	})
+	if err != nil {
+		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q: %v", operation, authCtx.CallerName(), err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, authCtx.CallerName())
+	}
+	return nil
 }
 
 func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {

@@ -48,6 +48,16 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
+	appInvocationRelationships, err := appInvocationAuthorizationRelationships(cfg)
+	if err != nil {
+		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
+	}
+	staticRelationships = append(staticRelationships, appInvocationRelationships...)
+	workflowRelationships, err := workflowAuthorizationRelationships(cfg)
+	if err != nil {
+		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
+	}
+	staticRelationships = append(staticRelationships, workflowRelationships...)
 	runtimeRelationships, err := listRuntimeAuthorizationRelationships(ctx, provider)
 	if err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
@@ -84,6 +94,15 @@ func staticAuthorizationModel(cfg *config.Config) (*proto.AuthorizationModel, er
 			}
 			model.ResourceTypes = append(model.ResourceTypes, resourceType)
 		}
+	}
+	var err error
+	model.ResourceTypes, err = appendAppInvocationAuthorizationResourceTypes(model.ResourceTypes, appInvocationAuthorizationResourceTypes(cfg)...)
+	if err != nil {
+		return nil, err
+	}
+	model.ResourceTypes, err = appendWorkflowAuthorizationResourceTypes(model.ResourceTypes, workflowAuthorizationResourceTypes(cfg)...)
+	if err != nil {
+		return nil, err
 	}
 	return model, nil
 }

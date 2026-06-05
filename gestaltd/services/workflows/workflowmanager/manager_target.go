@@ -23,29 +23,30 @@ func (m *Manager) resolveProvider(ctx context.Context, providerName string) (str
 	return m.workflow.ResolveProvider(ctx, strings.TrimSpace(providerName))
 }
 
-func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, definitionID, callerAppName string) (string, coreworkflow.Provider, coreworkflow.Target, int64, error) {
+func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, definitionID string, caller invocation.CallerProvider) (string, coreworkflow.Provider, coreworkflow.Target, int64, error) {
 	definitionID = strings.TrimSpace(definitionID)
 	if definitionID == "" {
 		return "", nil, coreworkflow.Target{}, 0, fmt.Errorf("%w: workflow definition_id is required", invocation.ErrInvalidInvocation)
 	}
-	definition, err := m.requireOwnedDefinition(WithCallerAppName(ctx, callerAppName), p, definitionID, providerSelection)
+	ctx = withWorkflowCaller(ctx, caller)
+	definition, err := m.requireOwnedDefinition(ctx, p, definitionID, providerSelection)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, 0, err
 	}
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerAppName)
+	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, 0, err
 	}
-	if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget, callerAppName); !decision.allowed {
+	if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget); !decision.allowed {
 		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, workflowTargetAuthorizationError{failure: decision.failure}
 	}
 	return definition.ProviderName, definition.provider, resolvedTarget, definition.Definition.Generation, nil
 }
 
-func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) (coreworkflow.Target, error) {
+func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (coreworkflow.Target, error) {
 	if len(target.Steps) == 0 {
 		return coreworkflow.Target{}, fmt.Errorf("workflow target.steps is required")
 	}
@@ -70,7 +71,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		case step.App != nil && step.Agent != nil:
 			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d] must set exactly one of app or agent", i)
 		case step.App != nil:
-			app, err := m.resolveWorkflowStepApp(ctx, p, *step.App, callerAppName)
+			app, err := m.resolveWorkflowStepApp(ctx, p, *step.App)
 			if err != nil {
 				return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].app: %w", i, err)
 			}
@@ -98,7 +99,7 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 	return out, nil
 }
 
-func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Principal, target coreworkflow.AppCall, callerAppName string) (coreworkflow.AppCall, error) {
+func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Principal, target coreworkflow.AppCall) (coreworkflow.AppCall, error) {
 	appName := strings.TrimSpace(target.Name)
 	if appName == "" {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: workflow target app is required", invocation.ErrInvalidInvocation)
@@ -151,7 +152,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if err != nil {
 		return coreworkflow.AppCall{}, err
 	}
-	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) && !callerAppCanInvoke(callerAppName, appName, opMeta.ID) {
+	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
@@ -240,10 +241,6 @@ func validateWorkflowAgentOutput(output coreagent.Output) error {
 	return nil
 }
 
-func callerAppCanInvoke(callerAppName, appName, operation string) bool {
-	return strings.TrimSpace(callerAppName) != "" && strings.TrimSpace(appName) != "" && strings.TrimSpace(operation) != ""
-}
-
 func isWorkflowProviderNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
@@ -309,10 +306,10 @@ func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure,
 }
 
 func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
-	return m.checkTargetAuthorizationForCaller(ctx, p, target, callerAppNameFromContext(ctx)).allowed
+	return m.checkTargetAuthorization(ctx, p, target).allowed
 }
 
-func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) targetAuthorizationDecision {
+func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
 	for stepIndex := range target.Steps {
 		step := target.Steps[stepIndex]
 		if step.Agent == nil {
@@ -320,7 +317,7 @@ func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *pr
 		}
 		hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
 		for i := range step.Agent.ToolRefs {
-			if denied := m.checkWorkflowAgentToolAuthorizationForCaller(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i, callerAppName); !denied.allowed {
+			if denied := m.checkWorkflowAgentToolAuthorization(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i); !denied.allowed {
 				return denied
 			}
 		}
@@ -328,14 +325,14 @@ func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *pr
 	return targetAuthorizationAllowed()
 }
 
-func (m *Manager) checkTargetAuthorizationForCaller(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) targetAuthorizationDecision {
+func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
 	if len(target.Steps) == 0 {
 		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppStep, "", "", -1)
 	}
 	for stepIndex := range target.Steps {
 		step := target.Steps[stepIndex]
 		if step.App != nil {
-			if denied := m.checkWorkflowStepAppAuthorizationForCaller(ctx, p, step.App, targetAuthorizationComponentAppStep, callerAppName); !denied.allowed {
+			if denied := m.checkWorkflowStepAppAuthorization(ctx, p, step.App, targetAuthorizationComponentAppStep); !denied.allowed {
 				return denied
 			}
 		}
@@ -352,7 +349,7 @@ func (m *Manager) checkTargetAuthorizationForCaller(ctx context.Context, p *prin
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
 			for i := range step.Agent.ToolRefs {
-				if denied := m.checkWorkflowAgentToolAuthorizationForCaller(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i, callerAppName); !denied.allowed {
+				if denied := m.checkWorkflowAgentToolAuthorization(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i); !denied.allowed {
 					return denied
 				}
 			}
@@ -360,19 +357,6 @@ func (m *Manager) checkTargetAuthorizationForCaller(ctx context.Context, p *prin
 		_ = stepIndex
 	}
 	return targetAuthorizationAllowed()
-}
-
-func (m *Manager) checkWorkflowStepAppAuthorizationForCaller(ctx context.Context, p *principal.Principal, app *coreworkflow.AppCall, component string, callerAppName string) targetAuthorizationDecision {
-	decision := m.checkWorkflowStepAppAuthorization(ctx, p, app, component)
-	if decision.allowed {
-		return decision
-	}
-	failure := decision.failure
-	if failure.reason == targetAuthorizationReasonPrincipalOperationPermissionDenied &&
-		callerAppCanInvoke(callerAppName, failure.provider, failure.operation) {
-		return targetAuthorizationAllowed()
-	}
-	return decision
 }
 
 func (m *Manager) checkWorkflowStepAppAuthorization(ctx context.Context, p *principal.Principal, app *coreworkflow.AppCall, component string) targetAuthorizationDecision {
@@ -427,20 +411,6 @@ func (m *Manager) checkWorkflowAgentToolAuthorization(ctx context.Context, p *pr
 		return targetAuthorizationAllowed()
 	}
 	return m.checkWorkflowStepAppAuthorization(ctx, p, &coreworkflow.AppCall{Name: appName, Operation: operation}, targetAuthorizationComponentAgentToolRef)
-}
-
-func (m *Manager) checkWorkflowAgentToolAuthorizationForCaller(ctx context.Context, p *principal.Principal, tool coreagent.ToolRef, hasSystemTools bool, index int, callerAppName string) targetAuthorizationDecision {
-	decision := m.checkWorkflowAgentToolAuthorization(ctx, p, tool, hasSystemTools, index)
-	if decision.allowed {
-		return decision
-	}
-	failure := decision.failure
-	if failure.component == targetAuthorizationComponentAgentToolRef &&
-		failure.reason == targetAuthorizationReasonPrincipalOperationPermissionDenied &&
-		callerAppCanInvoke(callerAppName, failure.provider, failure.operation) {
-		return targetAuthorizationAllowed()
-	}
-	return decision
 }
 
 func targetAuthorizationAllowed() targetAuthorizationDecision {

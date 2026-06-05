@@ -15,8 +15,9 @@ import (
 type fullAgentProvider struct {
 	gestalt.UnimplementedAgentProvider
 	closeTracker
-	configuredName      string
-	receivedTurnRequest *gestalt.CreateAgentProviderTurnRequest
+	configuredName         string
+	receivedSessionRequest *gestalt.CreateAgentProviderSessionRequest
+	receivedTurnRequest    *gestalt.CreateAgentProviderTurnRequest
 }
 
 func (p *fullAgentProvider) Configure(_ context.Context, name string, _ map[string]any) error {
@@ -34,16 +35,17 @@ func (p *fullAgentProvider) Metadata() gestalt.ProviderMetadata {
 }
 
 func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+	p.receivedSessionRequest = req
 	return &gestalt.AgentSession{
-		ID:           req.SessionID,
-		ProviderName: p.configuredName,
-		Model:        req.Model,
-		ClientRef:    req.ClientRef,
-		State:        gestalt.AgentSessionStateActive,
-		Metadata:     req.Metadata,
+		ID:                 req.SessionID,
+		ProviderName:       p.configuredName,
+		Model:              req.Model,
+		ClientRef:          req.ClientRef,
+		State:              gestalt.AgentSessionStateActive,
+		Metadata:           req.Metadata,
 		CreatedBySubjectID: req.CreatedBySubjectID,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}, nil
 }
 
@@ -100,18 +102,18 @@ func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAge
 		}
 	}
 	return &gestalt.AgentTurn{
-		ID:            req.TurnID,
-		SessionID:     req.SessionID,
-		ProviderName:  p.configuredName,
-		Model:         req.Model,
-		Status:        gestalt.AgentExecutionStatusWaitingForInput,
-		Messages:      req.Messages,
-		Output:        output,
-		StatusMessage: "waiting for input",
+		ID:                 req.TurnID,
+		SessionID:          req.SessionID,
+		ProviderName:       p.configuredName,
+		Model:              req.Model,
+		Status:             gestalt.AgentExecutionStatusWaitingForInput,
+		Messages:           req.Messages,
+		Output:             output,
+		StatusMessage:      "waiting for input",
 		CreatedBySubjectID: req.CreatedBySubjectID,
-		CreatedAt:     time.Now(),
-		StartedAt:     timePtr(time.Now()),
-		ExecutionRef:  req.ExecutionRef,
+		CreatedAt:          time.Now(),
+		StartedAt:          timePtr(time.Now()),
+		ExecutionRef:       req.ExecutionRef,
 	}, nil
 }
 
@@ -286,16 +288,20 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	session, err := agentClient.CreateSession(rpcCtx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:      "session-1",
-		IdempotencyKey: "session-req-1",
-		Model:          "gpt-5.1",
-		ClientRef:      "client-session-1",
-		Metadata:       mustStruct(t, map[string]any{"source": "go-test"}),
+		SessionId:          "session-1",
+		IdempotencyKey:     "session-req-1",
+		Model:              "gpt-5.1",
+		ClientRef:          "client-session-1",
+		Metadata:           mustStruct(t, map[string]any{"source": "go-test"}),
 		CreatedBySubjectId: "user:user-1",
 		Subject: &proto.SubjectContext{
 			Id:                  "borrower:borrower-1",
 			CredentialSubjectId: "user:user-1",
 			Email:               "borrower@example.com",
+		},
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "user:session"},
+			Caller:  &proto.ProviderContext{Kind: "app", Name: "sdk-test"},
 		},
 		SessionStart: &proto.AgentSessionStartConfig{
 			Hooks: []*proto.AgentSessionStartHook{{
@@ -324,6 +330,12 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	if session.GetCreatedBySubjectId() != "user:user-1" {
 		t.Fatalf("CreateSession created_by_subject_id = %q, want user:user-1", session.GetCreatedBySubjectId())
+	}
+	if got := provider.receivedSessionRequest.Context.GetSubject().GetId(); got != "user:session" {
+		t.Fatalf("native CreateSession context subject = %q, want user:session", got)
+	}
+	if got := provider.receivedSessionRequest.Context.GetCaller().GetName(); got != "sdk-test" {
+		t.Fatalf("native CreateSession context caller = %q, want sdk-test", got)
 	}
 
 	fetchedSession, err := agentClient.GetSession(rpcCtx, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"})
@@ -388,9 +400,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 				Structured: &proto.AgentStructuredOutput{Schema: mustStruct(t, map[string]any{"type": "object"})},
 			},
 		},
-		Metadata:     mustStruct(t, map[string]any{"requireInteraction": true}),
+		Metadata:           mustStruct(t, map[string]any{"requireInteraction": true}),
 		CreatedBySubjectId: session.GetCreatedBySubjectId(),
-		ExecutionRef: "exec-turn-1",
+		ExecutionRef:       "exec-turn-1",
 		ToolRefs: []*proto.AgentToolRef{{
 			App:       "slack",
 			Operation: "chat.postMessage",
@@ -400,7 +412,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),
-		RunGrant: "grant-1",
+		Context: &proto.RequestContext{
+			Subject: &proto.SubjectContext{Id: "user:agent-provider"},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -419,6 +433,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	if provider.receivedTurnRequest.Output.Structured.Schema["type"] != "object" {
 		t.Fatalf("CreateTurn output schema = %#v, want object", provider.receivedTurnRequest.Output.Structured.Schema)
+	}
+	if provider.receivedTurnRequest.Context.GetSubject().GetId() != "user:agent-provider" {
+		t.Fatalf("CreateTurn context = %#v, want request context", provider.receivedTurnRequest.Context)
 	}
 
 	fetchedTurn, err := agentClient.GetTurn(rpcCtx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"})

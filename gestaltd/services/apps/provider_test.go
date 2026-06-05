@@ -13,6 +13,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
@@ -334,7 +335,7 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 		Role:   "viewer",
 	})
 
-	reqCtx, err := requestContextProto(ctx, "")
+	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -366,7 +367,7 @@ func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
 		Source: principal.SourceAPIToken,
 	})
 
-	reqCtx, err := requestContextProto(ctx, "")
+	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -399,7 +400,7 @@ func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testi
 		CredentialSubjectID: "service_account:review-bot",
 	})
 
-	reqCtx, err := requestContextProto(ctx, "")
+	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -429,7 +430,7 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 		SubjectID: "service_account:event-handler",
 	})
 
-	reqCtx, err := requestContextProto(ctx, "")
+	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -491,7 +492,7 @@ func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 		},
 	})
 
-	reqCtx, err := requestContextProto(ctx, "")
+	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -520,7 +521,7 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 		},
 	}})
 
-	reqCtx, err := requestContextProto(ctx, "")
+	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -575,7 +576,7 @@ func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
 func TestRequestContextProto_PreservesHostOnlyContext(t *testing.T) {
 	t.Parallel()
 
-	reqCtx, err := requestContextProto(context.Background(), " https://valon.tools/ ")
+	reqCtx, err := requestContextProto(context.Background(), " https://valon.tools/ ", invocation.CallerProvider{})
 	if err != nil {
 		t.Fatalf("requestContextProto: %v", err)
 	}
@@ -590,7 +591,7 @@ func TestRequestContextProto_PreservesHostOnlyContext(t *testing.T) {
 func TestPrincipalFromProto_NonUserEmailDoesNotCreateIdentity(t *testing.T) {
 	t.Parallel()
 
-	p := principalFromProto(&proto.SubjectContext{
+	p := appaccessservice.PrincipalFromSubjectContext(&proto.SubjectContext{
 		Id:    "service_account:triage-bot",
 		Email: "spoofed@example.com",
 	})
@@ -641,7 +642,7 @@ func TestRemoteProviderResolveHTTPSubjectIgnoresProviderReturnedEmail(t *testing
 func TestPrincipalFromProtoDerivesKindFromSubjectID(t *testing.T) {
 	t.Parallel()
 
-	p := principalFromProto(&proto.SubjectContext{
+	p := appaccessservice.PrincipalFromSubjectContext(&proto.SubjectContext{
 		Id: "service_account:external-installation-127579767",
 	})
 	if p == nil {

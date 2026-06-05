@@ -71,7 +71,6 @@ func TestWorkflowFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	t.Setenv(EnvHostServiceSocket, "tcp://"+lis.Addr().String())
 
 	ctx := WithIdempotencyKey(context.Background(), "request-key")
-	ctx = withInvocationToken(ctx, "parent-token")
 	client, err := WorkflowFromContext(ctx)
 	if err != nil {
 		t.Fatalf("WorkflowFromContext: %v", err)

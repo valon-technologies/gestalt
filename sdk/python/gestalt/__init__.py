@@ -33,6 +33,7 @@ from ._api import (
     Request,
     Response,
     Subject,
+    SubjectPermission,
     field,
     parse_subject_id,
 )
@@ -634,6 +635,7 @@ __all__ = [
     "S3ReadStream",
     "SecretsProvider",
     "Subject",
+    "SubjectPermission",
     "SessionCatalogProvider",
     "SessionTTLProvider",
     "Starter",

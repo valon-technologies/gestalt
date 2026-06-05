@@ -6,7 +6,9 @@ use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent::{AgentToolRef, agent_tool_ref_from_proto};
-use crate::api::{Access, Credential, HTTPSubjectRequest, Request, Response, Subject};
+use crate::api::{
+    Access, Credential, HTTPSubjectRequest, Request, Response, Subject, scope_request_context,
+};
 use crate::catalog::{catalog_to_proto, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
@@ -137,9 +139,10 @@ where
         request: GrpcRequest<ExecuteRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoOperationResult>, Status> {
         let request = request.into_inner();
-        let result = self
-            .router
-            .execute(
+        let context = request.context.clone();
+        let result = scope_request_context(
+            context,
+            self.router.execute(
                 Arc::clone(&self.provider),
                 &request.operation,
                 Value::Object(object_map(request.params)),
@@ -147,11 +150,12 @@ where
                     request.context.as_ref(),
                     request.token,
                     request.connection_params.into_iter().collect(),
-                    request.idempotency_key.trim().to_string(),
                     request.invocation_token,
+                    request.idempotency_key.trim().to_string(),
                 ),
-            )
-            .await;
+            ),
+        )
+        .await;
 
         Ok(GrpcResponse::new(ProtoOperationResult {
             status: i32::from(result.status),
@@ -171,6 +175,7 @@ where
         }
 
         let request = request.into_inner();
+        let context = request.context.clone();
         let request = request_context(
             request.context.as_ref(),
             request.token,
@@ -178,9 +183,7 @@ where
             String::new(),
             String::new(),
         );
-        let catalog = self
-            .provider
-            .catalog_for_request(&request)
+        let catalog = scope_request_context(context, self.provider.catalog_for_request(&request))
             .await
             .map_err(|error| rpc_status("session catalog", error))?;
 
@@ -194,9 +197,10 @@ where
         request: GrpcRequest<ResolveHttpSubjectRequest>,
     ) -> std::result::Result<GrpcResponse<ResolveHttpSubjectResponse>, Status> {
         let request = request.into_inner();
-        let subject = self
-            .provider
-            .resolve_http_subject(
+        let context = request.context.clone();
+        let subject = scope_request_context(
+            context,
+            self.provider.resolve_http_subject(
                 http_subject_request(request.request.as_ref()),
                 &request_context(
                     request.context.as_ref(),
@@ -205,8 +209,9 @@ where
                     String::new(),
                     String::new(),
                 ),
-            )
-            .await;
+            ),
+        )
+        .await;
 
         let subject = match subject {
             Ok(subject) => subject,
@@ -231,8 +236,8 @@ fn request_context(
     context: Option<&crate::generated::v1::RequestContext>,
     token: String,
     connection_params: std::collections::BTreeMap<String, String>,
-    idempotency_key: String,
     invocation_token: String,
+    idempotency_key: String,
 ) -> Request {
     Request {
         token,
@@ -364,5 +369,6 @@ fn subject_to_proto(subject: Subject) -> SubjectContext {
         credential_subject_id: subject.credential_subject_id,
         email: subject.email,
         display_name: subject.display_name,
+        ..Default::default()
     }
 }

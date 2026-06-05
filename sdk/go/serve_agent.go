@@ -12,7 +12,7 @@ func ServeAgentProvider(ctx context.Context, provider AgentProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAgent, provider))
 		proto.RegisterAgentProviderServer(srv, agentProviderServer{provider: provider})
-	})
+	}, grpc.UnaryInterceptor(providerInvocationUnaryInterceptor))
 }
 
 type agentProviderServer struct {
@@ -21,6 +21,7 @@ type agentProviderServer struct {
 }
 
 func (s agentProviderServer) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	session, err := s.provider.CreateSession(ctx, createAgentProviderSessionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent create session", err)
@@ -30,6 +31,7 @@ func (s agentProviderServer) CreateSession(ctx context.Context, req *proto.Creat
 }
 
 func (s agentProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	session, err := s.provider.GetSession(ctx, getAgentProviderSessionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent get session", err)
@@ -39,6 +41,7 @@ func (s agentProviderServer) GetSession(ctx context.Context, req *proto.GetAgent
 }
 
 func (s agentProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	resp, err := s.provider.ListSessions(ctx, listAgentProviderSessionsRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent list sessions", err)
@@ -48,6 +51,7 @@ func (s agentProviderServer) ListSessions(ctx context.Context, req *proto.ListAg
 }
 
 func (s agentProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	session, err := s.provider.UpdateSession(ctx, updateAgentProviderSessionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent update session", err)
@@ -57,6 +61,7 @@ func (s agentProviderServer) UpdateSession(ctx context.Context, req *proto.Updat
 }
 
 func (s agentProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	providerReq, err := createAgentProviderTurnRequestFromProto(req)
 	if err != nil {
 		return nil, providerRPCError("agent create turn", err)
@@ -70,6 +75,7 @@ func (s agentProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAg
 }
 
 func (s agentProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	turn, err := s.provider.GetTurn(ctx, getAgentProviderTurnRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent get turn", err)
@@ -79,6 +85,7 @@ func (s agentProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentPro
 }
 
 func (s agentProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	resp, err := s.provider.ListTurns(ctx, listAgentProviderTurnsRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent list turns", err)
@@ -88,6 +95,7 @@ func (s agentProviderServer) ListTurns(ctx context.Context, req *proto.ListAgent
 }
 
 func (s agentProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	turn, err := s.provider.CancelTurn(ctx, cancelAgentProviderTurnRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent cancel turn", err)
@@ -97,6 +105,7 @@ func (s agentProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAg
 }
 
 func (s agentProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	resp, err := s.provider.ListTurnEvents(ctx, listAgentProviderTurnEventsRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent list turn events", err)
@@ -106,6 +115,7 @@ func (s agentProviderServer) ListTurnEvents(ctx context.Context, req *proto.List
 }
 
 func (s agentProviderServer) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	interaction, err := s.provider.GetInteraction(ctx, getAgentProviderInteractionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent get interaction", err)
@@ -115,6 +125,7 @@ func (s agentProviderServer) GetInteraction(ctx context.Context, req *proto.GetA
 }
 
 func (s agentProviderServer) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	resp, err := s.provider.ListInteractions(ctx, listAgentProviderInteractionsRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent list interactions", err)
@@ -124,6 +135,7 @@ func (s agentProviderServer) ListInteractions(ctx context.Context, req *proto.Li
 }
 
 func (s agentProviderServer) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+	ctx = withRequestContext(ctx, req.GetContext())
 	interaction, err := s.provider.ResolveInteraction(ctx, resolveAgentProviderInteractionRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("agent resolve interaction", err)

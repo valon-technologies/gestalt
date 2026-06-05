@@ -55,6 +55,15 @@ ResponseHeaders = dict[str, ResponseHeaderValue]
 
 
 @dataclasses.dataclass(slots=True)
+class SubjectPermission:
+    """One app permission attached to a subject."""
+
+    app: str = ""
+    operations: list[str] = dataclasses.field(default_factory=list)
+    all_operations: bool = False
+
+
+@dataclasses.dataclass(slots=True)
 class Subject:
     """Identity information attached to an incoming provider request."""
 
@@ -62,7 +71,8 @@ class Subject:
     credential_subject_id: str = ""
     email: str = ""
     display_name: str = ""
-
+    scopes: list[str] = dataclasses.field(default_factory=list)
+    permissions: list[SubjectPermission] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(slots=True)
@@ -108,6 +118,7 @@ class Request:
     idempotency_key: str = ""
     host: Host = dataclasses.field(default_factory=Host)
     agent_subject: Subject = dataclasses.field(default_factory=Subject)
+    context: Any | None = None
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""
@@ -117,20 +128,17 @@ class Request:
     def app(self) -> "AppProtocol":
         from ._app_access import _AppClient
 
-        return _AppClient(self.invocation_token, workflow=self.workflow)
+        return _AppClient(self)
 
     def agent(self) -> "Agent":
         from ._agent import Agent
 
-        return Agent(self.invocation_token, workflow=self.workflow)
+        return Agent(self)
 
     def workflows(self) -> "Workflow":
         from ._workflow import Workflow
 
-        return Workflow(
-            self.invocation_token,
-            idempotency_key=self.idempotency_key,
-        )
+        return Workflow(self)
 
     def authorization(self) -> AuthorizationProtocol:
         from ._authorization import _shared_authorization_client

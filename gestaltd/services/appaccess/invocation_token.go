@@ -214,6 +214,19 @@ func (c TokenContext) CallerApp() string {
 	return strings.TrimSpace(c.inner.callerApp)
 }
 
+func (c TokenContext) CallerProviderKind() invocation.ProviderKind {
+	return invocation.ProviderKind(strings.TrimSpace(string(c.inner.callerProviderKind)))
+}
+
+func (c TokenContext) CallerProvider() invocation.CallerProvider {
+	name := c.CallerApp()
+	kind := c.CallerProviderKind()
+	if kind == "" && name != "" {
+		kind = invocation.ProviderKindApp
+	}
+	return invocation.CallerProvider{Kind: kind, Name: name}
+}
+
 func (c TokenContext) Principal() *principal.Principal {
 	return principal.Canonicalized(c.inner.principal)
 }

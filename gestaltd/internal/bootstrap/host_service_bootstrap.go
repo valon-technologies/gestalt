@@ -55,7 +55,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 		hostServices = append(hostServices, authorizationHostService)
 	}
 	hostServices = append(hostServices,
-		buildAppInvocationHostService(deps, invTokens),
+		buildAppInvocationHostService(name, deps, invTokens),
 		buildWorkflowProviderHostService(name, deps, invTokens),
 		buildPluginAgentProviderHostService(name, deps, invTokens),
 	)
@@ -464,7 +464,12 @@ func buildWorkflowProviderHostService(appName string, deps Deps, tokens *appacce
 		Name:           "workflow_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, tokens))
+			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(
+				appName,
+				manager,
+				deps.Authorization,
+				workflowservice.WithInvocationTokenManager(tokens),
+			))
 		},
 	}
 }
@@ -482,7 +487,7 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *a
 			proto.RegisterAgentProviderServer(srv, agentservice.NewProviderServer(
 				pluginName,
 				manager,
-				tokens,
+				agentservice.WithInvocationTokenManager(tokens),
 				agentservice.WithWorkflowRunResolver(workflowRuns),
 			))
 		},
@@ -499,7 +504,7 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
+func buildAppInvocationHostService(appName string, deps Deps, tokens *appaccessservice.InvocationTokenManager) runtimehost.HostService {
 	invoker := deps.AppInvocation
 	if invoker == nil {
 		invoker = unavailableAppInvocation{}
@@ -511,8 +516,10 @@ func buildAppInvocationHostService(deps Deps, tokens *appaccessservice.Invocatio
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAppServer(srv, appaccessservice.NewServer(
 				invoker,
-				tokens,
+				appaccessservice.WithInvocationTokenManager(tokens),
 				appaccessservice.WithWorkflowRunResolver(workflowRuns),
+				appaccessservice.WithAuthorizationProvider(deps.Authorization),
+				appaccessservice.WithCallerApp(appName, deps.AppAccessProfiles[strings.TrimSpace(appName)]),
 			))
 		},
 	}

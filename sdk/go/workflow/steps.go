@@ -13,11 +13,11 @@ import (
 )
 
 type appClientInvoker struct {
-	newApp func(string) (gestalt.App, error)
+	newApp func(gestalt.Request) (gestalt.App, error)
 }
 
 func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocation) (*AppResult, error) {
-	client, err := i.newApp(call.Token)
+	client, err := i.newApp(gestalt.RequestFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocat
 	return out, nil
 }
 
-func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, invocationScope, stepID string) (any, error) {
+func (e *Executor) invokeAppStep(ctx context.Context, req Request, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, invocationScope, stepID string) (any, error) {
 	appName := strings.TrimSpace(app.Name)
 	operation := strings.TrimSpace(app.Operation)
 	if appName == "" || operation == "" {
@@ -71,7 +71,6 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string,
 		}
 	}
 	result, err := e.appInvoker.InvokeWorkflowApp(ctx, AppInvocation{
-		Token:           token,
 		App:             appName,
 		Operation:       operation,
 		Params:          params,
@@ -91,8 +90,8 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, token string,
 	return output, nil
 }
 
-func (e *Executor) invokeAgentStep(ctx context.Context, req Request, token string, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
-	client, err := e.newAgent(token)
+func (e *Executor) invokeAgentStep(ctx context.Context, req Request, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
+	client, err := e.newAgent(gestalt.RequestFromContext(ctx))
 	if err != nil {
 		return nil, "", err
 	}

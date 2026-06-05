@@ -12,6 +12,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -105,7 +106,7 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		req.Output,
 		req.CreatedBySubjectID,
 		strings.TrimSpace(req.ExecutionRef),
-		strings.TrimSpace(req.RunGrant),
+		req.Context,
 	)
 	return turn, err
 }
@@ -257,7 +258,7 @@ func (p *agentProvider) startTurn(
 	requestedOutput *gestalt.AgentOutput,
 	createdBySubjectID string,
 	executionRef string,
-	runGrant string,
+	reqCtx *proto.RequestContext,
 ) (*gestalt.AgentTurn, *gestalt.AgentInteraction, error) {
 	if turnID == "" {
 		turnID = "agent-turn-1"
@@ -316,7 +317,7 @@ func (p *agentProvider) startTurn(
 				ToolCallID:     "call-1",
 				ToolID:         tools[0].ID,
 				Arguments:      map[string]any{"taskId": "task-123"},
-				RunGrant:       runGrant,
+				Context:        reqCtx,
 				IdempotencyKey: " tool-call-key-1 ",
 			})
 			if err != nil {
