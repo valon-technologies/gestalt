@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -14,9 +15,9 @@ const (
 	providerLockKindWorkflow       = "workflow"
 	providerLockKindTelemetry      = "telemetry"
 	providerLockKindAudit          = "audit"
-	providerLockRuntimeExecutable  = providerReleaseRuntimeExecutable
-	providerLockRuntimeDeclarative = providerReleaseRuntimeDeclarative
-	providerLockRuntimeUI          = providerReleaseRuntimeUI
+	providerLockRuntimeExecutable  = providerrelease.RuntimeExecutable
+	providerLockRuntimeDeclarative = providerrelease.RuntimeDeclarative
+	providerLockRuntimeUI          = providerrelease.RuntimeUI
 	providerLockRuntimeAssets      = providerLockRuntimeUI
 )
 

@@ -26,6 +26,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -861,14 +862,10 @@ func TestLockAtPathsValidatesCommittedProviderInvokes(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(filepath.Dir(metadataPath), archiveName), archiveData, 0o644); err != nil {
 			t.Fatalf("write %s archive: %v", name, err)
 		}
-		writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-			Schema:        providerReleaseSchemaName,
-			SchemaVersion: providerReleaseSchemaVersion,
-			Package:       source,
-			Kind:          providermanifestv1.KindApp,
-			Version:       version,
-			Runtime:       providerReleaseRuntimeExecutable,
-			Artifacts: map[string]providerReleaseArtifact{
+		writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+			Package: source,
+			Kind:    providermanifestv1.KindApp,
+			Version: version, Artifacts: map[string]providerrelease.Artifact{
 				providerpkg.CurrentPlatformString(): {
 					Path:   archiveName,
 					SHA256: hex.EncodeToString(archiveSum[:]),
@@ -946,14 +943,10 @@ func TestCheckLockAtPathsReportsMissingProviderDrift(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(filepath.Dir(metadataPath), "target.tar.gz"), archiveData, 0o644); err != nil {
 		t.Fatalf("write archive: %v", err)
 	}
-	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       source,
-		Kind:          providermanifestv1.KindApp,
-		Version:       version,
-		Runtime:       providerReleaseRuntimeExecutable,
-		Artifacts: map[string]providerReleaseArtifact{
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package: source,
+		Kind:    providermanifestv1.KindApp,
+		Version: version, Artifacts: map[string]providerrelease.Artifact{
 			providerpkg.CurrentPlatformString(): {
 				Path:   "target.tar.gz",
 				SHA256: hex.EncodeToString(archiveSum[:]),
@@ -1017,29 +1010,28 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	}
 	var metadataCount atomic.Int64
 	var archiveCount atomic.Int64
+	metadataPath := "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/provider-release.yaml"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/provider-release.yaml":
-			metadataCount.Add(1)
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   "alpha.tar.gz",
 						SHA256: archiveSHA,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				t.Fatalf("marshal metadata: %v", err)
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
 			}
-			_, _ = w.Write(data)
+			if !serveProviderReleaseFixture(t, w, r.URL.Path, metadataPath, metadata) {
+				http.NotFound(w, r)
+			}
 		case "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/alpha.tar.gz":
 			archiveCount.Add(1)
 			_, _ = w.Write(archiveData)
@@ -1100,8 +1092,15 @@ apps:
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata count = %d, want 1", got)
 	}
-	if got := archiveCount.Load(); got != 1 {
-		t.Fatalf("archive count = %d, want 1", got)
+	if got := archiveCount.Load(); got != 0 {
+		t.Fatalf("archive count = %d, want 0", got)
+	}
+	archiveBeforeCheck := archiveCount.Load()
+	if err := NewLifecycle().WithHTTPClient(srv.Client()).CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
+	}
+	if got := archiveCount.Load(); got != archiveBeforeCheck {
+		t.Fatalf("archive count after check = %d, want %d", got, archiveBeforeCheck)
 	}
 }
 
@@ -1126,29 +1125,28 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 	}
 	var metadataCount atomic.Int64
 	var archiveCount atomic.Int64
+	metadataPath := "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/provider-release.yaml"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/provider-release.yaml":
-			metadataCount.Add(1)
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindSecrets,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindSecrets,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   "secrets.tar.gz",
 						SHA256: archiveSHA,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				t.Fatalf("marshal metadata: %v", err)
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
 			}
-			_, _ = w.Write(data)
+			if !serveProviderReleaseFixture(t, w, r.URL.Path, metadataPath, metadata) {
+				http.NotFound(w, r)
+			}
 		case "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/secrets.tar.gz":
 			archiveCount.Add(1)
 			_, _ = w.Write(archiveData)
@@ -1210,8 +1208,8 @@ providers:
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata count = %d, want 1", got)
 	}
-	if got := archiveCount.Load(); got != 1 {
-		t.Fatalf("archive count = %d, want 1", got)
+	if got := archiveCount.Load(); got != 0 {
+		t.Fatalf("archive count = %d, want 0", got)
 	}
 }
 
@@ -1566,21 +1564,6 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	return archivePath
 }
 
-func writeProviderReleaseMetadataFile(t *testing.T, path string, metadata providerReleaseMetadata) {
-	t.Helper()
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("create metadata dir: %v", err)
-	}
-	data, err := yaml.Marshal(metadata)
-	if err != nil {
-		t.Fatalf("marshal metadata: %v", err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write metadata: %v", err)
-	}
-}
-
 func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) {
 	t.Parallel()
 
@@ -1588,15 +1571,11 @@ func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) 
 	sourceDir := filepath.Join(dir, "provider")
 	writeSourceProviderTree(t, sourceDir, "github.com/acme/providers/alpha", "1.0.0", "alpha-binary")
 	metadataPath := filepath.Join(sourceDir, "dist", "provider-release.yaml")
-	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       "github.com/acme/providers/alpha",
-		Kind:          providermanifestv1.KindApp,
-		Runtime:       providerReleaseRuntimeExecutable,
-		Version:       "1.0.0",
-		Artifacts: map[string]providerReleaseArtifact{
-			platformKeyGeneric: {Path: "alpha.tar.gz", SHA256: "abc123"},
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package: "github.com/acme/providers/alpha",
+		Kind:    providermanifestv1.KindApp, Version: "1.0.0",
+		Artifacts: map[string]providerrelease.Artifact{
+			providerpkg.CurrentPlatformString(): {Path: "alpha.tar.gz", SHA256: "abc123"},
 		},
 	})
 
@@ -1615,15 +1594,11 @@ func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) 
 		t.Fatalf("local release metadata digest changed after adjacent source edit: %q != %q", second, first)
 	}
 
-	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       "github.com/acme/providers/alpha",
-		Kind:          providermanifestv1.KindApp,
-		Runtime:       providerReleaseRuntimeExecutable,
-		Version:       "1.0.1",
-		Artifacts: map[string]providerReleaseArtifact{
-			platformKeyGeneric: {Path: "alpha.tar.gz", SHA256: "abc123"},
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package: "github.com/acme/providers/alpha",
+		Kind:    providermanifestv1.KindApp, Version: "1.0.1",
+		Artifacts: map[string]providerrelease.Artifact{
+			providerpkg.CurrentPlatformString(): {Path: "alpha.tar.gz", SHA256: "abc123"},
 		},
 	})
 	third, err := fingerprintLocalReleaseMetadataDigest(metadataPath)
@@ -1642,31 +1617,26 @@ func TestLockAtPathsUsesProviderReleaseStaticValidationWithoutUnpackingArchive(t
 	packageSource := "github.com/acme/tools/static-lock"
 	version := "1.2.3"
 	metadataPath := filepath.Join(dir, "provider-release.yaml")
-	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       packageSource,
-		Kind:          providermanifestv1.KindApp,
-		Version:       version,
-		Runtime:       providerReleaseRuntimeExecutable,
-		Artifacts: map[string]providerReleaseArtifact{
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package: packageSource,
+		Kind:    providermanifestv1.KindApp,
+		Version: version,
+		Artifacts: map[string]providerrelease.Artifact{
 			providerpkg.CurrentPlatformString(): {
 				Path:   "missing-archive.tar.gz",
 				SHA256: strings.Repeat("a", 64),
 			},
 		},
-		StaticValidation: &providerReleaseStaticValidationData{
-			Manifest: &providermanifestv1.Manifest{
-				Kind:    providermanifestv1.KindApp,
-				Source:  packageSource,
-				Version: version,
-				Spec:    &providermanifestv1.Spec{},
-			},
-			Catalog: &catalog.Catalog{
-				Name: "static-lock",
-				Operations: []catalog.CatalogOperation{
-					{ID: "echo", Method: "POST"},
-				},
+		Manifest: &providermanifestv1.Manifest{
+			Kind:    providermanifestv1.KindApp,
+			Source:  packageSource,
+			Version: version,
+			Spec:    &providermanifestv1.Spec{},
+		},
+		Catalog: &catalog.Catalog{
+			Name: "static-lock",
+			Operations: []catalog.CatalogOperation{
+				{ID: "echo", Method: "POST"},
 			},
 		},
 	})
@@ -1700,39 +1670,31 @@ server:
 	}
 }
 
-func TestLockAtPathsUnpacksProviderReleaseWhenStaticValidationCatalogMissing(t *testing.T) {
+func TestLockAtPathsRejectsProviderReleaseWhenStaticValidationCatalogMissing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	packageSource := "github.com/acme/tools/static-lock"
 	version := "1.2.3"
-	archivePath := buildExecutableArchive(t, dir, "static-lock-src", packageSource, version, providermanifestv1.KindApp, "static-lock", "static-lock-binary")
-	archiveDigest, err := providerpkg.ArchiveDigest(archivePath)
-	if err != nil {
-		t.Fatalf("ArchiveDigest: %v", err)
-	}
 	metadataPath := filepath.Join(dir, "provider-release.yaml")
-	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       packageSource,
-		Kind:          providermanifestv1.KindApp,
-		Version:       version,
-		Runtime:       providerReleaseRuntimeExecutable,
-		Artifacts: map[string]providerReleaseArtifact{
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package: packageSource,
+		Kind:    providermanifestv1.KindApp,
+		Version: version,
+		Artifacts: map[string]providerrelease.Artifact{
 			providerpkg.CurrentPlatformString(): {
-				Path:   filepath.Base(archivePath),
-				SHA256: archiveDigest,
+				Path:   "missing-archive.tar.gz",
+				SHA256: strings.Repeat("a", 64),
 			},
 		},
-		StaticValidation: &providerReleaseStaticValidationData{
-			Manifest: &providermanifestv1.Manifest{
-				Kind:    providermanifestv1.KindApp,
-				Source:  packageSource,
-				Version: version,
-				Spec:    &providermanifestv1.Spec{},
-			},
+		Manifest: &providermanifestv1.Manifest{
+			Kind:    providermanifestv1.KindApp,
+			Source:  packageSource,
+			Version: version,
+			Spec:    &providermanifestv1.Spec{},
 		},
+		NoCatalog:    true,
+		AllowInvalid: true,
 	})
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
@@ -1751,16 +1713,14 @@ server:
 		t.Fatalf("write config: %v", err)
 	}
 
-	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
-	if err != nil {
-		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	_, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err == nil {
+		t.Fatal("LockAtPathsWithStatePaths unexpectedly succeeded")
 	}
-	entry := lock.Providers.App["static-lock"]
-	if !entry.CatalogAvailable {
-		t.Fatal("CatalogAvailable = false, want archive catalog projected into lock")
-	}
-	if entry.ValidationManifest == nil || entry.ValidationManifest.Spec == nil || entry.ValidationManifest.Spec.AllowedOperations["echo"] == nil {
-		t.Fatalf("allowed operations = %+v, want echo from archive catalog", entry.ValidationManifest)
+	if got := err.Error(); !strings.Contains(got, "must include catalog metadata unless the validation manifest is MCP-only") ||
+		!strings.Contains(got, packageSource) ||
+		!strings.Contains(got, metadataPath) {
+		t.Fatalf("LockAtPathsWithStatePaths error = %v, want catalog validation failure", err)
 	}
 }
 
@@ -1771,31 +1731,27 @@ func TestLockAtPathsRejectsPackageLocalStaticValidationSurfaceAsSelfContained(t 
 	packageSource := "github.com/acme/tools/static-openapi"
 	version := "1.2.3"
 	metadataPath := filepath.Join(dir, "provider-release.yaml")
-	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
-		Schema:        providerReleaseSchemaName,
-		SchemaVersion: providerReleaseSchemaVersion,
-		Package:       packageSource,
-		Kind:          providermanifestv1.KindApp,
-		Version:       version,
-		Runtime:       providerReleaseRuntimeExecutable,
-		Artifacts: map[string]providerReleaseArtifact{
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package: packageSource,
+		Kind:    providermanifestv1.KindApp,
+		Version: version,
+		Artifacts: map[string]providerrelease.Artifact{
 			providerpkg.CurrentPlatformString(): {
 				Path:   "missing-archive.tar.gz",
 				SHA256: strings.Repeat("a", 64),
 			},
 		},
-		StaticValidation: &providerReleaseStaticValidationData{
-			Manifest: &providermanifestv1.Manifest{
-				Kind:    providermanifestv1.KindApp,
-				Source:  packageSource,
-				Version: version,
-				Spec: &providermanifestv1.Spec{
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
-					},
+		Manifest: &providermanifestv1.Manifest{
+			Kind:    providermanifestv1.KindApp,
+			Source:  packageSource,
+			Version: version,
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
 				},
 			},
 		},
+		AllowInvalid: true,
 	})
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
@@ -1818,8 +1774,8 @@ server:
 	if err == nil {
 		t.Fatal("LockAtPathsWithStatePaths unexpectedly succeeded")
 	}
-	if strings.Contains(err.Error(), "openapi catalog") {
-		t.Fatalf("LockAtPathsWithStatePaths error = %v, want archive resolution before static OpenAPI validation", err)
+	if !strings.Contains(err.Error(), "validation manifest must be self-contained") {
+		t.Fatalf("LockAtPathsWithStatePaths error = %v, want self-contained validation manifest error", err)
 	}
 }
 
@@ -2209,14 +2165,10 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 						t.Fatalf("write extra archive: %v", err)
 					}
 				}
-				writeProviderReleaseMetadataFile(t, metadataAbsPath, providerReleaseMetadata{
-					Schema:        providerReleaseSchemaName,
-					SchemaVersion: providerReleaseSchemaVersion,
-					Package:       packageSource,
-					Kind:          providermanifestv1.KindApp,
-					Version:       version,
-					Runtime:       providerReleaseRuntimeExecutable,
-					Artifacts: map[string]providerReleaseArtifact{
+				writeProviderReleaseMetadataFileWithStaticValidation(t, metadataAbsPath, providerReleaseMetadataFixture{
+					Package: packageSource,
+					Kind:    providermanifestv1.KindApp,
+					Version: version, Artifacts: map[string]providerrelease.Artifact{
 						providerpkg.CurrentPlatformString(): {
 							Path:   currentArtifactPath,
 							SHA256: hex.EncodeToString(currentArchiveSHA[:]),
@@ -2239,21 +2191,21 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			} else {
 				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
-					case metadataPath:
-						metadataCount.Add(1)
+					case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+						if r.URL.Path == metadataPath {
+							metadataCount.Add(1)
+						}
 						if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 							handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 							http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 							return
 						}
-						metadata := providerReleaseMetadata{
-							Schema:        providerReleaseSchemaName,
-							SchemaVersion: providerReleaseSchemaVersion,
-							Package:       packageSource,
-							Kind:          providermanifestv1.KindApp,
-							Version:       version,
-							Runtime:       providerReleaseRuntimeExecutable,
-							Artifacts: map[string]providerReleaseArtifact{
+						metadata := providerReleaseMetadataFixture{
+							Package:     packageSource,
+							Kind:        providermanifestv1.KindApp,
+							Version:     version,
+							ArchivePath: currentArchivePath,
+							Artifacts: map[string]providerrelease.Artifact{
 								providerpkg.CurrentPlatformString(): {
 									Path:   filepath.Base(currentArchivePathURL),
 									SHA256: hex.EncodeToString(currentArchiveSHA[:]),
@@ -2264,14 +2216,9 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 								},
 							},
 						}
-						data, err := yaml.Marshal(metadata)
-						if err != nil {
-							handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-							http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-							return
+						if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+							http.NotFound(w, r)
 						}
-						w.Header().Set("Content-Type", "application/yaml")
-						_, _ = w.Write(data)
 					case currentArchivePathURL:
 						currentArchiveCount.Add(1)
 						if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -2325,14 +2272,10 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(indexedDBDir, indexedDBArchiveName), indexedDBArchiveData, 0o644); err != nil {
 					t.Fatalf("write indexeddb archive: %v", err)
 				}
-				writeProviderReleaseMetadataFile(t, indexedDBAbsPath, providerReleaseMetadata{
-					Schema:        providerReleaseSchemaName,
-					SchemaVersion: providerReleaseSchemaVersion,
-					Package:       indexedDBSource,
-					Kind:          providermanifestv1.KindIndexedDB,
-					Version:       indexedDBVersion,
-					Runtime:       providerReleaseRuntimeExecutable,
-					Artifacts: map[string]providerReleaseArtifact{
+				writeProviderReleaseMetadataFileWithStaticValidation(t, indexedDBAbsPath, providerReleaseMetadataFixture{
+					Package: indexedDBSource,
+					Kind:    providermanifestv1.KindIndexedDB,
+					Version: indexedDBVersion, Artifacts: map[string]providerrelease.Artifact{
 						providerpkg.CurrentPlatformString(): {
 							Path:   indexedDBArchiveName,
 							SHA256: hex.EncodeToString(indexedDBArchiveSum[:]),
@@ -2409,8 +2352,8 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if entry.Kind != providermanifestv1.KindApp {
 				t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindApp)
 			}
-			if entry.Runtime != providerReleaseRuntimeExecutable {
-				t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+			if entry.Runtime != providerLockRuntimeExecutable {
+				t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerLockRuntimeExecutable)
 			}
 			if entry.Version != version {
 				t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
@@ -2430,8 +2373,8 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				if got := metadataCount.Load(); got != 1 {
 					t.Fatalf("metadata request count = %d, want 1", got)
 				}
-				if got := currentArchiveCount.Load(); got != 1 {
-					t.Fatalf("current archive request count = %d, want 1", got)
+				if got := currentArchiveCount.Load(); got != 0 {
+					t.Fatalf("current archive request count = %d, want 0", got)
 				}
 				if got := extraArchiveCount.Load(); got != 0 {
 					t.Fatalf("extra archive request count = %d, want 0", got)
@@ -2456,8 +2399,8 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if diskEntry.Source != wantSource {
 				t.Fatalf("disk lock source = %q, want %q", diskEntry.Source, wantSource)
 			}
-			if diskEntry.Runtime != providerReleaseRuntimeExecutable {
-				t.Fatalf("disk lock runtime = %q, want %q", diskEntry.Runtime, providerReleaseRuntimeExecutable)
+			if diskEntry.Runtime != providerLockRuntimeExecutable {
+				t.Fatalf("disk lock runtime = %q, want %q", diskEntry.Runtime, providerLockRuntimeExecutable)
 			}
 			if diskEntry.Kind != providermanifestv1.KindApp {
 				t.Fatalf("disk lock kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindApp)
@@ -2544,14 +2487,12 @@ func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				t.Fatalf("app command = %q, want %q", cfg.Apps["alpha"].Command, executablePath)
 			}
 			if tc.localSource {
-				writeProviderReleaseMetadataFile(t, localMetadataPath, providerReleaseMetadata{
-					Schema:        providerReleaseSchemaName,
-					SchemaVersion: providerReleaseSchemaVersion,
-					Package:       packageSource,
-					Kind:          providermanifestv1.KindApp,
-					Version:       "1.2.4",
-					Runtime:       providerReleaseRuntimeExecutable,
-					Artifacts: map[string]providerReleaseArtifact{
+				writeProviderReleaseMetadataFileWithStaticValidation(t, localMetadataPath, providerReleaseMetadataFixture{
+					Package:      packageSource,
+					Kind:         providermanifestv1.KindApp,
+					Version:      "1.2.4",
+					AllowInvalid: true,
+					Artifacts: map[string]providerrelease.Artifact{
 						providerpkg.CurrentPlatformString(): {
 							Path:   wantCurrentArchiveURL,
 							SHA256: wantCurrentSHA,
@@ -2638,8 +2579,10 @@ packages:
 `, version, providerpkg.CurrentPlatformString())
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte(index))
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if failIndexAndMetadata.Load() {
 				http.Error(w, "metadata should not be fetched after lock", http.StatusInternalServerError)
 				return
@@ -2647,28 +2590,21 @@ packages:
 			if !requireAuth(w, r, "metadata") {
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     version,
+				ArchivePath: currentArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePath),
 						SHA256: currentArchiveSHAHex,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePath:
 			archiveCount.Add(1)
 			if !requireAuth(w, r, "archive") {
@@ -2821,6 +2757,7 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 		source       string
 		kind         string
 		metadataPath string
+		archiveFile  string
 		archivePath  string
 		archiveData  []byte
 		archiveSHA   string
@@ -2837,6 +2774,7 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 			source:       source,
 			kind:         kind,
 			metadataPath: "/providers/" + name + "/v1.2.3/provider-release.yaml",
+			archiveFile:  archiveFile,
 			archivePath:  "/providers/" + name + "/v1.2.3/" + name + ".tar.gz",
 			archiveData:  data,
 			archiveSHA:   hex.EncodeToString(sum[:]),
@@ -2883,30 +2821,25 @@ func TestSourceProviderPackagesResolveIndexedDBAndS3(t *testing.T) {
 		}
 		for _, rel := range releases {
 			switch r.URL.Path {
-			case rel.metadataPath:
-				metadataCount.Add(1)
-				metadata := providerReleaseMetadata{
-					Schema:        providerReleaseSchemaName,
-					SchemaVersion: providerReleaseSchemaVersion,
-					Package:       rel.source,
-					Kind:          rel.kind,
-					Version:       version,
-					Runtime:       providerReleaseRuntimeExecutable,
-					Artifacts: map[string]providerReleaseArtifact{
+			case rel.metadataPath, providerReleaseManifestSidecarPath(rel.metadataPath), providerReleaseCatalogSidecarPath(rel.metadataPath):
+				if r.URL.Path == rel.metadataPath {
+					metadataCount.Add(1)
+				}
+				metadata := providerReleaseMetadataFixture{
+					Package:     rel.source,
+					Kind:        rel.kind,
+					Version:     version,
+					ArchivePath: rel.archiveFile,
+					Artifacts: map[string]providerrelease.Artifact{
 						providerpkg.CurrentPlatformString(): {
 							Path:   filepath.Base(rel.archivePath),
 							SHA256: rel.archiveSHA,
 						},
 					},
 				}
-				data, err := yaml.Marshal(metadata)
-				if err != nil {
-					handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-					http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-					return
+				if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+					http.NotFound(w, r)
 				}
-				w.Header().Set("Content-Type", "application/yaml")
-				_, _ = w.Write(data)
 				return
 			case rel.archivePath:
 				archiveCount.Add(1)
@@ -3026,35 +2959,30 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	archivePathURL := "/providers/workflow/workflow-runner.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindWorkflow,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindWorkflow,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: archiveSHAHex,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3113,8 +3041,8 @@ func TestSourceWorkflowMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if entry.Kind != providermanifestv1.KindWorkflow {
 		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindWorkflow)
 	}
-	if entry.Runtime != providerReleaseRuntimeExecutable {
-		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+	if entry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerLockRuntimeExecutable)
 	}
 	if entry.Version != version {
 		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
@@ -3201,35 +3129,30 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 	archivePathURL := "/providers/external-credentials/external-credentials-runner.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindExternalCredentials,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindExternalCredentials,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: hex.EncodeToString(archiveSHA[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3289,8 +3212,8 @@ func TestSourceExternalCredentialsMetadataURLPrepareAndLockedLoad(t *testing.T) 
 	if entry.Kind != providermanifestv1.KindExternalCredentials {
 		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindExternalCredentials)
 	}
-	if entry.Runtime != providerReleaseRuntimeExecutable {
-		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+	if entry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerLockRuntimeExecutable)
 	}
 	if entry.Version != version {
 		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
@@ -3380,35 +3303,30 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	archivePathURL := "/providers/roadmap/roadmap-ui.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindUI,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeUI,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindUI,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: archiveSHAHex,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3471,8 +3389,8 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	if entry.Kind != providermanifestv1.KindUI {
 		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindUI)
 	}
-	if entry.Runtime != providerReleaseRuntimeUI {
-		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeUI)
+	if entry.Runtime != providerLockRuntimeUI {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerLockRuntimeUI)
 	}
 	if entry.Version != version {
 		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
@@ -3550,28 +3468,23 @@ func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	archivePathURL := "/providers/gadget/gadget-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			metadata := providerReleaseMetadataFixture{
+				Package:      packageSource,
+				Kind:         providermanifestv1.KindApp,
+				Version:      version,
+				ArchivePath:  archivePath,
+				AllowInvalid: true,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: hex.EncodeToString(archiveSHA[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(archiveData)
@@ -3605,8 +3518,8 @@ func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 		t.Fatal("PrepareAtPath unexpectedly succeeded")
 		return
 	}
-	if !strings.Contains(err.Error(), `manifest source "github.com/acme/tools/other-gadget" does not match metadata package "github.com/acme/tools/gadget"`) {
-		t.Fatalf("PrepareAtPath error = %v, want manifest source mismatch", err)
+	if !strings.Contains(err.Error(), `provider release validation manifest package "github.com/acme/tools/other-gadget" does not match "github.com/acme/tools/gadget"`) {
+		t.Fatalf("PrepareAtPath error = %v, want release validation manifest package mismatch", err)
 	}
 }
 
@@ -3645,8 +3558,10 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	var currentMu sync.RWMutex
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
@@ -3660,28 +3575,21 @@ func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 			currentMu.RLock()
 			currentArchiveURL := archiveURL
 			currentMu.RUnlock()
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     version,
+				ArchivePath: currentArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   currentArchiveURL,
 						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePath:
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3798,9 +3706,13 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 		repo         = "valon-technologies/toolshed"
 		tag          = "apps/workplace-hub/v0.0.1-alpha.1"
 		metadataID   = int64(101)
+		manifestID   = int64(102)
+		catalogID    = int64(103)
 		archiveID    = int64(202)
 		metadataName = "provider-release.yaml"
 		archiveName  = "alpha-current.tar.gz"
+		manifestName = providerrelease.ValidationManifestFile
+		catalogName  = providerrelease.ValidationCatalogFile
 	)
 
 	archiveAssetURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", repo, archiveID)
@@ -3810,6 +3722,20 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	var metadataCount atomic.Int64
 	var archiveCount atomic.Int64
 	handlerErrs := make(chan error, 8)
+	releaseFixture := func() providerReleaseFixtureFiles {
+		return newProviderReleaseFixtureFiles(t, providerReleaseMetadataFixture{
+			Package:     testSource,
+			Kind:        providermanifestv1.KindApp,
+			Version:     testVersion,
+			ArchivePath: archivePath,
+			Artifacts: map[string]providerrelease.Artifact{
+				providerpkg.CurrentPlatformString(): {
+					Path:   "./" + archiveName,
+					SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+				},
+			},
+		})
+	}
 	nextHandlerErr := func() error {
 		t.Helper()
 		select {
@@ -3836,7 +3762,12 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`, metadataID, metadataName, archiveID, archiveName)
+			_, _ = fmt.Fprintf(w, `{"assets":[{"id":%d,"name":"%s"},{"id":%d,"name":"%s"},{"id":%d,"name":"%s"},{"id":%d,"name":"%s"}]}`,
+				metadataID, metadataName,
+				manifestID, manifestName,
+				catalogID, catalogName,
+				archiveID, archiveName,
+			)
 		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, metadataID):
 			metadataCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3849,28 +3780,19 @@ func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 				http.Error(w, "bad metadata accept", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       testSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       testVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
-					providerpkg.CurrentPlatformString(): {
-						Path:   "./" + archiveName,
-						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
-					},
-				},
-			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+			setYAMLContentType(w)
+			_, _ = w.Write(releaseFixture().Metadata)
+		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, manifestID):
+			setYAMLContentType(w)
+			_, _ = w.Write(releaseFixture().Manifest)
+		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, catalogID):
+			files := releaseFixture()
+			if len(files.Catalog) == 0 {
+				http.NotFound(w, r)
 				return
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
+			setYAMLContentType(w)
+			_, _ = w.Write(files.Catalog)
 		case escapedPath == fmt.Sprintf("/repos/%s/releases/assets/%d", repo, archiveID):
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -3986,8 +3908,11 @@ func TestSourceAppMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T)
 	const archivePathURL = "/providers/alpha/alpha-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			count := metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			count := metadataCount.Load()
+			if r.URL.Path == metadataPath {
+				count = metadataCount.Add(1)
+			}
 			if count <= 2 {
 				http.Error(w, "bad gateway", http.StatusBadGateway)
 				return
@@ -4002,28 +3927,21 @@ func TestSourceAppMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T)
 				http.Error(w, "bad metadata accept", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       testSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       testVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     testSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     testVersion,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   "./alpha-current.tar.gz",
 						SHA256: hex.EncodeToString(archiveSHA[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			archiveCount.Add(1)
 			_, _ = w.Write(archiveData)
@@ -4086,7 +4004,7 @@ func TestSourceAppMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	}
 
 	metadataPath := "/releases/assets/999"
-	oversizedBody := bytes.Repeat([]byte("x"), providerReleaseMetadataMaxBytes+1)
+	oversizedBody := bytes.Repeat([]byte("x"), providerrelease.MaxBytes+1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != metadataPath {
 			http.NotFound(w, r)
@@ -4137,7 +4055,7 @@ func TestSourceAppMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
-	if !strings.Contains(err.Error(), fmt.Sprintf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)) {
+	if !strings.Contains(err.Error(), fmt.Sprintf("provider release metadata exceeds %d byte limit", providerrelease.MaxBytes)) {
 		t.Fatalf("PrepareAtPath error = %v, want metadata size limit", err)
 	}
 	if got := metadataCount.Load(); got != 1 {
@@ -4172,6 +4090,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	var archiveCount atomic.Int64
 	var currentMu sync.RWMutex
 	currentVersion := initialVersion
+	currentArchivePath := initialArchivePath
 	currentArchiveData := initialArchiveData
 	currentArchiveSHA := initialArchiveSHA
 
@@ -4190,8 +4109,10 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 	currentArchivePathURL := "/providers/alpha/alpha-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
@@ -4201,28 +4122,21 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 			version := currentVersion
 			archiveSHA := currentArchiveSHA
 			currentMu.RUnlock()
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       packageSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     packageSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     version,
+				ArchivePath: currentArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(currentArchivePathURL),
 						SHA256: hex.EncodeToString(archiveSHA[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case currentArchivePathURL:
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -4280,6 +4194,7 @@ func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) 
 
 	currentMu.Lock()
 	currentVersion = updatedVersion
+	currentArchivePath = updatedArchivePath
 	currentArchiveData = updatedArchiveData
 	currentArchiveSHA = updatedArchiveSHA
 	currentMu.Unlock()
@@ -4410,28 +4325,22 @@ func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatches
 	archivePathURL := "/providers/gadget/gadget-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       source,
-				Kind:          providermanifestv1.KindApp,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			metadata := providerReleaseMetadataFixture{
+				Package:     source,
+				Kind:        providermanifestv1.KindApp,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: hex.EncodeToString(archiveSHA[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			downloadCount.Add(1)
 			w.Header().Set("Content-Type", "application/octet-stream")
@@ -4542,33 +4451,29 @@ func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	archivePathURL := "/providers/auth/auth-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       source,
-				Kind:          providermanifestv1.KindAuthentication,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     source,
+				Kind:        providermanifestv1.KindAuthentication,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: archiveSHA,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			downloadCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
@@ -4721,33 +4626,29 @@ func TestSourceAuthAppPrepareAllowsMissingEnvPlaceholderInNonStringField(t *test
 	archivePathURL := "/providers/auth/auth-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       source,
-				Kind:          providermanifestv1.KindAuthentication,
-				Version:       version,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     source,
+				Kind:        providermanifestv1.KindAuthentication,
+				Version:     version,
+				ArchivePath: archivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: archiveSHA,
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
 				http.Error(w, "bad archive authorization", http.StatusBadRequest)
@@ -5092,61 +4993,51 @@ packages:
 `, secretsSource, secretsVersion, strings.TrimPrefix(secretsMetadataPath, "/"), providerpkg.CurrentPlatformString())
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write([]byte(index))
-		case secretsMetadataPath:
-			secretsMetadataCount.Add(1)
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       secretsSource,
-				Kind:          providermanifestv1.KindSecrets,
-				Version:       secretsVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+		case secretsMetadataPath, providerReleaseManifestSidecarPath(secretsMetadataPath), providerReleaseCatalogSidecarPath(secretsMetadataPath):
+			if r.URL.Path == secretsMetadataPath {
+				secretsMetadataCount.Add(1)
+			}
+			metadata := providerReleaseMetadataFixture{
+				Package:     secretsSource,
+				Kind:        providermanifestv1.KindSecrets,
+				Version:     secretsVersion,
+				ArchivePath: secretsArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(secretsArchivePathURL),
 						SHA256: hex.EncodeToString(secretsArchiveSum[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal secrets metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case secretsArchivePathURL:
 			secretsArchiveCount.Add(1)
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(secretsArchiveData)
-		case appMetadataPath:
-			appMetadataCount.Add(1)
+		case appMetadataPath, providerReleaseManifestSidecarPath(appMetadataPath), providerReleaseCatalogSidecarPath(appMetadataPath):
+			if r.URL.Path == appMetadataPath {
+				appMetadataCount.Add(1)
+			}
 			if !requireAppAuth(w, r) {
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       appSource,
-				Kind:          providermanifestv1.KindApp,
-				Version:       appVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     appSource,
+				Kind:        providermanifestv1.KindApp,
+				Version:     appVersion,
+				ArchivePath: appArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(appArchivePathURL),
 						SHA256: hex.EncodeToString(appArchiveSum[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal app metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case appArchivePathURL:
 			appArchiveCount.Add(1)
 			if !requireAppAuth(w, r) {
@@ -5229,8 +5120,8 @@ packages:
 	if got := appMetadataCount.Load(); got != 1 {
 		t.Fatalf("app metadata request count = %d, want 1", got)
 	}
-	if got := appArchiveCount.Load(); got != 1 {
-		t.Fatalf("app archive request count = %d, want 1", got)
+	if got := appArchiveCount.Load(); got != 0 {
+		t.Fatalf("app archive request count = %d, want 0", got)
 	}
 
 	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
@@ -5607,7 +5498,11 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			extraArchivePathURL := "/providers/cache/cache-extra.tar.gz"
 			currentArchivePathURL := "/providers/cache/cache-current.tar.gz"
 			metadataPath := "/providers/cache/provider-release.yaml"
-			extraArchiveData := []byte("fake-cache-extra-platform-archive")
+			extraArchivePath := buildExecutableArchive(t, dir, "cache-extra-src", cacheSource, version, providermanifestv1.KindCache, "cache-extra", "fake-cache-extra-platform-archive")
+			extraArchiveData, err := os.ReadFile(extraArchivePath)
+			if err != nil {
+				t.Fatalf("read extra archive: %v", err)
+			}
 			extraArchiveSum := sha256.Sum256(extraArchiveData)
 
 			sourceValue := ""
@@ -5631,14 +5526,10 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 				if err := os.WriteFile(filepath.Join(metadataDir, extraArchiveName), extraArchiveData, 0o644); err != nil {
 					t.Fatalf("write extra archive: %v", err)
 				}
-				writeProviderReleaseMetadataFile(t, metadataAbsPath, providerReleaseMetadata{
-					Schema:        providerReleaseSchemaName,
-					SchemaVersion: providerReleaseSchemaVersion,
-					Package:       cacheSource,
-					Kind:          providermanifestv1.KindCache,
-					Version:       version,
-					Runtime:       providerReleaseRuntimeExecutable,
-					Artifacts: map[string]providerReleaseArtifact{
+				writeProviderReleaseMetadataFileWithStaticValidation(t, metadataAbsPath, providerReleaseMetadataFixture{
+					Package: cacheSource,
+					Kind:    providermanifestv1.KindCache,
+					Version: version, Artifacts: map[string]providerrelease.Artifact{
 						providerpkg.CurrentPlatformString(): {
 							Path:   currentArchiveName,
 							SHA256: hex.EncodeToString(currentArchiveSum[:]),
@@ -5655,15 +5546,13 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 			} else {
 				srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					switch r.URL.Path {
-					case metadataPath:
-						metadata := providerReleaseMetadata{
-							Schema:        providerReleaseSchemaName,
-							SchemaVersion: providerReleaseSchemaVersion,
-							Package:       cacheSource,
-							Kind:          providermanifestv1.KindCache,
-							Version:       version,
-							Runtime:       providerReleaseRuntimeExecutable,
-							Artifacts: map[string]providerReleaseArtifact{
+					case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+						metadata := providerReleaseMetadataFixture{
+							Package:     cacheSource,
+							Kind:        providermanifestv1.KindCache,
+							Version:     version,
+							ArchivePath: currentArchivePath,
+							Artifacts: map[string]providerrelease.Artifact{
 								providerpkg.CurrentPlatformString(): {
 									Path:   filepath.Base(currentArchivePathURL),
 									SHA256: hex.EncodeToString(currentArchiveSum[:]),
@@ -5674,13 +5563,9 @@ func TestManagedCacheSourcesLockRecordsReleaseMetadataArchives(t *testing.T) {
 								},
 							},
 						}
-						data, err := yaml.Marshal(metadata)
-						if err != nil {
-							http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-							return
+						if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+							http.NotFound(w, r)
 						}
-						w.Header().Set("Content-Type", "application/yaml")
-						_, _ = w.Write(data)
 					case currentArchivePathURL:
 						w.Header().Set("Content-Type", "application/octet-stream")
 						_, _ = w.Write(currentArchiveData)
@@ -5866,33 +5751,29 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authArchivePathURL := "/providers/auth/auth.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case secretsMetadataPath:
-			secretsMetadataCount.Add(1)
+		case secretsMetadataPath, providerReleaseManifestSidecarPath(secretsMetadataPath), providerReleaseCatalogSidecarPath(secretsMetadataPath):
+			if r.URL.Path == secretsMetadataPath {
+				secretsMetadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer "+secretsSourceToken {
 				http.Error(w, "bad auth header for secrets metadata", http.StatusUnauthorized)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       secretsSource,
-				Kind:          providermanifestv1.KindSecrets,
-				Version:       secretsVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     secretsSource,
+				Kind:        providermanifestv1.KindSecrets,
+				Version:     secretsVersion,
+				ArchivePath: secretsArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(secretsArchivePathURL),
 						SHA256: hex.EncodeToString(secretsArchiveSum[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case secretsArchivePathURL:
 			secretsDownloads.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer "+secretsSourceToken {
@@ -5901,33 +5782,29 @@ func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(secretsArchiveData)
-		case authMetadataPath:
-			authMetadataCount.Add(1)
+		case authMetadataPath, providerReleaseManifestSidecarPath(authMetadataPath), providerReleaseCatalogSidecarPath(authMetadataPath):
+			if r.URL.Path == authMetadataPath {
+				authMetadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
 				http.Error(w, "bad auth header for auth metadata", http.StatusUnauthorized)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       authSource,
-				Kind:          providermanifestv1.KindAuthentication,
-				Version:       authVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     authSource,
+				Kind:        providermanifestv1.KindAuthentication,
+				Version:     authVersion,
+				ArchivePath: authArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(authArchivePathURL),
 						SHA256: hex.EncodeToString(authArchiveSum[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case authArchivePathURL:
 			authDownloads.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
@@ -6139,35 +6016,30 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 	archivePathURL := "/providers/auth/auth-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
 				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer ghp_inline_auth_source_token")
 				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
 				return
 			}
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       authSource,
-				Kind:          providermanifestv1.KindAuthentication,
-				Version:       authVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+			metadata := providerReleaseMetadataFixture{
+				Package:     authSource,
+				Kind:        providermanifestv1.KindAuthentication,
+				Version:     authVersion,
+				ArchivePath: authArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: hex.EncodeToString(authArchiveSum[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			archiveCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
@@ -6282,29 +6154,25 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 	archivePathURL := "/providers/secrets/secrets-current.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case metadataPath:
-			metadataCount.Add(1)
-			metadata := providerReleaseMetadata{
-				Schema:        providerReleaseSchemaName,
-				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       secretsSource,
-				Kind:          providermanifestv1.KindSecrets,
-				Version:       secretsVersion,
-				Runtime:       providerReleaseRuntimeExecutable,
-				Artifacts: map[string]providerReleaseArtifact{
+		case metadataPath, providerReleaseManifestSidecarPath(metadataPath), providerReleaseCatalogSidecarPath(metadataPath):
+			if r.URL.Path == metadataPath {
+				metadataCount.Add(1)
+			}
+			metadata := providerReleaseMetadataFixture{
+				Package:     secretsSource,
+				Kind:        providermanifestv1.KindSecrets,
+				Version:     secretsVersion,
+				ArchivePath: secretsArchivePath,
+				Artifacts: map[string]providerrelease.Artifact{
 					providerpkg.CurrentPlatformString(): {
 						Path:   filepath.Base(archivePathURL),
 						SHA256: hex.EncodeToString(secretsArchiveSum[:]),
 					},
 				},
 			}
-			data, err := yaml.Marshal(metadata)
-			if err != nil {
-				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
-				return
+			if !serveProviderReleaseFixtureForRequest(t, w, r.URL.Path, metadata) {
+				http.NotFound(w, r)
 			}
-			w.Header().Set("Content-Type", "application/yaml")
-			_, _ = w.Write(data)
 		case archivePathURL:
 			archiveCount.Add(1)
 			w.Header().Set("Content-Type", "application/octet-stream")

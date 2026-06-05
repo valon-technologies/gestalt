@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,24 +17,17 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/apps/source"
-	"gopkg.in/yaml.v3"
 )
 
 const (
-	providerReleaseSchemaName         = "gestaltd-provider-release"
-	providerReleaseSchemaVersion      = 1
-	providerReleaseRuntimeExecutable  = "executable"
-	providerReleaseRuntimeDeclarative = "declarative"
-	providerReleaseRuntimeUI          = "ui"
-	providerReleaseMetadataMaxBytes   = 4 << 20
-	httpAcceptHeader                  = "Accept"
-	httpAcceptOctetStream             = "application/octet-stream"
-	httpAcceptGitHubAPI               = "application/vnd.github+json"
-	httpAuthorizationHeader           = "Authorization"
-	httpBearerAuthorizationPrefix     = "Bearer "
+	httpAcceptHeader              = "Accept"
+	httpAcceptOctetStream         = "application/octet-stream"
+	httpAcceptGitHubAPI           = "application/vnd.github+json"
+	httpAuthorizationHeader       = "Authorization"
+	httpBearerAuthorizationPrefix = "Bearer "
 )
 
 var providerReleaseFetchRetryDelays = []time.Duration{
@@ -60,26 +52,10 @@ type gitHubReleaseByTagResponse struct {
 	Assets []gitHubReleaseAsset `json:"assets"`
 }
 
-type providerReleaseMetadata struct {
-	Schema           string                               `yaml:"schema"`
-	SchemaVersion    int                                  `yaml:"schemaVersion"`
-	Package          string                               `yaml:"package"`
-	Kind             string                               `yaml:"kind"`
-	Version          string                               `yaml:"version"`
-	Runtime          string                               `yaml:"runtime"`
-	Artifacts        map[string]providerReleaseArtifact   `yaml:"artifacts,omitempty"`
-	StaticValidation *providerReleaseStaticValidationData `yaml:"staticValidation,omitempty"`
-}
-
-type providerReleaseArtifact struct {
-	Path   string `yaml:"path"`
-	SHA256 string `yaml:"sha256"`
-}
-
-type providerReleaseStaticValidationData struct {
-	Manifest           *providermanifestv1.Manifest `yaml:"manifest,omitempty"`
-	Catalog            *catalog.Catalog             `yaml:"catalog,omitempty"`
-	CatalogSessionOnly bool                         `yaml:"catalogSessionOnly,omitempty"`
+type providerReleaseValidationBundle struct {
+	Metadata *providerrelease.Metadata
+	Manifest *providermanifestv1.Manifest
+	Catalog  *catalog.Catalog
 }
 
 func sourceAuthToken(entry *config.ProviderEntry) string {
@@ -89,157 +65,120 @@ func sourceAuthToken(entry *config.ProviderEntry) string {
 	return strings.TrimSpace(entry.Source.Auth.Token)
 }
 
-func decodeProviderReleaseMetadata(data []byte) (*providerReleaseMetadata, error) {
-	var metadata providerReleaseMetadata
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&metadata); err != nil {
-		return nil, fmt.Errorf("decode provider release metadata: %w", err)
-	}
-	if err := validateProviderReleaseMetadata(&metadata); err != nil {
-		return nil, err
-	}
-	return &metadata, nil
-}
-
-func validateProviderReleaseMetadata(metadata *providerReleaseMetadata) error {
-	if metadata == nil {
-		return fmt.Errorf("provider release metadata is required")
-	}
-	metadata.Kind = providermanifestv1.NormalizeKind(metadata.Kind)
-	if metadata.Schema != providerReleaseSchemaName {
-		return fmt.Errorf("unsupported provider release schema %q", metadata.Schema)
-	}
-	if metadata.SchemaVersion != providerReleaseSchemaVersion {
-		return fmt.Errorf("unsupported provider release schema version %d", metadata.SchemaVersion)
-	}
-	if _, err := source.Parse(strings.TrimSpace(metadata.Package)); err != nil {
-		return fmt.Errorf("provider release package: %w", err)
-	}
-	if err := source.ValidateVersion(strings.TrimSpace(metadata.Version)); err != nil {
-		return fmt.Errorf("provider release version: %w", err)
-	}
-	switch metadata.Kind {
-	case providermanifestv1.KindApp, providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime, providermanifestv1.KindUI:
-	default:
-		return fmt.Errorf("provider release kind %q is not supported", metadata.Kind)
-	}
-	switch metadata.Runtime {
-	case providerReleaseRuntimeExecutable:
-		if metadata.Kind == providermanifestv1.KindUI {
-			return fmt.Errorf("provider release runtime %q is invalid for kind %q", metadata.Runtime, metadata.Kind)
-		}
-	case providerReleaseRuntimeDeclarative:
-		if metadata.Kind != providermanifestv1.KindApp {
-			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindApp)
-		}
-	case providerReleaseRuntimeUI:
-		if metadata.Kind != providermanifestv1.KindUI {
-			return fmt.Errorf("provider release runtime %q is only valid for kind %q", metadata.Runtime, providermanifestv1.KindUI)
-		}
-	default:
-		return fmt.Errorf("provider release runtime %q is not supported", metadata.Runtime)
-	}
-	if len(metadata.Artifacts) == 0 {
-		return fmt.Errorf("provider release artifacts are required")
-	}
-	for target, artifact := range metadata.Artifacts {
-		switch {
-		case strings.TrimSpace(target) == "":
-			return fmt.Errorf("provider release artifact target is required")
-		case target != platformKeyGeneric:
-			if _, _, err := providerpkg.ParsePlatformString(target); err != nil {
-				return fmt.Errorf("provider release artifact target %q: %w", target, err)
-			}
-		}
-		if strings.TrimSpace(artifact.Path) == "" {
-			return fmt.Errorf("provider release artifact path is required for target %q", target)
-		}
-		if strings.TrimSpace(artifact.SHA256) == "" {
-			return fmt.Errorf("provider release artifact sha256 is required for target %q", target)
-		}
-	}
-	if err := validateProviderReleaseStaticValidation(metadata); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateProviderReleaseStaticValidation(metadata *providerReleaseMetadata) error {
-	static := metadata.StaticValidation
-	if static == nil {
-		return nil
-	}
-	if static.Manifest == nil && static.Catalog == nil {
-		return fmt.Errorf("provider release staticValidation must include manifest or catalog metadata")
-	}
-	if static.Manifest != nil {
-		manifestKind := providermanifestv1.NormalizeKind(static.Manifest.Kind)
-		if manifestKind != metadata.Kind {
-			return fmt.Errorf("provider release staticValidation.manifest kind %q does not match %q", manifestKind, metadata.Kind)
-		}
-		if source := strings.TrimSpace(static.Manifest.Source); source != "" && source != strings.TrimSpace(metadata.Package) {
-			return fmt.Errorf("provider release staticValidation.manifest package %q does not match %q", source, metadata.Package)
-		}
-		if version := strings.TrimSpace(static.Manifest.Version); version != "" && version != strings.TrimSpace(metadata.Version) {
-			return fmt.Errorf("provider release staticValidation.manifest version %q does not match %q", version, metadata.Version)
-		}
-		if len(static.Manifest.Artifacts) != 0 {
-			return fmt.Errorf("provider release staticValidation.manifest must not include platform artifacts")
-		}
-		if static.Manifest.Entrypoint != nil {
-			return fmt.Errorf("provider release staticValidation.manifest must not include entrypoint")
-		}
-	}
-	if static.Catalog != nil {
-		if err := static.Catalog.Validate(); err != nil {
-			return fmt.Errorf("provider release staticValidation.catalog: %w", err)
-		}
-	}
-	return nil
-}
-
-func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, metadataLocation, token string) (*providerReleaseMetadata, string, map[string]string, error) {
+func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metadataLocation, token string) (providerReleaseValidationBundle, string, map[string]string, error) {
 	resolvedMetadataLocation, gitHubReleaseAssets, err := resolveProviderReleaseMetadataLocation(ctx, client, metadataLocation, token)
 	if err != nil {
-		return nil, "", nil, err
+		return providerReleaseValidationBundle{}, "", nil, err
 	}
+	var data []byte
 	if !isRemoteReleaseMetadataLocation(resolvedMetadataLocation) {
-		data, err := readProviderReleaseMetadataFile(resolvedMetadataLocation)
+		data, err = providerrelease.ReadLocalFile(resolvedMetadataLocation)
 		if err != nil {
-			return nil, "", nil, err
+			return providerReleaseValidationBundle{}, "", nil, err
 		}
-		metadata, err := decodeProviderReleaseMetadata(data)
+	} else {
+		if client == nil {
+			client = http.DefaultClient
+		}
+		resp, err := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
+			return newAuthenticatedFetchRequest(ctx, resolvedMetadataLocation, token)
+		})
 		if err != nil {
-			return nil, "", nil, err
+			return providerReleaseValidationBundle{}, "", nil, fmt.Errorf("fetch provider release metadata: %w", err)
 		}
-		return metadata, resolvedMetadataLocation, gitHubReleaseAssets, nil
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return providerReleaseValidationBundle{}, "", nil, fmt.Errorf("unexpected status %d fetching provider release metadata from %s", resp.StatusCode, resolvedMetadataLocation)
+		}
+		data, err = io.ReadAll(io.LimitReader(resp.Body, providerrelease.MaxBytes+1))
+		if err != nil {
+			return providerReleaseValidationBundle{}, "", nil, fmt.Errorf("read provider release metadata: %w", err)
+		}
+		if len(data) > providerrelease.MaxBytes {
+			return providerReleaseValidationBundle{}, "", nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerrelease.MaxBytes)
+		}
+	}
+	metadata, err := providerrelease.Decode(data)
+	if err != nil {
+		return providerReleaseValidationBundle{}, "", nil, err
+	}
+	manifest, cat, err := fetchProviderReleaseSidecars(ctx, client, resolvedMetadataLocation, token, metadata, gitHubReleaseAssets)
+	if err != nil {
+		return providerReleaseValidationBundle{}, "", nil, err
+	}
+	if err := providerrelease.ValidateBundle(metadata, manifest, cat); err != nil {
+		return providerReleaseValidationBundle{}, "", nil, err
+	}
+	return providerReleaseValidationBundle{Metadata: metadata, Manifest: manifest, Catalog: cat}, resolvedMetadataLocation, gitHubReleaseAssets, nil
+}
+
+func fetchProviderReleaseSidecars(ctx context.Context, client *http.Client, metadataLocation, token string, metadata *providerrelease.Metadata, gitHubReleaseAssets map[string]string) (*providermanifestv1.Manifest, *catalog.Catalog, error) {
+	if metadata == nil {
+		return nil, nil, fmt.Errorf("provider release metadata is required")
+	}
+	manifestData, err := fetchProviderReleaseSidecar(ctx, client, metadataLocation, token, gitHubReleaseAssets, providerrelease.ValidationManifestFile, metadata.ValidationManifestSHA256)
+	if err != nil {
+		return nil, nil, err
+	}
+	manifest, err := providerrelease.DecodeManifest(manifestData)
+	if err != nil {
+		return nil, nil, fmt.Errorf("decode %s: %w", providerrelease.ValidationManifestFile, err)
+	}
+	var staticCatalog *catalog.Catalog
+	if metadata.ValidationCatalogSHA256 != "" {
+		catalogData, err := fetchProviderReleaseSidecar(ctx, client, metadataLocation, token, gitHubReleaseAssets, providerrelease.ValidationCatalogFile, metadata.ValidationCatalogSHA256)
+		if err != nil {
+			return nil, nil, err
+		}
+		cat, err := providerrelease.DecodeCatalog(catalogData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("decode %s: %w", providerrelease.ValidationCatalogFile, err)
+		}
+		staticCatalog = cat
+	}
+	return manifest, staticCatalog, nil
+}
+
+func fetchProviderReleaseSidecar(ctx context.Context, client *http.Client, metadataLocation, token string, gitHubReleaseAssets map[string]string, name, wantSHA string) ([]byte, error) {
+	sidecarLocation, err := resolveArchiveSourceLocation(metadataLocation, name, gitHubReleaseAssets)
+	if err != nil {
+		return nil, fmt.Errorf("resolve provider release validation sidecar %s: %w", name, err)
+	}
+	data, err := readProviderReleaseSidecar(ctx, client, token, sidecarLocation)
+	if err != nil {
+		return nil, err
+	}
+	if got := providerrelease.SHA256Hex(data); got != strings.TrimSpace(wantSHA) {
+		return nil, fmt.Errorf("provider release validation sidecar %s sha256 %q does not match %q", name, got, strings.TrimSpace(wantSHA))
+	}
+	return data, nil
+}
+
+func readProviderReleaseSidecar(ctx context.Context, client *http.Client, token, location string) ([]byte, error) {
+	if !isRemoteReleaseMetadataLocation(location) {
+		return providerrelease.ReadLocalFile(location)
 	}
 	if client == nil {
 		client = http.DefaultClient
 	}
 	resp, err := doProviderReleaseHTTPRequestWithRetry(ctx, client, func(ctx context.Context) (*http.Request, error) {
-		return newAuthenticatedFetchRequest(ctx, resolvedMetadataLocation, token)
+		return newAuthenticatedFetchRequest(ctx, location, token)
 	})
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("fetch provider release metadata: %w", err)
+		return nil, fmt.Errorf("fetch provider release validation sidecar %s: %w", location, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", nil, fmt.Errorf("unexpected status %d fetching provider release metadata from %s", resp.StatusCode, resolvedMetadataLocation)
+		return nil, fmt.Errorf("unexpected status %d fetching provider release validation sidecar from %s", resp.StatusCode, location)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, providerReleaseMetadataMaxBytes+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, providerrelease.MaxBytes+1))
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("read provider release metadata: %w", err)
+		return nil, fmt.Errorf("read provider release validation sidecar: %w", err)
 	}
-	if len(data) > providerReleaseMetadataMaxBytes {
-		return nil, "", nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
+	if len(data) > providerrelease.MaxBytes {
+		return nil, fmt.Errorf("provider release validation sidecar exceeds %d byte limit", providerrelease.MaxBytes)
 	}
-	metadata, err := decodeProviderReleaseMetadata(data)
-	if err != nil {
-		return nil, "", nil, err
-	}
-	return metadata, resolvedMetadataLocation, gitHubReleaseAssets, nil
+	return data, nil
 }
 
 func doProviderReleaseHTTPRequestWithRetry(ctx context.Context, client *http.Client, newRequest func(context.Context) (*http.Request, error)) (*http.Response, error) {
@@ -295,17 +234,6 @@ func newAuthenticatedFetchRequest(ctx context.Context, requestURL, token string)
 		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
 	}
 	return req, nil
-}
-
-func readProviderReleaseMetadataFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read provider release metadata: %w", err)
-	}
-	if len(data) > providerReleaseMetadataMaxBytes {
-		return nil, fmt.Errorf("provider release metadata exceeds %d byte limit", providerReleaseMetadataMaxBytes)
-	}
-	return data, nil
 }
 
 func resolveProviderReleaseMetadataLocation(ctx context.Context, client *http.Client, metadataLocation, token string) (string, map[string]string, error) {
@@ -392,12 +320,16 @@ func resolveGitHubReleaseAssetURL(ctx context.Context, client *http.Client, ref 
 	return metadataAssetURL, assetURLs, nil
 }
 
-func providerReleaseArchives(metadataURL string, metadata *providerReleaseMetadata, gitHubReleaseAssets map[string]string) (map[string]LockArchive, error) {
+func providerReleaseArchives(metadataURL string, metadata *providerrelease.Metadata, gitHubReleaseAssets map[string]string) (map[string]LockArchive, error) {
 	if metadata == nil {
 		return nil, fmt.Errorf("provider release metadata is required")
 	}
-	archives := make(map[string]LockArchive, len(metadata.Artifacts))
-	for target, artifact := range metadata.Artifacts {
+	artifacts, err := providerrelease.ArtifactsByTarget(metadata.Artifacts)
+	if err != nil {
+		return nil, err
+	}
+	archives := make(map[string]LockArchive, len(artifacts))
+	for target, artifact := range artifacts {
 		archiveRef, err := archiveReferenceForLock(metadataURL, artifact.Path, gitHubReleaseAssets)
 		if err != nil {
 			return nil, fmt.Errorf("resolve provider release artifact path for target %q: %w", target, err)
@@ -408,49 +340,6 @@ func providerReleaseArchives(metadataURL string, metadata *providerReleaseMetada
 		}
 	}
 	return archives, nil
-}
-
-func archiveReferenceNeedsIntegrityHash(archiveRef string) bool {
-	return isRemoteReleaseMetadataLocation(archiveRef)
-}
-
-func normalizedLocalReleaseMetadataFingerprintPayload(data []byte) ([]byte, error) {
-	metadata, err := decodeProviderReleaseMetadata(data)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(metadata)
-}
-
-func normalizedLocalReleaseMetadataFingerprintPayloadFromFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	return normalizedLocalReleaseMetadataFingerprintPayload(data)
-}
-
-func localReleaseArchiveExpectedSHA(sourceLocation, resolvedKey, archiveLocation string) (string, error) {
-	if isRemoteReleaseMetadataLocation(sourceLocation) || archiveReferenceNeedsIntegrityHash(archiveLocation) {
-		return "", nil
-	}
-
-	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(context.Background(), nil, sourceLocation, "")
-	if err != nil {
-		return "", err
-	}
-	artifact, ok := metadata.Artifacts[resolvedKey]
-	if !ok {
-		return "", fmt.Errorf("provider release metadata missing artifact for target %q", resolvedKey)
-	}
-	resolvedArchivePath, err := resolveArchiveSourceLocation(resolvedMetadataLocation, artifact.Path, gitHubReleaseAssets)
-	if err != nil {
-		return "", err
-	}
-	if filepath.Clean(resolvedArchivePath) != filepath.Clean(archiveLocation) {
-		return "", fmt.Errorf("provider release metadata target %q resolved to %s, want %s", resolvedKey, resolvedArchivePath, archiveLocation)
-	}
-	return strings.TrimSpace(artifact.SHA256), nil
 }
 
 func lockEntryPackage(entry LockEntry) string {
@@ -478,22 +367,10 @@ func lockEntryRuntime(entry LockEntry, fallbackKind string) string {
 	}
 	switch lockEntryKind(entry, fallbackKind) {
 	case providermanifestv1.KindUI:
-		return providerReleaseRuntimeUI
+		return providerLockRuntimeUI
 	default:
-		return providerReleaseRuntimeExecutable
+		return providerLockRuntimeExecutable
 	}
-}
-
-func releaseRuntimeForManifest(manifest *providermanifestv1.Manifest, kind string) string {
-	switch kind {
-	case providermanifestv1.KindUI:
-		return providerReleaseRuntimeUI
-	case providermanifestv1.KindApp:
-		if manifest != nil && manifest.IsDeclarativeOnlyProvider() {
-			return providerReleaseRuntimeDeclarative
-		}
-	}
-	return providerReleaseRuntimeExecutable
 }
 
 func downloadArchiveForSource(ctx context.Context, client *http.Client, token, archiveURL string) (*providerpkg.DownloadResult, error) {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
+	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -182,25 +184,26 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 		return err
 	}
 
-	metadata := map[string]any{
-		"schema":        "gestaltd-provider-release",
-		"schemaVersion": 1,
-		"package":       manifest.Source,
-		"kind":          manifest.Kind,
-		"version":       manifest.Version,
-		"runtime":       "executable",
-		"artifacts": map[string]any{
-			providerpkg.CurrentPlatformString(): map[string]any{
-				"path":   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
-				"sha256": digest,
-			},
-		},
-		"staticValidation": map[string]any{
-			"manifest": map[string]any{
-				"kind":    manifest.Kind,
-				"source":  manifest.Source,
-				"version": manifest.Version,
-				"spec":    map[string]any{},
+	staticManifest, err := staticvalidation.ProjectManifest(manifest, "", true)
+	if err != nil {
+		return err
+	}
+	staticManifestData, err := yaml.Marshal(staticManifest)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, providerrelease.ValidationManifestFile), staticManifestData, 0o644); err != nil {
+		return err
+	}
+	metadata := providerrelease.Metadata{
+		Package:                  manifest.Source,
+		Kind:                     manifest.Kind,
+		Version:                  manifest.Version,
+		ValidationManifestSHA256: providerrelease.SHA256Hex(staticManifestData),
+		Artifacts: providerrelease.Artifacts{
+			providerpkg.CurrentPlatformString(): {
+				Path:   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
+				SHA256: digest,
 			},
 		},
 	}
@@ -208,5 +211,5 @@ func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manif
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "provider-release.yaml"), data, 0o644)
+	return os.WriteFile(filepath.Join(dir, providerrelease.MetadataFile), data, 0o644)
 }

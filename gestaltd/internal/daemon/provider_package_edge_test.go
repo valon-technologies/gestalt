@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
@@ -80,12 +81,6 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 				t.Fatalf("owned ui manifest unexpectedly retained build metadata: %+v", ownedUIManifest.Build)
 			}
 			metadata := readProviderReleaseMetadata(t, outputDir)
-			if metadata.Schema != providerReleaseSchemaName {
-				t.Fatalf("release metadata schema = %q, want %q", metadata.Schema, providerReleaseSchemaName)
-			}
-			if metadata.SchemaVersion != providerReleaseSchemaVersion {
-				t.Fatalf("release metadata schemaVersion = %d, want %d", metadata.SchemaVersion, providerReleaseSchemaVersion)
-			}
 			if metadata.Package != releaseTestSource {
 				t.Fatalf("release metadata package = %q, want %q", metadata.Package, releaseTestSource)
 			}
@@ -95,16 +90,10 @@ func TestRun_ProviderPackageAndReleaseStagesOwnedUIPackage(t *testing.T) {
 			if metadata.Version != testVersion {
 				t.Fatalf("release metadata version = %q, want %q", metadata.Version, testVersion)
 			}
-			if metadata.Runtime != providerReleaseRuntimeKindExecutable {
-				t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
-			}
 			if len(metadata.Artifacts) != 1 {
 				t.Fatalf("release metadata artifacts = %+v, want 1 entry", metadata.Artifacts)
 			}
-			artifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
-			if !ok {
-				t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
-			}
+			artifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
 			if got := artifact.Path; got != archiveName {
 				t.Fatalf("release metadata artifact path = %q, want %q", got, archiveName)
 			}
@@ -368,16 +357,10 @@ func TestRun_ProviderPackageAndReleaseWritesProviderReleaseMetadataForDeclarativ
 	if metadata.Version != testVersion {
 		t.Fatalf("release metadata version = %q, want %q", metadata.Version, testVersion)
 	}
-	if metadata.Runtime != providerReleaseRuntimeKindDeclarative {
-		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindDeclarative)
-	}
 	if len(metadata.Artifacts) != 1 {
 		t.Fatalf("release metadata artifacts = %+v, want 1 entry", metadata.Artifacts)
 	}
-	artifact, ok := metadata.Artifacts[providerReleaseGenericTarget]
-	if !ok {
-		t.Fatalf("release metadata artifacts missing generic key: %+v", metadata.Artifacts)
-	}
+	artifact := providerReleaseArtifactForTarget(t, metadata, providerrelease.GenericTarget)
 	if got := artifact.Path; got != archiveName {
 		t.Fatalf("release metadata artifact path = %q, want %q", got, archiveName)
 	}
@@ -506,11 +489,14 @@ func TestRun_ProviderPackageDoesNotWriteReleaseFinalizationFiles(t *testing.T) {
 
 	pluginDir := newUIReleaseFixture(t, t.TempDir())
 	outputDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(outputDir, providerReleaseMetadataFile), []byte("stale\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(outputDir, providerrelease.MetadataFile), []byte("stale\n"), 0o644); err != nil {
 		t.Fatalf("write stale metadata: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(outputDir, "checksums.txt"), []byte("stale\n"), 0o644); err != nil {
-		t.Fatalf("write stale checksums: %v", err)
+	if err := os.WriteFile(filepath.Join(outputDir, providerrelease.ValidationManifestFile), []byte("stale\n"), 0o644); err != nil {
+		t.Fatalf("write stale validation manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outputDir, providerrelease.ValidationCatalogFile), []byte("stale\n"), 0o644); err != nil {
+		t.Fatalf("write stale validation catalog: %v", err)
 	}
 
 	runProviderPackageCommand(t, pluginDir,
@@ -518,7 +504,7 @@ func TestRun_ProviderPackageDoesNotWriteReleaseFinalizationFiles(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	for _, name := range []string{providerReleaseMetadataFile, "checksums.txt"} {
+	for _, name := range []string{providerrelease.MetadataFile, providerrelease.ValidationManifestFile, providerrelease.ValidationCatalogFile} {
 		if _, err := os.Stat(filepath.Join(outputDir, name)); err == nil {
 			t.Fatalf("provider package unexpectedly wrote %s", name)
 		} else if !os.IsNotExist(err) {

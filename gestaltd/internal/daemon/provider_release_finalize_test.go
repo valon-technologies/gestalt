@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
@@ -25,10 +26,7 @@ func TestRun_ProviderReleaseFinalizesArchivesWithoutSourceTree(t *testing.T) {
 	}
 
 	metadata := readProviderReleaseMetadata(t, outputDir)
-	artifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
-	if !ok {
-		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
-	}
+	artifact := providerReleaseArtifactForTarget(t, metadata, providerpkg.CurrentPlatformString())
 	if artifact.Path != archiveName {
 		t.Fatalf("release metadata artifact path = %q, want %q", artifact.Path, archiveName)
 	}
@@ -135,43 +133,83 @@ func TestProviderReleaseRejectsCorruptArchive(t *testing.T) {
 	}
 }
 
-func TestProviderReleaseMetadataIncludesPlatformArchives(t *testing.T) {
+func TestProviderReleaseMetadataAllowsMCPOnlyWithoutCatalog(t *testing.T) {
 	t.Parallel()
 
-	outputDir := t.TempDir()
-	linuxArchive := writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v1.0.0_linux_amd64.tar.gz", providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"))
-	darwinArchive := writeProviderReleaseArchiveForTest(t, outputDir, "gestalt-app-release-test_v1.0.0_darwin_arm64.tar.gz", providerReleaseManifestForTest("1.0.0", "Release Test", "darwin", "arm64"))
-	linuxSHA, err := providerpkg.ArchiveDigest(linuxArchive)
-	if err != nil {
-		t.Fatalf("ArchiveDigest(linux): %v", err)
-	}
-	darwinSHA, err := providerpkg.ArchiveDigest(darwinArchive)
-	if err != nil {
-		t.Fatalf("ArchiveDigest(darwin): %v", err)
-	}
-	metadata, err := buildProviderReleaseMetadata(
-		providerReleaseManifestForTest("1.0.0", "Release Test", "linux", "amd64"),
-		"1.0.0",
-		[]releaseArchive{
-			{Path: linuxArchive, SHA256: linuxSHA, Target: "linux/amd64"},
-			{Path: darwinArchive, SHA256: darwinSHA, Target: "darwin/arm64"},
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindApp,
+		Source:      releaseTestSource,
+		Version:     "1.0.0",
+		DisplayName: "MCP Only",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				MCP: &providermanifestv1.MCPSurface{URL: "https://mcp.example.test"},
+			},
 		},
-	)
+	}
+	metadata, err := buildProviderReleaseMetadataForManifest(t, manifest, map[string]string{
+		providerpkg.StaticCatalogFile: "name: ignored\noperations:\n  - id: ignored\n    method: POST\n",
+	})
 	if err != nil {
 		t.Fatalf("buildProviderReleaseMetadata: %v", err)
 	}
-	for target, wantSHA := range map[string]string{
-		"linux/amd64":  linuxSHA,
-		"darwin/arm64": darwinSHA,
-	} {
-		artifact, ok := metadata.Artifacts[target]
-		if !ok {
-			t.Fatalf("metadata artifacts missing %s: %+v", target, metadata.Artifacts)
-		}
-		if artifact.SHA256 != wantSHA {
-			t.Fatalf("metadata artifact %s sha = %q, want %q", target, artifact.SHA256, wantSHA)
+	if metadata.ValidationCatalogSHA256 != "" {
+		t.Fatalf("catalog sha256 = %q, want empty for MCP-only release", metadata.ValidationCatalogSHA256)
+	}
+}
+
+func TestProviderReleaseMetadataRejectsMCPAppWithoutStaticCatalog(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindApp,
+		Source:  releaseTestSource,
+		Version: "1.0.0",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				MCP:     &providermanifestv1.MCPSurface{URL: "https://mcp.example.test"},
+				GraphQL: &providermanifestv1.GraphQLSurface{URL: "https://graphql.example.test/graphql"},
+			},
+		},
+	}
+	_, err := buildProviderReleaseMetadataForManifest(t, manifest, nil)
+	if err == nil || !strings.Contains(err.Error(), "must include catalog metadata unless the validation manifest is MCP-only") {
+		t.Fatalf("buildProviderReleaseMetadata error = %v, want static catalog validation failure", err)
+	}
+}
+
+func buildProviderReleaseMetadataForManifest(t *testing.T, manifest *providermanifestv1.Manifest, files map[string]string) (*providerrelease.Metadata, error) {
+	t.Helper()
+
+	packageDir := t.TempDir()
+	data, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatJSON)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(packageDir, providerpkg.ManifestFile), data, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	for name, contents := range files {
+		if err := os.WriteFile(filepath.Join(packageDir, name), []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
 		}
 	}
+	outputDir := t.TempDir()
+	archive := filepath.Join(outputDir, "gestalt-app-release-test_v1.0.0.tar.gz")
+	if err := providerpkg.CreatePackageFromDir(packageDir, archive); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	archiveSHA, err := providerpkg.ArchiveDigest(archive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest: %v", err)
+	}
+
+	metadata, _, _, err := buildProviderReleaseMetadataAndSidecars(
+		manifest,
+		"1.0.0",
+		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+	)
+	return metadata, err
 }
 
 func providerReleaseManifestForTest(version, displayName, goos, goarch string) *providermanifestv1.Manifest {

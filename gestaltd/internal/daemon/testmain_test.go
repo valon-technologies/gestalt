@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
+	"github.com/valon-technologies/gestalt/server/internal/staticvalidation"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -360,36 +362,39 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 		return err
 	}
 
-	staticValidation := map[string]any{
-		"manifest": map[string]any{
-			"kind":    manifest.Kind,
-			"source":  manifest.Source,
-			"version": manifest.Version,
-			"spec":    map[string]any{},
-		},
+	staticManifest, err := staticvalidation.ProjectManifest(manifest, "", true)
+	if err != nil {
+		return err
 	}
+	manifestSidecar, err := yaml.Marshal(staticManifest)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, providerrelease.ValidationManifestFile), manifestSidecar, 0o644); err != nil {
+		return err
+	}
+	manifestSHA := sha256.Sum256(manifestSidecar)
+	var catalogSHA string
 	if catalogData, err := os.ReadFile(filepath.Join(dir, providerpkg.StaticCatalogFile)); err == nil {
-		var catalogDoc map[string]any
-		if err := yaml.Unmarshal(catalogData, &catalogDoc); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, providerrelease.ValidationCatalogFile), catalogData, 0o644); err != nil {
 			return err
 		}
-		staticValidation["catalog"] = catalogDoc
+		sum := sha256.Sum256(catalogData)
+		catalogSHA = fmt.Sprintf("%x", sum[:])
 	}
 
 	metadata := map[string]any{
-		"schema":        "gestaltd-provider-release",
-		"schemaVersion": 1,
-		"package":       manifest.Source,
-		"kind":          manifest.Kind,
-		"version":       manifest.Version,
-		"runtime":       "executable",
+		"package":                  manifest.Source,
+		"kind":                     manifest.Kind,
+		"version":                  manifest.Version,
+		"validationManifestSHA256": fmt.Sprintf("%x", manifestSHA[:]),
+		"validationCatalogSHA256":  catalogSHA,
 		"artifacts": map[string]any{
 			providerpkg.CurrentPlatformString(): map[string]any{
 				"path":   filepath.ToSlash(filepath.Join("..", filepath.Base(archivePath))),
 				"sha256": digest,
 			},
 		},
-		"staticValidation": staticValidation,
 	}
 	data, err := yaml.Marshal(metadata)
 	if err != nil {

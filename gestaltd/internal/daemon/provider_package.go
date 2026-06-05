@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -115,7 +116,7 @@ func runProviderPackage(args []string) (err error) {
 }
 
 func removeStaleReleaseFinalizationFiles(outputDir string) error {
-	for _, name := range []string{providerReleaseMetadataFile, "checksums.txt"} {
+	for _, name := range []string{providerrelease.MetadataFile, providerrelease.ValidationManifestFile, providerrelease.ValidationCatalogFile} {
 		p := filepath.Join(outputDir, name)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove stale %s: %w", name, err)
