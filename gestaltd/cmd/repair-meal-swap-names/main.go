@@ -37,10 +37,10 @@ type resolverMaps struct {
 }
 
 type patchSummary struct {
-	patched            int
-	skippedOK          int
-	skippedUnresolved  int
-	claimedByPatched   int
+	patched             int
+	skippedOK           int
+	skippedUnresolved   int
+	claimedByPatched    int
 	claimedByUnresolved int
 }
 
@@ -78,7 +78,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
 	allRows, err := loadMeals(ctx, db)
@@ -131,7 +131,7 @@ func loadMeals(ctx context.Context, db *sql.DB) ([]mealRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer queryRows.Close()
+	defer func() { _ = queryRows.Close() }()
 
 	var out []mealRecord
 	for queryRows.Next() {
@@ -339,7 +339,7 @@ func mealPayload(envelope indexeddbcodec.Record) indexeddbcodec.Record {
 	}
 	if payload, ok := envelope["payload"]; ok {
 		if record, ok := payload.(map[string]any); ok {
-			return cloneRecord(indexeddbcodec.Record(record))
+			return cloneRecord(record)
 		}
 	}
 	return cloneRecord(envelope)

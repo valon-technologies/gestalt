@@ -7,6 +7,8 @@ import (
 )
 
 func TestBuildResolverMapsPrefersMostRecentCleanName(t *testing.T) {
+	t.Parallel()
+
 	rows := []mealRecord{
 		{
 			id:                 "meal-1",
@@ -38,6 +40,8 @@ func TestBuildResolverMapsPrefersMostRecentCleanName(t *testing.T) {
 }
 
 func TestPlanPatchesNameAndClaimedBy(t *testing.T) {
+	t.Parallel()
+
 	rows := []mealRecord{
 		{
 			pkHash:             []byte{1},
@@ -77,6 +81,8 @@ func TestPlanPatchesNameAndClaimedBy(t *testing.T) {
 }
 
 func TestIsBadDisplayName(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name      string
 		subjectID string
