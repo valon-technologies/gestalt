@@ -19,6 +19,7 @@ export interface SubjectInput {
   id: string;
   credentialSubjectId?: string | undefined;
   email?: string | undefined;
+  displayName?: string | undefined;
 }
 
 /**
