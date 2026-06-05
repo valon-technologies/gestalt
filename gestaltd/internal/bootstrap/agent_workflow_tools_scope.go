@@ -93,6 +93,7 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 		ref.Operation = strings.TrimSpace(ref.Operation)
 		ref.Connection = strings.TrimSpace(ref.Connection)
 		ref.Instance = strings.TrimSpace(ref.Instance)
+		ref.CredentialMode = core.NormalizeOptionalConnectionMode(ref.CredentialMode)
 		if ref.System != "" {
 			if ref.System != coreagent.SystemToolWorkflow || ref.Operation == "" {
 				return
@@ -103,17 +104,18 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 		} else if ref.App == "" || ref.App == "*" || ref.Operation == "" {
 			return
 		}
-		key := strings.Join([]string{ref.System, ref.App, ref.Operation, ref.Connection, ref.Instance}, "\x00")
+		key := strings.Join([]string{ref.System, ref.App, ref.Operation, ref.Connection, ref.Instance, string(ref.CredentialMode)}, "\x00")
 		if _, ok := seen[key]; ok {
 			return
 		}
 		seen[key] = struct{}{}
 		inherited := coreagent.ToolRef{
-			System:     ref.System,
-			App:        ref.App,
-			Operation:  ref.Operation,
-			Connection: ref.Connection,
-			Instance:   ref.Instance,
+			System:         ref.System,
+			App:            ref.App,
+			Operation:      ref.Operation,
+			Connection:     ref.Connection,
+			Instance:       ref.Instance,
+			CredentialMode: ref.CredentialMode,
 		}
 		out = append(out, inherited)
 	}
@@ -130,10 +132,11 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 			continue
 		}
 		add(coreagent.ToolRef{
-			App:        target.App,
-			Operation:  target.Operation,
-			Connection: target.Connection,
-			Instance:   target.Instance,
+			App:            target.App,
+			Operation:      target.Operation,
+			Connection:     target.Connection,
+			Instance:       target.Instance,
+			CredentialMode: target.CredentialMode,
 		})
 	}
 	return out
@@ -163,9 +166,6 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 			}
 			if strings.TrimSpace(ref.App) == "" || strings.TrimSpace(ref.App) == "*" || strings.TrimSpace(ref.Operation) == "" {
 				return fmt.Errorf("%w: %s.agent.tools[%d] must be an exact app operation", invocation.ErrInvalidInvocation, stepPath, i)
-			}
-			if ref.CredentialMode != "" {
-				return fmt.Errorf("%w: %s.agent.tools[%d] credentialMode is not supported for workflow agent tools", invocation.ErrInvalidInvocation, stepPath, i)
 			}
 			if ref.RunAs != nil {
 				return fmt.Errorf("%w: %s.agent.tools[%d] runAs is not supported for workflow agent tools", invocation.ErrInvalidInvocation, stepPath, i)
@@ -230,10 +230,10 @@ func workflowSystemToolAppRefMatchesTarget(ref coreagent.ToolRef, target corewor
 	if strings.TrimSpace(ref.System) != "" || strings.TrimSpace(ref.App) == "" || strings.TrimSpace(ref.App) == "*" || strings.TrimSpace(ref.Operation) == "" {
 		return false
 	}
-	if ref.CredentialMode != "" {
+	if strings.TrimSpace(ref.App) != strings.TrimSpace(target.Name) || strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
 		return false
 	}
-	if strings.TrimSpace(ref.App) != strings.TrimSpace(target.Name) || strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
+	if !workflowSystemToolCredentialModeMatches(ref.CredentialMode, target.CredentialMode) {
 		return false
 	}
 	return workflowSystemToolRefBindingMatchesTarget(ref.Connection, ref.Instance, target.Connection, target.Instance)
@@ -246,6 +246,9 @@ func workflowSystemToolAppRefMatchesAgentRef(ref coreagent.ToolRef, target corea
 	if strings.TrimSpace(ref.App) != strings.TrimSpace(target.App) || strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
 		return false
 	}
+	if !workflowSystemToolCredentialModeMatches(ref.CredentialMode, target.CredentialMode) {
+		return false
+	}
 	return workflowSystemToolRefBindingMatchesTarget(ref.Connection, ref.Instance, target.Connection, target.Instance)
 }
 
@@ -253,10 +256,10 @@ func workflowSystemToolResolvedToolMatchesTarget(tool coreagent.Tool, target cor
 	if strings.TrimSpace(tool.Target.System) != "" || strings.TrimSpace(tool.Target.App) == "" || strings.TrimSpace(tool.Target.Operation) == "" {
 		return false
 	}
-	if tool.Target.CredentialMode != "" {
+	if strings.TrimSpace(tool.Target.App) != strings.TrimSpace(target.Name) || strings.TrimSpace(tool.Target.Operation) != strings.TrimSpace(target.Operation) {
 		return false
 	}
-	if strings.TrimSpace(tool.Target.App) != strings.TrimSpace(target.Name) || strings.TrimSpace(tool.Target.Operation) != strings.TrimSpace(target.Operation) {
+	if !workflowSystemToolCredentialModeMatches(tool.Target.CredentialMode, target.CredentialMode) {
 		return false
 	}
 	return workflowSystemToolResolvedBindingMatchesTarget(tool.Target.Connection, tool.Target.Instance, target.Connection, target.Instance)
@@ -269,7 +272,19 @@ func workflowSystemToolResolvedToolMatchesAgentRef(tool coreagent.Tool, target c
 	if strings.TrimSpace(tool.Target.App) != strings.TrimSpace(target.App) || strings.TrimSpace(tool.Target.Operation) != strings.TrimSpace(target.Operation) {
 		return false
 	}
+	if !workflowSystemToolCredentialModeMatches(tool.Target.CredentialMode, target.CredentialMode) {
+		return false
+	}
 	return workflowSystemToolResolvedBindingMatchesTarget(tool.Target.Connection, tool.Target.Instance, target.Connection, target.Instance)
+}
+
+func workflowSystemToolCredentialModeMatches(scope, target core.ConnectionMode) bool {
+	scope = core.NormalizeOptionalConnectionMode(scope)
+	target = core.NormalizeOptionalConnectionMode(target)
+	if scope == "" && target == "" {
+		return true
+	}
+	return scope == target
 }
 
 func workflowSystemToolRefBindingMatchesTarget(scopeConnection, scopeInstance, targetConnection, targetInstance string) bool {
