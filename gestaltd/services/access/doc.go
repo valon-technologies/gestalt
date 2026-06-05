@@ -5,10 +5,9 @@
 // principal, resource, action decision for app, workflow, agent, UI, and
 // authorization-administration surfaces.
 //
-// AppOperation and Provider requests include credential-scope requirements.
-// ProviderScope is scope-only for token and catalog plumbing before an
-// operation is known. AppOperationPolicyOnly deliberately skips credential
-// scope for caller-app delegation while still checking model policy.
+// Request names a resource/action and, when needed, the credential scope that
+// must also be present on the principal. ScopeOnly requests are for token and
+// catalog plumbing before a policy action is known.
 //
 // Allowed returns false without an error for scope or policy denial; use it
 // for list/filter paths where denied and absent are equivalent. Require

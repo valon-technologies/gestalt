@@ -202,7 +202,11 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
 	}
-	if err := m.access.Require(ctx, p, access.Provider(target.ProviderName)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType:    target.ProviderName,
+		Action:          "provider.access",
+		CredentialScope: access.ProviderCredentialScope,
+	}); err != nil {
 		return coreworkflow.AgentTurn{}, err
 	}
 	target.Model = strings.TrimSpace(target.Model)
@@ -318,7 +322,11 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			if agentProviderName == "" {
 				return fmt.Errorf("%w: workflow agent provider is required", access.ErrDenied)
 			}
-			if err := m.access.Require(ctx, p, access.Provider(agentProviderName)); err != nil {
+			if err := m.access.Require(ctx, p, access.Request{
+				ResourceType:    agentProviderName,
+				Action:          "provider.access",
+				CredentialScope: access.ProviderCredentialScope,
+			}); err != nil {
 				return err
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
@@ -367,7 +375,11 @@ func (m *Manager) validateWorkflowAgentToolAuthorizationForCaller(ctx context.Co
 		return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation", access.ErrDenied, index)
 	}
 	if operation == "" {
-		return m.access.Require(ctx, p, access.Provider(appName))
+		return m.access.Require(ctx, p, access.Request{
+			ResourceType:    appName,
+			Action:          "provider.access",
+			CredentialScope: access.ProviderCredentialScope,
+		})
 	}
 	return m.requireWorkflowAppOperationForCaller(ctx, p, callerAppName, appName, operation)
 }

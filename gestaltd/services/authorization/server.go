@@ -116,7 +116,11 @@ func (s *hostServer) requireMutation(ctx context.Context, method string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.enforcer.Require(ctx, p, access.AuthorizationMutation(method)); err != nil {
+	if err := s.enforcer.Require(ctx, p, access.Request{
+		ResourceType: "AuthorizationProvider",
+		ResourceID:   "authorization",
+		Action:       method,
+	}); err != nil {
 		return accessStatusError(err)
 	}
 	return nil

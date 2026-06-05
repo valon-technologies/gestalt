@@ -46,7 +46,10 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if err != nil {
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunStart)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationRunStart,
+	}); err != nil {
 		return nil, err
 	}
 	audit.setProvider(providerName)
@@ -131,7 +134,10 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if err != nil {
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunCancel)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationRunCancel,
+	}); err != nil {
 		return nil, err
 	}
 	audit.setProvider(value.ProviderName)
@@ -177,7 +183,10 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if err != nil {
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunSignal)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationRunSignal,
+	}); err != nil {
 		return nil, err
 	}
 	audit.setProvider(value.ProviderName)
@@ -255,7 +264,10 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		}
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunSignalOrStart)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationRunSignalOrStart,
+	}); err != nil {
 		phase = "authorize_platform"
 		return nil, err
 	}

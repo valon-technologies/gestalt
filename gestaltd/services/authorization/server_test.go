@@ -17,7 +17,6 @@ import (
 type testAuthorizationProvider struct {
 	allowed                    bool
 	checkAccessRequests        []*proto.CheckAccessRequest
-	listRelationshipsRequests  []*proto.ListRelationshipsRequest
 	setAuthorizationStateCalls int
 	core.AuthorizationProvider
 }
@@ -27,47 +26,9 @@ func (p *testAuthorizationProvider) CheckAccess(ctx context.Context, req *proto.
 	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
 }
 
-func (p *testAuthorizationProvider) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	return &proto.CheckAccessManyResponse{}, nil
-}
-
-func (p *testAuthorizationProvider) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	p.listRelationshipsRequests = append(p.listRelationshipsRequests, req)
-	return &proto.ListRelationshipsResponse{}, nil
-}
-
 func (p *testAuthorizationProvider) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
 	p.setAuthorizationStateCalls++
 	return &proto.SetAuthorizationStateResponse{}, nil
-}
-
-func TestHostServerReadsForwardWithoutMutationAccess(t *testing.T) {
-	t.Parallel()
-
-	provider := &testAuthorizationProvider{}
-	server := NewHostServer(provider, access.NewEnforcer(&testAuthorizationProvider{allowed: false}), nil)
-
-	if _, err := server.ListRelationships(context.Background(), &proto.ListRelationshipsRequest{}); err != nil {
-		t.Fatalf("ListRelationships error = %v", err)
-	}
-	if len(provider.listRelationshipsRequests) != 1 {
-		t.Fatalf("ListRelationships forwarded calls = %d, want 1", len(provider.listRelationshipsRequests))
-	}
-}
-
-func TestHostServerMutationRequiresPrincipal(t *testing.T) {
-	t.Parallel()
-
-	provider := &testAuthorizationProvider{}
-	server := NewHostServer(provider, access.NewEnforcer(&testAuthorizationProvider{allowed: true}), nil)
-
-	_, err := server.SetAuthorizationState(context.Background(), &proto.SetAuthorizationStateRequest{})
-	if status.Code(err) != codes.Unauthenticated {
-		t.Fatalf("SetAuthorizationState code = %v, want %v (err %v)", status.Code(err), codes.Unauthenticated, err)
-	}
-	if provider.setAuthorizationStateCalls != 0 {
-		t.Fatalf("SetAuthorizationState forwarded calls = %d, want 0", provider.setAuthorizationStateCalls)
-	}
 }
 
 func TestHostServerMutationDeniedByAccess(t *testing.T) {

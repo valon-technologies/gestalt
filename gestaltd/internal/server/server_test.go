@@ -2314,7 +2314,7 @@ func TestMountedUIRoutes_PrefersNestedMount(t *testing.T) {
 	}
 }
 
-func TestPolicyBoundMountedUIUsesCheckAccessRoles(t *testing.T) {
+func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
@@ -2437,6 +2437,8 @@ func TestPolicyBoundMountedUIUsesCheckAccessRoles(t *testing.T) {
 	}
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
+	// AuthorizationProvider defaultAccessPolicy is no longer consulted for
+	// mounted UI routes; every allowed role must be allowed by CheckAccess.
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("admin mounted UI status = %d, want 403: %s", resp.StatusCode, body)
 	}

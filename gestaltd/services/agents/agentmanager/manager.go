@@ -460,7 +460,11 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
-	if err := m.access.Require(ctx, p, access.Provider(providerName)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType:    providerName,
+		Action:          "provider.access",
+		CredentialScope: access.ProviderCredentialScope,
+	}); err != nil {
 		return nil, err
 	}
 	metadata := protoutil.MapFromStruct(req.GetMetadata())
@@ -1336,7 +1340,11 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	}
 	authorized := make([]namedAgentProvider, 0, len(candidates))
 	for _, candidate := range candidates {
-		allowed, err := m.access.Allowed(ctx, p, access.Provider(candidate.name))
+		allowed, err := m.access.Allowed(ctx, p, access.Request{
+			ResourceType:    candidate.name,
+			Action:          "provider.access",
+			CredentialScope: access.ProviderCredentialScope,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -1512,7 +1520,11 @@ func (m *Manager) filterProviderCandidatesByAccess(ctx context.Context, p *princ
 	filtered := make([]namedAgentProvider, 0, len(candidates))
 	denied := false
 	for _, candidate := range candidates {
-		allowed, err := m.access.Allowed(ctx, p, access.Provider(candidate.name))
+		allowed, err := m.access.Allowed(ctx, p, access.Request{
+			ResourceType:    candidate.name,
+			Action:          "provider.access",
+			CredentialScope: access.ProviderCredentialScope,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -2464,7 +2476,11 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if err != nil {
 		return coreagent.Tool{}, err
 	}
-	if err := m.access.Require(ctx, p, access.AppOperation(appName, opMeta.ID)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType:    appName,
+		Action:          opMeta.ID,
+		CredentialScope: access.OperationCredentialScope,
+	}); err != nil {
 		return coreagent.Tool{}, err
 	}
 	if connection == "" {
@@ -2649,7 +2665,11 @@ func (m *Manager) visitToolSearchCandidates(
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		allowed, err := m.access.Allowed(ctx, p, access.Provider(appName))
+		allowed, err := m.access.Allowed(ctx, p, access.Request{
+			ResourceType:    appName,
+			Action:          "provider.access",
+			CredentialScope: access.ProviderCredentialScope,
+		})
 		if err != nil {
 			return err
 		}
@@ -2695,7 +2715,11 @@ func (m *Manager) visitToolSearchCandidates(
 					if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
 						continue
 					}
-					allowed, err := m.access.Allowed(ctx, p, access.AppOperation(appName, operation))
+					allowed, err := m.access.Allowed(ctx, p, access.Request{
+						ResourceType:    appName,
+						Action:          operation,
+						CredentialScope: access.OperationCredentialScope,
+					})
 					if err != nil {
 						return err
 					}
@@ -3177,7 +3201,11 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if err := m.access.Require(ctx, p, access.Provider(appName)); err != nil {
+		if err := m.access.Require(ctx, p, access.Request{
+			ResourceType:    appName,
+			Action:          "provider.access",
+			CredentialScope: access.ProviderCredentialScope,
+		}); err != nil {
 			return err
 		}
 		connection := strings.TrimSpace(ref.Connection)

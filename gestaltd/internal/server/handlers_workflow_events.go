@@ -46,7 +46,11 @@ func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 
 	appName := strings.TrimSpace(req.Source)
 	if appName != "" {
-		if err := s.access.Require(r.Context(), p, access.Provider(appName)); err != nil {
+		if err := s.access.Require(r.Context(), p, access.Request{
+			ResourceType:    appName,
+			Action:          "provider.access",
+			CredentialScope: access.ProviderCredentialScope,
+		}); err != nil {
 			s.writeInvocationError(w, r, appName, "workflow.events.deliver", err)
 			return
 		}

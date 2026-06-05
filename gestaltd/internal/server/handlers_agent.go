@@ -460,7 +460,11 @@ func (s *Server) resolveAgentHarness(w http.ResponseWriter, r *http.Request) {
 		s.writeAgentManagerError(w, r, "provider", "", nil, err)
 		return
 	}
-	if err := s.access.Require(r.Context(), p, access.Provider(providerName)); err != nil {
+	if err := s.access.Require(r.Context(), p, access.Request{
+		ResourceType:    providerName,
+		Action:          "provider.access",
+		CredentialScope: access.ProviderCredentialScope,
+	}); err != nil {
 		s.writeAgentManagerError(w, r, "provider", providerName, nil, err)
 		return
 	}

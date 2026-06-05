@@ -31,7 +31,10 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationDefinitionApply)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationDefinitionApply,
+	}); err != nil {
 		return nil, err
 	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
@@ -205,7 +208,10 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return err
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationDefinitionDelete)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationDefinitionDelete,
+	}); err != nil {
 		return err
 	}
 	audit.setProvider(existing.ProviderName)

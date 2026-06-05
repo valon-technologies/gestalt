@@ -866,7 +866,10 @@ func (m *Manager) DeliverEvent(ctx context.Context, p *principal.Principal, req 
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
-	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationEventDeliver)); err != nil {
+	if err := m.access.Require(ctx, p, access.Request{
+		ResourceType: "gestalt",
+		Action:       workflowAuditOperationEventDeliver,
+	}); err != nil {
 		return coreworkflow.Event{}, err
 	}
 	deliveredBySubjectID := workflowSubjectIDFromPrincipal(p)

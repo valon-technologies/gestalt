@@ -443,7 +443,10 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 		if role == "" {
 			continue
 		}
-		allowed, err := enforcer.Allowed(ctx, p, access.UIRole(resourceName, role))
+		allowed, err := enforcer.Allowed(ctx, p, access.Request{
+			ResourceType: resourceName,
+			Action:       role,
+		})
 		if err != nil {
 			return invocation.AccessContext{}, false, err
 		}

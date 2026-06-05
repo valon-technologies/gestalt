@@ -50,26 +50,26 @@ func (e *Enforcer) Require(ctx context.Context, p *principal.Principal, req Requ
 	if !allowed {
 		return &accessError{
 			cause:    causePolicyDenied,
-			resource: resourceName(req.Resource),
-			action:   actionName(req.Action),
+			resource: resourceName(req.resource()),
+			action:   strings.TrimSpace(req.Action),
 		}
 	}
 	return nil
 }
 
 func scopeError(p *principal.Principal, req Request) error {
-	switch req.scope {
-	case scopeProvider:
-		provider := resourceName(req.Resource)
+	switch req.CredentialScope {
+	case ProviderCredentialScope:
+		provider := resourceName(req.resource())
 		if p == nil {
 			return &accessError{cause: causeNotAuthenticated, provider: provider}
 		}
 		if !principal.AllowsProviderPermission(p, provider) {
 			return &accessError{cause: causeScopeProvider, provider: provider}
 		}
-	case scopeOperation:
-		provider := resourceName(req.Resource)
-		operation := actionName(req.Action)
+	case OperationCredentialScope:
+		provider := resourceName(req.resource())
+		operation := strings.TrimSpace(req.Action)
 		if p == nil {
 			return &accessError{cause: causeNotAuthenticated, provider: provider, operation: operation}
 		}
@@ -81,7 +81,7 @@ func scopeError(p *principal.Principal, req Request) error {
 }
 
 func (e *Enforcer) policyAllowed(ctx context.Context, p *principal.Principal, req Request) (bool, error) {
-	if req.scopeOnly {
+	if req.ScopeOnly {
 		return true, nil
 	}
 	if e == nil || e.provider == nil {
@@ -90,22 +90,20 @@ func (e *Enforcer) policyAllowed(ctx context.Context, p *principal.Principal, re
 	if p == nil {
 		return false, &accessError{cause: causeNotAuthenticated}
 	}
-	if req.Subject == nil {
-		req.Subject = SubjectFromPrincipal(p)
-	}
-	if req.Subject == nil {
+	subject := SubjectFromPrincipal(p)
+	if subject == nil {
 		return false, &accessError{cause: causeNotAuthenticated}
 	}
 	resp, err := e.provider.CheckAccess(ctx, &proto.CheckAccessRequest{
-		Subject:  req.Subject,
-		Action:   req.Action,
-		Resource: req.Resource,
+		Subject:  subject,
+		Action:   req.action(),
+		Resource: req.resource(),
 	})
 	if err != nil {
 		return false, &accessError{
 			cause:    causePolicyUnavailable,
-			resource: resourceName(req.Resource),
-			action:   actionName(req.Action),
+			resource: resourceName(req.resource()),
+			action:   strings.TrimSpace(req.Action),
 			err:      err,
 		}
 	}
@@ -123,11 +121,4 @@ func resourceName(resource *proto.Resource) string {
 		return name
 	}
 	return strings.TrimSpace(resource.Type)
-}
-
-func actionName(action *proto.Action) string {
-	if action == nil {
-		return ""
-	}
-	return strings.TrimSpace(action.Name)
 }
