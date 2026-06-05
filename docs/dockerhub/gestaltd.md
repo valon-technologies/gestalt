@@ -119,8 +119,8 @@ stays quiet.
 artifacts keyed by locked archive identity. Cache hits restore prepared outputs
 without re-downloading or reinstalling the package.
 Set `GESTALTD_SYNC_CACHE_REMOTE=gs://bucket/prefix` with `--cache-dir` to back
-that local cache with sparse per-artifact GCS objects. `gestaltd sync` checks
-the local cache first, downloads only missing remote entries, and uploads only
+that local cache with sparse per-artifact GCS objects. `gestaltd sync` restores
+the remote cache into the local cache before materialization, then uploads only
 entries materialized during the current sync.
 Use a private cache location because cache writers can influence restored
 prepared artifacts.

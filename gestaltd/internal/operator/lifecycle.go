@@ -1080,6 +1080,12 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if recorder != nil {
 		recorder.FinishLoadPhase()
 	}
+	if paths.syncCache.remote != nil {
+		restoreStats := paths.syncCache.HydrateRemote(context.Background(), opts.Parallelism)
+		if recorder != nil {
+			recorder.RecordCacheRestore(restoreStats)
+		}
+	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, opts); err != nil {
 		return err
 	}
@@ -5094,7 +5100,7 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 	cache := paths.syncCache
 	if cache.dir != "" {
 		cacheStart := time.Now()
-		restore, err := cache.Restore(ctx, cacheReq)
+		restore, err := cache.Restore(cacheReq)
 		if restore != nil {
 			cacheResult = string(restore.Result)
 		}

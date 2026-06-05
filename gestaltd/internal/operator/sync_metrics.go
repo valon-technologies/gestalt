@@ -109,8 +109,18 @@ type SyncMetricsCache struct {
 	Hits          int                     `json:"hits"`
 	Misses        int                     `json:"misses"`
 	Invalid       int                     `json:"invalid"`
+	Restore       SyncMetricsCacheRestore `json:"restore"`
 	Put           SyncMetricsCachePut     `json:"put"`
 	Entries       []SyncMetricsCacheEntry `json:"entries"`
+}
+
+type SyncMetricsCacheRestore struct {
+	DurationSeconds float64 `json:"duration_seconds"`
+	ListSeconds     float64 `json:"list_seconds"`
+	Entries         int     `json:"entries"`
+	Restored        int     `json:"restored"`
+	Failures        int     `json:"failures"`
+	Bytes           int64   `json:"bytes"`
 }
 
 type SyncMetricsCachePut struct {
@@ -443,6 +453,22 @@ func (r *SyncMetricsRecorder) RecordCacheEntry(event syncCacheMetricsEvent) {
 		return cmp.Compare(a.Key, b.Key)
 	})
 	r.metrics.Cache.Entries = append([]SyncMetricsCacheEntry(nil), r.cache...)
+}
+
+func (r *SyncMetricsRecorder) RecordCacheRestore(stats materializedCacheHydrateStats) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.metrics.Cache.Restore = SyncMetricsCacheRestore{
+		DurationSeconds: roundedSeconds(stats.Duration),
+		ListSeconds:     roundedSeconds(stats.List),
+		Entries:         stats.Entries,
+		Restored:        stats.Restored,
+		Failures:        stats.Failures,
+		Bytes:           stats.Bytes,
+	}
 }
 
 func (r *SyncMetricsRecorder) RecordArtifact(event syncArtifactMetricsEvent) {

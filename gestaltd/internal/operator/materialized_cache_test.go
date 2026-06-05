@@ -28,7 +28,7 @@ func TestMaterializedCachePreservesEmptyDirectories(t *testing.T) {
 	if _, err := cache.Put(context.Background(), req, source); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	restore, err := cache.Restore(context.Background(), req)
+	restore, err := cache.Restore(req)
 	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 	}
 
 	sharedReq := materializedCacheUIRequest(dir, "beta", "dest-beta")
-	restore, err := cache.Restore(context.Background(), sharedReq)
+	restore, err := cache.Restore(sharedReq)
 	if err != nil {
 		t.Fatalf("Restore shared archive: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 	defer func() { _ = restore.cleanup() }()
 }
 
-func TestMaterializedCacheRestoresRemoteEntry(t *testing.T) {
+func TestMaterializedCacheHydratesRemoteEntriesBeforeRestore(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -81,32 +81,41 @@ func TestMaterializedCacheRestoresRemoteEntry(t *testing.T) {
 		t.Fatalf("remote puts = %d, want 1", remote.puts)
 	}
 
-	restore, err := (materializedCache{dir: filepath.Join(dir, "warm"), remote: remote}).Restore(context.Background(), req)
+	warm := materializedCache{dir: filepath.Join(dir, "warm"), remote: remote}
+	stats := warm.HydrateRemote(context.Background(), 2)
+	if stats.Entries != 1 || stats.Restored != 1 || stats.Failures != 0 || stats.Bytes == 0 {
+		t.Fatalf("HydrateRemote stats = %+v, want one restored entry", stats)
+	}
+	if remote.listCalls != 1 || remote.gets != 1 {
+		t.Fatalf("remote list/get calls = %d/%d, want 1/1", remote.listCalls, remote.gets)
+	}
+
+	remote.getErr = errors.New("remote cache unavailable")
+	stats = warm.HydrateRemote(context.Background(), 2)
+	if stats.Entries != 1 || stats.Restored != 1 || stats.Failures != 0 || stats.Bytes != 0 {
+		t.Fatalf("HydrateRemote local-hit stats = %+v, want one local restore without bytes", stats)
+	}
+	if remote.listCalls != 2 || remote.gets != 1 {
+		t.Fatalf("remote list/get calls after local hydrate = %d/%d, want 2/1", remote.listCalls, remote.gets)
+	}
+
+	restore, err := warm.Restore(req)
 	if err != nil {
-		t.Fatalf("Restore remote entry: %v", err)
+		t.Fatalf("Restore hydrated entry: %v", err)
 	}
 	if restore == nil || restore.Result != materializedCacheHit {
-		t.Fatalf("remote Restore result = %#v, want hit", restore)
+		t.Fatalf("hydrated Restore result = %#v, want hit", restore)
 	}
 	defer func() { _ = restore.cleanup() }()
 	if err := restore.commit(); err != nil {
-		t.Fatalf("commit remote restore: %v", err)
+		t.Fatalf("commit hydrated restore: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(req.DestinationDir, "manifest.yaml")); err != nil {
 		t.Fatalf("restored manifest stat: %v", err)
 	}
-
-	remote.getErr = errors.New("remote cache unavailable")
-	fallback, err := (materializedCache{dir: filepath.Join(dir, "fallback"), remote: remote}).Restore(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Restore remote read error: %v", err)
-	}
-	if fallback == nil || fallback.Result != materializedCacheMiss {
-		t.Fatalf("remote read error Restore result = %#v, want miss", fallback)
-	}
 }
 
-func TestMaterializedCacheTreatsUnsafeRemoteArchiveAsInvalid(t *testing.T) {
+func TestMaterializedCacheSkipsUnsafeRemoteArchiveDuringHydrate(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -119,12 +128,16 @@ func TestMaterializedCacheTreatsUnsafeRemoteArchiveAsInvalid(t *testing.T) {
 	remote.objects[key.Display] = materializedCacheUnsafeArchive(t)
 
 	cache := materializedCache{dir: filepath.Join(dir, "cache"), remote: remote}
-	restore, err := cache.Restore(context.Background(), req)
-	if err != nil {
-		t.Fatalf("Restore unsafe remote archive error = %v, want repairable invalid result", err)
+	stats := cache.HydrateRemote(context.Background(), 1)
+	if stats.Entries != 1 || stats.Restored != 0 || stats.Failures != 1 {
+		t.Fatalf("HydrateRemote unsafe stats = %+v, want one failure", stats)
 	}
-	if restore == nil || restore.Result != materializedCacheInvalid {
-		t.Fatalf("Restore unsafe remote archive = %#v, want invalid", restore)
+	restore, err := cache.Restore(req)
+	if err != nil {
+		t.Fatalf("Restore after unsafe hydrate: %v", err)
+	}
+	if restore == nil || restore.Result != materializedCacheMiss {
+		t.Fatalf("Restore unsafe remote archive = %#v, want miss", restore)
 	}
 }
 
@@ -260,7 +273,7 @@ func TestMaterializedCacheTreatsUnsafeMetadataAsInvalid(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(entryDir, materializedCacheEntryFile), data, 0o644); err != nil {
 		t.Fatalf("write entry: %v", err)
 	}
-	restore, err := cache.Restore(context.Background(), req)
+	restore, err := cache.Restore(req)
 	if err != nil {
 		t.Fatalf("Restore unsafe entry error = %v, want repairable invalid result", err)
 	}
@@ -276,10 +289,12 @@ func materializedCacheTestSHA256Hex(data []byte) string {
 
 type fakeMaterializedCacheRemote struct {
 	objects     map[string][]byte
+	listCalls   int
 	gets        int
 	existsCalls int
 	puts        int
 	exists      bool
+	listErr     error
 	getErr      error
 	existsErr   error
 }
@@ -288,16 +303,28 @@ func newFakeMaterializedCacheRemote() *fakeMaterializedCacheRemote {
 	return &fakeMaterializedCacheRemote{objects: map[string][]byte{}}
 }
 
-func (r *fakeMaterializedCacheRemote) Get(_ context.Context, key materializedCacheKey) (io.ReadCloser, bool, error) {
+func (r *fakeMaterializedCacheRemote) List(_ context.Context) ([]string, error) {
+	r.listCalls++
+	if r.listErr != nil {
+		return nil, r.listErr
+	}
+	objects := make([]string, 0, len(r.objects))
+	for display := range r.objects {
+		objects = append(objects, display)
+	}
+	return objects, nil
+}
+
+func (r *fakeMaterializedCacheRemote) Get(_ context.Context, display string) (io.ReadCloser, error) {
 	r.gets++
 	if r.getErr != nil {
-		return nil, false, r.getErr
+		return nil, r.getErr
 	}
-	data := r.objects[key.Display]
+	data := r.objects[display]
 	if data == nil {
-		return nil, false, nil
+		return nil, os.ErrNotExist
 	}
-	return io.NopCloser(bytes.NewReader(data)), true, nil
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 func (r *fakeMaterializedCacheRemote) Exists(_ context.Context, _ materializedCacheKey) (bool, error) {
