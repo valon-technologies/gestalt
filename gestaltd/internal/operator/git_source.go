@@ -158,10 +158,25 @@ func resolveGitSnapshotSource(cfg *config.Config, entry *config.ProviderEntry) (
 	if err != nil {
 		return gitSnapshotSource{}, err
 	}
+	metadataURL, err := snapshotSourceFileURL(base, snapshotPath, providerrelease.MetadataFile)
+	if err != nil {
+		return gitSnapshotSource{}, err
+	}
 	return gitSnapshotSource{
-		MetadataURL: base + "/" + snapshotPath.FileRelPath("provider-release.yaml"),
+		MetadataURL: metadataURL,
 		GestaltRef:  strings.TrimSpace(repo.GestaltRef),
 	}, nil
+}
+
+func snapshotSourceFileURL(base string, snapshotPath SnapshotSourceRefPath, filename string) (string, error) {
+	parsed, err := url.Parse(strings.TrimRight(strings.TrimSpace(base), "/") + "/" + snapshotPath.FileRelPath(filename))
+	if err != nil {
+		return "", fmt.Errorf("parse snapshot URL: %w", err)
+	}
+	query := parsed.Query()
+	query.Set("sourceRef", snapshotPath.SourceRef)
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
 }
 
 func githubRepoPath(raw string) (string, string, string, error) {

@@ -438,7 +438,11 @@ func resolveArchiveSourceLocation(metadataLocation, archiveRef string, gitHubRel
 		if err != nil {
 			return "", fmt.Errorf("parse provider release artifact path: %w", err)
 		}
-		return baseURL.ResolveReference(artifactURL).String(), nil
+		resolved := baseURL.ResolveReference(artifactURL)
+		if inheritReleaseMetadataQuery(baseURL, archiveRef, artifactURL) {
+			resolved.RawQuery = baseURL.RawQuery
+		}
+		return resolved.String(), nil
 	}
 	if isRemoteReleaseMetadataLocation(archiveRef) {
 		return archiveRef, nil
@@ -448,6 +452,16 @@ func resolveArchiveSourceLocation(metadataLocation, archiveRef string, gitHubRel
 		return filepath.Clean(archiveRef), nil
 	}
 	return filepath.Clean(filepath.Join(baseDir, filepath.FromSlash(archiveRef))), nil
+}
+
+func inheritReleaseMetadataQuery(base *url.URL, rawRef string, ref *url.URL) bool {
+	return base != nil &&
+		base.Query().Get("sourceRef") != "" &&
+		ref != nil &&
+		ref.Scheme == "" &&
+		ref.Host == "" &&
+		ref.RawQuery == "" &&
+		!strings.HasPrefix(strings.TrimSpace(rawRef), "/")
 }
 
 func copyLocalArchiveForSource(path string) (*providerpkg.DownloadResult, error) {

@@ -311,15 +311,9 @@ func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, ar
 	firstPath := ""
 	found := false
 	for _, archive := range archives {
-		cat, err := staticValidationCatalogFromArchive(manifest, archive)
+		cat, err := staticValidationCatalogFromArchiveManifest(archive)
 		if err != nil {
 			return nil, err
-		}
-		if cat == nil {
-			cat, err = staticValidationCatalogFromArchiveManifest(archive)
-			if err != nil {
-				return nil, err
-			}
 		}
 		if cat == nil {
 			continue
@@ -342,29 +336,6 @@ func staticValidationCatalogForRelease(manifest *providermanifestv1.Manifest, ar
 	return firstCatalog, nil
 }
 
-func staticValidationCatalogFromArchive(manifest *providermanifestv1.Manifest, archive releaseArchive) (*catalog.Catalog, error) {
-	data, err := packageio.ReadArchiveEntry(archive.Path, packageio.StaticCatalogFile)
-	if err != nil {
-		if !packageio.StaticCatalogRequired(manifest) && strings.Contains(err.Error(), "does not contain") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read static validation catalog from %s: %w", filepath.Base(archive.Path), err)
-	}
-	var cat catalog.Catalog
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(&cat); err != nil {
-		return nil, fmt.Errorf("decode static validation catalog from %s: %w", filepath.Base(archive.Path), err)
-	}
-	if strings.TrimSpace(cat.Name) == "" {
-		cat.Name = manifest.Source
-	}
-	if err := cat.Validate(); err != nil {
-		return nil, fmt.Errorf("validate static validation catalog from %s: %w", filepath.Base(archive.Path), err)
-	}
-	return &cat, nil
-}
-
 func staticValidationCatalogFromArchiveManifest(archive releaseArchive) (*catalog.Catalog, error) {
 	tmpDir, err := os.MkdirTemp("", "gestalt-provider-release-catalog-*")
 	if err != nil {
@@ -378,7 +349,7 @@ func staticValidationCatalogFromArchiveManifest(archive releaseArchive) (*catalo
 	if err != nil {
 		return nil, fmt.Errorf("read static validation catalog manifest from %s: %w", filepath.Base(archive.Path), err)
 	}
-	if providermanifestv1.NormalizeKind(manifest.Kind) != providermanifestv1.KindApp || manifest.Spec == nil || !manifest.Spec.IsManifestBacked() {
+	if providermanifestv1.NormalizeKind(manifest.Kind) != providermanifestv1.KindApp || manifest.Spec == nil {
 		return nil, nil
 	}
 	cat, sessionOnly, err := appservice.EffectiveCatalog(context.Background(), manifest.Source, appservice.ValidationAppFromManifest(manifestPath, manifest))
