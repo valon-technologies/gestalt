@@ -3,6 +3,8 @@ package access
 import "testing"
 
 func TestRequestBuilders(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		req          Request
@@ -18,7 +20,10 @@ func TestRequestBuilders(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			if tt.req.Resource.Type != tt.resourceType || tt.req.Resource.Id != tt.resourceID {
 				t.Fatalf("resource = %#v, want type %q id %q", tt.req.Resource, tt.resourceType, tt.resourceID)
 			}

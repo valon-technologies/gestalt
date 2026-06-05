@@ -26,6 +26,8 @@ func (p *recordingAuthorizationProvider) CheckAccess(ctx context.Context, req *p
 }
 
 func TestRequireAppOperationComposesScopeAndPolicy(t *testing.T) {
+	t.Parallel()
+
 	authz := &recordingAuthorizationProvider{allowed: true}
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "example.read")
@@ -49,6 +51,8 @@ func TestRequireAppOperationComposesScopeAndPolicy(t *testing.T) {
 }
 
 func TestRequireAppOperationScopeDeniedBeforePolicy(t *testing.T) {
+	t.Parallel()
+
 	authz := &recordingAuthorizationProvider{allowed: true}
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "other.read")
@@ -63,6 +67,8 @@ func TestRequireAppOperationScopeDeniedBeforePolicy(t *testing.T) {
 }
 
 func TestRequireAppOperationPolicyDenied(t *testing.T) {
+	t.Parallel()
+
 	authz := &recordingAuthorizationProvider{allowed: false}
 	enforcer := NewEnforcer(authz)
 	p := scopedPrincipal("subject:user:123", "example.read")
@@ -74,6 +80,8 @@ func TestRequireAppOperationPolicyDenied(t *testing.T) {
 }
 
 func TestRequireAppOperationPolicyUnavailable(t *testing.T) {
+	t.Parallel()
+
 	backendErr := errors.New("backend unavailable")
 	authz := &recordingAuthorizationProvider{err: backendErr}
 	enforcer := NewEnforcer(authz)
@@ -89,6 +97,8 @@ func TestRequireAppOperationPolicyUnavailable(t *testing.T) {
 }
 
 func TestRequireAppOperationNilProviderAppliesScopeOnly(t *testing.T) {
+	t.Parallel()
+
 	enforcer := NewEnforcer(nil)
 	if enforcer.HasProvider() {
 		t.Fatal("HasProvider = true, want false")
@@ -101,6 +111,8 @@ func TestRequireAppOperationNilProviderAppliesScopeOnly(t *testing.T) {
 }
 
 func TestSubjectFromPrincipalCanonicalizesUser(t *testing.T) {
+	t.Parallel()
+
 	p := &principal.Principal{UserID: "user_123"}
 	subject := SubjectFromPrincipal(p)
 	if subject == nil || subject.Id != "user:user_123" || subject.Type != "subject" {

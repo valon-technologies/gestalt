@@ -42,6 +42,8 @@ func (p *testAuthorizationProvider) SetAuthorizationState(ctx context.Context, r
 }
 
 func TestHostServerReadsForwardWithoutMutationAccess(t *testing.T) {
+	t.Parallel()
+
 	provider := &testAuthorizationProvider{}
 	server := NewHostServer(provider, access.NewEnforcer(&testAuthorizationProvider{allowed: false}), nil)
 
@@ -54,6 +56,8 @@ func TestHostServerReadsForwardWithoutMutationAccess(t *testing.T) {
 }
 
 func TestHostServerMutationRequiresPrincipal(t *testing.T) {
+	t.Parallel()
+
 	provider := &testAuthorizationProvider{}
 	server := NewHostServer(provider, access.NewEnforcer(&testAuthorizationProvider{allowed: true}), nil)
 
@@ -67,6 +71,8 @@ func TestHostServerMutationRequiresPrincipal(t *testing.T) {
 }
 
 func TestHostServerMutationDeniedByAccess(t *testing.T) {
+	t.Parallel()
+
 	provider := &testAuthorizationProvider{}
 	policy := &testAuthorizationProvider{allowed: false}
 	server := NewHostServer(provider, access.NewEnforcer(policy), nil)
@@ -88,6 +94,8 @@ func TestHostServerMutationDeniedByAccess(t *testing.T) {
 }
 
 func TestHostServerMutationUsesInvocationTokenPrincipal(t *testing.T) {
+	t.Parallel()
+
 	provider := &testAuthorizationProvider{}
 	policy := &testAuthorizationProvider{allowed: true}
 	tokens, err := appaccess.NewInvocationTokenManager([]byte("authorization-host-test-secret"))
