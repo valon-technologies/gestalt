@@ -66,63 +66,89 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 	defer func() { _ = restore.cleanup() }()
 }
 
-func TestMaterializedCacheHydratesRemoteEntriesBeforeRestore(t *testing.T) {
+func TestMaterializedCachePrefetchesRequestedRemoteEntriesBeforeRestore(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	remote := newFakeMaterializedCacheRemote()
 	source := writeMaterializedCacheUISource(t, dir, "source")
 	req := materializedCacheUIRequest(dir, "alpha", "dest")
+	unusedReq := materializedCacheUIRequest(dir, "unused", "dest-unused")
+	unusedReq.ArchiveSHA256 = materializedCacheTestSHA256Hex([]byte("unused archive"))
 
-	if _, err := (materializedCache{dir: filepath.Join(dir, "cold"), remote: remote}).Put(context.Background(), req, source); err != nil {
-		t.Fatalf("Put: %v", err)
+	cold := materializedCache{dir: filepath.Join(dir, "cold"), remote: remote}
+	if _, err := cold.Put(context.Background(), req, source); err != nil {
+		t.Fatalf("Put requested entry: %v", err)
 	}
-	if remote.puts != 1 {
-		t.Fatalf("remote puts = %d, want 1", remote.puts)
+	if _, err := cold.Put(context.Background(), unusedReq, source); err != nil {
+		t.Fatalf("Put unrequested entry: %v", err)
+	}
+	if remote.puts != 2 {
+		t.Fatalf("remote puts = %d, want 2", remote.puts)
+	}
+	key, eligible, err := materializedCacheKeyForRequest(req)
+	if err != nil || !eligible {
+		t.Fatalf("materializedCacheKeyForRequest eligible=%t err=%v", eligible, err)
+	}
+	unusedKey, eligible, err := materializedCacheKeyForRequest(unusedReq)
+	if err != nil || !eligible {
+		t.Fatalf("materializedCacheKeyForRequest unused eligible=%t err=%v", eligible, err)
 	}
 
 	warm := materializedCache{dir: filepath.Join(dir, "warm"), remote: remote}
-	stats := warm.HydrateRemote(context.Background(), 2)
-	if stats.Entries != 1 || stats.Restored != 1 || stats.Failures != 0 || stats.Bytes == 0 {
-		t.Fatalf("HydrateRemote stats = %+v, want one restored entry", stats)
+	stats := warm.Prefetch(context.Background(), []materializedCacheRequest{req, req}, 2)
+	if stats.Requests != 2 || stats.Eligible != 2 || len(stats.Keys) != 1 || stats.RemoteHits != 1 || stats.LocalHits != 0 || stats.RemoteMisses != 0 || stats.Failures != 0 || stats.Bytes == 0 {
+		t.Fatalf("Prefetch stats = %+v, want one remote hit for duplicated request", stats)
 	}
-	if remote.listCalls != 1 || remote.gets != 1 {
-		t.Fatalf("remote list/get calls = %d/%d, want 1/1", remote.listCalls, remote.gets)
+	if remote.gets != 1 || remote.getsByKey[key.Display] != 1 || remote.getsByKey[unusedKey.Display] != 0 {
+		t.Fatalf("remote gets = %d by key = %#v, want only requested key fetched once", remote.gets, remote.getsByKey)
 	}
 
 	remote.getErr = errors.New("remote cache unavailable")
-	stats = warm.HydrateRemote(context.Background(), 2)
-	if stats.Entries != 1 || stats.Restored != 1 || stats.Failures != 0 || stats.Bytes != 0 {
-		t.Fatalf("HydrateRemote local-hit stats = %+v, want one local restore without bytes", stats)
+	stats = warm.Prefetch(context.Background(), []materializedCacheRequest{req}, 2)
+	if stats.Requests != 1 || stats.Eligible != 1 || len(stats.Keys) != 1 || stats.LocalHits != 1 || stats.RemoteHits != 0 || stats.Failures != 0 || stats.Bytes != 0 {
+		t.Fatalf("Prefetch local-hit stats = %+v, want one local hit without bytes", stats)
 	}
-	if remote.listCalls != 2 || remote.gets != 1 {
-		t.Fatalf("remote list/get calls after local hydrate = %d/%d, want 2/1", remote.listCalls, remote.gets)
-	}
-
-	remote.listErr = errors.New("remote list unavailable")
-	stats = warm.HydrateRemote(context.Background(), 2)
-	if stats.Failures != 1 || stats.Error != "remote list unavailable" || stats.Duration <= 0 {
-		t.Fatalf("HydrateRemote list error stats = %+v, want failure, error, and duration", stats)
-	}
-	remote.listErr = nil
+	remote.getErr = nil
 
 	restore, err := warm.Restore(req)
 	if err != nil {
-		t.Fatalf("Restore hydrated entry: %v", err)
+		t.Fatalf("Restore prefetched entry: %v", err)
 	}
 	if restore == nil || restore.Result != materializedCacheHit {
-		t.Fatalf("hydrated Restore result = %#v, want hit", restore)
+		t.Fatalf("prefetched Restore result = %#v, want hit", restore)
 	}
 	defer func() { _ = restore.cleanup() }()
 	if err := restore.commit(); err != nil {
-		t.Fatalf("commit hydrated restore: %v", err)
+		t.Fatalf("commit prefetched restore: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(req.DestinationDir, "manifest.yaml")); err != nil {
 		t.Fatalf("restored manifest stat: %v", err)
 	}
 }
 
-func TestMaterializedCacheSkipsUnsafeRemoteArchiveDuringHydrate(t *testing.T) {
+func TestMaterializedCachePrefetchRemoteMissIsNonFatal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	remote := newFakeMaterializedCacheRemote()
+	req := materializedCacheUIRequest(dir, "alpha", "dest")
+
+	cache := materializedCache{dir: filepath.Join(dir, "cache"), remote: remote}
+	stats := cache.Prefetch(context.Background(), []materializedCacheRequest{req}, 1)
+	if stats.Requests != 1 || stats.Eligible != 1 || len(stats.Keys) != 1 || stats.RemoteMisses != 1 || stats.Failures != 0 {
+		t.Fatalf("Prefetch miss stats = %+v, want one remote miss", stats)
+	}
+	restore, err := cache.Restore(req)
+	if err != nil {
+		t.Fatalf("Restore after remote miss: %v", err)
+	}
+	if restore == nil || restore.Result != materializedCacheMiss {
+		t.Fatalf("Restore remote miss = %#v, want miss", restore)
+	}
+}
+
+func TestMaterializedCacheSkipsUnsafeRemoteArchiveDuringPrefetch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -135,13 +161,13 @@ func TestMaterializedCacheSkipsUnsafeRemoteArchiveDuringHydrate(t *testing.T) {
 	remote.objects[key.Display] = materializedCacheUnsafeArchive(t)
 
 	cache := materializedCache{dir: filepath.Join(dir, "cache"), remote: remote}
-	stats := cache.HydrateRemote(context.Background(), 1)
-	if stats.Entries != 1 || stats.Restored != 0 || stats.Failures != 1 {
-		t.Fatalf("HydrateRemote unsafe stats = %+v, want one failure", stats)
+	stats := cache.Prefetch(context.Background(), []materializedCacheRequest{req}, 1)
+	if stats.Requests != 1 || stats.Eligible != 1 || len(stats.Keys) != 1 || stats.RemoteHits != 0 || stats.Failures != 1 {
+		t.Fatalf("Prefetch unsafe stats = %+v, want one failure", stats)
 	}
 	restore, err := cache.Restore(req)
 	if err != nil {
-		t.Fatalf("Restore after unsafe hydrate: %v", err)
+		t.Fatalf("Restore after unsafe prefetch: %v", err)
 	}
 	if restore == nil || restore.Result != materializedCacheMiss {
 		t.Fatalf("Restore unsafe remote archive = %#v, want miss", restore)
@@ -296,38 +322,29 @@ func materializedCacheTestSHA256Hex(data []byte) string {
 
 type fakeMaterializedCacheRemote struct {
 	objects     map[string][]byte
-	listCalls   int
 	gets        int
+	getsByKey   map[string]int
 	existsCalls int
 	puts        int
 	exists      bool
-	listErr     error
 	getErr      error
 	existsErr   error
 }
 
 func newFakeMaterializedCacheRemote() *fakeMaterializedCacheRemote {
-	return &fakeMaterializedCacheRemote{objects: map[string][]byte{}}
+	return &fakeMaterializedCacheRemote{
+		objects:   map[string][]byte{},
+		getsByKey: map[string]int{},
+	}
 }
 
-func (r *fakeMaterializedCacheRemote) List(_ context.Context) ([]string, error) {
-	r.listCalls++
-	if r.listErr != nil {
-		return nil, r.listErr
-	}
-	objects := make([]string, 0, len(r.objects))
-	for display := range r.objects {
-		objects = append(objects, display)
-	}
-	return objects, nil
-}
-
-func (r *fakeMaterializedCacheRemote) Get(_ context.Context, display string) (io.ReadCloser, error) {
+func (r *fakeMaterializedCacheRemote) Get(_ context.Context, key materializedCacheKey) (io.ReadCloser, error) {
 	r.gets++
+	r.getsByKey[key.Display]++
 	if r.getErr != nil {
 		return nil, r.getErr
 	}
-	data := r.objects[display]
+	data := r.objects[key.Display]
 	if data == nil {
 		return nil, os.ErrNotExist
 	}

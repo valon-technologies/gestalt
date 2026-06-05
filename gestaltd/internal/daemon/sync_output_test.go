@@ -51,6 +51,17 @@ func TestWriteSyncJSON(t *testing.T) {
 			Mode:          "materialized",
 			BucketVersion: "materialized/v1",
 			Hits:          1,
+			Prefetch: operator.SyncMetricsCachePrefetch{
+				Requests:        2,
+				Eligible:        2,
+				UniqueKeys:      1,
+				LocalHits:       1,
+				RemoteHits:      1,
+				RemoteMisses:    0,
+				Failures:        0,
+				Bytes:           4096,
+				DurationSeconds: 0.25,
+			},
 			Put: operator.SyncMetricsCachePut{
 				Successes:             1,
 				LocalInspectSeconds:   1.1,
@@ -133,6 +144,18 @@ func TestWriteSyncJSON(t *testing.T) {
 	if !ok {
 		t.Fatalf("cache missing from JSON: %s", out.String())
 	}
+	if _, ok := cache["restore"]; ok {
+		t.Fatalf("cache.restore should not be serialized: %s", out.String())
+	}
+	prefetch, ok := cache["prefetch"].(map[string]any)
+	if !ok {
+		t.Fatalf("cache.prefetch missing from JSON: %#v", cache)
+	}
+	for _, key := range []string{"duration_seconds", "requests", "eligible", "unique_keys", "local_hits", "remote_hits", "remote_misses", "failures", "bytes"} {
+		if _, ok := prefetch[key]; !ok {
+			t.Fatalf("cache.prefetch.%s missing from JSON: %#v", key, prefetch)
+		}
+	}
 	put, ok := cache["put"].(map[string]any)
 	if !ok || put["successes"] == nil || put["failures"] == nil {
 		t.Fatalf("cache.put missing successes/failures: %#v", cache["put"])
@@ -158,6 +181,10 @@ func TestWriteSyncJSONIncludesEmptyMetricArrays(t *testing.T) {
 	archives := raw["archives"].(map[string]any)
 	if _, ok := archives["slowest_fetches"]; ok {
 		t.Fatalf("archives.slowest_fetches should not be serialized: %s", out.String())
+	}
+	cache := raw["cache"].(map[string]any)
+	if _, ok := cache["restore"]; ok {
+		t.Fatalf("cache.restore should not be serialized: %s", out.String())
 	}
 	for parent, keys := range map[string][]string{
 		"archives":  {"fetches"},
