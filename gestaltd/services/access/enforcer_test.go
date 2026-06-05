@@ -74,7 +74,7 @@ func TestRequireAppOperationPolicyDenied(t *testing.T) {
 	p := scopedPrincipal("subject:user:123", "example.read")
 
 	err := enforcer.RequireAppOperation(context.Background(), p, "example", "read")
-	if !errors.Is(err, ErrDenied) || !IsPolicyDenied(err) {
+	if !errors.Is(err, ErrDenied) {
 		t.Fatalf("error = %v, want policy denied", err)
 	}
 }

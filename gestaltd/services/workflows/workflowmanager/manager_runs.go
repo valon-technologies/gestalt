@@ -46,7 +46,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if err != nil {
 		return nil, err
 	}
-	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationRunStart); err != nil {
+	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunStart)); err != nil {
 		return nil, err
 	}
 	audit.setProvider(providerName)
@@ -131,7 +131,7 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if err != nil {
 		return nil, err
 	}
-	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationRunCancel); err != nil {
+	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunCancel)); err != nil {
 		return nil, err
 	}
 	audit.setProvider(value.ProviderName)
@@ -177,7 +177,7 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if err != nil {
 		return nil, err
 	}
-	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationRunSignal); err != nil {
+	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunSignal)); err != nil {
 		return nil, err
 	}
 	audit.setProvider(value.ProviderName)
@@ -249,14 +249,13 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	var definitionGeneration int64
 	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller, workflowManagerOperationRunsSignalOrStart)
 	if err != nil {
-		var targetErr workflowTargetAuthorizationError
-		if errors.As(err, &targetErr) {
+		if workflowTargetAccessErrorCause(err) != nil {
 			phase = "authorize_target"
 			audit.setProvider(providerName)
 		}
 		return nil, err
 	}
-	if err := m.enforcer().RequireWorkflowPlatform(ctx, p, workflowAuditOperationRunSignalOrStart); err != nil {
+	if err := m.access.Require(ctx, p, access.WorkflowPlatform(workflowAuditOperationRunSignalOrStart)); err != nil {
 		phase = "authorize_platform"
 		return nil, err
 	}
@@ -347,6 +346,9 @@ func workflowManagerErrorCode(err error) string {
 }
 
 func workflowManagerErrorType(err error) string {
+	if accessErr := workflowTargetAccessErrorCause(err); accessErr != nil {
+		err = accessErr
+	}
 	switch {
 	case err == nil:
 		return ""
@@ -476,7 +478,7 @@ func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run
 	if !workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) {
 		return false, nil
 	}
-	return m.storedTargetAccessible(ctx, p, run.Run.Target)
+	return m.storedTargetDeniedAsFalse(ctx, p, run.Run.Target)
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {

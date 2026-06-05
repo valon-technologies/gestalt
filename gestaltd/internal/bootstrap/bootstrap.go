@@ -991,8 +991,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	} else {
 		deps.Authorization = authorizationProvider
-		deps.Access = access.NewEnforcer(authorizationProvider)
 	}
+	deps.Access = access.NewEnforcer(deps.Authorization)
+	deps.AgentRuntime.access = deps.Access
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {
@@ -1138,9 +1139,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		return nil, err
 	}
 	platformAccess := prepared.Deps.Access
-	if platformAccess == nil {
-		platformAccess = access.NewEnforcer(nil)
-	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),

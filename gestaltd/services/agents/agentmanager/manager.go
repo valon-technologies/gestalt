@@ -460,12 +460,8 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
-	allowed, err := m.agentProviderAccess(ctx, p, providerName)
-	if err != nil {
+	if err := m.access.RequireProvider(ctx, p, providerName); err != nil {
 		return nil, err
-	}
-	if !allowed {
-		return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)
 	}
 	metadata := protoutil.MapFromStruct(req.GetMetadata())
 	if err := validateAgentSessionUserMetadata(metadata); err != nil {
@@ -1340,7 +1336,7 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	}
 	authorized := make([]namedAgentProvider, 0, len(candidates))
 	for _, candidate := range candidates {
-		allowed, err := m.agentProviderAccess(ctx, p, candidate.name)
+		allowed, err := m.agentProviderDeniedAsFalse(ctx, p, candidate.name)
 		if err != nil {
 			return nil, err
 		}
@@ -1516,7 +1512,7 @@ func (m *Manager) filterProviderCandidatesByAccess(ctx context.Context, p *princ
 	filtered := make([]namedAgentProvider, 0, len(candidates))
 	denied := false
 	for _, candidate := range candidates {
-		allowed, err := m.agentProviderAccess(ctx, p, candidate.name)
+		allowed, err := m.agentProviderDeniedAsFalse(ctx, p, candidate.name)
 		if err != nil {
 			return nil, err
 		}
@@ -2435,7 +2431,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if operation == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool operation is required", invocation.ErrOperationNotFound)
 	}
-	if err := m.enforcer().RequireProviderScope(p, appName); err != nil {
+	if err := m.access.RequireProviderScope(p, appName); err != nil {
 		return coreagent.Tool{}, err
 	}
 
@@ -2469,7 +2465,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if err != nil {
 		return coreagent.Tool{}, err
 	}
-	if err := m.enforcer().RequireAppOperation(ctx, p, appName, opMeta.ID); err != nil {
+	if err := m.access.RequireAppOperation(ctx, p, appName, opMeta.ID); err != nil {
 		return coreagent.Tool{}, err
 	}
 	if connection == "" {
@@ -2654,7 +2650,7 @@ func (m *Manager) visitToolSearchCandidates(
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		allowed, err := m.agentProviderAccess(ctx, p, appName)
+		allowed, err := m.agentProviderDeniedAsFalse(ctx, p, appName)
 		if err != nil {
 			return err
 		}
@@ -2700,7 +2696,7 @@ func (m *Manager) visitToolSearchCandidates(
 					if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
 						continue
 					}
-					allowed, err := m.agentOperationAccess(ctx, p, appName, operation)
+					allowed, err := m.agentOperationDeniedAsFalse(ctx, p, appName, operation)
 					if err != nil {
 						return err
 					}
@@ -3182,12 +3178,8 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		allowed, err := m.agentProviderAccess(ctx, p, appName)
-		if err != nil {
+		if err := m.access.RequireProvider(ctx, p, appName); err != nil {
 			return err
-		}
-		if !allowed {
-			return fmt.Errorf("%w: %s", access.ErrDenied, appName)
 		}
 		connection := strings.TrimSpace(ref.Connection)
 		if connection != "" && !core.SafeConnectionValue(connection) {
@@ -3201,33 +3193,24 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 	return nil
 }
 
-func (m *Manager) enforcer() *access.Enforcer {
-	if m == nil || m.access == nil {
-		return access.NewEnforcer(nil)
+func (m *Manager) agentProviderDeniedAsFalse(ctx context.Context, p *principal.Principal, provider string) (bool, error) {
+	if err := m.access.RequireProviderScope(p, provider); err != nil {
+		if errors.Is(err, access.ErrNotAuthenticated) {
+			return false, err
+		}
+		return false, nil
 	}
-	return m.access
+	return m.access.Allowed(ctx, p, access.Provider(provider))
 }
 
-func (m *Manager) agentProviderAccess(ctx context.Context, p *principal.Principal, provider string) (bool, error) {
-	err := m.enforcer().RequireProvider(ctx, p, provider)
-	if err == nil {
-		return true, nil
+func (m *Manager) agentOperationDeniedAsFalse(ctx context.Context, p *principal.Principal, provider, operation string) (bool, error) {
+	if err := m.access.RequireOperationScope(p, provider, operation); err != nil {
+		if errors.Is(err, access.ErrNotAuthenticated) {
+			return false, err
+		}
+		return false, nil
 	}
-	if access.IsPolicyUnavailable(err) {
-		return false, err
-	}
-	return false, nil
-}
-
-func (m *Manager) agentOperationAccess(ctx context.Context, p *principal.Principal, provider, operation string) (bool, error) {
-	err := m.enforcer().RequireAppOperation(ctx, p, provider, operation)
-	if err == nil {
-		return true, nil
-	}
-	if access.IsPolicyUnavailable(err) {
-		return false, err
-	}
-	return false, nil
+	return m.access.Allowed(ctx, p, access.AppOperation(provider, operation))
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {

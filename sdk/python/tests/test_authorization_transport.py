@@ -1,80 +1,50 @@
-"""Transport-backed Authorization SDK tests over a real Unix socket."""
-
 from __future__ import annotations
 
 import os
-import tempfile
 import unittest
-from concurrent import futures
-from typing import Any
+from unittest import mock
 
-import grpc
-
-from gestalt import ENV_HOST_SERVICE_SOCKET, Request
-from gestalt._authorization import SetAuthorizationStateRequest
-from gestalt._gen.v1 import authorization_pb2 as _authorization_pb2
-from gestalt._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
-
-authorization_pb2: Any = _authorization_pb2
-authorization_pb2_grpc: Any = _authorization_pb2_grpc
-
-_server: grpc.Server | None = None
-_socket_path = ""
-_previous_socket_env: str | None = None
-_invocation_tokens: list[str] = []
+from gestalt import ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, Request
+from gestalt._grpc_transport import (
+    INVOCATION_TOKEN_HEADER,
+    HostServiceMetadataInterceptor,
+)
 
 
-class _AuthorizationServicer(authorization_pb2_grpc.AuthorizationProviderServicer):
-    def SetAuthorizationState(self, request, context):
-        _invocation_tokens.extend(
-            value
-            for key, value in context.invocation_metadata()
-            if key == "x-gestalt-invocation-token"
-        )
-        return authorization_pb2.SetAuthorizationStateResponse()
-
-
-def setUpModule() -> None:
-    global _server, _socket_path, _previous_socket_env
-    _socket_path = os.path.join(
-        tempfile.gettempdir(), f"py-authorization-test-{os.getpid()}.sock"
-    )
-    if os.path.exists(_socket_path):
-        os.remove(_socket_path)
-
-    _server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-    authorization_pb2_grpc.add_AuthorizationProviderServicer_to_server(
-        _AuthorizationServicer(),
-        _server,
-    )
-    _server.add_insecure_port(f"unix:{_socket_path}")
-    _server.start()
-    _previous_socket_env = os.environ.get(ENV_HOST_SERVICE_SOCKET)
-    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
-
-
-def tearDownModule() -> None:
-    if _previous_socket_env is None:
-        os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
-    else:
-        os.environ[ENV_HOST_SERVICE_SOCKET] = _previous_socket_env
-    if _server is not None:
-        _server.stop(grace=0).wait()
-    if _socket_path and os.path.exists(_socket_path):
-        os.remove(_socket_path)
+class _CallDetails:
+    method = "/gestalt.authorization.v1.AuthorizationProvider/SetAuthorizationState"
+    timeout = None
+    metadata = None
+    credentials = None
+    wait_for_ready = None
+    compression = None
 
 
 class AuthorizationTransportTests(unittest.TestCase):
-    def setUp(self) -> None:
-        _invocation_tokens.clear()
+    def test_request_authorization_passes_invocation_token_to_host_channel(self) -> None:
+        with (
+            mock.patch.dict(
+                os.environ,
+                {ENV_HOST_SERVICE_SOCKET: "/tmp/auth.sock", ENV_HOST_SERVICE_TOKEN: ""},
+            ),
+            mock.patch("gestalt._authorization.host_service_channel") as channel,
+            mock.patch("gestalt._authorization.pb_grpc.AuthorizationProviderStub"),
+        ):
+            Request(invocation_token=" invoke-authz ").authorization().close()
 
-    def test_request_helper_forwards_invocation_token(self) -> None:
-        request = Request(invocation_token="invoke-authz")
+        channel.assert_called_once_with(
+            "authorization",
+            "/tmp/auth.sock",
+            token="",
+            invocation_token="invoke-authz",
+        )
 
-        with request.authorization() as client:
-            client.set_authorization_state(SetAuthorizationStateRequest())
+    def test_host_metadata_interceptor_adds_invocation_token(self) -> None:
+        details = HostServiceMetadataInterceptor(
+            invocation_token="invoke-authz",
+        )._with_metadata(_CallDetails())
 
-        self.assertEqual(_invocation_tokens, ["invoke-authz"])
+        self.assertIn((INVOCATION_TOKEN_HEADER, "invoke-authz"), details.metadata)
 
 
 if __name__ == "__main__":

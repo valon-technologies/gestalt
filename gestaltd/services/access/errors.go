@@ -12,47 +12,46 @@ var (
 	ErrScopeDenied      = errors.New("token scope denied")
 )
 
-type Cause string
+type cause string
 
 const (
-	CauseUnknown           Cause = ""
-	CauseNotAuthenticated  Cause = "not_authenticated"
-	CauseScopeProvider     Cause = "scope_provider"
-	CauseScopeOperation    Cause = "scope_operation"
-	CausePolicyDenied      Cause = "policy_denied"
-	CausePolicyUnavailable Cause = "policy_unavailable"
+	causeNotAuthenticated  cause = "not_authenticated"
+	causeScopeProvider     cause = "scope_provider"
+	causeScopeOperation    cause = "scope_operation"
+	causePolicyDenied      cause = "policy_denied"
+	causePolicyUnavailable cause = "policy_unavailable"
 )
 
-type Error struct {
-	Cause     Cause
-	Provider  string
-	Operation string
-	Resource  string
-	Action    string
-	Err       error
+type accessError struct {
+	cause     cause
+	provider  string
+	operation string
+	resource  string
+	action    string
+	err       error
 }
 
-func (e *Error) Error() string {
+func (e *accessError) Error() string {
 	if e == nil {
 		return ""
 	}
 	base := "access error"
-	switch e.Cause {
-	case CauseNotAuthenticated:
+	switch e.cause {
+	case causeNotAuthenticated:
 		base = ErrNotAuthenticated.Error()
-	case CauseScopeProvider, CauseScopeOperation:
+	case causeScopeProvider, causeScopeOperation:
 		base = ErrScopeDenied.Error()
-	case CausePolicyDenied:
+	case causePolicyDenied:
 		base = ErrDenied.Error()
-	case CausePolicyUnavailable:
+	case causePolicyUnavailable:
 		base = "authorization policy unavailable"
 	}
 	details := e.details()
-	if e.Err != nil && e.Cause != CauseNotAuthenticated {
+	if e.err != nil && e.cause != causeNotAuthenticated {
 		if details != "" {
-			return fmt.Sprintf("%s: %s: %v", base, details, e.Err)
+			return fmt.Sprintf("%s: %s: %v", base, details, e.err)
 		}
-		return fmt.Sprintf("%s: %v", base, e.Err)
+		return fmt.Sprintf("%s: %v", base, e.err)
 	}
 	if details != "" {
 		return fmt.Sprintf("%s: %s", base, details)
@@ -60,36 +59,36 @@ func (e *Error) Error() string {
 	return base
 }
 
-func (e *Error) Unwrap() error {
+func (e *accessError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
-	switch e.Cause {
-	case CauseNotAuthenticated:
+	switch e.cause {
+	case causeNotAuthenticated:
 		return ErrNotAuthenticated
-	case CauseScopeProvider, CauseScopeOperation:
+	case causeScopeProvider, causeScopeOperation:
 		return ErrScopeDenied
-	case CausePolicyDenied:
+	case causePolicyDenied:
 		return ErrDenied
 	default:
-		return e.Err
+		return e.err
 	}
 }
 
-func (e *Error) details() string {
+func (e *accessError) details() string {
 	if e == nil {
 		return ""
 	}
-	provider := strings.TrimSpace(e.Provider)
-	operation := strings.TrimSpace(e.Operation)
+	provider := strings.TrimSpace(e.provider)
+	operation := strings.TrimSpace(e.operation)
 	if provider != "" && operation != "" {
 		return provider + "." + operation
 	}
 	if provider != "" {
 		return provider
 	}
-	resource := strings.TrimSpace(e.Resource)
-	action := strings.TrimSpace(e.Action)
+	resource := strings.TrimSpace(e.resource)
+	action := strings.TrimSpace(e.action)
 	switch {
 	case resource != "" && action != "":
 		return resource + " " + action
@@ -102,34 +101,12 @@ func (e *Error) details() string {
 	}
 }
 
-func ErrorCause(err error) Cause {
-	var accessErr *Error
-	if errors.As(err, &accessErr) && accessErr != nil {
-		return accessErr.Cause
-	}
-	switch {
-	case errors.Is(err, ErrNotAuthenticated):
-		return CauseNotAuthenticated
-	case errors.Is(err, ErrScopeDenied):
-		return CauseScopeOperation
-	case errors.Is(err, ErrDenied):
-		return CausePolicyDenied
-	default:
-		return CauseUnknown
-	}
-}
-
 func IsOperationScopeDenied(err error) bool {
-	var accessErr *Error
-	return errors.As(err, &accessErr) && accessErr != nil && accessErr.Cause == CauseScopeOperation
-}
-
-func IsPolicyDenied(err error) bool {
-	var accessErr *Error
-	return errors.As(err, &accessErr) && accessErr != nil && accessErr.Cause == CausePolicyDenied
+	var accessErr *accessError
+	return errors.As(err, &accessErr) && accessErr != nil && accessErr.cause == causeScopeOperation
 }
 
 func IsPolicyUnavailable(err error) bool {
-	var accessErr *Error
-	return errors.As(err, &accessErr) && accessErr != nil && accessErr.Cause == CausePolicyUnavailable
+	var accessErr *accessError
+	return errors.As(err, &accessErr) && accessErr != nil && accessErr.cause == causePolicyUnavailable
 }

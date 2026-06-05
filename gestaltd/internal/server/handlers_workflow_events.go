@@ -45,7 +45,7 @@ func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 
 	appName := strings.TrimSpace(req.Source)
 	if appName != "" {
-		if err := s.enforcer().RequireProvider(r.Context(), p, appName); err != nil {
+		if err := s.access.RequireProvider(r.Context(), p, appName); err != nil {
 			s.writeInvocationError(w, r, appName, "workflow.events.deliver", err)
 			return
 		}

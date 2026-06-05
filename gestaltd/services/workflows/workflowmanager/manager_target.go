@@ -132,7 +132,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		}
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 	}
-	if err := m.enforcer().RequireProviderScope(p, appName); err != nil {
+	if err := m.access.RequireProviderScope(p, appName); err != nil {
 		return coreworkflow.AppCall{}, err
 	}
 	if credentialMode != "" {
@@ -205,7 +205,7 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
 	}
-	if err := m.enforcer().RequireProvider(ctx, p, target.ProviderName); err != nil {
+	if err := m.access.RequireProvider(ctx, p, target.ProviderName); err != nil {
 		return coreworkflow.AgentTurn{}, err
 	}
 	target.Model = strings.TrimSpace(target.Model)
@@ -252,25 +252,25 @@ func isWorkflowProviderNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func (m *Manager) enforcer() *access.Enforcer {
-	if m == nil || m.access == nil {
-		return access.NewEnforcer(nil)
-	}
-	return m.access
-}
-
-type workflowTargetAuthorizationError struct {
+type workflowTargetAccessError struct {
 	err error
 }
 
-func (e workflowTargetAuthorizationError) Error() string { return core.ErrNotFound.Error() }
-func (e workflowTargetAuthorizationError) Unwrap() error { return core.ErrNotFound }
-
-func (e workflowTargetAuthorizationError) AccessError() error {
+func (e workflowTargetAccessError) Error() string { return core.ErrNotFound.Error() }
+func (e workflowTargetAccessError) Unwrap() error { return core.ErrNotFound }
+func (e workflowTargetAccessError) AccessError() error {
 	return e.err
 }
 
-func (m *Manager) storedTargetAccessible(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (bool, error) {
+func workflowTargetAccessErrorCause(err error) error {
+	var target interface{ AccessError() error }
+	if errors.As(err, &target) {
+		return target.AccessError()
+	}
+	return nil
+}
+
+func (m *Manager) storedTargetDeniedAsFalse(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (bool, error) {
 	if err := m.validateTargetAuthorized(ctx, p, target, callerAppNameFromContext(ctx)); err != nil {
 		if access.IsPolicyUnavailable(err) {
 			return false, err
@@ -321,7 +321,7 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			if agentProviderName == "" {
 				return fmt.Errorf("%w: workflow agent provider is required", access.ErrDenied)
 			}
-			if err := m.enforcer().RequireProvider(ctx, p, agentProviderName); err != nil {
+			if err := m.access.RequireProvider(ctx, p, agentProviderName); err != nil {
 				return err
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
@@ -370,7 +370,7 @@ func (m *Manager) validateWorkflowAgentToolAuthorizationForCaller(ctx context.Co
 		return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation", access.ErrDenied, index)
 	}
 	if operation == "" {
-		return m.enforcer().RequireProvider(ctx, p, appName)
+		return m.access.RequireProvider(ctx, p, appName)
 	}
 	return m.requireWorkflowAppOperationForCaller(ctx, p, callerAppName, appName, operation)
 }

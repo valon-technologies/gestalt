@@ -402,6 +402,10 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 	route, matched := mounted.routeForRequestPath(r.URL.Path)
 	accessCtx, allowed, err := s.authorizeMountedUIRoute(r.Context(), p, mounted, route, matched)
 	if err != nil {
+		if access.IsPolicyUnavailable(err) {
+			writeError(w, http.StatusServiceUnavailable, err.Error())
+			return nil, false
+		}
 		writeError(w, http.StatusInternalServerError, "failed to authorize app access")
 		return nil, false
 	}
@@ -427,7 +431,7 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 	if !mountedUIRequiresAuthorization(mounted) {
 		return invocation.AccessContext{}, true, nil
 	}
-	enforcer := s.enforcer()
+	enforcer := s.access
 	resourceName := mountedUIAuthorizationResourceName(mounted)
 	if resourceName == "" {
 		return invocation.AccessContext{}, false, nil

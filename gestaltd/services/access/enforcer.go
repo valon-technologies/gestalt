@@ -26,13 +26,13 @@ func (e *Enforcer) Allowed(ctx context.Context, p *principal.Principal, req Requ
 		return true, nil
 	}
 	if p == nil {
-		return false, &Error{Cause: CauseNotAuthenticated}
+		return false, &accessError{cause: causeNotAuthenticated}
 	}
 	if req.Subject == nil {
 		req.Subject = SubjectFromPrincipal(p)
 	}
 	if req.Subject == nil {
-		return false, &Error{Cause: CauseNotAuthenticated}
+		return false, &accessError{cause: causeNotAuthenticated}
 	}
 	resp, err := e.provider.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject:  req.Subject,
@@ -40,11 +40,11 @@ func (e *Enforcer) Allowed(ctx context.Context, p *principal.Principal, req Requ
 		Resource: req.Resource,
 	})
 	if err != nil {
-		return false, &Error{
-			Cause:    CausePolicyUnavailable,
-			Resource: resourceName(req.Resource),
-			Action:   actionName(req.Action),
-			Err:      err,
+		return false, &accessError{
+			cause:    causePolicyUnavailable,
+			resource: resourceName(req.Resource),
+			action:   actionName(req.Action),
+			err:      err,
 		}
 	}
 	if resp == nil || !resp.Allowed {
@@ -59,10 +59,10 @@ func (e *Enforcer) Require(ctx context.Context, p *principal.Principal, req Requ
 		return err
 	}
 	if !allowed {
-		return &Error{
-			Cause:    CausePolicyDenied,
-			Resource: resourceName(req.Resource),
-			Action:   actionName(req.Action),
+		return &accessError{
+			cause:    causePolicyDenied,
+			resource: resourceName(req.Resource),
+			action:   actionName(req.Action),
 		}
 	}
 	return nil
@@ -71,10 +71,10 @@ func (e *Enforcer) Require(ctx context.Context, p *principal.Principal, req Requ
 func (e *Enforcer) RequireProviderScope(p *principal.Principal, provider string) error {
 	provider = strings.TrimSpace(provider)
 	if p == nil {
-		return &Error{Cause: CauseNotAuthenticated, Provider: provider}
+		return &accessError{cause: causeNotAuthenticated, provider: provider}
 	}
 	if !principal.AllowsProviderPermission(p, provider) {
-		return &Error{Cause: CauseScopeProvider, Provider: provider}
+		return &accessError{cause: causeScopeProvider, provider: provider}
 	}
 	return nil
 }
@@ -83,10 +83,10 @@ func (e *Enforcer) RequireOperationScope(p *principal.Principal, provider, opera
 	provider = strings.TrimSpace(provider)
 	operation = strings.TrimSpace(operation)
 	if p == nil {
-		return &Error{Cause: CauseNotAuthenticated, Provider: provider, Operation: operation}
+		return &accessError{cause: causeNotAuthenticated, provider: provider, operation: operation}
 	}
 	if !principal.AllowsOperationPermission(p, provider, operation) {
-		return &Error{Cause: CauseScopeOperation, Provider: provider, Operation: operation}
+		return &accessError{cause: causeScopeOperation, provider: provider, operation: operation}
 	}
 	return nil
 }
@@ -103,18 +103,6 @@ func (e *Enforcer) RequireProvider(ctx context.Context, p *principal.Principal, 
 		return err
 	}
 	return e.Require(ctx, p, Provider(provider))
-}
-
-func (e *Enforcer) RequireUIRole(ctx context.Context, p *principal.Principal, policy, role string) error {
-	return e.Require(ctx, p, UIRole(policy, role))
-}
-
-func (e *Enforcer) RequireAuthorizationMutation(ctx context.Context, p *principal.Principal, action string) error {
-	return e.Require(ctx, p, AuthorizationMutation(action))
-}
-
-func (e *Enforcer) RequireWorkflowPlatform(ctx context.Context, p *principal.Principal, action string) error {
-	return e.Require(ctx, p, WorkflowPlatform(action))
 }
 
 func resourceName(resource *proto.Resource) string {

@@ -407,13 +407,6 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) enforcer() *access.Enforcer {
-	if s == nil || s.access == nil {
-		return access.NewEnforcer(nil)
-	}
-	return s.access
-}
-
 func (s *Server) issueSessionToken(provider core.AuthenticationProvider, identity *core.UserIdentity) (string, error) {
 	if issuer, ok := provider.(SessionTokenIssuer); ok {
 		return issuer.IssueSessionToken(identity)
