@@ -1670,6 +1670,62 @@ server:
 	}
 }
 
+func TestSyncAtPathsUsesLockedStaticValidationCatalogForOpenAPIProvider(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	artifactsDir := filepath.Join(dir, "artifacts")
+	packageSource := "github.com/acme/tools/static-openapi"
+	version := "1.2.3"
+	archivePath := buildExecutableArchiveDataWithSpec(t, dir, "static-openapi-src", packageSource, version, providermanifestv1.KindApp, "static-openapi", []byte("static-openapi-binary"), withNoAuthDefaultConnection(&providermanifestv1.Spec{
+		Surfaces: &providermanifestv1.ProviderSurfaces{
+			OpenAPI: &providermanifestv1.OpenAPISurface{Document: "http://127.0.0.1:1/openapi.yaml"},
+		},
+	}))
+	archiveSHA, err := providerpkg.ArchiveDigest(archivePath)
+	if err != nil {
+		t.Fatalf("ArchiveDigest: %v", err)
+	}
+
+	metadataPath := filepath.Join(dir, "provider-release.yaml")
+	writeProviderReleaseMetadataFileWithStaticValidation(t, metadataPath, providerReleaseMetadataFixture{
+		Package:     packageSource,
+		Kind:        providermanifestv1.KindApp,
+		Version:     version,
+		ArchivePath: archivePath,
+		Artifacts: map[string]providerrelease.Artifact{
+			providerpkg.CurrentPlatformString(): {
+				Path:   filepath.Base(archivePath),
+				SHA256: archiveSHA,
+			},
+		},
+	})
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: %s
+%sapps:
+  static-openapi:
+    source: %s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, config.ConfigAPIVersion, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(metadataPath), filepath.ToSlash(artifactsDir))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 1}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	}
+}
+
 func TestLockAtPathsRejectsProviderReleaseWhenStaticValidationCatalogMissing(t *testing.T) {
 	t.Parallel()
 
@@ -1850,6 +1906,12 @@ func buildExecutableArchiveFromBinaryPath(t *testing.T, dir, srcDirName, source,
 func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, kind, binaryName string, binaryData []byte) string {
 	t.Helper()
 
+	return buildExecutableArchiveDataWithSpec(t, dir, srcDirName, source, version, kind, binaryName, binaryData, &providermanifestv1.Spec{})
+}
+
+func buildExecutableArchiveDataWithSpec(t *testing.T, dir, srcDirName, source, version, kind, binaryName string, binaryData []byte, spec *providermanifestv1.Spec) string {
+	t.Helper()
+
 	artPath := artifactRelPath(binaryName)
 	srcDir := filepath.Join(dir, srcDirName)
 	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
@@ -1871,7 +1933,7 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 		},
 	}
 	manifest.Kind = kind
-	manifest.Spec = &providermanifestv1.Spec{}
+	manifest.Spec = spec
 	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artPath}
 
 	manifestBytes, err := providerpkg.EncodeManifest(manifest)
