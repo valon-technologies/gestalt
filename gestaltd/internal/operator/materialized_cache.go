@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 const (
@@ -91,6 +92,22 @@ type materializedCacheRestore struct {
 
 	cleanup func() error
 	commit  func() error
+}
+
+type materializedCachePutResult struct {
+	Key     materializedCacheKey
+	Files   int
+	Bytes   int64
+	Timings materializedCachePutTimings
+}
+
+type materializedCachePutTimings struct {
+	LocalInspect          time.Duration
+	LocalWrite            time.Duration
+	RemoteExists          time.Duration
+	RemoteArchive         time.Duration
+	RemoteUpload          time.Duration
+	RemoteSkippedExisting bool
 }
 
 func materializedCacheKeyForRequest(req materializedCacheRequest) (materializedCacheKey, bool, error) {
@@ -193,17 +210,22 @@ func materializedCacheRestoreResult(key materializedCacheKey, result materialize
 	return &materializedCacheRestore{Result: result, Key: key}, nil
 }
 
-func (c materializedCache) Put(ctx context.Context, req materializedCacheRequest, sourceDir string) (materializedCacheKey, int, int64, error) {
+func (c materializedCache) Put(ctx context.Context, req materializedCacheRequest, sourceDir string) (materializedCachePutResult, error) {
 	key, eligible, err := materializedCacheKeyForRequest(req)
+	result := materializedCachePutResult{Key: key}
 	if err != nil {
-		return key, 0, 0, err
+		return result, err
 	}
 	if !eligible {
-		return key, 0, 0, nil
+		return result, nil
 	}
+	inspectStart := time.Now()
 	files, bytes, digest, err := inspectMaterializedCacheFiles(sourceDir)
+	result.Timings.LocalInspect = time.Since(inspectStart)
+	result.Files = len(files)
+	result.Bytes = bytes
 	if err != nil {
-		return key, 0, 0, err
+		return result, err
 	}
 	entry := materializedCacheEntry{
 		Schema:              materializedCacheSchema,
@@ -222,14 +244,17 @@ func (c materializedCache) Put(ctx context.Context, req materializedCacheRequest
 		Files:               files,
 	}
 
+	writeStart := time.Now()
 	entryDir := c.entryDir(key)
 	parentDir := filepath.Dir(entryDir)
 	if err := os.MkdirAll(parentDir, 0o755); err != nil {
-		return key, 0, 0, fmt.Errorf("create materialized cache parent: %w", err)
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, fmt.Errorf("create materialized cache parent: %w", err)
 	}
 	tmpDir, err := os.MkdirTemp(parentDir, "."+filepath.Base(entryDir)+".tmp-*")
 	if err != nil {
-		return key, 0, 0, fmt.Errorf("create materialized cache temp entry: %w", err)
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, fmt.Errorf("create materialized cache temp entry: %w", err)
 	}
 	keepTmp := false
 	defer func() {
@@ -239,41 +264,63 @@ func (c materializedCache) Put(ctx context.Context, req materializedCacheRequest
 	}()
 	rootDir := filepath.Join(tmpDir, materializedCacheRootDir)
 	if err := copyMaterializedFiles(sourceDir, rootDir, files); err != nil {
-		return key, 0, 0, err
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, err
 	}
 	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
-		return key, 0, 0, err
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, err
 	}
 	if err := os.WriteFile(filepath.Join(tmpDir, materializedCacheEntryFile), append(data, '\n'), 0o644); err != nil {
-		return key, 0, 0, fmt.Errorf("write materialized cache entry metadata: %w", err)
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, fmt.Errorf("write materialized cache entry metadata: %w", err)
 	}
 	if err := os.RemoveAll(entryDir); err != nil {
-		return key, 0, 0, fmt.Errorf("remove stale materialized cache entry: %w", err)
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, fmt.Errorf("remove stale materialized cache entry: %w", err)
 	}
 	if err := os.Rename(tmpDir, entryDir); err != nil {
-		return key, 0, 0, fmt.Errorf("commit materialized cache entry: %w", err)
+		result.Timings.LocalWrite = time.Since(writeStart)
+		return result, fmt.Errorf("commit materialized cache entry: %w", err)
 	}
 	keepTmp = true
+	result.Timings.LocalWrite = time.Since(writeStart)
 	if c.remote != nil {
-		archivePath, err := os.CreateTemp(parentDir, "."+filepath.Base(entryDir)+".archive-*.tar.gz")
+		existsStart := time.Now()
+		exists, err := c.remote.Exists(ctx, key)
+		result.Timings.RemoteExists = time.Since(existsStart)
 		if err != nil {
-			return key, len(files), bytes, fmt.Errorf("create materialized cache archive temp file: %w", err)
+			return result, fmt.Errorf("check materialized cache remote object: %w", err)
+		}
+		if exists {
+			result.Timings.RemoteSkippedExisting = true
+			return result, nil
+		}
+		archivePath, err := os.CreateTemp(parentDir, "."+filepath.Base(entryDir)+".archive-*.tar")
+		if err != nil {
+			return result, fmt.Errorf("create materialized cache archive temp file: %w", err)
 		}
 		archiveName := archivePath.Name()
 		if err := archivePath.Close(); err != nil {
 			_ = os.Remove(archiveName)
-			return key, len(files), bytes, fmt.Errorf("close materialized cache archive temp file: %w", err)
+			return result, fmt.Errorf("close materialized cache archive temp file: %w", err)
 		}
 		defer func() { _ = os.Remove(archiveName) }()
+		archiveStart := time.Now()
 		if err := writeMaterializedCacheEntryArchive(entryDir, archiveName); err != nil {
-			return key, len(files), bytes, err
+			result.Timings.RemoteArchive = time.Since(archiveStart)
+			return result, err
 		}
+		result.Timings.RemoteArchive = time.Since(archiveStart)
+		uploadStart := time.Now()
 		if err := c.remote.Put(ctx, key, archiveName); err != nil {
-			return key, len(files), bytes, err
+			result.Timings.RemoteUpload = time.Since(uploadStart)
+			return result, err
 		}
+		result.Timings.RemoteUpload = time.Since(uploadStart)
 	}
-	return key, len(files), bytes, nil
+	return result, nil
 }
 
 func (c materializedCache) entryDir(key materializedCacheKey) string {

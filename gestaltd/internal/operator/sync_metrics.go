@@ -114,8 +114,14 @@ type SyncMetricsCache struct {
 }
 
 type SyncMetricsCachePut struct {
-	Successes int `json:"successes"`
-	Failures  int `json:"failures"`
+	Successes             int     `json:"successes"`
+	Failures              int     `json:"failures"`
+	LocalInspectSeconds   float64 `json:"local_inspect_seconds"`
+	LocalWriteSeconds     float64 `json:"local_write_seconds"`
+	RemoteExistsSeconds   float64 `json:"remote_exists_seconds"`
+	RemoteArchiveSeconds  float64 `json:"remote_archive_seconds"`
+	RemoteUploadSeconds   float64 `json:"remote_upload_seconds"`
+	RemoteSkippedExisting int     `json:"remote_skipped_existing"`
 }
 
 type SyncMetricsCacheEntry struct {
@@ -216,6 +222,7 @@ type syncCacheMetricsEvent struct {
 	Bytes      int64
 	Files      int
 	Duration   time.Duration
+	PutTimings materializedCachePutTimings
 }
 
 func NewSyncMetricsRecorder() *SyncMetricsRecorder {
@@ -403,6 +410,14 @@ func (r *SyncMetricsRecorder) RecordCacheEntry(event syncCacheMetricsEvent) {
 		} else {
 			r.metrics.Cache.Put.Successes++
 			put = syncCachePutSuccess
+		}
+		r.metrics.Cache.Put.LocalInspectSeconds = roundedSeconds(secondsDuration(r.metrics.Cache.Put.LocalInspectSeconds) + event.PutTimings.LocalInspect)
+		r.metrics.Cache.Put.LocalWriteSeconds = roundedSeconds(secondsDuration(r.metrics.Cache.Put.LocalWriteSeconds) + event.PutTimings.LocalWrite)
+		r.metrics.Cache.Put.RemoteExistsSeconds = roundedSeconds(secondsDuration(r.metrics.Cache.Put.RemoteExistsSeconds) + event.PutTimings.RemoteExists)
+		r.metrics.Cache.Put.RemoteArchiveSeconds = roundedSeconds(secondsDuration(r.metrics.Cache.Put.RemoteArchiveSeconds) + event.PutTimings.RemoteArchive)
+		r.metrics.Cache.Put.RemoteUploadSeconds = roundedSeconds(secondsDuration(r.metrics.Cache.Put.RemoteUploadSeconds) + event.PutTimings.RemoteUpload)
+		if event.PutTimings.RemoteSkippedExisting {
+			r.metrics.Cache.Put.RemoteSkippedExisting++
 		}
 	}
 	entry := SyncMetricsCacheEntry{

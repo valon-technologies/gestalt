@@ -96,6 +96,18 @@ func writeSyncText(w io.Writer, metrics operator.SyncMetrics, verbose bool) erro
 		); err != nil {
 			return err
 		}
+		if metrics.Cache.Put.Successes > 0 || metrics.Cache.Put.Failures > 0 {
+			if _, err := fmt.Fprintf(w, "Cache put timing: inspect %.3fs, local write %.3fs, remote exists %.3fs, archive %.3fs, upload %.3fs, skipped existing %d.\n",
+				metrics.Cache.Put.LocalInspectSeconds,
+				metrics.Cache.Put.LocalWriteSeconds,
+				metrics.Cache.Put.RemoteExistsSeconds,
+				metrics.Cache.Put.RemoteArchiveSeconds,
+				metrics.Cache.Put.RemoteUploadSeconds,
+				metrics.Cache.Put.RemoteSkippedExisting,
+			); err != nil {
+				return err
+			}
+		}
 		if _, err := fmt.Fprintf(w, "Downloads: %d archives, %s, cumulative download time %.3fs.\n", metrics.Archives.Downloads.Count, formatIECBytes(metrics.Archives.Downloads.Bytes), metrics.Archives.Downloads.DurationSeconds); err != nil {
 			return err
 		}

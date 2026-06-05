@@ -3,7 +3,6 @@ package operator
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -26,7 +25,7 @@ func TestMaterializedCachePreservesEmptyDirectories(t *testing.T) {
 
 	req := materializedCacheUIRequest(dir, "alpha", "dest")
 	cache := materializedCache{dir: filepath.Join(dir, "cache")}
-	if _, _, _, err := cache.Put(context.Background(), req, source); err != nil {
+	if _, err := cache.Put(context.Background(), req, source); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	restore, err := cache.Restore(context.Background(), req)
@@ -52,7 +51,7 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 	source := writeMaterializedCacheUISource(t, dir, "source")
 	cache := materializedCache{dir: filepath.Join(dir, "cache")}
 	req := materializedCacheUIRequest(dir, "alpha", "dest-alpha")
-	if _, _, _, err := cache.Put(context.Background(), req, source); err != nil {
+	if _, err := cache.Put(context.Background(), req, source); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -75,7 +74,7 @@ func TestMaterializedCacheRestoresRemoteEntry(t *testing.T) {
 	source := writeMaterializedCacheUISource(t, dir, "source")
 	req := materializedCacheUIRequest(dir, "alpha", "dest")
 
-	if _, _, _, err := (materializedCache{dir: filepath.Join(dir, "cold"), remote: remote}).Put(context.Background(), req, source); err != nil {
+	if _, err := (materializedCache{dir: filepath.Join(dir, "cold"), remote: remote}).Put(context.Background(), req, source); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 	if remote.puts != 1 {
@@ -127,6 +126,64 @@ func TestMaterializedCacheTreatsUnsafeRemoteArchiveAsInvalid(t *testing.T) {
 	if restore == nil || restore.Result != materializedCacheInvalid {
 		t.Fatalf("Restore unsafe remote archive = %#v, want invalid", restore)
 	}
+}
+
+func TestMaterializedCachePutSkipsRemoteArchiveWhenObjectExists(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	remote := newFakeMaterializedCacheRemote()
+	remote.exists = true
+	source := writeMaterializedCacheUISource(t, dir, "source")
+	req := materializedCacheUIRequest(dir, "alpha", "dest")
+	cache := materializedCache{dir: filepath.Join(dir, "cache"), remote: remote}
+
+	result, err := cache.Put(context.Background(), req, source)
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if remote.existsCalls != 1 {
+		t.Fatalf("remote exists calls = %d, want 1", remote.existsCalls)
+	}
+	if remote.puts != 0 {
+		t.Fatalf("remote puts = %d, want 0", remote.puts)
+	}
+	if !result.Timings.RemoteSkippedExisting {
+		t.Fatal("RemoteSkippedExisting = false, want true")
+	}
+	if result.Timings.RemoteArchive != 0 || result.Timings.RemoteUpload != 0 {
+		t.Fatalf("remote archive/upload timings = %s/%s, want zero", result.Timings.RemoteArchive, result.Timings.RemoteUpload)
+	}
+	assertNoMaterializedCacheArchiveTemps(t, filepath.Join(dir, "cache"), result.Key)
+}
+
+func TestMaterializedCachePutRemoteExistsErrorSkipsArchive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	remote := newFakeMaterializedCacheRemote()
+	remote.existsErr = errors.New("metadata unavailable")
+	source := writeMaterializedCacheUISource(t, dir, "source")
+	req := materializedCacheUIRequest(dir, "alpha", "dest")
+	cache := materializedCache{dir: filepath.Join(dir, "cache"), remote: remote}
+
+	result, err := cache.Put(context.Background(), req, source)
+	if err == nil {
+		t.Fatal("Put error = nil, want remote exists error")
+	}
+	if remote.existsCalls != 1 {
+		t.Fatalf("remote exists calls = %d, want 1", remote.existsCalls)
+	}
+	if remote.puts != 0 {
+		t.Fatalf("remote puts = %d, want 0", remote.puts)
+	}
+	if result.Files == 0 || result.Bytes == 0 {
+		t.Fatalf("put result files/bytes = %d/%d, want populated result", result.Files, result.Bytes)
+	}
+	if result.Timings.RemoteArchive != 0 || result.Timings.RemoteUpload != 0 {
+		t.Fatalf("remote archive/upload timings = %s/%s, want zero", result.Timings.RemoteArchive, result.Timings.RemoteUpload)
+	}
+	assertNoMaterializedCacheArchiveTemps(t, filepath.Join(dir, "cache"), result.Key)
 }
 
 func writeMaterializedCacheUISource(t *testing.T, dir, name string) string {
@@ -218,10 +275,13 @@ func materializedCacheTestSHA256Hex(data []byte) string {
 }
 
 type fakeMaterializedCacheRemote struct {
-	objects map[string][]byte
-	gets    int
-	puts    int
-	getErr  error
+	objects     map[string][]byte
+	gets        int
+	existsCalls int
+	puts        int
+	exists      bool
+	getErr      error
+	existsErr   error
 }
 
 func newFakeMaterializedCacheRemote() *fakeMaterializedCacheRemote {
@@ -240,6 +300,14 @@ func (r *fakeMaterializedCacheRemote) Get(_ context.Context, key materializedCac
 	return io.NopCloser(bytes.NewReader(data)), true, nil
 }
 
+func (r *fakeMaterializedCacheRemote) Exists(_ context.Context, _ materializedCacheKey) (bool, error) {
+	r.existsCalls++
+	if r.existsErr != nil {
+		return false, r.existsErr
+	}
+	return r.exists, nil
+}
+
 func (r *fakeMaterializedCacheRemote) Put(_ context.Context, key materializedCacheKey, archivePath string) error {
 	r.puts++
 	data, err := os.ReadFile(archivePath)
@@ -254,8 +322,7 @@ func materializedCacheUnsafeArchive(t *testing.T) []byte {
 	t.Helper()
 
 	var buf bytes.Buffer
-	gzw := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gzw)
+	tw := tar.NewWriter(&buf)
 	if err := tw.WriteHeader(&tar.Header{
 		Name:     materializedCacheRootDir + "/link",
 		Typeflag: tar.TypeSymlink,
@@ -267,8 +334,17 @@ func materializedCacheUnsafeArchive(t *testing.T) []byte {
 	if err := tw.Close(); err != nil {
 		t.Fatalf("close unsafe archive tar: %v", err)
 	}
-	if err := gzw.Close(); err != nil {
-		t.Fatalf("close unsafe archive gzip: %v", err)
-	}
 	return buf.Bytes()
+}
+
+func assertNoMaterializedCacheArchiveTemps(t *testing.T, cacheDir string, key materializedCacheKey) {
+	t.Helper()
+
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir((materializedCache{dir: cacheDir}).entryDir(key)), ".*.archive-*.tar"))
+	if err != nil {
+		t.Fatalf("glob archive temp files: %v", err)
+	}
+	if len(matches) != 0 {
+		t.Fatalf("archive temp files = %v, want none", matches)
+	}
 }
