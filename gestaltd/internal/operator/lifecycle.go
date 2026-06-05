@@ -3228,9 +3228,7 @@ func (l *Lifecycle) resolveLockedProvider(ctx context.Context, cfg *config.Confi
 		entry.InputDigest = fingerprint
 		provider.ResolvedManifest = entry.ValidationManifest
 		provider.ResolvedManifestPath = ""
-		provider.ResolvedCatalog = catalogFromValidationManifest(entry.ValidationManifest, entry.CatalogAvailable)
-		provider.ResolvedCatalogAvailable = entry.CatalogAvailable
-		provider.ResolvedCatalogSessionOnly = entry.CatalogSessionOnly
+		bindLockValidationCatalog(provider, entry)
 		return entry, nil
 	}
 	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
@@ -3674,9 +3672,7 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 			lockEntry.CatalogFingerprint = fingerprint
 		}
 		lock.Providers.App[name] = lockEntry
-		entry.ResolvedCatalog = catalogFromValidationManifest(lockEntry.ValidationManifest, lockEntry.CatalogAvailable)
-		entry.ResolvedCatalogAvailable = lockEntry.CatalogAvailable
-		entry.ResolvedCatalogSessionOnly = lockEntry.CatalogSessionOnly
+		bindLockValidationCatalog(entry, lockEntry)
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		entries := lockEntriesForKind(lock, collection.kind)
@@ -3841,6 +3837,15 @@ func catalogFromValidationManifest(manifest *providermanifestv1.Manifest, availa
 		cat.Operations = append(cat.Operations, catalog.CatalogOperation{ID: id})
 	}
 	return cat
+}
+
+func bindLockValidationCatalog(provider *config.ProviderEntry, entry LockEntry) {
+	if provider == nil {
+		return
+	}
+	provider.ResolvedCatalog = catalogFromValidationManifest(entry.ValidationManifest, entry.CatalogAvailable)
+	provider.ResolvedCatalogAvailable = entry.CatalogAvailable
+	provider.ResolvedCatalogSessionOnly = entry.CatalogSessionOnly
 }
 
 func staticCatalogInputFingerprint(entry *config.ProviderEntry) (string, error) {
@@ -4072,9 +4077,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 					return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 				}
 			}
-			provider.ResolvedCatalog = catalogFromValidationManifest(entry.ValidationManifest, entry.CatalogAvailable)
-			provider.ResolvedCatalogAvailable = entry.CatalogAvailable
-			provider.ResolvedCatalogSessionOnly = entry.CatalogSessionOnly
+			bindLockValidationCatalog(provider, entry)
 			return bind("", entry.ValidationManifest)
 		}
 	}
@@ -4864,7 +4867,13 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	if !needMaterialize {
 		recordSyncArtifact(paths, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, syncArtifactArchiveSourceKind(paths, entry), syncArtifactResultReused, syncArtifactReasonFresh, start, 0, 0)
 	}
-	return bindPreparedProviderInstall(paths, name, app, configMap, install)
+	if err := bindPreparedProviderInstall(paths, name, app, configMap, install); err != nil {
+		return err
+	}
+	if lockEntryHasCompleteStaticValidation(providermanifestv1.KindApp, entry) {
+		bindLockValidationCatalog(app, entry)
+	}
+	return nil
 }
 
 func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockEntry, kind, name string, app *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
