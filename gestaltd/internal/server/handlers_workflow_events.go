@@ -108,6 +108,12 @@ func (s *Server) writeWorkflowDeliverEventError(w http.ResponseWriter, r *http.R
 	case errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired),
 		errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, access.ErrNotAuthenticated):
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+	case access.IsPolicyUnavailable(err):
+		writeError(w, http.StatusServiceUnavailable, err.Error())
+	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
+		writeError(w, http.StatusForbidden, err.Error())
 	default:
 		s.writeWorkflowDeliverEventProviderError(r.Context(), w, err)
 	}

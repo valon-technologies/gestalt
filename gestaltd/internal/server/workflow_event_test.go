@@ -184,14 +184,88 @@ func TestWorkflowEventDeliveryPropagatesAuthorizationPolicyUnavailable(t *testin
 	}
 }
 
+func TestWorkflowEventDeliveryMapsPlatformAccessErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		authz      workflowEventAuthorizationProvider
+		wantStatus int
+	}{
+		{
+			name:       "denied",
+			authz:      workflowEventAuthorizationProvider{denyResource: "gestalt"},
+			wantStatus: http.StatusForbidden,
+		},
+		{
+			name:       "policy unavailable",
+			authz:      workflowEventAuthorizationProvider{err: errors.New("authorization backend unavailable"), errResource: "gestalt"},
+			wantStatus: http.StatusServiceUnavailable,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			services := testutil.NewStubServices(t)
+			plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+			if err != nil {
+				t.Fatalf("GenerateToken: %v", err)
+			}
+			seedAPITokenWithPermissions(t, services, plaintext, hashed, "event-user", []core.AccessPermission{{App: "github"}})
+			provider := newMemoryWorkflowProvider()
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Auth = &coretesting.StubAuthProvider{
+					N: "stub",
+					ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
+						return nil, core.ErrNotFound
+					},
+				}
+				cfg.Services = services
+				cfg.Access = access.NewEnforcer(tt.authz)
+				cfg.Workflow = &stubWorkflowControl{
+					defaultProviderName: "basic",
+					provider:            provider,
+				}
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			body := bytes.NewBufferString(`{"source":"github","type":"github.pull_request","subject":"repo:toolshed"}`)
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/events", body)
+			req.Header.Set("Authorization", "Bearer "+plaintext)
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("deliver request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != tt.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tt.wantStatus)
+			}
+			if len(provider.deliveredEvents) != 0 {
+				t.Fatalf("delivered events = %#v, want none", provider.deliveredEvents)
+			}
+		})
+	}
+}
+
 type workflowEventAuthorizationProvider struct {
-	err error
+	err          error
+	errResource  string
+	denyResource string
 	core.AuthorizationProvider
 }
 
-func (p workflowEventAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	if p.err != nil {
+func (p workflowEventAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	resourceType := req.GetResource().GetType()
+	if p.err != nil && (p.errResource == "" || p.errResource == resourceType) {
 		return nil, p.err
+	}
+	if p.denyResource != "" && p.denyResource == resourceType {
+		return &proto.CheckAccessResponse{Allowed: false}, nil
 	}
 	return &proto.CheckAccessResponse{Allowed: true}, nil
 }
