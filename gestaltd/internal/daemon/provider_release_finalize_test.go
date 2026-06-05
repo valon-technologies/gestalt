@@ -215,6 +215,122 @@ paths:
 	}
 }
 
+func TestProviderReleaseMetadataMergesExecutableStaticAndAPICatalogs(t *testing.T) {
+	t.Parallel()
+
+	metadata, _, catalogData, err := buildProviderReleaseBundleForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/release-test
+version: 1.0.0
+displayName: Mixed App
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    rest:
+      connection: default
+      baseUrl: https://api.example.test
+      operations:
+        - name: createThing
+          method: POST
+          path: /things
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+		"catalog.yaml": `name: test
+operations:
+  - id: pluginOp
+    method: POST
+    description: Static plugin operation
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
+		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
+	}
+	cat, err := providerrelease.DecodeCatalog(catalogData)
+	if err != nil {
+		t.Fatalf("DecodeCatalog: %v", err)
+	}
+	if _, ok := catalog.OperationByID(cat, "pluginOp"); !ok {
+		t.Fatalf("catalog operations = %#v, want pluginOp", cat.Operations)
+	}
+	if _, ok := catalog.OperationByID(cat, "createThing"); !ok {
+		t.Fatalf("catalog operations = %#v, want createThing", cat.Operations)
+	}
+}
+
+func TestProviderReleaseMetadataMergesExecutableStaticAndOpenAPICatalogs(t *testing.T) {
+	t.Parallel()
+
+	metadata, _, catalogData, err := buildProviderReleaseBundleForRawManifest(t, `kind: app
+source: github.com/testowner/apps/catalog/release-test
+version: 1.0.0
+displayName: Mixed OpenAPI App
+artifacts:
+  - os: test
+    arch: test
+    path: provider
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+entrypoint:
+  artifactPath: provider
+spec:
+  surfaces:
+    openapi:
+      connection: default
+      document: openapi.yaml
+  connections:
+    default:
+      auth:
+        type: none
+`, map[string]string{
+		"provider": "",
+		"catalog.yaml": `name: test
+operations:
+  - id: pluginOp
+    method: POST
+    description: Static plugin operation
+`,
+		"openapi.yaml": `openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /teams:
+    get:
+      operationId: getTeams
+      responses:
+        "200":
+          description: ok
+`,
+	})
+	if err != nil {
+		t.Fatalf("buildProviderReleaseMetadata: %v", err)
+	}
+	if metadata.ValidationCatalogSHA256 == "" || len(catalogData) == 0 {
+		t.Fatalf("catalog sidecar missing: sha=%q bytes=%d", metadata.ValidationCatalogSHA256, len(catalogData))
+	}
+	cat, err := providerrelease.DecodeCatalog(catalogData)
+	if err != nil {
+		t.Fatalf("DecodeCatalog: %v", err)
+	}
+	if _, ok := catalog.OperationByID(cat, "pluginOp"); !ok {
+		t.Fatalf("catalog operations = %#v, want pluginOp", cat.Operations)
+	}
+	if _, ok := catalog.OperationByID(cat, "getTeams"); !ok {
+		t.Fatalf("catalog operations = %#v, want getTeams", cat.Operations)
+	}
+}
+
 func TestProviderReleaseMetadataBuildsGraphQLMCPCatalogSidecar(t *testing.T) {
 	t.Parallel()
 
@@ -296,6 +412,43 @@ func buildProviderReleaseBundleForManifest(t *testing.T, manifest *providermanif
 		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
+	}
+	outputDir := t.TempDir()
+	archive := filepath.Join(outputDir, "gestalt-app-release-test_v1.0.0.tar.gz")
+	if err := providerpkg.CreatePackageFromDir(packageDir, archive); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	archiveSHA, err := providerpkg.ArchiveDigest(archive)
+	if err != nil {
+		t.Fatalf("ArchiveDigest: %v", err)
+	}
+
+	return buildProviderReleaseMetadataAndSidecars(
+		manifest,
+		"1.0.0",
+		[]releaseArchive{{Path: archive, SHA256: archiveSHA, Target: providerpkg.CurrentPlatformString()}},
+	)
+}
+
+func buildProviderReleaseBundleForRawManifest(t *testing.T, rawManifest string, files map[string]string) (*providerrelease.Metadata, []byte, []byte, error) {
+	t.Helper()
+
+	packageDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(packageDir, "manifest.yaml"), []byte(rawManifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+	for name, contents := range files {
+		path := filepath.Join(packageDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("create %s: %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	_, manifest, _, err := providerpkg.LoadManifestFromPath(packageDir)
+	if err != nil {
+		t.Fatalf("LoadManifestFromPath: %v", err)
 	}
 	outputDir := t.TempDir()
 	archive := filepath.Join(outputDir, "gestalt-app-release-test_v1.0.0.tar.gz")

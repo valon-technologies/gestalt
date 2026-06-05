@@ -1083,7 +1083,7 @@ apps:
 	if entry.SourceRef.ResolvedGestaltRef != gestaltRef {
 		t.Fatalf("resolvedGestaltRef = %q, want %q", entry.SourceRef.ResolvedGestaltRef, gestaltRef)
 	}
-	if entry.Source != srv.URL+"/snapshots/github.com/acme/providers/"+ref+"/apps/alpha/provider-release.yaml" {
+	if entry.Source != srv.URL+"/snapshots/github.com/acme/providers/"+ref+"/apps/alpha/provider-release.yaml?sourceRef="+ref {
 		t.Fatalf("source = %q", entry.Source)
 	}
 	if entry.Version != version {
