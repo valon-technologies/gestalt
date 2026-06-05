@@ -1,9 +1,15 @@
 package operator
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,10 +26,10 @@ func TestMaterializedCachePreservesEmptyDirectories(t *testing.T) {
 
 	req := materializedCacheUIRequest(dir, "alpha", "dest")
 	cache := materializedCache{dir: filepath.Join(dir, "cache")}
-	if _, _, _, err := cache.Put(req, source); err != nil {
+	if _, _, _, err := cache.Put(context.Background(), req, source); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	restore, err := cache.Restore(req)
+	restore, err := cache.Restore(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
@@ -46,12 +52,12 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 	source := writeMaterializedCacheUISource(t, dir, "source")
 	cache := materializedCache{dir: filepath.Join(dir, "cache")}
 	req := materializedCacheUIRequest(dir, "alpha", "dest-alpha")
-	if _, _, _, err := cache.Put(req, source); err != nil {
+	if _, _, _, err := cache.Put(context.Background(), req, source); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
 	sharedReq := materializedCacheUIRequest(dir, "beta", "dest-beta")
-	restore, err := cache.Restore(sharedReq)
+	restore, err := cache.Restore(context.Background(), sharedReq)
 	if err != nil {
 		t.Fatalf("Restore shared archive: %v", err)
 	}
@@ -59,6 +65,68 @@ func TestMaterializedCacheRestoresSharedArchiveForDifferentSubjects(t *testing.T
 		t.Fatalf("shared Restore result = %#v, want hit", restore)
 	}
 	defer func() { _ = restore.cleanup() }()
+}
+
+func TestMaterializedCacheRestoresRemoteEntry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	remote := newFakeMaterializedCacheRemote()
+	source := writeMaterializedCacheUISource(t, dir, "source")
+	req := materializedCacheUIRequest(dir, "alpha", "dest")
+
+	if _, _, _, err := (materializedCache{dir: filepath.Join(dir, "cold"), remote: remote}).Put(context.Background(), req, source); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if remote.puts != 1 {
+		t.Fatalf("remote puts = %d, want 1", remote.puts)
+	}
+
+	restore, err := (materializedCache{dir: filepath.Join(dir, "warm"), remote: remote}).Restore(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Restore remote entry: %v", err)
+	}
+	if restore == nil || restore.Result != materializedCacheHit {
+		t.Fatalf("remote Restore result = %#v, want hit", restore)
+	}
+	defer func() { _ = restore.cleanup() }()
+	if err := restore.commit(); err != nil {
+		t.Fatalf("commit remote restore: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(req.DestinationDir, "manifest.yaml")); err != nil {
+		t.Fatalf("restored manifest stat: %v", err)
+	}
+
+	remote.getErr = errors.New("remote cache unavailable")
+	fallback, err := (materializedCache{dir: filepath.Join(dir, "fallback"), remote: remote}).Restore(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Restore remote read error: %v", err)
+	}
+	if fallback == nil || fallback.Result != materializedCacheMiss {
+		t.Fatalf("remote read error Restore result = %#v, want miss", fallback)
+	}
+}
+
+func TestMaterializedCacheTreatsUnsafeRemoteArchiveAsInvalid(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	remote := newFakeMaterializedCacheRemote()
+	req := materializedCacheUIRequest(dir, "alpha", "dest")
+	key, eligible, err := materializedCacheKeyForRequest(req)
+	if err != nil || !eligible {
+		t.Fatalf("materializedCacheKeyForRequest eligible=%t err=%v", eligible, err)
+	}
+	remote.objects[key.Display] = materializedCacheUnsafeArchive(t)
+
+	cache := materializedCache{dir: filepath.Join(dir, "cache"), remote: remote}
+	restore, err := cache.Restore(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Restore unsafe remote archive error = %v, want repairable invalid result", err)
+	}
+	if restore == nil || restore.Result != materializedCacheInvalid {
+		t.Fatalf("Restore unsafe remote archive = %#v, want invalid", restore)
+	}
 }
 
 func writeMaterializedCacheUISource(t *testing.T, dir, name string) string {
@@ -135,7 +203,7 @@ func TestMaterializedCacheTreatsUnsafeMetadataAsInvalid(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(entryDir, materializedCacheEntryFile), data, 0o644); err != nil {
 		t.Fatalf("write entry: %v", err)
 	}
-	restore, err := cache.Restore(req)
+	restore, err := cache.Restore(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Restore unsafe entry error = %v, want repairable invalid result", err)
 	}
@@ -147,4 +215,60 @@ func TestMaterializedCacheTreatsUnsafeMetadataAsInvalid(t *testing.T) {
 func materializedCacheTestSHA256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+type fakeMaterializedCacheRemote struct {
+	objects map[string][]byte
+	gets    int
+	puts    int
+	getErr  error
+}
+
+func newFakeMaterializedCacheRemote() *fakeMaterializedCacheRemote {
+	return &fakeMaterializedCacheRemote{objects: map[string][]byte{}}
+}
+
+func (r *fakeMaterializedCacheRemote) Get(_ context.Context, key materializedCacheKey) (io.ReadCloser, bool, error) {
+	r.gets++
+	if r.getErr != nil {
+		return nil, false, r.getErr
+	}
+	data := r.objects[key.Display]
+	if data == nil {
+		return nil, false, nil
+	}
+	return io.NopCloser(bytes.NewReader(data)), true, nil
+}
+
+func (r *fakeMaterializedCacheRemote) Put(_ context.Context, key materializedCacheKey, archivePath string) error {
+	r.puts++
+	data, err := os.ReadFile(archivePath)
+	if err != nil {
+		return err
+	}
+	r.objects[key.Display] = data
+	return nil
+}
+
+func materializedCacheUnsafeArchive(t *testing.T) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     materializedCacheRootDir + "/link",
+		Typeflag: tar.TypeSymlink,
+		Linkname: materializedCacheEntryFile,
+		Mode:     0o777,
+	}); err != nil {
+		t.Fatalf("write unsafe archive header: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close unsafe archive tar: %v", err)
+	}
+	if err := gzw.Close(); err != nil {
+		t.Fatalf("close unsafe archive gzip: %v", err)
+	}
+	return buf.Bytes()
 }
