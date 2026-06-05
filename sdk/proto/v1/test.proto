@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+// HelloWorldRequest carries no input fields. It exists to exercise the
+// provider-kind-specific request/response path.
+message HelloWorldRequest {}
+
+// HelloWorldResponse returns the fixed test-provider message.
+message HelloWorldResponse {
+  string message = 1;
+}
+
+// TestProvider models a minimal provider-kind-specific protocol used to verify
+// new provider kind registration and lifecycle wiring.
+service TestProvider {
+  rpc HelloWorld(HelloWorldRequest) returns (HelloWorldResponse);
+}
