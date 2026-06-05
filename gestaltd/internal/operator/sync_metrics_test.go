@@ -76,11 +76,27 @@ func TestSyncMetricsRecorderCountsCacheLookupAndPutSeparately(t *testing.T) {
 		SourceKind: syncArtifactSourceRemoteArchive,
 		Result:     syncCacheResultMiss,
 		Put:        true,
+		PutTimings: materializedCachePutTimings{
+			LocalInspect:          1100 * time.Millisecond,
+			LocalWrite:            2200 * time.Millisecond,
+			RemoteExists:          300 * time.Millisecond,
+			RemoteArchive:         4400 * time.Millisecond,
+			RemoteUpload:          5500 * time.Millisecond,
+			RemoteSkippedExisting: true,
+		},
 	})
 
 	cache := recorder.Snapshot().Cache
 	if cache.Eligible != 1 || cache.Misses != 1 || cache.Put.Successes != 1 {
 		t.Fatalf("cache counts = eligible %d, misses %d, put successes %d; want 1, 1, 1", cache.Eligible, cache.Misses, cache.Put.Successes)
+	}
+	if cache.Put.LocalInspectSeconds != 1.1 ||
+		cache.Put.LocalWriteSeconds != 2.2 ||
+		cache.Put.RemoteExistsSeconds != 0.3 ||
+		cache.Put.RemoteArchiveSeconds != 4.4 ||
+		cache.Put.RemoteUploadSeconds != 5.5 ||
+		cache.Put.RemoteSkippedExisting != 1 {
+		t.Fatalf("cache put timings = %+v, want aggregated timing fields", cache.Put)
 	}
 	if len(cache.Entries) != 2 {
 		t.Fatalf("cache entries len = %d, want 2", len(cache.Entries))

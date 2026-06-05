@@ -5175,19 +5175,20 @@ func (l *Lifecycle) materializeLockedArchive(ctx context.Context, paths lifecycl
 	}
 	if cache.dir != "" && cacheEligible {
 		cacheStart := time.Now()
-		key, files, bytes, putErr := cache.Put(ctx, cacheReq, installed.Root)
+		putResult, putErr := cache.Put(ctx, cacheReq, installed.Root)
 		recordSyncCacheEntry(paths, syncCacheMetricsEvent{
 			Subject:    subject,
 			SourceKind: cacheReq.SourceKind,
-			Key:        key.Display,
-			SHA256:     key.ArchiveSHA256,
+			Key:        putResult.Key.Display,
+			SHA256:     putResult.Key.ArchiveSHA256,
 			Platform:   platform,
 			Result:     cacheResult,
 			Put:        true,
 			PutFailed:  putErr != nil,
-			Bytes:      bytes,
-			Files:      files,
+			Bytes:      putResult.Bytes,
+			Files:      putResult.Files,
 			Duration:   time.Since(cacheStart),
+			PutTimings: putResult.Timings,
 		})
 	}
 	activateStart := time.Now()

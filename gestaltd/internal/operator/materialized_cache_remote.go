@@ -19,6 +19,7 @@ const materializedCacheRemoteScope = "https://www.googleapis.com/auth/devstorage
 
 type materializedCacheRemote interface {
 	Get(context.Context, materializedCacheKey) (io.ReadCloser, bool, error)
+	Exists(context.Context, materializedCacheKey) (bool, error)
 	Put(context.Context, materializedCacheKey, string) error
 }
 
@@ -93,6 +94,30 @@ func (r *gcsMaterializedCacheRemote) Get(ctx context.Context, key materializedCa
 	return resp.Body, true, nil
 }
 
+func (r *gcsMaterializedCacheRemote) Exists(ctx context.Context, key materializedCacheKey) (bool, error) {
+	object := r.objectName(key)
+	client, err := r.httpClient(ctx)
+	if err != nil {
+		return false, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.metadataURL(object), nil)
+	if err != nil {
+		return false, fmt.Errorf("build materialized cache remote metadata request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("read materialized cache remote object metadata %s: %w", object, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return false, gcsMaterializedCacheStatusError("read metadata for", object, resp)
+	}
+	return true, nil
+}
+
 func (r *gcsMaterializedCacheRemote) Put(ctx context.Context, key materializedCacheKey, archivePath string) error {
 	object := r.objectName(key)
 	client, err := r.httpClient(ctx)
@@ -109,7 +134,7 @@ func (r *gcsMaterializedCacheRemote) Put(ctx context.Context, key materializedCa
 	if err != nil {
 		return fmt.Errorf("build materialized cache remote upload request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/gzip")
+	req.Header.Set("Content-Type", "application/x-tar")
 	if info, err := file.Stat(); err == nil {
 		req.ContentLength = info.Size()
 	}
@@ -140,13 +165,17 @@ func (r *gcsMaterializedCacheRemote) httpClient(ctx context.Context) (*http.Clie
 
 func (r *gcsMaterializedCacheRemote) objectName(key materializedCacheKey) string {
 	if r.prefix == "" {
-		return key.Display + ".tar.gz"
+		return key.Display + ".tar"
 	}
-	return path.Join(r.prefix, key.Display+".tar.gz")
+	return path.Join(r.prefix, key.Display+".tar")
 }
 
 func (r *gcsMaterializedCacheRemote) downloadURL(object string) string {
-	return "https://storage.googleapis.com/storage/v1/b/" + url.PathEscape(r.bucket) + "/o/" + escapeGCSPathSegment(object) + "?alt=media"
+	return r.metadataURL(object) + "?alt=media"
+}
+
+func (r *gcsMaterializedCacheRemote) metadataURL(object string) string {
+	return "https://storage.googleapis.com/storage/v1/b/" + url.PathEscape(r.bucket) + "/o/" + escapeGCSPathSegment(object)
 }
 
 func (r *gcsMaterializedCacheRemote) uploadURL(object string) string {

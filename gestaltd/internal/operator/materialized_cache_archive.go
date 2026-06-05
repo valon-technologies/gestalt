@@ -2,7 +2,6 @@ package operator
 
 import (
 	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -19,11 +18,7 @@ func writeMaterializedCacheEntryArchive(entryDir, outputPath string) error {
 	}
 	defer func() { _ = out.Close() }()
 
-	gzw := gzip.NewWriter(out)
-	gzw.ModTime = time.Unix(0, 0)
-	defer func() { _ = gzw.Close() }()
-
-	tw := tar.NewWriter(gzw)
+	tw := tar.NewWriter(out)
 	defer func() { _ = tw.Close() }()
 
 	if err := filepath.WalkDir(entryDir, func(absPath string, d os.DirEntry, err error) error {
@@ -87,9 +82,6 @@ func writeMaterializedCacheEntryArchive(entryDir, outputPath string) error {
 	if err := tw.Close(); err != nil {
 		return fmt.Errorf("close materialized cache tar stream: %w", err)
 	}
-	if err := gzw.Close(); err != nil {
-		return fmt.Errorf("close materialized cache gzip stream: %w", err)
-	}
 	if err := out.Close(); err != nil {
 		return fmt.Errorf("close materialized cache archive: %w", err)
 	}
@@ -97,13 +89,7 @@ func writeMaterializedCacheEntryArchive(entryDir, outputPath string) error {
 }
 
 func extractMaterializedCacheEntryArchive(reader io.Reader, destDir string) error {
-	gzr, err := gzip.NewReader(reader)
-	if err != nil {
-		return fmt.Errorf("open materialized cache gzip stream: %w", err)
-	}
-	defer func() { _ = gzr.Close() }()
-
-	tr := tar.NewReader(gzr)
+	tr := tar.NewReader(reader)
 	seen := map[string]struct{}{}
 	for {
 		hdr, err := tr.Next()
@@ -159,9 +145,6 @@ func extractMaterializedCacheEntryArchive(reader io.Reader, destDir string) erro
 	}
 	if _, ok := seen[materializedCacheEntryFile]; !ok {
 		return fmt.Errorf("materialized cache archive missing %s", materializedCacheEntryFile)
-	}
-	if err := gzr.Close(); err != nil {
-		return fmt.Errorf("close materialized cache gzip stream: %w", err)
 	}
 	return nil
 }

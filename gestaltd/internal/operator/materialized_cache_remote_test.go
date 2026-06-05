@@ -19,13 +19,21 @@ func TestGCSMaterializedCacheRemoteHTTPContracts(t *testing.T) {
 		t.Fatalf("materializedCacheKeyForRequest eligible=%t err=%v", eligible, err)
 	}
 
-	objectName := "prefix/" + key.Display + ".tar.gz"
+	objectName := "prefix/" + key.Display + ".tar"
 	var sawDownload bool
+	var sawExists bool
 	var sawUpload bool
 	remote := &gcsMaterializedCacheRemote{
 		client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			switch r.Method {
 			case http.MethodGet:
+				if r.URL.Query().Get("alt") == "" {
+					sawExists = true
+					if got := r.URL.EscapedPath(); got != "/storage/v1/b/cache-bucket/o/"+escapeGCSPathSegment(objectName) {
+						t.Fatalf("exists escaped path = %q, want encoded object path", got)
+					}
+					return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(http.NoBody)}, nil
+				}
 				sawDownload = true
 				if got := r.URL.Query().Get("alt"); got != "media" {
 					t.Fatalf("download alt query = %q, want media", got)
@@ -45,8 +53,8 @@ func TestGCSMaterializedCacheRemoteHTTPContracts(t *testing.T) {
 				if got := r.URL.Query().Get("name"); got != objectName {
 					t.Fatalf("upload name = %q, want %q", got, objectName)
 				}
-				if got := r.Header.Get("Content-Type"); got != "application/gzip" {
-					t.Fatalf("upload content type = %q, want application/gzip", got)
+				if got := r.Header.Get("Content-Type"); got != "application/x-tar" {
+					t.Fatalf("upload content type = %q, want application/x-tar", got)
 				}
 				return &http.Response{StatusCode: http.StatusPreconditionFailed, Body: io.NopCloser(http.NoBody)}, nil
 			default:
@@ -65,16 +73,23 @@ func TestGCSMaterializedCacheRemoteHTTPContracts(t *testing.T) {
 	if reader != nil || hit {
 		t.Fatalf("Get hit=%t reader=%v, want 404 miss", hit, reader)
 	}
+	exists, err := remote.Exists(context.Background(), key)
+	if err != nil {
+		t.Fatalf("Exists: %v", err)
+	}
+	if exists {
+		t.Fatal("Exists = true, want 404 miss")
+	}
 
-	archivePath := filepath.Join(dir, "entry.tar.gz")
+	archivePath := filepath.Join(dir, "entry.tar")
 	if err := os.WriteFile(archivePath, []byte("archive"), 0o644); err != nil {
 		t.Fatalf("write archive: %v", err)
 	}
 	if err := remote.Put(context.Background(), key, archivePath); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	if !sawDownload || !sawUpload {
-		t.Fatalf("saw download/upload = %t/%t, want both", sawDownload, sawUpload)
+	if !sawDownload || !sawExists || !sawUpload {
+		t.Fatalf("saw download/exists/upload = %t/%t/%t, want all", sawDownload, sawExists, sawUpload)
 	}
 }
 

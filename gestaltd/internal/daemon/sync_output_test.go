@@ -51,7 +51,15 @@ func TestWriteSyncJSON(t *testing.T) {
 			Mode:          "materialized",
 			BucketVersion: "materialized/v1",
 			Hits:          1,
-			Put:           operator.SyncMetricsCachePut{Successes: 1},
+			Put: operator.SyncMetricsCachePut{
+				Successes:             1,
+				LocalInspectSeconds:   1.1,
+				LocalWriteSeconds:     2.2,
+				RemoteExistsSeconds:   0.3,
+				RemoteArchiveSeconds:  4.4,
+				RemoteUploadSeconds:   5.5,
+				RemoteSkippedExisting: 1,
+			},
 			Entries: []operator.SyncMetricsCacheEntry{{
 				Subject:         "provider \"alpha\"",
 				SourceKind:      "remote_archive",
@@ -129,6 +137,11 @@ func TestWriteSyncJSON(t *testing.T) {
 	if !ok || put["successes"] == nil || put["failures"] == nil {
 		t.Fatalf("cache.put missing successes/failures: %#v", cache["put"])
 	}
+	for _, key := range []string{"local_inspect_seconds", "local_write_seconds", "remote_exists_seconds", "remote_archive_seconds", "remote_upload_seconds", "remote_skipped_existing"} {
+		if _, ok := put[key]; !ok {
+			t.Fatalf("cache.put.%s missing from JSON: %#v", key, put)
+		}
+	}
 }
 
 func TestWriteSyncJSONIncludesEmptyMetricArrays(t *testing.T) {
@@ -180,7 +193,15 @@ func TestWriteSyncText(t *testing.T) {
 			Enabled:    true,
 			Dir:        "/cache",
 			Hits:       1,
-			Put:        operator.SyncMetricsCachePut{Successes: 1},
+			Put: operator.SyncMetricsCachePut{
+				Successes:             1,
+				LocalInspectSeconds:   1.1,
+				LocalWriteSeconds:     2.2,
+				RemoteExistsSeconds:   0.3,
+				RemoteArchiveSeconds:  4.4,
+				RemoteUploadSeconds:   5.5,
+				RemoteSkippedExisting: 1,
+			},
 		},
 		Archives: operator.SyncMetricsArchives{
 			Requests: 3,
@@ -201,6 +222,7 @@ func TestWriteSyncText(t *testing.T) {
 		"Loaded 2 prepared artifacts from lock/config.",
 		"Fetched 3 archives: 2 downloads.",
 		"Cache:",
+		"Cache put timing: inspect 1.100s, local write 2.200s, remote exists 0.300s, archive 4.400s, upload 5.500s, skipped existing 1.",
 		"Downloads: 2 archives",
 		"Prepared output: 4 files",
 		"Prepared artifacts in /prepared in 1.234s.",
