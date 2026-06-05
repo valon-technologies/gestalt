@@ -126,7 +126,8 @@ func workflowAgentTurnToCore(agent *WorkflowStepAgentConfig) *coreworkflow.Agent
 		})
 	}
 	tools := make([]coreagent.ToolRef, 0, len(agent.Tools))
-	for _, tool := range agent.Tools {
+	for i := range agent.Tools {
+		tool := &agent.Tools[i]
 		tools = append(tools, coreagent.ToolRef{
 			System:         strings.TrimSpace(tool.System),
 			App:            strings.TrimSpace(tool.App),
