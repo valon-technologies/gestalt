@@ -656,28 +656,6 @@ pub mod app_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.App", "InvokeGraphQL"));
             self.inner.unary(req, path, codec).await
         }
-        ///
-        pub async fn exchange_invocation_token(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ExchangeInvocationTokenRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ExchangeInvocationTokenResponse>,
-            tonic::Status,
-        > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.App/ExchangeInvocationToken",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.App",
-                "ExchangeInvocationToken",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
     }
 }
 /// Generated server implementations.
@@ -703,14 +681,6 @@ pub mod app_server {
             &self,
             request: tonic::Request<super::AppInvokeGraphQlRequest>,
         ) -> std::result::Result<tonic::Response<super::OperationResult>, tonic::Status>;
-        ///
-        async fn exchange_invocation_token(
-            &self,
-            request: tonic::Request<super::ExchangeInvocationTokenRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ExchangeInvocationTokenResponse>,
-            tonic::Status,
-        >;
     }
     ///
     #[derive(Debug)]
@@ -846,47 +816,6 @@ pub mod app_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = InvokeGraphQLSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.App/ExchangeInvocationToken" => {
-                    #[allow(non_camel_case_types)]
-                    struct ExchangeInvocationTokenSvc<T: App>(pub Arc<T>);
-                    impl<T: App> tonic::server::UnaryService<super::ExchangeInvocationTokenRequest>
-                        for ExchangeInvocationTokenSvc<T>
-                    {
-                        type Response = super::ExchangeInvocationTokenResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ExchangeInvocationTokenRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as App>::exchange_invocation_token(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ExchangeInvocationTokenSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

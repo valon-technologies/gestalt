@@ -20,7 +20,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ManagerService = workflowmanager.Service
@@ -31,16 +30,9 @@ type ProviderServer struct {
 	appName       string
 	manager       ManagerService
 	authorization core.AuthorizationProvider
-	tokens        *appaccessservice.InvocationTokenManager
 }
 
 type ProviderServerOption func(*ProviderServer)
-
-func WithInvocationTokenManager(tokens *appaccessservice.InvocationTokenManager) ProviderServerOption {
-	return func(s *ProviderServer) {
-		s.tokens = tokens
-	}
-}
 
 func NewProviderServer(appName string, manager ManagerService, authorization core.AuthorizationProvider, opts ...ProviderServerOption) *ProviderServer {
 	s := &ProviderServer{
@@ -58,53 +50,26 @@ func NewProviderServer(appName string, manager ManagerService, authorization cor
 
 type workflowProviderAuthRequest interface {
 	GetContext() *proto.RequestContext
-	GetInvocationToken() string
-}
-
-type workflowProviderWorkflowRequest interface {
-	GetWorkflow() *structpb.Struct
 }
 
 type workflowManagerAuthContext struct {
-	request         appaccessservice.ProviderRequestContext
-	token           appaccessservice.TokenContext
-	invocationToken string
-	legacy          bool
+	request appaccessservice.ProviderRequestContext
 }
 
 func (c workflowManagerAuthContext) Principal() *principal.Principal {
-	if c.legacy {
-		return c.token.Principal()
-	}
 	return c.request.Principal()
 }
 
 func (c workflowManagerAuthContext) Caller() invocation.CallerProvider {
-	if c.legacy {
-		return c.token.CallerProvider()
-	}
 	return invocation.CallerProvider{Kind: c.request.CallerKind(), Name: c.request.CallerName()}
 }
 
 func (c workflowManagerAuthContext) CallerName() string {
-	if c.legacy {
-		return c.token.CallerApp()
-	}
 	return c.request.CallerName()
 }
 
 func (c workflowManagerAuthContext) Restore(ctx context.Context) context.Context {
-	if c.legacy {
-		if c.request.CallerName() != "" {
-			ctx = c.request.Restore(ctx, "")
-		}
-		return appaccessservice.RestoreTokenContext(ctx, c.token, "")
-	}
-	ctx = c.request.Restore(ctx, "")
-	if token := strings.TrimSpace(c.invocationToken); token != "" {
-		ctx = appaccessservice.WithInvocationToken(ctx, token)
-	}
-	return ctx
+	return c.request.Restore(ctx, "")
 }
 
 func (s *ProviderServer) managerContext(ctx context.Context, authCtx workflowManagerAuthContext) context.Context {
@@ -548,61 +513,14 @@ func (s *ProviderServer) DeliverEvent(ctx context.Context, req *proto.DeliverWor
 }
 
 func (s *ProviderServer) requestContext(req workflowProviderAuthRequest) (workflowManagerAuthContext, error) {
-	if req.GetContext() != nil {
-		invocationToken := strings.TrimSpace(req.GetInvocationToken())
-		if invocationToken != "" {
-			if s == nil || s.tokens == nil {
-				return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-			}
-			tokenCtx, err := s.tokens.ResolveToken(invocationToken, "")
-			if err != nil {
-				return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, err.Error())
-			}
-			if tokenCtx.CallerApp() == "" {
-				return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
-			}
-			if workflowReq, ok := req.(workflowProviderWorkflowRequest); ok {
-				tokenCtx = appaccessservice.TokenContextWithWorkflow(tokenCtx, workflowReq.GetWorkflow())
-			}
-			out := workflowManagerAuthContext{
-				token:           tokenCtx,
-				invocationToken: invocationToken,
-				legacy:          true,
-			}
-			if authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.appName); err == nil {
-				out.request = authCtx
-			}
-			return out, nil
-		}
-		authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.appName)
-		if err != nil {
-			return workflowManagerAuthContext{}, err
-		}
-		return workflowManagerAuthContext{request: authCtx}, nil
-	}
-	if s == nil || s.tokens == nil {
-		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-	}
-	tokenCtx, err := s.tokens.ResolveToken(req.GetInvocationToken(), "")
+	authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.appName)
 	if err != nil {
-		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, err.Error())
+		return workflowManagerAuthContext{}, err
 	}
-	if tokenCtx.CallerApp() == "" {
-		return workflowManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
-	}
-	if workflowReq, ok := req.(workflowProviderWorkflowRequest); ok {
-		tokenCtx = appaccessservice.TokenContextWithWorkflow(tokenCtx, workflowReq.GetWorkflow())
-	}
-	return workflowManagerAuthContext{token: tokenCtx, legacy: true}, nil
+	return workflowManagerAuthContext{request: authCtx}, nil
 }
 
 func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx workflowManagerAuthContext, operation string) error {
-	if authCtx.legacy {
-		if authCtx.token.AllowsWorkflowManagerOperation(operation) {
-			return nil
-		}
-		return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, authCtx.CallerName())
-	}
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow manager operation")
 	}

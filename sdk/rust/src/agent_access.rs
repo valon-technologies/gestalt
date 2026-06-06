@@ -1,5 +1,4 @@
 use hyper_util::rt::TokioIo;
-use prost_types::Struct;
 use tokio::net::UnixStream;
 use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
@@ -32,9 +31,6 @@ const AGENT_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`Agent`].
 pub enum AgentError {
-    /// The invocation token was empty.
-    #[error("agent: invocation token is not available")]
-    MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
@@ -47,57 +43,6 @@ pub enum AgentError {
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
-}
-
-/// Source used to connect an agent host-service client.
-pub trait AgentConnectionSource {
-    /// Legacy invocation token to forward, when available.
-    fn agent_invocation_token(&self) -> &str;
-
-    /// Request context to forward on new host-service calls.
-    fn agent_request_context(&self) -> Option<pb::RequestContext> {
-        None
-    }
-
-    /// Legacy workflow context to forward with invocation-token calls.
-    fn agent_workflow(&self) -> crate::Result<Option<Struct>> {
-        Ok(None)
-    }
-
-    /// Whether an empty invocation token should fail connection.
-    fn agent_requires_invocation_token(&self) -> bool {
-        true
-    }
-}
-
-impl AgentConnectionSource for &Request {
-    fn agent_invocation_token(&self) -> &str {
-        self.invocation_token()
-    }
-
-    fn agent_request_context(&self) -> Option<pb::RequestContext> {
-        current_request_context()
-    }
-
-    fn agent_workflow(&self) -> crate::Result<Option<Struct>> {
-        if self.workflow.is_empty() {
-            return Ok(None);
-        }
-        protocol::struct_from_json(serde_json::Value::Object(self.workflow.clone())).map(Some)
-    }
-
-    fn agent_requires_invocation_token(&self) -> bool {
-        false
-    }
-}
-
-impl<T> AgentConnectionSource for T
-where
-    T: AsRef<str>,
-{
-    fn agent_invocation_token(&self) -> &str {
-        self.as_ref()
-    }
 }
 
 /// Input for creating an agent session.
@@ -434,20 +379,13 @@ pub(crate) fn new_agent_resolve_interaction_request(
 /// Client for managing agent sessions, turns, events, and interactions.
 pub struct Agent {
     client: ProtoAgentProviderClient<AgentTransport>,
-    invocation_token: String,
-    workflow: Option<Struct>,
     context: Option<pb::RequestContext>,
 }
 
 impl Agent {
-    /// Connects to the agent service with request context or a legacy invocation token.
-    pub async fn connect(
-        source: impl AgentConnectionSource,
-    ) -> std::result::Result<Self, AgentError> {
-        let invocation_token = source.agent_invocation_token().trim().to_owned();
-        if invocation_token.is_empty() && source.agent_requires_invocation_token() {
-            return Err(AgentError::MissingInvocationToken);
-        }
+    /// Connects to the agent service with host request context from Gestalt.
+    pub async fn connect(_request: &Request) -> std::result::Result<Self, AgentError> {
+        let context = current_request_context();
         let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| AgentError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
@@ -478,9 +416,7 @@ impl Agent {
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),
-            invocation_token,
-            workflow: source.agent_workflow()?,
-            context: source.agent_request_context(),
+            context,
         })
     }
 
@@ -637,35 +573,19 @@ impl Agent {
     }
 
     fn attach_context<T: HasAgentRequestContext>(&self, request: &mut T) {
-        request.set_auth(
-            self.invocation_token.clone(),
-            self.workflow.clone(),
-            self.context.clone(),
-        );
+        request.set_context(self.context.clone());
     }
 }
 
 trait HasAgentRequestContext {
-    fn set_auth(
-        &mut self,
-        invocation_token: String,
-        workflow: Option<Struct>,
-        context: Option<pb::RequestContext>,
-    );
+    fn set_context(&mut self, context: Option<pb::RequestContext>);
 }
 
 macro_rules! impl_agent_request_context {
     ($($ty:ty),+ $(,)?) => {
         $(
             impl HasAgentRequestContext for $ty {
-                fn set_auth(
-                    &mut self,
-                    invocation_token: String,
-                    workflow: Option<Struct>,
-                    context: Option<pb::RequestContext>,
-                ) {
-                    self.invocation_token = invocation_token;
-                    self.workflow = workflow;
+                fn set_context(&mut self, context: Option<pb::RequestContext>) {
                     self.context = context;
                 }
             }

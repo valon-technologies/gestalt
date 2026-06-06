@@ -278,7 +278,6 @@ export interface CreateAgentProviderSessionRequest {
   metadata?: JsonObjectInput | undefined;
   createdBySubjectId?: string | undefined;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
@@ -287,14 +286,12 @@ export interface CreateAgentProviderSessionRequest {
 export interface GetAgentProviderSessionRequest {
   sessionId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderSessionsRequest {
   providerName?: string | undefined;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
   sessionIds: readonly string[];
   state: AgentSessionState;
@@ -312,7 +309,6 @@ export interface UpdateAgentProviderSessionRequest {
   state: AgentSessionState;
   metadata?: JsonObjectInput | undefined;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -371,8 +367,6 @@ export interface CreateAgentProviderTurnRequest {
   toolSource: AgentToolSourceMode;
   subject?: Subject | undefined;
   modelOptions?: JsonObjectInput | undefined;
-  runGrant: string;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
   timeoutSeconds: number;
 }
@@ -391,14 +385,12 @@ export type AgentOutput =
 export interface GetAgentProviderTurnRequest {
   turnId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderTurnsRequest {
   sessionId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
   turnIds: readonly string[];
   status: AgentExecutionStatus;
@@ -414,7 +406,6 @@ export interface CancelAgentProviderTurnRequest {
   turnId: string;
   reason: string;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -435,7 +426,6 @@ export interface ListAgentProviderTurnEventsRequest {
   afterSeq: bigint;
   limit: number;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -460,14 +450,12 @@ export interface AgentInteraction {
 export interface GetAgentProviderInteractionRequest {
   interactionId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderInteractionsRequest {
   turnId: string;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -480,7 +468,6 @@ export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
   subject?: Subject | undefined;
-  invocationToken: string;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -493,7 +480,6 @@ export interface ExecuteAgentToolRequest {
   toolId: string;
   arguments?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
-  runGrant?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -528,7 +514,6 @@ export interface ListAgentToolsRequest {
   pageSize?: number | undefined;
   pageToken?: string | undefined;
   query?: string | undefined;
-  runGrant?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -542,7 +527,6 @@ export interface ResolveAgentConnectionRequest {
   turnId: string;
   connection: string;
   instance?: string | undefined;
-  runGrant?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -562,7 +546,6 @@ export interface AgentHostListToolsInput {
   pageSize?: number | undefined;
   pageToken?: string | undefined;
   query?: string | undefined;
-  runGrant?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -574,7 +557,6 @@ export interface AgentHostExecuteToolInput {
   toolId: string;
   arguments?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
-  runGrant?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -584,7 +566,6 @@ export interface AgentHostResolveConnectionInput {
   turnId: string;
   connection: string;
   instance?: string | undefined;
-  runGrant?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -833,7 +814,6 @@ function createAgentProviderSessionRequestFromProto(
     metadata: optionalObjectFromStruct(request.metadata),
     createdBySubjectId: request.createdBySubjectId ?? "",
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
     sessionStart: request.sessionStart === undefined ? undefined : {
       hooks: request.sessionStart.hooks.map((hook) => ({
@@ -862,7 +842,6 @@ function getAgentProviderSessionRequestFromProto(
   return {
     sessionId: request.sessionId,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -873,7 +852,6 @@ function listAgentProviderSessionsRequestFromProto(
   return {
     providerName: request.providerName,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
     sessionIds: [...request.sessionIds],
     state: request.state as AgentSessionState,
@@ -891,7 +869,6 @@ function updateAgentProviderSessionRequestFromProto(
     state: request.state as AgentSessionState,
     metadata: optionalObjectFromStruct(request.metadata),
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -929,8 +906,6 @@ function createAgentProviderTurnRequestFromProto(
     toolSource: request.toolSource as AgentToolSourceMode,
     subject: agentRequestSubjectFromProto(request),
     modelOptions: optionalObjectFromStruct(request.modelOptions),
-    runGrant: request.runGrant,
-    invocationToken: request.invocationToken,
     context: request.context,
     timeoutSeconds: request.timeoutSeconds,
   };
@@ -942,7 +917,6 @@ function getAgentProviderTurnRequestFromProto(
   return {
     turnId: request.turnId,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -953,7 +927,6 @@ function listAgentProviderTurnsRequestFromProto(
   return {
     sessionId: request.sessionId,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
     turnIds: [...request.turnIds],
     status: request.status as AgentExecutionStatus,
@@ -969,7 +942,6 @@ function cancelAgentProviderTurnRequestFromProto(
     turnId: request.turnId,
     reason: request.reason,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -982,7 +954,6 @@ function listAgentProviderTurnEventsRequestFromProto(
     afterSeq: request.afterSeq,
     limit: request.limit,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -993,7 +964,6 @@ function getAgentProviderInteractionRequestFromProto(
   return {
     interactionId: request.interactionId,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -1004,7 +974,6 @@ function listAgentProviderInteractionsRequestFromProto(
   return {
     turnId: request.turnId,
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -1017,7 +986,6 @@ function resolveAgentProviderInteractionRequestFromProto(
     interactionId: request.interactionId,
     resolution: optionalObjectFromStruct(request.resolution),
     subject: agentRequestSubjectFromProto(request),
-    invocationToken: request.invocationToken,
     context: request.context,
   };
 }
@@ -1165,7 +1133,6 @@ function executeToolRequestToProto(
     toolId: request.toolId,
     arguments: optionalStruct(request.arguments),
     idempotencyKey: request.idempotencyKey ?? "",
-    runGrant: request.runGrant ?? "",
     context: request.context,
   });
 }
@@ -1186,7 +1153,6 @@ function listToolsRequestToProto(request: ListAgentToolsRequest): ProtoListAgent
     pageSize: request.pageSize ?? 0,
     pageToken: request.pageToken ?? "",
     query: request.query ?? "",
-    runGrant: request.runGrant ?? "",
     context: request.context,
   });
 }
@@ -1228,7 +1194,6 @@ function resolveConnectionRequestToProto(
     turnId: request.turnId,
     connection: request.connection,
     instance: request.instance ?? "",
-    runGrant: request.runGrant ?? "",
     context: request.context,
   });
 }
@@ -1300,7 +1265,6 @@ class AgentHostImpl implements AgentHost {
         toolId: input.toolId,
         arguments: input.arguments,
         idempotencyKey: input.idempotencyKey ?? "",
-        runGrant: input.runGrant ?? "",
         context: input.context,
       },
     );
@@ -1326,7 +1290,6 @@ class AgentHostImpl implements AgentHost {
         pageSize: input.pageSize ?? 0,
         pageToken: input.pageToken ?? "",
         query: input.query ?? "",
-        runGrant: input.runGrant ?? "",
         context: input.context,
       },
     );
@@ -1351,7 +1314,6 @@ class AgentHostImpl implements AgentHost {
         turnId: input.turnId,
         connection: input.connection,
         instance: input.instance ?? "",
-        runGrant: input.runGrant ?? "",
         context: input.context,
       },
     );

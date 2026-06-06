@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
@@ -13,10 +12,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowrunauth"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -30,28 +27,12 @@ type AppServer struct {
 	proto.UnimplementedAppServer
 
 	invoker        invocation.Invoker
-	tokens         *InvocationTokenManager
-	workflowRuns   WorkflowRunResolver
 	authorization  core.AuthorizationProvider
 	callerApp      string
 	accessProfiles AppAccessProfiles
 }
 
-type WorkflowRunResolver = workflowrunauth.Resolver
-
 type AppServerOption func(*AppServer)
-
-func WithInvocationTokenManager(tokens *InvocationTokenManager) AppServerOption {
-	return func(s *AppServer) {
-		s.tokens = tokens
-	}
-}
-
-func WithWorkflowRunResolver(resolver WorkflowRunResolver) AppServerOption {
-	return func(s *AppServer) {
-		s.workflowRuns = resolver
-	}
-}
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOption {
 	return func(s *AppServer) {
@@ -82,31 +63,6 @@ func NewServer(invoker invocation.Invoker, opts ...AppServerOption) proto.AppSer
 	return NewAppServer(invoker, opts...)
 }
 
-func (s *AppServer) ExchangeInvocationToken(_ context.Context, req *proto.ExchangeInvocationTokenRequest) (*proto.ExchangeInvocationTokenResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	grants, err := decodeAppInvocationGrantProto(req.GetGrants())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	if s == nil || s.tokens == nil {
-		return nil, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-	}
-	exchangedToken, err := s.tokens.ExchangeToken(
-		req.GetParentInvocationToken(),
-		grants,
-		time.Duration(req.GetTtlSeconds())*time.Second,
-	)
-	if err != nil {
-		return nil, status.Error(codes.FailedPrecondition, err.Error())
-	}
-
-	return &proto.ExchangeInvocationTokenResponse{
-		InvocationToken: exchangedToken,
-	}, nil
-}
-
 func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -120,7 +76,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	if targetOperation == "" {
 		return nil, status.Error(codes.InvalidArgument, "operation is required")
 	}
-	callCtx, err := s.requestContextForInvoke(ctx, req, targetApp, targetOperation)
+	callCtx, err := s.requestContextForInvoke(ctx, req.GetContext(), targetApp, targetOperation, req.GetCredentialMode())
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +114,7 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 	if document == "" {
 		return nil, status.Error(codes.InvalidArgument, "document is required")
 	}
-	callCtx, err := s.requestContextForSurfaceInvoke(ctx, req, targetApp, "graphql")
+	callCtx, err := s.requestContextForSurfaceInvoke(ctx, req.GetContext(), targetApp, "graphql")
 	if err != nil {
 		return nil, err
 	}
@@ -195,24 +151,9 @@ type requestInvocationContext struct {
 	operationProfile       AppOperationProfile
 	workflow               map[string]any
 	requestContext         *proto.RequestContext
-	legacyTokenContext     *invocationTokenContext
 }
 
-func (s *AppServer) requestContextForInvoke(ctx context.Context, req *proto.AppInvokeRequest, targetApp, targetOperation string) (requestInvocationContext, error) {
-	reqCtx := req.GetContext()
-	if reqCtx == nil {
-		return s.tokenContextForInvoke(ctx, req, targetApp, targetOperation, req.GetCredentialMode())
-	}
-	if strings.TrimSpace(req.GetInvocationToken()) != "" {
-		callCtx, err := s.tokenContextForInvoke(ctx, req, targetApp, targetOperation, req.GetCredentialMode())
-		if err != nil {
-			return requestInvocationContext{}, err
-		}
-		if parsedCtx, err := s.requestContext(reqCtx); err == nil {
-			callCtx.requestContext = parsedCtx.requestContext
-		}
-		return callCtx, nil
-	}
+func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, targetOperation, rawCredentialMode string) (requestInvocationContext, error) {
 	callCtx, err := s.requestContext(reqCtx)
 	if err != nil {
 		return requestInvocationContext{}, err
@@ -221,7 +162,7 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, req *proto.AppI
 		return requestInvocationContext{}, err
 	}
 	profile, profileOK := EffectiveAppOperationProfile(s.accessProfiles, targetApp, targetOperation)
-	credentialMode, err := appInvokeCredentialMode(req.GetCredentialMode())
+	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
 	if err != nil {
 		return requestInvocationContext{}, err
 	}
@@ -243,21 +184,7 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, req *proto.AppI
 	return callCtx, nil
 }
 
-func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (requestInvocationContext, error) {
-	reqCtx := req.GetContext()
-	if reqCtx == nil {
-		return s.tokenContextForSurfaceInvoke(req, targetApp, surface)
-	}
-	if strings.TrimSpace(req.GetInvocationToken()) != "" {
-		callCtx, err := s.tokenContextForSurfaceInvoke(req, targetApp, surface)
-		if err != nil {
-			return requestInvocationContext{}, err
-		}
-		if parsedCtx, err := s.requestContext(reqCtx); err == nil {
-			callCtx.requestContext = parsedCtx.requestContext
-		}
-		return callCtx, nil
-	}
+func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, surface string) (requestInvocationContext, error) {
 	callCtx, err := s.requestContext(reqCtx)
 	if err != nil {
 		return requestInvocationContext{}, err
@@ -271,139 +198,6 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, req *pro
 	// Surface invocations do not carry delegation metadata. Config validation
 	// rejects runAs on surfaces so GraphQL cannot silently ignore it.
 	return callCtx, nil
-}
-
-func (s *AppServer) tokenContextForSurfaceInvoke(req *proto.AppInvokeGraphQLRequest, targetApp, surface string) (requestInvocationContext, error) {
-	invocationToken := strings.TrimSpace(req.GetInvocationToken())
-	if invocationToken == "" {
-		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "invocation token is required")
-	}
-	if s == nil || s.tokens == nil {
-		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-	}
-	tokenCtx, err := s.tokens.resolveToken(invocationToken, "")
-	if err != nil {
-		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	callerApp := strings.TrimSpace(tokenCtx.callerApp)
-	if !allowsSurface(tokenCtx.grants, targetApp, surface) {
-		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s surface %q", callerApp, targetApp, surface)
-	}
-	return requestContextFromLegacyToken(tokenCtx), nil
-}
-
-func (s *AppServer) tokenContextForInvoke(ctx context.Context, req *proto.AppInvokeRequest, targetApp, targetOperation, rawCredentialMode string) (requestInvocationContext, error) {
-	invocationToken := ""
-	var workflow *structpb.Struct
-	if req != nil {
-		invocationToken = strings.TrimSpace(req.GetInvocationToken())
-		workflow = req.GetWorkflow()
-	}
-	if invocationToken == "" {
-		tokenCtx, err := workflowRunAsInvocationContext(ctx, s.workflowRuns, workflow, targetApp, targetOperation, rawCredentialMode)
-		if err != nil {
-			return requestInvocationContext{}, err
-		}
-		return requestContextFromLegacyToken(tokenCtx), nil
-	}
-	if s == nil || s.tokens == nil {
-		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-	}
-	tokenCtx, err := s.tokens.resolveToken(invocationToken, "")
-	if err != nil {
-		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	if workflow != nil {
-		tokenCtx.workflow = invocation.CloneWorkflowContext(workflow.AsMap())
-	}
-	callerApp := strings.TrimSpace(tokenCtx.callerApp)
-	profile, ok := EffectiveOperationProfile(tokenCtx.grants, targetApp, targetOperation)
-	if !ok {
-		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", callerApp, targetApp, targetOperation)
-	}
-	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
-	if err != nil {
-		return requestInvocationContext{}, err
-	}
-	if credentialMode != "" {
-		if !appInvokeLegacyCredentialModeAllowed(credentialMode, profile) {
-			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callerApp, targetApp, targetOperation, credentialMode)
-		}
-		tokenCtx.credentialModeOverride = credentialMode
-		tokenCtx.operationProfile = profile
-		return requestContextFromLegacyToken(tokenCtx), nil
-	}
-	tokenCtx.credentialModeOverride = profile.CredentialMode
-	tokenCtx.operationProfile = profile
-	return requestContextFromLegacyToken(tokenCtx), nil
-}
-
-func WorkflowRunAsTokenContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct) (TokenContext, error) {
-	tokenCtx, err := workflowRunAsInvocationContext(ctx, resolver, workflow, "", "", "")
-	if err != nil {
-		return TokenContext{}, err
-	}
-	return TokenContext{inner: tokenCtx}, nil
-}
-
-func workflowRunAsInvocationContext(ctx context.Context, resolver WorkflowRunResolver, workflow *structpb.Struct, targetApp, targetOperation, rawCredentialMode string) (invocationTokenContext, error) {
-	resolved, err := workflowrunauth.ResolveInvocationFromWorkflowRun(ctx, resolver, workflow)
-	if err != nil {
-		return invocationTokenContext{}, err
-	}
-	grants := AllInvocationGrants()
-	p := principal.Canonicalize(&principal.Principal{
-		SubjectID:           resolved.RunAs.SubjectID,
-		CredentialSubjectID: resolved.RunAs.CredentialSubjectID,
-	})
-
-	tokenCtx := invocationTokenContext{
-		callerApp:          "workflow:" + strings.TrimSpace(resolved.ProviderName),
-		callerProviderKind: invocation.ProviderKindWorkflow,
-		principal:          p,
-		grants:             grants,
-		workflow:           resolved.Workflow,
-	}
-	if targetApp == "" && targetOperation == "" {
-		return tokenCtx, nil
-	}
-	profile, ok := EffectiveOperationProfile(grants, targetApp, targetOperation)
-	if !ok {
-		return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "workflow run %q may not invoke %s.%s", resolved.RunID, targetApp, targetOperation)
-	}
-	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
-	if err != nil {
-		return invocationTokenContext{}, err
-	}
-	if credentialMode != "" {
-		if !appInvokeLegacyCredentialModeAllowed(credentialMode, profile) {
-			return invocationTokenContext{}, status.Errorf(codes.PermissionDenied, "workflow run %q may not invoke %s.%s with credential_mode %q", resolved.RunID, targetApp, targetOperation, credentialMode)
-		}
-		tokenCtx.credentialModeOverride = credentialMode
-		tokenCtx.operationProfile = profile
-		return tokenCtx, nil
-	}
-	tokenCtx.credentialModeOverride = profile.CredentialMode
-	tokenCtx.operationProfile = profile
-	return tokenCtx, nil
-}
-
-func requestContextFromLegacyToken(tokenCtx invocationTokenContext) requestInvocationContext {
-	return requestInvocationContext{
-		callerApp:              tokenCtx.callerApp,
-		callerProviderKind:     tokenCtx.callerProviderKind,
-		principal:              tokenCtx.principal,
-		credential:             tokenCtx.credential,
-		credentialModeOverride: tokenCtx.credentialModeOverride,
-		operationProfile: AppOperationProfile{
-			CredentialMode: tokenCtx.operationProfile.CredentialMode,
-			Delegation: AppAccessDelegation{
-				RunAs: tokenCtx.operationProfile.Delegation.RunAs,
-			},
-		},
-		workflow:           tokenCtx.workflow,
-		legacyTokenContext: &tokenCtx,
-	}
 }
 
 func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocationContext, error) {
@@ -482,17 +276,6 @@ func appInvokeCredentialModeAllowed(mode core.ConnectionMode, profile AppOperati
 	return true
 }
 
-func appInvokeLegacyCredentialModeAllowed(mode core.ConnectionMode, profile OperationProfile) bool {
-	mode = core.NormalizeOptionalConnectionMode(mode)
-	if mode == "" {
-		return true
-	}
-	if profile.CredentialMode != "" {
-		return profile.CredentialMode == mode
-	}
-	return true
-}
-
 func prepareInvocationSelectors(ctx context.Context, callCtx requestInvocationContext, rawConnection, rawInstance string) (context.Context, string, error) {
 	connection := strings.TrimSpace(rawConnection)
 	instance := strings.TrimSpace(rawInstance)
@@ -503,16 +286,6 @@ func prepareInvocationSelectors(ctx context.Context, callCtx requestInvocationCo
 }
 
 func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocationContext, connectionOverride string) context.Context {
-	if callCtx.legacyTokenContext != nil {
-		if callCtx.requestContext != nil {
-			ctx = restoreRequestContextInvocationContext(ctx, callCtx, "")
-		}
-		return restoreInvocationTokenContext(ctx, *callCtx.legacyTokenContext, connectionOverride)
-	}
-	return restoreRequestContextInvocationContext(ctx, callCtx, connectionOverride)
-}
-
-func restoreRequestContextInvocationContext(ctx context.Context, callCtx requestInvocationContext, connectionOverride string) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}

@@ -3,17 +3,15 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type workflow struct {
-	client          proto.WorkflowProviderClient
-	invocationToken string
-	context         *proto.RequestContext
-	idempotencyKey  string
+	client         proto.WorkflowProviderClient
+	context        *proto.RequestContext
+	idempotencyKey string
 }
 
 // Workflow is the fakeable contract for applying definitions and starting or
@@ -37,22 +35,18 @@ type Workflow interface {
 
 var sharedWorkflowTransport sharedManagerTransport[proto.WorkflowProviderClient]
 
-// NewWorkflow returns a capability that attaches invocationToken to every request.
-func NewWorkflow(invocationToken string) (Workflow, error) {
-	return newWorkflow(nil, strings.TrimSpace(invocationToken), true)
+// NewWorkflow returns a workflow capability for the current provider request.
+func NewWorkflow(req Request) (Workflow, error) {
+	return newWorkflow(requestContextForRequest(req))
 }
 
 // NewWorkflowFromRequest returns a workflow capability for the current
 // provider request.
 func NewWorkflowFromRequest(req Request) (Workflow, error) {
-	return newWorkflow(requestContextForRequest(req), req.InvocationToken(), false)
+	return NewWorkflow(req)
 }
 
-func newWorkflow(reqCtx *proto.RequestContext, invocationToken string, requireToken bool) (*workflow, error) {
-	invocationToken = strings.TrimSpace(invocationToken)
-	if requireToken && invocationToken == "" {
-		return nil, fmt.Errorf("workflow: invocation token is not available")
-	}
+func newWorkflow(reqCtx *proto.RequestContext) (*workflow, error) {
 	target, token, err := hostServiceTarget("workflow")
 	if err != nil {
 		return nil, err
@@ -67,15 +61,14 @@ func newWorkflow(reqCtx *proto.RequestContext, invocationToken string, requireTo
 	}
 
 	return &workflow{
-		client:          client,
-		invocationToken: invocationToken,
-		context:         cloneRequestContext(reqCtx),
+		client:  client,
+		context: cloneRequestContext(reqCtx),
 	}, nil
 }
 
 // WorkflowFromContext returns a Workflow using context metadata.
 func WorkflowFromContext(ctx context.Context) (Workflow, error) {
-	client, err := newWorkflow(requestContextFromContext(ctx), InvocationTokenFromContext(ctx), false)
+	client, err := newWorkflow(requestContextFromContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +81,7 @@ func (c *workflow) Close() error {
 }
 
 func (c *workflow) attachAuth(req protoMessage) {
-	attachHostServiceAuth(req, c.context, c.invocationToken)
+	attachHostServiceAuth(req, c.context)
 }
 
 func (c *workflow) ApplyDefinition(ctx context.Context, input WorkflowApplyDefinition) (*WorkflowDefinition, error) {

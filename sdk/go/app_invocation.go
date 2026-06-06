@@ -35,46 +35,31 @@ type InvokeGraphQLOptions struct {
 	IdempotencyKey string
 }
 
-// InvocationGrant describes access granted to an exchanged invocation token.
-type InvocationGrant struct {
-	// App is the app name the child token may invoke.
-	App string
-	// Operations are the specific operation ids allowed by the child token.
-	Operations []string
-	// Surfaces are the surface names allowed by the child token.
-	Surfaces []string
-	// AllOperations allows every operation on App.
-	AllOperations bool
-}
-
 type appClient struct {
-	client          proto.AppClient
-	invocationToken string
-	context         *proto.RequestContext
+	client  proto.AppClient
+	context *proto.RequestContext
 }
 
 // App is the fakeable contract for app invocation calls.
 type App interface {
 	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
 	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error)
-	ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error)
 }
 
 var sharedAppTransport sharedManagerTransport[proto.AppClient]
 
-// NewApp returns a capability that attaches invocationToken to every request
-// when one is available.
-func NewApp(invocationToken string) (App, error) {
-	return newApp(nil, strings.TrimSpace(invocationToken))
+// NewApp returns an app invocation capability for the current provider request.
+func NewApp(req Request) (App, error) {
+	return newApp(requestContextForRequest(req))
 }
 
 // NewAppFromRequest returns an app invocation capability for the current
 // provider request.
 func NewAppFromRequest(req Request) (App, error) {
-	return newApp(requestContextForRequest(req), req.InvocationToken())
+	return NewApp(req)
 }
 
-func newApp(reqCtx *proto.RequestContext, invocationToken string) (App, error) {
+func newApp(reqCtx *proto.RequestContext) (App, error) {
 	target, token, err := hostServiceTarget("app")
 	if err != nil {
 		return nil, err
@@ -89,15 +74,14 @@ func newApp(reqCtx *proto.RequestContext, invocationToken string) (App, error) {
 	}
 
 	return &appClient{
-		client:          client,
-		invocationToken: strings.TrimSpace(invocationToken),
-		context:         cloneRequestContext(reqCtx),
+		client:  client,
+		context: cloneRequestContext(reqCtx),
 	}, nil
 }
 
 // AppFromContext returns an App using the current provider request context.
 func AppFromContext(ctx context.Context) (App, error) {
-	return newApp(requestContextFromContext(ctx), InvocationTokenFromContext(ctx))
+	return newApp(requestContextFromContext(ctx))
 }
 
 // Close is a no-op because this capability uses shared transport.
@@ -122,11 +106,10 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 	}
 
 	req := &proto.AppInvokeRequest{
-		InvocationToken: c.invocationToken,
-		App:             app,
-		Operation:       operation,
-		Params:          msg,
-		Context:         cloneRequestContext(c.context),
+		App:       app,
+		Operation: operation,
+		Params:    msg,
+		Context:   cloneRequestContext(c.context),
 	}
 	if opts != nil {
 		req.Connection = opts.Connection
@@ -139,10 +122,9 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 				return nil, fmt.Errorf("app: encode workflow context: %w", err)
 			}
 			if req.Context == nil {
-				req.Workflow = workflow
-			} else {
-				req.Context.Workflow = workflow
+				req.Context = &proto.RequestContext{}
 			}
+			req.Context.Workflow = workflow
 		}
 	}
 
@@ -180,11 +162,10 @@ func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, var
 	}
 
 	req := &proto.AppInvokeGraphQLRequest{
-		InvocationToken: c.invocationToken,
-		App:             app,
-		Document:        document,
-		Variables:       msg,
-		Context:         cloneRequestContext(c.context),
+		App:       app,
+		Document:  document,
+		Variables: msg,
+		Context:   cloneRequestContext(c.context),
 	}
 	if opts != nil {
 		req.Connection = opts.Connection
@@ -201,61 +182,6 @@ func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, var
 		Headers: httpHeaderFromProto(resp.GetHeaders()),
 		Body:    resp.GetBody(),
 	}, nil
-}
-
-// ExchangeInvocationToken exchanges this invocation token for a narrower child token.
-func (c *appClient) ExchangeInvocationToken(ctx context.Context, grants []InvocationGrant, ttl time.Duration) (string, error) {
-	if c == nil || c.client == nil {
-		return "", fmt.Errorf("app: client is not initialized")
-	}
-
-	req := &proto.ExchangeInvocationTokenRequest{
-		ParentInvocationToken: c.invocationToken,
-		Grants:                encodeInvocationGrants(grants),
-	}
-	if ttl > 0 {
-		req.TtlSeconds = int64(ttl / time.Second)
-		if req.TtlSeconds == 0 {
-			req.TtlSeconds = 1
-		}
-	}
-
-	resp, err := c.client.ExchangeInvocationToken(ctx, req)
-	if err != nil {
-		return "", err
-	}
-	return resp.GetInvocationToken(), nil
-}
-
-func encodeInvocationGrants(grants []InvocationGrant) []*proto.AppInvocationGrant {
-	if len(grants) == 0 {
-		return nil
-	}
-	out := make([]*proto.AppInvocationGrant, 0, len(grants))
-	for _, grant := range grants {
-		app := strings.TrimSpace(grant.App)
-		if app == "" {
-			continue
-		}
-		ops := make([]string, 0, len(grant.Operations))
-		for _, operation := range grant.Operations {
-			operation = strings.TrimSpace(operation)
-			if operation == "" {
-				continue
-			}
-			ops = append(ops, operation)
-		}
-		out = append(out, &proto.AppInvocationGrant{
-			App:           app,
-			Operations:    ops,
-			Surfaces:      grant.Surfaces,
-			AllOperations: grant.AllOperations,
-		})
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func cloneRequestContext(reqCtx *proto.RequestContext) *proto.RequestContext {

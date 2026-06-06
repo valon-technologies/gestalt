@@ -150,7 +150,6 @@ where
                     request.context.as_ref(),
                     request.token,
                     request.connection_params.into_iter().collect(),
-                    request.invocation_token,
                     request.idempotency_key.trim().to_string(),
                 ),
             ),
@@ -181,7 +180,6 @@ where
             request.token,
             request.connection_params.into_iter().collect(),
             String::new(),
-            String::new(),
         );
         let catalog = scope_request_context(context, self.provider.catalog_for_request(&request))
             .await
@@ -206,7 +204,6 @@ where
                     request.context.as_ref(),
                     String::new(),
                     Default::default(),
-                    String::new(),
                     String::new(),
                 ),
             ),
@@ -236,7 +233,6 @@ fn request_context(
     context: Option<&crate::generated::v1::RequestContext>,
     token: String,
     connection_params: std::collections::BTreeMap<String, String>,
-    invocation_token: String,
     idempotency_key: String,
 ) -> Request {
     Request {
@@ -253,7 +249,6 @@ fn request_context(
         tool_refs_set: context
             .map(|context| context.tool_refs_set)
             .unwrap_or(false),
-        invocation_token,
     }
 }
 

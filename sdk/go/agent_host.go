@@ -25,7 +25,6 @@ type AgentHostAPI interface {
 type AgentHostListToolsInput struct {
 	SessionID string
 	TurnID    string
-	RunGrant  string
 	Context   *proto.RequestContext
 	PageSize  int32
 	PageToken string
@@ -40,7 +39,6 @@ type AgentHostExecuteToolInput struct {
 	ToolCallID     string
 	ToolID         string
 	Arguments      any
-	RunGrant       string
 	IdempotencyKey string
 	Context        *proto.RequestContext
 }
@@ -52,7 +50,6 @@ type AgentHostResolveConnectionInput struct {
 	TurnID     string
 	Connection string
 	Instance   string
-	RunGrant   string
 	Context    *proto.RequestContext
 }
 
@@ -98,7 +95,6 @@ func (c *agentHost) ExecuteTool(ctx context.Context, input AgentHostExecuteToolI
 		ToolCallId:     input.ToolCallID,
 		ToolId:         input.ToolID,
 		Arguments:      arguments,
-		RunGrant:       input.RunGrant,
 		IdempotencyKey: input.IdempotencyKey,
 		Context:        agentHostRequestContext(ctx, input.Context),
 	})
@@ -114,7 +110,6 @@ func (c *agentHost) ListTools(ctx context.Context, input AgentHostListToolsInput
 	resp, err := c.client.ListTools(ctx, &proto.ListAgentToolsRequest{
 		SessionId: input.SessionID,
 		TurnId:    input.TurnID,
-		RunGrant:  input.RunGrant,
 		PageSize:  input.PageSize,
 		PageToken: input.PageToken,
 		Query:     input.Query,
@@ -134,7 +129,6 @@ func (c *agentHost) ResolveConnection(ctx context.Context, input AgentHostResolv
 		TurnId:     input.TurnID,
 		Connection: input.Connection,
 		Instance:   input.Instance,
-		RunGrant:   input.RunGrant,
 		Context:    agentHostRequestContext(ctx, input.Context),
 	})
 	if err != nil {

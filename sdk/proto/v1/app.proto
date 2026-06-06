@@ -90,51 +90,32 @@ message OperationResult {
   map<string, StringList> headers = 3;
 }
 
-// AppInvocationGrant describes one app operation grant minted into an
-// exchanged invocation token.
-message AppInvocationGrant {
-  string app = 1;
-  repeated string operations = 2;
-  repeated string surfaces = 3;
-  bool all_operations = 4;
-}
-
-// ExchangeInvocationTokenRequest narrows an existing invocation token to a
-// child token that carries only the requested app grants.
-message ExchangeInvocationTokenRequest {
-  string parent_invocation_token = 1;
-  repeated AppInvocationGrant grants = 2;
-  int64 ttl_seconds = 3;
-}
-
-// ExchangeInvocationTokenResponse returns the child invocation token.
-message ExchangeInvocationTokenResponse {
-  string invocation_token = 1;
-}
-
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
 message AppInvokeRequest {
+  reserved 7, 10;
+  reserved "invocation_token", "workflow";
+
   string app = 2;
   string operation = 3;
   google.protobuf.Struct params = 4;
   string connection = 5;
   string instance = 6;
-  string invocation_token = 7;
   string idempotency_key = 8;
   string credential_mode = 9;
-  google.protobuf.Struct workflow = 10;
   RequestContext context = 11;
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 // through Gestalt.
 message AppInvokeGraphQLRequest {
+  reserved 6;
+  reserved "invocation_token";
+
   string app = 1;
   string document = 2;
   google.protobuf.Struct variables = 3;
   string connection = 4;
   string instance = 5;
-  string invocation_token = 6;
   string idempotency_key = 7;
   RequestContext context = 8;
 }
@@ -270,13 +251,15 @@ message ResolveHTTPSubjectResponse {
 
 // ExecuteRequest invokes one executable operation.
 message ExecuteRequest {
+  reserved 8;
+  reserved "invocation_token";
+
   string operation = 1;
   google.protobuf.Struct params = 2;
   string token = 3;
   map<string, string> connection_params = 4;
   string invocation_id = 5;
   RequestContext context = 6;
-  string invocation_token = 8;
   string idempotency_key = 9;
 }
 
@@ -319,5 +302,4 @@ service AppProvider {
 service App {
   rpc Invoke(AppInvokeRequest) returns (OperationResult);
   rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult);
-  rpc ExchangeInvocationToken(ExchangeInvocationTokenRequest) returns (ExchangeInvocationTokenResponse);
 }

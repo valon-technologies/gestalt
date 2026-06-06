@@ -140,7 +140,7 @@ test("Agent forwards request context across session and turn calls", async () =>
       }),
     });
     const agent = new Agent(
-      request("", {}, {}, {}, {}, {}, "", "", {}, {}, [], false, context),
+      request("", {}, {}, {}, {}, {}, "", {}, {}, [], false, context),
     );
 
     const session = await agent.createSession({

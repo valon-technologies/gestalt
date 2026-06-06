@@ -457,7 +457,6 @@ class CreateAgentProviderTurnRequest:
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
     subject: Subject | None = None
     model_options: JsonObject | None = None
-    run_grant: str = ""
     timeout_seconds: int = 0
     context: Any | None = None
 
@@ -578,7 +577,6 @@ class ExecuteAgentToolRequest:
     tool_id: str = ""
     arguments: JsonObjectInput | None = None
     idempotency_key: str = ""
-    run_grant: str = ""
     context: Any | None = None
 
 
@@ -622,7 +620,6 @@ class ListAgentToolsRequest:
     turn_id: str = ""
     page_size: int = 0
     page_token: str = ""
-    run_grant: str = ""
     query: str = ""
     context: Any | None = None
 
@@ -633,7 +630,6 @@ class ResolveAgentConnectionRequest:
     turn_id: str = ""
     connection: str = ""
     instance: str = ""
-    run_grant: str = ""
     context: Any | None = None
 
 
@@ -746,7 +742,6 @@ def create_agent_provider_turn_request_from_proto(
         model_options=struct_to_dict(request.model_options)
         if has_field(request, "model_options")
         else None,
-        run_grant=request.run_grant,
         timeout_seconds=request.timeout_seconds,
         context=request.context if has_field(request, "context") else None,
     )
@@ -1533,7 +1528,6 @@ def execute_agent_tool_request_to_proto(
         tool_call_id=request.tool_call_id,
         tool_id=request.tool_id,
         idempotency_key=request.idempotency_key,
-        run_grant=request.run_grant,
     )
     _copy_struct(out, "arguments", request.arguments)
     _copy_message(out, "context", request.context)
@@ -1549,7 +1543,6 @@ def list_agent_tools_request_to_proto(
         turn_id=request.turn_id,
         page_size=_int_field(request.page_size),
         page_token=request.page_token,
-        run_grant=request.run_grant,
         query=request.query,
     )
     _copy_message(out, "context", request.context)
@@ -1569,7 +1562,6 @@ def resolve_agent_connection_request_to_proto(
         turn_id=request.turn_id,
         connection=request.connection,
         instance=request.instance,
-        run_grant=request.run_grant,
     )
     _copy_message(out, "context", request.context)
     return out
@@ -1843,7 +1835,6 @@ class AgentHostProtocol(Protocol):
         tool_call_id: str,
         tool_id: str,
         arguments: Mapping[str, Any] | None = None,
-        run_grant: str = "",
         context: Any | None = None,
         idempotency_key: str = "",
         timeout_seconds: float | None = None,
@@ -1866,7 +1857,6 @@ class AgentHostProtocol(Protocol):
         *,
         page_size: int = 0,
         page_token: str = "",
-        run_grant: str = "",
         query: str = "",
         context: Any | None = None,
         timeout_seconds: float | None = None,
@@ -1889,7 +1879,6 @@ class AgentHostProtocol(Protocol):
         *,
         connection: str,
         instance: str = "",
-        run_grant: str = "",
         context: Any | None = None,
         timeout_seconds: float | None = None,
     ) -> ResolvedAgentConnection:
@@ -1940,7 +1929,6 @@ class AgentHost:
         tool_call_id: str,
         tool_id: str,
         arguments: JsonObjectInput | None = None,
-        run_grant: str = "",
         context: Any | None = None,
         idempotency_key: str = "",
         timeout_seconds: float | None = None,
@@ -1954,7 +1942,6 @@ class AgentHost:
                 tool_call_id=tool_call_id,
                 tool_id=tool_id,
                 arguments=arguments,
-                run_grant=run_grant,
                 context=context,
                 idempotency_key=idempotency_key,
             ),
@@ -1983,7 +1970,6 @@ class AgentHost:
         *,
         page_size: int = 0,
         page_token: str = "",
-        run_grant: str = "",
         query: str = "",
         context: Any | None = None,
         timeout_seconds: float | None = None,
@@ -1996,7 +1982,6 @@ class AgentHost:
                 turn_id=turn_id,
                 page_size=page_size,
                 page_token=page_token,
-                run_grant=run_grant,
                 query=query,
                 context=context,
             ),
@@ -2025,7 +2010,6 @@ class AgentHost:
         *,
         connection: str,
         instance: str = "",
-        run_grant: str = "",
         context: Any | None = None,
         timeout_seconds: float | None = None,
     ) -> ResolvedAgentConnection:
@@ -2037,7 +2021,6 @@ class AgentHost:
                 turn_id=turn_id,
                 connection=connection,
                 instance=instance,
-                run_grant=run_grant,
                 context=context,
             ),
             timeout_seconds=timeout_seconds,
@@ -2277,16 +2260,11 @@ class AgentProtocol(Protocol):
 class Agent:
     """Client for managing agent sessions, turns, events, and interactions.
 
-    This capability is for provider code that receives a Gestalt request or
-    legacy invocation token and needs to call the host's agent API.
+    This capability is for provider code that receives a Gestalt request and
+    needs to call the host's agent API.
     """
 
-    def __init__(
-        self,
-        request: Request | str,
-        *,
-        workflow: JsonObjectInput | None = None,
-    ) -> None:
+    def __init__(self, request: Request) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"agent: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2294,15 +2272,7 @@ class Agent:
 
         self._channel = host_service_channel("agent", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)
-        self._invocation_token = ""
-        self._context = None
-        if isinstance(request, Request):
-            self._invocation_token = request.invocation_token.strip()
-            self._context = request.context
-            workflow = request.workflow
-        else:
-            self._invocation_token = request.strip()
-        self._workflow = struct_from_dict(workflow) if workflow else None
+        self._context = request.context
 
     def close(self) -> None:
         """Close the underlying gRPC channel."""
@@ -2407,10 +2377,6 @@ class Agent:
         )
 
     def _attach_context(self, request: Any) -> None:
-        if hasattr(request, "invocation_token"):
-            request.invocation_token = self._invocation_token
-        if self._workflow is not None and hasattr(request, "workflow"):
-            request.workflow.CopyFrom(self._workflow)
         if self._context is not None and hasattr(request, "context"):
             request.context.CopyFrom(self._context)
 

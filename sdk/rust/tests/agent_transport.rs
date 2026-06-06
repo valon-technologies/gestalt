@@ -823,7 +823,6 @@ async fn agent_host_client_round_trip_over_unix_socket() {
         .list_tools_for_turn(AgentHostListToolsInput {
             session_id: "session-1".to_string(),
             turn_id: "turn-1".to_string(),
-            run_grant: String::new(),
             page_size: 10,
             page_token: "page-0".to_string(),
             query: "lookup".to_string(),
@@ -841,7 +840,6 @@ async fn agent_host_client_round_trip_over_unix_socket() {
                 turn_id: "turn-1".to_string(),
                 tool_call_id: "call-7".to_string(),
                 tool_id: "lookup".to_string(),
-                run_grant: String::new(),
                 idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
                 arguments: None,
             }
@@ -873,7 +871,6 @@ async fn agent_host_client_round_trip_over_unix_socket() {
             turn_id: "turn-1".to_string(),
             connection: "model".to_string(),
             instance: "default".to_string(),
-            run_grant: String::new(),
         })
         .await
         .expect("resolve connection");

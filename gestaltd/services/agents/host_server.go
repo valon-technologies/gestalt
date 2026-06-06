@@ -65,7 +65,6 @@ func (s *HostServer) ListTools(ctx context.Context, req *proto.ListAgentToolsReq
 		PageSize:     int(req.GetPageSize()),
 		PageToken:    strings.TrimSpace(req.GetPageToken()),
 		Query:        strings.TrimSpace(req.GetQuery()),
-		RunGrant:     strings.TrimSpace(req.GetRunGrant()),
 		Context:      req.GetContext(),
 	})
 	if err != nil {
@@ -132,7 +131,6 @@ func (s *HostServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToo
 		ToolCallID:     toolCallID,
 		ToolID:         toolID,
 		Arguments:      mapFromStruct(req.GetArguments()),
-		RunGrant:       strings.TrimSpace(req.GetRunGrant()),
 		IdempotencyKey: idempotencyKey,
 		Context:        req.GetContext(),
 	})
@@ -173,7 +171,6 @@ func (s *HostServer) ResolveConnection(ctx context.Context, req *proto.ResolveAg
 		TurnID:       turnID,
 		Connection:   connection,
 		Instance:     strings.TrimSpace(req.GetInstance()),
-		RunGrant:     strings.TrimSpace(req.GetRunGrant()),
 		Context:      req.GetContext(),
 	})
 	if err != nil {

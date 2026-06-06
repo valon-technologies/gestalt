@@ -118,7 +118,7 @@ test("App forwards request context to operation and GraphQL calls", async () => 
       }),
     });
     const app = new App(
-      request("", {}, {}, {}, {}, {}, "", "request-key", {}, {}, [], false, context),
+      request("", {}, {}, {}, {}, {}, "request-key", {}, {}, [], false, context),
     );
 
     const first = await app.invoke(
@@ -272,7 +272,7 @@ test("App honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const app = new App(request("", {}, {}, {}, {}, {}, "", "", {}, {}, [], false, create(RequestContextSchema, {
+    const app = new App(request("", {}, {}, {}, {}, {}, "", {}, {}, [], false, create(RequestContextSchema, {
       subject: create(SubjectContextSchema, {
         id: "user:user-123",
       }),

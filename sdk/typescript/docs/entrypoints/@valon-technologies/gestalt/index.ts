@@ -63,7 +63,6 @@ export {
 } from "../../../../src/catalog.ts";
 export {
   App,
-  type AppInvocationGrant,
   type AppGraphQLInvokeOptions,
   type AppInvokeOptions,
 } from "../../../../src/app-access.ts";

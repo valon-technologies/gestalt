@@ -24,7 +24,6 @@ type Request struct {
 	IdempotencyKey   string
 	ToolRefs         []AgentToolRef
 	ToolRefsSet      bool
-	invocationToken  string
 	requestContext   *proto.RequestContext
 }
 
@@ -38,16 +37,12 @@ func (r Request) ConnectionParam(name string) (string, bool) {
 	return value, ok
 }
 
-func (r Request) InvocationToken() string {
-	return r.invocationToken
-}
-
 func (r Request) App() (App, error) {
 	return NewAppFromRequest(r)
 }
 
 func (r Request) Workflow() (Workflow, error) {
-	client, err := newWorkflow(requestContextForRequest(r), r.InvocationToken(), false)
+	client, err := newWorkflow(requestContextForRequest(r))
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +66,6 @@ func RequestFromContext(ctx context.Context) Request {
 		IdempotencyKey:   IdempotencyKeyFromContext(ctx),
 		ToolRefs:         ToolRefsFromContext(ctx),
 		ToolRefsSet:      ToolRefsSetFromContext(ctx),
-		invocationToken:  invocationTokenFromContext(ctx),
 		requestContext:   requestContextFromContext(ctx),
 	}
 }
@@ -358,7 +352,6 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			IdempotencyKey:   IdempotencyKeyFromContext(ctx),
 			ToolRefs:         ToolRefsFromContext(ctx),
 			ToolRefsSet:      ToolRefsSetFromContext(ctx),
-			invocationToken:  invocationTokenFromContext(ctx),
 			requestContext:   requestContextFromContext(ctx),
 		})
 	})

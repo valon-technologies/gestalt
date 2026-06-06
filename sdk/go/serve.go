@@ -121,17 +121,6 @@ func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grp
 	return err
 }
 
-type providerInvocationTokenRequest interface {
-	GetInvocationToken() string
-}
-
-func providerInvocationUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	if tokenReq, ok := req.(providerInvocationTokenRequest); ok {
-		ctx = withInvocationToken(ctx, tokenReq.GetInvocationToken())
-	}
-	return handler(ctx, req)
-}
-
 func providerParentPID() int {
 	raw := os.Getenv(proto.EnvProviderParentPID)
 	if raw == "" {

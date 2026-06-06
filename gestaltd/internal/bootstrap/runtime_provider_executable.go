@@ -48,7 +48,7 @@ func buildExecutableRuntime(ctx context.Context, name string, entry *config.Runt
 }
 
 func buildRuntimeProviderHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
-	hostServices, _, err := buildProviderHostServices(name, deps)
+	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, err
 	}

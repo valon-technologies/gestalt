@@ -21,7 +21,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -118,7 +117,6 @@ type Config struct {
 	Providers         *registry.ProviderMap[core.Provider]
 	Agent             AgentControl
 	WorkflowTools     WorkflowSystemTools
-	RunGrants         *agentgrant.Manager
 	TurnScopes        *agentturnscope.Store
 	ToolIDs           *agenttoolid.Codec
 	Invoker           invocation.Invoker
@@ -137,7 +135,6 @@ type Manager struct {
 	providers                     *registry.ProviderMap[core.Provider]
 	agent                         AgentControl
 	workflowTools                 WorkflowSystemTools
-	runGrants                     *agentgrant.Manager
 	turnScopes                    *agentturnscope.Store
 	toolIDs                       *agenttoolid.Codec
 	invoker                       invocation.Invoker
@@ -153,7 +150,6 @@ func New(cfg Config) *Manager {
 		providers:         cfg.Providers,
 		agent:             cfg.Agent,
 		workflowTools:     cfg.WorkflowTools,
-		runGrants:         cfg.RunGrants,
 		turnScopes:        cfg.TurnScopes,
 		toolIDs:           cfg.ToolIDs,
 		invoker:           cfg.Invoker,
@@ -831,15 +827,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	runGrant := ""
 	if err := m.storeTurnScope(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource); err != nil {
 		return nil, err
-	}
-	if m.runGrants != nil {
-		runGrant, err = m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource)
-		if err != nil {
-			return nil, err
-		}
 	}
 	scopeCommitted := false
 	defer func() {
@@ -859,7 +848,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
-	providerReq.RunGrant = runGrant
 	providerReq.Context, err = agentRequestContext(ctx, p, req.GetContext(), callerKind, callerName)
 	if err != nil {
 		return nil, err
@@ -1012,12 +1000,6 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 		m.turnScopes.Revoke(owned.providerName, normalized.SessionID, normalized.ID)
 		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
 			m.turnScopes.Revoke(owned.providerName, normalized.SessionID, executionRef)
-		}
-	}
-	if m.runGrants != nil {
-		m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, normalized.ID)
-		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
-			m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, executionRef)
 		}
 	}
 	return normalized, nil
@@ -1580,53 +1562,6 @@ func (m *Manager) storeTurnScope(ctx context.Context, p *principal.Principal, pr
 		ToolSource:          toolSource,
 		Connections:         connections,
 	})
-}
-
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
-	if m == nil || m.runGrants == nil {
-		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
-	}
-	callerKind = invocation.ProviderKind(strings.TrimSpace(string(callerKind)))
-	callerName = strings.TrimSpace(callerName)
-	subject := agentSubjectFromPrincipal(p)
-	permissions := agentTurnPermissions(ctx, p, callerKind, callerName, toolRefs)
-	connections := agentGrantConnectionBindings(m.agentConnectionBindings(providerName))
-	if toolSource == coreagent.ToolSourceModeNone {
-		connections = nil
-	}
-	legacyCallerAppName := ""
-	if callerKind == invocation.ProviderKindApp {
-		legacyCallerAppName = callerName
-	}
-	return m.runGrants.Mint(agentgrant.Grant{
-		ProviderName:        providerName,
-		SessionID:           sessionID,
-		TurnID:              turnID,
-		CallerAppName:       legacyCallerAppName,
-		CallerKind:          callerKind,
-		CallerName:          callerName,
-		SubjectID:           subject.SubjectID,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		Permissions:         permissions,
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolRefsSet:         toolRefsSet,
-		Tools:               append([]coreagent.Tool(nil), tools...),
-		ToolSource:          toolSource,
-		Connections:         connections,
-	})
-}
-
-func agentGrantConnectionBindings(src []agentturnscope.ConnectionBinding) []agentgrant.ConnectionBinding {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make([]agentgrant.ConnectionBinding, 0, len(src))
-	for _, binding := range src {
-		if connection := strings.TrimSpace(binding.Connection); connection != "" {
-			out = append(out, agentgrant.ConnectionBinding{Connection: connection})
-		}
-	}
-	return out
 }
 
 func (m *Manager) deleteTurnScope(providerName, sessionID, turnID string) {

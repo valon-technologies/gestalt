@@ -252,22 +252,28 @@ message WorkflowSignal {
 }
 
 message ApplyWorkflowProviderDefinitionRequest {
+  reserved 3;
+  reserved "invocation_token";
+
   string provider_name = 1;
   WorkflowDefinitionSpec spec = 2;
-  string invocation_token = 3;
   string idempotency_key = 4;
   string requested_by_subject_id = 5;
   RequestContext context = 6;
 }
 
 message GetWorkflowProviderDefinitionRequest {
+  reserved 2;
+  reserved "invocation_token";
+
   string definition_id = 1;
-  string invocation_token = 2;
   RequestContext context = 3;
 }
 
 message ListWorkflowProviderDefinitionsRequest {
-  string invocation_token = 1;
+  reserved 1;
+  reserved "invocation_token";
+
   RequestContext context = 2;
 }
 
@@ -276,35 +282,42 @@ message ListWorkflowProviderDefinitionsResponse {
 }
 
 message SetWorkflowProviderDefinitionPausedRequest {
+  reserved 3;
+  reserved "invocation_token";
+
   string definition_id = 1;
   bool paused = 2;
-  string invocation_token = 3;
   string requested_by_subject_id = 4;
   RequestContext context = 5;
 }
 
 message SetWorkflowProviderActivationPausedRequest {
+  reserved 4;
+  reserved "invocation_token";
+
   string definition_id = 1;
   string activation_id = 2;
   bool paused = 3;
-  string invocation_token = 4;
   string requested_by_subject_id = 5;
   RequestContext context = 6;
 }
 
 message DeleteWorkflowProviderDefinitionRequest {
+  reserved 2;
+  reserved "invocation_token";
+
   string definition_id = 1;
-  string invocation_token = 2;
   RequestContext context = 3;
 }
 
 message StartWorkflowProviderRunRequest {
-  reserved 1;
+  reserved 1, 8;
+  reserved "invocation_token";
+
   string idempotency_key = 2;
   string created_by_subject_id = 4;
   string workflow_key = 6;
   string provider_name = 7;
-  string invocation_token = 8;
   string definition_id = 9;
   SubjectContext run_as = 10;
   google.protobuf.Struct input = 11;
@@ -313,16 +326,20 @@ message StartWorkflowProviderRunRequest {
 }
 
 message GetWorkflowProviderRunRequest {
+  reserved 3;
+  reserved "invocation_token";
+
   string run_id = 2;
-  string invocation_token = 3;
   RequestContext context = 4;
 }
 
 message ListWorkflowProviderRunsRequest {
+  reserved 4;
+  reserved "invocation_token";
+
   int32 page_size = 1;
   string page_token = 2;
   WorkflowRunStatus status = 3;
-  string invocation_token = 4;
   string target_app = 5;
   RequestContext context = 6;
 }
@@ -333,27 +350,33 @@ message ListWorkflowProviderRunsResponse {
 }
 
 message CancelWorkflowProviderRunRequest {
+  reserved 4;
+  reserved "invocation_token";
+
   string run_id = 2;
   string reason = 3;
-  string invocation_token = 4;
   RequestContext context = 5;
 }
 
 message SignalWorkflowProviderRunRequest {
+  reserved 3;
+  reserved "invocation_token";
+
   string run_id = 1;
   WorkflowSignal signal = 2;
-  string invocation_token = 3;
   RequestContext context = 4;
 }
 
 message SignalOrStartWorkflowProviderRunRequest {
+  reserved 8;
+  reserved "invocation_token";
+
   string workflow_key = 1;
   reserved 2;
   string idempotency_key = 3;
   string created_by_subject_id = 4;
   WorkflowSignal signal = 6;
   string provider_name = 7;
-  string invocation_token = 8;
   string definition_id = 9;
   SubjectContext run_as = 10;
   google.protobuf.Struct input = 11;
@@ -369,10 +392,12 @@ message SignalWorkflowRunResponse {
 }
 
 message DeliverWorkflowProviderEventRequest {
+  reserved 4;
+  reserved "invocation_token";
+
   string app_name = 1;
   WorkflowEvent event = 2;
   string delivered_by_subject_id = 3;
-  string invocation_token = 4;
   string provider_name = 5;
   RequestContext context = 6;
 }
@@ -387,8 +412,10 @@ message WorkflowRunEvent {
 }
 
 message GetWorkflowProviderRunEventsRequest {
+  reserved 2;
+  reserved "invocation_token";
+
   string run_id = 1;
-  string invocation_token = 2;
   RequestContext context = 3;
 }
 
@@ -397,8 +424,10 @@ message GetWorkflowProviderRunEventsResponse {
 }
 
 message GetWorkflowProviderRunOutputRequest {
+  reserved 2;
+  reserved "invocation_token";
+
   string run_id = 1;
-  string invocation_token = 2;
   RequestContext context = 3;
 }
 

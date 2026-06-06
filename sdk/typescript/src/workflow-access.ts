@@ -13,7 +13,6 @@ import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
 } from "./host-service.ts";
-import { hostInvocationContext } from "./invocation-context.ts";
 import type { Request, SubjectInput } from "./api.ts";
 import { jsonFromValue, structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
@@ -185,17 +184,13 @@ export interface Workflow {
  */
 class WorkflowImpl implements Workflow {
   private readonly client: Client<typeof WorkflowProviderService>;
-  private readonly invocationContext: ReturnType<typeof hostInvocationContext>;
+  private readonly context: Request["__requestContext"];
   private readonly idempotencyKey: string;
 
   constructor(request: Request);
-  constructor(invocationToken: string);
-  constructor(requestOrToken: Request | string) {
-    this.invocationContext = hostInvocationContext(requestOrToken);
-    if (typeof requestOrToken === "string" && !this.invocationContext.invocationToken) {
-      throw new Error("workflow: invocation token is not available");
-    }
-    this.idempotencyKey = typeof requestOrToken === "string" ? "" : requestOrToken.idempotencyKey.trim();
+  constructor(request: Request) {
+    this.context = request.__requestContext;
+    this.idempotencyKey = request.idempotencyKey.trim();
 
     const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
@@ -222,7 +217,7 @@ class WorkflowImpl implements Workflow {
         await this.client.applyDefinition({
           providerName: request.providerName,
           spec: workflowDefinitionSpecToProto(request.spec),
-          ...this.invocationContext,
+          context: this.context,
           idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
           requestedBySubjectId: request.requestedBySubjectId ?? "",
         }),
@@ -239,7 +234,7 @@ class WorkflowImpl implements Workflow {
       workflowDefinitionFromProto(
         await this.client.getDefinition({
           definitionId: request.definitionId,
-          ...this.invocationContext,
+          context: this.context,
         }),
       ),
       "Workflow.getDefinition returned no definition",
@@ -251,7 +246,7 @@ class WorkflowImpl implements Workflow {
     _request: WorkflowListDefinitions = {},
   ): Promise<readonly WorkflowDefinition[]> {
     const response = await this.client.listDefinitions({
-      ...this.invocationContext,
+      context: this.context,
     });
     return response.definitions.map((definition) =>
       requireDefinition(workflowDefinitionFromProto(definition), "Workflow.listDefinitions returned an empty definition")
@@ -267,7 +262,7 @@ class WorkflowImpl implements Workflow {
         await this.client.setDefinitionPaused({
           definitionId: request.definitionId,
           paused: request.paused,
-          ...this.invocationContext,
+          context: this.context,
           requestedBySubjectId: request.requestedBySubjectId ?? "",
         }),
       ),
@@ -285,7 +280,7 @@ class WorkflowImpl implements Workflow {
           definitionId: request.definitionId,
           activationId: request.activationId,
           paused: request.paused,
-          ...this.invocationContext,
+          context: this.context,
           requestedBySubjectId: request.requestedBySubjectId ?? "",
         }),
       ),
@@ -299,7 +294,7 @@ class WorkflowImpl implements Workflow {
   ): Promise<void> {
     await this.client.deleteDefinition({
       definitionId: request.definitionId,
-      ...this.invocationContext,
+      context: this.context,
     });
   }
 
@@ -316,7 +311,7 @@ class WorkflowImpl implements Workflow {
           input: structFromObject(request.input),
           idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
           workflowKey: request.workflowKey ?? "",
-          ...this.invocationContext,
+          context: this.context,
           createdBySubjectId: request.createdBySubjectId ?? "",
           runAs: subjectToProto(request.runAs),
         }),
@@ -333,7 +328,7 @@ class WorkflowImpl implements Workflow {
       workflowRunFromProto(
         await this.client.getRun({
           runId: request.runId,
-          ...this.invocationContext,
+          context: this.context,
         }),
       ),
       "Workflow.getRun returned no run",
@@ -349,7 +344,7 @@ class WorkflowImpl implements Workflow {
       pageToken: request.pageToken ?? "",
       status: request.status ?? 0,
       targetApp: request.targetApp ?? "",
-      ...this.invocationContext,
+      context: this.context,
     });
     return {
       runs: response.runs.map((run) => requireRun(workflowRunFromProto(run), "Workflow.listRuns returned an empty run")),
@@ -363,7 +358,7 @@ class WorkflowImpl implements Workflow {
   ): Promise<readonly WorkflowRunEvent[]> {
     const response = await this.client.getRunEvents({
       runId: request.runId,
-      ...this.invocationContext,
+      context: this.context,
     });
     return response.events.map((event) =>
       requireRunEvent(workflowRunEventFromProto(event), "Workflow.getRunEvents returned an empty event")
@@ -376,7 +371,7 @@ class WorkflowImpl implements Workflow {
   ): Promise<GetWorkflowProviderRunOutputResponse> {
     const response = await this.client.getRunOutput({
       runId: request.runId,
-      ...this.invocationContext,
+      context: this.context,
     });
     return {
       output: response.output === undefined
@@ -394,7 +389,7 @@ class WorkflowImpl implements Workflow {
         await this.client.cancelRun({
           runId: request.runId,
           reason: request.reason ?? "",
-          ...this.invocationContext,
+          context: this.context,
         }),
       ),
       "Workflow.cancelRun returned no run",
@@ -410,7 +405,7 @@ class WorkflowImpl implements Workflow {
         await this.client.signalRun({
           runId: request.runId,
           signal: workflowSignalToProto(request.signal),
-          ...this.invocationContext,
+          context: this.context,
         }),
       ),
       "Workflow.signalRun returned no response",
@@ -431,7 +426,7 @@ class WorkflowImpl implements Workflow {
           input: structFromObject(request.input),
           idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
           signal: workflowSignalToProto(request.signal),
-          ...this.invocationContext,
+          context: this.context,
           createdBySubjectId: request.createdBySubjectId ?? "",
           runAs: subjectToProto(request.runAs),
         }),
@@ -450,7 +445,7 @@ class WorkflowImpl implements Workflow {
           appName: request.appName ?? "",
           event: workflowEventToProto(request.event),
           deliveredBySubjectId: request.deliveredBySubjectId ?? "",
-          ...this.invocationContext,
+          context: this.context,
           providerName: request.providerName ?? "",
         }),
       ),

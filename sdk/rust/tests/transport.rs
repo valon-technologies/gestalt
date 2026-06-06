@@ -360,7 +360,6 @@ async fn serves_provider_requests_over_unix_socket() {
             token: String::new(),
             connection_params: Default::default(),
             invocation_id: String::new(),
-            invocation_token: String::new(),
             idempotency_key: " transport-tool-123 ".to_string(),
             context: Some(RequestContext {
                 subject: Some(SubjectContext {

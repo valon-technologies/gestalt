@@ -410,18 +410,15 @@ export interface ApplyWorkflowProviderDefinitionRequest {
   spec?: WorkflowDefinitionSpec | undefined;
   idempotencyKey?: string | undefined;
   requestedBySubjectId?: string | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface GetWorkflowProviderDefinitionRequest {
   definitionId: string;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListWorkflowProviderDefinitionsRequest {
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -429,7 +426,6 @@ export interface SetWorkflowProviderDefinitionPausedRequest {
   definitionId: string;
   paused: boolean;
   requestedBySubjectId?: string | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -438,13 +434,11 @@ export interface SetWorkflowProviderActivationPausedRequest {
   activationId: string;
   paused: boolean;
   requestedBySubjectId?: string | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface DeleteWorkflowProviderDefinitionRequest {
   definitionId: string;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -456,13 +450,11 @@ export interface StartWorkflowProviderRunRequest {
   createdBySubjectId?: string | undefined;
   runAs?: SubjectInput | undefined;
   workflowKey?: string | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface GetWorkflowProviderRunRequest {
   runId: string;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -471,33 +463,28 @@ export interface ListWorkflowProviderRunsRequest {
   pageToken?: string | undefined;
   status?: WorkflowRunStatus | undefined;
   targetApp?: string | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface GetWorkflowProviderRunEventsRequest {
   runId: string;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface GetWorkflowProviderRunOutputRequest {
   runId: string;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface CancelWorkflowProviderRunRequest {
   runId: string;
   reason: string;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface SignalWorkflowProviderRunRequest {
   runId: string;
   signal?: WorkflowSignal | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -510,7 +497,6 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   createdBySubjectId?: string | undefined;
   runAs?: SubjectInput | undefined;
   signal?: WorkflowSignal | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -525,7 +511,6 @@ export interface DeliverWorkflowProviderEventRequest {
   appName?: string | undefined;
   event?: WorkflowEvent | undefined;
   deliveredBySubjectId?: string | undefined;
-  invocationToken?: string | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
@@ -1608,29 +1593,28 @@ function applyWorkflowProviderDefinitionRequestFromProto(input: ProtoApplyWorkfl
     spec: workflowDefinitionSpecFromProto(input.spec),
     idempotencyKey: input.idempotencyKey,
     requestedBySubjectId: input.requestedBySubjectId,
-    invocationToken: input.invocationToken,
     context: input.context,
   };
 }
 
 function getWorkflowProviderDefinitionRequestFromProto(input: ProtoGetWorkflowProviderDefinitionRequest): GetWorkflowProviderDefinitionRequest {
-  return { definitionId: input.definitionId, invocationToken: input.invocationToken, context: input.context };
+  return { definitionId: input.definitionId, context: input.context };
 }
 
 function listWorkflowProviderDefinitionsRequestFromProto(input: ProtoListWorkflowProviderDefinitionsRequest): ListWorkflowProviderDefinitionsRequest {
-  return { invocationToken: input.invocationToken, context: input.context };
+  return { context: input.context };
 }
 
 function setWorkflowProviderDefinitionPausedRequestFromProto(input: ProtoSetWorkflowProviderDefinitionPausedRequest): SetWorkflowProviderDefinitionPausedRequest {
-  return { definitionId: input.definitionId, paused: input.paused, requestedBySubjectId: input.requestedBySubjectId, invocationToken: input.invocationToken, context: input.context };
+  return { definitionId: input.definitionId, paused: input.paused, requestedBySubjectId: input.requestedBySubjectId, context: input.context };
 }
 
 function setWorkflowProviderActivationPausedRequestFromProto(input: ProtoSetWorkflowProviderActivationPausedRequest): SetWorkflowProviderActivationPausedRequest {
-  return { definitionId: input.definitionId, activationId: input.activationId, paused: input.paused, requestedBySubjectId: input.requestedBySubjectId, invocationToken: input.invocationToken, context: input.context };
+  return { definitionId: input.definitionId, activationId: input.activationId, paused: input.paused, requestedBySubjectId: input.requestedBySubjectId, context: input.context };
 }
 
 function deleteWorkflowProviderDefinitionRequestFromProto(input: ProtoDeleteWorkflowProviderDefinitionRequest): DeleteWorkflowProviderDefinitionRequest {
-  return { definitionId: input.definitionId, invocationToken: input.invocationToken, context: input.context };
+  return { definitionId: input.definitionId, context: input.context };
 }
 
 function startWorkflowProviderRunRequestFromProto(input: ProtoStartWorkflowProviderRunRequest): StartWorkflowProviderRunRequest {
@@ -1642,13 +1626,12 @@ function startWorkflowProviderRunRequestFromProto(input: ProtoStartWorkflowProvi
     createdBySubjectId: input.createdBySubjectId,
     runAs: subjectInputFromProto(input.runAs),
     workflowKey: input.workflowKey,
-    invocationToken: input.invocationToken,
     context: input.context,
   };
 }
 
 function getWorkflowProviderRunRequestFromProto(input: ProtoGetWorkflowProviderRunRequest): GetWorkflowProviderRunRequest {
-  return { runId: input.runId, invocationToken: input.invocationToken, context: input.context };
+  return { runId: input.runId, context: input.context };
 }
 
 function listWorkflowProviderRunsRequestFromProto(input: ProtoListWorkflowProviderRunsRequest): ListWorkflowProviderRunsRequest {
@@ -1657,25 +1640,24 @@ function listWorkflowProviderRunsRequestFromProto(input: ProtoListWorkflowProvid
     pageToken: input.pageToken,
     status: input.status as WorkflowRunStatus,
     targetApp: input.targetApp,
-    invocationToken: input.invocationToken,
     context: input.context,
   };
 }
 
 function getWorkflowProviderRunEventsRequestFromProto(input: ProtoGetWorkflowProviderRunEventsRequest): GetWorkflowProviderRunEventsRequest {
-  return { runId: input.runId, invocationToken: input.invocationToken, context: input.context };
+  return { runId: input.runId, context: input.context };
 }
 
 function getWorkflowProviderRunOutputRequestFromProto(input: ProtoGetWorkflowProviderRunOutputRequest): GetWorkflowProviderRunOutputRequest {
-  return { runId: input.runId, invocationToken: input.invocationToken, context: input.context };
+  return { runId: input.runId, context: input.context };
 }
 
 function cancelWorkflowProviderRunRequestFromProto(input: ProtoCancelWorkflowProviderRunRequest): CancelWorkflowProviderRunRequest {
-  return { runId: input.runId, reason: input.reason, invocationToken: input.invocationToken, context: input.context };
+  return { runId: input.runId, reason: input.reason, context: input.context };
 }
 
 function signalWorkflowProviderRunRequestFromProto(input: ProtoSignalWorkflowProviderRunRequest): SignalWorkflowProviderRunRequest {
-  return { runId: input.runId, signal: workflowSignalFromProto(input.signal), invocationToken: input.invocationToken, context: input.context };
+  return { runId: input.runId, signal: workflowSignalFromProto(input.signal), context: input.context };
 }
 
 function signalOrStartWorkflowProviderRunRequestFromProto(input: ProtoSignalOrStartWorkflowProviderRunRequest): SignalOrStartWorkflowProviderRunRequest {
@@ -1688,7 +1670,6 @@ function signalOrStartWorkflowProviderRunRequestFromProto(input: ProtoSignalOrSt
     createdBySubjectId: input.createdBySubjectId,
     runAs: subjectInputFromProto(input.runAs),
     signal: workflowSignalFromProto(input.signal),
-    invocationToken: input.invocationToken,
     context: input.context,
   };
 }
@@ -1698,7 +1679,6 @@ function deliverWorkflowProviderEventRequestFromProto(input: ProtoDeliverWorkflo
     appName: input.appName,
     event: workflowEventFromProto(input.event),
     deliveredBySubjectId: input.deliveredBySubjectId,
-    invocationToken: input.invocationToken,
     context: input.context,
   };
 }
@@ -1722,7 +1702,6 @@ export interface WorkflowExecutionRequest {
   input?: Record<string, JsonInput> | undefined;
   metadata?: Record<string, JsonInput> | undefined;
   createdBySubjectId?: string | undefined;
-  invocationToken?: string | undefined;
   signals?: readonly WorkflowSignal[] | undefined;
   steps?: Record<string, { inputs?: Record<string, unknown>; outputs?: unknown }> | undefined;
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ManagerService interface {
@@ -34,25 +33,11 @@ type ManagerService interface {
 type ProviderServer struct {
 	proto.UnimplementedAgentProviderServer
 
-	pluginName   string
-	manager      ManagerService
-	tokens       *appaccessservice.InvocationTokenManager
-	workflowRuns appaccessservice.WorkflowRunResolver
+	pluginName string
+	manager    ManagerService
 }
 
 type ProviderServerOption func(*ProviderServer)
-
-func WithInvocationTokenManager(tokens *appaccessservice.InvocationTokenManager) ProviderServerOption {
-	return func(s *ProviderServer) {
-		s.tokens = tokens
-	}
-}
-
-func WithWorkflowRunResolver(resolver appaccessservice.WorkflowRunResolver) ProviderServerOption {
-	return func(s *ProviderServer) {
-		s.workflowRuns = resolver
-	}
-}
 
 func NewProviderServer(pluginName string, manager ManagerService, opts ...ProviderServerOption) *ProviderServer {
 	s := &ProviderServer{
@@ -67,52 +52,11 @@ func NewProviderServer(pluginName string, manager ManagerService, opts ...Provid
 	return s
 }
 
-type agentProviderAuthRequest interface {
-	GetContext() *proto.RequestContext
-	GetInvocationToken() string
-}
-
-type agentProviderWorkflowRequest interface {
-	GetWorkflow() *structpb.Struct
-}
-
-type agentManagerAuthContext struct {
-	request         appaccessservice.ProviderRequestContext
-	token           appaccessservice.TokenContext
-	invocationToken string
-	legacy          bool
-}
-
-func (c agentManagerAuthContext) Principal() *principal.Principal {
-	if c.legacy {
-		return c.token.Principal()
-	}
-	return c.request.Principal()
-}
-
-func (c agentManagerAuthContext) Restore(ctx context.Context) context.Context {
-	if c.legacy {
-		if c.request.CallerName() != "" {
-			ctx = c.request.Restore(ctx, "")
-		}
-		ctx = appaccessservice.RestoreTokenContext(ctx, c.token, "")
-		if caller := c.token.CallerProvider(); caller.Kind != "" && caller.Name != "" {
-			ctx = invocation.WithCallerProvider(ctx, caller.Kind, caller.Name)
-		}
-		return ctx
-	}
-	ctx = c.request.Restore(ctx, "")
-	if token := strings.TrimSpace(c.invocationToken); token != "" {
-		ctx = appaccessservice.WithInvocationToken(ctx, token)
-	}
-	return ctx
-}
-
 func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +71,7 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +90,7 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +116,7 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +135,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +154,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +173,7 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +203,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +222,7 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +245,7 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -320,7 +264,7 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	reqCtx, err := s.requestContext(ctx, req)
+	reqCtx, err := s.requestContext(req.GetContext())
 	if err != nil {
 		return nil, err
 	}
@@ -343,70 +287,12 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 	return nil, status.Error(codes.Unimplemented, "agent get capabilities is not available through the public provider facade")
 }
 
-func (s *ProviderServer) requestContext(ctx context.Context, req agentProviderAuthRequest) (agentManagerAuthContext, error) {
-	if req.GetContext() != nil {
-		token := strings.TrimSpace(req.GetInvocationToken())
-		if token != "" {
-			if s == nil || s.tokens == nil {
-				return agentManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-			}
-			tokenCtx, err := s.tokens.ResolveToken(token, "")
-			if err != nil {
-				return agentManagerAuthContext{}, status.Error(codes.FailedPrecondition, err.Error())
-			}
-			if tokenCtx.CallerApp() == "" {
-				return agentManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
-			}
-			var workflow *structpb.Struct
-			if workflowReq, ok := req.(agentProviderWorkflowRequest); ok {
-				workflow = workflowReq.GetWorkflow()
-			}
-			out := agentManagerAuthContext{
-				token:           appaccessservice.TokenContextWithWorkflow(tokenCtx, workflow),
-				invocationToken: token,
-				legacy:          true,
-			}
-			if authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.pluginName); err == nil {
-				out.request = authCtx
-			}
-			return out, nil
-		}
-		authCtx, err := appaccessservice.ProviderRequestContextFromProto(req.GetContext(), invocation.ProviderKindApp, s.pluginName)
-		if err != nil {
-			return agentManagerAuthContext{}, err
-		}
-		return agentManagerAuthContext{request: authCtx}, nil
-	}
-	var workflow *structpb.Struct
-	if workflowReq, ok := req.(agentProviderWorkflowRequest); ok {
-		workflow = workflowReq.GetWorkflow()
-	}
-	token := strings.TrimSpace(req.GetInvocationToken())
-	if token == "" {
-		tokenCtx, err := appaccessservice.WorkflowRunAsTokenContext(ctx, s.workflowRuns, workflow)
-		if err != nil {
-			return agentManagerAuthContext{}, err
-		}
-		return agentManagerAuthContext{token: tokenCtx, legacy: true}, nil
-	}
-	if s == nil || s.tokens == nil {
-		return agentManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
-	}
-	tokenCtx, err := s.tokens.ResolveToken(token, "")
-	if err != nil {
-		return agentManagerAuthContext{}, status.Error(codes.FailedPrecondition, err.Error())
-	}
-	if tokenCtx.CallerApp() == "" {
-		return agentManagerAuthContext{}, status.Error(codes.FailedPrecondition, "invocation token caller app is required")
-	}
-	return agentManagerAuthContext{
-		token:  appaccessservice.TokenContextWithWorkflow(tokenCtx, workflow),
-		legacy: true,
-	}, nil
+func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
+	return appaccessservice.ProviderRequestContextFromProto(reqCtx, invocation.ProviderKindApp, s.pluginName)
 }
 
-func (s *ProviderServer) restoreRequestContext(ctx context.Context, authCtx agentManagerAuthContext) context.Context {
-	return authCtx.Restore(ctx)
+func (s *ProviderServer) restoreRequestContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {
+	return reqCtx.Restore(ctx, "")
 }
 
 func agentManagerStatusError(err error) error {

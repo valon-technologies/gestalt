@@ -1806,7 +1806,6 @@ def _plugin_request(request: Any) -> Request:
         agent_subject=_subject_from_proto(request_context, "agent_subject"),
         credential=_credential_from_proto(request_context),
         access=_access_from_proto(request_context),
-        invocation_token=getattr(request, "invocation_token", "").strip(),
         host=_host_from_proto(request_context),
         workflow=_workflow_from_proto(request_context),
         tool_refs=tool_refs,

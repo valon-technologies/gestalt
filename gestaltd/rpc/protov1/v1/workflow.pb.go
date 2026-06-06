@@ -2355,7 +2355,6 @@ type ApplyWorkflowProviderDefinitionRequest struct {
 	state                protoimpl.MessageState  `protogen:"open.v1"`
 	ProviderName         string                  `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	Spec                 *WorkflowDefinitionSpec `protobuf:"bytes,2,opt,name=spec,proto3" json:"spec,omitempty"`
-	InvocationToken      string                  `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	IdempotencyKey       string                  `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	RequestedBySubjectId string                  `protobuf:"bytes,5,opt,name=requested_by_subject_id,json=requestedBySubjectId,proto3" json:"requested_by_subject_id,omitempty"`
 	Context              *RequestContext         `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
@@ -2407,13 +2406,6 @@ func (x *ApplyWorkflowProviderDefinitionRequest) GetSpec() *WorkflowDefinitionSp
 	return nil
 }
 
-func (x *ApplyWorkflowProviderDefinitionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *ApplyWorkflowProviderDefinitionRequest) GetIdempotencyKey() string {
 	if x != nil {
 		return x.IdempotencyKey
@@ -2436,12 +2428,11 @@ func (x *ApplyWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
 }
 
 type GetWorkflowProviderDefinitionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	DefinitionId    string                 `protobuf:"bytes,1,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,2,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DefinitionId  string                 `protobuf:"bytes,1,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetWorkflowProviderDefinitionRequest) Reset() {
@@ -2481,13 +2472,6 @@ func (x *GetWorkflowProviderDefinitionRequest) GetDefinitionId() string {
 	return ""
 }
 
-func (x *GetWorkflowProviderDefinitionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *GetWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
 	if x != nil {
 		return x.Context
@@ -2496,11 +2480,10 @@ func (x *GetWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
 }
 
 type ListWorkflowProviderDefinitionsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	InvocationToken string                 `protobuf:"bytes,1,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       *RequestContext        `protobuf:"bytes,2,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListWorkflowProviderDefinitionsRequest) Reset() {
@@ -2531,13 +2514,6 @@ func (x *ListWorkflowProviderDefinitionsRequest) ProtoReflect() protoreflect.Mes
 // Deprecated: Use ListWorkflowProviderDefinitionsRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkflowProviderDefinitionsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_workflow_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *ListWorkflowProviderDefinitionsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
 }
 
 func (x *ListWorkflowProviderDefinitionsRequest) GetContext() *RequestContext {
@@ -2595,7 +2571,6 @@ type SetWorkflowProviderDefinitionPausedRequest struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
 	DefinitionId         string                 `protobuf:"bytes,1,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
 	Paused               bool                   `protobuf:"varint,2,opt,name=paused,proto3" json:"paused,omitempty"`
-	InvocationToken      string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	RequestedBySubjectId string                 `protobuf:"bytes,4,opt,name=requested_by_subject_id,json=requestedBySubjectId,proto3" json:"requested_by_subject_id,omitempty"`
 	Context              *RequestContext        `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -2646,13 +2621,6 @@ func (x *SetWorkflowProviderDefinitionPausedRequest) GetPaused() bool {
 	return false
 }
 
-func (x *SetWorkflowProviderDefinitionPausedRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *SetWorkflowProviderDefinitionPausedRequest) GetRequestedBySubjectId() string {
 	if x != nil {
 		return x.RequestedBySubjectId
@@ -2672,7 +2640,6 @@ type SetWorkflowProviderActivationPausedRequest struct {
 	DefinitionId         string                 `protobuf:"bytes,1,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
 	ActivationId         string                 `protobuf:"bytes,2,opt,name=activation_id,json=activationId,proto3" json:"activation_id,omitempty"`
 	Paused               bool                   `protobuf:"varint,3,opt,name=paused,proto3" json:"paused,omitempty"`
-	InvocationToken      string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	RequestedBySubjectId string                 `protobuf:"bytes,5,opt,name=requested_by_subject_id,json=requestedBySubjectId,proto3" json:"requested_by_subject_id,omitempty"`
 	Context              *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -2730,13 +2697,6 @@ func (x *SetWorkflowProviderActivationPausedRequest) GetPaused() bool {
 	return false
 }
 
-func (x *SetWorkflowProviderActivationPausedRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *SetWorkflowProviderActivationPausedRequest) GetRequestedBySubjectId() string {
 	if x != nil {
 		return x.RequestedBySubjectId
@@ -2752,12 +2712,11 @@ func (x *SetWorkflowProviderActivationPausedRequest) GetContext() *RequestContex
 }
 
 type DeleteWorkflowProviderDefinitionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	DefinitionId    string                 `protobuf:"bytes,1,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,2,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	DefinitionId  string                 `protobuf:"bytes,1,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteWorkflowProviderDefinitionRequest) Reset() {
@@ -2797,13 +2756,6 @@ func (x *DeleteWorkflowProviderDefinitionRequest) GetDefinitionId() string {
 	return ""
 }
 
-func (x *DeleteWorkflowProviderDefinitionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *DeleteWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
 	if x != nil {
 		return x.Context
@@ -2817,7 +2769,6 @@ type StartWorkflowProviderRunRequest struct {
 	CreatedBySubjectId           string                 `protobuf:"bytes,4,opt,name=created_by_subject_id,json=createdBySubjectId,proto3" json:"created_by_subject_id,omitempty"`
 	WorkflowKey                  string                 `protobuf:"bytes,6,opt,name=workflow_key,json=workflowKey,proto3" json:"workflow_key,omitempty"`
 	ProviderName                 string                 `protobuf:"bytes,7,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	InvocationToken              string                 `protobuf:"bytes,8,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	DefinitionId                 string                 `protobuf:"bytes,9,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
 	RunAs                        *SubjectContext        `protobuf:"bytes,10,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
 	Input                        *structpb.Struct       `protobuf:"bytes,11,opt,name=input,proto3" json:"input,omitempty"`
@@ -2885,13 +2836,6 @@ func (x *StartWorkflowProviderRunRequest) GetProviderName() string {
 	return ""
 }
 
-func (x *StartWorkflowProviderRunRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *StartWorkflowProviderRunRequest) GetDefinitionId() string {
 	if x != nil {
 		return x.DefinitionId
@@ -2928,12 +2872,11 @@ func (x *StartWorkflowProviderRunRequest) GetContext() *RequestContext {
 }
 
 type GetWorkflowProviderRunRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RunId           string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetWorkflowProviderRunRequest) Reset() {
@@ -2973,13 +2916,6 @@ func (x *GetWorkflowProviderRunRequest) GetRunId() string {
 	return ""
 }
 
-func (x *GetWorkflowProviderRunRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *GetWorkflowProviderRunRequest) GetContext() *RequestContext {
 	if x != nil {
 		return x.Context
@@ -2988,15 +2924,14 @@ func (x *GetWorkflowProviderRunRequest) GetContext() *RequestContext {
 }
 
 type ListWorkflowProviderRunsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	PageSize        int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken       string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	Status          WorkflowRunStatus      `protobuf:"varint,3,opt,name=status,proto3,enum=gestalt.provider.v1.WorkflowRunStatus" json:"status,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	TargetApp       string                 `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Status        WorkflowRunStatus      `protobuf:"varint,3,opt,name=status,proto3,enum=gestalt.provider.v1.WorkflowRunStatus" json:"status,omitempty"`
+	TargetApp     string                 `protobuf:"bytes,5,opt,name=target_app,json=targetApp,proto3" json:"target_app,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListWorkflowProviderRunsRequest) Reset() {
@@ -3048,13 +2983,6 @@ func (x *ListWorkflowProviderRunsRequest) GetStatus() WorkflowRunStatus {
 		return x.Status
 	}
 	return WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
-}
-
-func (x *ListWorkflowProviderRunsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
 }
 
 func (x *ListWorkflowProviderRunsRequest) GetTargetApp() string {
@@ -3124,13 +3052,12 @@ func (x *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
 }
 
 type CancelWorkflowProviderRunRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RunId           string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Reason          string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CancelWorkflowProviderRunRequest) Reset() {
@@ -3177,13 +3104,6 @@ func (x *CancelWorkflowProviderRunRequest) GetReason() string {
 	return ""
 }
 
-func (x *CancelWorkflowProviderRunRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *CancelWorkflowProviderRunRequest) GetContext() *RequestContext {
 	if x != nil {
 		return x.Context
@@ -3192,13 +3112,12 @@ func (x *CancelWorkflowProviderRunRequest) GetContext() *RequestContext {
 }
 
 type SignalWorkflowProviderRunRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RunId           string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	Signal          *WorkflowSignal        `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Signal        *WorkflowSignal        `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SignalWorkflowProviderRunRequest) Reset() {
@@ -3245,13 +3164,6 @@ func (x *SignalWorkflowProviderRunRequest) GetSignal() *WorkflowSignal {
 	return nil
 }
 
-func (x *SignalWorkflowProviderRunRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 func (x *SignalWorkflowProviderRunRequest) GetContext() *RequestContext {
 	if x != nil {
 		return x.Context
@@ -3266,7 +3178,6 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	CreatedBySubjectId           string                 `protobuf:"bytes,4,opt,name=created_by_subject_id,json=createdBySubjectId,proto3" json:"created_by_subject_id,omitempty"`
 	Signal                       *WorkflowSignal        `protobuf:"bytes,6,opt,name=signal,proto3" json:"signal,omitempty"`
 	ProviderName                 string                 `protobuf:"bytes,7,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	InvocationToken              string                 `protobuf:"bytes,8,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	DefinitionId                 string                 `protobuf:"bytes,9,opt,name=definition_id,json=definitionId,proto3" json:"definition_id,omitempty"`
 	RunAs                        *SubjectContext        `protobuf:"bytes,10,opt,name=run_as,json=runAs,proto3" json:"run_as,omitempty"`
 	Input                        *structpb.Struct       `protobuf:"bytes,11,opt,name=input,proto3" json:"input,omitempty"`
@@ -3337,13 +3248,6 @@ func (x *SignalOrStartWorkflowProviderRunRequest) GetSignal() *WorkflowSignal {
 func (x *SignalOrStartWorkflowProviderRunRequest) GetProviderName() string {
 	if x != nil {
 		return x.ProviderName
-	}
-	return ""
-}
-
-func (x *SignalOrStartWorkflowProviderRunRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
 	}
 	return ""
 }
@@ -3456,7 +3360,6 @@ type DeliverWorkflowProviderEventRequest struct {
 	AppName              string                 `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
 	Event                *WorkflowEvent         `protobuf:"bytes,2,opt,name=event,proto3" json:"event,omitempty"`
 	DeliveredBySubjectId string                 `protobuf:"bytes,3,opt,name=delivered_by_subject_id,json=deliveredBySubjectId,proto3" json:"delivered_by_subject_id,omitempty"`
-	InvocationToken      string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	ProviderName         string                 `protobuf:"bytes,5,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	Context              *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -3510,13 +3413,6 @@ func (x *DeliverWorkflowProviderEventRequest) GetEvent() *WorkflowEvent {
 func (x *DeliverWorkflowProviderEventRequest) GetDeliveredBySubjectId() string {
 	if x != nil {
 		return x.DeliveredBySubjectId
-	}
-	return ""
-}
-
-func (x *DeliverWorkflowProviderEventRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
 	}
 	return ""
 }
@@ -3620,12 +3516,11 @@ func (x *WorkflowRunEvent) GetCreatedAt() *timestamppb.Timestamp {
 }
 
 type GetWorkflowProviderRunEventsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RunId           string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,2,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetWorkflowProviderRunEventsRequest) Reset() {
@@ -3661,13 +3556,6 @@ func (*GetWorkflowProviderRunEventsRequest) Descriptor() ([]byte, []int) {
 func (x *GetWorkflowProviderRunEventsRequest) GetRunId() string {
 	if x != nil {
 		return x.RunId
-	}
-	return ""
-}
-
-func (x *GetWorkflowProviderRunEventsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
 	}
 	return ""
 }
@@ -3724,12 +3612,11 @@ func (x *GetWorkflowProviderRunEventsResponse) GetEvents() []*WorkflowRunEvent {
 }
 
 type GetWorkflowProviderRunOutputRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RunId           string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,2,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Context         *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RunId         string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	Context       *RequestContext        `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetWorkflowProviderRunOutputRequest) Reset() {
@@ -3765,13 +3652,6 @@ func (*GetWorkflowProviderRunOutputRequest) Descriptor() ([]byte, []int) {
 func (x *GetWorkflowProviderRunOutputRequest) GetRunId() string {
 	if x != nil {
 		return x.RunId
-	}
-	return ""
-}
-
-func (x *GetWorkflowProviderRunOutputRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
 	}
 	return ""
 }
@@ -4022,104 +3902,91 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12'\n" +
 	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12\x1a\n" +
-	"\bsequence\x18\b \x01(\x03R\bsequence\"\xd8\x02\n" +
+	"\bsequence\x18\b \x01(\x03R\bsequence\"\xc5\x02\n" +
 	"&ApplyWorkflowProviderDefinitionRequest\x12#\n" +
 	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12?\n" +
-	"\x04spec\x18\x02 \x01(\v2+.gestalt.provider.v1.WorkflowDefinitionSpecR\x04spec\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x12'\n" +
+	"\x04spec\x18\x02 \x01(\v2+.gestalt.provider.v1.WorkflowDefinitionSpecR\x04spec\x12'\n" +
 	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x125\n" +
 	"\x17requested_by_subject_id\x18\x05 \x01(\tR\x14requestedBySubjectId\x12=\n" +
-	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xb5\x01\n" +
+	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04R\x10invocation_token\"\xa2\x01\n" +
 	"$GetWorkflowProviderDefinitionRequest\x12#\n" +
-	"\rdefinition_id\x18\x01 \x01(\tR\fdefinitionId\x12)\n" +
-	"\x10invocation_token\x18\x02 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\x92\x01\n" +
-	"&ListWorkflowProviderDefinitionsRequest\x12)\n" +
-	"\x10invocation_token\x18\x01 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x02 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"t\n" +
+	"\rdefinition_id\x18\x01 \x01(\tR\fdefinitionId\x12=\n" +
+	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x02\x10\x03R\x10invocation_token\"\x7f\n" +
+	"&ListWorkflowProviderDefinitionsRequest\x12=\n" +
+	"\acontext\x18\x02 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x01\x10\x02R\x10invocation_token\"t\n" +
 	"'ListWorkflowProviderDefinitionsResponse\x12I\n" +
-	"\vdefinitions\x18\x01 \x03(\v2'.gestalt.provider.v1.WorkflowDefinitionR\vdefinitions\"\x8a\x02\n" +
+	"\vdefinitions\x18\x01 \x03(\v2'.gestalt.provider.v1.WorkflowDefinitionR\vdefinitions\"\xf7\x01\n" +
 	"*SetWorkflowProviderDefinitionPausedRequest\x12#\n" +
 	"\rdefinition_id\x18\x01 \x01(\tR\fdefinitionId\x12\x16\n" +
-	"\x06paused\x18\x02 \x01(\bR\x06paused\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x125\n" +
+	"\x06paused\x18\x02 \x01(\bR\x06paused\x125\n" +
 	"\x17requested_by_subject_id\x18\x04 \x01(\tR\x14requestedBySubjectId\x12=\n" +
-	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xaf\x02\n" +
+	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04R\x10invocation_token\"\x9c\x02\n" +
 	"*SetWorkflowProviderActivationPausedRequest\x12#\n" +
 	"\rdefinition_id\x18\x01 \x01(\tR\fdefinitionId\x12#\n" +
 	"\ractivation_id\x18\x02 \x01(\tR\factivationId\x12\x16\n" +
-	"\x06paused\x18\x03 \x01(\bR\x06paused\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x125\n" +
+	"\x06paused\x18\x03 \x01(\bR\x06paused\x125\n" +
 	"\x17requested_by_subject_id\x18\x05 \x01(\tR\x14requestedBySubjectId\x12=\n" +
-	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xb8\x01\n" +
+	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x04\x10\x05R\x10invocation_token\"\xa5\x01\n" +
 	"'DeleteWorkflowProviderDefinitionRequest\x12#\n" +
-	"\rdefinition_id\x18\x01 \x01(\tR\fdefinitionId\x12)\n" +
-	"\x10invocation_token\x18\x02 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\x8b\x04\n" +
+	"\rdefinition_id\x18\x01 \x01(\tR\fdefinitionId\x12=\n" +
+	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x02\x10\x03R\x10invocation_token\"\xf8\x03\n" +
 	"\x1fStartWorkflowProviderRunRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x121\n" +
 	"\x15created_by_subject_id\x18\x04 \x01(\tR\x12createdBySubjectId\x12!\n" +
 	"\fworkflow_key\x18\x06 \x01(\tR\vworkflowKey\x12#\n" +
-	"\rprovider_name\x18\a \x01(\tR\fproviderName\x12)\n" +
-	"\x10invocation_token\x18\b \x01(\tR\x0finvocationToken\x12#\n" +
+	"\rprovider_name\x18\a \x01(\tR\fproviderName\x12#\n" +
 	"\rdefinition_id\x18\t \x01(\tR\fdefinitionId\x12:\n" +
 	"\x06run_as\x18\n" +
 	" \x01(\v2#.gestalt.provider.v1.SubjectContextR\x05runAs\x12-\n" +
 	"\x05input\x18\v \x01(\v2\x17.google.protobuf.StructR\x05input\x12D\n" +
 	"\x1eexpected_definition_generation\x18\f \x01(\x03R\x1cexpectedDefinitionGeneration\x12=\n" +
-	"\acontext\x18\r \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x01\x10\x02\"\xa0\x01\n" +
+	"\acontext\x18\r \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x01\x10\x02J\x04\b\b\x10\tR\x10invocation_token\"\x8d\x01\n" +
 	"\x1dGetWorkflowProviderRunRequest\x12\x15\n" +
-	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xa6\x02\n" +
+	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12=\n" +
+	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04R\x10invocation_token\"\x93\x02\n" +
 	"\x1fListWorkflowProviderRunsRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\x12>\n" +
-	"\x06status\x18\x03 \x01(\x0e2&.gestalt.provider.v1.WorkflowRunStatusR\x06status\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12\x1d\n" +
+	"\x06status\x18\x03 \x01(\x0e2&.gestalt.provider.v1.WorkflowRunStatusR\x06status\x12\x1d\n" +
 	"\n" +
 	"target_app\x18\x05 \x01(\tR\ttargetApp\x12=\n" +
-	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\x80\x01\n" +
+	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x04\x10\x05R\x10invocation_token\"\x80\x01\n" +
 	" ListWorkflowProviderRunsResponse\x124\n" +
 	"\x04runs\x18\x01 \x03(\v2 .gestalt.provider.v1.WorkflowRunR\x04runs\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xbb\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa8\x01\n" +
 	" CancelWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xe0\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12=\n" +
+	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x04\x10\x05R\x10invocation_token\"\xcd\x01\n" +
 	" SignalWorkflowProviderRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12;\n" +
-	"\x06signal\x18\x02 \x01(\v2#.gestalt.provider.v1.WorkflowSignalR\x06signal\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xd0\x04\n" +
+	"\x06signal\x18\x02 \x01(\v2#.gestalt.provider.v1.WorkflowSignalR\x06signal\x12=\n" +
+	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04R\x10invocation_token\"\xbd\x04\n" +
 	"'SignalOrStartWorkflowProviderRunRequest\x12!\n" +
 	"\fworkflow_key\x18\x01 \x01(\tR\vworkflowKey\x12'\n" +
 	"\x0fidempotency_key\x18\x03 \x01(\tR\x0eidempotencyKey\x121\n" +
 	"\x15created_by_subject_id\x18\x04 \x01(\tR\x12createdBySubjectId\x12;\n" +
 	"\x06signal\x18\x06 \x01(\v2#.gestalt.provider.v1.WorkflowSignalR\x06signal\x12#\n" +
-	"\rprovider_name\x18\a \x01(\tR\fproviderName\x12)\n" +
-	"\x10invocation_token\x18\b \x01(\tR\x0finvocationToken\x12#\n" +
+	"\rprovider_name\x18\a \x01(\tR\fproviderName\x12#\n" +
 	"\rdefinition_id\x18\t \x01(\tR\fdefinitionId\x12:\n" +
 	"\x06run_as\x18\n" +
 	" \x01(\v2#.gestalt.provider.v1.SubjectContextR\x05runAs\x12-\n" +
 	"\x05input\x18\v \x01(\v2\x17.google.protobuf.StructR\x05input\x12D\n" +
 	"\x1eexpected_definition_generation\x18\f \x01(\x03R\x1cexpectedDefinitionGeneration\x12=\n" +
-	"\acontext\x18\r \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x02\x10\x03\"\xd0\x01\n" +
+	"\acontext\x18\r \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\b\x10\tJ\x04\b\x02\x10\x03R\x10invocation_token\"\xd0\x01\n" +
 	"\x19SignalWorkflowRunResponse\x122\n" +
 	"\x03run\x18\x01 \x01(\v2 .gestalt.provider.v1.WorkflowRunR\x03run\x12;\n" +
 	"\x06signal\x18\x02 \x01(\v2#.gestalt.provider.v1.WorkflowSignalR\x06signal\x12\x1f\n" +
 	"\vstarted_run\x18\x03 \x01(\bR\n" +
 	"startedRun\x12!\n" +
-	"\fworkflow_key\x18\x04 \x01(\tR\vworkflowKey\"\xc0\x02\n" +
+	"\fworkflow_key\x18\x04 \x01(\tR\vworkflowKey\"\xad\x02\n" +
 	"#DeliverWorkflowProviderEventRequest\x12\x19\n" +
 	"\bapp_name\x18\x01 \x01(\tR\aappName\x128\n" +
 	"\x05event\x18\x02 \x01(\v2\".gestalt.provider.v1.WorkflowEventR\x05event\x125\n" +
-	"\x17delivered_by_subject_id\x18\x03 \x01(\tR\x14deliveredBySubjectId\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12#\n" +
+	"\x17delivered_by_subject_id\x18\x03 \x01(\tR\x14deliveredBySubjectId\x12#\n" +
 	"\rprovider_name\x18\x05 \x01(\tR\fproviderName\x12=\n" +
-	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"\xce\x01\n" +
+	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x04\x10\x05R\x10invocation_token\"\xce\x01\n" +
 	"\x10WorkflowRunEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x17\n" +
@@ -4127,17 +3994,15 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12+\n" +
 	"\x04data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\x04data\x129\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xa6\x01\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x93\x01\n" +
 	"#GetWorkflowProviderRunEventsRequest\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12)\n" +
-	"\x10invocation_token\x18\x02 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"e\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12=\n" +
+	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x02\x10\x03R\x10invocation_token\"e\n" +
 	"$GetWorkflowProviderRunEventsResponse\x12=\n" +
-	"\x06events\x18\x01 \x03(\v2%.gestalt.provider.v1.WorkflowRunEventR\x06events\"\xa6\x01\n" +
+	"\x06events\x18\x01 \x03(\v2%.gestalt.provider.v1.WorkflowRunEventR\x06events\"\x93\x01\n" +
 	"#GetWorkflowProviderRunOutputRequest\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12)\n" +
-	"\x10invocation_token\x18\x02 \x01(\tR\x0finvocationToken\x12=\n" +
-	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\"V\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12=\n" +
+	"\acontext\x18\x03 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x02\x10\x03R\x10invocation_token\"V\n" +
 	"$GetWorkflowProviderRunOutputResponse\x12.\n" +
 	"\x06output\x18\x01 \x01(\v2\x16.google.protobuf.ValueR\x06output*\xdf\x01\n" +
 	"\x11WorkflowRunStatus\x12#\n" +

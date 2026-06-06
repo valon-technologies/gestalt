@@ -16,7 +16,6 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
@@ -38,7 +37,6 @@ type agentRuntime struct {
 	startupWaits           *startupWaitTracker
 	invoker                invocation.Invoker
 	systemTools            agentSystemToolExecutor
-	runGrants              *agentgrant.Manager
 	turnScopes             *agentturnscope.Store
 	toolIDs                *agenttoolid.Codec
 	toolSearcher           agentToolResolver
@@ -243,15 +241,6 @@ func (r *agentRuntime) SetTurnScopes(scopes *agentturnscope.Store) {
 	r.turnScopes = scopes
 }
 
-func (r *agentRuntime) SetRunGrants(grants *agentgrant.Manager) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.runGrants = grants
-}
-
 func (r *agentRuntime) SetToolIDCodec(codec *agenttoolid.Codec) {
 	if r == nil {
 		return
@@ -417,18 +406,17 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	r.mu.RLock()
 	invoker := r.invoker
 	systemTools := r.systemTools
-	grants := r.runGrants
 	scopes := r.turnScopes
 	toolIDs := r.toolIDs
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	scope, reqCtx, legacyScope, err := resolveAgentRuntimeScope(scopes, grants, req.Context, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	scope, reqCtx, err := resolveAgentTurnScope(scopes, req.Context, strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = restoreAgentRuntimeScopeContext(ctx, scope, reqCtx, legacyScope)
-	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, agentTurnValidationRequestContext(req.Context, legacyScope)); err != nil {
+	ctx = reqCtx.Restore(ctx, "")
+	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, req.Context); err != nil {
 		return nil, err
 	}
 	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
@@ -437,7 +425,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if toolIDs == nil {
 		return nil, fmt.Errorf("%w: agent tool id codec is not configured", invocation.ErrInternal)
 	}
-	toolTarget, err := resolveAgentToolTarget(toolIDs, grants, req.ToolID)
+	toolTarget, err := toolIDs.Resolve(req.ToolID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: agent tool id is invalid", invocation.ErrAuthorizationDenied)
 	}
@@ -525,21 +513,6 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	}, nil
 }
 
-func resolveAgentToolTarget(toolIDs *agenttoolid.Codec, grants *agentgrant.Manager, toolID string) (coreagent.ToolTarget, error) {
-	target, err := toolIDs.Resolve(toolID)
-	if err == nil {
-		return target, nil
-	}
-	if grants == nil {
-		return coreagent.ToolTarget{}, err
-	}
-	legacyTarget, legacyErr := grants.ResolveToolID(toolID)
-	if legacyErr == nil {
-		return legacyTarget, nil
-	}
-	return coreagent.ToolTarget{}, err
-}
-
 func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
 	requestedTurnID := strings.TrimSpace(req.TurnID)
 	var scope agentturnscope.Scope
@@ -550,18 +523,16 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 		return nil, fmt.Errorf("agent runtime is not configured")
 	}
 	r.mu.RLock()
-	grants := r.runGrants
 	scopes := r.turnScopes
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
 	var reqCtx appaccessservice.ProviderRequestContext
-	legacyScope := false
-	scope, reqCtx, legacyScope, err = resolveAgentRuntimeScope(scopes, grants, req.Context, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	scope, reqCtx, err = resolveAgentTurnScope(scopes, req.Context, strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = restoreAgentRuntimeScopeContext(ctx, scope, reqCtx, legacyScope)
-	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, agentTurnValidationRequestContext(req.Context, legacyScope)); err != nil {
+	ctx = reqCtx.Restore(ctx, "")
+	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, req.Context); err != nil {
 		return nil, err
 	}
 	principalValue := agentTurnScopePrincipal(scope)
@@ -710,17 +681,16 @@ func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.Reso
 		return nil, fmt.Errorf("agent runtime is not configured")
 	}
 	r.mu.RLock()
-	grants := r.runGrants
 	scopes := r.turnScopes
 	invoker := r.invoker
 	r.mu.RUnlock()
 	requestedTurnID := strings.TrimSpace(req.TurnID)
-	scope, reqCtx, legacyScope, err := resolveAgentRuntimeScope(scopes, grants, req.Context, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
+	scope, reqCtx, err := resolveAgentTurnScope(scopes, req.Context, strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
 	}
-	ctx = restoreAgentRuntimeScopeContext(ctx, scope, reqCtx, legacyScope)
-	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, agentTurnValidationRequestContext(req.Context, legacyScope)); err != nil {
+	ctx = reqCtx.Restore(ctx, "")
+	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, req.Context); err != nil {
 		return nil, err
 	}
 	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
@@ -790,121 +760,6 @@ func materializeAgentConnectionHeaders(token string, info invocation.ConnectionR
 		return nil, nil
 	}
 	return map[string]string{"Authorization": core.BearerScheme + token}, nil
-}
-
-func resolveAgentRuntimeScope(scopes *agentturnscope.Store, grants *agentgrant.Manager, reqCtx *proto.RequestContext, runGrant, providerName, sessionID, turnID string) (agentturnscope.Scope, appaccessservice.ProviderRequestContext, bool, error) {
-	if strings.TrimSpace(runGrant) != "" {
-		grant, err := resolveAgentRunGrant(grants, runGrant, providerName, sessionID, turnID)
-		if err != nil {
-			return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, false, err
-		}
-		// Mixed-version providers may still send a request context alongside
-		// the run grant, but the grant is the trusted authorization boundary.
-		return agentTurnScopeFromRunGrant(grant), appaccessservice.ProviderRequestContext{}, true, nil
-	}
-	if reqCtx != nil {
-		scope, parsed, err := resolveAgentTurnScope(scopes, reqCtx, providerName, sessionID, turnID)
-		return scope, parsed, false, err
-	}
-	grant, err := resolveAgentRunGrant(grants, runGrant, providerName, sessionID, turnID)
-	if err != nil {
-		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, false, err
-	}
-	return agentTurnScopeFromRunGrant(grant), appaccessservice.ProviderRequestContext{}, true, nil
-}
-
-func restoreAgentRuntimeScopeContext(ctx context.Context, scope agentturnscope.Scope, reqCtx appaccessservice.ProviderRequestContext, legacy bool) context.Context {
-	if !legacy {
-		return reqCtx.Restore(ctx, "")
-	}
-	p := agentTurnScopePrincipal(scope)
-	if p != nil {
-		ctx = principal.WithPrincipal(ctx, p)
-	}
-	if scope.CallerKind != "" && strings.TrimSpace(scope.CallerName) != "" {
-		ctx = invocation.WithCallerProvider(ctx, scope.CallerKind, strings.TrimSpace(scope.CallerName))
-	}
-	return ctx
-}
-
-func agentTurnValidationRequestContext(reqCtx *proto.RequestContext, legacy bool) *proto.RequestContext {
-	if legacy {
-		return nil
-	}
-	return reqCtx
-}
-
-func resolveAgentRunGrant(grants *agentgrant.Manager, token, providerName, sessionID, turnID string) (agentgrant.Grant, error) {
-	if grants == nil {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
-	}
-	grant, err := grants.Resolve(token)
-	if err != nil {
-		return agentgrant.Grant{}, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
-	}
-	if strings.TrimSpace(grant.ProviderName) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant has no provider", invocation.ErrAuthorizationDenied)
-	}
-	if providerName != "" && strings.TrimSpace(grant.ProviderName) != providerName {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant is not valid for provider %q", invocation.ErrAuthorizationDenied, providerName)
-	}
-	if strings.TrimSpace(grant.SessionID) == "" || strings.TrimSpace(grant.SessionID) != sessionID {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant is not valid for session %q", invocation.ErrAuthorizationDenied, sessionID)
-	}
-	if strings.TrimSpace(turnID) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent turn is required", invocation.ErrAuthorizationDenied)
-	}
-	if strings.TrimSpace(grant.TurnID) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant has no turn", invocation.ErrAuthorizationDenied)
-	}
-	if strings.TrimSpace(grant.SubjectID) == "" {
-		return agentgrant.Grant{}, fmt.Errorf("%w: agent run grant has no subject", invocation.ErrAuthorizationDenied)
-	}
-	return grant, nil
-}
-
-func agentTurnScopeFromRunGrant(grant agentgrant.Grant) agentturnscope.Scope {
-	callerKind, callerName := agentTurnScopeCallerFromRunGrant(grant)
-	return agentturnscope.Scope{
-		ProviderName:        strings.TrimSpace(grant.ProviderName),
-		SessionID:           strings.TrimSpace(grant.SessionID),
-		TurnID:              strings.TrimSpace(grant.TurnID),
-		CallerKind:          callerKind,
-		CallerName:          callerName,
-		SubjectID:           strings.TrimSpace(grant.SubjectID),
-		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
-		Permissions:         append([]core.AccessPermission(nil), grant.Permissions...),
-		ToolRefs:            append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-		ToolRefsSet:         grant.ToolRefsSet,
-		Tools:               append([]coreagent.Tool(nil), grant.Tools...),
-		ToolSource:          grant.ToolSource,
-		Connections:         agentTurnScopeConnectionsFromRunGrant(grant.Connections),
-	}
-}
-
-func agentTurnScopeCallerFromRunGrant(grant agentgrant.Grant) (invocation.ProviderKind, string) {
-	callerKind := invocation.ProviderKind(strings.TrimSpace(string(grant.CallerKind)))
-	callerName := strings.TrimSpace(grant.CallerName)
-	if callerName == "" {
-		callerName = strings.TrimSpace(grant.CallerAppName)
-	}
-	if callerKind == "" && callerName != "" {
-		callerKind = invocation.ProviderKindApp
-	}
-	return callerKind, callerName
-}
-
-func agentTurnScopeConnectionsFromRunGrant(src []agentgrant.ConnectionBinding) []agentturnscope.ConnectionBinding {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make([]agentturnscope.ConnectionBinding, 0, len(src))
-	for _, binding := range src {
-		if connection := strings.TrimSpace(binding.Connection); connection != "" {
-			out = append(out, agentturnscope.ConnectionBinding{Connection: connection})
-		}
-	}
-	return out
 }
 
 func resolveAgentTurnScope(scopes *agentturnscope.Store, reqCtx *proto.RequestContext, providerName, sessionID, turnID string) (agentturnscope.Scope, appaccessservice.ProviderRequestContext, error) {

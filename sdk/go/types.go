@@ -138,7 +138,6 @@ type credentialKey struct{}
 type accessKey struct{}
 type hostKey struct{}
 type idempotencyKeyKey struct{}
-type invocationTokenKey struct{}
 type workflowKey struct{}
 type toolRefsKey struct{}
 
@@ -237,19 +236,6 @@ func WithIdempotencyKey(ctx context.Context, key string) context.Context {
 func IdempotencyKeyFromContext(ctx context.Context) string {
 	key, _ := ctx.Value(idempotencyKeyKey{}).(string)
 	return strings.TrimSpace(key)
-}
-
-func withInvocationToken(ctx context.Context, token string) context.Context {
-	return context.WithValue(ctx, invocationTokenKey{}, token)
-}
-
-func invocationTokenFromContext(ctx context.Context) string {
-	token, _ := ctx.Value(invocationTokenKey{}).(string)
-	return token
-}
-
-func InvocationTokenFromContext(ctx context.Context) string {
-	return invocationTokenFromContext(ctx)
 }
 
 // WithWorkflowContext attaches workflow callback metadata to the context.

@@ -146,7 +146,7 @@ test("Workflow forwards request context to provider calls", async () => {
       }),
     });
     const workflow = new Workflow(
-      request("", {}, {}, {}, {}, {}, "", "workflow-request-key-ts", {}, {}, [], false, context),
+      request("", {}, {}, {}, {}, {}, "workflow-request-key-ts", {}, {}, [], false, context),
     );
 
     const applied = await workflow.applyDefinition({

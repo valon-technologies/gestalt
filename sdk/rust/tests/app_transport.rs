@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 
 use generated::v1::app_server::{App as ProtoApp, AppServer};
 use generated::v1::{
-    AppInvokeGraphQlRequest, AppInvokeRequest, ExchangeInvocationTokenRequest,
-    ExchangeInvocationTokenResponse, OperationResult, RequestContext as ProviderRequestContext,
+    AppInvokeGraphQlRequest, AppInvokeRequest, OperationResult,
+    RequestContext as ProviderRequestContext,
 };
 use gestalt::proto::v1::{RequestContext, SubjectContext};
 use gestalt::{App, InvokeGraphQLOptions, InvokeOptions, Request};
@@ -149,15 +149,6 @@ impl ProtoApp for TestAppServer {
                 "idempotency_key": request.idempotency_key,
             })
             .to_string(),
-        }))
-    }
-
-    async fn exchange_invocation_token(
-        &self,
-        _request: GrpcRequest<ExchangeInvocationTokenRequest>,
-    ) -> std::result::Result<GrpcResponse<ExchangeInvocationTokenResponse>, Status> {
-        Ok(GrpcResponse::new(ExchangeInvocationTokenResponse {
-            invocation_token: String::new(),
         }))
     }
 }
