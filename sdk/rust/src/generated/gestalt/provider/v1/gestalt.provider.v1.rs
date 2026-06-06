@@ -125,36 +125,6 @@ pub struct OperationResult {
     #[prost(btree_map = "string, message", tag = "3")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
 }
-/// AppInvocationGrant describes one app operation grant minted into an
-/// exchanged invocation token.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AppInvocationGrant {
-    #[prost(string, tag = "1")]
-    pub app: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
-    pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, repeated, tag = "3")]
-    pub surfaces: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(bool, tag = "4")]
-    pub all_operations: bool,
-}
-/// ExchangeInvocationTokenRequest narrows an existing invocation token to a
-/// child token that carries only the requested app grants.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ExchangeInvocationTokenRequest {
-    #[prost(string, tag = "1")]
-    pub parent_invocation_token: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "2")]
-    pub grants: ::prost::alloc::vec::Vec<AppInvocationGrant>,
-    #[prost(int64, tag = "3")]
-    pub ttl_seconds: i64,
-}
-/// ExchangeInvocationTokenResponse returns the child invocation token.
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExchangeInvocationTokenResponse {
-    #[prost(string, tag = "1")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
 /// AppInvokeRequest invokes a declared operation on another app through Gestalt.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppInvokeRequest {
@@ -168,14 +138,10 @@ pub struct AppInvokeRequest {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub credential_mode: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "11")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -193,8 +159,6 @@ pub struct AppInvokeGraphQlRequest {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
@@ -414,8 +378,6 @@ pub struct ExecuteRequest {
     pub invocation_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
-    #[prost(string, tag = "8")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
@@ -673,12 +635,8 @@ pub struct CreateAgentProviderSessionRequest {
     pub prepared_workspace: ::core::option::Option<PreparedAgentWorkspace>,
     #[prost(string, tag = "11")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "13")]
     pub workspace: ::core::option::Option<AgentWorkspace>,
-    #[prost(message, optional, tag = "14")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "15")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -720,10 +678,6 @@ pub struct GetAgentProviderSessionRequest {
     pub session_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -745,10 +699,6 @@ pub struct ListAgentProviderSessionsRequest {
     pub summary_only: bool,
     #[prost(string, tag = "6")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "9")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -769,10 +719,6 @@ pub struct UpdateAgentProviderSessionRequest {
     pub metadata: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "5")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "6")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -882,21 +828,15 @@ pub struct CreateAgentProviderTurnRequest {
     pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "16")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "17")]
-    pub run_grant: ::prost::alloc::string::String,
     /// Optional provider-owned turn execution budget, in seconds.
     /// If unset or zero, the provider chooses its own execution timeout. This does
     /// not control the CreateTurn RPC deadline.
     #[prost(int32, tag = "18")]
     pub timeout_seconds: i32,
-    #[prost(string, tag = "19")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(bool, tag = "20")]
     pub tool_refs_set: bool,
     #[prost(message, optional, tag = "21")]
     pub output: ::core::option::Option<AgentOutput>,
-    #[prost(message, optional, tag = "22")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "23")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -928,10 +868,6 @@ pub struct GetAgentProviderTurnRequest {
     pub turn_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -954,10 +890,6 @@ pub struct ListAgentProviderTurnsRequest {
     /// direct lookup.
     #[prost(bool, tag = "6")]
     pub summary_only: bool,
-    #[prost(string, tag = "7")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "9")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -974,10 +906,6 @@ pub struct CancelAgentProviderTurnRequest {
     pub reason: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1012,10 +940,6 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub limit: i32,
     #[prost(message, optional, tag = "4")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "5")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "7")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1030,8 +954,6 @@ pub struct GetAgentProviderInteractionRequest {
     pub interaction_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1041,10 +963,6 @@ pub struct ListAgentProviderInteractionsRequest {
     pub turn_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1061,12 +979,8 @@ pub struct ResolveAgentProviderInteractionRequest {
     pub resolution: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "3")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
-    pub workflow: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "7")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1084,8 +998,6 @@ pub struct ExecuteAgentToolRequest {
     pub arguments: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub run_grant: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "9")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -1129,8 +1041,6 @@ pub struct ListAgentToolsRequest {
     pub page_size: i32,
     #[prost(string, tag = "4")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub run_grant: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub query: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "8")]
@@ -1153,8 +1063,6 @@ pub struct ResolveAgentConnectionRequest {
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub run_grant: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3481,8 +3389,6 @@ pub struct ApplyWorkflowProviderDefinitionRequest {
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
@@ -3494,15 +3400,11 @@ pub struct ApplyWorkflowProviderDefinitionRequest {
 pub struct GetWorkflowProviderDefinitionRequest {
     #[prost(string, tag = "1")]
     pub definition_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderDefinitionsRequest {
-    #[prost(string, tag = "1")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3517,8 +3419,6 @@ pub struct SetWorkflowProviderDefinitionPausedRequest {
     pub definition_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "2")]
     pub paused: bool,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
@@ -3532,8 +3432,6 @@ pub struct SetWorkflowProviderActivationPausedRequest {
     pub activation_id: ::prost::alloc::string::String,
     #[prost(bool, tag = "3")]
     pub paused: bool,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub requested_by_subject_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
@@ -3543,8 +3441,6 @@ pub struct SetWorkflowProviderActivationPausedRequest {
 pub struct DeleteWorkflowProviderDefinitionRequest {
     #[prost(string, tag = "1")]
     pub definition_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3558,8 +3454,6 @@ pub struct StartWorkflowProviderRunRequest {
     pub workflow_key: ::prost::alloc::string::String,
     #[prost(string, tag = "7")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub definition_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "10")]
@@ -3575,8 +3469,6 @@ pub struct StartWorkflowProviderRunRequest {
 pub struct GetWorkflowProviderRunRequest {
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3588,8 +3480,6 @@ pub struct ListWorkflowProviderRunsRequest {
     pub page_token: ::prost::alloc::string::String,
     #[prost(enumeration = "WorkflowRunStatus", tag = "3")]
     pub status: i32,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub target_app: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
@@ -3608,8 +3498,6 @@ pub struct CancelWorkflowProviderRunRequest {
     pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub reason: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3619,8 +3507,6 @@ pub struct SignalWorkflowProviderRunRequest {
     pub run_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3636,8 +3522,6 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(string, tag = "7")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub definition_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "10")]
@@ -3668,8 +3552,6 @@ pub struct DeliverWorkflowProviderEventRequest {
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "3")]
     pub delivered_by_subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
@@ -3694,8 +3576,6 @@ pub struct WorkflowRunEvent {
 pub struct GetWorkflowProviderRunEventsRequest {
     #[prost(string, tag = "1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
 }
@@ -3708,8 +3588,6 @@ pub struct GetWorkflowProviderRunEventsResponse {
 pub struct GetWorkflowProviderRunOutputRequest {
     #[prost(string, tag = "1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
     pub context: ::core::option::Option<RequestContext>,
 }

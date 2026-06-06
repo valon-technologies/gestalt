@@ -388,7 +388,6 @@ func attachWorkflowProviderRequestContext(ctx context.Context, req gproto.Messag
 	if req == nil {
 		return nil
 	}
-	attachWorkflowProviderInvocationToken(ctx, req)
 	reqCtx, err := appaccessservice.RequestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		return err
@@ -412,19 +411,6 @@ func attachWorkflowProviderRequestContext(ctx context.Context, req gproto.Messag
 	}
 	msg.Set(field, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
 	return nil
-}
-
-func attachWorkflowProviderInvocationToken(ctx context.Context, req gproto.Message) {
-	token := strings.TrimSpace(appaccessservice.InvocationTokenFromContext(ctx))
-	if token == "" || req == nil {
-		return
-	}
-	msg := req.ProtoReflect()
-	field := msg.Descriptor().Fields().ByName(protoreflect.Name("invocation_token"))
-	if field == nil || field.Kind() != protoreflect.StringKind || msg.Get(field).String() != "" {
-		return
-	}
-	msg.Set(field, protoreflect.ValueOfString(token))
 }
 
 func workflowRunStatusMetric(run *proto.WorkflowRun) string {

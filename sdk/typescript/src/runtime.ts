@@ -594,13 +594,12 @@ export function createProviderService(
 	        await provider.execute(
 	          request.operation,
 	          objectFromUnknown(request.params),
-	          providerRequest(
-	            request.token,
-	            request.connectionParams,
-	            request.context,
-	            request.invocationToken,
-	            request.idempotencyKey,
-	          ),
+          providerRequest(
+            request.token,
+            request.connectionParams,
+            request.context,
+            request.idempotencyKey,
+          ),
 	        ),
       );
     },
@@ -828,7 +827,6 @@ function providerRequest(
   token: string,
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
-  invocationToken = "",
   idempotencyKey = "",
 ): Request {
   const credential = requestContext?.credential;
@@ -859,7 +857,6 @@ function providerRequest(
     host: {
       publicBaseUrl: host?.publicBaseUrl ?? "",
     },
-    invocationToken,
     __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
   };

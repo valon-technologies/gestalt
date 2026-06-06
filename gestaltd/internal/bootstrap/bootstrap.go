@@ -25,7 +25,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
@@ -169,7 +168,6 @@ type Deps struct {
 	Authorization         core.AuthorizationProvider
 	WorkflowRuntime       *workflowRuntime
 	AgentRuntime          *agentRuntime
-	AgentRunGrants        *agentgrant.Manager
 	AgentTurnScopes       *agentturnscope.Store
 	AgentToolIDs          *agenttoolid.Codec
 	WorkflowManager       workflowmanager.Service
@@ -836,10 +834,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: agent tool ids: %w", err)
 	}
-	agentRunGrants, err := agentgrant.NewManager(encKey)
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap: agent run grants: %w", err)
-	}
 	agentTurnScopes := agentturnscope.NewStore()
 	hostServiceTLSCAFile, hostServiceTLSCAPEM, err := hostServiceTLSCAFromEnv()
 	if err != nil {
@@ -852,7 +846,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		RuntimeRelayBaseURL:  cfg.Server.Runtime.RelayBaseURL,
 		SecretManager:        sm,
 		Telemetry:            tp,
-		AgentRunGrants:       agentRunGrants,
 		AgentTurnScopes:      agentTurnScopes,
 		AgentToolIDs:         agentToolIDs,
 		HostServiceTLSCAFile: hostServiceTLSCAFile,
@@ -878,7 +871,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AgentRuntime = agentRuntime
-	deps.AgentRuntime.SetRunGrants(agentRunGrants)
 	deps.AgentRuntime.SetTurnScopes(agentTurnScopes)
 	deps.AgentRuntime.SetToolIDCodec(agentToolIDs)
 
@@ -1184,7 +1176,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Providers:                     providers,
 		Agent:                         prepared.Deps.AgentRuntime,
 		WorkflowTools:                 workflowTools,
-		RunGrants:                     prepared.Deps.AgentRunGrants,
 		TurnScopes:                    prepared.Deps.AgentTurnScopes,
 		ToolIDs:                       prepared.Deps.AgentToolIDs,
 		Invoker:                       sharedInvoker,
@@ -1688,7 +1679,7 @@ func buildNamedExternalCredentialsProvider(ctx context.Context, cfg *config.Conf
 			return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices(logicalName, deps)
+	hostServices, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: external credentials provider %q: %w", logicalName, err)
 	}
@@ -1880,7 +1871,7 @@ func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *co
 			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices(logicalName, deps)
+	hostServices, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
@@ -1970,7 +1961,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	hostServices, _, err := buildProviderHostServices(name, deps)
+	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
@@ -2032,7 +2023,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
 	}
-	hostServices, _, err := buildProviderHostServices(name, deps, agentHostService)
+	hostServices, err := buildProviderHostServices(name, deps, agentHostService)
 	if err != nil {
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}

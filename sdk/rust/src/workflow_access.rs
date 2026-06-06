@@ -26,9 +26,6 @@ const WORKFLOW_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`Workflow`].
 pub enum WorkflowError {
-    /// The invocation token was empty.
-    #[error("workflow: invocation token is not available")]
-    MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
@@ -41,54 +38,6 @@ pub enum WorkflowError {
     /// Required environment or target configuration was invalid.
     #[error("{0}")]
     Env(String),
-}
-
-/// Source used to connect a workflow host-service client.
-pub trait WorkflowConnectionSource {
-    /// Legacy invocation token to forward, when available.
-    fn workflow_invocation_token(&self) -> &str;
-
-    /// Request context to forward on new host-service calls.
-    fn workflow_request_context(&self) -> Option<pb::RequestContext> {
-        None
-    }
-
-    /// Request idempotency key to use for create calls without their own key.
-    fn workflow_idempotency_key(&self) -> &str {
-        ""
-    }
-
-    /// Whether an empty invocation token should fail connection.
-    fn workflow_requires_invocation_token(&self) -> bool {
-        true
-    }
-}
-
-impl WorkflowConnectionSource for &Request {
-    fn workflow_invocation_token(&self) -> &str {
-        self.invocation_token()
-    }
-
-    fn workflow_request_context(&self) -> Option<pb::RequestContext> {
-        current_request_context()
-    }
-
-    fn workflow_idempotency_key(&self) -> &str {
-        self.idempotency_key.trim()
-    }
-
-    fn workflow_requires_invocation_token(&self) -> bool {
-        false
-    }
-}
-
-impl<T> WorkflowConnectionSource for T
-where
-    T: AsRef<str>,
-{
-    fn workflow_invocation_token(&self) -> &str {
-        self.as_ref()
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -263,7 +212,6 @@ pub(crate) fn new_workflow_apply_definition_request(
         provider_name: input.provider_name,
         spec: input.spec,
         context: None,
-        invocation_token: String::new(),
         idempotency_key: input.idempotency_key,
         requested_by_subject_id: input.requested_by_subject_id,
     }
@@ -275,7 +223,6 @@ pub(crate) fn new_workflow_get_definition_request(
     pb::GetWorkflowProviderDefinitionRequest {
         definition_id: input.definition_id,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -286,7 +233,6 @@ pub(crate) fn new_workflow_set_definition_paused_request(
         definition_id: input.definition_id,
         paused: input.paused,
         context: None,
-        invocation_token: String::new(),
         requested_by_subject_id: input.requested_by_subject_id,
     }
 }
@@ -299,7 +245,6 @@ pub(crate) fn new_workflow_set_activation_paused_request(
         activation_id: input.activation_id,
         paused: input.paused,
         context: None,
-        invocation_token: String::new(),
         requested_by_subject_id: input.requested_by_subject_id,
     }
 }
@@ -310,7 +255,6 @@ pub(crate) fn new_workflow_delete_definition_request(
     pb::DeleteWorkflowProviderDefinitionRequest {
         definition_id: input.definition_id,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -323,7 +267,6 @@ pub(crate) fn new_workflow_start_run_request(
         created_by_subject_id: input.created_by_subject_id,
         workflow_key: input.workflow_key,
         context: None,
-        invocation_token: String::new(),
         definition_id: input.definition_id,
         run_as: input.run_as.map(workflow_subject_to_proto),
         input: input
@@ -342,7 +285,6 @@ pub(crate) fn new_workflow_list_runs_request(
         page_token: input.page_token,
         status: input.status as i32,
         context: None,
-        invocation_token: String::new(),
         target_app: input.target_app,
     }
 }
@@ -353,7 +295,6 @@ pub(crate) fn new_workflow_get_run_request(
     pb::GetWorkflowProviderRunRequest {
         run_id: input.run_id,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -363,7 +304,6 @@ pub(crate) fn new_workflow_get_run_events_request(
     pb::GetWorkflowProviderRunEventsRequest {
         run_id: input.run_id,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -373,7 +313,6 @@ pub(crate) fn new_workflow_get_run_output_request(
     pb::GetWorkflowProviderRunOutputRequest {
         run_id: input.run_id,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -384,7 +323,6 @@ pub(crate) fn new_workflow_cancel_run_request(
         run_id: input.run_id,
         reason: input.reason,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -395,7 +333,6 @@ pub(crate) fn new_workflow_signal_run_request(
         run_id: input.run_id,
         signal: input.signal,
         context: None,
-        invocation_token: String::new(),
     }
 }
 
@@ -409,7 +346,6 @@ pub(crate) fn new_workflow_signal_or_start_run_request(
         created_by_subject_id: input.created_by_subject_id,
         signal: input.signal,
         context: None,
-        invocation_token: String::new(),
         definition_id: input.definition_id,
         run_as: input.run_as.map(workflow_subject_to_proto),
         input: input
@@ -428,7 +364,6 @@ pub(crate) fn new_workflow_deliver_event_request(
         event: input.event,
         delivered_by_subject_id: input.delivered_by_subject_id,
         context: None,
-        invocation_token: String::new(),
         provider_name: input.provider_name,
     }
 }
@@ -436,28 +371,22 @@ pub(crate) fn new_workflow_deliver_event_request(
 /// Client for applying workflow definitions, starting runs, signaling, and delivering events.
 pub struct Workflow {
     client: ProtoWorkflowProviderClient<WorkflowTransport>,
-    invocation_token: String,
     context: Option<pb::RequestContext>,
     idempotency_key: String,
 }
 
 impl Workflow {
-    /// Connects to the workflow service with request context or a legacy invocation token.
-    pub async fn connect(
-        source: impl WorkflowConnectionSource,
-    ) -> std::result::Result<Self, WorkflowError> {
-        Self::connect_with_idempotency_key(source, "").await
+    /// Connects to the workflow service with host request context from Gestalt.
+    pub async fn connect(request: &Request) -> std::result::Result<Self, WorkflowError> {
+        Self::connect_with_idempotency_key(request, "").await
     }
 
     /// Connects to the workflow service with an explicit fallback idempotency key.
     pub async fn connect_with_idempotency_key(
-        source: impl WorkflowConnectionSource,
+        request: &Request,
         idempotency_key: impl AsRef<str>,
     ) -> std::result::Result<Self, WorkflowError> {
-        let invocation_token = source.workflow_invocation_token().trim().to_owned();
-        if invocation_token.is_empty() && source.workflow_requires_invocation_token() {
-            return Err(WorkflowError::MissingInvocationToken);
-        }
+        let context = current_request_context();
         let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| WorkflowError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
@@ -488,10 +417,9 @@ impl Workflow {
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),
-            invocation_token,
-            context: source.workflow_request_context(),
+            context,
             idempotency_key: if idempotency_key.as_ref().trim().is_empty() {
-                source.workflow_idempotency_key().to_owned()
+                request.idempotency_key.trim().to_owned()
             } else {
                 idempotency_key.as_ref().trim().to_owned()
             },
@@ -525,7 +453,6 @@ impl Workflow {
         Ok(self
             .client
             .list_definitions(pb::ListWorkflowProviderDefinitionsRequest {
-                invocation_token: self.invocation_token.clone(),
                 context: self.context.clone(),
             })
             .await?
@@ -668,20 +595,19 @@ impl Workflow {
     }
 
     fn attach_context<T: HasWorkflowRequestContext>(&self, request: &mut T) {
-        request.set_auth(self.invocation_token.clone(), self.context.clone());
+        request.set_context(self.context.clone());
     }
 }
 
 trait HasWorkflowRequestContext {
-    fn set_auth(&mut self, invocation_token: String, context: Option<pb::RequestContext>);
+    fn set_context(&mut self, context: Option<pb::RequestContext>);
 }
 
 macro_rules! impl_workflow_request_context {
     ($($ty:ty),+ $(,)?) => {
         $(
             impl HasWorkflowRequestContext for $ty {
-                fn set_auth(&mut self, invocation_token: String, context: Option<pb::RequestContext>) {
-                    self.invocation_token = invocation_token;
+                fn set_context(&mut self, context: Option<pb::RequestContext>) {
                     self.context = context;
                 }
             }

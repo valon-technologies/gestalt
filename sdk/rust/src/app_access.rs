@@ -1,7 +1,4 @@
-use std::time::Duration;
-
 use hyper_util::rt::TokioIo;
-use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::UnixStream;
 use tonic::Request as GrpcRequest;
@@ -24,9 +21,6 @@ const APP_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`App`].
 pub enum AppError {
-    /// The invocation token was empty.
-    #[error("app: invocation token is not available")]
-    MissingInvocationToken,
     /// The host-service transport could not be created.
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
@@ -42,19 +36,6 @@ pub enum AppError {
     /// The host returned a protocol value the SDK could not represent.
     #[error("{0}")]
     Protocol(String),
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-/// Grant included when exchanging an invocation token for a child token.
-pub struct InvocationGrant {
-    /// App name that the child token may invoke.
-    pub plugin: String,
-    /// Specific operation ids allowed by the child token.
-    pub operations: Vec<String>,
-    /// Surface names allowed by the child token.
-    pub surfaces: Vec<String>,
-    /// Whether the child token may invoke every operation on the app.
-    pub all_operations: bool,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -98,79 +79,18 @@ pub trait AppContract: Send {
         variables: Option<serde_json::Value>,
         options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError>;
-    async fn exchange_invocation_token(
-        &mut self,
-        grants: &[InvocationGrant],
-        ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppError>;
-}
-
-/// Source used to connect an app host-service client.
-pub trait AppConnectionSource {
-    /// Legacy invocation token to forward, when available.
-    fn app_invocation_token(&self) -> &str;
-
-    /// Request context to forward on new host-service calls.
-    fn app_request_context(&self) -> Option<pb::RequestContext> {
-        None
-    }
-
-    /// Legacy workflow context to forward with invocation-token calls.
-    fn app_workflow(&self) -> std::result::Result<Option<Struct>, AppError> {
-        Ok(None)
-    }
-
-    /// Whether an empty invocation token should fail connection.
-    fn app_requires_invocation_token(&self) -> bool {
-        true
-    }
-}
-
-impl AppConnectionSource for &Request {
-    fn app_invocation_token(&self) -> &str {
-        self.invocation_token()
-    }
-
-    fn app_request_context(&self) -> Option<pb::RequestContext> {
-        current_request_context()
-    }
-
-    fn app_workflow(&self) -> std::result::Result<Option<Struct>, AppError> {
-        workflow_to_struct(&self.workflow)
-    }
-
-    fn app_requires_invocation_token(&self) -> bool {
-        false
-    }
-}
-
-impl<T> AppConnectionSource for T
-where
-    T: AsRef<str>,
-{
-    fn app_invocation_token(&self) -> &str {
-        self.as_ref()
-    }
 }
 
 /// Client for invoking sibling app operations through Gestalt.
 pub struct App {
     client: ProtoAppClient<AppTransport>,
-    invocation_token: String,
     context: Option<pb::RequestContext>,
-    workflow: Option<Struct>,
 }
 
 impl App {
-    /// Connects to the app service with request context or a legacy invocation token.
-    pub async fn connect(source: impl AppConnectionSource) -> std::result::Result<Self, AppError> {
-        let invocation_token = source.app_invocation_token().trim().to_owned();
-        if invocation_token.is_empty() && source.app_requires_invocation_token() {
-            return Err(AppError::MissingInvocationToken);
-        }
-        let context = source.app_request_context();
-        let workflow = source.app_workflow()?;
-
+    /// Connects to the app service with host request context from Gestalt.
+    pub async fn connect(_request: &Request) -> std::result::Result<Self, AppError> {
+        let context = current_request_context();
         let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET)
             .map_err(|_| AppError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
         let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
@@ -202,9 +122,7 @@ impl App {
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),
-            invocation_token,
             context,
-            workflow,
         })
     }
 
@@ -233,7 +151,6 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
-                invocation_token: self.invocation_token.clone(),
                 idempotency_key: options
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
@@ -242,7 +159,6 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.credential_mode.trim().to_string())
                     .unwrap_or_default(),
-                workflow: self.workflow.clone(),
                 context: self.context.clone(),
             })
             .await?
@@ -294,7 +210,6 @@ impl App {
                     .as_ref()
                     .map(|opts| opts.instance.clone())
                     .unwrap_or_default(),
-                invocation_token: self.invocation_token.clone(),
                 idempotency_key: options
                     .as_ref()
                     .map(|opts| opts.idempotency_key.trim().to_string())
@@ -313,29 +228,6 @@ impl App {
             headers: protocol::string_lists_from_proto(&response.headers),
             body: response.body,
         })
-    }
-
-    /// Exchanges this invocation token for a narrower child token.
-    pub async fn exchange_invocation_token(
-        &mut self,
-        grants: &[InvocationGrant],
-        ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppError> {
-        let ttl_seconds = ttl
-            .map(duration_to_ttl_seconds)
-            .transpose()?
-            .unwrap_or_default();
-        let response = self
-            .client
-            .exchange_invocation_token(pb::ExchangeInvocationTokenRequest {
-                parent_invocation_token: self.invocation_token.clone(),
-                grants: encode_invocation_grants(grants),
-                ttl_seconds,
-            })
-            .await?
-            .into_inner();
-
-        Ok(response.invocation_token)
     }
 }
 
@@ -359,14 +251,6 @@ impl AppContract for App {
         options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError> {
         App::invoke_graphql(self, &plugin, &document, variables, options).await
-    }
-
-    async fn exchange_invocation_token(
-        &mut self,
-        grants: &[InvocationGrant],
-        ttl: Option<Duration>,
-    ) -> std::result::Result<String, AppError> {
-        App::exchange_invocation_token(self, grants, ttl).await
     }
 }
 
@@ -417,61 +301,6 @@ fn parse_app_target(raw_target: &str) -> Result<AppTarget, AppError> {
         )));
     }
     Ok(AppTarget::Unix(target.to_string()))
-}
-
-fn workflow_to_struct(
-    workflow: &serde_json::Map<String, serde_json::Value>,
-) -> std::result::Result<Option<Struct>, AppError> {
-    if workflow.is_empty() {
-        return Ok(None);
-    }
-    protocol::struct_from_json(serde_json::Value::Object(workflow.clone()))
-        .map(Some)
-        .map_err(|err| AppError::Protocol(err.to_string()))
-}
-
-fn encode_invocation_grants(grants: &[InvocationGrant]) -> Vec<pb::AppInvocationGrant> {
-    grants
-        .iter()
-        .filter_map(|grant| {
-            let app = grant.plugin.trim();
-            if app.is_empty() {
-                return None;
-            }
-            let operations = grant
-                .operations
-                .iter()
-                .map(|operation| operation.trim())
-                .filter(|operation| !operation.is_empty())
-                .map(ToOwned::to_owned)
-                .collect();
-            let surfaces = grant
-                .surfaces
-                .iter()
-                .map(|surface| surface.trim())
-                .filter(|surface| !surface.is_empty())
-                .map(|surface| surface.to_ascii_lowercase())
-                .collect();
-
-            Some(pb::AppInvocationGrant {
-                app: app.to_owned(),
-                operations,
-                surfaces,
-                all_operations: grant.all_operations,
-            })
-        })
-        .collect()
-}
-
-fn duration_to_ttl_seconds(ttl: Duration) -> std::result::Result<i64, AppError> {
-    if ttl.is_zero() {
-        return Ok(0);
-    }
-
-    let ttl_seconds = ttl.as_secs().max(1);
-    i64::try_from(ttl_seconds).map_err(|_| {
-        AppError::Protocol("app: exchange token ttl exceeds supported range".to_string())
-    })
 }
 
 fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, AppError> {

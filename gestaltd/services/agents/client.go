@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -303,7 +302,6 @@ func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message) 
 	if req == nil {
 		return nil
 	}
-	attachAgentProviderInvocationToken(ctx, req)
 	reqCtx, err := appaccess.RequestContextProto(ctx, "", invocation.CallerProvider{})
 	if err != nil {
 		return err
@@ -327,19 +325,6 @@ func attachAgentProviderRequestContext(ctx context.Context, req gproto.Message) 
 	}
 	msg.Set(field, protoreflect.ValueOfMessage(reqCtx.ProtoReflect()))
 	return nil
-}
-
-func attachAgentProviderInvocationToken(ctx context.Context, req gproto.Message) {
-	token := strings.TrimSpace(appaccess.InvocationTokenFromContext(ctx))
-	if token == "" || req == nil {
-		return
-	}
-	msg := req.ProtoReflect()
-	field := msg.Descriptor().Fields().ByName(protoreflect.Name("invocation_token"))
-	if field == nil || field.Kind() != protoreflect.StringKind || msg.Get(field).String() != "" {
-		return
-	}
-	msg.Set(field, protoreflect.ValueOfString(token))
 }
 
 func (r *remoteAgent) Ping(ctx context.Context) error {

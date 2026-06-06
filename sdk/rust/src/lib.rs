@@ -71,9 +71,7 @@ pub use api::{
     Access, Credential, HTTPSubjectRequest, Host, Provider, Request, Response, RuntimeMetadata,
     Subject, current_request_context, ok, with_request_context,
 };
-pub use app_access::{
-    App, AppContract, AppError, InvocationGrant, InvokeGraphQLOptions, InvokeOptions,
-};
+pub use app_access::{App, AppContract, AppError, InvokeGraphQLOptions, InvokeOptions};
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,

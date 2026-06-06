@@ -2344,17 +2344,12 @@ class WorkflowProtocol(Protocol):
 class Workflow:
     """Client for applying definitions, starting runs, signaling, and delivering events.
 
-    This capability is for provider code that receives a Gestalt request or
-    legacy invocation token. The request idempotency key is used for create
-    requests that do not already include one.
+    This capability is for provider code that receives a Gestalt request. The
+    request idempotency key is used for create requests that do not already
+    include one.
     """
 
-    def __init__(
-        self,
-        request: Request | str,
-        *,
-        idempotency_key: str = "",
-    ) -> None:
+    def __init__(self, request: Request, *, idempotency_key: str = "") -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"workflow: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2362,17 +2357,9 @@ class Workflow:
 
         self._channel = host_service_channel("workflow", target, token=relay_token)
         self._stub = pb_grpc.WorkflowProviderStub(self._channel)
-        self._invocation_token = ""
-        self._context = None
-        if isinstance(request, Request):
-            self._invocation_token = request.invocation_token.strip()
-            self._context = request.context
-            if not idempotency_key.strip():
-                idempotency_key = request.idempotency_key
-        else:
-            self._invocation_token = request.strip()
-            if not self._invocation_token:
-                raise RuntimeError("workflow: invocation token is not available")
+        self._context = request.context
+        if not idempotency_key.strip():
+            idempotency_key = request.idempotency_key
         self._idempotency_key = idempotency_key.strip()
 
     def close(self) -> None:
@@ -2518,8 +2505,6 @@ class Workflow:
         )
 
     def _attach_context(self, request: Any) -> None:
-        if hasattr(request, "invocation_token"):
-            request.invocation_token = self._invocation_token
         if self._context is not None and hasattr(request, "context"):
             request.context.CopyFrom(self._context)
 
@@ -2551,7 +2536,6 @@ class WorkflowExecutionRequest:
     input: WorkflowJsonObject | None = None
     metadata: WorkflowJsonObject | None = None
     created_by_subject_id: str = ""
-    invocation_token: str = ""
     signals: Sequence[WorkflowSignal] = _dataclasses.field(default_factory=list)
     steps: Mapping[str, Any] | None = None
 

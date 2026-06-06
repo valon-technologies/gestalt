@@ -3,16 +3,14 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type agent struct {
-	client          proto.AgentProviderClient
-	invocationToken string
-	context         *proto.RequestContext
+	client  proto.AgentProviderClient
+	context *proto.RequestContext
 }
 
 // Agent is the fakeable contract for managing agent sessions, turns, events, and interactions.
@@ -33,18 +31,17 @@ type Agent interface {
 
 var sharedAgentTransport sharedManagerTransport[proto.AgentProviderClient]
 
-// NewAgent returns a capability that attaches invocationToken to every request
-// when one is available.
-func NewAgent(invocationToken string) (Agent, error) {
-	return newAgent(nil, strings.TrimSpace(invocationToken))
+// NewAgent returns an agent capability for the current provider request.
+func NewAgent(req Request) (Agent, error) {
+	return newAgent(requestContextForRequest(req))
 }
 
 // NewAgentFromRequest returns an agent capability for the current provider request.
 func NewAgentFromRequest(req Request) (Agent, error) {
-	return newAgent(requestContextForRequest(req), req.InvocationToken())
+	return NewAgent(req)
 }
 
-func newAgent(reqCtx *proto.RequestContext, invocationToken string) (Agent, error) {
+func newAgent(reqCtx *proto.RequestContext) (Agent, error) {
 	target, token, err := hostServiceTarget("agent")
 	if err != nil {
 		return nil, err
@@ -59,15 +56,14 @@ func newAgent(reqCtx *proto.RequestContext, invocationToken string) (Agent, erro
 	}
 
 	return &agent{
-		client:          client,
-		invocationToken: strings.TrimSpace(invocationToken),
-		context:         cloneRequestContext(reqCtx),
+		client:  client,
+		context: cloneRequestContext(reqCtx),
 	}, nil
 }
 
 // AgentFromContext returns an Agent using the current provider request context.
 func AgentFromContext(ctx context.Context) (Agent, error) {
-	return newAgent(requestContextFromContext(ctx), InvocationTokenFromContext(ctx))
+	return newAgent(requestContextFromContext(ctx))
 }
 
 // Close is a no-op because this capability uses shared transport.
@@ -80,7 +76,7 @@ func (c *agent) attachAuth(ctx context.Context, req protoMessage) error {
 	if err != nil {
 		return err
 	}
-	attachHostServiceAuth(req, reqCtx, c.invocationToken)
+	attachHostServiceAuth(req, reqCtx)
 	return attachWorkflowContextField(ctx, req)
 }
 

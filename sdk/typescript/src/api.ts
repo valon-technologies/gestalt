@@ -74,7 +74,6 @@ export interface Request {
   workflow: Record<string, unknown>;
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;
-  invocationToken: string;
   __requestContext?: ProtoRequestContext | undefined;
 }
 
@@ -168,7 +167,6 @@ export function request(
   credential: Partial<Credential> = {},
   access: Partial<Access> = {},
   workflow: Record<string, unknown> = {},
-  invocationToken = "",
   idempotencyKey = "",
   host: Partial<Host> = {},
   agentSubject: Partial<Subject> = {},
@@ -222,7 +220,6 @@ export function request(
     host: {
       publicBaseUrl: host.publicBaseUrl ?? "",
     },
-    invocationToken,
     __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
   };

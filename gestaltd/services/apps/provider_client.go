@@ -13,7 +13,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -33,25 +32,22 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
-	client         proto.AppProviderClient
-	support        integrationProviderSupport
-	name           string
-	displayName    string
-	description    string
-	connection     core.ConnectionMode
-	catalog        *catalog.Catalog
-	iconSVG        string
-	authTypes      []string
-	connParams     map[string]core.ConnectionParamDef
-	credFields     []core.CredentialFieldDef
-	discovery      *core.DiscoveryConfig
-	closer         io.Closer
-	publicBaseURL  string
-	callerKind     invocation.ProviderKind
-	callerName     string
-	invTokens      *appaccessservice.InvocationTokenManager
-	invokeGrants   appaccessservice.InvocationGrants
-	workflowGrants workflowgrants.Grants
+	client        proto.AppProviderClient
+	support       integrationProviderSupport
+	name          string
+	displayName   string
+	description   string
+	connection    core.ConnectionMode
+	catalog       *catalog.Catalog
+	iconSVG       string
+	authTypes     []string
+	connParams    map[string]core.ConnectionParamDef
+	credFields    []core.CredentialFieldDef
+	discovery     *core.DiscoveryConfig
+	closer        io.Closer
+	publicBaseURL string
+	callerKind    invocation.ProviderKind
+	callerName    string
 }
 
 var (
@@ -73,24 +69,6 @@ func WithCloser(c io.Closer) RemoteProviderOption {
 
 func WithHostContext(publicBaseURL string) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.publicBaseURL = normalizePublicBaseURL(publicBaseURL) }
-}
-
-func WithInvocationTokens(tokens *appaccessservice.InvocationTokenManager) RemoteProviderOption {
-	return func(b *remoteProviderBase) { b.invTokens = tokens }
-}
-
-func WithInvocationTokenSubject(appName string, grants appaccessservice.InvocationGrants) RemoteProviderOption {
-	return func(b *remoteProviderBase) {
-		b.callerName = strings.TrimSpace(appName)
-		b.callerKind = invocation.ProviderKindApp
-		b.invokeGrants = appaccessservice.CloneInvocationGrants(grants)
-	}
-}
-
-func WithWorkflowManagerGrants(grants workflowgrants.Grants) RemoteProviderOption {
-	return func(b *remoteProviderBase) {
-		b.workflowGrants = workflowgrants.Clone(grants)
-	}
 }
 
 func WithCallerProvider(kind invocation.ProviderKind, name string) RemoteProviderOption {
@@ -187,14 +165,6 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	if err != nil {
 		return nil, err
 	}
-	requestToken := ""
-	if p != nil && p.invTokens != nil && p.callerName != "" {
-		mintCtx := invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, p.callerName)
-		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(mintCtx, p.callerName, p.invokeGrants, p.workflowGrants)
-		if err != nil {
-			return nil, err
-		}
-	}
 	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
 		Operation:        operation,
 		Params:           msg,
@@ -203,7 +173,6 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		InvocationId:     invocationIDFromContext(ctx),
 		IdempotencyKey:   invocation.IdempotencyKeyFromContext(ctx),
 		Context:          reqCtx,
-		InvocationToken:  requestToken,
 	})
 	if err != nil {
 		return nil, remoteProviderExecuteError(err)

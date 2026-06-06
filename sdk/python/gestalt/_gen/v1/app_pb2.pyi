@@ -151,34 +151,6 @@ class OperationResult(_message.Message):
     headers: _containers.MessageMap[str, StringList]
     def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ..., headers: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
 
-class AppInvocationGrant(_message.Message):
-    __slots__ = ()
-    APP_FIELD_NUMBER: _ClassVar[int]
-    OPERATIONS_FIELD_NUMBER: _ClassVar[int]
-    SURFACES_FIELD_NUMBER: _ClassVar[int]
-    ALL_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
-    app: str
-    operations: _containers.RepeatedScalarFieldContainer[str]
-    surfaces: _containers.RepeatedScalarFieldContainer[str]
-    all_operations: bool
-    def __init__(self, app: _Optional[str] = ..., operations: _Optional[_Iterable[str]] = ..., surfaces: _Optional[_Iterable[str]] = ..., all_operations: _Optional[bool] = ...) -> None: ...
-
-class ExchangeInvocationTokenRequest(_message.Message):
-    __slots__ = ()
-    PARENT_INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    GRANTS_FIELD_NUMBER: _ClassVar[int]
-    TTL_SECONDS_FIELD_NUMBER: _ClassVar[int]
-    parent_invocation_token: str
-    grants: _containers.RepeatedCompositeFieldContainer[AppInvocationGrant]
-    ttl_seconds: int
-    def __init__(self, parent_invocation_token: _Optional[str] = ..., grants: _Optional[_Iterable[_Union[AppInvocationGrant, _Mapping]]] = ..., ttl_seconds: _Optional[int] = ...) -> None: ...
-
-class ExchangeInvocationTokenResponse(_message.Message):
-    __slots__ = ()
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    invocation_token: str
-    def __init__(self, invocation_token: _Optional[str] = ...) -> None: ...
-
 class AppInvokeRequest(_message.Message):
     __slots__ = ()
     APP_FIELD_NUMBER: _ClassVar[int]
@@ -186,22 +158,18 @@ class AppInvokeRequest(_message.Message):
     PARAMS_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
-    WORKFLOW_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     app: str
     operation: str
     params: _struct_pb2.Struct
     connection: str
     instance: str
-    invocation_token: str
     idempotency_key: str
     credential_mode: str
-    workflow: _struct_pb2.Struct
     context: RequestContext
-    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
 
 class AppInvokeGraphQLRequest(_message.Message):
     __slots__ = ()
@@ -210,7 +178,6 @@ class AppInvokeGraphQLRequest(_message.Message):
     VARIABLES_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     app: str
@@ -218,10 +185,9 @@ class AppInvokeGraphQLRequest(_message.Message):
     variables: _struct_pb2.Struct
     connection: str
     instance: str
-    invocation_token: str
     idempotency_key: str
     context: RequestContext
-    def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, app: _Optional[str] = ..., document: _Optional[str] = ..., variables: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
 
 class SubjectContext(_message.Message):
     __slots__ = ()
@@ -443,7 +409,6 @@ class ExecuteRequest(_message.Message):
     CONNECTION_PARAMS_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     operation: str
     params: _struct_pb2.Struct
@@ -451,9 +416,8 @@ class ExecuteRequest(_message.Message):
     connection_params: _containers.ScalarMap[str, str]
     invocation_id: str
     context: RequestContext
-    invocation_token: str
     idempotency_key: str
-    def __init__(self, operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., token: _Optional[str] = ..., connection_params: _Optional[_Mapping[str, str]] = ..., invocation_id: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    def __init__(self, operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., token: _Optional[str] = ..., connection_params: _Optional[_Mapping[str, str]] = ..., invocation_id: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class GetSessionCatalogRequest(_message.Message):
     __slots__ = ()

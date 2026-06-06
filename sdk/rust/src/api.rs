@@ -90,8 +90,6 @@ pub struct Request {
     pub tool_refs: Vec<AgentToolRef>,
     /// Whether the host attached a tool-ref context to this request.
     pub tool_refs_set: bool,
-    /// Invocation token used to call host services.
-    pub invocation_token: String,
 }
 
 tokio::task_local! {
@@ -104,22 +102,17 @@ impl Request {
         self.connection_params.get(name).map(String::as_str)
     }
 
-    /// Returns the invocation token used to call host services.
-    pub fn invocation_token(&self) -> &str {
-        &self.invocation_token
-    }
-
-    /// Creates an app client using this request's invocation token or scoped request context.
+    /// Creates an app client using this request's scoped request context.
     pub async fn app(&self) -> std::result::Result<crate::App, crate::AppError> {
         crate::App::connect(self).await
     }
 
-    /// Creates a workflow using this request's invocation token or scoped request context.
+    /// Creates a workflow using this request's scoped request context.
     pub async fn workflow(&self) -> std::result::Result<crate::Workflow, crate::WorkflowError> {
         crate::Workflow::connect(self).await
     }
 
-    /// Creates an agent using this request's invocation token or scoped request context.
+    /// Creates an agent using this request's scoped request context.
     pub async fn agent(&self) -> std::result::Result<crate::Agent, crate::AgentError> {
         crate::Agent::connect(self).await
     }

@@ -3,7 +3,6 @@ package gestalt
 import (
 	"context"
 	"reflect"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -35,12 +34,11 @@ func hostServiceDialOptions(token string, binding string) []grpc.DialOption {
 	return host.DialOptions(token, binding)
 }
 
-func attachHostServiceAuth(req gproto.Message, reqCtx *proto.RequestContext, invocationToken string) {
+func attachHostServiceAuth(req gproto.Message, reqCtx *proto.RequestContext) {
 	if protoMessageIsNil(req) {
 		return
 	}
 	msg := req.ProtoReflect()
-	setProtoStringField(msg, "invocation_token", strings.TrimSpace(invocationToken), false)
 	setProtoMessageField(msg, "context", cloneRequestContext(reqCtx))
 }
 
@@ -68,20 +66,6 @@ func protoMessageIsNil[M gproto.Message](msg M) bool {
 	default:
 		return false
 	}
-}
-
-func setProtoStringField(msg protoreflect.Message, name protoreflect.Name, value string, onlyIfEmpty bool) {
-	if value == "" || !msg.IsValid() {
-		return
-	}
-	field := msg.Descriptor().Fields().ByName(name)
-	if field == nil || field.Kind() != protoreflect.StringKind {
-		return
-	}
-	if onlyIfEmpty && msg.Get(field).String() != "" {
-		return
-	}
-	msg.Set(field, protoreflect.ValueOfString(value))
 }
 
 func setProtoMessageField(msg protoreflect.Message, name protoreflect.Name, value gproto.Message) {

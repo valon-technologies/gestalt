@@ -14,7 +14,6 @@ type ExecuteToolRequest struct {
 	ToolCallID     string
 	ToolID         string
 	Arguments      map[string]any
-	RunGrant       string
 	IdempotencyKey string
 	Context        *proto.RequestContext
 }
@@ -33,7 +32,6 @@ type ListToolsRequest struct {
 	Query        string
 	ToolRefs     []ToolRef
 	ToolSource   ToolSourceMode
-	RunGrant     string
 	Context      *proto.RequestContext
 }
 
@@ -48,6 +46,5 @@ type ResolveConnectionRequest struct {
 	TurnID       string
 	Connection   string
 	Instance     string
-	RunGrant     string
 	Context      *proto.RequestContext
 }

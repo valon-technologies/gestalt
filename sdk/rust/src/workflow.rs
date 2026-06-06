@@ -713,7 +713,6 @@ pub struct WorkflowExecutionRequest {
     pub trigger: Option<WorkflowRunTrigger>,
     pub input: Option<Value>,
     pub metadata: Option<Value>,
-    pub invocation_token: String,
     pub signals: Vec<WorkflowSignal>,
 }
 

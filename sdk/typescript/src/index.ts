@@ -78,7 +78,6 @@ export {
 } from "./build.ts";
 export {
   App,
-  type AppInvocationGrant,
   type AppGraphQLInvokeOptions,
   type AppInvokeOptions,
 } from "./app-access.ts";
