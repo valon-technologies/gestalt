@@ -141,9 +141,9 @@ class Request:
         return Workflow(self)
 
     def authorization(self) -> AuthorizationProtocol:
-        from ._authorization import Authorization
+        from ._authorization import _shared_authorization_client
 
-        return Authorization(invocation_token=self.invocation_token)
+        return _shared_authorization_client()
 
     def workflow_run_context(self) -> "WorkflowRunContext":
         from ._workflow import parse_workflow_run_context

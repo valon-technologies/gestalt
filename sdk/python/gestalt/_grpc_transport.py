@@ -19,7 +19,6 @@ _INTERNAL_CHANNEL_OPTIONS = (
     *INTERNAL_GRPC_MESSAGE_OPTIONS,
 )
 _HOST_SERVICE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
-INVOCATION_TOKEN_HEADER = "x-gestalt-invocation-token"
 ENV_HOST_SERVICE_SOCKET = "GESTALT_HOST_SERVICE_SOCKET"
 ENV_HOST_SERVICE_TOKEN = "GESTALT_HOST_SERVICE_TOKEN"
 HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding"
@@ -31,12 +30,9 @@ class HostServiceMetadataInterceptor(
     grpc.StreamUnaryClientInterceptor,
     grpc.StreamStreamClientInterceptor,
 ):
-    def __init__(
-        self, token: str = "", binding: str = "", invocation_token: str = ""
-    ) -> None:
+    def __init__(self, token: str = "", binding: str = "") -> None:
         self._token = token
         self._binding = binding
-        self._invocation_token = invocation_token
 
     def intercept_unary_unary(
         self, continuation: Any, client_call_details: Any, request: Any
@@ -65,8 +61,6 @@ class HostServiceMetadataInterceptor(
             metadata.append((_HOST_SERVICE_RELAY_TOKEN_HEADER, self._token))
         if self._binding:
             metadata.append((HOST_SERVICE_BINDING_HEADER, self._binding))
-        if self._invocation_token:
-            metadata.append((INVOCATION_TOKEN_HEADER, self._invocation_token))
         return _ClientCallDetails(
             method=client_call_details.method,
             timeout=client_call_details.timeout,
@@ -131,12 +125,7 @@ def secure_internal_channel(
 
 
 def host_service_channel(
-    service_name: str,
-    target: str,
-    *,
-    token: str = "",
-    binding: str = "",
-    invocation_token: str = "",
+    service_name: str, target: str, *, token: str = "", binding: str = ""
 ) -> grpc.Channel:
     scheme, address = parse_host_service_target(service_name, target)
     if scheme == "unix":
@@ -147,9 +136,9 @@ def host_service_channel(
         channel = secure_internal_channel(internal_channel_target("tls", address))
     else:
         raise RuntimeError(f"unsupported {service_name} transport scheme {scheme!r}")
-    if token or binding or invocation_token:
+    if token or binding:
         channel = grpc.intercept_channel(
-            channel, HostServiceMetadataInterceptor(token, binding, invocation_token)
+            channel, HostServiceMetadataInterceptor(token, binding)
         )
     return channel
 
