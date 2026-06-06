@@ -240,7 +240,7 @@ func (p *startupProviderProxy) beginCallerWait(ctx context.Context) (func(), err
 	}
 	target := newStartupProviderNode(invocation.ProviderKindApp, p.spec.Name)
 	workflow := invocation.WorkflowContextFromContext(ctx)
-	if providerName, _ := workflow["provider"].(string); strings.TrimSpace(providerName) != "" {
+	if providerName, _ := workflow["providerName"].(string); strings.TrimSpace(providerName) != "" {
 		return p.tracker.beginWait(newStartupProviderNode(invocation.ProviderKindWorkflow, providerName), target)
 	}
 	if done, ok, err := p.tracker.beginCallerProviderWait(ctx, target); ok || err != nil {

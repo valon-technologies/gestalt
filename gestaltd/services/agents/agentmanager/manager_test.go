@@ -124,6 +124,43 @@ func mustProtoStruct(t testing.TB, values map[string]any) *structpb.Struct {
 	return out
 }
 
+func workflowAgentRequestContext(t testing.TB, runID, stepID, providerName, model string) *proto.RequestContext {
+	t.Helper()
+	return &proto.RequestContext{
+		Caller: &proto.ProviderContext{
+			Kind: string(invocation.ProviderKindWorkflow),
+			Name: "temporal",
+		},
+		Subject: &proto.SubjectContext{
+			Id:                  principal.UserSubjectID("runner"),
+			CredentialSubjectId: principal.UserSubjectID("runner"),
+		},
+		Workflow: mustProtoStruct(t, map[string]any{
+			"providerName":         "temporal",
+			"runId":                runID,
+			"definitionId":         "agent_review",
+			"definitionGeneration": 1,
+			"workflowKey":          "review:123",
+			"currentStepId":        stepID,
+			"currentStep": map[string]any{
+				"id":    stepID,
+				"index": 0,
+			},
+			"target": map[string]any{
+				"kind": "steps",
+				"steps": []any{
+					map[string]any{
+						"id":            stepID,
+						"kind":          "agent",
+						"agentProvider": providerName,
+						"model":         model,
+					},
+				},
+			},
+		}),
+	}
+}
+
 func mustAgentMessages(t testing.TB, messages []coreagent.Message) []*proto.AgentMessage {
 	t.Helper()
 	out, err := agentwire.MessagesToProto(messages)
@@ -910,6 +947,65 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 		Resolution:    mustProtoStruct(t, map[string]any{"value": true}),
 	}); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("ResolveInteraction as visible non-owner error = %v, want not found", err)
+	}
+}
+
+func TestManagerWorkflowTurnAccessRequiresSameRunAndStepScope(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	scopes := newAgentManagerTestTurnScopes()
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		TurnScopes: scopes,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("runner")}
+	run1 := workflowAgentRequestContext(t, "run-1", "review", "alpha", "test-model")
+	run2 := workflowAgentRequestContext(t, "run-2", "review", "alpha", "test-model")
+
+	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+		Context:      run1,
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		Context:        run1,
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "test-model",
+		Output:         agentTextOutputProto(),
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
+	if scope.CallerKind != invocation.ProviderKindWorkflow || scope.CallerName != "temporal" || scope.WorkflowRunID != "run-1" || scope.WorkflowStepID != "review" {
+		t.Fatalf("turn scope = %#v, want workflow temporal run-1/review", scope)
+	}
+
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{Context: run1, TurnId: turn.ID}); err != nil {
+		t.Fatalf("GetTurn same workflow run: %v", err)
+	}
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{Context: run2, TurnId: turn.ID}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("GetTurn different workflow run error = %v, want authorization denied", err)
+	}
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{Context: run2, TurnId: turn.ID, Reason: "wrong run"}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("CancelTurn different workflow run error = %v, want authorization denied", err)
+	}
+	if got := alpha.turns[turn.ID].Status; got != coreagent.ExecutionStatusRunning {
+		t.Fatalf("turn status after denied cancel = %q, want running", got)
+	}
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{Context: run1, TurnId: turn.ID, Reason: "done"}); err != nil {
+		t.Fatalf("CancelTurn same workflow run: %v", err)
 	}
 }
 

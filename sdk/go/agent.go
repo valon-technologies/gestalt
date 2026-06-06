@@ -33,7 +33,11 @@ var sharedAgentTransport sharedManagerTransport[proto.AgentProviderClient]
 
 // NewAgent returns an agent capability for the current provider request.
 func NewAgent(req Request) (Agent, error) {
-	return newAgent(requestContextForRequest(req))
+	reqCtx, err := requestContextForRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	return newAgent(reqCtx)
 }
 
 // NewAgentFromRequest returns an agent capability for the current provider request.

@@ -72,8 +72,15 @@ func WorkflowRunContext(req Request) map[string]any {
 		ctxValue["runId"] = runID
 	}
 	if providerName := strings.TrimSpace(req.ProviderName); providerName != "" {
-		ctxValue["provider"] = providerName
+		ctxValue["providerName"] = providerName
 	}
+	if definitionID := strings.TrimSpace(req.DefinitionID); definitionID != "" {
+		ctxValue["definitionId"] = definitionID
+	}
+	if req.DefinitionGeneration != 0 {
+		ctxValue["definitionGeneration"] = req.DefinitionGeneration
+	}
+	ctxValue["workflowKey"] = strings.TrimSpace(req.WorkflowKey)
 	if target := WorkflowTargetContext(req.Target); len(target) > 0 {
 		ctxValue["target"] = target
 	}
@@ -96,6 +103,47 @@ func WorkflowRunContext(req Request) map[string]any {
 		ctxValue["runAs"] = runAs
 	}
 	return ctxValue
+}
+
+func WorkflowStepContext(req Request, stepIndex int, stepID string) map[string]any {
+	ctxValue := WorkflowRunContext(req)
+	stepID = strings.TrimSpace(stepID)
+	ctxValue["currentStep"] = map[string]any{
+		"id":    stepID,
+		"index": stepIndex,
+	}
+	if stepID != "" {
+		ctxValue["currentStepId"] = stepID
+	}
+	return ctxValue
+}
+
+func StepInvocationRequest(req Request, stepIndex int, stepID, idempotencyKey string) (gestalt.Request, error) {
+	providerName := strings.TrimSpace(req.ProviderName)
+	if providerName == "" {
+		return gestalt.Request{}, fmt.Errorf("workflow provider name is required for step invocation")
+	}
+	if strings.TrimSpace(req.RunID) == "" {
+		return gestalt.Request{}, fmt.Errorf("workflow run id is required for step invocation")
+	}
+	if strings.TrimSpace(req.DefinitionID) == "" {
+		return gestalt.Request{}, fmt.Errorf("workflow definition id is required for step invocation")
+	}
+	if req.DefinitionGeneration <= 0 {
+		return gestalt.Request{}, fmt.Errorf("workflow definition generation is required for step invocation")
+	}
+	if req.RunAs == nil || strings.TrimSpace(req.RunAs.ID) == "" {
+		return gestalt.Request{}, fmt.Errorf("workflow runAs subject is required for step invocation")
+	}
+	return gestalt.NewRequest(gestalt.RequestInput{
+		Subject: *req.RunAs,
+		Caller: gestalt.RequestCaller{
+			Kind: gestalt.RequestCallerKindWorkflow,
+			Name: providerName,
+		},
+		WorkflowContext: WorkflowStepContext(req, stepIndex, stepID),
+		IdempotencyKey:  strings.TrimSpace(idempotencyKey),
+	})
 }
 
 func WorkflowTargetContext(target *gestalt.BoundWorkflowTarget) map[string]any {

@@ -235,6 +235,76 @@ func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
 	}
 }
 
+func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
+	t.Parallel()
+
+	authz := &recordingAuthorizationProvider{allowed: false}
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(invoker, WithAuthorizationProvider(authz), WithCallerApp("temporal", nil))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	workflow := map[string]any{
+		"providerName":         "temporal",
+		"runId":                "run-123",
+		"definitionId":         "slack_reactions",
+		"definitionGeneration": 3,
+		"workflowKey":          "thread:123",
+		"currentStepId":        "react",
+		"currentStep": map[string]any{
+			"id":    "react",
+			"index": 0,
+		},
+		"target": map[string]any{
+			"kind": "steps",
+			"steps": []any{
+				map[string]any{
+					"id":             "react",
+					"kind":           "app",
+					"app":            "slack",
+					"operation":      "events.addReaction",
+					"connection":     "team-primary",
+					"credentialMode": "subject",
+				},
+			},
+		},
+	}
+
+	resp, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:            "slack",
+		Operation:      "events.addReaction",
+		Connection:     "team-primary",
+		CredentialMode: "subject",
+		Context:        requestContextWithCallerKind(t, "workflow", "temporal", workflow),
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.GetStatus() != 202 || resp.GetBody() != "accepted" {
+		t.Fatalf("Invoke response = %+v, want accepted", resp)
+	}
+	if len(authz.requests) != 0 {
+		t.Fatalf("authorization requests = %d, want 0 for workflow caller", len(authz.requests))
+	}
+	if invoker.subjectID != "user:test-user" || invoker.credentialMode != core.ConnectionModeSubject {
+		t.Fatalf("invocation principal/mode = %s/%q, want workflow subject/subject", invoker.subjectID, invoker.credentialMode)
+	}
+	if got := invocation.WorkflowContextString(invoker.workflowContext, "currentStepId"); got != "react" {
+		t.Fatalf("workflow currentStepId = %q, want react", got)
+	}
+
+	_, err = client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:            "slack",
+		Operation:      "chat.postMessage",
+		Connection:     "team-primary",
+		CredentialMode: "subject",
+		Context:        requestContextWithCallerKind(t, "workflow", "temporal", workflow),
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("Invoke mismatched operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+}
+
 func TestAppServerInvokeFailsClosedWithoutAuthorizedCaller(t *testing.T) {
 	t.Parallel()
 
@@ -272,6 +342,10 @@ func TestAppServerInvokeFailsClosedWithoutAuthorizedCaller(t *testing.T) {
 }
 
 func requestContext(t *testing.T, caller string, workflow map[string]any) *proto.RequestContext {
+	return requestContextWithCallerKind(t, "app", caller, workflow)
+}
+
+func requestContextWithCallerKind(t *testing.T, callerKind, caller string, workflow map[string]any) *proto.RequestContext {
 	t.Helper()
 
 	var workflowStruct *structpb.Struct
@@ -296,7 +370,7 @@ func requestContext(t *testing.T, caller string, workflow map[string]any) *proto
 		},
 		Workflow: workflowStruct,
 		Caller: &proto.ProviderContext{
-			Kind: "app",
+			Kind: callerKind,
 			Name: caller,
 		},
 		Invocation: &proto.InvocationContext{

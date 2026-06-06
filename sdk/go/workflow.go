@@ -37,7 +37,11 @@ var sharedWorkflowTransport sharedManagerTransport[proto.WorkflowProviderClient]
 
 // NewWorkflow returns a workflow capability for the current provider request.
 func NewWorkflow(req Request) (Workflow, error) {
-	return newWorkflow(requestContextForRequest(req))
+	reqCtx, err := requestContextForRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	return newWorkflow(reqCtx)
 }
 
 // NewWorkflowFromRequest returns a workflow capability for the current

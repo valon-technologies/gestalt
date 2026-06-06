@@ -21,10 +21,84 @@ type Request struct {
 	Credential       Credential
 	Access           Access
 	Host             Host
+	Caller           RequestCaller
+	WorkflowContext  map[string]any
 	IdempotencyKey   string
 	ToolRefs         []AgentToolRef
 	ToolRefsSet      bool
 	requestContext   *proto.RequestContext
+}
+
+// RequestCallerKind identifies the trusted provider surface making a host
+// service request. These values match the daemon invocation caller kinds.
+type RequestCallerKind string
+
+const (
+	RequestCallerKindApp      RequestCallerKind = "app"
+	RequestCallerKindWorkflow RequestCallerKind = "workflow"
+	RequestCallerKindAgent    RequestCallerKind = "agent"
+)
+
+// RequestCaller identifies the trusted provider making a host service request.
+type RequestCaller struct {
+	Kind RequestCallerKind
+	Name string
+}
+
+// RequestInput contains the public request authority fields used to construct
+// an SDK Request and its wire RequestContext together.
+type RequestInput struct {
+	Token            string
+	ConnectionParams map[string]string
+	Subject          Subject
+	AgentSubject     Subject
+	Credential       Credential
+	Access           Access
+	Host             Host
+	Caller           RequestCaller
+	WorkflowContext  map[string]any
+	IdempotencyKey   string
+	ToolRefs         []AgentToolRef
+	ToolRefsSet      bool
+}
+
+// NewRequest builds a Request with a canonical host-service RequestContext.
+func NewRequest(input RequestInput) (Request, error) {
+	req := Request{
+		Token:            input.Token,
+		ConnectionParams: cloneStringMap(input.ConnectionParams),
+		Subject:          input.Subject,
+		AgentSubject:     input.AgentSubject,
+		Credential:       input.Credential,
+		Access:           input.Access,
+		Host:             input.Host,
+		Caller:           RequestCaller{Kind: RequestCallerKind(strings.TrimSpace(string(input.Caller.Kind))), Name: strings.TrimSpace(input.Caller.Name)},
+		IdempotencyKey:   input.IdempotencyKey,
+		ToolRefs:         copyAgentToolRefs(input.ToolRefs),
+		ToolRefsSet:      input.ToolRefsSet,
+	}
+	reqCtx, err := requestContextForRequest(req)
+	if err != nil {
+		return Request{}, err
+	}
+	if input.WorkflowContext != nil {
+		workflow, err := structFromAny(input.WorkflowContext)
+		if err != nil {
+			return Request{}, fmt.Errorf("request: encode workflow context: %w", err)
+		}
+		if workflow != nil {
+			if reqCtx == nil {
+				reqCtx = &proto.RequestContext{}
+			}
+			reqCtx.Workflow = workflow
+			req.WorkflowContext = mapFromStruct(workflow)
+		}
+	}
+	if emptyRequestContext(reqCtx) {
+		reqCtx = nil
+	}
+	req.requestContext = reqCtx
+	return req, nil
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -42,7 +116,11 @@ func (r Request) App() (App, error) {
 }
 
 func (r Request) Workflow() (Workflow, error) {
-	client, err := newWorkflow(requestContextForRequest(r))
+	reqCtx, err := requestContextForRequest(r)
+	if err != nil {
+		return nil, err
+	}
+	client, err := newWorkflow(reqCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -56,21 +134,35 @@ func (r Request) Agent() (Agent, error) {
 
 // RequestFromContext reconstructs the current provider request from ctx.
 func RequestFromContext(ctx context.Context) Request {
+	reqCtx := requestContextFromContext(ctx)
+	caller := RequestCaller{}
+	if protoCaller := reqCtx.GetCaller(); protoCaller != nil {
+		caller = RequestCaller{
+			Kind: RequestCallerKind(strings.TrimSpace(protoCaller.GetKind())),
+			Name: strings.TrimSpace(protoCaller.GetName()),
+		}
+	}
+	workflow := WorkflowContextFromContext(ctx)
+	if workflow == nil && reqCtx.GetWorkflow() != nil {
+		workflow = reqCtx.GetWorkflow().AsMap()
+	}
 	return Request{
-		ConnectionParams: ConnectionParams(ctx),
+		ConnectionParams: cloneStringMap(ConnectionParams(ctx)),
 		Subject:          SubjectFromContext(ctx),
 		AgentSubject:     AgentSubjectFromContext(ctx),
 		Credential:       CredentialFromContext(ctx),
 		Access:           AccessFromContext(ctx),
 		Host:             HostContextFromContext(ctx),
+		Caller:           caller,
+		WorkflowContext:  cloneWorkflowContextMap(workflow),
 		IdempotencyKey:   IdempotencyKeyFromContext(ctx),
 		ToolRefs:         ToolRefsFromContext(ctx),
 		ToolRefsSet:      ToolRefsSetFromContext(ctx),
-		requestContext:   requestContextFromContext(ctx),
+		requestContext:   reqCtx,
 	}
 }
 
-func requestContextForRequest(req Request) *proto.RequestContext {
+func requestContextForRequest(req Request) (*proto.RequestContext, error) {
 	reqCtx := cloneRequestContext(req.requestContext)
 	if reqCtx == nil {
 		reqCtx = &proto.RequestContext{}
@@ -95,14 +187,31 @@ func requestContextForRequest(req Request) *proto.RequestContext {
 	if reqCtx.Host == nil && req.Host.PublicBaseURL != "" {
 		reqCtx.Host = &proto.HostContext{PublicBaseUrl: req.Host.PublicBaseURL}
 	}
+	if reqCtx.Caller == nil {
+		callerKind := strings.TrimSpace(string(req.Caller.Kind))
+		callerName := strings.TrimSpace(req.Caller.Name)
+		if callerKind != "" || callerName != "" {
+			if callerKind == "" || callerName == "" {
+				return nil, fmt.Errorf("request: caller kind and name are required together")
+			}
+			reqCtx.Caller = &proto.ProviderContext{Kind: callerKind, Name: callerName}
+		}
+	}
+	if reqCtx.Workflow == nil && req.WorkflowContext != nil {
+		workflow, err := structFromAny(req.WorkflowContext)
+		if err != nil {
+			return nil, fmt.Errorf("request: encode workflow context: %w", err)
+		}
+		reqCtx.Workflow = workflow
+	}
 	if !reqCtx.ToolRefsSet && req.ToolRefsSet {
 		reqCtx.ToolRefsSet = true
 		reqCtx.ToolRefs = agentToolRefsToProto(req.ToolRefs)
 	}
 	if emptyRequestContext(reqCtx) {
-		return nil
+		return nil, nil
 	}
-	return reqCtx
+	return reqCtx, nil
 }
 
 func subjectContextFromSubject(subject Subject) *proto.SubjectContext {
@@ -169,6 +278,17 @@ func emptyCredential(credential Credential) bool {
 
 func emptyAccess(access Access) bool {
 	return access.Policy == "" && access.Role == ""
+}
+
+func cloneWorkflowContextMap(values map[string]any) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
 }
 
 func emptyRequestContext(reqCtx *proto.RequestContext) bool {

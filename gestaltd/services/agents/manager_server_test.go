@@ -18,6 +18,8 @@ import (
 type recordingManagerService struct {
 	createSession func(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
 	createTurn    func(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error)
+	getTurn       func(context.Context, *principal.Principal, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error)
+	cancelTurn    func(context.Context, *principal.Principal, *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error)
 	listSessions  func(context.Context, *principal.Principal, *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error)
 	listTurns     func(context.Context, *principal.Principal, *proto.ListAgentProviderTurnsRequest) ([]*coreagent.Turn, error)
 }
@@ -51,7 +53,10 @@ func (s *recordingManagerService) CreateTurn(ctx context.Context, p *principal.P
 	return nil, errors.New("unexpected CreateTurn call")
 }
 
-func (s *recordingManagerService) GetTurn(context.Context, *principal.Principal, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
+func (s *recordingManagerService) GetTurn(ctx context.Context, p *principal.Principal, req *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
+	if s.getTurn != nil {
+		return s.getTurn(ctx, p, req)
+	}
 	return nil, errors.New("unexpected GetTurn call")
 }
 
@@ -62,7 +67,10 @@ func (s *recordingManagerService) ListTurns(ctx context.Context, p *principal.Pr
 	return nil, errors.New("unexpected ListTurns call")
 }
 
-func (s *recordingManagerService) CancelTurn(context.Context, *principal.Principal, *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
+func (s *recordingManagerService) CancelTurn(ctx context.Context, p *principal.Principal, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
+	if s.cancelTurn != nil {
+		return s.cancelTurn(ctx, p, req)
+	}
 	return nil, errors.New("unexpected CancelTurn call")
 }
 
@@ -164,6 +172,89 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
+func TestManagerServerAuthorizesWorkflowAgentStep(t *testing.T) {
+	t.Parallel()
+
+	workflow := map[string]any{
+		"providerName":         "temporal",
+		"runId":                "run-123",
+		"definitionId":         "agent_review",
+		"definitionGeneration": 2,
+		"workflowKey":          "review:123",
+		"currentStepId":        "review",
+		"currentStep": map[string]any{
+			"id":    "review",
+			"index": 0,
+		},
+		"target": map[string]any{
+			"kind": "steps",
+			"steps": []any{
+				map[string]any{
+					"id":            "review",
+					"kind":          "agent",
+					"agentProvider": "claude",
+					"model":         "default",
+				},
+			},
+		},
+	}
+	service := &recordingManagerService{
+		createSession: func(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+			if got := invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "currentStepId"); got != "review" {
+				t.Fatalf("workflow currentStepId = %q, want review", got)
+			}
+			return &coreagent.Session{ID: "session-1", ProviderName: req.GetProviderName(), Model: req.GetModel(), State: coreagent.SessionStateActive}, nil
+		},
+		createTurn: func(context.Context, *principal.Principal, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
+			return &coreagent.Turn{ID: "turn-1", SessionID: "session-1", Status: coreagent.ExecutionStatusRunning}, nil
+		},
+		getTurn: func(context.Context, *principal.Principal, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error) {
+			return &coreagent.Turn{ID: "turn-1", SessionID: "session-1", Status: coreagent.ExecutionStatusSucceeded}, nil
+		},
+		cancelTurn: func(context.Context, *principal.Principal, *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
+			return &coreagent.Turn{ID: "turn-1", SessionID: "session-1", Status: coreagent.ExecutionStatusCanceled}, nil
+		},
+	}
+	server := NewProviderServer("temporal", service)
+	ctx := agentManagerRequestContextWithCallerKind("workflow", "temporal", "user-1", workflow)
+
+	if _, err := server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		Context:      ctx,
+		ProviderName: "claude",
+		Model:        "default",
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
+		Context:   ctx,
+		SessionId: "session-1",
+		Model:     "default",
+	}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if _, err := server.GetTurn(context.Background(), &proto.GetAgentProviderTurnRequest{
+		Context: ctx,
+		TurnId:  "turn-1",
+	}); err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	if _, err := server.CancelTurn(context.Background(), &proto.CancelAgentProviderTurnRequest{
+		Context: ctx,
+		TurnId:  "turn-1",
+	}); err != nil {
+		t.Fatalf("CancelTurn: %v", err)
+	}
+
+	_, err := server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		Context:      ctx,
+		ProviderName: "openai",
+		Model:        "default",
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("CreateSession mismatched provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+}
+
 func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 	t.Parallel()
 
@@ -258,9 +349,13 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 }
 
 func agentManagerRequestContext(callerApp, subjectID string, workflow map[string]any) *proto.RequestContext {
+	return agentManagerRequestContextWithCallerKind("app", callerApp, subjectID, workflow)
+}
+
+func agentManagerRequestContextWithCallerKind(callerKind, callerApp, subjectID string, workflow map[string]any) *proto.RequestContext {
 	ctx := &proto.RequestContext{
 		Caller: &proto.ProviderContext{
-			Kind: string(invocation.ProviderKindApp),
+			Kind: callerKind,
 			Name: callerApp,
 		},
 		Subject: &proto.SubjectContext{

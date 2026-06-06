@@ -50,7 +50,11 @@ var sharedAppTransport sharedManagerTransport[proto.AppClient]
 
 // NewApp returns an app invocation capability for the current provider request.
 func NewApp(req Request) (App, error) {
-	return newApp(requestContextForRequest(req))
+	reqCtx, err := requestContextForRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	return newApp(reqCtx)
 }
 
 // NewAppFromRequest returns an app invocation capability for the current

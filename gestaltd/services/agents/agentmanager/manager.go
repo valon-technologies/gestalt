@@ -827,7 +827,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	if err := m.storeTurnScope(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource); err != nil {
+	if err := m.storeTurnScope(ctx, req.GetContext(), p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource); err != nil {
 		return nil, err
 	}
 	scopeCommitted := false
@@ -887,6 +887,9 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, req *prot
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	if err := m.authorizeWorkflowTurnAccess(ctx, owned, req.GetContext()); err != nil {
+		return nil, err
+	}
 	return owned.turn, nil
 }
 
@@ -976,6 +979,9 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	if !owned.sessionOwned {
 		return nil, core.ErrNotFound
 	}
+	if err := m.authorizeWorkflowTurnAccess(ctx, owned, req.GetContext()); err != nil {
+		return nil, err
+	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	providerReq := cloneAgentRequest(req, &proto.CancelAgentProviderTurnRequest{})
 	providerReq.TurnId = strings.TrimSpace(req.GetTurnId())
@@ -1017,6 +1023,9 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, re
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	if err := m.authorizeWorkflowTurnAccess(ctx, owned, req.GetContext()); err != nil {
+		return nil, err
+	}
 	callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
 	if err != nil {
 		return nil, err
@@ -1046,6 +1055,9 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
+	if err := m.authorizeWorkflowTurnAccess(ctx, owned, req.GetContext()); err != nil {
+		return nil, err
+	}
 	callCtx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), owned.providerName)
 	if err != nil {
 		return nil, err
@@ -1087,6 +1099,9 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	}
 	if !owned.sessionOwned {
 		return nil, core.ErrNotFound
+	}
+	if err := m.authorizeWorkflowTurnAccess(ctx, owned, req.GetContext()); err != nil {
+		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	interactionID := strings.TrimSpace(req.GetInteractionId())
@@ -1537,9 +1552,13 @@ func agentProviderReadFallbackAllowed(err error) bool {
 	return false
 }
 
-func (m *Manager) storeTurnScope(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) error {
+func (m *Manager) storeTurnScope(ctx context.Context, reqContext *proto.RequestContext, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) error {
 	if m == nil || m.turnScopes == nil {
 		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
+	}
+	workflowRunID, workflowStepID, err := workflowTurnScope(ctx, reqContext, callerKind, providerName)
+	if err != nil {
+		return err
 	}
 	subject := agentSubjectFromPrincipal(p)
 	permissions := agentTurnPermissions(ctx, p, callerKind, callerName, toolRefs)
@@ -1553,6 +1572,8 @@ func (m *Manager) storeTurnScope(ctx context.Context, p *principal.Principal, pr
 		TurnID:              turnID,
 		CallerKind:          callerKind,
 		CallerName:          callerName,
+		WorkflowRunID:       workflowRunID,
+		WorkflowStepID:      workflowStepID,
 		SubjectID:           subject.SubjectID,
 		CredentialSubjectID: subject.CredentialSubjectID,
 		Permissions:         permissions,
@@ -1562,6 +1583,75 @@ func (m *Manager) storeTurnScope(ctx context.Context, p *principal.Principal, pr
 		ToolSource:          toolSource,
 		Connections:         connections,
 	})
+}
+
+func workflowTurnScope(ctx context.Context, reqContext *proto.RequestContext, callerKind invocation.ProviderKind, providerName string) (string, string, error) {
+	if callerKind != invocation.ProviderKindWorkflow {
+		return "", "", nil
+	}
+	step, err := appaccessservice.WorkflowStepInvocationFromContext(agentWorkflowContext(ctx, reqContext))
+	if err != nil {
+		return "", "", err
+	}
+	if step.Kind != "agent" {
+		return "", "", fmt.Errorf("%w: workflow step %q is not an agent step", invocation.ErrAuthorizationDenied, step.ID)
+	}
+	if step.AgentProvider != strings.TrimSpace(providerName) {
+		return "", "", fmt.Errorf("%w: workflow step %q may not invoke agent provider %q", invocation.ErrAuthorizationDenied, step.ID, strings.TrimSpace(providerName))
+	}
+	return step.RunID, step.ID, nil
+}
+
+func (m *Manager) authorizeWorkflowTurnAccess(ctx context.Context, owned *accessibleAgentTurn, reqContext *proto.RequestContext) error {
+	caller := reqContext.GetCaller()
+	if invocation.ProviderKind(strings.TrimSpace(caller.GetKind())) != invocation.ProviderKindWorkflow {
+		return nil
+	}
+	callerName := strings.TrimSpace(caller.GetName())
+	step, err := appaccessservice.WorkflowStepInvocationFromContext(agentWorkflowContext(ctx, reqContext))
+	if err != nil {
+		return err
+	}
+	if callerName == "" || step.ProviderName != callerName {
+		return fmt.Errorf("%w: workflow caller %q does not match workflow context provider %q", invocation.ErrAuthorizationDenied, callerName, step.ProviderName)
+	}
+	if step.Kind != "agent" || step.AgentProvider != owned.providerName {
+		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
+	}
+	if model := strings.TrimSpace(step.Model); model != "" {
+		turnModel := strings.TrimSpace(owned.turn.Model)
+		sessionModel := strings.TrimSpace(owned.session.Model)
+		if turnModel != "" && turnModel != model {
+			return fmt.Errorf("%w: workflow %q step %q may not access agent model %q", invocation.ErrAuthorizationDenied, callerName, step.ID, turnModel)
+		}
+		if sessionModel != "" && sessionModel != model {
+			return fmt.Errorf("%w: workflow %q step %q may not access agent model %q", invocation.ErrAuthorizationDenied, callerName, step.ID, sessionModel)
+		}
+	}
+	if m == nil || m.turnScopes == nil {
+		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
+	}
+	scope, ok := m.turnScopes.Get(owned.providerName, owned.turn.SessionID, owned.turn.ID)
+	if !ok {
+		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
+	}
+	if scope.CallerKind != invocation.ProviderKindWorkflow ||
+		strings.TrimSpace(scope.CallerName) != callerName ||
+		strings.TrimSpace(scope.WorkflowRunID) != step.RunID ||
+		strings.TrimSpace(scope.WorkflowStepID) != step.ID {
+		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
+	}
+	return nil
+}
+
+func agentWorkflowContext(ctx context.Context, reqContext *proto.RequestContext) map[string]any {
+	if workflow := invocation.WorkflowContextFromContext(ctx); workflow != nil {
+		return workflow
+	}
+	if workflow := reqContext.GetWorkflow(); workflow != nil {
+		return workflow.AsMap()
+	}
+	return nil
 }
 
 func (m *Manager) deleteTurnScope(providerName, sessionID, turnID string) {

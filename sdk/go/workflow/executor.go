@@ -15,15 +15,18 @@ import (
 const workflowStepOutputBodyMaxBytes = 64 * 1024
 
 type Request struct {
-	ProviderName       string
-	RunID              string
-	Target             *gestalt.BoundWorkflowTarget
-	Trigger            *gestalt.WorkflowRunTrigger
-	Input              map[string]any
-	Metadata           map[string]any
-	CreatedBySubjectID string
-	RunAs              *gestalt.Subject
-	Signals            []gestalt.WorkflowSignal
+	ProviderName         string
+	RunID                string
+	DefinitionID         string
+	DefinitionGeneration int64
+	WorkflowKey          string
+	Target               *gestalt.BoundWorkflowTarget
+	Trigger              *gestalt.WorkflowRunTrigger
+	Input                map[string]any
+	Metadata             map[string]any
+	CreatedBySubjectID   string
+	RunAs                *gestalt.Subject
+	Signals              []gestalt.WorkflowSignal
 }
 
 type Response struct {
@@ -65,6 +68,7 @@ type AppInvocation struct {
 	CredentialMode  string
 	IdempotencyKey  string
 	WorkflowContext map[string]any
+	Request         gestalt.Request
 }
 
 type AppResult struct {
@@ -243,9 +247,9 @@ func (e *Executor) ExecuteStep(ctx context.Context, stepReq StepRequest) (*StepR
 		cancelStep()
 		return failedStepResponse(stepID, "invalid_step", "workflow step cannot set both app and agent", "", inputs, outputs, stepInputs), nil
 	case step.App != nil:
-		output, err = e.invokeAppStep(stepCtx, req, step.App, inputs, outputs, stepInputs, scope, stepID)
+		output, err = e.invokeAppStep(stepCtx, req, stepReq.StepIndex, step.App, inputs, outputs, stepInputs, scope, stepID)
 	case step.Agent != nil:
-		output, turnID, err = e.invokeAgentStep(stepCtx, req, step.Agent, inputs, outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
+		output, turnID, err = e.invokeAgentStep(stepCtx, req, stepReq.StepIndex, step.Agent, inputs, outputs, stepInputs, sessions, scope, stepID, step.TimeoutSeconds, step.Metadata)
 	default:
 		err = fmt.Errorf("workflow step must set app or agent")
 	}
