@@ -17,7 +17,7 @@ type appClientInvoker struct {
 }
 
 func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocation) (*AppResult, error) {
-	client, err := i.newApp(gestalt.RequestFromContext(ctx))
+	client, err := i.newApp(call.Request)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocat
 	return out, nil
 }
 
-func (e *Executor) invokeAppStep(ctx context.Context, req Request, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, invocationScope, stepID string) (any, error) {
+func (e *Executor) invokeAppStep(ctx context.Context, req Request, stepIndex int, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, invocationScope, stepID string) (any, error) {
 	appName := strings.TrimSpace(app.Name)
 	operation := strings.TrimSpace(app.Operation)
 	if appName == "" || operation == "" {
@@ -70,6 +70,12 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, app *gestalt.
 			params[key] = value
 		}
 	}
+	idempotencyKey := WorkflowStepIdempotencyKey(req, invocationScope, stepID, "step")
+	workflowContext := WorkflowStepContext(req, stepIndex, stepID)
+	request, err := StepInvocationRequest(req, stepIndex, stepID, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
 	result, err := e.appInvoker.InvokeWorkflowApp(ctx, AppInvocation{
 		App:             appName,
 		Operation:       operation,
@@ -77,8 +83,9 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, app *gestalt.
 		Connection:      strings.TrimSpace(app.Connection),
 		Instance:        strings.TrimSpace(app.Instance),
 		CredentialMode:  strings.TrimSpace(app.CredentialMode),
-		IdempotencyKey:  WorkflowStepIdempotencyKey(req, invocationScope, stepID, "step"),
-		WorkflowContext: WorkflowRunContext(req),
+		IdempotencyKey:  idempotencyKey,
+		WorkflowContext: workflowContext,
+		Request:         request,
 	})
 	if err != nil {
 		return nil, err
@@ -90,8 +97,12 @@ func (e *Executor) invokeAppStep(ctx context.Context, req Request, app *gestalt.
 	return output, nil
 }
 
-func (e *Executor) invokeAgentStep(ctx context.Context, req Request, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
-	client, err := e.newAgent(gestalt.RequestFromContext(ctx))
+func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex int, agent *gestalt.WorkflowStepAgentTurn, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int32, stepMetadata any) (any, string, error) {
+	request, err := StepInvocationRequest(req, stepIndex, stepID, WorkflowStepIdempotencyKey(req, invocationScope, stepID, "agent"))
+	if err != nil {
+		return nil, "", err
+	}
+	client, err := e.newAgent(request)
 	if err != nil {
 		return nil, "", err
 	}
@@ -103,7 +114,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, agent *gest
 	if providerName == "" {
 		return nil, "", fmt.Errorf("workflow agent provider is required")
 	}
-	workflowContext := WorkflowRunContext(req)
+	workflowContext := WorkflowStepContext(req, stepIndex, stepID)
 	ctx = gestalt.WithWorkflowContext(ctx, workflowContext)
 	sessionKey := strings.TrimSpace(agent.SessionKey)
 	if sessionKey == "" {

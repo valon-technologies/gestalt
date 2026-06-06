@@ -60,6 +60,9 @@ func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAge
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), req.GetModel()); err != nil {
+		return nil, err
+	}
 	session, err := s.manager.CreateSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -79,6 +82,9 @@ func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProv
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "get agent sessions"); err != nil {
+		return nil, err
+	}
 	session, err := s.manager.GetSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -96,6 +102,9 @@ func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentP
 	}
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
+	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "list agent sessions"); err != nil {
+		return nil, err
 	}
 	sessions, err := s.manager.ListSessions(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
@@ -124,6 +133,9 @@ func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAge
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "update agent sessions"); err != nil {
+		return nil, err
+	}
 	session, err := s.manager.UpdateSession(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -143,6 +155,9 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, "", req.GetModel()); err != nil {
+		return nil, err
+	}
 	turn, err := s.manager.CreateTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -161,6 +176,9 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	turnID := strings.TrimSpace(req.GetTurnId())
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
+	}
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, "", ""); err != nil {
+		return nil, err
 	}
 	turn, err := s.manager.GetTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
@@ -183,6 +201,9 @@ func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProv
 	}
 	if req.GetLimit() < 0 {
 		return nil, status.Error(codes.InvalidArgument, "limit must be non-negative")
+	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "list agent turns"); err != nil {
+		return nil, err
 	}
 	turns, err := s.manager.ListTurns(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
@@ -211,6 +232,9 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, "", ""); err != nil {
+		return nil, err
+	}
 	turn, err := s.manager.CancelTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -229,6 +253,9 @@ func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgen
 	turnID := strings.TrimSpace(req.GetTurnId())
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
+	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "list agent turn events"); err != nil {
+		return nil, err
 	}
 	events, err := s.manager.ListTurnEvents(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
@@ -253,6 +280,9 @@ func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAg
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "list agent interactions"); err != nil {
+		return nil, err
+	}
 	interactions, err := s.manager.ListInteractions(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -276,6 +306,9 @@ func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.Reso
 	if interactionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "interaction_id is required")
 	}
+	if err := rejectWorkflowAgentRequest(reqCtx, "resolve agent interactions"); err != nil {
+		return nil, err
+	}
 	interaction, err := s.manager.ResolveInteraction(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -288,11 +321,50 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 }
 
 func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
-	return appaccessservice.ProviderRequestContextFromProto(reqCtx, invocation.ProviderKindApp, s.pluginName)
+	out, err := appaccessservice.ProviderRequestContextFromProto(reqCtx, "", s.pluginName)
+	if err != nil {
+		return out, err
+	}
+	switch out.CallerKind() {
+	case invocation.ProviderKindApp, invocation.ProviderKindWorkflow:
+		return out, nil
+	default:
+		return out, status.Errorf(codes.FailedPrecondition, "%s caller context is not supported for agent provider invocation", out.CallerKind())
+	}
 }
 
 func (s *ProviderServer) restoreRequestContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {
 	return reqCtx.Restore(ctx, "")
+}
+
+func (s *ProviderServer) authorizeWorkflowAgentRequest(reqCtx appaccessservice.ProviderRequestContext, providerName, model string) error {
+	if reqCtx.CallerKind() != invocation.ProviderKindWorkflow {
+		return nil
+	}
+	step, err := appaccessservice.WorkflowStepInvocationFromContext(reqCtx.Workflow())
+	if err != nil {
+		return err
+	}
+	if step.ProviderName != reqCtx.CallerName() {
+		return status.Errorf(codes.PermissionDenied, "workflow caller %q does not match workflow context provider %q", reqCtx.CallerName(), step.ProviderName)
+	}
+	if step.Kind != "agent" {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke agent provider", reqCtx.CallerName(), step.ID)
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" && step.AgentProvider != providerName {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke agent provider %q", reqCtx.CallerName(), step.ID, providerName)
+	}
+	if model = strings.TrimSpace(model); model != "" && step.Model != model {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke agent model %q", reqCtx.CallerName(), step.ID, model)
+	}
+	return nil
+}
+
+func rejectWorkflowAgentRequest(reqCtx appaccessservice.ProviderRequestContext, operation string) error {
+	if reqCtx.CallerKind() != invocation.ProviderKindWorkflow {
+		return nil
+	}
+	return status.Errorf(codes.PermissionDenied, "workflow callers may not %s", operation)
 }
 
 func agentManagerStatusError(err error) error {

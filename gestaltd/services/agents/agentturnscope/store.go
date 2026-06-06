@@ -21,6 +21,8 @@ type Scope struct {
 	TurnID              string
 	CallerKind          invocation.ProviderKind
 	CallerName          string
+	WorkflowRunID       string
+	WorkflowStepID      string
 	SubjectID           string
 	CredentialSubjectID string
 	Permissions         []core.AccessPermission
@@ -135,6 +137,8 @@ func cloneScope(src Scope) Scope {
 		TurnID:              strings.TrimSpace(src.TurnID),
 		CallerKind:          callerKind,
 		CallerName:          callerName,
+		WorkflowRunID:       strings.TrimSpace(src.WorkflowRunID),
+		WorkflowStepID:      strings.TrimSpace(src.WorkflowStepID),
 		SubjectID:           strings.TrimSpace(src.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(src.CredentialSubjectID),
 		Permissions:         clonePermissions(src.Permissions),

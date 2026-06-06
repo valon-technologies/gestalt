@@ -255,6 +255,70 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 	}
 }
 
+func TestTransport_AgentRequestBuilderCallerAndWorkflowContext(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &agentTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterAgentProviderServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
+
+	req, err := gestalt.NewRequest(gestalt.RequestInput{
+		Subject: gestalt.Subject{ID: "service_account:workflow-runner", CredentialSubjectID: "service_account:workflow-runner"},
+		Caller:  gestalt.RequestCaller{Kind: gestalt.RequestCallerKindWorkflow, Name: "temporal"},
+		WorkflowContext: map[string]any{
+			"providerName":  "temporal",
+			"runId":         "run-1",
+			"currentStepId": "review",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	client, err := gestalt.NewAgentFromRequest(req)
+	if err != nil {
+		t.Fatalf("Agent: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+		ProviderName: "claude",
+		Model:        "default",
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := client.GetTurn(context.Background(), gestalt.AgentGetTurn{TurnID: "turn-1"}); err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.sessionRequests) != 1 || len(harness.getTurnRequests) != 1 {
+		t.Fatalf("requests = sessions:%d get:%d", len(harness.sessionRequests), len(harness.getTurnRequests))
+	}
+	got := harness.sessionRequests[0].GetContext()
+	if got.GetCaller().GetKind() != "workflow" || got.GetCaller().GetName() != "temporal" {
+		t.Fatalf("caller = %#v, want workflow temporal", got.GetCaller())
+	}
+	if got.GetWorkflow().AsMap()["currentStepId"] != "review" {
+		t.Fatalf("workflow context = %#v, want currentStepId=review", got.GetWorkflow().AsMap())
+	}
+	if got := harness.getTurnRequests[0].GetContext().GetWorkflow().AsMap()["currentStepId"]; got != "review" {
+		t.Fatalf("get workflow currentStepId = %#v, want review", got)
+	}
+}
+
 func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)

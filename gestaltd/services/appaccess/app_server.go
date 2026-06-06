@@ -28,7 +28,7 @@ type AppServer struct {
 
 	invoker        invocation.Invoker
 	authorization  core.AuthorizationProvider
-	callerApp      string
+	callerName     string
 	accessProfiles AppAccessProfiles
 }
 
@@ -42,7 +42,7 @@ func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOpt
 
 func WithCallerApp(callerApp string, profiles AppAccessProfiles) AppServerOption {
 	return func(s *AppServer) {
-		s.callerApp = strings.TrimSpace(callerApp)
+		s.callerName = strings.TrimSpace(callerApp)
 		s.accessProfiles = CloneAppAccessProfiles(profiles)
 	}
 }
@@ -76,7 +76,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	if targetOperation == "" {
 		return nil, status.Error(codes.InvalidArgument, "operation is required")
 	}
-	callCtx, err := s.requestContextForInvoke(ctx, req.GetContext(), targetApp, targetOperation, req.GetCredentialMode())
+	callCtx, err := s.requestContextForInvoke(ctx, req.GetContext(), targetApp, targetOperation, req.GetConnection(), req.GetInstance(), req.GetCredentialMode())
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (s *AppServer) InvokeGraphQL(ctx context.Context, req *proto.AppInvokeGraph
 }
 
 type requestInvocationContext struct {
-	callerApp              string
+	callerName             string
 	callerProviderKind     invocation.ProviderKind
 	principal              *principal.Principal
 	credential             invocation.CredentialContext
@@ -153,25 +153,34 @@ type requestInvocationContext struct {
 	requestContext         *proto.RequestContext
 }
 
-func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, targetOperation, rawCredentialMode string) (requestInvocationContext, error) {
+func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, targetOperation, rawConnection, rawInstance, rawCredentialMode string) (requestInvocationContext, error) {
 	callCtx, err := s.requestContext(reqCtx)
 	if err != nil {
 		return requestInvocationContext{}, err
+	}
+	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
+	if err != nil {
+		return requestInvocationContext{}, err
+	}
+	if callCtx.callerProviderKind == invocation.ProviderKindWorkflow {
+		if err := authorizeWorkflowAppInvocation(callCtx, targetApp, targetOperation, rawConnection, rawInstance, credentialMode); err != nil {
+			return requestInvocationContext{}, err
+		}
+		if credentialMode != "" {
+			callCtx.credentialModeOverride = credentialMode
+		}
+		return callCtx, nil
 	}
 	if err := s.authorizeAppInvocation(ctx, callCtx, appInvocationAuthorizationResourceTypeOperation, appInvocationOperationResourceID(targetApp, targetOperation), targetApp, targetOperation); err != nil {
 		return requestInvocationContext{}, err
 	}
 	profile, profileOK := EffectiveAppOperationProfile(s.accessProfiles, targetApp, targetOperation)
-	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
-	if err != nil {
-		return requestInvocationContext{}, err
-	}
 	if credentialMode != "" {
 		if !profileOK {
-			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callCtx.callerApp, targetApp, targetOperation, credentialMode)
+			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callCtx.callerName, targetApp, targetOperation, credentialMode)
 		}
 		if profileOK && !appInvokeCredentialModeAllowed(credentialMode, profile) {
-			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callCtx.callerApp, targetApp, targetOperation, credentialMode)
+			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callCtx.callerName, targetApp, targetOperation, credentialMode)
 		}
 		callCtx.credentialModeOverride = credentialMode
 		callCtx.operationProfile = profile
@@ -206,15 +215,18 @@ func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocat
 	}
 	caller := reqCtx.GetCaller()
 	callerKind := invocation.ProviderKind(strings.TrimSpace(caller.GetKind()))
-	callerApp := strings.TrimSpace(caller.GetName())
-	if callerKind != invocation.ProviderKindApp || callerApp == "" {
-		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "app caller context is required")
+	callerName := strings.TrimSpace(caller.GetName())
+	if callerName == "" {
+		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "provider caller context is required")
 	}
-	if expected := strings.TrimSpace(s.callerApp); expected != "" && callerApp != expected {
-		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "app caller context %q does not match host service caller %q", callerApp, expected)
+	if callerKind != invocation.ProviderKindApp && callerKind != invocation.ProviderKindWorkflow {
+		return requestInvocationContext{}, status.Errorf(codes.FailedPrecondition, "%s caller context is not supported for app invocation", callerKind)
+	}
+	if expected := strings.TrimSpace(s.callerName); expected != "" && callerName != expected {
+		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match host service caller %q", callerName, expected)
 	}
 	return requestInvocationContext{
-		callerApp:          callerApp,
+		callerName:         callerName,
 		callerProviderKind: callerKind,
 		principal:          PrincipalFromSubjectContext(reqCtx.GetSubject()),
 		credential:         credentialFromRequestContext(reqCtx),
@@ -224,13 +236,16 @@ func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocat
 }
 
 func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestInvocationContext, resourceType, resourceID, targetApp, target string) error {
+	if callCtx.callerProviderKind == invocation.ProviderKindWorkflow {
+		return status.Error(codes.PermissionDenied, "workflow callers may only invoke workflow target app operations")
+	}
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for app invocation")
 	}
 	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type: appInvocationAuthorizationSubjectTypeApp,
-			Id:   callCtx.callerApp,
+			Id:   callCtx.callerName,
 		},
 		Action: &proto.Action{Name: appInvocationAuthorizationActionInvoke},
 		Resource: &proto.Resource{
@@ -239,10 +254,37 @@ func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestI
 		},
 	})
 	if err != nil {
-		return status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s: %v", callCtx.callerApp, targetApp, target, err)
+		return status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s: %v", callCtx.callerName, targetApp, target, err)
 	}
 	if resp == nil || !resp.GetAllowed() {
-		return status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", callCtx.callerApp, targetApp, target)
+		return status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", callCtx.callerName, targetApp, target)
+	}
+	return nil
+}
+
+func authorizeWorkflowAppInvocation(callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) error {
+	step, err := WorkflowStepInvocationFromContext(callCtx.workflow)
+	if err != nil {
+		return err
+	}
+	if step.ProviderName != callCtx.callerName {
+		return status.Errorf(codes.PermissionDenied, "workflow caller %q does not match workflow context provider %q", callCtx.callerName, step.ProviderName)
+	}
+	if step.Kind != "app" || step.App != targetApp || step.Operation != targetOperation {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke %s.%s", callCtx.callerName, step.ID, targetApp, targetOperation)
+	}
+	if strings.TrimSpace(rawConnection) != step.Connection {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke %s.%s with connection %q", callCtx.callerName, step.ID, targetApp, targetOperation, strings.TrimSpace(rawConnection))
+	}
+	if strings.TrimSpace(rawInstance) != step.Instance {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke %s.%s with instance %q", callCtx.callerName, step.ID, targetApp, targetOperation, strings.TrimSpace(rawInstance))
+	}
+	stepCredentialMode, err := appInvokeCredentialMode(step.CredentialMode)
+	if err != nil {
+		return err
+	}
+	if stepCredentialMode != credentialMode {
+		return status.Errorf(codes.PermissionDenied, "workflow %q step %q may not invoke %s.%s with credential_mode %q", callCtx.callerName, step.ID, targetApp, targetOperation, credentialMode)
 	}
 	return nil
 }
@@ -292,8 +334,8 @@ func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocat
 	if callCtx.principal != nil {
 		ctx = principal.WithPrincipal(ctx, principal.Canonicalized(callCtx.principal))
 	}
-	if callCtx.callerApp != "" && callCtx.callerProviderKind != "" {
-		ctx = invocation.WithCallerProvider(ctx, callCtx.callerProviderKind, callCtx.callerApp)
+	if callCtx.callerName != "" && callCtx.callerProviderKind != "" {
+		ctx = invocation.WithCallerProvider(ctx, callCtx.callerProviderKind, callCtx.callerName)
 	}
 	if meta := invocationMetaFromRequestContext(callCtx.requestContext); meta != nil {
 		ctx = invocation.ContextWithMeta(ctx, meta)

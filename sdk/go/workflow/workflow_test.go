@@ -51,8 +51,11 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 	invoker := &recordingAppInvoker{}
 	executor := New(Config{AppInvoker: invoker})
 	resp, err := executor.Execute(context.Background(), Request{
-		ProviderName: "indexeddb",
-		RunID:        "run-1",
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
+		WorkflowKey:          "customer:ada",
 		RunAs: &gestalt.Subject{
 			ID:                  "service_account:workflow-runner",
 			CredentialSubjectID: "service_account:workflow-runner",
@@ -81,6 +84,19 @@ func TestExecutorInvokesAppStep(t *testing.T) {
 	if invoker.call.Params["text"] != "hello Ada" || invoker.call.Params["name"] != "Ada" {
 		t.Fatalf("params = %#v", invoker.call.Params)
 	}
+	if invoker.call.Request.Caller.Kind != gestalt.RequestCallerKindWorkflow || invoker.call.Request.Caller.Name != "indexeddb" {
+		t.Fatalf("request caller = %#v, want indexeddb workflow", invoker.call.Request.Caller)
+	}
+	if invoker.call.Request.Subject.ID != "service_account:workflow-runner" {
+		t.Fatalf("request subject = %#v, want workflow runner", invoker.call.Request.Subject)
+	}
+	if invoker.call.Request.WorkflowContext["definitionId"] != "definition-1" || invoker.call.Request.WorkflowContext["workflowKey"] != "customer:ada" {
+		t.Fatalf("request workflow context = %#v", invoker.call.Request.WorkflowContext)
+	}
+	currentStep := invoker.call.Request.WorkflowContext["currentStep"].(map[string]any)
+	if currentStep["id"] != "send" || currentStep["index"] != float64(0) {
+		t.Fatalf("current step = %#v, want send/0", currentStep)
+	}
 	runAs := invoker.call.WorkflowContext["runAs"].(map[string]any)
 	if runAs["id"] != "service_account:workflow-runner" {
 		t.Fatalf("workflow runAs = %#v", runAs)
@@ -105,8 +121,14 @@ func TestExecutorExecuteStepUsesPriorOutput(t *testing.T) {
 	executor := New(Config{AppInvoker: invoker})
 	resp, err := executor.ExecuteStep(context.Background(), StepRequest{
 		Request: Request{
-			ProviderName: "indexeddb",
-			RunID:        "run-1",
+			ProviderName:         "indexeddb",
+			RunID:                "run-1",
+			DefinitionID:         "definition-1",
+			DefinitionGeneration: 1,
+			RunAs: &gestalt.Subject{
+				ID:                  "service_account:workflow-runner",
+				CredentialSubjectID: "service_account:workflow-runner",
+			},
 			Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
 				{
 					ID: "collect",
@@ -211,8 +233,10 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 		AgentPollInterval: 0,
 	})
 	resp, err := executor.Execute(context.Background(), Request{
-		ProviderName: "indexeddb",
-		RunID:        "run-1",
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
 		RunAs: &gestalt.Subject{
 			ID:                  "service_account:workflow-runner",
 			CredentialSubjectID: "service_account:workflow-runner",
@@ -249,6 +273,12 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	}
 	if agent.getTurnWorkflow["runId"] != "run-1" {
 		t.Fatalf("get turn workflow context = %#v", agent.getTurnWorkflow)
+	}
+	if agent.request.Caller.Kind != gestalt.RequestCallerKindWorkflow || agent.request.Caller.Name != "indexeddb" {
+		t.Fatalf("agent request caller = %#v, want indexeddb workflow", agent.request.Caller)
+	}
+	if agent.request.WorkflowContext["currentStepId"] != "review" {
+		t.Fatalf("agent request workflow context = %#v, want currentStepId=review", agent.request.WorkflowContext)
 	}
 }
 

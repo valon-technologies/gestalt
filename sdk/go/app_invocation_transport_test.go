@@ -223,6 +223,62 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
+func TestTransport_AppRequestBuilderCallerAndWorkflowContext(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &pluginAppTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterAppServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
+
+	req, err := gestalt.NewRequest(gestalt.RequestInput{
+		Subject: gestalt.Subject{ID: "service_account:workflow-runner", CredentialSubjectID: "service_account:workflow-runner"},
+		Caller:  gestalt.RequestCaller{Kind: gestalt.RequestCallerKindWorkflow, Name: "temporal"},
+		WorkflowContext: map[string]any{
+			"providerName":  "temporal",
+			"runId":         "run-1",
+			"currentStepId": "react",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	client, err := gestalt.NewAppFromRequest(req)
+	if err != nil {
+		t.Fatalf("App: %v", err)
+	}
+	if _, err := client.Invoke(context.Background(), "slack", "events.addReaction", map[string]any{}, nil); err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.requests) != 1 {
+		t.Fatalf("invoke requests len = %d, want 1", len(harness.requests))
+	}
+	got := harness.requests[0].GetContext()
+	if got.GetCaller().GetKind() != "workflow" || got.GetCaller().GetName() != "temporal" {
+		t.Fatalf("caller = %#v, want workflow temporal", got.GetCaller())
+	}
+	if got.GetSubject().GetId() != "service_account:workflow-runner" {
+		t.Fatalf("subject = %q, want workflow runner", got.GetSubject().GetId())
+	}
+	if got.GetWorkflow().AsMap()["currentStepId"] != "react" {
+		t.Fatalf("workflow context = %#v, want currentStepId=react", got.GetWorkflow().AsMap())
+	}
+}
+
 func appTransportRequest() gestalt.Request {
 	return gestalt.Request{
 		Subject: gestalt.Subject{
