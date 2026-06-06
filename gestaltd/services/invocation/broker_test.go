@@ -284,7 +284,7 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 		testutil.NewProviderRegistry(t, provider),
 		nil,
 		nil,
-		WithEnforcer(access.NewEnforcer(authz)),
+		WithAuthorizationProvider(authz),
 	)
 
 	result, err := broker.Invoke(
@@ -344,7 +344,7 @@ func TestBrokerInvokeGraphQLAuthorizationDeniesBeforeCredentialResolution(t *tes
 		testutil.NewProviderRegistry(t, provider),
 		nil,
 		nil,
-		WithEnforcer(access.NewEnforcer(authz)),
+		WithAuthorizationProvider(authz),
 	)
 
 	_, err := broker.InvokeGraphQL(

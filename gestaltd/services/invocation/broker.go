@@ -115,7 +115,7 @@ type Broker struct {
 	connMapper        ConnectionMapper
 	mcpMapper         ConnectionMapper
 	connectionRuntime ConnectionRuntimeResolver
-	access            *access.Enforcer
+	authorization     core.AuthorizationProvider
 	logger            *slog.Logger
 	tracerProvider    trace.TracerProvider
 }
@@ -134,8 +134,8 @@ func WithConnectionRuntime(r ConnectionRuntimeResolver) BrokerOption {
 	return func(b *Broker) { b.connectionRuntime = r }
 }
 
-func WithEnforcer(enforcer *access.Enforcer) BrokerOption {
-	return func(b *Broker) { b.access = enforcer }
+func WithAuthorizationProvider(provider core.AuthorizationProvider) BrokerOption {
+	return func(b *Broker) { b.authorization = provider }
 }
 
 func WithLogger(l *slog.Logger) BrokerOption {
@@ -263,11 +263,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	if err := b.access.Require(ctx, p, access.Request{
-		ResourceType:    providerName,
-		Action:          opMeta.ID,
-		CredentialScope: access.OperationCredentialScope,
-	}); err != nil {
+	if err := access.Require(ctx, b.authorization, p, providerName, opMeta.ID, access.OperationCredentialScope); err != nil {
 		return fail(err)
 	}
 	metricOperation = operation
@@ -450,11 +446,7 @@ func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, prov
 	}
 	ctx = withResolvedPrincipal(ctx, p)
 	setSubjectAttribute(p)
-	if err := b.access.Require(ctx, p, access.Request{
-		ResourceType:    providerName,
-		Action:          graphQLOperationID,
-		CredentialScope: access.OperationCredentialScope,
-	}); err != nil {
+	if err := access.Require(ctx, b.authorization, p, providerName, graphQLOperationID, access.OperationCredentialScope); err != nil {
 		return fail(err)
 	}
 
@@ -505,10 +497,7 @@ func (b *Broker) MCPConnection(providerName string) string {
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-	if err := b.access.Require(ctx, p, access.Request{
-		ResourceType:    providerName,
-		CredentialScope: access.ProviderCredentialScope,
-	}); err != nil {
+	if err := access.Require(ctx, b.authorization, p, providerName, "", access.ProviderCredentialScope); err != nil {
 		return ctx, "", err
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -555,10 +544,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 	if len(targets) == 0 {
 		targets = []CatalogResolutionTarget{{}}
 	}
-	if err := b.access.Require(ctx, p, access.Request{
-		ResourceType:    providerName,
-		CredentialScope: access.ProviderCredentialScope,
-	}); err != nil {
+	if err := access.Require(ctx, b.authorization, p, providerName, "", access.ProviderCredentialScope); err != nil {
 		return nil, err
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {

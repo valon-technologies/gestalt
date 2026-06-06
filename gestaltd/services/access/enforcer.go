@@ -1,3 +1,8 @@
+// Package access is the shared gestaltd policy gate.
+//
+// Require checks one resource/action and optional credential scope. An empty
+// action enforces scope only. A nil policy provider means policy checks allow,
+// but credential scopes are still enforced.
 package access
 
 import (
@@ -11,110 +16,92 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-type Enforcer struct {
-	provider core.AuthorizationProvider
-}
+var (
+	ErrNotAuthenticated = errors.New("not authenticated")
+	ErrDenied           = errors.New("authorization denied")
+	ErrScopeDenied      = errors.New("token scope denied")
 
-func NewEnforcer(provider core.AuthorizationProvider) *Enforcer {
+	errPolicyUnavailable = errors.New("authorization policy unavailable")
+)
+
+type CredentialScope uint8
+
+const (
+	ProviderCredentialScope CredentialScope = iota + 1
+	OperationCredentialScope
+)
+
+func Require(ctx context.Context, provider core.AuthorizationProvider, p *principal.Principal, resourceType, action string, scope CredentialScope) error {
+	resourceType = strings.TrimSpace(resourceType)
+	action = strings.TrimSpace(action)
+	switch scope {
+	case ProviderCredentialScope:
+		if p == nil {
+			return withDetails(ErrNotAuthenticated, resourceType, "")
+		}
+		if !principal.AllowsProviderPermission(p, resourceType) {
+			return withDetails(ErrScopeDenied, resourceType, "")
+		}
+	case OperationCredentialScope:
+		if p == nil {
+			return withDetails(ErrNotAuthenticated, resourceType, action)
+		}
+		if !principal.AllowsOperationPermission(p, resourceType, action) {
+			return withDetails(ErrScopeDenied, resourceType, action)
+		}
+	}
+	if action == "" {
+		return nil
+	}
 	if provider == nil {
 		return nil
 	}
-	return &Enforcer{provider: provider}
-}
-
-func (e *Enforcer) Allowed(ctx context.Context, p *principal.Principal, req Request) (bool, error) {
-	if err := scopeError(p, req); err != nil {
-		if errors.Is(err, ErrScopeDenied) {
-			return false, nil
-		}
-		return false, err
-	}
-	return e.policyAllowed(ctx, p, req)
-}
-
-func (e *Enforcer) Require(ctx context.Context, p *principal.Principal, req Request) error {
-	if err := scopeError(p, req); err != nil {
-		return err
-	}
-	allowed, err := e.policyAllowed(ctx, p, req)
-	if err != nil {
-		return err
-	}
-	if !allowed {
-		return deniedError(ErrDenied, resourceName(req.resource()), req.Action)
-	}
-	return nil
-}
-
-func scopeError(p *principal.Principal, req Request) error {
-	switch req.CredentialScope {
-	case ProviderCredentialScope:
-		provider := resourceName(req.resource())
-		if p == nil {
-			return deniedError(ErrNotAuthenticated, provider, "")
-		}
-		if !principal.AllowsProviderPermission(p, provider) {
-			return deniedError(ErrScopeDenied, provider, "")
-		}
-	case OperationCredentialScope:
-		provider := resourceName(req.resource())
-		operation := strings.TrimSpace(req.Action)
-		if p == nil {
-			return deniedError(ErrNotAuthenticated, provider, operation)
-		}
-		if !principal.AllowsOperationPermission(p, provider, operation) {
-			return deniedError(ErrScopeDenied, provider, operation)
-		}
-	}
-	return nil
-}
-
-func (e *Enforcer) policyAllowed(ctx context.Context, p *principal.Principal, req Request) (bool, error) {
-	action := strings.TrimSpace(req.Action)
-	if action == "" {
-		return true, nil
-	}
-	if e == nil || e.provider == nil {
-		return true, nil
-	}
 	if p == nil {
-		return false, ErrNotAuthenticated
+		return withDetails(ErrNotAuthenticated, resourceType, action)
 	}
 	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
 	if subjectID == "" {
-		return false, ErrNotAuthenticated
+		return withDetails(ErrNotAuthenticated, resourceType, action)
 	}
-	resource := req.resource()
-	resp, err := e.provider.CheckAccess(ctx, &proto.CheckAccessRequest{
+	resp, err := provider.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject:  &proto.Subject{Type: "subject", Id: subjectID},
 		Action:   &proto.Action{Name: action},
-		Resource: resource,
+		Resource: &proto.Resource{Type: resourceType, Id: resourceType},
 	})
 	if err != nil {
-		if details := accessDetails(resourceName(resource), action); details != "" {
-			return false, fmt.Errorf("%w: %s: %w", errPolicyUnavailable, details, err)
+		if details := requestDetails(resourceType, action); details != "" {
+			return fmt.Errorf("%w: %s: %w", errPolicyUnavailable, details, err)
 		}
-		return false, fmt.Errorf("%w: %w", errPolicyUnavailable, err)
+		return fmt.Errorf("%w: %w", errPolicyUnavailable, err)
 	}
 	if resp == nil || !resp.Allowed {
-		return false, nil
+		return withDetails(ErrDenied, resourceType, action)
 	}
-	return true, nil
+	return nil
 }
 
-func deniedError(cause error, resource, action string) error {
-	if details := accessDetails(resource, action); details != "" {
+func IsPolicyUnavailable(err error) bool {
+	return errors.Is(err, errPolicyUnavailable)
+}
+
+func withDetails(cause error, resource, action string) error {
+	if details := requestDetails(resource, action); details != "" {
 		return fmt.Errorf("%w: %s", cause, details)
 	}
 	return cause
 }
 
-func resourceName(resource *proto.Resource) string {
-	if resource == nil {
+func requestDetails(resource, action string) string {
+	resource = strings.TrimSpace(resource)
+	action = strings.TrimSpace(action)
+	switch {
+	case resource != "" && action != "":
+		return resource + " " + action
+	case resource != "":
+		return resource
+	case action != "":
+		return action
+	default:
 		return ""
 	}
-	if name := strings.TrimSpace(resource.Id); name != "" {
-		return name
-	}
-	return strings.TrimSpace(resource.Type)
 }
