@@ -23,6 +23,7 @@ import {
   AgentProvider as AgentProviderService,
   AgentProviderCapabilitiesSchema,
   AgentSessionSchema,
+  AgentToolConfigSchema,
   AgentTurnEventSchema,
   AgentTurnSchema,
   AgentExecutionStatus as ProtoAgentExecutionStatus,
@@ -34,11 +35,13 @@ import {
   ExecuteAgentToolRequestSchema,
   GetAgentProviderCapabilitiesRequestSchema,
   ListAgentToolsRequestSchema,
+  ListedAgentToolSchema,
   ListAgentProviderInteractionsResponseSchema,
   ListAgentProviderSessionsResponseSchema,
   ListAgentProviderTurnEventsResponseSchema,
   ListAgentProviderTurnsResponseSchema,
   ResolveAgentConnectionRequestSchema,
+  type AgentToolConfig as ProtoAgentToolConfig,
   type AgentInteraction as ProtoAgentInteraction,
   type AgentMessagePartImageRef as ProtoAgentMessagePartImageRef,
   type AgentMessagePartToolCall as ProtoAgentMessagePartToolCall,
@@ -87,6 +90,7 @@ import {
   agentMessageFromProto,
   agentMessageToProto,
   agentToolRefFromProto,
+  agentToolRefToProto,
   agentTurnOutputFromProto,
   agentTurnOutputToProto,
   agentTurnDisplayToProto,
@@ -118,7 +122,8 @@ export type AgentMessagePartType =
 /** Native tool-source constants for authored agent provider capabilities. */
 export const AgentToolSourceMode = {
   UNSPECIFIED: ProtoAgentToolSourceMode.UNSPECIFIED,
-  MCP_CATALOG: ProtoAgentToolSourceMode.MCP_CATALOG,
+  CATALOG: ProtoAgentToolSourceMode.CATALOG,
+  MCP_CATALOG: ProtoAgentToolSourceMode.CATALOG,
   NONE: ProtoAgentToolSourceMode.NONE,
 } as const;
 export type AgentToolSourceMode =
@@ -213,6 +218,15 @@ export interface AgentToolRef {
   runAs?: SubjectInput | undefined;
 }
 
+export type AgentToolConfig =
+  | { none: Record<string, never>; catalog?: undefined }
+  | { none?: undefined; catalog: AgentCatalogToolConfig };
+
+export interface AgentCatalogToolConfig {
+  refs?: readonly AgentToolRef[] | undefined;
+  tools?: readonly ListedAgentTool[] | undefined;
+}
+
 export interface ResolvedAgentTool {
   id?: string | undefined;
   name?: string | undefined;
@@ -281,6 +295,7 @@ export interface CreateAgentProviderSessionRequest {
   context?: ProtoRequestContext | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
+  tools?: AgentToolConfig | undefined;
 }
 
 export interface GetAgentProviderSessionRequest {
@@ -833,6 +848,7 @@ function createAgentProviderSessionRequestFromProto(
       root: request.preparedWorkspace.root,
       cwd: request.preparedWorkspace.cwd,
     },
+    tools: agentToolConfigFromProto(request.tools),
   };
 }
 
@@ -1183,6 +1199,69 @@ function listedToolFromProto(tool: ProtoListedAgentTool): ListedAgentTool {
     ref: tool.ref === undefined ? undefined : agentToolRefFromProto(tool.ref),
     tags: [...tool.tags],
     searchText: tool.searchText,
+  };
+}
+
+function listedToolToProto(tool: ListedAgentTool): MessageInitShape<typeof ListedAgentToolSchema> {
+  return {
+    id: tool.id,
+    mcpName: tool.mcpName,
+    title: tool.title,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    outputSchema: tool.outputSchema,
+    annotations: tool.annotations === undefined ? undefined : {
+      readOnlyHint: tool.annotations.readOnlyHint,
+      idempotentHint: tool.annotations.idempotentHint,
+      destructiveHint: tool.annotations.destructiveHint,
+      openWorldHint: tool.annotations.openWorldHint,
+    },
+    ref: tool.ref === undefined ? undefined : agentToolRefToProto(tool.ref),
+    tags: [...(tool.tags ?? [])],
+    searchText: tool.searchText,
+  };
+}
+
+function agentToolConfigFromProto(
+  tools?: ProtoAgentToolConfig | undefined,
+): AgentToolConfig | undefined {
+  switch (tools?.source.case) {
+    case "none":
+      return { none: {} };
+    case "catalog":
+      return {
+        catalog: {
+          refs: tools.source.value.refs.map(agentToolRefFromProto),
+          tools: tools.source.value.tools.map(listedToolFromProto),
+        },
+      };
+    default:
+      return undefined;
+  }
+}
+
+export function agentToolConfigToProto(
+  tools?: AgentToolConfig | undefined,
+): MessageInitShape<typeof AgentToolConfigSchema> | undefined {
+  if (tools === undefined) {
+    return undefined;
+  }
+  if (tools.catalog !== undefined) {
+    return {
+      source: {
+        case: "catalog",
+        value: {
+          refs: tools.catalog.refs?.map(agentToolRefToProto) ?? [],
+          tools: tools.catalog.tools?.map(listedToolToProto) ?? [],
+        },
+      },
+    };
+  }
+  return {
+    source: {
+      case: "none",
+      value: {},
+    },
   };
 }
 

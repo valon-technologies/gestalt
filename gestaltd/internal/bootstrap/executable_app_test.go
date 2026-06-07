@@ -1062,7 +1062,7 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 		SessionId:      sessionID,
 		Model:          "gpt-test",
 		IdempotencyKey: "plugin-agent-turn",
-		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
 		Output: &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Text{
 				Text: &proto.AgentTextOutput{},
@@ -3893,7 +3893,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if len(turnReq.Tools) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", turnReq.Tools)
 	}
-	if turnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+	if turnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", turnReq.GetToolSource())
 	}
 	if len(turnReq.GetToolRefs()) != 1 || turnReq.GetToolRefs()[0].GetApp() != "roadmap" || turnReq.GetToolRefs()[0].GetOperation() != "sync" {

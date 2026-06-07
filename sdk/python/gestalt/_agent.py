@@ -70,6 +70,7 @@ AGENT_SESSION_STATE_ACTIVE = pb.AGENT_SESSION_STATE_ACTIVE
 AGENT_SESSION_STATE_ARCHIVED = pb.AGENT_SESSION_STATE_ARCHIVED
 
 AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = pb.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+AGENT_TOOL_SOURCE_MODE_CATALOG = pb.AGENT_TOOL_SOURCE_MODE_CATALOG
 AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = pb.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
 AGENT_TOOL_SOURCE_MODE_NONE = pb.AGENT_TOOL_SOURCE_MODE_NONE
 
@@ -98,6 +99,7 @@ class AgentCreateSession:
     metadata: Any | None = None
     idempotency_key: str = ""
     workspace: Any | None = None
+    tools: AgentToolConfig | None = None
 
 
 @dataclass(slots=True)
@@ -337,6 +339,21 @@ class CreateAgentProviderSessionRequest:
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
     context: Any | None = None
+    tools: AgentToolConfig | None = None
+
+
+@dataclass(slots=True)
+class AgentNoTools:
+    pass
+
+
+@dataclass(slots=True)
+class AgentCatalogToolConfig:
+    refs: Iterable[AgentToolRef] = field(default_factory=list)
+    tools: Iterable[ListedAgentTool] = field(default_factory=list)
+
+
+AgentToolConfig: TypeAlias = AgentNoTools | AgentCatalogToolConfig
 
 
 @dataclass(slots=True)
@@ -666,6 +683,9 @@ def create_agent_provider_session_request_from_proto(
         if has_field(request, "prepared_workspace")
         else None,
         context=request.context if has_field(request, "context") else None,
+        tools=agent_tool_config_from_proto(request.tools)
+        if has_field(request, "tools")
+        else None,
     )
 
 
@@ -1487,6 +1507,76 @@ def listed_agent_tool_from_proto(value: Any) -> ListedAgentTool:
     )
 
 
+def listed_agent_tool_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListedAgentTool):
+        return _copy(value)
+    data = _data(value, {})
+    out = pb.ListedAgentTool(
+        id=data.get("id", ""),
+        mcp_name=data.get("mcp_name", ""),
+        title=data.get("title", ""),
+        description=data.get("description", ""),
+        input_schema=data.get("input_schema", ""),
+        output_schema=data.get("output_schema", ""),
+        tags=list(data.get("tags") or []),
+        search_text=data.get("search_text", ""),
+    )
+    if data.get("annotations") is not None:
+        out.annotations.CopyFrom(agent_tool_annotations_to_proto(data["annotations"]))
+    if data.get("ref") is not None:
+        out.ref.CopyFrom(_agent_tool_ref_value(data["ref"]))
+    return out
+
+
+def agent_tool_config_from_proto(value: Any) -> AgentToolConfig | None:
+    source = value.WhichOneof("source")
+    if source == "none":
+        return AgentNoTools()
+    if source == "catalog":
+        return AgentCatalogToolConfig(
+            refs=[agent_tool_ref_from_proto(ref) for ref in value.catalog.refs],
+            tools=[listed_agent_tool_from_proto(tool) for tool in value.catalog.tools],
+        )
+    return None
+
+
+def agent_tool_config_to_proto(value: Any | None) -> Any | None:
+    if value is None:
+        return None
+    if isinstance(value, pb.AgentToolConfig):
+        return _copy(value)
+    if isinstance(value, AgentCatalogToolConfig):
+        out = pb.AgentToolConfig()
+        out.catalog.refs.extend(_agent_tool_ref_value(item) for item in value.refs)
+        out.catalog.tools.extend(listed_agent_tool_to_proto(item) for item in value.tools)
+        return out
+    if isinstance(value, AgentNoTools):
+        return pb.AgentToolConfig(none=pb.AgentNoTools())
+    data = _data(value, {})
+    out = pb.AgentToolConfig()
+    if data.get("refs") is not None or data.get("tools") is not None:
+        out.catalog.refs.extend(
+            _agent_tool_ref_value(item) for item in (data.get("refs") or [])
+        )
+        out.catalog.tools.extend(
+            listed_agent_tool_to_proto(item) for item in (data.get("tools") or [])
+        )
+        return out
+    if data.get("catalog") is not None:
+        catalog = _data(data["catalog"], {})
+        out.catalog.refs.extend(
+            _agent_tool_ref_value(item) for item in (catalog.get("refs") or [])
+        )
+        out.catalog.tools.extend(
+            listed_agent_tool_to_proto(item) for item in (catalog.get("tools") or [])
+        )
+        return out
+    if data.get("none") is not None:
+        out.none.SetInParent()
+        return out
+    return None
+
+
 def agent_tool_annotations_from_proto(value: Any) -> AgentToolAnnotations:
     return AgentToolAnnotations(
         read_only_hint=value.read_only_hint
@@ -1502,6 +1592,20 @@ def agent_tool_annotations_from_proto(value: Any) -> AgentToolAnnotations:
         if has_field(value, "open_world_hint")
         else None,
     )
+
+
+def agent_tool_annotations_to_proto(value: Any) -> Any:
+    data = _data(value, {})
+    out = _app_pb.OperationAnnotations()
+    if data.get("read_only_hint") is not None:
+        out.read_only_hint = data["read_only_hint"]
+    if data.get("idempotent_hint") is not None:
+        out.idempotent_hint = data["idempotent_hint"]
+    if data.get("destructive_hint") is not None:
+        out.destructive_hint = data["destructive_hint"]
+    if data.get("open_world_hint") is not None:
+        out.open_world_hint = data["open_world_hint"]
+    return out
 
 
 def resolved_agent_connection_from_proto(value: Any) -> ResolvedAgentConnection:
@@ -2081,6 +2185,8 @@ def _agent_create_session_request(value: Any | None = None, **kwargs: Any) -> An
     )
     if data.get("metadata") is not None:
         request.metadata.CopyFrom(struct_from_dict(data["metadata"]))
+    if data.get("tools") is not None:
+        request.tools.CopyFrom(agent_tool_config_to_proto(data["tools"]))
     return request
 
 

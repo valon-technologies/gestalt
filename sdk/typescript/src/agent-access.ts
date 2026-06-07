@@ -25,10 +25,12 @@ import {
   AgentInteractionType,
   AgentSessionState,
   AgentToolSourceMode,
+  agentToolConfigToProto,
   type AgentInteraction,
   type AgentOutput,
   type AgentMessage,
   type AgentSession,
+  type AgentToolConfig,
   type AgentToolRef,
   type AgentTurn,
   type AgentTurnEvent,
@@ -68,6 +70,7 @@ export interface AgentCreateSession {
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
   workspace?: AgentWorkspace | undefined;
+  tools?: AgentToolConfig | undefined;
 }
 
 /** Shape accepted when fetching an agent session through the agent facade. */
@@ -200,6 +203,7 @@ class AgentImpl implements Agent {
         idempotencyKey: request.idempotencyKey ?? "",
         context: this.context,
         workspace: workspaceToProto(request.workspace),
+        tools: agentToolConfigToProto(request.tools),
       }),
     );
   }

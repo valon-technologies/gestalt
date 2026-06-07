@@ -29,11 +29,12 @@ use generated::v1::{
 };
 use gestalt::proto::v1::{RequestContext, SubjectContext};
 use gestalt::{
-    Agent, AgentCancelTurn, AgentCreateSession, AgentCreateTurn, AgentGetSession, AgentGetTurn,
-    AgentInteractionState, AgentListInteractions, AgentListSessions, AgentListTurnEvents,
-    AgentListTurns, AgentMessage, AgentMessagePart,
+    Agent, AgentCancelTurn, AgentCatalogToolConfig, AgentCreateSession, AgentCreateTurn,
+    AgentGetSession, AgentGetTurn, AgentInteractionState, AgentListInteractions, AgentListSessions,
+    AgentListTurnEvents, AgentListTurns, AgentMessage, AgentMessagePart,
     AgentMessagePartType as NativeAgentMessagePartType, AgentOutput, AgentResolveInteraction,
-    AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentUpdateSession, Request, Subject,
+    AgentSessionState, AgentToolConfig, AgentToolConfigSource, AgentToolRef, AgentToolSourceMode,
+    AgentUpdateSession, ListedAgentTool, Request, Subject,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -50,6 +51,8 @@ struct SeenRequest {
     turn_id: String,
     interaction_id: String,
     reason: String,
+    tool_ref_operation: String,
+    listed_tool_mcp_name: String,
 }
 
 #[derive(Clone, Default)]
@@ -75,6 +78,29 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: String::new(),
             interaction_id: String::new(),
             reason: String::new(),
+            tool_ref_operation: request
+                .tools
+                .as_ref()
+                .and_then(|tools| tools.source.as_ref())
+                .and_then(|source| match source {
+                    generated::v1::agent_tool_config::Source::Catalog(catalog) => catalog
+                        .refs
+                        .first()
+                        .map(|tool_ref| tool_ref.operation.clone()),
+                    generated::v1::agent_tool_config::Source::None(_) => None,
+                })
+                .unwrap_or_default(),
+            listed_tool_mcp_name: request
+                .tools
+                .as_ref()
+                .and_then(|tools| tools.source.as_ref())
+                .and_then(|source| match source {
+                    generated::v1::agent_tool_config::Source::Catalog(catalog) => {
+                        catalog.tools.first().map(|tool| tool.mcp_name.clone())
+                    }
+                    generated::v1::agent_tool_config::Source::None(_) => None,
+                })
+                .unwrap_or_default(),
         });
         Ok(GrpcResponse::new(AgentSession {
             id: "session-managed-1".to_string(),
@@ -102,6 +128,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: String::new(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(AgentSession {
             id: request.session_id,
@@ -128,6 +155,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: String::new(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(ListAgentProviderSessionsResponse {
             sessions: vec![AgentSession {
@@ -156,6 +184,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: String::new(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(AgentSession {
             id: request.session_id,
@@ -187,6 +216,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: String::new(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(AgentTurn {
             id: "turn-managed-1".to_string(),
@@ -220,6 +250,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: request.turn_id.clone(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(AgentTurn {
             id: request.turn_id,
@@ -253,6 +284,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: String::new(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(ListAgentProviderTurnsResponse {
             turns: vec![AgentTurn {
@@ -282,6 +314,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: request.turn_id.clone(),
             interaction_id: String::new(),
             reason: request.reason.clone(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(AgentTurn {
             id: request.turn_id,
@@ -310,6 +343,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: request.turn_id.clone(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(ListAgentProviderTurnEventsResponse {
             events: vec![AgentTurnEvent {
@@ -338,6 +372,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: request.turn_id.clone(),
             interaction_id: String::new(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(ListAgentProviderInteractionsResponse {
             interactions: vec![AgentInteraction {
@@ -385,6 +420,7 @@ impl ProtoAgentProvider for TestAgentServer {
             turn_id: request.turn_id.clone(),
             interaction_id: request.interaction_id.clone(),
             reason: String::new(),
+            ..Default::default()
         });
         Ok(GrpcResponse::new(AgentInteraction {
             id: request.interaction_id,
@@ -441,6 +477,28 @@ async fn agent_connects_over_tcp_and_sends_relay_token() {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
+            tools: Some(AgentToolConfig {
+                source: Some(AgentToolConfigSource::Catalog(AgentCatalogToolConfig {
+                    refs: vec![AgentToolRef {
+                        app: "slack".to_string(),
+                        operation: "chat.postMessage".to_string(),
+                        ..Default::default()
+                    }],
+                    tools: vec![ListedAgentTool {
+                        id: "tool-slack".to_string(),
+                        mcp_name: "slack__chat_post_message".to_string(),
+                        title: "Send Slack message".to_string(),
+                        description: "Post a Slack message".to_string(),
+                        input_schema: r#"{"type":"object"}"#.to_string(),
+                        r#ref: Some(AgentToolRef {
+                            app: "slack".to_string(),
+                            operation: "chat.postMessage".to_string(),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                })),
+            }),
             ..Default::default()
         })
         .await
@@ -490,6 +548,28 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
+            tools: Some(AgentToolConfig {
+                source: Some(AgentToolConfigSource::Catalog(AgentCatalogToolConfig {
+                    refs: vec![AgentToolRef {
+                        app: "slack".to_string(),
+                        operation: "chat.postMessage".to_string(),
+                        ..Default::default()
+                    }],
+                    tools: vec![ListedAgentTool {
+                        id: "tool-slack".to_string(),
+                        mcp_name: "slack__chat_post_message".to_string(),
+                        title: "Send Slack message".to_string(),
+                        description: "Post a Slack message".to_string(),
+                        input_schema: r#"{"type":"object"}"#.to_string(),
+                        r#ref: Some(AgentToolRef {
+                            app: "slack".to_string(),
+                            operation: "chat.postMessage".to_string(),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                })),
+            }),
             ..Default::default()
         })
         .await
@@ -530,7 +610,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 }],
                 ..Default::default()
             }],
-            tool_source: AgentToolSourceMode::McpCatalog,
+            tool_source: AgentToolSourceMode::Catalog,
             output: AgentOutput::text(),
             tool_refs: Vec::new(),
             metadata: None,
@@ -611,6 +691,8 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: String::new(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                tool_ref_operation: "chat.postMessage".to_string(),
+                listed_tool_mcp_name: "slack__chat_post_message".to_string(),
             },
             SeenRequest {
                 method: "get_session".to_string(),
@@ -620,6 +702,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: String::new(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "list_sessions".to_string(),
@@ -629,6 +712,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: String::new(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "update_session".to_string(),
@@ -638,6 +722,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: String::new(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "create_turn".to_string(),
@@ -647,6 +732,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: String::new(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "get_turn".to_string(),
@@ -656,6 +742,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: "turn-managed-1".to_string(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "list_turns".to_string(),
@@ -665,6 +752,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: String::new(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "cancel_turn".to_string(),
@@ -674,6 +762,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: "turn-managed-1".to_string(),
                 interaction_id: String::new(),
                 reason: "user canceled".to_string(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "list_turn_events".to_string(),
@@ -683,6 +772,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: "turn-managed-1".to_string(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "list_interactions".to_string(),
@@ -692,6 +782,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: "turn-managed-1".to_string(),
                 interaction_id: String::new(),
                 reason: String::new(),
+                ..Default::default()
             },
             SeenRequest {
                 method: "resolve_interaction".to_string(),
@@ -701,6 +792,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 turn_id: "turn-managed-1".to_string(),
                 interaction_id: "interaction-1".to_string(),
                 reason: String::new(),
+                ..Default::default()
             },
         ]
     );
@@ -759,7 +851,7 @@ async fn agent_create_turn_accepts_native_values() {
                 }),
                 ..Default::default()
             }],
-            tool_source: AgentToolSourceMode::McpCatalog,
+            tool_source: AgentToolSourceMode::Catalog,
             output: AgentOutput::structured_schema(serde_json::json!({ "type": "object" }))
                 .expect("structured output"),
             metadata: Some(serde_json::json!({ "request": "native" })),
@@ -787,7 +879,7 @@ async fn agent_create_turn_accepts_native_values() {
     assert_eq!(request.model, "gpt-5.1");
     assert_eq!(
         request.tool_source,
-        ProtoAgentToolSourceMode::McpCatalog as i32
+        ProtoAgentToolSourceMode::Catalog as i32
     );
     assert_eq!(request.messages.len(), 1);
     assert_eq!(request.messages[0].role, "user");

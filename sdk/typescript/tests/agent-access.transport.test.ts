@@ -39,6 +39,8 @@ test("Agent forwards request context across session and turn calls", async () =>
     subjectId: string;
     providerName?: string;
     sessionId?: string;
+    toolRefOperation?: string | undefined;
+    listedToolMcpName?: string | undefined;
     workflowRunId?: string;
   }> = [];
 
@@ -53,6 +55,12 @@ test("Agent forwards request context across session and turn calls", async () =>
             method: "createSession",
             subjectId: input.context?.subject?.id ?? "",
             providerName: input.providerName,
+            toolRefOperation: input.tools?.source.case === "catalog"
+              ? input.tools.source.value.refs[0]?.operation
+              : undefined,
+            listedToolMcpName: input.tools?.source.case === "catalog"
+              ? input.tools.source.value.tools[0]?.mcpName
+              : undefined,
             ...(typeof input.context?.workflow?.runId === "string"
               ? { workflowRunId: input.context.workflow.runId }
               : {}),
@@ -147,6 +155,22 @@ test("Agent forwards request context across session and turn calls", async () =>
       providerName: "workflow-agent",
       model: "gpt-test",
       clientRef: "workflow-session",
+      tools: {
+        catalog: {
+          refs: [{ app: "slack", operation: "chat.postMessage" }],
+          tools: [{
+            id: "tool-slack",
+            mcpName: "slack__chat_post_message",
+            title: "Send Slack message",
+            description: "Post a Slack message",
+            inputSchema: "{\"type\":\"object\"}",
+            outputSchema: "",
+            ref: { app: "slack", operation: "chat.postMessage" },
+            tags: [],
+            searchText: "",
+          }],
+        },
+      },
     });
     const fetchedSession = await agent.getSession({ sessionId: "session-1" });
     const listedSessions = await agent.listSessions({ providerName: "basic" });
@@ -167,6 +191,8 @@ test("Agent forwards request context across session and turn calls", async () =>
         method: "createSession",
         subjectId: "user:user-123",
         providerName: "workflow-agent",
+        toolRefOperation: "chat.postMessage",
+        listedToolMcpName: "slack__chat_post_message",
         workflowRunId: "run-123",
       },
       {

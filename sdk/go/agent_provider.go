@@ -153,15 +153,15 @@ type ResolvedAgentTool struct {
 }
 
 type AgentToolRef struct {
-	App         string
-	Operation   string
-	Connection  string
-	Instance    string
-	Title       string
-	Description string
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	Title          string
+	Description    string
 	CredentialMode string
-	System      string
-	RunAs       *Subject
+	System         string
+	RunAs          *Subject
 }
 
 type AgentProviderCapabilities struct {
@@ -219,7 +219,23 @@ type CreateAgentProviderSessionRequest struct {
 	SessionStart       *AgentSessionStartConfig
 	PreparedWorkspace  *AgentPreparedWorkspace
 	Workspace          *AgentWorkspace
+	Tools              AgentToolConfig
 }
+
+type AgentToolConfig interface {
+	agentToolConfig()
+}
+
+type AgentNoTools struct{}
+
+func (*AgentNoTools) agentToolConfig() {}
+
+type AgentCatalogToolConfig struct {
+	Refs  []AgentToolRef
+	Tools []ListedAgentTool
+}
+
+func (*AgentCatalogToolConfig) agentToolConfig() {}
 
 type AgentSessionStartConfig struct {
 	Hooks []AgentSessionStartHook
@@ -507,7 +523,8 @@ const (
 	AgentMessagePartTypeImageRef    AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF)
 
 	AgentToolSourceModeUnspecified AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED)
-	AgentToolSourceModeMCPCatalog  AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG)
+	AgentToolSourceModeCatalog     AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG)
+	AgentToolSourceModeMCPCatalog  AgentToolSourceMode = AgentToolSourceModeCatalog
 	AgentToolSourceModeNone        AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE)
 
 	AgentExecutionStatusUnspecified     AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED)

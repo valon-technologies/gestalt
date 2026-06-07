@@ -935,7 +935,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if got := turnRequests[0].GetTools(); len(got) != 0 {
 		t.Fatalf("provider turn tools = %#v, want no preloaded tools", got)
 	}
-	if turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+	if turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].GetToolSource())
 	}
 	if got := turnRequests[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != "docs" || got[0].GetOperation() != "search" {

@@ -24,6 +24,7 @@ class AgentMessagePartType(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
 class AgentToolSourceMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     AGENT_TOOL_SOURCE_MODE_UNSPECIFIED: _ClassVar[AgentToolSourceMode]
+    AGENT_TOOL_SOURCE_MODE_CATALOG: _ClassVar[AgentToolSourceMode]
     AGENT_TOOL_SOURCE_MODE_MCP_CATALOG: _ClassVar[AgentToolSourceMode]
     AGENT_TOOL_SOURCE_MODE_NONE: _ClassVar[AgentToolSourceMode]
 
@@ -63,6 +64,7 @@ AGENT_MESSAGE_PART_TYPE_TOOL_CALL: AgentMessagePartType
 AGENT_MESSAGE_PART_TYPE_TOOL_RESULT: AgentMessagePartType
 AGENT_MESSAGE_PART_TYPE_IMAGE_REF: AgentMessagePartType
 AGENT_TOOL_SOURCE_MODE_UNSPECIFIED: AgentToolSourceMode
+AGENT_TOOL_SOURCE_MODE_CATALOG: AgentToolSourceMode
 AGENT_TOOL_SOURCE_MODE_MCP_CATALOG: AgentToolSourceMode
 AGENT_TOOL_SOURCE_MODE_NONE: AgentToolSourceMode
 AGENT_EXECUTION_STATUS_UNSPECIFIED: AgentExecutionStatus
@@ -272,6 +274,7 @@ class CreateAgentProviderSessionRequest(_message.Message):
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     WORKSPACE_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    TOOLS_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     idempotency_key: str
     model: str
@@ -284,7 +287,28 @@ class CreateAgentProviderSessionRequest(_message.Message):
     provider_name: str
     workspace: AgentWorkspace
     context: _app_pb2.RequestContext
-    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    tools: AgentToolConfig
+    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., tools: _Optional[_Union[AgentToolConfig, _Mapping]] = ...) -> None: ...
+
+class AgentToolConfig(_message.Message):
+    __slots__ = ()
+    NONE_FIELD_NUMBER: _ClassVar[int]
+    CATALOG_FIELD_NUMBER: _ClassVar[int]
+    none: AgentNoTools
+    catalog: AgentCatalogToolConfig
+    def __init__(self, none: _Optional[_Union[AgentNoTools, _Mapping]] = ..., catalog: _Optional[_Union[AgentCatalogToolConfig, _Mapping]] = ...) -> None: ...
+
+class AgentNoTools(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class AgentCatalogToolConfig(_message.Message):
+    __slots__ = ()
+    REFS_FIELD_NUMBER: _ClassVar[int]
+    TOOLS_FIELD_NUMBER: _ClassVar[int]
+    refs: _containers.RepeatedCompositeFieldContainer[_app_pb2.AgentToolRef]
+    tools: _containers.RepeatedCompositeFieldContainer[ListedAgentTool]
+    def __init__(self, refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ListedAgentTool, _Mapping]]] = ...) -> None: ...
 
 class AgentSessionStartConfig(_message.Message):
     __slots__ = ()

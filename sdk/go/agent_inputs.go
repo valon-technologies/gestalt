@@ -9,6 +9,7 @@ type AgentCreateSession struct {
 	Metadata       any
 	IdempotencyKey string
 	Workspace      *AgentWorkspace
+	Tools          AgentToolConfig
 }
 
 type AgentGetSession struct {
@@ -107,6 +108,7 @@ func newAgentCreateSessionRequest(input AgentCreateSession) (*proto.CreateAgentP
 		Metadata:       metadata,
 		IdempotencyKey: input.IdempotencyKey,
 		Workspace:      workspace,
+		Tools:          agentToolConfigToProto(input.Tools),
 	}, nil
 }
 

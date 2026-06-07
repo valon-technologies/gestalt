@@ -28,6 +28,7 @@ from gestalt import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
     Agent,
+    AgentCreateSession,
     AgentCreateTurn,
     AgentHost,
     AgentInteraction,
@@ -92,6 +93,7 @@ _host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, Any]] = []
 _manager_contexts: list[dict[str, Any]] = []
 _manager_workflows: list[dict[str, Any]] = []
+_manager_session_tools: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
 
@@ -110,6 +112,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def __init__(self) -> None:
         self.configured: list[tuple[str, dict[str, object]]] = []
         self.context_subject_ids: list[str] = []
+        self.session_tools: list[dict[str, str]] = []
 
     def configure(self, name: str, config: dict[str, Any]) -> None:
         self.configured.append((name, dict(config)))
@@ -128,6 +131,16 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
 
     def create_session(self, request: Any) -> Any:
         self.context_subject_ids.append(_native_context_subject_id(request.context))
+        self.session_tools.append(
+            {
+                "tool_ref_operation": request.tools.refs[0].operation
+                if request.tools is not None and request.tools.refs
+                else "",
+                "listed_tool_mcp_name": request.tools.tools[0].mcp_name
+                if request.tools is not None and request.tools.tools
+                else "",
+            }
+        )
         return AgentSession(
             id=request.session_id,
             provider_name="py-agent",
@@ -397,6 +410,20 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
             request,
             "create_session",
             provider_name=request.provider_name,
+        )
+        _manager_session_tools.append(
+            {
+                "tool_ref_operation": request.tools.catalog.refs[0].operation
+                if request.HasField("tools")
+                and request.tools.HasField("catalog")
+                and request.tools.catalog.refs
+                else "",
+                "listed_tool_mcp_name": request.tools.catalog.tools[0].mcp_name
+                if request.HasField("tools")
+                and request.tools.HasField("catalog")
+                and request.tools.catalog.tools
+                else "",
+            }
         )
         return agent_pb2.AgentSession(
             id="session-managed-1",
@@ -693,6 +720,7 @@ class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
         _provider.context_subject_ids.clear()
+        _provider.session_tools.clear()
         _host_relay_tokens.clear()
         _host_list_requests.clear()
         _host_execute_requests.clear()
@@ -700,6 +728,7 @@ class AgentTransportTests(unittest.TestCase):
         _manager_requests.clear()
         _manager_contexts.clear()
         _manager_workflows.clear()
+        _manager_session_tools.clear()
         _manager_relay_tokens.clear()
 
     def test_private_generated_stubs_are_packaged(self) -> None:
@@ -895,6 +924,29 @@ class AgentTransportTests(unittest.TestCase):
             context=app_pb2.RequestContext(
                 subject=app_pb2.SubjectContext(id="user:session")
             ),
+            tools=agent_pb2.AgentToolConfig(
+                catalog=agent_pb2.AgentCatalogToolConfig(
+                    refs=[
+                        app_pb2.AgentToolRef(
+                            app="slack",
+                            operation="chat.postMessage",
+                        )
+                    ],
+                    tools=[
+                        agent_pb2.ListedAgentTool(
+                            id="tool-slack",
+                            mcp_name="slack__chat_post_message",
+                            title="Send Slack message",
+                            description="Post a Slack message",
+                            input_schema='{"type":"object"}',
+                            ref=app_pb2.AgentToolRef(
+                                app="slack",
+                                operation="chat.postMessage",
+                            ),
+                        )
+                    ],
+                )
+            ),
         )
         create_session_metadata = struct_pb2.Struct()
         create_session_metadata.update({"source": "py-test"})
@@ -993,6 +1045,15 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(created_turn.id, "turn-1")
         self.assertEqual(created_turn.created_by_subject_id, "user:turn-owner")
         self.assertEqual(_provider.context_subject_ids, ["user:session", "user:turn"])
+        self.assertEqual(
+            _provider.session_tools,
+            [
+                {
+                    "tool_ref_operation": "chat.postMessage",
+                    "listed_tool_mcp_name": "slack__chat_post_message",
+                }
+            ],
+        )
         self.assertEqual(
             created_turn.status,
             agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
@@ -1350,6 +1411,47 @@ class AgentTransportTests(unittest.TestCase):
                     "reason": "",
                 },
             ],
+        )
+
+    def test_agent_create_session_accepts_direct_catalog_tools_dict(self) -> None:
+        context = app_pb2.RequestContext(
+            subject=app_pb2.SubjectContext(id="user:agent-manager")
+        )
+        with Agent(Request(context=context)) as manager:
+            manager.create_session(
+                AgentCreateSession(
+                    provider_name="openai",
+                    model="gpt-5.1",
+                    tools={
+                        "refs": [
+                            {
+                                "app": "slack",
+                                "operation": "chat.postMessage",
+                            },
+                        ],
+                        "tools": [
+                            {
+                                "id": "tool-slack",
+                                "mcp_name": "slack__chat_post_message",
+                                "title": "Send Slack message",
+                                "description": "Post a Slack message",
+                                "input_schema": '{"type":"object"}',
+                                "ref": {
+                                    "app": "slack",
+                                    "operation": "chat.postMessage",
+                                },
+                            },
+                        ],
+                    },
+                )
+            )
+
+        self.assertEqual(
+            _manager_session_tools[-1],
+            {
+                "tool_ref_operation": "chat.postMessage",
+                "listed_tool_mcp_name": "slack__chat_post_message",
+            },
         )
 
     def test_request_agent_roundtrip(self) -> None:
