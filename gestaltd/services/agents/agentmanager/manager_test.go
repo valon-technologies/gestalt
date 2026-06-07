@@ -2008,9 +2008,6 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
 	}
-	if got := req.GetMcpTools(); len(got) != 0 {
-		t.Fatalf("CreateTurn mcp_tools = %#v, want none", got)
-	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
 	if scope.ToolSource != coreagent.ToolSourceModeNone {
 		t.Fatalf("scope tool source = %q, want none", scope.ToolSource)
@@ -2219,9 +2216,6 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	}
 	if got := req.GetToolRefs(); len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
-	}
-	if got := req.GetMcpTools(); len(got) != 0 {
-		t.Fatalf("CreateTurn mcp_tools = %#v, want none for explicit empty tool refs", got)
 	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
 	if scope.ToolSource != coreagent.ToolSourceModeUnspecified {

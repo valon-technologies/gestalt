@@ -866,7 +866,29 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 		if err != nil {
 			return nil, err
 		}
-		providerReq.McpTools = agentwire.ListedToolsToProto(mcpTools)
+		for i := range mcpTools {
+			tool := mcpTools[i]
+			listed := &proto.ListedAgentTool{
+				Id:           tool.ToolID,
+				McpName:      tool.MCPName,
+				Title:        tool.Title,
+				Description:  tool.Description,
+				Tags:         append([]string(nil), tool.Tags...),
+				SearchText:   tool.SearchText,
+				InputSchema:  tool.InputSchemaJSON,
+				OutputSchema: tool.OutputSchemaJSON,
+				Ref:          agentwire.ToolRefToProto(tool.Ref),
+			}
+			if annotations := tool.Annotations; annotations.ReadOnlyHint != nil || annotations.IdempotentHint != nil || annotations.DestructiveHint != nil || annotations.OpenWorldHint != nil {
+				listed.Annotations = &proto.OperationAnnotations{
+					ReadOnlyHint:    annotations.ReadOnlyHint,
+					IdempotentHint:  annotations.IdempotentHint,
+					DestructiveHint: annotations.DestructiveHint,
+					OpenWorldHint:   annotations.OpenWorldHint,
+				}
+			}
+			providerReq.McpTools = append(providerReq.McpTools, listed)
+		}
 	}
 	turn, err = ownedSession.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
