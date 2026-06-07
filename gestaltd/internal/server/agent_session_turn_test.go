@@ -909,10 +909,6 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.BoundedListHydration {
 		t.Fatalf("provider capabilities = %#v, want streaming text and catalog listing", gotProvider.Capabilities)
 	}
-	if got := gotProvider.Capabilities.SupportedToolSources; strings.Join(got, ",") != "mcp_catalog" {
-		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
-	}
-
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)

@@ -66,6 +66,7 @@ const (
 	agentSessionToolScopeMetadataKey           = "__gestalt.lifecycle.agent.tools"
 	agentSessionToolScopeMetadataSourceCatalog = "catalog"
 	agentSessionToolScopeMetadataSourceNone    = "none"
+	legacyAgentToolSourceCatalog               = "mcp_catalog"
 )
 
 type AgentProviderNotAvailableError struct {
@@ -2734,6 +2735,9 @@ func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSou
 	if source == "" {
 		return coreagent.ToolSourceModeUnspecified
 	}
+	if string(source) == legacyAgentToolSourceCatalog {
+		return coreagent.ToolSourceModeCatalog
+	}
 	return source
 }
 
@@ -4127,7 +4131,11 @@ func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal,
 }
 
 func normalizeToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
-	if strings.TrimSpace(string(source)) == "" {
+	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
+	if source == "" {
+		return coreagent.ToolSourceModeCatalog
+	}
+	if string(source) == legacyAgentToolSourceCatalog {
 		return coreagent.ToolSourceModeCatalog
 	}
 	return source
@@ -4225,7 +4233,7 @@ func agentProviderCapabilitiesSupportToolSource(caps *coreagent.ProviderCapabili
 		return false
 	}
 	for _, supported := range caps.SupportedToolSources {
-		if coreagent.ToolSourceMode(strings.TrimSpace(string(supported))) == source {
+		if normalizeAgentToolSource(supported) == source {
 			return true
 		}
 	}
