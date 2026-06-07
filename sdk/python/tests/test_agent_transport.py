@@ -50,6 +50,7 @@ from gestalt import (
     AgentTurnEvent,
     AgentTurnOutput,
     Error,
+    ExecuteAgentToolRequest,
     ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsResponse,
@@ -59,6 +60,7 @@ from gestalt import (
     ProviderKind,
     ProviderMetadata,
     Request,
+    ResolveAgentConnectionRequest,
     WarningsProvider,
     _runtime,
     agent_message_from_dict,
@@ -1125,29 +1127,35 @@ class AgentTransportTests(unittest.TestCase):
             subject=app_pb2.SubjectContext(id="user:agent-host")
         )
         with AgentHost() as host:
-            list_response = host.list_tools_for_turn(
-                "session-1",
-                "turn-1",
-                page_size=10,
-                page_token="page-0",
-                query="person",
-                context=request_context,
+            list_response = host.list_tools(
+                ListAgentToolsRequest(
+                    session_id="session-1",
+                    turn_id="turn-1",
+                    page_size=10,
+                    page_token="page-0",
+                    query="person",
+                    context=request_context,
+                ),
             )
-            response = host.execute_tool_for_turn(
-                "session-1",
-                "turn-1",
-                tool_call_id="call-7",
-                tool_id="lookup",
-                arguments=ToolArguments(query="Ada Lovelace"),
-                context=request_context,
-                idempotency_key="tool-call-key-7",
+            response = host.execute_tool(
+                ExecuteAgentToolRequest(
+                    session_id="session-1",
+                    turn_id="turn-1",
+                    tool_call_id="call-7",
+                    tool_id="lookup",
+                    arguments=ToolArguments(query="Ada Lovelace"),
+                    context=request_context,
+                    idempotency_key="tool-call-key-7",
+                ),
             )
-            connection = host.resolve_connection_for_turn(
-                "session-1",
-                "turn-1",
-                connection="model",
-                instance="default",
-                context=request_context,
+            connection = host.resolve_connection(
+                ResolveAgentConnectionRequest(
+                    session_id="session-1",
+                    turn_id="turn-1",
+                    connection="model",
+                    instance="default",
+                    context=request_context,
+                ),
             )
 
         self.assertEqual(len(list_response.tools), 1)

@@ -972,23 +972,11 @@ pub trait AgentHostApi: Send {
         &mut self,
         input: AgentHostExecuteToolInput,
     ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError>;
-    async fn execute_tool_for_turn(
-        &mut self,
-        input: AgentHostExecuteToolInput,
-    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError>;
     async fn list_tools(
         &mut self,
         input: AgentHostListToolsInput,
     ) -> std::result::Result<ListAgentToolsResponse, AgentHostError>;
-    async fn list_tools_for_turn(
-        &mut self,
-        input: AgentHostListToolsInput,
-    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError>;
     async fn resolve_connection(
-        &mut self,
-        input: AgentHostResolveConnectionInput,
-    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError>;
-    async fn resolve_connection_for_turn(
         &mut self,
         input: AgentHostResolveConnectionInput,
     ) -> std::result::Result<ResolvedAgentConnection, AgentHostError>;
@@ -1057,14 +1045,6 @@ impl AgentHost {
         ))
     }
 
-    /// Executes a host tool using plain Rust request fields.
-    pub async fn execute_tool_for_turn(
-        &mut self,
-        input: AgentHostExecuteToolInput,
-    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError> {
-        self.execute_tool(input).await
-    }
-
     /// Lists host tools visible to the current agent request.
     pub async fn list_tools(
         &mut self,
@@ -1083,14 +1063,6 @@ impl AgentHost {
         ))
     }
 
-    /// Lists host tools using plain Rust request fields.
-    pub async fn list_tools_for_turn(
-        &mut self,
-        input: AgentHostListToolsInput,
-    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError> {
-        self.list_tools(input).await
-    }
-
     /// Resolves a configured agent connection for the current turn.
     pub async fn resolve_connection(
         &mut self,
@@ -1106,14 +1078,6 @@ impl AgentHost {
         resolved_connection_from_proto(self.client.resolve_connection(request).await?.into_inner())
             .map_err(AgentHostError::Input)
     }
-
-    /// Resolves an agent connection using plain Rust request fields.
-    pub async fn resolve_connection_for_turn(
-        &mut self,
-        input: AgentHostResolveConnectionInput,
-    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
-        self.resolve_connection(input).await
-    }
 }
 
 #[async_trait]
@@ -1125,13 +1089,6 @@ impl AgentHostApi for AgentHost {
         AgentHost::execute_tool(self, input).await
     }
 
-    async fn execute_tool_for_turn(
-        &mut self,
-        input: AgentHostExecuteToolInput,
-    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError> {
-        AgentHost::execute_tool_for_turn(self, input).await
-    }
-
     async fn list_tools(
         &mut self,
         input: AgentHostListToolsInput,
@@ -1139,25 +1096,11 @@ impl AgentHostApi for AgentHost {
         AgentHost::list_tools(self, input).await
     }
 
-    async fn list_tools_for_turn(
-        &mut self,
-        input: AgentHostListToolsInput,
-    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError> {
-        AgentHost::list_tools_for_turn(self, input).await
-    }
-
     async fn resolve_connection(
         &mut self,
         input: AgentHostResolveConnectionInput,
     ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
         AgentHost::resolve_connection(self, input).await
-    }
-
-    async fn resolve_connection_for_turn(
-        &mut self,
-        input: AgentHostResolveConnectionInput,
-    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
-        AgentHost::resolve_connection_for_turn(self, input).await
     }
 }
 

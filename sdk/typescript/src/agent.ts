@@ -552,53 +552,14 @@ export interface ResolvedAgentConnection {
   params: Record<string, string>;
   expiresAt?: Date | undefined;
 }
-/** Plain-object input for listing tools available to one agent turn. */
-export interface AgentHostListToolsInput {
-  sessionId: string;
-  turnId: string;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-  query?: string | undefined;
-  context?: ProtoRequestContext | undefined;
-}
-
-/** Plain-object input for executing a tool during one agent turn. */
-export interface AgentHostExecuteToolInput {
-  sessionId: string;
-  turnId: string;
-  toolCallId: string;
-  toolId: string;
-  arguments?: JsonObjectInput | undefined;
-  idempotencyKey?: string | undefined;
-  context?: ProtoRequestContext | undefined;
-}
-
-/** Plain-object input for resolving a configured connection during one turn. */
-export interface AgentHostResolveConnectionInput {
-  sessionId: string;
-  turnId: string;
-  connection: string;
-  instance?: string | undefined;
-  context?: ProtoRequestContext | undefined;
-}
-
 /** Fakeable client contract for agent host calls. */
 export interface AgentHost {
   executeTool(
     request: ExecuteAgentToolRequest,
   ): Promise<ExecuteAgentToolResponse>;
-  executeToolForTurn(
-    input: AgentHostExecuteToolInput,
-  ): Promise<ExecuteAgentToolResponse>;
   listTools(request: ListAgentToolsRequest): Promise<ListAgentToolsResponse>;
-  listToolsForTurn(
-    input: AgentHostListToolsInput,
-  ): Promise<ListAgentToolsResponse>;
   resolveConnection(
     request: ResolveAgentConnectionRequest,
-  ): Promise<ResolvedAgentConnection>;
-  resolveConnectionForTurn(
-    input: AgentHostResolveConnectionInput,
   ): Promise<ResolvedAgentConnection>;
 }
 
@@ -1328,45 +1289,12 @@ class AgentHostImpl implements AgentHost {
     );
   }
 
-  /** Executes a host tool using plain TypeScript request fields. */
-  async executeToolForTurn(
-    input: AgentHostExecuteToolInput,
-  ): Promise<ExecuteAgentToolResponse> {
-    return await this.executeTool(
-      {
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        toolCallId: input.toolCallId,
-        toolId: input.toolId,
-        arguments: input.arguments,
-        idempotencyKey: input.idempotencyKey ?? "",
-        context: input.context,
-      },
-    );
-  }
-
   /** Lists host tools visible to the current agent request. */
   async listTools(
     request: ListAgentToolsRequest,
   ): Promise<ListAgentToolsResponse> {
     return listToolsResponseFromProto(
       await this.client.listTools(listToolsRequestToProto(request)),
-    );
-  }
-
-  /** Lists host tools using plain TypeScript request fields. */
-  async listToolsForTurn(
-    input: AgentHostListToolsInput,
-  ): Promise<ListAgentToolsResponse> {
-    return await this.listTools(
-      {
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pageSize: input.pageSize ?? 0,
-        pageToken: input.pageToken ?? "",
-        query: input.query ?? "",
-        context: input.context,
-      },
     );
   }
 
@@ -1379,20 +1307,6 @@ class AgentHostImpl implements AgentHost {
     );
   }
 
-  /** Resolves an agent connection using plain TypeScript request fields. */
-  async resolveConnectionForTurn(
-    input: AgentHostResolveConnectionInput,
-  ): Promise<ResolvedAgentConnection> {
-    return await this.resolveConnection(
-      {
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        connection: input.connection,
-        instance: input.instance ?? "",
-        context: input.context,
-      },
-    );
-  }
 }
 
 /** Builds the Connect service implementation used by the TypeScript runtime. */

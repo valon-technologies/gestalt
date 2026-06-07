@@ -420,7 +420,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
     const host = new AgentHost();
-    const response = await host.executeToolForTurn({
+    const response = await host.executeTool({
       sessionId: "session-123",
       turnId: "turn-123",
       toolCallId: "call-123",
@@ -456,7 +456,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       },
     ]);
 
-    const listResponse = await host.listToolsForTurn({
+    const listResponse = await host.listTools({
       sessionId: "session-123",
       turnId: "turn-123",
       pageSize: 10,
@@ -478,7 +478,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       },
     ]);
 
-    const resolvedConnection = await host.resolveConnectionForTurn({
+    const resolvedConnection = await host.resolveConnection({
       sessionId: "session-123",
       turnId: "turn-123",
       connection: "model",
