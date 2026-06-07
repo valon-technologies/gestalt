@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 var (
@@ -61,6 +62,12 @@ const (
 	agentDefaultToolNarrowingK   = 200
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
+)
+
+const (
+	agentSessionToolScopeMetadataKey           = "__gestalt.lifecycle.agent.tools"
+	agentSessionToolScopeMetadataSourceCatalog = "catalog"
+	agentSessionToolScopeMetadataSourceNone    = "none"
 )
 
 type AgentProviderNotAvailableError struct {
@@ -504,25 +511,54 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if err != nil {
 		return nil, err
 	}
+	callerKind, callerName := agentCaller(ctx, req.GetContext(), providerName)
+	if callerKind != "" && callerName != "" {
+		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
+	}
+	if _, _, err := workflowTurnScope(ctx, req.GetContext(), callerKind, providerName); err != nil {
+		return nil, err
+	}
+	ctx, providerReqContext, err := agentProviderRequestContext(ctx, p, req.GetContext(), providerName)
+	if err != nil {
+		return nil, err
+	}
+	sessionTools, err := m.agentSessionTools(ctx, p, providerName, provider, req.GetTools())
+	if err != nil {
+		return nil, err
+	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	sessionID := newAgentSessionID(providerName, subjectID, idempotencyKey, workspace != nil)
+	deterministicSession := workspace != nil && idempotencyKey != ""
+	if deterministicSession && sessionTools.set {
+		if err := m.validateExistingSessionToolScope(ctx, p, providerName, provider, sessionID, providerReqContext, sessionTools); err != nil {
+			return nil, err
+		}
+	} else if deterministicSession {
+		if err := m.validateExistingSessionWithoutSessionTools(ctx, p, providerName, provider, sessionID, providerReqContext); err != nil {
+			return nil, err
+		}
+	}
+	providerMetadata := req.GetMetadata()
+	if sessionTools.set {
+		providerMetadata, err = agentSessionMetadataWithToolScope(metadata, sessionTools)
+		if err != nil {
+			return nil, err
+		}
+	}
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{})
 	providerReq.SessionId = sessionID
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.ProviderName = providerName
 	providerReq.Model = strings.TrimSpace(req.GetModel())
 	providerReq.ClientRef = strings.TrimSpace(req.GetClientRef())
-	providerReq.Metadata = req.GetMetadata()
+	providerReq.Metadata = providerMetadata
 	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
 	providerReq.PreparedWorkspace = nil
-	providerReq.Tools = nil
-	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), providerName)
-	if err != nil {
-		return nil, err
-	}
+	providerReq.Tools = sessionTools.config
+	providerReq.Context = providerReqContext
 	session, err = provider.CreateSession(ctx, providerReq)
 	if err != nil {
 		if sessionStart != nil || workspace != nil {
@@ -542,6 +578,25 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	}
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
+	}
+	if sessionTools.set {
+		if persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
+			return nil, err
+		} else if !ok {
+			return nil, fmt.Errorf("%w: existing agent session is missing tool scope metadata", invocation.ErrInvalidInvocation)
+		} else if !agentSessionScopeMatchesTools(persistedScope, sessionTools) {
+			return nil, fmt.Errorf("%w: agent session tool scope does not match existing session", invocation.ErrInvalidInvocation)
+		}
+		if err := m.storeSessionScope(ctx, req.GetContext(), p, providerName, normalized.ID, callerKind, callerName, sessionTools.refs, sessionTools.listed, sessionTools.toolSource); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
+			return nil, err
+		} else if ok {
+			return nil, fmt.Errorf("%w: existing agent session has tool scope metadata", invocation.ErrInvalidInvocation)
+		}
+		m.deleteSessionScope(providerName, normalized.ID)
 	}
 	return normalized, nil
 }
@@ -749,6 +804,9 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
+	if normalized.State == coreagent.SessionStateArchived {
+		m.deleteSessionScope(owned.providerName, normalized.ID)
+	}
 	return normalized, nil
 }
 
@@ -784,14 +842,24 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err != nil {
 		return nil, err
 	}
-	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) > 0 {
-		toolSource = coreagent.ToolSourceModeMCPCatalog
-	}
-	if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !req.GetToolRefsSet() && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
-		toolSource = coreagent.ToolSourceModeMCPCatalog
-		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, callerKind, callerName, agentwire.MessagesFromProto(req.GetMessages()))
-	}
 	toolRefsSet := req.GetToolRefsSet() || len(toolRefs) > 0
+	if sessionScope, ok, err := m.sessionScopeForSession(ownedSession.providerName, ownedSession.session); err != nil {
+		return nil, err
+	} else if ok {
+		toolSource, toolRefs, toolRefsSet, err = agentTurnToolsFromSessionScope(sessionScope, toolSource, toolRefs, toolRefsSet)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) > 0 {
+			toolSource = coreagent.ToolSourceModeMCPCatalog
+		}
+		if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !toolRefsSet && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
+			toolSource = coreagent.ToolSourceModeMCPCatalog
+			toolRefs = m.defaultAgentTurnToolRefs(ctx, p, callerKind, callerName, agentwire.MessagesFromProto(req.GetMessages()))
+			toolRefsSet = len(toolRefs) > 0
+		}
+	}
 	requestedOutput := agentOutputFromProto(req.GetOutput())
 	if err := validateAgentOutput(requestedOutput); err != nil {
 		return nil, err
@@ -1176,6 +1244,35 @@ type accessibleAgentTurn struct {
 	turn         *coreagent.Turn
 	session      *coreagent.Session
 	sessionOwned bool
+}
+
+type agentSessionTools struct {
+	config     *proto.AgentToolConfig
+	refs       []coreagent.ToolRef
+	listed     []coreagent.ListedTool
+	toolSource coreagent.ToolSourceMode
+	set        bool
+}
+
+type agentSessionToolScopeMetadata struct {
+	Version int                           `json:"version"`
+	Source  string                        `json:"source"`
+	Refs    []agentSessionToolRefMetadata `json:"refs,omitempty"`
+}
+
+type agentSessionToolRefMetadata struct {
+	System         string                     `json:"system,omitempty"`
+	App            string                     `json:"app,omitempty"`
+	Operation      string                     `json:"operation,omitempty"`
+	Connection     string                     `json:"connection,omitempty"`
+	Instance       string                     `json:"instance,omitempty"`
+	CredentialMode string                     `json:"credentialMode,omitempty"`
+	RunAs          *agentSessionRunAsMetadata `json:"runAs,omitempty"`
+}
+
+type agentSessionRunAsMetadata struct {
+	SubjectID           string `json:"subjectId,omitempty"`
+	CredentialSubjectID string `json:"credentialSubjectId,omitempty"`
 }
 
 func (m *Manager) providerCandidates(ctx context.Context, providerName string) ([]namedAgentProvider, error) {
@@ -1586,6 +1683,137 @@ func (m *Manager) storeTurnScope(ctx context.Context, reqContext *proto.RequestC
 	})
 }
 
+func (m *Manager) storeSessionScope(ctx context.Context, reqContext *proto.RequestContext, p *principal.Principal, providerName, sessionID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, listedTools []coreagent.ListedTool, toolSource coreagent.ToolSourceMode) error {
+	if m == nil || m.turnScopes == nil {
+		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
+	}
+	workflowRunID, workflowStepID, err := workflowTurnScope(ctx, reqContext, callerKind, providerName)
+	if err != nil {
+		return err
+	}
+	subject := agentSubjectFromPrincipal(p)
+	permissions := agentTurnPermissions(ctx, p, callerKind, callerName, toolRefs)
+	connections := m.agentConnectionBindings(providerName)
+	if toolSource == coreagent.ToolSourceModeNone {
+		connections = nil
+	}
+	return m.turnScopes.PutSession(agentturnscope.Scope{
+		ProviderName:        providerName,
+		SessionID:           sessionID,
+		CallerKind:          callerKind,
+		CallerName:          callerName,
+		WorkflowRunID:       workflowRunID,
+		WorkflowStepID:      workflowStepID,
+		SubjectID:           subject.SubjectID,
+		CredentialSubjectID: subject.CredentialSubjectID,
+		Permissions:         permissions,
+		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolRefsSet:         true,
+		ListedTools:         append([]coreagent.ListedTool(nil), listedTools...),
+		ToolSource:          toolSource,
+		Connections:         connections,
+	})
+}
+
+func (m *Manager) sessionScope(providerName, sessionID string) (agentturnscope.Scope, bool) {
+	if m == nil || m.turnScopes == nil {
+		return agentturnscope.Scope{}, false
+	}
+	return m.turnScopes.GetSession(providerName, sessionID)
+}
+
+func (m *Manager) sessionScopeForSession(providerName string, session *coreagent.Session) (agentturnscope.Scope, bool, error) {
+	if session == nil {
+		return agentturnscope.Scope{}, false, nil
+	}
+	sessionID := strings.TrimSpace(session.ID)
+	if scope, ok := m.sessionScope(providerName, sessionID); ok {
+		return scope, true, nil
+	}
+	scope, ok, err := agentSessionScopeFromMetadata(providerName, session)
+	if err != nil || !ok {
+		return agentturnscope.Scope{}, ok, err
+	}
+	if m != nil && m.turnScopes != nil {
+		_ = m.turnScopes.PutSession(scope)
+	}
+	return scope, true, nil
+}
+
+func (m *Manager) validateExistingSessionToolScope(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, sessionID string, reqContext *proto.RequestContext, tools agentSessionTools) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	existing, err := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		SessionId: sessionID,
+		Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context:   reqContext,
+	})
+	if err != nil {
+		if agentProviderReturnedNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	normalized, err := normalizeProviderSession(providerName, sessionID, existing)
+	if err != nil {
+		return err
+	}
+	if !providerSessionOwnedBy(normalized, p) {
+		return core.ErrNotFound
+	}
+	persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: existing agent session is missing tool scope metadata", invocation.ErrInvalidInvocation)
+	}
+	if !agentSessionScopeMatchesTools(persistedScope, tools) {
+		return fmt.Errorf("%w: agent session tool scope does not match existing session", invocation.ErrInvalidInvocation)
+	}
+	return nil
+}
+
+func (m *Manager) validateExistingSessionWithoutSessionTools(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, sessionID string, reqContext *proto.RequestContext) error {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil
+	}
+	existing, err := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		SessionId: sessionID,
+		Subject:   agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context:   reqContext,
+	})
+	if err != nil {
+		if agentProviderReturnedNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	normalized, err := normalizeProviderSession(providerName, sessionID, existing)
+	if err != nil {
+		return err
+	}
+	if !providerSessionOwnedBy(normalized, p) {
+		return core.ErrNotFound
+	}
+	if _, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
+		return err
+	} else if ok {
+		return fmt.Errorf("%w: existing agent session has tool scope metadata", invocation.ErrInvalidInvocation)
+	}
+	return nil
+}
+
+func (m *Manager) deleteSessionScope(providerName, sessionID string) {
+	if m == nil || m.turnScopes == nil {
+		return
+	}
+	m.turnScopes.DeleteSession(providerName, sessionID)
+}
+
 func workflowTurnScope(ctx context.Context, reqContext *proto.RequestContext, callerKind invocation.ProviderKind, providerName string) (string, string, error) {
 	if callerKind != invocation.ProviderKindWorkflow {
 		return "", "", nil
@@ -1798,6 +2026,287 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		Tools:         tools,
 		NextPageToken: nextPageToken,
 	}, nil
+}
+
+func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, config *proto.AgentToolConfig) (agentSessionTools, error) {
+	if config == nil {
+		return agentSessionTools{}, nil
+	}
+	switch source := config.GetSource().(type) {
+	case *proto.AgentToolConfig_None:
+		if supported, err := agentProviderSupportsToolSource(ctx, provider, coreagent.ToolSourceModeNone); err != nil {
+			return agentSessionTools{}, err
+		} else if !supported {
+			return agentSessionTools{}, fmt.Errorf("agent provider %q does not support tool source %q", providerName, coreagent.ToolSourceModeNone)
+		}
+		return agentSessionTools{
+			config:     &proto.AgentToolConfig{Source: &proto.AgentToolConfig_None{None: &proto.AgentNoTools{}}},
+			toolSource: coreagent.ToolSourceModeNone,
+			set:        true,
+		}, nil
+	case *proto.AgentToolConfig_Catalog:
+		if supported, err := agentProviderSupportsToolSource(ctx, provider, coreagent.ToolSourceModeMCPCatalog); err != nil {
+			return agentSessionTools{}, err
+		} else if !supported {
+			return agentSessionTools{}, fmt.Errorf("agent provider %q does not support tool source %q", providerName, coreagent.ToolSourceModeMCPCatalog)
+		}
+		catalog := source.Catalog
+		if catalog == nil {
+			catalog = &proto.AgentCatalogToolConfig{}
+		}
+		refs, err := normalizeToolRefs(agentwire.ToolRefsFromProto(catalog.GetRefs()))
+		if err != nil {
+			return agentSessionTools{}, err
+		}
+		if err := validateMCPCatalogToolRefs(refs); err != nil {
+			return agentSessionTools{}, err
+		}
+		if err := m.authorizeToolRefs(ctx, p, refs); err != nil {
+			return agentSessionTools{}, err
+		}
+		var listed []coreagent.ListedTool
+		if len(refs) > 0 {
+			listResp, err := m.listTools(ctx, p, coreagent.ListToolsRequest{
+				ProviderName: providerName,
+				PageSize:     agentToolListMaxPageSize,
+				ToolRefs:     refs,
+				ToolSource:   coreagent.ToolSourceModeMCPCatalog,
+			})
+			if err != nil {
+				return agentSessionTools{}, err
+			}
+			if listResp != nil {
+				listed = append([]coreagent.ListedTool(nil), listResp.Tools...)
+			}
+		}
+		return agentSessionTools{
+			config: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
+				Refs:  agentwire.ToolRefsToProto(refs),
+				Tools: listedAgentToolsToProto(listed),
+			}}},
+			refs:       refs,
+			listed:     listed,
+			toolSource: coreagent.ToolSourceModeMCPCatalog,
+			set:        true,
+		}, nil
+	default:
+		return agentSessionTools{}, fmt.Errorf("%w: agent session tools source is required", invocation.ErrInvalidInvocation)
+	}
+}
+
+func agentSessionMetadataWithToolScope(metadata map[string]any, tools agentSessionTools) (*structpb.Struct, error) {
+	withScope := maps.Clone(metadata)
+	if withScope == nil {
+		withScope = map[string]any{}
+	}
+	scope, err := agentSessionToolScopeMetadataFromTools(tools)
+	if err != nil {
+		return nil, err
+	}
+	scopeValue, err := agentSessionToolScopeMetadataValue(scope)
+	if err != nil {
+		return nil, err
+	}
+	withScope[agentSessionToolScopeMetadataKey] = scopeValue
+	return protoutil.StructFromMap(withScope)
+}
+
+func agentSessionToolScopeMetadataValue(scope agentSessionToolScopeMetadata) (map[string]any, error) {
+	encoded, err := json.Marshal(scope)
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func agentSessionToolScopeMetadataFromTools(tools agentSessionTools) (agentSessionToolScopeMetadata, error) {
+	source, err := agentSessionToolScopeMetadataSource(tools.toolSource)
+	if err != nil {
+		return agentSessionToolScopeMetadata{}, err
+	}
+	return agentSessionToolScopeMetadata{
+		Version: 1,
+		Source:  source,
+		Refs:    agentSessionToolRefsMetadataFromCore(tools.refs),
+	}, nil
+}
+
+func agentSessionScopeFromMetadata(providerName string, session *coreagent.Session) (agentturnscope.Scope, bool, error) {
+	if session == nil || session.Metadata == nil {
+		return agentturnscope.Scope{}, false, nil
+	}
+	value, ok := session.Metadata[agentSessionToolScopeMetadataKey]
+	if !ok {
+		return agentturnscope.Scope{}, false, nil
+	}
+	var metadata agentSessionToolScopeMetadata
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return agentturnscope.Scope{}, true, fmt.Errorf("%w: invalid agent session tool metadata", invocation.ErrInvalidInvocation)
+	}
+	if err := json.Unmarshal(encoded, &metadata); err != nil {
+		return agentturnscope.Scope{}, true, fmt.Errorf("%w: invalid agent session tool metadata", invocation.ErrInvalidInvocation)
+	}
+	source, err := agentSessionToolScopeMetadataCoreSource(metadata.Source)
+	if err != nil {
+		return agentturnscope.Scope{}, true, err
+	}
+	refs := agentSessionToolRefsMetadataToCore(metadata.Refs)
+	if source == coreagent.ToolSourceModeNone {
+		refs = nil
+	}
+	if source == coreagent.ToolSourceModeMCPCatalog {
+		if err := validateMCPCatalogToolRefs(refs); err != nil {
+			return agentturnscope.Scope{}, true, err
+		}
+	}
+	return agentturnscope.Scope{
+		ProviderName: strings.TrimSpace(providerName),
+		SessionID:    strings.TrimSpace(session.ID),
+		ToolRefs:     refs,
+		ToolRefsSet:  true,
+		ToolSource:   source,
+	}, true, nil
+}
+
+func agentSessionToolScopeMetadataSource(source coreagent.ToolSourceMode) (string, error) {
+	switch normalizeAgentToolSource(source) {
+	case coreagent.ToolSourceModeMCPCatalog:
+		return agentSessionToolScopeMetadataSourceCatalog, nil
+	case coreagent.ToolSourceModeNone:
+		return agentSessionToolScopeMetadataSourceNone, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported agent session tool source %q", invocation.ErrInvalidInvocation, source)
+	}
+}
+
+func agentSessionToolScopeMetadataCoreSource(source string) (coreagent.ToolSourceMode, error) {
+	switch strings.TrimSpace(source) {
+	case agentSessionToolScopeMetadataSourceCatalog:
+		return coreagent.ToolSourceModeMCPCatalog, nil
+	case agentSessionToolScopeMetadataSourceNone:
+		return coreagent.ToolSourceModeNone, nil
+	default:
+		return "", fmt.Errorf("%w: unsupported agent session tool source %q", invocation.ErrInvalidInvocation, source)
+	}
+}
+
+func agentSessionToolRefsMetadataFromCore(refs []coreagent.ToolRef) []agentSessionToolRefMetadata {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]agentSessionToolRefMetadata, 0, len(refs))
+	for i := range refs {
+		ref := normalizeToolRefForCompare(refs[i])
+		out = append(out, agentSessionToolRefMetadata{
+			System:         ref.System,
+			App:            ref.App,
+			Operation:      ref.Operation,
+			Connection:     ref.Connection,
+			Instance:       ref.Instance,
+			CredentialMode: string(ref.CredentialMode),
+			RunAs:          agentSessionRunAsMetadataFromCore(ref.RunAs),
+		})
+	}
+	return out
+}
+
+func agentSessionToolRefsMetadataToCore(refs []agentSessionToolRefMetadata) []coreagent.ToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]coreagent.ToolRef, 0, len(refs))
+	for i := range refs {
+		out = append(out, normalizeToolRefForCompare(coreagent.ToolRef{
+			System:         refs[i].System,
+			App:            refs[i].App,
+			Operation:      refs[i].Operation,
+			Connection:     refs[i].Connection,
+			Instance:       refs[i].Instance,
+			CredentialMode: core.ConnectionMode(refs[i].CredentialMode),
+			RunAs:          agentSessionRunAsMetadataToCore(refs[i].RunAs),
+		}))
+	}
+	return out
+}
+
+func agentSessionRunAsMetadataFromCore(runAs *core.RunAsSubject) *agentSessionRunAsMetadata {
+	normalized := core.NormalizeRunAsSubject(runAs)
+	if normalized == nil {
+		return nil
+	}
+	return &agentSessionRunAsMetadata{
+		SubjectID:           normalized.SubjectID,
+		CredentialSubjectID: normalized.CredentialSubjectID,
+	}
+}
+
+func agentSessionRunAsMetadataToCore(runAs *agentSessionRunAsMetadata) *core.RunAsSubject {
+	if runAs == nil {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:           runAs.SubjectID,
+		CredentialSubjectID: runAs.CredentialSubjectID,
+	})
+}
+
+func agentSessionScopeMatchesTools(scope agentturnscope.Scope, tools agentSessionTools) bool {
+	if normalizeAgentToolSource(scope.ToolSource) != normalizeAgentToolSource(tools.toolSource) {
+		return false
+	}
+	return agentToolRefsEqual(scope.ToolRefs, tools.refs)
+}
+
+func agentToolRefsEqual(left, right []coreagent.ToolRef) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	counts := make(map[agentToolRefCompareKey]int, len(left))
+	for i := range left {
+		counts[agentToolRefCompareKeyFromRef(left[i])]++
+	}
+	for i := range right {
+		key := agentToolRefCompareKeyFromRef(right[i])
+		if counts[key] == 0 {
+			return false
+		}
+		counts[key]--
+	}
+	return true
+}
+
+type agentToolRefCompareKey struct {
+	System          string
+	App             string
+	Operation       string
+	Connection      string
+	Instance        string
+	CredentialMode  core.ConnectionMode
+	RunAsSubject    string
+	RunAsCredential string
+}
+
+func agentToolRefCompareKeyFromRef(ref coreagent.ToolRef) agentToolRefCompareKey {
+	normalized := normalizeToolRefForCompare(ref)
+	runAs := core.NormalizeRunAsSubject(normalized.RunAs)
+	key := agentToolRefCompareKey{
+		System:         normalized.System,
+		App:            normalized.App,
+		Operation:      normalized.Operation,
+		Connection:     normalized.Connection,
+		Instance:       normalized.Instance,
+		CredentialMode: normalized.CredentialMode,
+	}
+	if runAs != nil {
+		key.RunAsSubject = runAs.SubjectID
+		key.RunAsCredential = runAs.CredentialSubjectID
+	}
+	return key
 }
 
 func (m *Manager) searchWorkflowSystemTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {
@@ -2230,6 +2739,145 @@ func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUn
 
 func listedAgentToolUnavailable(tool coreagent.ListedTool) bool {
 	return tool.Target.Unavailable != nil
+}
+
+func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentTool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]*proto.ListedAgentTool, 0, len(tools))
+	for i := range tools {
+		out = append(out, listedAgentToolToProto(tools[i]))
+	}
+	return out
+}
+
+func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
+	return &proto.ListedAgentTool{
+		Id:           strings.TrimSpace(tool.ToolID),
+		McpName:      strings.TrimSpace(tool.MCPName),
+		Title:        strings.TrimSpace(tool.Title),
+		Description:  strings.TrimSpace(tool.Description),
+		InputSchema:  strings.TrimSpace(tool.InputSchemaJSON),
+		OutputSchema: strings.TrimSpace(tool.OutputSchemaJSON),
+		Annotations:  operationAnnotationsToProto(tool.Annotations),
+		Ref:          agentwire.ToolRefToProto(tool.Ref),
+		Tags:         append([]string(nil), tool.Tags...),
+		SearchText:   strings.TrimSpace(tool.SearchText),
+	}
+}
+
+func operationAnnotationsToProto(annotations core.CapabilityAnnotations) *proto.OperationAnnotations {
+	if annotations.ReadOnlyHint == nil &&
+		annotations.IdempotentHint == nil &&
+		annotations.DestructiveHint == nil &&
+		annotations.OpenWorldHint == nil {
+		return nil
+	}
+	return &proto.OperationAnnotations{
+		ReadOnlyHint:    annotations.ReadOnlyHint,
+		IdempotentHint:  annotations.IdempotentHint,
+		DestructiveHint: annotations.DestructiveHint,
+		OpenWorldHint:   annotations.OpenWorldHint,
+	}
+}
+
+func agentTurnToolsFromSessionScope(scope agentturnscope.Scope, requestedSource coreagent.ToolSourceMode, requestedRefs []coreagent.ToolRef, requestedRefsSet bool) (coreagent.ToolSourceMode, []coreagent.ToolRef, bool, error) {
+	sessionSource := normalizeAgentToolSource(scope.ToolSource)
+	if requestedSource != coreagent.ToolSourceModeUnspecified && requestedSource != sessionSource {
+		return "", nil, false, fmt.Errorf("%w: agent turn tool source %q does not match session tool source %q", invocation.ErrInvalidInvocation, requestedSource, sessionSource)
+	}
+	if requestedRefsSet {
+		if sessionSource == coreagent.ToolSourceModeNone && len(requestedRefs) > 0 {
+			return "", nil, false, fmt.Errorf("%w: toolRefs are not supported with agent tool source %q", invocation.ErrInvalidInvocation, sessionSource)
+		}
+		if !agentToolRefsWithinSessionScope(requestedRefs, scope.ToolRefs) {
+			return "", nil, false, fmt.Errorf("%w: agent turn toolRefs must be a subset of session toolRefs", invocation.ErrAuthorizationDenied)
+		}
+		return sessionSource, append([]coreagent.ToolRef(nil), requestedRefs...), true, nil
+	}
+	return sessionSource, append([]coreagent.ToolRef(nil), scope.ToolRefs...), true, nil
+}
+
+func agentToolRefsWithinSessionScope(requested, allowed []coreagent.ToolRef) bool {
+	if len(requested) == 0 {
+		return true
+	}
+	if len(allowed) == 0 {
+		return false
+	}
+	for i := range requested {
+		ok := false
+		for j := range allowed {
+			if agentToolRefAllowsSessionRef(allowed[j], requested[i]) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func agentToolRefAllowsSessionRef(allowed, requested coreagent.ToolRef) bool {
+	allowed = normalizeToolRefForCompare(allowed)
+	requested = normalizeToolRefForCompare(requested)
+	if allowed.System != "" || requested.System != "" {
+		return allowed.System != "" &&
+			allowed.System == requested.System &&
+			agentOptionalScopeFieldAllows(allowed.Operation, requested.Operation) &&
+			agentOptionalScopeFieldAllows(allowed.App, requested.App)
+	}
+	if allowed.App != agentToolSearchAllApp && allowed.App != requested.App {
+		return false
+	}
+	if !agentOptionalScopeFieldAllows(allowed.Operation, requested.Operation) {
+		return false
+	}
+	if !agentOptionalScopeFieldAllows(allowed.Connection, requested.Connection) {
+		return false
+	}
+	if !agentOptionalScopeFieldAllows(allowed.Instance, requested.Instance) {
+		return false
+	}
+	if allowed.CredentialMode != "" && allowed.CredentialMode != requested.CredentialMode {
+		return false
+	}
+	if allowed.RunAs != nil {
+		if requested.RunAs == nil {
+			return false
+		}
+		return allowed.RunAs.SubjectID == requested.RunAs.SubjectID &&
+			allowed.RunAs.CredentialSubjectID == requested.RunAs.CredentialSubjectID
+	}
+	return true
+}
+
+func normalizeToolRefForCompare(ref coreagent.ToolRef) coreagent.ToolRef {
+	ref.System = strings.TrimSpace(ref.System)
+	ref.App = strings.TrimSpace(ref.App)
+	ref.Operation = strings.TrimSpace(ref.Operation)
+	ref.Connection = strings.TrimSpace(ref.Connection)
+	ref.Instance = strings.TrimSpace(ref.Instance)
+	ref.CredentialMode = core.NormalizeOptionalConnectionMode(ref.CredentialMode)
+	ref.RunAs = core.NormalizeRunAsSubject(ref.RunAs)
+	return ref
+}
+
+func agentOptionalScopeFieldAllows(allowed, requested string) bool {
+	allowed = strings.TrimSpace(allowed)
+	requested = strings.TrimSpace(requested)
+	return allowed == "" || allowed == requested
+}
+
+func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
+	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
+	if source == "" {
+		return coreagent.ToolSourceModeUnspecified
+	}
+	return source
 }
 
 func unavailableAgentToolReason(err error) string {

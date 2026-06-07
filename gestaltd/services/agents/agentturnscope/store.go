@@ -28,6 +28,7 @@ type Scope struct {
 	Permissions         []core.AccessPermission
 	ToolRefs            []coreagent.ToolRef
 	ToolRefsSet         bool
+	ListedTools         []coreagent.ListedTool
 	Tools               []coreagent.Tool
 	ToolSource          coreagent.ToolSourceMode
 	Connections         []ConnectionBinding
@@ -35,12 +36,16 @@ type Scope struct {
 }
 
 type Store struct {
-	mu     sync.RWMutex
-	scopes map[string]*Scope
+	mu            sync.RWMutex
+	scopes        map[string]*Scope
+	sessionScopes map[string]*Scope
 }
 
 func NewStore() *Store {
-	return &Store{scopes: map[string]*Scope{}}
+	return &Store{
+		scopes:        map[string]*Scope{},
+		sessionScopes: map[string]*Scope{},
+	}
 }
 
 func (s *Store) Put(scope Scope) error {
@@ -58,6 +63,25 @@ func (s *Store) Put(scope Scope) error {
 		s.scopes = map[string]*Scope{}
 	}
 	s.scopes[key] = &scope
+	return nil
+}
+
+func (s *Store) PutSession(scope Scope) error {
+	scope = cloneScope(scope)
+	key := sessionScopeKey(scope.ProviderName, scope.SessionID)
+	if key == "" {
+		return fmt.Errorf("agent session scope requires provider and session")
+	}
+	scope.TurnID = ""
+	if scope.ToolRefsSet || len(scope.ToolRefs) > 0 {
+		scope.ToolRefsSet = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sessionScopes == nil {
+		s.sessionScopes = map[string]*Scope{}
+	}
+	s.sessionScopes[key] = &scope
 	return nil
 }
 
@@ -92,6 +116,16 @@ func (s *Store) Delete(providerName, sessionID, turnID string) {
 	}
 }
 
+func (s *Store) DeleteSession(providerName, sessionID string) {
+	key := sessionScopeKey(providerName, sessionID)
+	if key == "" || s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.sessionScopes, key)
+}
+
 func (s *Store) Revoke(providerName, sessionID, turnID string) {
 	key := scopeKey(providerName, sessionID, turnID)
 	if key == "" || s == nil {
@@ -118,6 +152,20 @@ func (s *Store) Get(providerName, sessionID, turnID string) (Scope, bool) {
 	return cloneScope(*scope), true
 }
 
+func (s *Store) GetSession(providerName, sessionID string) (Scope, bool) {
+	key := sessionScopeKey(providerName, sessionID)
+	if key == "" || s == nil {
+		return Scope{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	scope := s.sessionScopes[key]
+	if scope == nil {
+		return Scope{}, false
+	}
+	return cloneScope(*scope), true
+}
+
 func scopeKey(providerName, sessionID, turnID string) string {
 	providerName = strings.TrimSpace(providerName)
 	sessionID = strings.TrimSpace(sessionID)
@@ -126,6 +174,15 @@ func scopeKey(providerName, sessionID, turnID string) string {
 		return ""
 	}
 	return providerName + "\x00" + sessionID + "\x00" + turnID
+}
+
+func sessionScopeKey(providerName, sessionID string) string {
+	providerName = strings.TrimSpace(providerName)
+	sessionID = strings.TrimSpace(sessionID)
+	if providerName == "" || sessionID == "" {
+		return ""
+	}
+	return providerName + "\x00" + sessionID
 }
 
 func cloneScope(src Scope) Scope {
@@ -144,6 +201,7 @@ func cloneScope(src Scope) Scope {
 		Permissions:         clonePermissions(src.Permissions),
 		ToolRefs:            cloneToolRefs(src.ToolRefs),
 		ToolRefsSet:         src.ToolRefsSet || len(src.ToolRefs) > 0,
+		ListedTools:         cloneListedTools(src.ListedTools),
 		Tools:               cloneTools(src.Tools),
 		ToolSource:          src.ToolSource,
 		Connections:         cloneConnectionBindings(src.Connections),
@@ -181,6 +239,30 @@ func cloneToolRefs(src []coreagent.ToolRef) []coreagent.ToolRef {
 			RunAs:          core.NormalizeRunAsSubject(src[i].RunAs),
 			Title:          strings.TrimSpace(src[i].Title),
 			Description:    strings.TrimSpace(src[i].Description),
+		})
+	}
+	return out
+}
+
+func cloneListedTools(src []coreagent.ListedTool) []coreagent.ListedTool {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]coreagent.ListedTool, 0, len(src))
+	for i := range src {
+		out = append(out, coreagent.ListedTool{
+			ToolID:           strings.TrimSpace(src[i].ToolID),
+			MCPName:          strings.TrimSpace(src[i].MCPName),
+			Title:            strings.TrimSpace(src[i].Title),
+			Description:      strings.TrimSpace(src[i].Description),
+			Tags:             append([]string(nil), src[i].Tags...),
+			SearchText:       strings.TrimSpace(src[i].SearchText),
+			InputSchemaJSON:  strings.TrimSpace(src[i].InputSchemaJSON),
+			OutputSchemaJSON: strings.TrimSpace(src[i].OutputSchemaJSON),
+			Annotations:      src[i].Annotations,
+			Ref:              cloneToolRefs([]coreagent.ToolRef{src[i].Ref})[0],
+			Target:           cloneToolTarget(src[i].Target),
+			Hidden:           src[i].Hidden,
 		})
 	}
 	return out
