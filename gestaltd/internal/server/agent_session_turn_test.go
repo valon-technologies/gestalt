@@ -935,11 +935,11 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if got := turnRequests[0].GetTools(); len(got) != 0 {
 		t.Fatalf("provider turn tools = %#v, want no preloaded tools", got)
 	}
-	if turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
-		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].GetToolSource())
+	if turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("provider turn tool source = %q, want unspecified", turnRequests[0].GetToolSource())
 	}
-	if got := turnRequests[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != "docs" || got[0].GetOperation() != "search" {
-		t.Fatalf("provider turn tool refs = %#v, want docs.search", got)
+	if got := turnRequests[0].GetToolRefs(); len(got) != 0 {
+		t.Fatalf("provider turn tool refs = %#v, want none", got)
 	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?after=0&limit=10", nil)
@@ -1262,8 +1262,8 @@ func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 	if got := turnRequests[0].ToolRefs; len(got) != 0 {
 		t.Fatalf("omitted toolRefs provider refs = %#v, want none", got)
 	}
-	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
-		t.Fatalf("omitted tool source = %q, want none", got)
+	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("omitted tool source = %q, want unspecified", got)
 	}
 }
 
@@ -1342,8 +1342,8 @@ func TestAgentCreateTurnUsesNoToolsWithStructuredOutput(t *testing.T) {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
 	req := turnRequests[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
-		t.Fatalf("provider turn tool source = %q, want none", req.GetToolSource())
+	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("provider turn tool source = %q, want unspecified", req.GetToolSource())
 	}
 	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
 		t.Fatalf("provider turn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
@@ -1406,8 +1406,8 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
-		t.Fatalf("provider turn tool source = %q, want none", got)
+	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("provider turn tool source = %q, want unspecified", got)
 	}
 	if got := turnRequests[0].GetToolRefs(); len(got) != 0 {
 		t.Fatalf("provider turn tool refs = %#v, want none", got)

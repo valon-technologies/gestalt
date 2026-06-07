@@ -1261,11 +1261,11 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
-		t.Fatalf("provider turn tool source = %s, want MCP catalog", got)
+	if got := alpha.createTurnReqs[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("provider turn tool source = %s, want unspecified", got)
 	}
-	if len(alpha.createTurnReqs[0].GetToolRefs()) != 1 || alpha.createTurnReqs[0].GetToolRefs()[0].GetApp() != "slack" {
-		t.Fatalf("provider turn refs = %#v, want inherited slack ref", alpha.createTurnReqs[0].GetToolRefs())
+	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 0 {
+		t.Fatalf("provider turn refs = %#v, want none", got)
 	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
 	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "slack" {
@@ -1312,8 +1312,12 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != "slack" {
-		t.Fatalf("CreateTurn tool refs = %#v, want durable slack scope", got)
+	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 0 {
+		t.Fatalf("CreateTurn tool refs = %#v, want none", got)
+	}
+	scope := requireAgentManagerTurnScope(t, manager.turnScopes, "alpha", session.ID, alpha.createTurnReqs[0].GetTurnId())
+	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "slack" {
+		t.Fatalf("turn scope refs = %#v, want durable slack scope", scope.ToolRefs)
 	}
 }
 
@@ -1862,8 +1866,8 @@ func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if got := req.GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
-		t.Fatalf("CreateTurn tool source = %q, want none", got)
+	if got := req.GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("CreateTurn tool source = %q, want unspecified", got)
 	}
 	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
