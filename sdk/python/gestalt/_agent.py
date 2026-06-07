@@ -468,8 +468,6 @@ class CreateAgentProviderTurnRequest:
     metadata: JsonObject | None = None
     created_by_subject_id: str = ""
     execution_ref: str = ""
-    tool_refs: Iterable[AgentToolRef] = field(default_factory=list)
-    tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
     subject: Subject | None = None
     model_options: JsonObject | None = None
     timeout_seconds: int = 0
@@ -752,8 +750,6 @@ def create_agent_provider_turn_request_from_proto(
         else None,
         created_by_subject_id=request.created_by_subject_id.strip(),
         execution_ref=request.execution_ref,
-        tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
-        tool_source=request.tool_source,
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,

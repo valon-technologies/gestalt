@@ -341,8 +341,6 @@ type CreateAgentProviderTurnRequest struct {
 	Metadata           map[string]any
 	CreatedBySubjectID string
 	ExecutionRef       string
-	ToolRefs           []AgentToolRef
-	ToolSource         AgentToolSourceMode
 	Subject            *Subject
 	ModelOptions       map[string]any
 	Context            *proto.RequestContext

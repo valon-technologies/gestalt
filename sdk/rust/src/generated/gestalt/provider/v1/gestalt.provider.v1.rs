@@ -846,10 +846,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub created_by_subject_id: ::prost::alloc::string::String,
     #[prost(string, tag = "11")]
     pub execution_ref: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "12")]
-    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(enumeration = "AgentToolSourceMode", tag = "13")]
-    pub tool_source: i32,
     #[prost(message, optional, tag = "14")]
     pub subject: ::core::option::Option<SubjectContext>,
     #[prost(message, optional, tag = "16")]
@@ -859,8 +855,6 @@ pub struct CreateAgentProviderTurnRequest {
     /// not control the CreateTurn RPC deadline.
     #[prost(int32, tag = "18")]
     pub timeout_seconds: i32,
-    #[prost(bool, tag = "20")]
-    pub tool_refs_set: bool,
     #[prost(message, optional, tag = "21")]
     pub output: ::core::option::Option<AgentOutput>,
     #[prost(message, optional, tag = "23")]

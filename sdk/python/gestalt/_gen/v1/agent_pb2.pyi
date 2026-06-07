@@ -484,12 +484,9 @@ class CreateAgentProviderTurnRequest(_message.Message):
     METADATA_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
-    TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
-    TOOL_SOURCE_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
-    TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
@@ -501,15 +498,12 @@ class CreateAgentProviderTurnRequest(_message.Message):
     metadata: _struct_pb2.Struct
     created_by_subject_id: str
     execution_ref: str
-    tool_refs: _containers.RepeatedCompositeFieldContainer[_app_pb2.AgentToolRef]
-    tool_source: AgentToolSourceMode
     subject: _app_pb2.SubjectContext
     model_options: _struct_pb2.Struct
     timeout_seconds: int
-    tool_refs_set: bool
     output: AgentOutput
     context: _app_pb2.RequestContext
-    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
 class AgentTextOutput(_message.Message):
     __slots__ = ()

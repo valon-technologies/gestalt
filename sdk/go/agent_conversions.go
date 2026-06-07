@@ -780,8 +780,6 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		Metadata:           mapFromStruct(req.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 		ExecutionRef:       req.GetExecutionRef(),
-		ToolRefs:           agentToolRefsFromProto(req.GetToolRefs()),
-		ToolSource:         AgentToolSourceMode(req.GetToolSource()),
 		Subject:            subjectFromProto(req.GetSubject()),
 		ModelOptions:       mapFromStruct(req.GetModelOptions()),
 		Context:            cloneRequestContext(req.GetContext()),

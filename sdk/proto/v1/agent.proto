@@ -301,8 +301,8 @@ message AgentTurnDisplay {
 }
 
 message CreateAgentProviderTurnRequest {
-  reserved 9, 15, 17, 19, 22;
-  reserved "provider_options", "tool_grant", "run_grant", "invocation_token", "workflow";
+  reserved 9, 12, 13, 15, 17, 19, 20, 22;
+  reserved "provider_options", "tool_refs", "tool_source", "tool_grant", "run_grant", "tool_refs_set", "invocation_token", "workflow";
 
   string turn_id = 1;
   string session_id = 2;
@@ -313,15 +313,12 @@ message CreateAgentProviderTurnRequest {
   google.protobuf.Struct metadata = 8;
   string created_by_subject_id = 10;
   string execution_ref = 11;
-  repeated AgentToolRef tool_refs = 12;
-  AgentToolSourceMode tool_source = 13;
   SubjectContext subject = 14;
   google.protobuf.Struct model_options = 16;
   // Optional provider-owned turn execution budget, in seconds.
   // If unset or zero, the provider chooses its own execution timeout. This does
   // not control the CreateTurn RPC deadline.
   int32 timeout_seconds = 18;
-  bool tool_refs_set = 20;
   AgentOutput output = 21;
   RequestContext context = 23;
 }

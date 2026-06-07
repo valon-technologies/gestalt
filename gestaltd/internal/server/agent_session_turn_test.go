@@ -935,12 +935,6 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if got := turnRequests[0].GetTools(); len(got) != 0 {
 		t.Fatalf("provider turn tools = %#v, want no preloaded tools", got)
 	}
-	if turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("provider turn tool source = %q, want unspecified", turnRequests[0].GetToolSource())
-	}
-	if got := turnRequests[0].GetToolRefs(); len(got) != 0 {
-		t.Fatalf("provider turn tool refs = %#v, want none", got)
-	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?after=0&limit=10", nil)
 	eventsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1232,7 +1226,7 @@ func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	createTurn := func(name, body string, wantStatus int) {
+	createTurn := func(name, body string, wantStatus int) string {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(body))
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1241,14 +1235,20 @@ func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 			t.Fatalf("%s: create turn: %v", name, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
+		respBody, _ := io.ReadAll(resp.Body)
 		if resp.StatusCode != wantStatus {
-			respBody, _ := io.ReadAll(resp.Body)
 			t.Fatalf("%s: create turn status = %d body=%s, want %d", name, resp.StatusCode, respBody, wantStatus)
 		}
+		return string(respBody)
 	}
 
 	createTurn("omitted", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
-	createTurn("explicit empty", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusBadRequest)
+	if body := createTurn("explicit empty", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusBadRequest); !strings.Contains(body, "turn tools must be configured on the session") {
+		t.Fatalf("explicit empty response body = %s", body)
+	}
+	if body := createTurn("tool source", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolSource":"catalog"}`, http.StatusBadRequest); !strings.Contains(body, "turn tools must be configured on the session") {
+		t.Fatalf("tool source response body = %s", body)
+	}
 	createTurn("plugin broad", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusBadRequest)
 	createTurn("missing output", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusBadRequest)
 	createTurn("null toolRefs", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
@@ -1258,12 +1258,6 @@ func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
-	}
-	if got := turnRequests[0].ToolRefs; len(got) != 0 {
-		t.Fatalf("omitted toolRefs provider refs = %#v, want none", got)
-	}
-	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("omitted tool source = %q, want unspecified", got)
 	}
 }
 
@@ -1342,11 +1336,8 @@ func TestAgentCreateTurnUsesNoToolsWithStructuredOutput(t *testing.T) {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
 	req := turnRequests[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("provider turn tool source = %q, want unspecified", req.GetToolSource())
-	}
-	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
-		t.Fatalf("provider turn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
+	if len(req.GetTools()) != 0 {
+		t.Fatalf("provider turn tools = %#v, want none", req.GetTools())
 	}
 	if req.GetOutput().GetStructured() == nil {
 		t.Fatal("provider turn output.structured = nil, want structured output request")
@@ -1405,12 +1396,6 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
-	}
-	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("provider turn tool source = %q, want unspecified", got)
-	}
-	if got := turnRequests[0].GetToolRefs(); len(got) != 0 {
-		t.Fatalf("provider turn tool refs = %#v, want none", got)
 	}
 }
 
