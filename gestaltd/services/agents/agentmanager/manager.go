@@ -818,8 +818,8 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	var tools []coreagent.Tool
 	switch toolSource {
-	case coreagent.ToolSourceModeMCPCatalog:
-		if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
+	case coreagent.ToolSourceModeCatalog:
+		if err := validateCatalogToolRefs(toolRefs); err != nil {
 			return nil, err
 		}
 		if err := m.authorizeToolRefs(ctx, p, toolRefs); err != nil {
@@ -1866,8 +1866,8 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 	if err != nil {
 		return nil, err
 	}
-	if toolSource != coreagent.ToolSourceModeMCPCatalog {
-		return nil, fmt.Errorf("agent tool listing requires %q tool source", coreagent.ToolSourceModeMCPCatalog)
+	if toolSource != coreagent.ToolSourceModeCatalog {
+		return nil, fmt.Errorf("agent tool listing requires %q tool source", coreagent.ToolSourceModeCatalog)
 	}
 	attrs := []attribute.KeyValue{
 		observability.AttrAgentToolSource.String(string(toolSource)),
@@ -1885,7 +1885,7 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 	if err != nil {
 		return nil, err
 	}
-	if err := validateMCPCatalogToolRefs(refs); err != nil {
+	if err := validateCatalogToolRefs(refs); err != nil {
 		return nil, err
 	}
 	pageSize, err := effectiveAgentToolListPageSize(req.PageSize)
@@ -1977,10 +1977,10 @@ func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal,
 	case *proto.AgentToolConfig_None:
 		return agentSessionTools{}, nil
 	case *proto.AgentToolConfig_Catalog:
-		if supported, err := agentProviderSupportsToolSource(ctx, provider, coreagent.ToolSourceModeMCPCatalog); err != nil {
+		if supported, err := agentProviderSupportsToolSource(ctx, provider, coreagent.ToolSourceModeCatalog); err != nil {
 			return agentSessionTools{}, err
 		} else if !supported {
-			return agentSessionTools{}, fmt.Errorf("agent provider %q does not support tool source %q", providerName, coreagent.ToolSourceModeMCPCatalog)
+			return agentSessionTools{}, fmt.Errorf("agent provider %q does not support tool source %q", providerName, coreagent.ToolSourceModeCatalog)
 		}
 		catalog := source.Catalog
 		if catalog == nil {
@@ -1990,7 +1990,7 @@ func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal,
 		if err != nil {
 			return agentSessionTools{}, err
 		}
-		if err := validateMCPCatalogToolRefs(refs); err != nil {
+		if err := validateCatalogToolRefs(refs); err != nil {
 			return agentSessionTools{}, err
 		}
 		if err := m.authorizeToolRefs(ctx, p, refs); err != nil {
@@ -2002,7 +2002,7 @@ func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal,
 				ProviderName: providerName,
 				PageSize:     agentToolListMaxPageSize,
 				ToolRefs:     refs,
-				ToolSource:   coreagent.ToolSourceModeMCPCatalog,
+				ToolSource:   coreagent.ToolSourceModeCatalog,
 			})
 			if err != nil {
 				return agentSessionTools{}, err
@@ -2018,7 +2018,7 @@ func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal,
 			}}},
 			refs:       refs,
 			listed:     listed,
-			toolSource: coreagent.ToolSourceModeMCPCatalog,
+			toolSource: coreagent.ToolSourceModeCatalog,
 			set:        true,
 		}, nil
 	default:
@@ -2091,8 +2091,8 @@ func agentSessionScopeFromMetadata(providerName string, session *coreagent.Sessi
 	if source == coreagent.ToolSourceModeNone {
 		refs = nil
 	}
-	if source == coreagent.ToolSourceModeMCPCatalog {
-		if err := validateMCPCatalogToolRefs(refs); err != nil {
+	if source == coreagent.ToolSourceModeCatalog {
+		if err := validateCatalogToolRefs(refs); err != nil {
 			return agentturnscope.Scope{}, true, err
 		}
 	}
@@ -2107,7 +2107,7 @@ func agentSessionScopeFromMetadata(providerName string, session *coreagent.Sessi
 
 func agentSessionToolScopeMetadataSource(source coreagent.ToolSourceMode) (string, error) {
 	switch normalizeAgentToolSource(source) {
-	case coreagent.ToolSourceModeMCPCatalog:
+	case coreagent.ToolSourceModeCatalog:
 		return agentSessionToolScopeMetadataSourceCatalog, nil
 	case coreagent.ToolSourceModeNone:
 		return agentSessionToolScopeMetadataSourceNone, nil
@@ -2119,7 +2119,7 @@ func agentSessionToolScopeMetadataSource(source coreagent.ToolSourceMode) (strin
 func agentSessionToolScopeMetadataCoreSource(source string) (coreagent.ToolSourceMode, error) {
 	switch strings.TrimSpace(source) {
 	case agentSessionToolScopeMetadataSourceCatalog:
-		return coreagent.ToolSourceModeMCPCatalog, nil
+		return coreagent.ToolSourceModeCatalog, nil
 	case agentSessionToolScopeMetadataSourceNone:
 		return coreagent.ToolSourceModeNone, nil
 	default:
@@ -3203,8 +3203,8 @@ func operationInputSchema(op catalog.CatalogOperation) (map[string]any, error) {
 	return out, nil
 }
 
-func validateMCPCatalogToolRefs(refs []coreagent.ToolRef) error {
-	if err := coreagent.ValidateMCPCatalogToolRefs(refs, "tool_refs"); err != nil {
+func validateCatalogToolRefs(refs []coreagent.ToolRef) error {
+	if err := coreagent.ValidateCatalogToolRefs(refs, "tool_refs"); err != nil {
 		return fmt.Errorf("%w: %w", invocation.ErrInvalidInvocation, err)
 	}
 	return nil
@@ -3907,7 +3907,7 @@ func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
 func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
 	source = normalizeToolSource(source)
 	switch source {
-	case coreagent.ToolSourceModeMCPCatalog, coreagent.ToolSourceModeNone:
+	case coreagent.ToolSourceModeCatalog, coreagent.ToolSourceModeNone:
 	default:
 		return "", fmt.Errorf("unsupported agent tool source %q", source)
 	}
@@ -4128,7 +4128,7 @@ func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal,
 
 func normalizeToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
 	if strings.TrimSpace(string(source)) == "" {
-		return coreagent.ToolSourceModeMCPCatalog
+		return coreagent.ToolSourceModeCatalog
 	}
 	return source
 }

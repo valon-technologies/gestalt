@@ -669,7 +669,7 @@ func (p *recordingAgentProvider) GetCapabilities(context.Context, *proto.GetAgen
 		Interactions:         true,
 		ResumableTurns:       true,
 		BoundedListHydration: true,
-		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeCatalog},
 	}, nil
 }
 
@@ -953,7 +953,7 @@ func (p *callbackAgentProvider) GetCapabilities(context.Context, *proto.GetAgent
 		Interactions:         true,
 		ResumableTurns:       true,
 		BoundedListHydration: true,
-		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeCatalog},
 	}, nil
 }
 
@@ -1029,7 +1029,7 @@ func (p *generatedIDAgentProvider) GetCapabilities(context.Context, *proto.GetAg
 		Interactions:         true,
 		ResumableTurns:       true,
 		BoundedListHydration: true,
-		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeCatalog},
 	}, nil
 }
 

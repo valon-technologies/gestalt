@@ -76,13 +76,11 @@ message ResolvedAgentTool {
 }
 
 enum AgentToolSourceMode {
-  option allow_alias = true;
-
   reserved 1;
+  reserved "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG";
 
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
   AGENT_TOOL_SOURCE_MODE_CATALOG = 2;
-  AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = 2 [deprecated = true];
   AGENT_TOOL_SOURCE_MODE_NONE = 3;
 }
 

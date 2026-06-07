@@ -241,7 +241,7 @@ func (p *fullAgentProvider) GetCapabilities(context.Context, *gestalt.GetAgentPr
 		ToolCalls:                 true,
 		Interactions:              true,
 		BoundedListHydration:      true,
-		SupportedToolSources:      []gestalt.AgentToolSourceMode{gestalt.AgentToolSourceModeMCPCatalog, gestalt.AgentToolSourceModeNone},
+		SupportedToolSources:      []gestalt.AgentToolSourceMode{gestalt.AgentToolSourceModeCatalog, gestalt.AgentToolSourceModeNone},
 		SupportsSessionStart:      true,
 		SupportsPreparedWorkspace: true,
 	}, nil

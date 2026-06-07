@@ -1826,7 +1826,7 @@ func (p *stubAgentTurnManagerProvider) GetCapabilities(context.Context, *proto.G
 		Interactions:         true,
 		ResumableTurns:       true,
 		BoundedListHydration: true,
-		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeCatalog},
 	}, nil
 }
 

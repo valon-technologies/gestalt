@@ -123,7 +123,6 @@ export type AgentMessagePartType =
 export const AgentToolSourceMode = {
   UNSPECIFIED: ProtoAgentToolSourceMode.UNSPECIFIED,
   CATALOG: ProtoAgentToolSourceMode.CATALOG,
-  MCP_CATALOG: ProtoAgentToolSourceMode.CATALOG,
   NONE: ProtoAgentToolSourceMode.NONE,
 } as const;
 export type AgentToolSourceMode =

@@ -2601,7 +2601,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactScope(t *testi
 			Operations: []string{"chat.postMessage"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "slack", Operation: "chat.postMessage"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put credential mode turn scope: %v", err)
@@ -2632,7 +2632,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactScope(t *testi
 			App:       "slack",
 			Operation: "events.reply",
 		}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("ResolveTools exact hidden: %v", err)
@@ -2654,7 +2654,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactScope(t *testi
 			Operation: "events.reply",
 		}},
 		Tools:      exactTools,
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put exact turn scope: %v", err)
@@ -2747,7 +2747,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 			{App: "source", Operation: "messages.reply"},
 			{App: "target", Operation: "reviews.create", CredentialMode: core.ConnectionModeNone, RunAs: runAs},
 		},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put runAs turn scope: %v", err)
@@ -2844,7 +2844,7 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnScope(t *testing.T) {
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put turn scope: %v", err)
@@ -2920,7 +2920,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefScope(t *testing.
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put turn scope: %v", err)
@@ -3020,7 +3020,7 @@ func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *t
 	}
 }
 
-func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
+func TestAgentRuntimeListsCatalogToolsForScopedTurn(t *testing.T) {
 	t.Parallel()
 
 	invoker := &recordingAgentRuntimeInvoker{}
@@ -3118,7 +3118,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 			{App: "roadmap", Operation: "sync!"},
 			{App: "roadmap", Operation: "sync_2"},
 		},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put turn scope: %v", err)
@@ -3184,7 +3184,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put empty turn scope: %v", err)
@@ -3197,7 +3197,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 		Context:      emptyContext,
 	})
 	if err != nil {
-		t.Fatalf("ListTools with empty mcp catalog scope: %v", err)
+		t.Fatalf("ListTools with empty catalog scope: %v", err)
 	}
 	if len(emptyListResp.Tools) != 0 || emptyListResp.NextPageToken != "" {
 		t.Fatalf("ListTools empty scope = %#v, want no tools", emptyListResp)
@@ -3213,7 +3213,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 			Operations: docsPermissions,
 		}},
 		ToolRefs:   docsRefs,
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put docs turn scope: %v", err)
@@ -3265,7 +3265,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("ExecuteTool with empty mcp catalog scope error = %v, want ErrAuthorizationDenied", err)
+		t.Fatalf("ExecuteTool with empty catalog scope error = %v, want ErrAuthorizationDenied", err)
 	}
 
 	broadContext, err := putAgentRuntimeTurnScope(turnScopes, agentturnscope.Scope{
@@ -3278,7 +3278,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put broad turn scope: %v", err)
@@ -3291,7 +3291,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 		Context:      broadContext,
 	})
 	if err != nil {
-		t.Fatalf("ListTools with broad mcp catalog scope: %v", err)
+		t.Fatalf("ListTools with broad catalog scope: %v", err)
 	}
 	if broadListResp.NextPageToken != "" || len(broadListResp.Tools) != 1 || broadListResp.Tools[0].Ref.Operation != "sync" {
 		t.Fatalf("ListTools broad scope response = %#v, want sync tool", broadListResp)
@@ -3306,7 +3306,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
-		t.Fatalf("ExecuteTool with mcp catalog scope: %v", err)
+		t.Fatalf("ExecuteTool with catalog scope: %v", err)
 	}
 	if execResp == nil || execResp.Status != http.StatusAccepted || execResp.Body != `{"taskId":"task-123"}` {
 		t.Fatalf("ExecuteTool response = %#v, want accepted task body", execResp)
@@ -3321,14 +3321,14 @@ func TestAgentRuntimeListsMCPCatalogToolsForScopedTurn(t *testing.T) {
 		Arguments:    map[string]any{"taskId": "task-123"},
 	})
 	if err != nil {
-		t.Fatalf("ExecuteTool with broad mcp catalog scope: %v", err)
+		t.Fatalf("ExecuteTool with broad catalog scope: %v", err)
 	}
 	if broadExecResp == nil || broadExecResp.Status != http.StatusAccepted || broadExecResp.Body != `{"taskId":"task-123"}` {
 		t.Fatalf("ExecuteTool broad response = %#v, want accepted task body", broadExecResp)
 	}
 }
 
-func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadScopes(t *testing.T) {
+func TestAgentRuntimeListsUnavailableCatalogSentinelForBroadScopes(t *testing.T) {
 	t.Parallel()
 
 	invoker := &reconnectingAgentRuntimeInvoker{
@@ -3391,7 +3391,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadScopes(t *testing
 			{App: "linear", Operations: []string{"viewer"}},
 		},
 		ToolRefs:   []coreagent.ToolRef{{App: "*"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put broad turn scope: %v", err)
@@ -3446,7 +3446,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadScopes(t *testing
 			Operations: []string{"viewer"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "linear"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put app turn scope: %v", err)
@@ -3475,7 +3475,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadScopes(t *testing
 			Operations: []string{"viewer"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "linear", Operation: "viewer"}},
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 	})
 	if err != nil {
 		t.Fatalf("Put exact turn scope: %v", err)

@@ -422,7 +422,7 @@ func (p *routeCountingAgentProvider) GetCapabilities(context.Context, *proto.Get
 	return &coreagent.ProviderCapabilities{
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{
-			coreagent.ToolSourceModeMCPCatalog,
+			coreagent.ToolSourceModeCatalog,
 			coreagent.ToolSourceModeNone,
 		},
 	}, nil
@@ -823,8 +823,8 @@ func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 	if !ok {
 		t.Fatal("session scope was not stored")
 	}
-	if scope.ToolSource != coreagent.ToolSourceModeMCPCatalog {
-		t.Fatalf("session scope tool source = %q, want mcp catalog", scope.ToolSource)
+	if scope.ToolSource != coreagent.ToolSourceModeCatalog {
+		t.Fatalf("session scope tool source = %q, want catalog", scope.ToolSource)
 	}
 	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].Operation != "chat.postMessage" {
 		t.Fatalf("session scope refs = %#v, want slack chat.postMessage", scope.ToolRefs)
@@ -1140,7 +1140,7 @@ func TestCreateSessionIgnoresStaleSessionScopeWhenDurableMetadataMatches(t *test
 			Operation: "issues.create",
 		}},
 		ToolRefsSet: true,
-		ToolSource:  coreagent.ToolSourceModeMCPCatalog,
+		ToolSource:  coreagent.ToolSourceModeCatalog,
 	}); err != nil {
 		t.Fatalf("PutSession stale scope: %v", err)
 	}
@@ -1637,7 +1637,7 @@ func TestManagerListSessionsRequiresBoundedHydrationForLimitedLists(t *testing.T
 
 	provider := newRouteCountingAgentProvider("unbounded")
 	provider.capabilities = &coreagent.ProviderCapabilities{
-		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeCatalog},
 	}
 	subjectID := principal.UserSubjectID("user-1")
 	manager := newTestManager(t, Config{
@@ -1736,7 +1736,7 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 
 	provider := newRouteCountingAgentProvider("unbounded")
 	provider.capabilities = &coreagent.ProviderCapabilities{
-		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeMCPCatalog},
+		SupportedToolSources: []coreagent.ToolSourceMode{coreagent.ToolSourceModeCatalog},
 	}
 	subjectID := principal.UserSubjectID("user-1")
 	provider.sessions["session-1"] = &coreagent.Session{
@@ -2455,7 +2455,7 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
 	firstPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 		PageSize:   5,
 	})
@@ -2467,7 +2467,7 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 	}
 
 	clampedPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 		PageSize:   10000,
 		PageToken:  firstPage.NextPageToken,
@@ -2481,7 +2481,7 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 	}
 
 	lastPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 		PageSize:   10000,
 		PageToken:  clampedPage.NextPageToken,
@@ -2600,7 +2600,7 @@ func TestManagerProjectsAgentFacingAppToolSchemas(t *testing.T) {
 	}
 
 	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs:   refs,
 		PageSize:   10,
 	})
@@ -2644,7 +2644,7 @@ func TestManagerProjectsAgentFacingAppToolSchemas(t *testing.T) {
 	requireSearchTextOmits(t, hiddenTool.SearchText, "internal_admin", "admin-only token")
 
 	resolved, err := manager.ResolveTools(context.Background(), p, coreagent.ResolveToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs: []coreagent.ToolRef{
 			{App: "planner", Operation: "bad_schema"},
 			{App: "planner", Operation: "empty_schema"},
@@ -2704,7 +2704,7 @@ func TestManagerProjectsWorkflowSystemToolSchemas(t *testing.T) {
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
 	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs:   []coreagent.ToolRef{ref},
 	})
 	if err != nil {
@@ -2719,7 +2719,7 @@ func TestManagerProjectsWorkflowSystemToolSchemas(t *testing.T) {
 	requireAgentToolSchemaMissingKeys(t, listedSchema, "allOf", "oneOf", "anyOf")
 
 	resolved, err := manager.ResolveTools(context.Background(), p, coreagent.ResolveToolsRequest{
-		ToolSource: coreagent.ToolSourceModeMCPCatalog,
+		ToolSource: coreagent.ToolSourceModeCatalog,
 		ToolRefs:   []coreagent.ToolRef{ref},
 	})
 	if err != nil {

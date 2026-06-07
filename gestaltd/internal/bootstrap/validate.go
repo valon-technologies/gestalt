@@ -114,14 +114,14 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	if errs := errResolver(); len(errs) > 0 {
 		return warnings, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))
 	}
-	if err := validateMCPCatalogs(providers); err != nil {
+	if err := validateCatalogs(providers); err != nil {
 		return warnings, err
 	}
 
 	return warnings, nil
 }
 
-func validateMCPCatalogs(providers *registry.ProviderMap[core.Provider]) error {
+func validateCatalogs(providers *registry.ProviderMap[core.Provider]) error {
 	for _, name := range providers.List() {
 		prov, err := providers.Get(name)
 		if err != nil {

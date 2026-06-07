@@ -162,10 +162,6 @@ pub enum AgentToolSourceMode {
 }
 
 impl AgentToolSourceMode {
-    #[allow(non_upper_case_globals)]
-    #[deprecated(note = "use AgentToolSourceMode::Catalog")]
-    pub const McpCatalog: Self = Self::Catalog;
-
     pub const fn as_i32(self) -> i32 {
         self as i32
     }

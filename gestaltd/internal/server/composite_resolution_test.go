@@ -90,6 +90,6 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 		t.Fatalf("execute token = %q, want %q", gotToken, "oauth-token")
 	}
 	if got := mcpCatalogCalls.Load(); got != 0 {
-		t.Fatalf("mcp catalog calls = %d, want 0", got)
+		t.Fatalf("catalog calls = %d, want 0", got)
 	}
 }

@@ -225,7 +225,7 @@ func (p *Provider) buildCatalogFromSources(apiCat, mcpCat *catalog.Catalog) *cat
 		return nil
 	}
 	if apiCat == nil {
-		return tagMCPCatalog(mcpCat)
+		return tagMCPTransportCatalog(mcpCat)
 	}
 	if mcpCat == nil {
 		return tagRESTCatalog(apiCat)
@@ -265,7 +265,7 @@ func tagRESTCatalog(src *catalog.Catalog) *catalog.Catalog {
 	return tagCatalog(src, catalog.TransportREST)
 }
 
-func tagMCPCatalog(src *catalog.Catalog) *catalog.Catalog {
+func tagMCPTransportCatalog(src *catalog.Catalog) *catalog.Catalog {
 	return tagCatalog(src, catalog.TransportMCPPassthrough)
 }
 
