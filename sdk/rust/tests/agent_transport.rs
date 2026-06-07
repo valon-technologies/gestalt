@@ -713,6 +713,14 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
         AgentExecutionStatus::WaitingForInput
     );
     assert_eq!(created_turn.messages[0].parts.len(), 1);
+    assert_eq!(
+        provider
+            .turn_request_context_subjects
+            .lock()
+            .expect("turn request contexts")
+            .as_slice(),
+        ["user:turn"]
+    );
 
     let listed_turns = client
         .list_turns(pb::ListAgentProviderTurnsRequest {

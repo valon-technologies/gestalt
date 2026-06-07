@@ -121,15 +121,17 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 		sessionKey = stepID
 	}
 	optionsKey := stableJSON(agent.ModelOptions)
+	toolsKey := workflowAgentSessionToolsKey(agent.Tools)
 	state, ok := sessions[sessionKey]
 	if ok {
-		if state.providerName != providerName || state.model != model || state.options != optionsKey {
-			return nil, "", fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, or model_options", sessionKey)
+		if state.providerName != providerName || state.model != model || state.options != optionsKey || state.tools != toolsKey {
+			return nil, "", fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, model_options, or tools", sessionKey)
 		}
 	} else {
 		session, err := client.CreateSession(ctx, gestalt.AgentCreateSession{
 			ProviderName: providerName,
 			Model:        model,
+			Tools:        workflowAgentSessionTools(agent.Tools),
 			Metadata: map[string]any{
 				"workflow":       workflowContext,
 				"workflowStepId": stepID,
@@ -139,7 +141,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 		if err != nil {
 			return nil, "", err
 		}
-		state = workflowAgentSessionState{session: session, providerName: providerName, model: model, options: optionsKey}
+		state = workflowAgentSessionState{session: session, providerName: providerName, model: model, options: optionsKey, tools: toolsKey}
 		sessions[sessionKey] = state
 	}
 	messages, err := workflowAgentTurnMessages(agent, req, outputs, stepInputs)
@@ -150,8 +152,6 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 		SessionID:      state.session.ID,
 		Model:          model,
 		Messages:       messages,
-		ToolRefs:       append([]gestalt.AgentToolRef(nil), agent.Tools...),
-		ToolRefsSet:    true,
 		Output:         agent.Output,
 		Metadata:       stepMetadata,
 		ModelOptions:   agent.ModelOptions,
@@ -244,11 +244,26 @@ func workflowAgentTurnID(turn *gestalt.AgentTurn) string {
 	return strings.TrimSpace(turn.ID)
 }
 
+func workflowAgentSessionTools(refs []gestalt.AgentToolRef) gestalt.AgentToolConfig {
+	if len(refs) == 0 {
+		return &gestalt.AgentNoTools{}
+	}
+	return &gestalt.AgentCatalogToolConfig{Refs: append([]gestalt.AgentToolRef(nil), refs...)}
+}
+
+func workflowAgentSessionToolsKey(refs []gestalt.AgentToolRef) string {
+	if len(refs) == 0 {
+		return "[]"
+	}
+	return stableJSON(refs)
+}
+
 type workflowAgentSessionState struct {
 	session      *gestalt.AgentSession
 	providerName string
 	model        string
 	options      string
+	tools        string
 }
 
 type workflowStepResult struct {

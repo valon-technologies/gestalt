@@ -345,10 +345,11 @@ func workflowAgentSessionsFromOutputs(target *gestalt.BoundWorkflowTarget, stepI
 		providerName := strings.TrimSpace(step.Agent.Provider)
 		model := strings.TrimSpace(step.Agent.Model)
 		optionsKey := stableJSON(step.Agent.ModelOptions)
+		toolsKey := workflowAgentSessionToolsKey(step.Agent.Tools)
 		state, exists := sessions[sessionKey]
 		if exists {
-			if state.providerName != providerName || state.model != model || state.options != optionsKey {
-				return nil, fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, or model_options", sessionKey)
+			if state.providerName != providerName || state.model != model || state.options != optionsKey || state.tools != toolsKey {
+				return nil, fmt.Errorf("workflow agent session_key %q uses incompatible provider, model, model_options, or tools", sessionKey)
 			}
 			continue
 		}
@@ -357,6 +358,7 @@ func workflowAgentSessionsFromOutputs(target *gestalt.BoundWorkflowTarget, stepI
 			providerName: providerName,
 			model:        model,
 			options:      optionsKey,
+			tools:        toolsKey,
 		}
 	}
 	return sessions, nil

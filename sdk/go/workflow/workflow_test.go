@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -248,6 +249,10 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 				Provider: "claude",
 				Model:    "default",
 				Prompt:   gestalt.WorkflowText{Template: "review ${{ input.name }}"},
+				Tools: []gestalt.AgentToolRef{{
+					App:       "slack",
+					Operation: "chat.postMessage",
+				}},
 			},
 		}}},
 		Input: map[string]any{"name": "Ada"},
@@ -261,8 +266,18 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	if agent.session.ProviderName != "claude" || agent.session.Model != "default" {
 		t.Fatalf("session = %#v", agent.session)
 	}
+	sessionTools, ok := agent.session.Tools.(*gestalt.AgentCatalogToolConfig)
+	if !ok {
+		t.Fatalf("session tools = %#v, want catalog config", agent.session.Tools)
+	}
+	if len(sessionTools.Refs) != 1 || sessionTools.Refs[0].App != "slack" || sessionTools.Refs[0].Operation != "chat.postMessage" {
+		t.Fatalf("session tool refs = %#v, want slack chat.postMessage", sessionTools.Refs)
+	}
 	if agent.turn.SessionID != "session-1" || agent.turn.Messages[0].Text != "review Ada" {
 		t.Fatalf("turn = %#v", agent.turn)
+	}
+	if len(agent.turn.ToolRefs) != 0 || agent.turn.ToolRefsSet {
+		t.Fatalf("turn tools = refs %#v set %v, want inherited session tools", agent.turn.ToolRefs, agent.turn.ToolRefsSet)
 	}
 	if agent.turn.TimeoutSeconds != 45 {
 		t.Fatalf("turn timeout = %d, want 45", agent.turn.TimeoutSeconds)
@@ -279,6 +294,250 @@ func TestExecutorInvokesAgentStepWithWorkflowRunAs(t *testing.T) {
 	}
 	if agent.request.WorkflowContext["currentStepId"] != "review" {
 		t.Fatalf("agent request workflow context = %#v, want currentStepId=review", agent.request.WorkflowContext)
+	}
+}
+
+func TestExecutorCreatesNoToolsAgentSessionWhenWorkflowToolsEmpty(t *testing.T) {
+	t.Parallel()
+
+	agent := &recordingAgentClient{}
+	executor := New(Config{
+		NewAgent: func(req gestalt.Request) (AgentClient, error) {
+			agent.request = req
+			return agent, nil
+		},
+		AgentPollInterval: 0,
+	})
+	resp, err := executor.ExecuteStep(context.Background(), StepRequest{Request: Request{
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
+		RunAs: &gestalt.Subject{
+			ID:                  "service_account:workflow-runner",
+			CredentialSubjectID: "service_account:workflow-runner",
+		},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
+			ID: "review",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider: "claude",
+				Model:    "default",
+				Prompt:   gestalt.WorkflowText{Template: "review"},
+			},
+		}}},
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteStep: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("status = %d, want 200; step = %#v", resp.Status, resp.Step)
+	}
+	if _, ok := agent.session.Tools.(*gestalt.AgentNoTools); !ok {
+		t.Fatalf("session = %#v, want no tools config", agent.session)
+	}
+	if len(agent.turn.ToolRefs) != 0 || agent.turn.ToolRefsSet {
+		t.Fatalf("turn tools = refs %#v set %v, want inherited no-tools session", agent.turn.ToolRefs, agent.turn.ToolRefsSet)
+	}
+}
+
+func TestExecutorRejectsLiveSharedAgentSessionWithIncompatibleTools(t *testing.T) {
+	t.Parallel()
+
+	agent := &recordingAgentClient{}
+	executor := New(Config{
+		NewAgent: func(req gestalt.Request) (AgentClient, error) {
+			agent.request = req
+			return agent, nil
+		},
+		AgentPollInterval: 0,
+	})
+	resp, err := executor.Execute(context.Background(), Request{
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
+		RunAs: &gestalt.Subject{
+			ID:                  "service_account:workflow-runner",
+			CredentialSubjectID: "service_account:workflow-runner",
+		},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+			{
+				ID: "review-a",
+				Agent: &gestalt.WorkflowStepAgentTurn{
+					Provider:   "claude",
+					Model:      "default",
+					SessionKey: "review",
+					Prompt:     gestalt.WorkflowText{Template: "review a"},
+					Tools: []gestalt.AgentToolRef{{
+						App:       "slack",
+						Operation: "chat.postMessage",
+					}},
+				},
+			},
+			{
+				ID: "review-b",
+				Agent: &gestalt.WorkflowStepAgentTurn{
+					Provider:   "claude",
+					Model:      "default",
+					SessionKey: "review",
+					Prompt:     gestalt.WorkflowText{Template: "review b"},
+					Tools: []gestalt.AgentToolRef{{
+						App:       "github",
+						Operation: "issues.create",
+					}},
+				},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status == 200 || !strings.Contains(resp.Body, "tools") {
+		t.Fatalf("response = %#v, want incompatible tools failure", resp)
+	}
+}
+
+func TestExecutorAllowsLiveSharedAgentSessionWithNilAndEmptyTools(t *testing.T) {
+	t.Parallel()
+
+	agent := &recordingAgentClient{}
+	executor := New(Config{
+		NewAgent: func(req gestalt.Request) (AgentClient, error) {
+			agent.request = req
+			return agent, nil
+		},
+		AgentPollInterval: 0,
+	})
+	resp, err := executor.Execute(context.Background(), Request{
+		ProviderName:         "indexeddb",
+		RunID:                "run-1",
+		DefinitionID:         "definition-1",
+		DefinitionGeneration: 1,
+		RunAs: &gestalt.Subject{
+			ID:                  "service_account:workflow-runner",
+			CredentialSubjectID: "service_account:workflow-runner",
+		},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+			{
+				ID: "review-a",
+				Agent: &gestalt.WorkflowStepAgentTurn{
+					Provider:   "claude",
+					Model:      "default",
+					SessionKey: "review",
+					Prompt:     gestalt.WorkflowText{Template: "review a"},
+				},
+			},
+			{
+				ID: "review-b",
+				Agent: &gestalt.WorkflowStepAgentTurn{
+					Provider:   "claude",
+					Model:      "default",
+					SessionKey: "review",
+					Prompt:     gestalt.WorkflowText{Template: "review b"},
+					Tools:      []gestalt.AgentToolRef{},
+				},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Fatalf("response = %#v, want success", resp)
+	}
+}
+
+func TestWorkflowAgentSessionsFromOutputsRejectsIncompatibleTools(t *testing.T) {
+	t.Parallel()
+
+	target := &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+		{
+			ID: "review-a",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:   "claude",
+				Model:      "default",
+				SessionKey: "review",
+				Tools: []gestalt.AgentToolRef{{
+					App:       "slack",
+					Operation: "chat.postMessage",
+				}},
+			},
+		},
+		{
+			ID: "review-b",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:   "claude",
+				Model:      "default",
+				SessionKey: "review",
+				Tools: []gestalt.AgentToolRef{{
+					App:       "github",
+					Operation: "issues.create",
+				}},
+			},
+		},
+	}}
+
+	_, err := workflowAgentSessionsFromOutputs(target, 2, map[string]any{
+		"review-a": map[string]any{
+			"kind": "agent",
+			"agent": map[string]any{
+				"sessionId": "session-1",
+			},
+		},
+		"review-b": map[string]any{
+			"kind": "agent",
+			"agent": map[string]any{
+				"sessionId": "session-1",
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "tools") {
+		t.Fatalf("workflowAgentSessionsFromOutputs error = %v, want incompatible tools", err)
+	}
+}
+
+func TestWorkflowAgentSessionsFromOutputsAllowsNilAndEmptyTools(t *testing.T) {
+	t.Parallel()
+
+	target := &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{
+		{
+			ID: "review-a",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:   "claude",
+				Model:      "default",
+				SessionKey: "review",
+			},
+		},
+		{
+			ID: "review-b",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider:   "claude",
+				Model:      "default",
+				SessionKey: "review",
+				Tools:      []gestalt.AgentToolRef{},
+			},
+		},
+	}}
+
+	sessions, err := workflowAgentSessionsFromOutputs(target, 2, map[string]any{
+		"review-a": map[string]any{
+			"kind": "agent",
+			"agent": map[string]any{
+				"sessionId": "session-1",
+			},
+		},
+		"review-b": map[string]any{
+			"kind": "agent",
+			"agent": map[string]any{
+				"sessionId": "session-1",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("workflowAgentSessionsFromOutputs: %v", err)
+	}
+	if len(sessions) != 1 || sessions["review"].session.ID != "session-1" {
+		t.Fatalf("sessions = %#v, want shared review session", sessions)
 	}
 }
 
