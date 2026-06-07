@@ -42,7 +42,7 @@ func (s *Server) publicHTTPOperations(integration string, prov core.Provider, op
 	return out
 }
 
-func (s *Server) publicMCPCatalog(integration string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
+func (s *Server) publicCatalog(integration string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
 	if cat == nil {
 		return nil
 	}

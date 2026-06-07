@@ -623,7 +623,7 @@ func (p *memoryAgentProvider) GetCapabilities(context.Context, *proto.GetAgentPr
 		ResumableTurns:       true,
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{
-			coreagent.ToolSourceModeMCPCatalog,
+			coreagent.ToolSourceModeCatalog,
 		},
 	}, nil
 }

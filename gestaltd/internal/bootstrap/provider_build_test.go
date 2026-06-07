@@ -560,7 +560,7 @@ func TestMCPAllowedOperationsForSpecCompositeFiltersOnlyWhenAPIIsPresent(t *test
 
 	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, mcpCatalog)
 	if !includeMCP {
-		t.Fatal("includeMCP = false, want true for matching static MCP catalog")
+		t.Fatal("includeMCP = false, want true for matching static catalog")
 	}
 	if len(filtered) != 1 || filtered["mcp_lookup"] == nil {
 		t.Fatalf("filtered allowedOperations = %#v, want only mcp_lookup", filtered)

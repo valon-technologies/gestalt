@@ -25,7 +25,6 @@ class AgentToolSourceMode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     AGENT_TOOL_SOURCE_MODE_UNSPECIFIED: _ClassVar[AgentToolSourceMode]
     AGENT_TOOL_SOURCE_MODE_CATALOG: _ClassVar[AgentToolSourceMode]
-    AGENT_TOOL_SOURCE_MODE_MCP_CATALOG: _ClassVar[AgentToolSourceMode]
     AGENT_TOOL_SOURCE_MODE_NONE: _ClassVar[AgentToolSourceMode]
 
 class AgentExecutionStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
@@ -65,7 +64,6 @@ AGENT_MESSAGE_PART_TYPE_TOOL_RESULT: AgentMessagePartType
 AGENT_MESSAGE_PART_TYPE_IMAGE_REF: AgentMessagePartType
 AGENT_TOOL_SOURCE_MODE_UNSPECIFIED: AgentToolSourceMode
 AGENT_TOOL_SOURCE_MODE_CATALOG: AgentToolSourceMode
-AGENT_TOOL_SOURCE_MODE_MCP_CATALOG: AgentToolSourceMode
 AGENT_TOOL_SOURCE_MODE_NONE: AgentToolSourceMode
 AGENT_EXECUTION_STATUS_UNSPECIFIED: AgentExecutionStatus
 AGENT_EXECUTION_STATUS_PENDING: AgentExecutionStatus

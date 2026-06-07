@@ -419,8 +419,8 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, req.Context); err != nil {
 		return nil, err
 	}
-	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
-		return nil, fmt.Errorf("%w: agent tool execution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
+	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeCatalog {
+		return nil, fmt.Errorf("%w: agent tool execution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeCatalog)
 	}
 	if toolIDs == nil {
 		return nil, fmt.Errorf("%w: agent tool id codec is not configured", invocation.ErrInternal)
@@ -540,13 +540,13 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 		return nil, fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	toolSource := normalizeAgentToolSource(scope.ToolSource)
-	if toolSource != coreagent.ToolSourceModeMCPCatalog {
-		return nil, fmt.Errorf("%w: agent tool listing requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
+	if toolSource != coreagent.ToolSourceModeCatalog {
+		return nil, fmt.Errorf("%w: agent tool listing requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeCatalog)
 	}
 	if searcher == nil {
 		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
 	}
-	if err := validateAgentMCPCatalogToolRefs(scope.ToolRefs); err != nil {
+	if err := validateAgentCatalogToolRefs(scope.ToolRefs); err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
 	if len(scope.ToolRefs) == 0 {
@@ -598,10 +598,10 @@ func logAgentRuntimeListTools(ctx context.Context, req coreagent.ListToolsReques
 	}
 	if err != nil {
 		attrs = append(attrs, "error", err)
-		slog.WarnContext(ctx, "agent runtime MCP catalog tool listing failed", attrs...)
+		slog.WarnContext(ctx, "agent runtime catalog tool listing failed", attrs...)
 		return
 	}
-	slog.InfoContext(ctx, "agent runtime MCP catalog tools listed", attrs...)
+	slog.InfoContext(ctx, "agent runtime catalog tools listed", attrs...)
 }
 
 func agentToolRefsLogValue(refs []coreagent.ToolRef) []map[string]string {
@@ -693,8 +693,8 @@ func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.Reso
 	if err := r.validateAgentTurnScopeTurn(ctx, scope, requestedTurnID, req.Context); err != nil {
 		return nil, err
 	}
-	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
-		return nil, fmt.Errorf("%w: agent connection resolution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
+	if source := normalizeAgentToolSource(scope.ToolSource); source != coreagent.ToolSourceModeCatalog {
+		return nil, fmt.Errorf("%w: agent connection resolution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeCatalog)
 	}
 	connection := config.ResolveConnectionAlias(req.Connection)
 	if connection == "" {
@@ -880,10 +880,10 @@ func validateAgentToolTargetForScope(scope agentturnscope.Scope, principalValue 
 		return fmt.Errorf("%w: agent execution principal is required", invocation.ErrInternal)
 	}
 	source := normalizeAgentToolSource(scope.ToolSource)
-	if source != coreagent.ToolSourceModeMCPCatalog {
+	if source != coreagent.ToolSourceModeCatalog {
 		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, scope.ToolSource)
 	}
-	if err := validateAgentMCPCatalogToolRefs(scope.ToolRefs); err != nil {
+	if err := validateAgentCatalogToolRefs(scope.ToolRefs); err != nil {
 		return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
 	if len(scope.ToolRefs) == 0 {
@@ -927,10 +927,10 @@ func validateUnavailableAgentToolTargetForScope(scope agentturnscope.Scope, prin
 
 func validateAgentTurnScopeForToolTarget(scope agentturnscope.Scope, target coreagent.ToolTarget, rawToolID string) error {
 	source := normalizeAgentToolSource(scope.ToolSource)
-	if source != coreagent.ToolSourceModeMCPCatalog {
+	if source != coreagent.ToolSourceModeCatalog {
 		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, scope.ToolSource)
 	}
-	if err := validateAgentMCPCatalogToolRefs(scope.ToolRefs); err != nil {
+	if err := validateAgentCatalogToolRefs(scope.ToolRefs); err != nil {
 		return fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
 	}
 	if len(scope.ToolRefs) == 0 || !agentToolMatchesRefs(target, scope.ToolRefs) {
@@ -1029,17 +1029,17 @@ func executeUnavailableAgentTool(target coreagent.ToolTarget) (*coreagent.Execut
 
 func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
 	if strings.TrimSpace(string(source)) == "" {
-		return coreagent.ToolSourceModeMCPCatalog
+		return coreagent.ToolSourceModeCatalog
 	}
 	return source
 }
 
-func validateAgentMCPCatalogToolRefs(refs []coreagent.ToolRef) error {
-	return coreagent.ValidateMCPCatalogToolRefs(refs, "toolRefs")
+func validateAgentCatalogToolRefs(refs []coreagent.ToolRef) error {
+	return coreagent.ValidateCatalogToolRefs(refs, "toolRefs")
 }
 
 func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, source coreagent.ToolSourceMode, tools []coreagent.ListedTool) error {
-	if source != coreagent.ToolSourceModeMCPCatalog {
+	if source != coreagent.ToolSourceModeCatalog {
 		return fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInternal, source)
 	}
 	for i := range tools {

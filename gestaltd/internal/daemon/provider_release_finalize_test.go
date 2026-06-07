@@ -327,7 +327,7 @@ paths:
 	}
 }
 
-func TestProviderReleaseMetadataBuildsGraphQLMCPCatalog(t *testing.T) {
+func TestProviderReleaseMetadataBuildsGraphQLCatalog(t *testing.T) {
 	t.Parallel()
 
 	manifest := &providermanifestv1.Manifest{
