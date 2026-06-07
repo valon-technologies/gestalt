@@ -55,6 +55,7 @@ struct TestAgentProvider {
     configured_name: Mutex<String>,
     session_context_subjects: Mutex<Vec<String>>,
     turn_context_subjects: Mutex<Vec<String>>,
+    turn_request_context_subjects: Mutex<Vec<String>>,
 }
 
 #[derive(Default, Clone)]
@@ -208,6 +209,10 @@ impl AgentProvider for TestAgentProvider {
             .push(request_context_subject_id(
                 gestalt::current_request_context().as_ref(),
             ));
+        self.turn_request_context_subjects
+            .lock()
+            .expect("turn_request_context_subjects lock")
+            .push(request_context_subject_id(request.context.as_ref()));
         Ok(AgentTurn {
             id: request.turn_id,
             session_id: request.session_id,
@@ -780,6 +785,13 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             .turn_context_subjects
             .lock()
             .expect("turn_context_subjects lock"),
+        vec!["user:turn".to_string()]
+    );
+    assert_eq!(
+        *provider
+            .turn_request_context_subjects
+            .lock()
+            .expect("turn_request_context_subjects lock"),
         vec!["user:turn".to_string()]
     );
 
