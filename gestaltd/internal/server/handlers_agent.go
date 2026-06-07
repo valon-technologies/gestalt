@@ -1302,7 +1302,7 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
 	switch mode {
 	case coreagent.ToolSourceModeMCPCatalog:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG
 	case coreagent.ToolSourceModeNone:
 		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE
 	default:

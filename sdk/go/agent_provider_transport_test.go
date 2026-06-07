@@ -318,6 +318,25 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			Root: "/workspace",
 			Cwd:  "/workspace/project",
 		},
+		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{
+			Catalog: &proto.AgentCatalogToolConfig{
+				Refs: []*proto.AgentToolRef{{
+					App:       "slack",
+					Operation: "chat.postMessage",
+				}},
+				Tools: []*proto.ListedAgentTool{{
+					Id:          "tool-slack",
+					McpName:     "slack__chat_post_message",
+					Title:       "Send Slack message",
+					Description: "Post a Slack message",
+					InputSchema: `{"type":"object"}`,
+					Ref: &proto.AgentToolRef{
+						App:       "slack",
+						Operation: "chat.postMessage",
+					},
+				}},
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -336,6 +355,16 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	if got := provider.receivedSessionRequest.Context.GetCaller().GetName(); got != "sdk-test" {
 		t.Fatalf("native CreateSession context caller = %q, want sdk-test", got)
+	}
+	sessionCatalog, ok := provider.receivedSessionRequest.Tools.(*gestalt.AgentCatalogToolConfig)
+	if !ok {
+		t.Fatalf("native CreateSession tools = %#v, want catalog", provider.receivedSessionRequest.Tools)
+	}
+	if got := sessionCatalog.Refs[0].Operation; got != "chat.postMessage" {
+		t.Fatalf("native CreateSession tool ref operation = %q, want chat.postMessage", got)
+	}
+	if got := sessionCatalog.Tools[0].MCPName; got != "slack__chat_post_message" {
+		t.Fatalf("native CreateSession listed tool mcp name = %q, want slack__chat_post_message", got)
 	}
 
 	fetchedSession, err := agentClient.GetSession(rpcCtx, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"})
@@ -407,7 +436,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			App:       "slack",
 			Operation: "chat.postMessage",
 		}},
-		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
 		Subject:    &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,

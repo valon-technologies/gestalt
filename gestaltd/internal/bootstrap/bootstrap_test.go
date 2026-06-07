@@ -794,7 +794,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	}
 
 	outputBody := ""
-	if req.GetToolSource() == proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG || len(req.GetTools()) > 0 {
+	if req.GetToolSource() == proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG || len(req.GetTools()) > 0 {
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
@@ -810,7 +810,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 		defer func() { _ = conn.Close() }()
 		client := proto.NewAgentHostClient(conn)
 		tools := bootstrapAgentToolsFromProto(req.GetTools())
-		if len(tools) == 0 && req.GetToolSource() == proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+		if len(tools) == 0 && req.GetToolSource() == proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 			listReq := &proto.ListAgentToolsRequest{
 				SessionId: req.GetSessionId(),
 				TurnId:    turnID,
@@ -2362,7 +2362,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if len(createTurnReq.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
 	}
-	if createTurnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+	if createTurnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", createTurnReq.GetToolSource())
 	}
 	if len(createTurnReq.GetToolRefs()) != 1 || createTurnReq.GetToolRefs()[0].GetApp() != "roadmap" || createTurnReq.GetToolRefs()[0].GetOperation() != "sync" {

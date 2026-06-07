@@ -707,7 +707,7 @@ func TestCreateSessionUsesStableWorkspaceSessionIDWithIdempotencyKey(t *testing.
 	}
 }
 
-func TestCreateSessionClearsCallerPreparedWorkspace(t *testing.T) {
+func TestCreateSessionClearsCallerPreparedWorkspaceAndTools(t *testing.T) {
 	t.Parallel()
 
 	provider := newRouteCountingAgentProvider("alpha")
@@ -724,6 +724,16 @@ func TestCreateSessionClearsCallerPreparedWorkspace(t *testing.T) {
 		ProviderName:      "alpha",
 		Model:             "test-model",
 		PreparedWorkspace: &proto.PreparedAgentWorkspace{Root: "/tmp/spoofed", Cwd: "/tmp/spoofed"},
+		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
+			Refs: []*proto.AgentToolRef{{
+				App:       "slack",
+				Operation: "chat.postMessage",
+			}},
+			Tools: []*proto.ListedAgentTool{{
+				Id:      "tool-spoofed",
+				McpName: "slack__chat_post_message",
+			}},
+		}}},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -733,6 +743,9 @@ func TestCreateSessionClearsCallerPreparedWorkspace(t *testing.T) {
 	}
 	if got := provider.createSessionReqs[0].GetPreparedWorkspace(); got != nil {
 		t.Fatalf("PreparedWorkspace = %#v, want nil", got)
+	}
+	if got := provider.createSessionReqs[0].GetTools(); got != nil {
+		t.Fatalf("Tools = %#v, want nil", got)
 	}
 }
 
@@ -1330,7 +1343,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.GetToolSource())
 	}
 	if got := req.GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
@@ -1395,7 +1408,7 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.GetToolSource())
 	}
 	if got := req.GetToolRefs(); len(got) != 1 || got[0].GetApp() != "linear" || got[0].GetOperation() != "" {
@@ -1838,7 +1851,7 @@ func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
-		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
 		Output:         agentTextOutputProto(),
 	})
 	if err != nil {
@@ -1848,7 +1861,7 @@ func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG {
+	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.GetToolSource())
 	}
 	if got := req.GetToolRefs(); len(got) != 0 {

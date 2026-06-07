@@ -289,15 +289,15 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		return AgentToolRef{}
 	}
 	return AgentToolRef{
-		App:         value.GetApp(),
-		Operation:   value.GetOperation(),
-		Connection:  value.GetConnection(),
-		Instance:    value.GetInstance(),
-		Title:       value.GetTitle(),
-		Description: value.GetDescription(),
+		App:            value.GetApp(),
+		Operation:      value.GetOperation(),
+		Connection:     value.GetConnection(),
+		Instance:       value.GetInstance(),
+		Title:          value.GetTitle(),
+		Description:    value.GetDescription(),
 		CredentialMode: value.GetCredentialMode(),
-		System:      value.GetSystem(),
-		RunAs:       subjectFromProto(value.GetRunAs()),
+		System:         value.GetSystem(),
+		RunAs:          subjectFromProto(value.GetRunAs()),
 	}
 }
 
@@ -314,15 +314,15 @@ func agentToolRefsFromProto(values []*proto.AgentToolRef) []AgentToolRef {
 
 func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		App:         value.App,
-		Operation:   value.Operation,
-		Connection:  value.Connection,
-		Instance:    value.Instance,
-		Title:       value.Title,
-		Description: value.Description,
+		App:            value.App,
+		Operation:      value.Operation,
+		Connection:     value.Connection,
+		Instance:       value.Instance,
+		Title:          value.Title,
+		Description:    value.Description,
 		CredentialMode: value.CredentialMode,
-		System:      value.System,
-		RunAs:       subjectToProto(value.RunAs),
+		System:         value.System,
+		RunAs:          subjectToProto(value.RunAs),
 	}
 }
 
@@ -335,6 +335,52 @@ func agentToolRefsToProto(values []AgentToolRef) []*proto.AgentToolRef {
 		out = append(out, agentToolRefToProto(value))
 	}
 	return out
+}
+
+func agentToolConfigFromProto(value *proto.AgentToolConfig) AgentToolConfig {
+	if value == nil {
+		return nil
+	}
+	switch source := value.GetSource().(type) {
+	case *proto.AgentToolConfig_None:
+		return &AgentNoTools{}
+	case *proto.AgentToolConfig_Catalog:
+		catalog := source.Catalog
+		if catalog == nil {
+			catalog = &proto.AgentCatalogToolConfig{}
+		}
+		return &AgentCatalogToolConfig{
+			Refs:  agentToolRefsFromProto(catalog.GetRefs()),
+			Tools: listedAgentToolsFromProto(catalog.GetTools()),
+		}
+	default:
+		return nil
+	}
+}
+
+func agentToolConfigToProto(value AgentToolConfig) *proto.AgentToolConfig {
+	if value == nil {
+		return nil
+	}
+	switch toolConfig := value.(type) {
+	case *AgentCatalogToolConfig:
+		if toolConfig == nil {
+			return nil
+		}
+		return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{
+			Catalog: &proto.AgentCatalogToolConfig{
+				Refs:  agentToolRefsToProto(toolConfig.Refs),
+				Tools: listedAgentToolsToProto(toolConfig.Tools),
+			},
+		}}
+	case *AgentNoTools:
+		if toolConfig == nil {
+			return nil
+		}
+		return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_None{None: &proto.AgentNoTools{}}}
+	default:
+		return nil
+	}
 }
 
 func agentProviderCapabilitiesToProto(value *AgentProviderCapabilities) *proto.AgentProviderCapabilities {
@@ -539,6 +585,7 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		SessionStart:       agentSessionStartConfigFromProto(req.GetSessionStart()),
 		PreparedWorkspace:  agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
 		Workspace:          agentWorkspaceFromProto(req.GetWorkspace()),
+		Tools:              agentToolConfigFromProto(req.GetTools()),
 	}
 }
 
@@ -1115,6 +1162,32 @@ func listedAgentToolsFromProto(values []*proto.ListedAgentTool) []ListedAgentToo
 	return out
 }
 
+func listedAgentToolToProto(value ListedAgentTool) *proto.ListedAgentTool {
+	return &proto.ListedAgentTool{
+		Id:           value.ID,
+		McpName:      value.MCPName,
+		Title:        value.Title,
+		Description:  value.Description,
+		InputSchema:  value.InputSchema,
+		OutputSchema: value.OutputSchema,
+		Annotations:  agentToolAnnotationsToProto(value.Annotations),
+		Ref:          agentToolRefPtrToProto(value.Ref),
+		Tags:         append([]string(nil), value.Tags...),
+		SearchText:   value.SearchText,
+	}
+}
+
+func listedAgentToolsToProto(values []ListedAgentTool) []*proto.ListedAgentTool {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]*proto.ListedAgentTool, 0, len(values))
+	for _, value := range values {
+		out = append(out, listedAgentToolToProto(value))
+	}
+	return out
+}
+
 func listAgentToolsResponseFromProto(value *proto.ListAgentToolsResponse) *ListAgentToolsResponse {
 	if value == nil {
 		return nil
@@ -1135,6 +1208,25 @@ func agentToolAnnotationsFromProto(value *proto.OperationAnnotations) *AgentTool
 		DestructiveHint: value.DestructiveHint,
 		OpenWorldHint:   value.OpenWorldHint,
 	}
+}
+
+func agentToolAnnotationsToProto(value *AgentToolAnnotations) *proto.OperationAnnotations {
+	if value == nil {
+		return nil
+	}
+	return &proto.OperationAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
+	}
+}
+
+func agentToolRefPtrToProto(value *AgentToolRef) *proto.AgentToolRef {
+	if value == nil {
+		return nil
+	}
+	return agentToolRefToProto(*value)
 }
 
 func resolvedAgentConnectionFromProto(value *proto.ResolvedAgentConnection) *ResolvedAgentConnection {

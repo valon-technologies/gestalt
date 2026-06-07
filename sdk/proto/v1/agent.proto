@@ -76,10 +76,13 @@ message ResolvedAgentTool {
 }
 
 enum AgentToolSourceMode {
+  option allow_alias = true;
+
   reserved 1;
 
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
-  AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = 2;
+  AGENT_TOOL_SOURCE_MODE_CATALOG = 2;
+  AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = 2 [deprecated = true];
   AGENT_TOOL_SOURCE_MODE_NONE = 3;
 }
 
@@ -176,6 +179,21 @@ message CreateAgentProviderSessionRequest {
   string provider_name = 11;
   AgentWorkspace workspace = 13;
   RequestContext context = 15;
+  AgentToolConfig tools = 16;
+}
+
+message AgentToolConfig {
+  oneof source {
+    AgentNoTools none = 1;
+    AgentCatalogToolConfig catalog = 2;
+  }
+}
+
+message AgentNoTools {}
+
+message AgentCatalogToolConfig {
+  repeated AgentToolRef refs = 1;
+  repeated ListedAgentTool tools = 2;
 }
 
 message AgentSessionStartConfig {

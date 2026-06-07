@@ -129,10 +129,18 @@ test("AgentProvider rejects structured output without a schema", async () => {
 test("AgentProvider forwards request context subjects to handlers", async () => {
   const seenSubjectIds: string[] = [];
   const seenContextSubjectIds: string[] = [];
+  const seenSessionTools: Array<{
+    toolRefOperation?: string | undefined;
+    listedToolMcpName?: string | undefined;
+  }> = [];
   const provider = defineAgentProvider({
     createSession(request) {
       seenSubjectIds.push(request.subject?.id ?? "");
       seenContextSubjectIds.push(request.context?.subject?.id ?? "");
+      seenSessionTools.push({
+        toolRefOperation: request.tools?.catalog?.refs?.[0]?.operation,
+        listedToolMcpName: request.tools?.catalog?.tools?.[0]?.mcpName,
+      });
       return {
         id: request.sessionId,
         model: request.model,
@@ -159,6 +167,22 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
           id: "user:session",
         }),
       }),
+      tools: {
+        source: {
+          case: "catalog",
+          value: {
+            refs: [{ app: "slack", operation: "chat.postMessage" }],
+            tools: [{
+              id: "tool-slack",
+              mcpName: "slack__chat_post_message",
+              title: "Send Slack message",
+              description: "Post a Slack message",
+              inputSchema: "{\"type\":\"object\"}",
+              ref: { app: "slack", operation: "chat.postMessage" },
+            }],
+          },
+        },
+      },
     }),
   );
   await (service.createTurn as any)(
@@ -178,6 +202,10 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
 
   expect(seenSubjectIds).toEqual(["user:session", "user:turn"]);
   expect(seenContextSubjectIds).toEqual(["user:session", "user:turn"]);
+  expect(seenSessionTools).toEqual([{
+    toolRefOperation: "chat.postMessage",
+    listedToolMcpName: "slack__chat_post_message",
+  }]);
 });
 
 async function reserveTCPAddress(): Promise<string> {

@@ -14,10 +14,10 @@ use crate::generated::v1::{
 use crate::{
     agent::{
         AgentExecutionStatus, AgentInteraction, AgentMessage, AgentOutput, AgentSession,
-        AgentSessionState, AgentToolRef, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
-        AgentWorkspace, agent_output_to_proto, event_from_proto, interaction_from_proto,
-        new_agent_messages, new_agent_tool_refs, new_agent_workspace, session_from_proto,
-        turn_from_proto,
+        AgentSessionState, AgentToolConfig, AgentToolRef, AgentToolSourceMode, AgentTurn,
+        AgentTurnEvent, AgentWorkspace, agent_output_to_proto, event_from_proto,
+        interaction_from_proto, new_agent_messages, new_agent_tool_config, new_agent_tool_refs,
+        new_agent_workspace, session_from_proto, turn_from_proto,
     },
     api::{Request, current_request_context},
     env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN},
@@ -54,6 +54,7 @@ pub struct AgentCreateSession {
     pub metadata: Option<serde_json::Value>,
     pub idempotency_key: String,
     pub workspace: Option<AgentWorkspace>,
+    pub tools: Option<AgentToolConfig>,
 }
 
 /// Input for fetching an agent session.
@@ -250,6 +251,7 @@ pub(crate) fn new_agent_create_session_request(
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
         idempotency_key: input.idempotency_key,
         workspace: input.workspace.map(new_agent_workspace),
+        tools: input.tools.map(new_agent_tool_config),
         ..Default::default()
     })
 }

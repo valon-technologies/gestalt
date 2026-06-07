@@ -396,7 +396,7 @@ func agentToolSourceModeFromProtoStrict(mode proto.AgentToolSourceMode) coreagen
 	switch mode {
 	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED:
 		return coreagent.ToolSourceModeUnspecified
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG:
+	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG:
 		return coreagent.ToolSourceModeMCPCatalog
 	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE:
 		return coreagent.ToolSourceModeNone
@@ -518,6 +518,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.SessionStart = sessionStartConfigToProto(sessionStart)
 	providerReq.Workspace = agentWorkspaceToProto(workspace)
 	providerReq.PreparedWorkspace = nil
+	providerReq.Tools = nil
 	ctx, providerReq.Context, err = agentProviderRequestContext(ctx, p, req.GetContext(), providerName)
 	if err != nil {
 		return nil, err

@@ -639,6 +639,32 @@ pub struct CreateAgentProviderSessionRequest {
     pub workspace: ::core::option::Option<AgentWorkspace>,
     #[prost(message, optional, tag = "15")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(message, optional, tag = "16")]
+    pub tools: ::core::option::Option<AgentToolConfig>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentToolConfig {
+    #[prost(oneof = "agent_tool_config::Source", tags = "1, 2")]
+    pub source: ::core::option::Option<agent_tool_config::Source>,
+}
+/// Nested message and enum types in `AgentToolConfig`.
+pub mod agent_tool_config {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Source {
+        #[prost(message, tag = "1")]
+        None(super::AgentNoTools),
+        #[prost(message, tag = "2")]
+        Catalog(super::AgentCatalogToolConfig),
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentNoTools {}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AgentCatalogToolConfig {
+    #[prost(message, repeated, tag = "1")]
+    pub refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    #[prost(message, repeated, tag = "2")]
+    pub tools: ::prost::alloc::vec::Vec<ListedAgentTool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentSessionStartConfig {
@@ -1131,7 +1157,7 @@ impl AgentMessagePartType {
 #[repr(i32)]
 pub enum AgentToolSourceMode {
     Unspecified = 0,
-    McpCatalog = 2,
+    Catalog = 2,
     None = 3,
 }
 impl AgentToolSourceMode {
@@ -1142,7 +1168,7 @@ impl AgentToolSourceMode {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             Self::Unspecified => "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
-            Self::McpCatalog => "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG",
+            Self::Catalog => "AGENT_TOOL_SOURCE_MODE_CATALOG",
             Self::None => "AGENT_TOOL_SOURCE_MODE_NONE",
         }
     }
@@ -1150,7 +1176,7 @@ impl AgentToolSourceMode {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED" => Some(Self::Unspecified),
-            "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG" => Some(Self::McpCatalog),
+            "AGENT_TOOL_SOURCE_MODE_CATALOG" => Some(Self::Catalog),
             "AGENT_TOOL_SOURCE_MODE_NONE" => Some(Self::None),
             _ => None,
         }

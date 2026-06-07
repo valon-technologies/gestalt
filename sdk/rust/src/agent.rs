@@ -157,18 +157,22 @@ impl TryFrom<i32> for AgentMessagePartType {
 pub enum AgentToolSourceMode {
     #[default]
     Unspecified = 0,
-    McpCatalog = 2,
+    Catalog = 2,
     None = 3,
 }
 
 impl AgentToolSourceMode {
+    #[allow(non_upper_case_globals)]
+    #[deprecated(note = "use AgentToolSourceMode::Catalog")]
+    pub const McpCatalog: Self = Self::Catalog;
+
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
-            2 => Self::McpCatalog,
+            2 => Self::Catalog,
             3 => Self::None,
             _ => Self::Unspecified,
         }
@@ -181,7 +185,7 @@ impl TryFrom<i32> for AgentToolSourceMode {
     fn try_from(value: i32) -> ProviderResult<Self> {
         match value {
             0 => Ok(Self::Unspecified),
-            2 => Ok(Self::McpCatalog),
+            2 => Ok(Self::Catalog),
             3 => Ok(Self::None),
             _ => Err(crate::Error::bad_request(format!(
                 "unknown agent tool source mode {value}"
@@ -426,6 +430,26 @@ pub struct AgentToolRef {
     pub run_as: Option<Subject>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AgentToolConfig {
+    pub source: Option<AgentToolConfigSource>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AgentToolConfigSource {
+    None(AgentNoTools),
+    Catalog(AgentCatalogToolConfig),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentNoTools {}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AgentCatalogToolConfig {
+    pub refs: Vec<AgentToolRef>,
+    pub tools: Vec<ListedAgentTool>,
+}
+
 impl AgentMessage {
     /// Sets message metadata from any JSON-object-like serializable value.
     pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
@@ -542,6 +566,7 @@ pub struct CreateAgentProviderSessionRequest {
     pub subject: Option<Subject>,
     pub session_start: Option<AgentSessionStartConfig>,
     pub prepared_workspace: Option<AgentPreparedWorkspace>,
+    pub tools: Option<AgentToolConfig>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1690,6 +1715,7 @@ fn create_session_request_from_proto(
                 root: value.root,
                 cwd: value.cwd,
             }),
+        tools: value.tools.map(agent_tool_config_from_proto),
     }
 }
 
@@ -1763,6 +1789,72 @@ fn listed_tool_from_proto(value: pb::ListedAgentTool) -> ListedAgentTool {
         tags: value.tags,
         search_text: value.search_text,
     }
+}
+
+fn listed_tool_to_proto(value: ListedAgentTool) -> pb::ListedAgentTool {
+    pb::ListedAgentTool {
+        id: value.id,
+        mcp_name: value.mcp_name,
+        title: value.title,
+        description: value.description,
+        input_schema: value.input_schema,
+        output_schema: value.output_schema,
+        annotations: value
+            .annotations
+            .map(|annotations| pb::OperationAnnotations {
+                read_only_hint: annotations.read_only_hint,
+                idempotent_hint: annotations.idempotent_hint,
+                destructive_hint: annotations.destructive_hint,
+                open_world_hint: annotations.open_world_hint,
+            }),
+        r#ref: value.r#ref.map(agent_tool_ref_to_proto),
+        tags: value.tags,
+        search_text: value.search_text,
+    }
+}
+
+fn agent_tool_config_from_proto(value: pb::AgentToolConfig) -> AgentToolConfig {
+    let source = match value.source {
+        Some(pb::agent_tool_config::Source::None(_)) => {
+            Some(AgentToolConfigSource::None(AgentNoTools {}))
+        }
+        Some(pb::agent_tool_config::Source::Catalog(catalog)) => {
+            Some(AgentToolConfigSource::Catalog(AgentCatalogToolConfig {
+                refs: catalog
+                    .refs
+                    .into_iter()
+                    .map(agent_tool_ref_from_proto)
+                    .collect(),
+                tools: catalog
+                    .tools
+                    .into_iter()
+                    .map(listed_tool_from_proto)
+                    .collect(),
+            }))
+        }
+        None => None,
+    };
+    AgentToolConfig { source }
+}
+
+pub(crate) fn new_agent_tool_config(value: AgentToolConfig) -> pb::AgentToolConfig {
+    let source = match value.source {
+        Some(AgentToolConfigSource::None(_)) => {
+            Some(pb::agent_tool_config::Source::None(pb::AgentNoTools {}))
+        }
+        Some(AgentToolConfigSource::Catalog(catalog)) => Some(
+            pb::agent_tool_config::Source::Catalog(pb::AgentCatalogToolConfig {
+                refs: new_agent_tool_refs(catalog.refs),
+                tools: catalog
+                    .tools
+                    .into_iter()
+                    .map(listed_tool_to_proto)
+                    .collect(),
+            }),
+        ),
+        None => None,
+    };
+    pb::AgentToolConfig { source }
 }
 
 fn list_tools_response_from_proto(value: pb::ListAgentToolsResponse) -> ListAgentToolsResponse {

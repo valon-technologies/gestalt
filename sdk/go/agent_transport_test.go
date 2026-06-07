@@ -130,6 +130,23 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-1",
+		Tools: &gestalt.AgentCatalogToolConfig{
+			Refs: []gestalt.AgentToolRef{{
+				App:       "slack",
+				Operation: "chat.postMessage",
+			}},
+			Tools: []gestalt.ListedAgentTool{{
+				ID:          "tool-slack",
+				MCPName:     "slack__chat_post_message",
+				Title:       "Send Slack message",
+				Description: "Post a Slack message",
+				InputSchema: `{"type":"object"}`,
+				Ref: &gestalt.AgentToolRef{
+					App:       "slack",
+					Operation: "chat.postMessage",
+				},
+			}},
+		},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -166,6 +183,16 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	}
 	if harness.sessionRequests[0].GetProviderName() != "managed" || harness.sessionRequests[0].GetModel() != "gpt-test" {
 		t.Fatalf("session request = %+v, want provider_name=managed model=gpt-test", harness.sessionRequests[0])
+	}
+	sessionCatalog := harness.sessionRequests[0].GetTools().GetCatalog()
+	if sessionCatalog == nil {
+		t.Fatalf("session tools = %#v, want catalog", harness.sessionRequests[0].GetTools())
+	}
+	if got := sessionCatalog.GetRefs()[0].GetOperation(); got != "chat.postMessage" {
+		t.Fatalf("session tool ref operation = %q, want chat.postMessage", got)
+	}
+	if got := sessionCatalog.GetTools()[0].GetMcpName(); got != "slack__chat_post_message" {
+		t.Fatalf("session listed tool mcp name = %q, want slack__chat_post_message", got)
 	}
 	if len(harness.turnRequests) != 1 {
 		t.Fatalf("turn requests len = %d, want 1", len(harness.turnRequests))
@@ -252,6 +279,49 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 	}
 	if got := harness.cancelTurnRequests[0].GetContext().GetWorkflow().AsMap()["runId"]; got != "run-1" {
 		t.Fatalf("cancel workflow runId = %#v, want run-1", got)
+	}
+}
+
+func TestTransport_AgentCreateSessionTypedNilTools(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &agentTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterAgentProviderServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+
+	client, err := gestalt.NewAgentFromRequest(agentTransportRequest())
+	if err != nil {
+		t.Fatalf("Agent: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	var typedNilCatalog *gestalt.AgentCatalogToolConfig
+	if _, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		Tools:        typedNilCatalog,
+	}); err != nil {
+		t.Fatalf("CreateSession typed nil catalog: %v", err)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.sessionRequests) != 1 {
+		t.Fatalf("session requests len = %d, want 1", len(harness.sessionRequests))
+	}
+	if harness.sessionRequests[0].GetTools() != nil {
+		t.Fatalf("session tools = %#v, want nil for typed nil catalog", harness.sessionRequests[0].GetTools())
 	}
 }
 

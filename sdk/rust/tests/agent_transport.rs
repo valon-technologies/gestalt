@@ -21,16 +21,16 @@ use gestalt::{
     AgentExecutionStatus, AgentHost, AgentHostExecuteToolInput, AgentHostListToolsInput,
     AgentHostResolveConnectionInput, AgentInteraction, AgentInteractionState, AgentInteractionType,
     AgentMessagePartType, AgentProvider, AgentProviderCapabilities, AgentSession,
-    AgentSessionState, AgentToolSourceMode, AgentTurn, AgentTurnEvent, AgentTurnOutput,
-    AgentTurnTextOutput, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
-    CreateAgentProviderTurnRequest, GetAgentProviderCapabilitiesRequest,
-    GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
-    GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
-    ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
-    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsRequest,
-    ListAgentProviderTurnEventsResponse, ListAgentProviderTurnsRequest,
-    ListAgentProviderTurnsResponse, ResolveAgentProviderInteractionRequest, RuntimeMetadata,
-    UpdateAgentProviderSessionRequest,
+    AgentSessionState, AgentToolConfigSource, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
+    AgentTurnOutput, AgentTurnTextOutput, CancelAgentProviderTurnRequest,
+    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest,
+    GetAgentProviderCapabilitiesRequest, GetAgentProviderInteractionRequest,
+    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
+    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
+    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
+    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
+    ResolveAgentProviderInteractionRequest, RuntimeMetadata, UpdateAgentProviderSessionRequest,
 };
 use hyper_util::rt::tokio::TokioIo;
 use serde::Serialize;
@@ -56,6 +56,13 @@ struct TestAgentProvider {
     session_context_subjects: Mutex<Vec<String>>,
     turn_context_subjects: Mutex<Vec<String>>,
     turn_request_context_subjects: Mutex<Vec<String>>,
+    session_tools: Mutex<Vec<SessionTools>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SessionTools {
+    tool_ref_operation: String,
+    listed_tool_mcp_name: String,
 }
 
 #[derive(Default, Clone)]
@@ -130,6 +137,26 @@ impl AgentProvider for TestAgentProvider {
             .push(request_context_subject_id(
                 gestalt::current_request_context().as_ref(),
             ));
+        self.session_tools.lock().expect("session_tools lock").push(
+            match request.tools.and_then(|tools| tools.source) {
+                Some(AgentToolConfigSource::Catalog(catalog)) => SessionTools {
+                    tool_ref_operation: catalog
+                        .refs
+                        .first()
+                        .map(|tool_ref| tool_ref.operation.clone())
+                        .unwrap_or_default(),
+                    listed_tool_mcp_name: catalog
+                        .tools
+                        .first()
+                        .map(|tool| tool.mcp_name.clone())
+                        .unwrap_or_default(),
+                },
+                Some(AgentToolConfigSource::None(_)) | None => SessionTools {
+                    tool_ref_operation: String::new(),
+                    listed_tool_mcp_name: String::new(),
+                },
+            },
+        );
         Ok(AgentSession {
             id: request.session_id,
             provider_name: configured_name(self),
@@ -387,10 +414,7 @@ impl AgentProvider for TestAgentProvider {
             supports_session_start: false,
             supports_prepared_workspace: false,
             bounded_list_hydration: true,
-            supported_tool_sources: vec![
-                AgentToolSourceMode::McpCatalog,
-                AgentToolSourceMode::None,
-            ],
+            supported_tool_sources: vec![AgentToolSourceMode::Catalog, AgentToolSourceMode::None],
         })
     }
 }
@@ -577,6 +601,30 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
                 }),
                 ..Default::default()
             }),
+            tools: Some(pb::AgentToolConfig {
+                source: Some(pb::agent_tool_config::Source::Catalog(
+                    pb::AgentCatalogToolConfig {
+                        refs: vec![pb::AgentToolRef {
+                            app: "slack".to_string(),
+                            operation: "chat.postMessage".to_string(),
+                            ..Default::default()
+                        }],
+                        tools: vec![pb::ListedAgentTool {
+                            id: "tool-slack".to_string(),
+                            mcp_name: "slack__chat_post_message".to_string(),
+                            title: "Send Slack message".to_string(),
+                            description: "Post a Slack message".to_string(),
+                            input_schema: r#"{"type":"object"}"#.to_string(),
+                            r#ref: Some(pb::AgentToolRef {
+                                app: "slack".to_string(),
+                                operation: "chat.postMessage".to_string(),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }],
+                    },
+                )),
+            }),
             ..Default::default()
         })
         .await
@@ -761,7 +809,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     assert_eq!(
         capabilities.supported_tool_sources,
         vec![
-            pb::AgentToolSourceMode::McpCatalog as i32,
+            pb::AgentToolSourceMode::Catalog as i32,
             pb::AgentToolSourceMode::None as i32
         ]
     );
@@ -779,6 +827,13 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             .lock()
             .expect("session_context_subjects lock"),
         vec!["user:session".to_string()]
+    );
+    assert_eq!(
+        *provider.session_tools.lock().expect("session_tools lock"),
+        vec![SessionTools {
+            tool_ref_operation: "chat.postMessage".to_string(),
+            listed_tool_mcp_name: "slack__chat_post_message".to_string(),
+        }]
     );
     assert_eq!(
         *provider
