@@ -55,6 +55,7 @@ struct TestAgentProvider {
     configured_name: Mutex<String>,
     session_context_subjects: Mutex<Vec<String>>,
     turn_context_subjects: Mutex<Vec<String>>,
+    mcp_tool_names: Mutex<Vec<String>>,
 }
 
 #[derive(Default, Clone)]
@@ -208,6 +209,10 @@ impl AgentProvider for TestAgentProvider {
             .push(request_context_subject_id(
                 gestalt::current_request_context().as_ref(),
             ));
+        self.mcp_tool_names
+            .lock()
+            .expect("mcp_tool_names lock")
+            .extend(request.mcp_tools.iter().map(|tool| tool.mcp_name.clone()));
         Ok(AgentTurn {
             id: request.turn_id,
             session_id: request.session_id,
@@ -649,6 +654,17 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
             output: Some(pb::AgentOutput {
                 kind: Some(pb::agent_output::Kind::Text(pb::AgentTextOutput {})),
             }),
+            mcp_tools: vec![pb::ListedAgentTool {
+                id: "tool-1".to_string(),
+                mcp_name: "slack__chat_post_message".to_string(),
+                title: "Post message".to_string(),
+                r#ref: Some(pb::AgentToolRef {
+                    app: "slack".to_string(),
+                    operation: "chat.postMessage".to_string(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
             ..Default::default()
         })
         .await
@@ -660,6 +676,14 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
         AgentExecutionStatus::WaitingForInput
     );
     assert_eq!(created_turn.messages[0].parts.len(), 1);
+    assert_eq!(
+        provider
+            .mcp_tool_names
+            .lock()
+            .expect("mcp_tool_names lock")
+            .as_slice(),
+        ["slack__chat_post_message"]
+    );
 
     let listed_turns = client
         .list_turns(pb::ListAgentProviderTurnsRequest {

@@ -110,6 +110,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def __init__(self) -> None:
         self.configured: list[tuple[str, dict[str, object]]] = []
         self.context_subject_ids: list[str] = []
+        self.mcp_tool_names: list[str] = []
 
     def configure(self, name: str, config: dict[str, Any]) -> None:
         self.configured.append((name, dict(config)))
@@ -175,6 +176,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
 
     def create_turn(self, request: Any) -> Any:
         self.context_subject_ids.append(_native_context_subject_id(request.context))
+        self.mcp_tool_names.extend(tool.mcp_name for tool in request.mcp_tools)
         return AgentTurn(
             id=request.turn_id,
             session_id=request.session_id,
@@ -693,6 +695,7 @@ class AgentTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _provider.configured.clear()
         _provider.context_subject_ids.clear()
+        _provider.mcp_tool_names.clear()
         _host_relay_tokens.clear()
         _host_list_requests.clear()
         _host_execute_requests.clear()
@@ -937,6 +940,17 @@ class AgentTransportTests(unittest.TestCase):
                 ],
                 created_by_subject_id="user:turn-owner",
                 execution_ref="exec-turn-1",
+                mcp_tools=[
+                    agent_pb2.ListedAgentTool(
+                        id="tool-1",
+                        mcp_name="slack__chat_post_message",
+                        title="Post message",
+                        ref=app_pb2.AgentToolRef(
+                            app="slack",
+                            operation="chat.postMessage",
+                        ),
+                    )
+                ],
                 context=app_pb2.RequestContext(
                     subject=app_pb2.SubjectContext(id="user:turn")
                 ),
@@ -993,6 +1007,7 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(created_turn.id, "turn-1")
         self.assertEqual(created_turn.created_by_subject_id, "user:turn-owner")
         self.assertEqual(_provider.context_subject_ids, ["user:session", "user:turn"])
+        self.assertEqual(_provider.mcp_tool_names, ["slack__chat_post_message"])
         self.assertEqual(
             created_turn.status,
             agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,

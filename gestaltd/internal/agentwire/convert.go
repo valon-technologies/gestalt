@@ -5,6 +5,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
@@ -139,6 +140,44 @@ func ToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
 		out = append(out, ToolRefToProto(refs[i]))
 	}
 	return out
+}
+
+func ListedToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
+	return &proto.ListedAgentTool{
+		Id:           tool.ToolID,
+		McpName:      tool.MCPName,
+		Title:        tool.Title,
+		Description:  tool.Description,
+		Tags:         append([]string(nil), tool.Tags...),
+		SearchText:   tool.SearchText,
+		InputSchema:  tool.InputSchemaJSON,
+		OutputSchema: tool.OutputSchemaJSON,
+		Annotations:  OperationAnnotationsToProto(tool.Annotations),
+		Ref:          ToolRefToProto(tool.Ref),
+	}
+}
+
+func ListedToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentTool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]*proto.ListedAgentTool, 0, len(tools))
+	for i := range tools {
+		out = append(out, ListedToolToProto(tools[i]))
+	}
+	return out
+}
+
+func OperationAnnotationsToProto(value catalog.CapabilityAnnotations) *proto.OperationAnnotations {
+	if value.ReadOnlyHint == nil && value.IdempotentHint == nil && value.DestructiveHint == nil && value.OpenWorldHint == nil {
+		return nil
+	}
+	return &proto.OperationAnnotations{
+		ReadOnlyHint:    value.ReadOnlyHint,
+		IdempotentHint:  value.IdempotentHint,
+		DestructiveHint: value.DestructiveHint,
+		OpenWorldHint:   value.OpenWorldHint,
+	}
 }
 
 func ToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {

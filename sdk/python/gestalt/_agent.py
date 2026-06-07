@@ -455,6 +455,7 @@ class CreateAgentProviderTurnRequest:
     execution_ref: str = ""
     tool_refs: Iterable[AgentToolRef] = field(default_factory=list)
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+    mcp_tools: Iterable[ListedAgentTool] = field(default_factory=list)
     subject: Subject | None = None
     model_options: JsonObject | None = None
     timeout_seconds: int = 0
@@ -736,6 +737,7 @@ def create_agent_provider_turn_request_from_proto(
         execution_ref=request.execution_ref,
         tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
         tool_source=request.tool_source,
+        mcp_tools=[listed_agent_tool_from_proto(tool) for tool in request.mcp_tools],
         subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,

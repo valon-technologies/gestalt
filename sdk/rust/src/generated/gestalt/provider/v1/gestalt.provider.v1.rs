@@ -839,6 +839,8 @@ pub struct CreateAgentProviderTurnRequest {
     pub output: ::core::option::Option<AgentOutput>,
     #[prost(message, optional, tag = "23")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(message, repeated, tag = "24")]
+    pub mcp_tools: ::prost::alloc::vec::Vec<ListedAgentTool>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentTextOutput {}

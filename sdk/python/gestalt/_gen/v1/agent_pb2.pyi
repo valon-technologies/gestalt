@@ -468,6 +468,7 @@ class CreateAgentProviderTurnRequest(_message.Message):
     TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    MCP_TOOLS_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     session_id: str
     idempotency_key: str
@@ -485,7 +486,8 @@ class CreateAgentProviderTurnRequest(_message.Message):
     tool_refs_set: bool
     output: AgentOutput
     context: _app_pb2.RequestContext
-    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+    mcp_tools: _containers.RepeatedCompositeFieldContainer[ListedAgentTool]
+    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_app_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., tool_refs_set: _Optional[bool] = ..., output: _Optional[_Union[AgentOutput, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., mcp_tools: _Optional[_Iterable[_Union[ListedAgentTool, _Mapping]]] = ...) -> None: ...
 
 class AgentTextOutput(_message.Message):
     __slots__ = ()

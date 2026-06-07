@@ -18,9 +18,11 @@ import {
   ExecuteAgentToolResponseSchema,
   ListAgentToolsResponseSchema,
   ListAgentProviderTurnEventsRequestSchema,
+  ListedAgentToolSchema,
   ResolvedAgentConnectionSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
+  AgentToolRefSchema,
   RequestContextSchema,
   SubjectContextSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
@@ -129,6 +131,7 @@ test("AgentProvider rejects structured output without a schema", async () => {
 test("AgentProvider forwards request context subjects to handlers", async () => {
   const seenSubjectIds: string[] = [];
   const seenContextSubjectIds: string[] = [];
+  const seenMcpToolNames: string[] = [];
   const provider = defineAgentProvider({
     createSession(request) {
       seenSubjectIds.push(request.subject?.id ?? "");
@@ -141,6 +144,7 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
     createTurn(request) {
       seenSubjectIds.push(request.subject?.id ?? "");
       seenContextSubjectIds.push(request.context?.subject?.id ?? "");
+      seenMcpToolNames.push(...request.mcpTools.map((tool) => tool.mcpName));
       return {
         id: request.turnId,
         sessionId: request.sessionId,
@@ -168,6 +172,17 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
       model: "gpt-test",
       output: { kind: { case: "text", value: {} } },
       timeoutSeconds: 120,
+      mcpTools: [
+        create(ListedAgentToolSchema, {
+          id: "tool-1",
+          mcpName: "slack__chat_post_message",
+          title: "Post message",
+          ref: create(AgentToolRefSchema, {
+            app: "slack",
+            operation: "chat.postMessage",
+          }),
+        }),
+      ],
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {
           id: "user:turn",
@@ -178,6 +193,7 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
 
   expect(seenSubjectIds).toEqual(["user:session", "user:turn"]);
   expect(seenContextSubjectIds).toEqual(["user:session", "user:turn"]);
+  expect(seenMcpToolNames).toEqual(["slack__chat_post_message"]);
 });
 
 async function reserveTCPAddress(): Promise<string> {

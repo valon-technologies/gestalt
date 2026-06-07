@@ -408,7 +408,17 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			Operation: "chat.postMessage",
 		}},
 		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
-		Subject:    &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
+		McpTools: []*proto.ListedAgentTool{{
+			Id:          "tool-1",
+			McpName:     "slack__chat_post_message",
+			Title:       "Post message",
+			Description: "Post a Slack message",
+			Ref: &proto.AgentToolRef{
+				App:       "slack",
+				Operation: "chat.postMessage",
+			},
+		}},
+		Subject: &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),
@@ -436,6 +446,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 	if provider.receivedTurnRequest.Context.GetSubject().GetId() != "user:agent-provider" {
 		t.Fatalf("CreateTurn context = %#v, want request context", provider.receivedTurnRequest.Context)
+	}
+	if got := provider.receivedTurnRequest.MCPTools; len(got) != 1 || got[0].MCPName != "slack__chat_post_message" || got[0].Ref == nil || got[0].Ref.App != "slack" {
+		t.Fatalf("CreateTurn MCPTools = %#v, want Slack listed tool", got)
 	}
 
 	fetchedTurn, err := agentClient.GetTurn(rpcCtx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"})

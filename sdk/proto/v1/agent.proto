@@ -306,6 +306,7 @@ message CreateAgentProviderTurnRequest {
   bool tool_refs_set = 20;
   AgentOutput output = 21;
   RequestContext context = 23;
+  repeated ListedAgentTool mcp_tools = 24;
 }
 
 message AgentTextOutput {}

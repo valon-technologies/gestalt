@@ -1352,6 +1352,108 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	}
 }
 
+func TestManagerCreateTurnForwardsMCPToolsForCatalogRefs(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	docs := agentCatalogTestProvider("docs", "Docs", "search", "summarize")
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, docs),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "test-model",
+		ToolRefs:       []*proto.AgentToolRef{{App: "docs", Operation: "search"}},
+		McpTools:       []*proto.ListedAgentTool{{Id: "spoofed-tool", McpName: "spoofed"}},
+		Output:         agentTextOutputProto(),
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if got := req.GetTools(); len(got) != 0 {
+		t.Fatalf("CreateTurn resolved tools = %#v, want none", got)
+	}
+	got := req.GetMcpTools()
+	if len(got) != 1 {
+		t.Fatalf("CreateTurn mcp_tools = %#v, want one docs.search tool", got)
+	}
+	if got[0].GetId() == "spoofed-tool" || got[0].GetMcpName() != "docs__search" {
+		t.Fatalf("CreateTurn mcp_tools[0] = %#v, want generated docs__search tool", got[0])
+	}
+	if got[0].GetRef().GetApp() != "docs" || got[0].GetRef().GetOperation() != "search" {
+		t.Fatalf("CreateTurn mcp_tools[0].ref = %#v, want docs.search", got[0].GetRef())
+	}
+}
+
+func TestManagerCreateTurnForwardsAllMCPToolsBeyondDefaultPageSize(t *testing.T) {
+	t.Parallel()
+
+	const toolCount = agentToolListMaxPageSize + 5
+	operations := make([]string, 0, toolCount)
+	for i := 0; i < toolCount; i++ {
+		operations = append(operations, fmt.Sprintf("op%04d", i))
+	}
+	alpha := newRouteCountingAgentProvider("alpha")
+	docs := agentCatalogTestProvider("docs", "Docs", operations...)
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, docs),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		TimeoutSeconds: 1,
+		SessionId:      session.ID,
+		Model:          "test-model",
+		ToolRefs:       []*proto.AgentToolRef{{App: "docs"}},
+		Output:         agentTextOutputProto(),
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	got := alpha.createTurnReqs[0].GetMcpTools()
+	if len(got) != toolCount {
+		t.Fatalf("CreateTurn mcp_tools len = %d, want %d", len(got), toolCount)
+	}
+	if got[0].GetMcpName() != "docs__op0000" || got[len(got)-1].GetMcpName() != "docs__op1004" {
+		t.Fatalf("CreateTurn mcp_tools bounds = %q, %q", got[0].GetMcpName(), got[len(got)-1].GetMcpName())
+	}
+}
+
 func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProvider(t *testing.T) {
 	t.Parallel()
 
@@ -1906,6 +2008,9 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
 	}
+	if got := req.GetMcpTools(); len(got) != 0 {
+		t.Fatalf("CreateTurn mcp_tools = %#v, want none", got)
+	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
 	if scope.ToolSource != coreagent.ToolSourceModeNone {
 		t.Fatalf("scope tool source = %q, want none", scope.ToolSource)
@@ -2114,6 +2219,9 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	}
 	if got := req.GetToolRefs(); len(got) != 0 {
 		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
+	}
+	if got := req.GetMcpTools(); len(got) != 0 {
+		t.Fatalf("CreateTurn mcp_tools = %#v, want none for explicit empty tool refs", got)
 	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
 	if scope.ToolSource != coreagent.ToolSourceModeUnspecified {

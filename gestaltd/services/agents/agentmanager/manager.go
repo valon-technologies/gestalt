@@ -775,6 +775,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err != nil {
 		return nil, err
 	}
+	explicitToolRefs := req.GetToolRefsSet() || len(toolRefs) > 0
 	callerKind, callerName := agentCaller(ctx, req.GetContext(), ownedSession.providerName)
 	if callerKind != "" && callerName != "" {
 		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
@@ -827,15 +828,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	if err := m.storeTurnScope(ctx, req.GetContext(), p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource); err != nil {
-		return nil, err
-	}
-	scopeCommitted := false
-	defer func() {
-		if !scopeCommitted {
-			m.deleteTurnScope(ownedSession.providerName, ownedSession.session.ID, turnID)
-		}
-	}()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
 	providerReq.TurnId = turnID
 	providerReq.SessionId = ownedSession.session.ID
@@ -845,12 +837,36 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ToolRefsSet = toolRefsSet
 	providerReq.ToolSource = agentwire.ToolSourceModeToProto(toolSource)
 	providerReq.Tools = nil
+	providerReq.McpTools = nil
 	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
 	providerReq.Context, err = agentRequestContext(ctx, p, req.GetContext(), callerKind, callerName)
 	if err != nil {
 		return nil, err
+	}
+	if err := m.storeTurnScope(ctx, req.GetContext(), p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, toolSource); err != nil {
+		return nil, err
+	}
+	scopeCommitted := false
+	defer func() {
+		if !scopeCommitted {
+			m.deleteTurnScope(ownedSession.providerName, ownedSession.session.ID, turnID)
+		}
+	}()
+	if explicitToolRefs && toolSource == coreagent.ToolSourceModeMCPCatalog && len(toolRefs) > 0 {
+		mcpTools, err := m.listAllMCPCatalogTools(ctx, p, coreagent.ListToolsRequest{
+			ProviderName: ownedSession.providerName,
+			SessionID:    ownedSession.session.ID,
+			TurnID:       turnID,
+			ToolRefs:     toolRefs,
+			ToolSource:   toolSource,
+			Context:      providerReq.GetContext(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		providerReq.McpTools = agentwire.ListedToolsToProto(mcpTools)
 	}
 	turn, err = ownedSession.provider.CreateTurn(ctx, providerReq)
 	if err != nil {
@@ -1797,6 +1813,33 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		Tools:         tools,
 		NextPageToken: nextPageToken,
 	}, nil
+}
+
+func (m *Manager) listAllMCPCatalogTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) ([]coreagent.ListedTool, error) {
+	if m == nil || m.providers == nil {
+		return nil, nil
+	}
+	req.ToolSource = coreagent.ToolSourceModeMCPCatalog
+	req.PageSize = agentToolListMaxPageSize
+	req.Query = ""
+	req.PageToken = ""
+
+	out := []coreagent.ListedTool{}
+	for {
+		resp, err := m.listTools(ctx, p, req)
+		if err != nil {
+			return nil, err
+		}
+		if resp != nil {
+			out = append(out, resp.Tools...)
+			req.PageToken = strings.TrimSpace(resp.NextPageToken)
+		} else {
+			req.PageToken = ""
+		}
+		if req.PageToken == "" {
+			return out, nil
+		}
+	}
 }
 
 func (m *Manager) searchWorkflowSystemTools(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef) ([]coreagent.Tool, error) {

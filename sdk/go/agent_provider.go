@@ -153,15 +153,15 @@ type ResolvedAgentTool struct {
 }
 
 type AgentToolRef struct {
-	App         string
-	Operation   string
-	Connection  string
-	Instance    string
-	Title       string
-	Description string
+	App            string
+	Operation      string
+	Connection     string
+	Instance       string
+	Title          string
+	Description    string
 	CredentialMode string
-	System      string
-	RunAs       *Subject
+	System         string
+	RunAs          *Subject
 }
 
 type AgentProviderCapabilities struct {
@@ -327,6 +327,7 @@ type CreateAgentProviderTurnRequest struct {
 	ExecutionRef       string
 	ToolRefs           []AgentToolRef
 	ToolSource         AgentToolSourceMode
+	MCPTools           []ListedAgentTool
 	Subject            *Subject
 	ModelOptions       map[string]any
 	Context            *proto.RequestContext

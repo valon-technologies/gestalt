@@ -659,6 +659,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub execution_ref: String,
     pub tool_refs: Vec<AgentToolRef>,
     pub tool_source: AgentToolSourceMode,
+    pub mcp_tools: Vec<ListedAgentTool>,
     pub subject: Option<Subject>,
     pub model_options: Option<AgentJson>,
     pub timeout_seconds: i32,
@@ -1728,6 +1729,11 @@ fn create_turn_request_from_proto(
             .map(agent_tool_ref_from_proto)
             .collect(),
         tool_source: AgentToolSourceMode::from_i32_lossy(value.tool_source),
+        mcp_tools: value
+            .mcp_tools
+            .into_iter()
+            .map(listed_tool_from_proto)
+            .collect(),
         subject: agent_subject_from_proto(value.subject),
         model_options: json_from_struct(value.model_options),
         timeout_seconds: value.timeout_seconds,

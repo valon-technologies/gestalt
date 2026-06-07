@@ -365,6 +365,7 @@ export interface CreateAgentProviderTurnRequest {
   executionRef: string;
   toolRefs: readonly AgentToolRef[];
   toolSource: AgentToolSourceMode;
+  mcpTools: readonly ListedAgentTool[];
   subject?: Subject | undefined;
   modelOptions?: JsonObjectInput | undefined;
   context?: ProtoRequestContext | undefined;
@@ -904,6 +905,7 @@ function createAgentProviderTurnRequestFromProto(
     executionRef: request.executionRef,
     toolRefs: request.toolRefs.map(agentToolRefFromProto),
     toolSource: request.toolSource as AgentToolSourceMode,
+    mcpTools: request.mcpTools.map(listedToolFromProto),
     subject: agentRequestSubjectFromProto(request),
     modelOptions: optionalObjectFromStruct(request.modelOptions),
     context: request.context,
