@@ -137,9 +137,6 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 			if got := invocation.WorkflowContextString(invocation.WorkflowContextFromContext(ctx), "runId"); got != "run-123" {
 				t.Fatalf("workflow run id = %q, want run-123", got)
 			}
-			if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-				t.Fatalf("tool source = %q, want unspecified", req.GetToolSource())
-			}
 			if req.GetOutput().GetStructured() == nil {
 				t.Fatal("output.structured = nil, want structured output request")
 			}

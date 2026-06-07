@@ -15,17 +15,16 @@ use generated::v1::agent_provider_server::{
 use generated::v1::{
     AgentExecutionStatus, AgentInteraction, AgentInteractionState as ProtoAgentInteractionState,
     AgentInteractionType, AgentMessagePartType, AgentProviderCapabilities, AgentSession,
-    AgentSessionState as ProtoAgentSessionState, AgentToolSourceMode as ProtoAgentToolSourceMode,
-    AgentTurn, AgentTurnEvent, AgentTurnTextOutput, CancelAgentProviderTurnRequest,
-    CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest,
-    GetAgentProviderCapabilitiesRequest, GetAgentProviderInteractionRequest,
-    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
-    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
-    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
-    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
-    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
-    RequestContext as ProviderRequestContext, ResolveAgentProviderInteractionRequest,
-    UpdateAgentProviderSessionRequest,
+    AgentSessionState as ProtoAgentSessionState, AgentTurn, AgentTurnEvent, AgentTurnTextOutput,
+    CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
+    CreateAgentProviderTurnRequest, GetAgentProviderCapabilitiesRequest,
+    GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
+    GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
+    ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
+    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsRequest,
+    ListAgentProviderTurnEventsResponse, ListAgentProviderTurnsRequest,
+    ListAgentProviderTurnsResponse, RequestContext as ProviderRequestContext,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
 use gestalt::proto::v1::{RequestContext, SubjectContext};
 use gestalt::{
@@ -33,8 +32,8 @@ use gestalt::{
     AgentGetSession, AgentGetTurn, AgentInteractionState, AgentListInteractions, AgentListSessions,
     AgentListTurnEvents, AgentListTurns, AgentMessage, AgentMessagePart,
     AgentMessagePartType as NativeAgentMessagePartType, AgentOutput, AgentResolveInteraction,
-    AgentSessionState, AgentToolConfig, AgentToolConfigSource, AgentToolRef, AgentToolSourceMode,
-    AgentUpdateSession, ListedAgentTool, Request, Subject,
+    AgentSessionState, AgentToolConfig, AgentToolConfigSource, AgentToolRef, AgentUpdateSession,
+    ListedAgentTool, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -610,9 +609,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
                 }],
                 ..Default::default()
             }],
-            tool_source: AgentToolSourceMode::Catalog,
             output: AgentOutput::text(),
-            tool_refs: Vec::new(),
             metadata: None,
             idempotency_key: String::new(),
             model_options: None,
@@ -839,19 +836,6 @@ async fn agent_create_turn_accepts_native_values() {
                 }],
                 metadata: Some(serde_json::json!({ "source": "native" })),
             }],
-            tool_refs: vec![AgentToolRef {
-                app: "github".to_string(),
-                operation: "issues.get".to_string(),
-                connection: "default".to_string(),
-                run_as: Some(Subject {
-                    id: "service_account:gestalt-support-github".to_string(),
-                    credential_subject_id: "service_account:github-credential".to_string(),
-                    email: String::new(),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }],
-            tool_source: AgentToolSourceMode::Catalog,
             output: AgentOutput::structured_schema(serde_json::json!({ "type": "object" }))
                 .expect("structured output"),
             metadata: Some(serde_json::json!({ "request": "native" })),
@@ -877,10 +861,6 @@ async fn agent_create_turn_accepts_native_values() {
     );
     assert_eq!(request.session_id, "session-managed-1");
     assert_eq!(request.model, "gpt-5.1");
-    assert_eq!(
-        request.tool_source,
-        ProtoAgentToolSourceMode::Catalog as i32
-    );
     assert_eq!(request.messages.len(), 1);
     assert_eq!(request.messages[0].role, "user");
     assert_eq!(request.messages[0].text, "Summarize this");
@@ -894,19 +874,6 @@ async fn agent_create_turn_accepts_native_values() {
         AgentMessagePartType::Text as i32
     );
     assert_eq!(request.messages[0].parts[0].text, "Summarize this");
-    assert_eq!(request.tool_refs.len(), 1);
-    assert_eq!(request.tool_refs[0].app, "github");
-    assert_eq!(request.tool_refs[0].operation, "issues.get");
-    assert_eq!(request.tool_refs[0].connection, "default");
-    let run_as = request.tool_refs[0]
-        .run_as
-        .as_ref()
-        .expect("tool ref run_as");
-    assert_eq!(run_as.id, "service_account:gestalt-support-github");
-    assert_eq!(
-        run_as.credential_subject_id,
-        "service_account:github-credential"
-    );
     let output = request.output.as_ref().expect("output");
     let generated::v1::agent_output::Kind::Structured(output) =
         output.kind.as_ref().expect("output kind")

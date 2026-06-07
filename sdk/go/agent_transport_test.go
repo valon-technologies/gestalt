@@ -203,12 +203,6 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	if harness.turnRequests[0].GetSessionId() != "session-1" || harness.turnRequests[0].GetModel() != "gpt-test" {
 		t.Fatalf("turn request = %+v, want session_id=session-1 model=gpt-test", harness.turnRequests[0])
 	}
-	if len(harness.turnRequests[0].GetToolRefs()) != 0 {
-		t.Fatalf("turn tool refs len = %d, want 0", len(harness.turnRequests[0].GetToolRefs()))
-	}
-	if harness.turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("turn tool source = %s, want unspecified", harness.turnRequests[0].GetToolSource())
-	}
 }
 
 func TestTransport_AgentWorkflowContext(t *testing.T) {
@@ -472,9 +466,6 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 	if metadata := got.GetMessages()[0].GetMetadata().AsMap(); metadata["source"] != "native" {
 		t.Fatalf("message metadata = %#v", metadata)
-	}
-	if len(got.GetToolRefs()) != 0 || got.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("turn tools = refs:%#v source:%s, want unset", got.GetToolRefs(), got.GetToolSource())
 	}
 	if schema := got.GetOutput().GetStructured().GetSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("output schema = %#v", schema)

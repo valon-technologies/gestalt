@@ -378,8 +378,6 @@ export interface CreateAgentProviderTurnRequest {
   metadata?: JsonObjectInput | undefined;
   createdBySubjectId?: string | undefined;
   executionRef: string;
-  toolRefs: readonly AgentToolRef[];
-  toolSource: AgentToolSourceMode;
   subject?: Subject | undefined;
   modelOptions?: JsonObjectInput | undefined;
   context?: ProtoRequestContext | undefined;
@@ -918,8 +916,6 @@ function createAgentProviderTurnRequestFromProto(
     metadata: optionalObjectFromStruct(request.metadata),
     createdBySubjectId: request.createdBySubjectId ?? "",
     executionRef: request.executionRef,
-    toolRefs: request.toolRefs.map(agentToolRefFromProto),
-    toolSource: request.toolSource as AgentToolSourceMode,
     subject: agentRequestSubjectFromProto(request),
     modelOptions: optionalObjectFromStruct(request.modelOptions),
     context: request.context,

@@ -122,8 +122,6 @@ type agentSessionUpdateRequest struct {
 type agentTurnCreateRequest struct {
 	Model          string                `json:"model,omitempty"`
 	Messages       []agentMessageRequest `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest `json:"toolRefs,omitempty"`
-	ToolSource     string                `json:"toolSource,omitempty"`
 	Output         *agentOutputRequest   `json:"output,omitempty"`
 	Metadata       map[string]any        `json:"metadata,omitempty"`
 	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
@@ -167,8 +165,7 @@ func (output *agentOutputRequest) UnmarshalJSON(data []byte) error {
 }
 
 type agentTurnCreateRequestPresence struct {
-	ToolRefs bool
-	Output   *agentOutputRequestPresence
+	Output *agentOutputRequestPresence
 }
 
 type agentOutputRequestPresence struct {
@@ -572,25 +569,12 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		var err error
 		req, presence, err = decodeAgentTurnCreateRequest(r.Body)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 	idempotencyKey, ok := resolveAgentIdempotencyKey(w, r, req.IdempotencyKey)
 	if !ok {
-		return
-	}
-	if err := validateAgentToolRefs(req.ToolRefs); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	if presence.ToolRefs && req.ToolRefs == nil {
-		writeError(w, http.StatusBadRequest, "toolRefs must be an array")
-		return
-	}
-	toolSource, err := agentToolSourceModeFromRequest(req.ToolSource)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	messages, err := agentMessagesFromRequest(req.Messages)
@@ -623,9 +607,6 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		Model:          strings.TrimSpace(req.Model),
 		SessionId:      strings.TrimSpace(sessionID),
 		Messages:       messages,
-		ToolRefs:       agentToolRefsForCreateTurn(req),
-		ToolRefsSet:    presence.ToolRefs,
-		ToolSource:     agentToolSourceModeToProto(toolSource),
 		Output:         outputProto,
 		Metadata:       metadata,
 		ModelOptions:   modelOptions,
@@ -633,10 +614,10 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, agentmanager.ErrAgentSessionNotFound) {
-			s.writeAgentManagerError(w, r, "session", sessionID, req.ToolRefs, err)
+			s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
 			return
 		}
-		s.writeAgentManagerError(w, r, "turn", sessionID, req.ToolRefs, err)
+		s.writeAgentManagerError(w, r, "turn", sessionID, nil, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, agentTurnInfoFromCore(turn))
@@ -660,7 +641,10 @@ func decodeAgentTurnCreateRequest(body io.Reader) (agentTurnCreateRequest, agent
 		return req, presence, err
 	}
 	if _, ok := raw["toolRefs"]; ok {
-		presence.ToolRefs = true
+		return req, presence, fmt.Errorf("turn tools must be configured on the session")
+	}
+	if _, ok := raw["toolSource"]; ok {
+		return req, presence, fmt.Errorf("turn tools must be configured on the session")
 	}
 	if value, ok := raw["output"]; ok {
 		presence.Output = &agentOutputRequestPresence{}
@@ -1232,10 +1216,6 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 	return out
 }
 
-func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []*proto.AgentToolRef {
-	return agentwire.ToolRefsToProto(agentToolRefsFromRequest(req.ToolRefs))
-}
-
 func agentSessionToolsToProto(req *agentSessionToolsRequest) (*proto.AgentToolConfig, error) {
 	if req == nil {
 		return nil, nil
@@ -1325,30 +1305,6 @@ func validateAgentToolRefs(refs []agentToolRefRequest) error {
 		}
 	}
 	return nil
-}
-
-func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, error) {
-	switch strings.TrimSpace(value) {
-	case "":
-		return coreagent.ToolSourceModeUnspecified, nil
-	case string(coreagent.ToolSourceModeMCPCatalog):
-		return coreagent.ToolSourceModeMCPCatalog, nil
-	case string(coreagent.ToolSourceModeNone):
-		return coreagent.ToolSourceModeNone, nil
-	default:
-		return "", fmt.Errorf("unsupported agent tool source %q", value)
-	}
-}
-
-func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
-	switch mode {
-	case coreagent.ToolSourceModeMCPCatalog:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG
-	case coreagent.ToolSourceModeNone:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE
-	default:
-		return proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-	}
 }
 
 func agentMessagePartTypeToProto(partType coreagent.MessagePartType) proto.AgentMessagePartType {

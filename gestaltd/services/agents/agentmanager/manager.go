@@ -800,9 +800,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if callerKind != "" && callerName != "" {
 		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
 	}
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED || req.GetToolRefsSet() || len(req.GetToolRefs()) > 0 {
-		return nil, fmt.Errorf("%w: agent turn tools must be configured on the session", invocation.ErrInvalidInvocation)
-	}
 	toolSource := coreagent.ToolSourceModeNone
 	var toolRefs []coreagent.ToolRef
 	toolRefsSet := true

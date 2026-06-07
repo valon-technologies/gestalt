@@ -483,8 +483,6 @@ class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
             request,
             "create_turn",
             session_id=request.session_id,
-            tool_source=request.tool_source,
-            tool_ref_count=len(request.tool_refs),
             timeout_seconds=request.timeout_seconds,
             output_kind=request.output.WhichOneof("kind")
             if request.HasField("output")
@@ -1356,8 +1354,6 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "",
                     "interaction_id": "",
                     "reason": "",
-                    "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED,
-                    "tool_ref_count": 0,
                     "timeout_seconds": 120,
                     "output_kind": "structured",
                     "has_structured_schema": True,
@@ -1603,8 +1599,6 @@ class AgentTransportTests(unittest.TestCase):
             ["create_session", "create_turn", "resolve_interaction"],
         )
         self.assertEqual(_manager_session_tools[0]["tool_ref_operation"], "issues.get")
-        self.assertEqual(_manager_requests[1]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED)
-        self.assertEqual(_manager_requests[1]["tool_ref_count"], 0)
         self.assertEqual(_manager_requests[1]["timeout_seconds"], 120)
         self.assertEqual(_manager_requests[1]["output_kind"], "structured")
         self.assertTrue(_manager_requests[1]["has_structured_schema"])

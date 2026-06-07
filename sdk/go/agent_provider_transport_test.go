@@ -432,12 +432,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		Metadata:           mustStruct(t, map[string]any{"requireInteraction": true}),
 		CreatedBySubjectId: session.GetCreatedBySubjectId(),
 		ExecutionRef:       "exec-turn-1",
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "slack",
-			Operation: "chat.postMessage",
-		}},
-		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
-		Subject:    &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
+		Subject:            &proto.SubjectContext{Id: "borrower:borrower-1", CredentialSubjectId: "user:user-1"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),

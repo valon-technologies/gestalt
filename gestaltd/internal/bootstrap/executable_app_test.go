@@ -3894,12 +3894,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if len(turnReq.Tools) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", turnReq.Tools)
 	}
-	if turnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("CreateTurn tool source = %q, want unspecified", turnReq.GetToolSource())
-	}
-	if len(turnReq.GetToolRefs()) != 0 {
-		t.Fatalf("CreateTurn tool refs = %#v, want none", turnReq.GetToolRefs())
-	}
 }
 
 func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {

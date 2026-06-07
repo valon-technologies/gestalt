@@ -263,6 +263,49 @@ describe("S3 transport", () => {
     });
   });
 
+  test("copy, delete, and exists round-trip", async () => {
+    // Use a dedicated TCP harness and run this before the heavier S3 cases:
+    // Bun's HTTP/2 client can corrupt session authority after many RPCs.
+    const { proc: tcpProc, target } = await startTCPHarness();
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const previousTarget = process.env[envName];
+    process.env[envName] = target;
+    try {
+      const s3 = client();
+      const sourceRef = {
+        key: "source.txt",
+      } as const;
+      const destinationRef = {
+        key: "copied.txt",
+      } as const;
+      const source = s3.object(sourceRef.key);
+
+      await source.writeString("copy me", {
+        contentType: "text/plain",
+        metadata: {
+          copied: "true",
+        },
+      });
+
+      const copied = await s3.copyObject(sourceRef, destinationRef);
+      expect(copied.ref.key).toBe("copied.txt");
+      expect(await s3.object(destinationRef.key).text()).toBe("copy me");
+
+      const destination = s3.object(destinationRef.key);
+      expect(await destination.exists()).toBe(true);
+      await destination.delete();
+      expect(await destination.exists()).toBe(false);
+      await expect(destination.stat()).rejects.toBeInstanceOf(S3NotFoundError);
+    } finally {
+      tcpProc.kill();
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
+    }
+  });
+
   test("large in-memory uploads round-trip", async () => {
     const s3 = client();
     const largeText = "x".repeat(5 * 1024 * 1024);
@@ -357,49 +400,6 @@ describe("S3 transport", () => {
     });
     expect(treePage.objects.map((object) => object.ref.key)).toEqual(["tree/root.txt"]);
     expect(treePage.commonPrefixes).toEqual(["tree/nested/"]);
-  });
-
-  test("copy, delete, and exists round-trip", async () => {
-    // Use a dedicated TCP harness: Bun's HTTP/2 client can corrupt session
-    // authority after many RPCs on the shared default harness (see beforeAll).
-    const { proc: tcpProc, target } = await startTCPHarness();
-    const envName = ENV_HOST_SERVICE_SOCKET;
-    const previousTarget = process.env[envName];
-    process.env[envName] = target;
-    try {
-      const s3 = client();
-      const sourceRef = {
-        key: "source.txt",
-      } as const;
-      const destinationRef = {
-        key: "copied.txt",
-      } as const;
-      const source = s3.object(sourceRef.key);
-
-      await source.writeString("copy me", {
-        contentType: "text/plain",
-        metadata: {
-          copied: "true",
-        },
-      });
-
-      const copied = await s3.copyObject(sourceRef, destinationRef);
-      expect(copied.ref.key).toBe("copied.txt");
-      expect(await s3.object(destinationRef.key).text()).toBe("copy me");
-
-      const destination = s3.object(destinationRef.key);
-      expect(await destination.exists()).toBe(true);
-      await destination.delete();
-      expect(await destination.exists()).toBe(false);
-      await expect(destination.stat()).rejects.toBeInstanceOf(S3NotFoundError);
-    } finally {
-      tcpProc.kill();
-      if (previousTarget === undefined) {
-        delete process.env[envName];
-      } else {
-        process.env[envName] = previousTarget;
-      }
-    }
   });
 
   test("partial stream consumption can be cancelled by the caller", async () => {

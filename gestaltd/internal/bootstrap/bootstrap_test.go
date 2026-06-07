@@ -2386,12 +2386,6 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if len(createTurnReq.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
 	}
-	if createTurnReq.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("CreateTurn tool source = %q, want unspecified", createTurnReq.GetToolSource())
-	}
-	if len(createTurnReq.GetToolRefs()) != 0 {
-		t.Fatalf("CreateTurn tool refs = %#v, want none", createTurnReq.GetToolRefs())
-	}
 	if createTurnReq.GetContext() == nil {
 		t.Fatal("CreateTurn context is empty")
 	}

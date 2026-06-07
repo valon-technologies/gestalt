@@ -1261,12 +1261,6 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("provider turn tool source = %s, want unspecified", got)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 0 {
-		t.Fatalf("provider turn refs = %#v, want none", got)
-	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
 	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "slack" {
 		t.Fatalf("turn scope refs = %#v, want inherited slack ref", scope.ToolRefs)
@@ -1311,9 +1305,6 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 0 {
-		t.Fatalf("CreateTurn tool refs = %#v, want none", got)
 	}
 	scope := requireAgentManagerTurnScope(t, manager.turnScopes, "alpha", session.ID, alpha.createTurnReqs[0].GetTurnId())
 	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "slack" {
@@ -1866,11 +1857,8 @@ func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if got := req.GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("CreateTurn tool source = %q, want unspecified", got)
-	}
-	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
-		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
+	if len(req.GetTools()) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want none", req.GetTools())
 	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
 	if scope.ToolSource != coreagent.ToolSourceModeNone {
@@ -1878,79 +1866,6 @@ func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 	}
 	if len(scope.ToolRefs) != 0 || len(scope.Tools) != 0 || len(scope.Connections) != 0 {
 		t.Fatalf("turn scope = refs:%#v tools:%#v connections:%#v, want no tool or connection scope", scope.ToolRefs, scope.Tools, scope.Connections)
-	}
-}
-
-func TestManagerCreateTurnRejectsTurnToolScope(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		req  *proto.CreateAgentProviderTurnRequest
-	}{
-		{
-			name: "catalog source",
-			req: &proto.CreateAgentProviderTurnRequest{
-				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
-				Output:     agentTextOutputProto(),
-			},
-		},
-		{
-			name: "none source",
-			req: &proto.CreateAgentProviderTurnRequest{
-				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-				Output:     agentTextOutputProto(),
-			},
-		},
-		{
-			name: "tool refs",
-			req: &proto.CreateAgentProviderTurnRequest{
-				ToolRefs: []*proto.AgentToolRef{{App: "docs"}},
-				Output:   agentTextOutputProto(),
-			},
-		},
-		{
-			name: "empty tool refs set",
-			req: &proto.CreateAgentProviderTurnRequest{
-				ToolRefsSet: true,
-				Output:      agentTextOutputProto(),
-			},
-		},
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			alpha := newRouteCountingAgentProvider("alpha")
-			manager := newTestManager(t, Config{
-				Agent: &routeCountingAgentControl{
-					defaultName: "alpha",
-					names:       []string{"alpha"},
-					providers: map[string]*routeCountingAgentProvider{
-						"alpha": alpha,
-					},
-				},
-				TurnScopes: newAgentManagerTestTurnScopes(),
-			})
-			p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-			session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-				ProviderName: "alpha",
-				Model:        "test-model",
-			})
-			if err != nil {
-				t.Fatalf("CreateSession: %v", err)
-			}
-			tt.req.SessionId = session.ID
-			tt.req.Model = "test-model"
-			_, err = manager.CreateTurn(context.Background(), p, tt.req)
-			if !errors.Is(err, invocation.ErrInvalidInvocation) {
-				t.Fatalf("CreateTurn error = %v, want invalid invocation", err)
-			}
-			if len(alpha.createTurnReqs) != 0 {
-				t.Fatalf("CreateTurn requests = %d, want 0", len(alpha.createTurnReqs))
-			}
-		})
 	}
 }
 
@@ -1987,20 +1902,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			req: &proto.CreateAgentProviderTurnRequest{
 				TimeoutSeconds: 1,
 				Output:         agentStructuredOutputProto(t, map[string]any{}),
-			},
-			wantErr: invocation.ErrInvalidInvocation,
-		},
-		{
-			name: "none source rejects tool refs",
-			caps: &coreagent.ProviderCapabilities{
-				SupportedToolSources: []coreagent.ToolSourceMode{
-					coreagent.ToolSourceModeNone,
-				},
-			},
-			req: &proto.CreateAgentProviderTurnRequest{
-				TimeoutSeconds: 1,
-				ToolRefs:       []*proto.AgentToolRef{{App: "docs"}},
-				Output:         agentTextOutputProto(),
 			},
 			wantErr: invocation.ErrInvalidInvocation,
 		},
