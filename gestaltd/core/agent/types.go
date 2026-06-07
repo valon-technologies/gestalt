@@ -128,7 +128,7 @@ type ToolSourceMode string
 
 const (
 	ToolSourceModeUnspecified ToolSourceMode = ""
-	ToolSourceModeCatalog     ToolSourceMode = "mcp_catalog"
+	ToolSourceModeCatalog     ToolSourceMode = "catalog"
 	ToolSourceModeNone        ToolSourceMode = "none"
 )
 

@@ -1028,7 +1028,8 @@ func executeUnavailableAgentTool(target coreagent.ToolTarget) (*coreagent.Execut
 }
 
 func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {
-	if strings.TrimSpace(string(source)) == "" {
+	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
+	if source == "" || string(source) == "mcp_catalog" {
 		return coreagent.ToolSourceModeCatalog
 	}
 	return source
