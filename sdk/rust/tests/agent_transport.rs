@@ -887,7 +887,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
         .expect("connect agent host")
         .with_request_context(request_context.clone());
     let listed = host
-        .list_tools_for_turn(AgentHostListToolsInput {
+        .list_tools(AgentHostListToolsInput {
             session_id: "session-1".to_string(),
             turn_id: "turn-1".to_string(),
             page_size: 10,
@@ -901,7 +901,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     assert_eq!(listed.next_page_token, "next-1");
 
     let invoked = host
-        .execute_tool_for_turn(
+        .execute_tool(
             AgentHostExecuteToolInput {
                 session_id: "session-1".to_string(),
                 turn_id: "turn-1".to_string(),
@@ -933,7 +933,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     );
 
     let resolved_connection = host
-        .resolve_connection_for_turn(AgentHostResolveConnectionInput {
+        .resolve_connection(AgentHostResolveConnectionInput {
             session_id: "session-1".to_string(),
             turn_id: "turn-1".to_string(),
             connection: "model".to_string(),

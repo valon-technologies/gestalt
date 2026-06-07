@@ -99,8 +99,8 @@ The root package exports provider definition helpers:
 as `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
 `AgentTurnEvent`. Structured payload fields accept JSON values and timestamp
 fields use native `Date`; the SDK runtime owns transport serialization at the
-transport boundary. `AgentHost` includes plain-object helpers named
-`listToolsForTurn`, `executeToolForTurn`, and `resolveConnectionForTurn`.
+transport boundary. `AgentHost` includes plain-object helpers named `listTools`,
+`executeTool`, and `resolveConnection`.
 Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`, and
 `boundWorkflowRun` accept plain JSON objects
 and native `Date` values. Copy helpers such as `boundWorkflowTargetFromTarget`

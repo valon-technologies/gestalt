@@ -1925,20 +1925,6 @@ class AgentHostProtocol(Protocol):
     ) -> ExecuteAgentToolResponse:
         """Execute a host tool."""
 
-    def execute_tool_for_turn(
-        self,
-        session_id: str,
-        turn_id: str,
-        *,
-        tool_call_id: str,
-        tool_id: str,
-        arguments: Mapping[str, Any] | None = None,
-        context: Any | None = None,
-        idempotency_key: str = "",
-        timeout_seconds: float | None = None,
-    ) -> ExecuteAgentToolResponse:
-        """Execute a host tool for one turn."""
-
     def list_tools(
         self,
         request: ListAgentToolsRequest | Mapping[str, Any] | None = None,
@@ -1948,19 +1934,6 @@ class AgentHostProtocol(Protocol):
     ) -> ListAgentToolsResponse:
         """List host tools."""
 
-    def list_tools_for_turn(
-        self,
-        session_id: str,
-        turn_id: str,
-        *,
-        page_size: int = 0,
-        page_token: str = "",
-        query: str = "",
-        context: Any | None = None,
-        timeout_seconds: float | None = None,
-    ) -> ListAgentToolsResponse:
-        """List host tools for one turn."""
-
     def resolve_connection(
         self,
         request: ResolveAgentConnectionRequest | Mapping[str, Any] | None = None,
@@ -1969,18 +1942,6 @@ class AgentHostProtocol(Protocol):
         **kwargs: Any,
     ) -> ResolvedAgentConnection:
         """Resolve an agent connection."""
-
-    def resolve_connection_for_turn(
-        self,
-        session_id: str,
-        turn_id: str,
-        *,
-        connection: str,
-        instance: str = "",
-        context: Any | None = None,
-        timeout_seconds: float | None = None,
-    ) -> ResolvedAgentConnection:
-        """Resolve an agent connection for one turn."""
 
 
 class AgentHost:
@@ -2019,33 +1980,6 @@ class AgentHost:
         )
         return execute_agent_tool_response_from_proto(response)
 
-    def execute_tool_for_turn(
-        self,
-        session_id: str,
-        turn_id: str,
-        *,
-        tool_call_id: str,
-        tool_id: str,
-        arguments: JsonObjectInput | None = None,
-        context: Any | None = None,
-        idempotency_key: str = "",
-        timeout_seconds: float | None = None,
-    ) -> ExecuteAgentToolResponse:
-        """Execute a host tool using plain Python request fields."""
-
-        return self.execute_tool(
-            ExecuteAgentToolRequest(
-                session_id=session_id,
-                turn_id=turn_id,
-                tool_call_id=tool_call_id,
-                tool_id=tool_id,
-                arguments=arguments,
-                context=context,
-                idempotency_key=idempotency_key,
-            ),
-            timeout_seconds=timeout_seconds,
-        )
-
     def list_tools(
         self,
         request: ListAgentToolsRequest | Mapping[str, Any],
@@ -2061,31 +1995,6 @@ class AgentHost:
         )
         return list_agent_tools_response_from_proto(response)
 
-    def list_tools_for_turn(
-        self,
-        session_id: str,
-        turn_id: str,
-        *,
-        page_size: int = 0,
-        page_token: str = "",
-        query: str = "",
-        context: Any | None = None,
-        timeout_seconds: float | None = None,
-    ) -> ListAgentToolsResponse:
-        """List host tools using plain Python request fields."""
-
-        return self.list_tools(
-            ListAgentToolsRequest(
-                session_id=session_id,
-                turn_id=turn_id,
-                page_size=page_size,
-                page_token=page_token,
-                query=query,
-                context=context,
-            ),
-            timeout_seconds=timeout_seconds,
-        )
-
     def resolve_connection(
         self,
         request: ResolveAgentConnectionRequest | Mapping[str, Any],
@@ -2100,29 +2009,6 @@ class AgentHost:
             timeout_seconds=timeout_seconds,
         )
         return resolved_agent_connection_from_proto(response)
-
-    def resolve_connection_for_turn(
-        self,
-        session_id: str,
-        turn_id: str,
-        *,
-        connection: str,
-        instance: str = "",
-        context: Any | None = None,
-        timeout_seconds: float | None = None,
-    ) -> ResolvedAgentConnection:
-        """Resolve an agent connection using plain Python request fields."""
-
-        return self.resolve_connection(
-            ResolveAgentConnectionRequest(
-                session_id=session_id,
-                turn_id=turn_id,
-                connection=connection,
-                instance=instance,
-                context=context,
-            ),
-            timeout_seconds=timeout_seconds,
-        )
 
     def __enter__(self) -> AgentHost:
         """Return the client for ``with`` statements."""
