@@ -36,15 +36,6 @@ func (p *catalogCountingProvider) Catalog() *catalog.Catalog {
 	return p.CatalogVal
 }
 
-type unavailableAgentCatalogTestProvider struct {
-	*catalogCountingProvider
-	err error
-}
-
-func (p *unavailableAgentCatalogTestProvider) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
-	return nil, p.err
-}
-
 func agentCatalogTestProvider(name, displayName string, operations ...string) *catalogCountingProvider {
 	catalogOperations := make([]catalog.CatalogOperation, 0, len(operations))
 	for _, operation := range operations {
@@ -1032,6 +1023,69 @@ func TestCreateSessionWithoutToolsClearsStaleSessionScope(t *testing.T) {
 	}
 	if _, ok := scopes.GetSession("alpha", session.ID); ok {
 		t.Fatal("stale session scope was not deleted")
+	}
+}
+
+func TestCreateSessionWithoutToolsAcceptsExistingNoToolsMetadata(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.supportsWorkspace = true
+	scopes := newAgentManagerTestTurnScopes()
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": alpha},
+		},
+		TurnScopes: scopes,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	workspace := &proto.AgentWorkspace{
+		Checkouts: []*proto.AgentWorkspaceGitCheckout{{
+			Url:  "https://github.com/valon-technologies/gestalt.git",
+			Ref:  "main",
+			Path: "repo",
+		}},
+		Cwd: "repo",
+	}
+
+	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName:   "alpha",
+		Model:          "test-model",
+		IdempotencyKey: "workspace-review",
+		Workspace:      workspace,
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	metadata, err := agentSessionMetadataWithToolScope(nil, agentSessionTools{
+		toolSource: coreagent.ToolSourceModeNone,
+		set:        true,
+	})
+	if err != nil {
+		t.Fatalf("agentSessionMetadataWithToolScope: %v", err)
+	}
+	alpha.sessions[session.ID].Metadata = metadata.AsMap()
+	if err := scopes.PutSession(agentturnscope.Scope{
+		ProviderName: "alpha",
+		SessionID:    session.ID,
+		ToolRefsSet:  true,
+		ToolSource:   coreagent.ToolSourceModeNone,
+	}); err != nil {
+		t.Fatalf("PutSession: %v", err)
+	}
+
+	if _, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName:   "alpha",
+		Model:          "test-model",
+		IdempotencyKey: "workspace-review",
+		Workspace:      workspace,
+	}); err != nil {
+		t.Fatalf("CreateSession retry: %v", err)
+	}
+	if _, ok := scopes.GetSession("alpha", session.ID); ok {
+		t.Fatal("legacy no-tools session scope was not deleted")
 	}
 }
 

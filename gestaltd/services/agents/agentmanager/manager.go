@@ -557,9 +557,9 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 			return nil, err
 		}
 	} else {
-		if _, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
+		if persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
 			return nil, err
-		} else if ok {
+		} else if ok && !agentSessionScopeIsNoTools(persistedScope) {
 			return nil, fmt.Errorf("%w: existing agent session has tool scope metadata", invocation.ErrInvalidInvocation)
 		}
 		m.deleteSessionScope(providerName, normalized.ID)
@@ -1746,9 +1746,9 @@ func (m *Manager) validateExistingSessionWithoutSessionTools(ctx context.Context
 	if !providerSessionOwnedBy(normalized, p) {
 		return core.ErrNotFound
 	}
-	if _, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
+	if persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
 		return err
-	} else if ok {
+	} else if ok && !agentSessionScopeIsNoTools(persistedScope) {
 		return fmt.Errorf("%w: existing agent session has tool scope metadata", invocation.ErrInvalidInvocation)
 	}
 	return nil
@@ -2198,6 +2198,10 @@ func agentSessionScopeMatchesTools(scope agentturnscope.Scope, tools agentSessio
 		return false
 	}
 	return agentToolRefsEqual(scope.ToolRefs, tools.refs)
+}
+
+func agentSessionScopeIsNoTools(scope agentturnscope.Scope) bool {
+	return normalizeAgentToolSource(scope.ToolSource) == coreagent.ToolSourceModeNone && len(scope.ToolRefs) == 0
 }
 
 func agentToolRefsEqual(left, right []coreagent.ToolRef) bool {
@@ -2720,62 +2724,6 @@ func operationAnnotationsToProto(annotations core.CapabilityAnnotations) *proto.
 	}
 }
 
-func agentToolRefsWithinSessionScope(requested, allowed []coreagent.ToolRef) bool {
-	if len(requested) == 0 {
-		return true
-	}
-	if len(allowed) == 0 {
-		return false
-	}
-	for i := range requested {
-		ok := false
-		for j := range allowed {
-			if agentToolRefAllowsSessionRef(allowed[j], requested[i]) {
-				ok = true
-				break
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func agentToolRefAllowsSessionRef(allowed, requested coreagent.ToolRef) bool {
-	allowed = normalizeToolRefForCompare(allowed)
-	requested = normalizeToolRefForCompare(requested)
-	if allowed.System != "" || requested.System != "" {
-		return allowed.System != "" &&
-			allowed.System == requested.System &&
-			agentOptionalScopeFieldAllows(allowed.Operation, requested.Operation) &&
-			agentOptionalScopeFieldAllows(allowed.App, requested.App)
-	}
-	if allowed.App != agentToolSearchAllApp && allowed.App != requested.App {
-		return false
-	}
-	if !agentOptionalScopeFieldAllows(allowed.Operation, requested.Operation) {
-		return false
-	}
-	if !agentOptionalScopeFieldAllows(allowed.Connection, requested.Connection) {
-		return false
-	}
-	if !agentOptionalScopeFieldAllows(allowed.Instance, requested.Instance) {
-		return false
-	}
-	if allowed.CredentialMode != "" && allowed.CredentialMode != requested.CredentialMode {
-		return false
-	}
-	if allowed.RunAs != nil {
-		if requested.RunAs == nil {
-			return false
-		}
-		return allowed.RunAs.SubjectID == requested.RunAs.SubjectID &&
-			allowed.RunAs.CredentialSubjectID == requested.RunAs.CredentialSubjectID
-	}
-	return true
-}
-
 func normalizeToolRefForCompare(ref coreagent.ToolRef) coreagent.ToolRef {
 	ref.System = strings.TrimSpace(ref.System)
 	ref.App = strings.TrimSpace(ref.App)
@@ -2785,12 +2733,6 @@ func normalizeToolRefForCompare(ref coreagent.ToolRef) coreagent.ToolRef {
 	ref.CredentialMode = core.NormalizeOptionalConnectionMode(ref.CredentialMode)
 	ref.RunAs = core.NormalizeRunAsSubject(ref.RunAs)
 	return ref
-}
-
-func agentOptionalScopeFieldAllows(allowed, requested string) bool {
-	allowed = strings.TrimSpace(allowed)
-	requested = strings.TrimSpace(requested)
-	return allowed == "" || allowed == requested
 }
 
 func normalizeAgentToolSource(source coreagent.ToolSourceMode) coreagent.ToolSourceMode {

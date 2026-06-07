@@ -839,7 +839,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1","metadata":{"project":"docs"}}`))
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4","clientRef":"cli-1","metadata":{"project":"docs"},"tools":{"catalog":{"refs":[{"app":"docs","operation":"search"}]}}}`))
 	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	sessionResp, err := http.DefaultClient.Do(sessionReq)
 	if err != nil {
@@ -913,7 +913,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"app":"docs","operation":"search"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1180,7 +1180,7 @@ func TestAgentHarnessResolveUsesDefaultAndNamedHarness(t *testing.T) {
 	}
 }
 
-func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
+func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAgentProvider()
@@ -1248,29 +1248,26 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 	}
 
 	createTurn("omitted", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
-	createTurn("explicit empty", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
-	createTurn("plugin broad", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
+	createTurn("explicit empty", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusBadRequest)
+	createTurn("plugin broad", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusBadRequest)
 	createTurn("missing output", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusBadRequest)
 	createTurn("null toolRefs", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
 	createTurn("global credential mode", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
 	createTurn("system title", `{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
-	if len(turnRequests) != 3 {
-		t.Fatalf("provider turn requests len = %d, want 3", len(turnRequests))
+	if len(turnRequests) != 1 {
+		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].App != "*" || got[0].Operation != "" {
-		t.Fatalf("omitted toolRefs provider refs = %#v, want global broad ref", got)
+	if got := turnRequests[0].ToolRefs; len(got) != 0 {
+		t.Fatalf("omitted toolRefs provider refs = %#v, want none", got)
 	}
-	if got := turnRequests[1].ToolRefs; len(got) != 0 {
-		t.Fatalf("explicit empty toolRefs provider refs = %#v, want none", got)
-	}
-	if got := turnRequests[2].ToolRefs; len(got) != 1 || got[0].App != "docs" || got[0].Operation != "" {
-		t.Fatalf("plugin broad provider refs = %#v, want docs broad ref", got)
+	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
+		t.Fatalf("omitted tool source = %q, want none", got)
 	}
 }
 
-func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) {
+func TestAgentCreateTurnUsesNoToolsWithStructuredOutput(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAgentProvider()
@@ -1333,11 +1330,11 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 		}
 	}
 
-	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
-	createTurn("null output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":null}`, http.StatusBadRequest)
-	createTurn("ambiguous output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("ambiguous null text output", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
-	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
+	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"output":{"structured":{"schema":{"type":"object","properties":{"score":{"type":"number"}}}}}}`, http.StatusCreated)
+	createTurn("null output", `{"messages":[{"role":"user","text":"grade"}],"output":null}`, http.StatusBadRequest)
+	createTurn("ambiguous output", `{"messages":[{"role":"user","text":"grade"}],"output":{"text":{},"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("ambiguous null text output", `{"messages":[{"role":"user","text":"grade"}],"output":{"text":null,"structured":{"schema":{"type":"object"}}}}`, http.StatusBadRequest)
+	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"output":{"structured":{"schema":{}}}}`, http.StatusBadRequest)
 	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}],"output":{"text":{}}}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
@@ -1409,8 +1406,8 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("provider turn tool source = %q, want unspecified", got)
+	if got := turnRequests[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
+		t.Fatalf("provider turn tool source = %q, want none", got)
 	}
 	if got := turnRequests[0].GetToolRefs(); len(got) != 0 {
 		t.Fatalf("provider turn tool refs = %#v, want none", got)

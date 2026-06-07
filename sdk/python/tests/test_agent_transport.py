@@ -28,6 +28,7 @@ from gestalt import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
     Agent,
+    AgentCatalogToolConfig,
     AgentCreateSession,
     AgentCreateTurn,
     AgentHost,
@@ -1259,7 +1260,6 @@ class AgentTransportTests(unittest.TestCase):
                             ],
                         )
                     ],
-                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     output=agent_pb2.AgentOutput(
                         structured={"schema": {"type": "object"}},
                     ),
@@ -1356,7 +1356,7 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "",
                     "interaction_id": "",
                     "reason": "",
-                    "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
+                    "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED,
                     "tool_ref_count": 0,
                     "timeout_seconds": 120,
                     "output_kind": "structured",
@@ -1543,9 +1543,25 @@ class AgentTransportTests(unittest.TestCase):
 
     def test_agent_accepts_native_inputs(self) -> None:
         with Agent(Request()) as manager:
+            created_session = manager.create_session(
+                AgentCreateSession(
+                    provider_name="openai",
+                    model="gpt-5.1",
+                    client_ref="cli-session-1",
+                    tools=AgentCatalogToolConfig(
+                        refs=[
+                            AgentToolRef(
+                                app="github",
+                                operation="issues.get",
+                                connection="default",
+                            )
+                        ]
+                    ),
+                )
+            )
             created_turn = manager.create_turn(
                 AgentCreateTurn(
-                    session_id="session-managed-1",
+                    session_id=created_session.id,
                     model="gpt-5.1",
                     messages=[
                         AgentMessage(
@@ -1555,14 +1571,6 @@ class AgentTransportTests(unittest.TestCase):
                             metadata={"source": "native"},
                         )
                     ],
-                    tool_refs=[
-                        AgentToolRef(
-                            app="github",
-                            operation="issues.get",
-                            connection="default",
-                        )
-                    ],
-                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     output=AgentOutput(
                         structured=AgentStructuredOutput(
                             schema={"type": "object"},
@@ -1589,16 +1597,17 @@ class AgentTransportTests(unittest.TestCase):
             agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
         )
         self.assertEqual(resolved.id, "interaction-1")
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py"])
+        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py", "relay-token-py"])
         self.assertEqual(
             [item["method"] for item in _manager_requests],
-            ["create_turn", "resolve_interaction"],
+            ["create_session", "create_turn", "resolve_interaction"],
         )
-        self.assertEqual(_manager_requests[0]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE)
-        self.assertEqual(_manager_requests[0]["tool_ref_count"], 1)
-        self.assertEqual(_manager_requests[0]["timeout_seconds"], 120)
-        self.assertEqual(_manager_requests[0]["output_kind"], "structured")
-        self.assertTrue(_manager_requests[0]["has_structured_schema"])
+        self.assertEqual(_manager_session_tools[0]["tool_ref_operation"], "issues.get")
+        self.assertEqual(_manager_requests[1]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED)
+        self.assertEqual(_manager_requests[1]["tool_ref_count"], 0)
+        self.assertEqual(_manager_requests[1]["timeout_seconds"], 120)
+        self.assertEqual(_manager_requests[1]["output_kind"], "structured")
+        self.assertTrue(_manager_requests[1]["has_structured_schema"])
 
     def test_agent_create_turn_requires_unambiguous_output(self) -> None:
         with Agent(Request()) as manager:

@@ -83,13 +83,23 @@ type agentToolRefRequest struct {
 }
 
 type agentSessionCreateRequest struct {
-	ProviderName   string                 `json:"provider,omitempty"`
-	Model          string                 `json:"model,omitempty"`
-	ClientRef      string                 `json:"clientRef,omitempty"`
-	Metadata       map[string]any         `json:"metadata,omitempty"`
-	ModelOptions   map[string]any         `json:"modelOptions,omitempty"`
-	IdempotencyKey string                 `json:"idempotencyKey,omitempty"`
-	Workspace      *agentWorkspaceRequest `json:"workspace,omitempty"`
+	ProviderName   string                    `json:"provider,omitempty"`
+	Model          string                    `json:"model,omitempty"`
+	ClientRef      string                    `json:"clientRef,omitempty"`
+	Metadata       map[string]any            `json:"metadata,omitempty"`
+	ModelOptions   map[string]any            `json:"modelOptions,omitempty"`
+	IdempotencyKey string                    `json:"idempotencyKey,omitempty"`
+	Workspace      *agentWorkspaceRequest    `json:"workspace,omitempty"`
+	Tools          *agentSessionToolsRequest `json:"tools,omitempty"`
+}
+
+type agentSessionToolsRequest struct {
+	None    *json.RawMessage                 `json:"none,omitempty"`
+	Catalog *agentSessionCatalogToolsRequest `json:"catalog,omitempty"`
+}
+
+type agentSessionCatalogToolsRequest struct {
+	Refs []agentToolRefRequest `json:"refs,omitempty"`
 }
 
 type agentWorkspaceRequest struct {
@@ -336,6 +346,11 @@ func (s *Server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid metadata: %v", err))
 		return
 	}
+	tools, err := agentSessionToolsToProto(req.Tools)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	session, err := s.agentRuns.CreateSession(r.Context(), p, &proto.CreateAgentProviderSessionRequest{
 		IdempotencyKey: idempotencyKey,
 		ProviderName:   strings.TrimSpace(req.ProviderName),
@@ -343,6 +358,7 @@ func (s *Server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 		ClientRef:      strings.TrimSpace(req.ClientRef),
 		Metadata:       metadata,
 		Workspace:      agentWorkspaceRequestToProto(req.Workspace),
+		Tools:          tools,
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", "", nil, err)
@@ -1218,6 +1234,31 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 
 func agentToolRefsForCreateTurn(req agentTurnCreateRequest) []*proto.AgentToolRef {
 	return agentwire.ToolRefsToProto(agentToolRefsFromRequest(req.ToolRefs))
+}
+
+func agentSessionToolsToProto(req *agentSessionToolsRequest) (*proto.AgentToolConfig, error) {
+	if req == nil {
+		return nil, nil
+	}
+	hasNone := req.None != nil
+	hasCatalog := req.Catalog != nil
+	if hasNone && hasCatalog {
+		return nil, fmt.Errorf("tools must set exactly one of none or catalog")
+	}
+	if hasNone {
+		return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_None{None: &proto.AgentNoTools{}}}, nil
+	}
+	if !hasCatalog {
+		return nil, nil
+	}
+	if err := validateAgentToolRefs(req.Catalog.Refs); err != nil {
+		return nil, err
+	}
+	return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{
+		Catalog: &proto.AgentCatalogToolConfig{
+			Refs: agentwire.ToolRefsToProto(agentToolRefsFromRequest(req.Catalog.Refs)),
+		},
+	}}, nil
 }
 
 func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
