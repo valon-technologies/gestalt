@@ -85,17 +85,16 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		CatalogConnection: connMaps.APIConnection,
 	}))
 	prepared.AgentManager.SetTarget(agentmanager.New(agentmanager.Config{
-		Providers:                     providers,
-		Agent:                         prepared.Deps.AgentRuntime,
-		WorkflowTools:                 workflowTools,
-		TurnScopes:                    prepared.Deps.AgentTurnScopes,
-		ToolIDs:                       prepared.Deps.AgentToolIDs,
-		Invoker:                       sharedInvoker,
-		DefaultConnection:             connMaps.DefaultConnection,
-		CatalogConnection:             connMaps.APIConnection,
-		AgentConnections:              agentConnectionBindings(cfg),
-		SessionStart:                  agentSessionStartConfigs(cfg),
-		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
+		Providers:         providers,
+		Agent:             prepared.Deps.AgentRuntime,
+		WorkflowTools:     workflowTools,
+		TurnScopes:        prepared.Deps.AgentTurnScopes,
+		ToolIDs:           prepared.Deps.AgentToolIDs,
+		Invoker:           sharedInvoker,
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.APIConnection,
+		AgentConnections:  agentConnectionBindings(cfg),
+		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(prepared.AgentManager)
 	prepared.AppInvocation.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", nil, invocation.WithoutRateLimit()))

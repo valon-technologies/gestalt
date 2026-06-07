@@ -414,8 +414,21 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
+	session, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+		ProviderName: "alpha",
+		Model:        "gpt-test",
+		Tools: &gestalt.AgentCatalogToolConfig{Refs: []gestalt.AgentToolRef{{
+			App:        "github",
+			Operation:  "issues.get",
+			Connection: "default",
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
 	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
-		SessionID: "session-1",
+		SessionID: session.ID,
 		Model:     "gpt-test",
 		Messages: []gestalt.AgentMessage{{
 			Role: "user",
@@ -425,12 +438,6 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 			}},
 			Metadata: map[string]any{"source": "native"},
 		}},
-		ToolRefs: []gestalt.AgentToolRef{{
-			App:        "github",
-			Operation:  "issues.get",
-			Connection: "default",
-		}},
-		ToolSource: gestalt.AgentToolSourceModeMCPCatalog,
 		Output: &gestalt.AgentOutput{
 			Structured: &gestalt.AgentStructuredOutput{Schema: map[string]any{"type": "object"}},
 		},
@@ -447,6 +454,12 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
+	if len(harness.sessionRequests) != 1 {
+		t.Fatalf("session requests len = %d, want 1", len(harness.sessionRequests))
+	}
+	if got := harness.sessionRequests[0].GetTools().GetCatalog().GetRefs(); len(got) != 1 || got[0].GetApp() != "github" || got[0].GetConnection() != "default" {
+		t.Fatalf("session tool refs = %#v", got)
+	}
 	if len(harness.turnRequests) != 1 {
 		t.Fatalf("turn requests len = %d, want 1", len(harness.turnRequests))
 	}
@@ -460,8 +473,8 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	if metadata := got.GetMessages()[0].GetMetadata().AsMap(); metadata["source"] != "native" {
 		t.Fatalf("message metadata = %#v", metadata)
 	}
-	if got.GetToolRefs()[0].GetApp() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
-		t.Fatalf("tool refs = %#v", got.GetToolRefs())
+	if len(got.GetToolRefs()) != 0 || got.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
+		t.Fatalf("turn tools = refs:%#v source:%s, want unset", got.GetToolRefs(), got.GetToolSource())
 	}
 	if schema := got.GetOutput().GetStructured().GetSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("output schema = %#v", schema)

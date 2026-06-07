@@ -432,6 +432,7 @@ func (p *routeCountingAgentProvider) GetCapabilities(context.Context, *proto.Get
 		BoundedListHydration: true,
 		SupportedToolSources: []coreagent.ToolSourceMode{
 			coreagent.ToolSourceModeMCPCatalog,
+			coreagent.ToolSourceModeNone,
 		},
 	}, nil
 }
@@ -1253,14 +1254,12 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
 		TimeoutSeconds: 1,
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "github",
-			Operation: "issues.create",
-		}},
-		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
 	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("CreateTurn error = %v, want authorization denied", err)
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != "slack" {
+		t.Fatalf("CreateTurn tool refs = %#v, want durable slack scope", got)
 	}
 }
 
@@ -1766,54 +1765,7 @@ func TestManagerListTurnsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *
 	}
 }
 
-func TestManagerCreateTurnLeavesToolSourceUnsetWhenNoToolsRequested(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	alpha.capabilities = &coreagent.ProviderCapabilities{
-		BoundedListHydration: true,
-	}
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes: newAgentManagerTestTurnScopes(),
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Tools:          []*proto.ResolvedAgentTool{{Id: "spoofed-tool", Name: "spoofed_tool"}},
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	if got := alpha.createTurnReqs[0].GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("CreateTurn tool source = %q, want empty", got)
-	}
-	if got := alpha.createTurnReqs[0].Tools; len(got) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", got)
-	}
-}
-
-func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testing.T) {
+func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 	t.Parallel()
 
 	alpha := newRouteCountingAgentProvider("alpha")
@@ -1828,12 +1780,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 		},
 		TurnScopes: scopes,
 	})
-	p := &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-		Identity: &core.UserIdentity{
-			Email: "ada@example.com",
-		},
-	}
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 
 	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "alpha",
@@ -1847,589 +1794,22 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
-		Context: &proto.RequestContext{
-			Subject: &proto.SubjectContext{Id: principal.UserSubjectID("user-1")},
-		},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createSessionReqs) != 1 {
+		t.Fatalf("CreateSession requests = %d, want 1", len(alpha.createSessionReqs))
+	}
+	if alpha.createSessionReqs[0].GetTools() != nil {
+		t.Fatalf("CreateSession tools = %#v, want unset no-tools config", alpha.createSessionReqs[0].GetTools())
 	}
 	if len(alpha.createTurnReqs) != 1 {
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
-		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.GetToolSource())
-	}
-	if got := req.GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want global broad catalog ref", got)
-	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
-	if scope.ToolSource != coreagent.ToolSourceModeMCPCatalog {
-		t.Fatalf("scope tool source = %q, want mcp_catalog", scope.ToolSource)
-	}
-	if got := scope.ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
-		t.Fatalf("scope tool refs = %#v, want global broad catalog ref", got)
-	}
-	requireAgentManagerRequestContextCaller(t, req.GetContext(), invocation.ProviderKindAgent, "alpha")
-	if got := req.GetContext().GetSubject().GetId(); got != principal.UserSubjectID("user-1") {
-		t.Fatalf("request context subject = %q, want user:user-1", got)
-	}
-	if scope.CallerKind != invocation.ProviderKindAgent || scope.CallerName != "alpha" {
-		t.Fatalf("scope caller = %s/%q, want agent/alpha", scope.CallerKind, scope.CallerName)
-	}
-}
-
-func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProvider(t *testing.T) {
-	t.Parallel()
-
-	threshold := 1
-	linear := agentCatalogTestProvider("linear", "Linear", "issues")
-	github := agentCatalogTestProvider("github", "GitHub", "issues", "pull_requests")
-	alpha := newRouteCountingAgentProvider("alpha")
-	scopes := newAgentManagerTestTurnScopes()
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear, github),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes:                    scopes,
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
-		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.GetToolSource())
-	}
-	if got := req.GetToolRefs(); len(got) != 1 || got[0].GetApp() != "linear" || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want linear provider ref", got)
-	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
-	if got := scope.ToolRefs; len(got) != 1 || got[0].App != "linear" || got[0].Operation != "" {
-		t.Fatalf("scope tool refs = %#v, want linear provider ref", got)
-	}
-
-	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
-		ToolSource: scope.ToolSource,
-		ToolRefs:   scope.ToolRefs,
-	})
-	if err != nil {
-		t.Fatalf("ListTools narrowed scope: %v", err)
-	}
-	if len(listed.Tools) != 1 || listed.Tools[0].Target.App != "linear" || listed.Tools[0].Target.Operation != "issues" {
-		t.Fatalf("ListTools narrowed scope = %#v, want only linear issues", listed.Tools)
-	}
-}
-
-func TestManagerCreateTurnKeepsImplicitWildcardForSmallCatalogs(t *testing.T) {
-	t.Parallel()
-
-	threshold := 10
-	linear := agentCatalogTestProvider("linear", "Linear", "issues")
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for small catalog", got)
-	}
-}
-
-func TestManagerCreateTurnDoesNotEnumerateCatalogsWhenNoProviderMentionMatches(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	linear := agentCatalogTestProvider("linear", "Linear", "issues")
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my tickets"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if linear.catalogCalls != 0 {
-		t.Fatalf("linear catalog calls = %d, want no enumeration without a provider mention", linear.catalogCalls)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard without provider mention", got)
-	}
-}
-
-func TestManagerCreateTurnDoesNotStemProviderMentionsForImplicitNarrowing(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	docs := agentCatalogTestProvider("docs", "Docs", "search")
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, docs),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "open a doc"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if docs.catalogCalls != 0 {
-		t.Fatalf("docs catalog calls = %d, want no enumeration for non-exact provider mention", docs.catalogCalls)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for non-exact provider mention", got)
-	}
-}
-
-func TestManagerCreateTurnKeepsImplicitWildcardForHTTPAppCallerDefaults(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	linear := agentCatalogTestProvider("linear", "Linear", "issues")
-	alpha := newRouteCountingAgentProvider("alpha")
-	scopes := newAgentManagerTestTurnScopes()
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes:                    scopes,
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-		Kind:      principal.KindUser,
-	}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
-	_, err = manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
-		Output:         agentTextOutputProto(),
-		Context: &proto.RequestContext{
-			Caller: &proto.ProviderContext{
-				Kind: string(invocation.ProviderKindApp),
-				Name: "slack",
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for app caller default", got)
-	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, alpha.createTurnReqs[0].GetTurnId())
-	if scope.CallerKind != invocation.ProviderKindApp || scope.CallerName != "slack" {
-		t.Fatalf("scope caller = %s/%q, want app/slack", scope.CallerKind, scope.CallerName)
-	}
-	if linear.catalogCalls != 0 {
-		t.Fatalf("linear catalog calls = %d, want app caller default to skip narrowing probes", linear.catalogCalls)
-	}
-}
-
-func TestManagerCreateTurnNarrowsFromLatestUserTextOnly(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	linear := agentCatalogTestProvider("linear", "Linear", "issues")
-	github := agentCatalogTestProvider("github", "GitHub", "issues")
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear, github),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages: mustAgentMessages(t, []coreagent.Message{
-			{Role: "user", Text: "linear was mentioned earlier"},
-			{Role: "assistant", Text: "linear is still in assistant text"},
-			{
-				Role: "user",
-				Parts: []coreagent.MessagePart{
-					{Type: coreagent.MessagePartTypeJSON, Text: "linear should be ignored"},
-					{Type: coreagent.MessagePartTypeToolResult, ToolResult: &coreagent.ToolResultPart{Content: "linear should be ignored"}},
-					{Type: coreagent.MessagePartTypeText, Text: "show me github issues"},
-				},
-				Metadata: map[string]any{"provider": "linear"},
-			},
-		}),
-		Output: agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != "github" || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want github from latest user text part only", got)
-	}
-}
-
-func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderCannotBeProbed(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	linear := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "linear",
-			DN:       "Linear",
-			ConnMode: core.ConnectionModeNone,
-		},
-	}
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want fail-open broad wildcard", got)
-	}
-}
-
-func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderUnavailable(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	linear := &unavailableAgentCatalogTestProvider{
-		catalogCountingProvider: &catalogCountingProvider{
-			StubIntegration: coretesting.StubIntegration{
-				N:        "linear",
-				DN:       "Linear",
-				ConnMode: core.ConnectionModeSubject,
-			},
-		},
-		err: invocation.ErrNoCredential,
-	}
-	github := agentCatalogTestProvider("github", "GitHub", "issues")
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear, github),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard when mentioned provider is unavailable", got)
-	}
-}
-
-func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderHasNoVisibleCandidates(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	hidden := false
-	linear := &catalogCountingProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N:        "linear",
-			DN:       "Linear",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-				ID:      "admin",
-				Title:   "Admin",
-				Visible: &hidden,
-			}}},
-		},
-	}
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, linear),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		DefaultToolNarrowingThreshold: &threshold,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Messages:       mustAgentMessages(t, []coreagent.Message{{Role: "user", Text: "show me linear"}}),
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if got := alpha.createTurnReqs[0].GetToolRefs(); len(got) != 1 || got[0].GetApp() != agentToolSearchAllApp || got[0].GetOperation() != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard when provider has no visible candidates", got)
-	}
-}
-
-func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG {
-		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.GetToolSource())
-	}
-	if got := req.GetToolRefs(); len(got) != 0 {
-		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty catalog source", got)
-	}
-}
-
-func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	alpha.capabilities = &coreagent.ProviderCapabilities{
-		SupportedToolSources: []coreagent.ToolSourceMode{
-			coreagent.ToolSourceModeNone,
-		},
-	}
-	scopes := newAgentManagerTestTurnScopes()
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes:       scopes,
-		AgentConnections: map[string][]string{"alpha": {"anthropic"}},
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
-		t.Fatalf("CreateTurn tool source = %q, want none", req.GetToolSource())
+	if got := req.GetToolSource(); got != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
+		t.Fatalf("CreateTurn tool source = %q, want none", got)
 	}
 	if len(req.GetToolRefs()) != 0 || len(req.GetTools()) != 0 {
 		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.GetToolRefs(), req.GetTools())
@@ -2438,11 +1818,81 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 	if scope.ToolSource != coreagent.ToolSourceModeNone {
 		t.Fatalf("scope tool source = %q, want none", scope.ToolSource)
 	}
-	if scope.ToolRefsSet {
-		t.Fatalf("scope tool refs set = true, want false for unset tool refs")
-	}
 	if len(scope.ToolRefs) != 0 || len(scope.Tools) != 0 || len(scope.Connections) != 0 {
 		t.Fatalf("turn scope = refs:%#v tools:%#v connections:%#v, want no tool or connection scope", scope.ToolRefs, scope.Tools, scope.Connections)
+	}
+}
+
+func TestManagerCreateTurnRejectsTurnToolScope(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		req  *proto.CreateAgentProviderTurnRequest
+	}{
+		{
+			name: "catalog source",
+			req: &proto.CreateAgentProviderTurnRequest{
+				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
+				Output:     agentTextOutputProto(),
+			},
+		},
+		{
+			name: "none source",
+			req: &proto.CreateAgentProviderTurnRequest{
+				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+				Output:     agentTextOutputProto(),
+			},
+		},
+		{
+			name: "tool refs",
+			req: &proto.CreateAgentProviderTurnRequest{
+				ToolRefs: []*proto.AgentToolRef{{App: "docs"}},
+				Output:   agentTextOutputProto(),
+			},
+		},
+		{
+			name: "empty tool refs set",
+			req: &proto.CreateAgentProviderTurnRequest{
+				ToolRefsSet: true,
+				Output:      agentTextOutputProto(),
+			},
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			alpha := newRouteCountingAgentProvider("alpha")
+			manager := newTestManager(t, Config{
+				Agent: &routeCountingAgentControl{
+					defaultName: "alpha",
+					names:       []string{"alpha"},
+					providers: map[string]*routeCountingAgentProvider{
+						"alpha": alpha,
+					},
+				},
+				TurnScopes: newAgentManagerTestTurnScopes(),
+			})
+			p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+			session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
+				ProviderName: "alpha",
+				Model:        "test-model",
+			})
+			if err != nil {
+				t.Fatalf("CreateSession: %v", err)
+			}
+			tt.req.SessionId = session.ID
+			tt.req.Model = "test-model"
+			_, err = manager.CreateTurn(context.Background(), p, tt.req)
+			if !errors.Is(err, invocation.ErrInvalidInvocation) {
+				t.Fatalf("CreateTurn error = %v, want invalid invocation", err)
+			}
+			if len(alpha.createTurnReqs) != 0 {
+				t.Fatalf("CreateTurn requests = %d, want 0", len(alpha.createTurnReqs))
+			}
+		})
 	}
 }
 
@@ -2465,7 +1915,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
 				TimeoutSeconds: 1,
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				Output:         agentStructuredOutputProto(t, map[string]any{"type": "object"}),
 			},
 			wantCreated: true,
@@ -2479,7 +1928,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
 				TimeoutSeconds: 1,
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				Output:         agentStructuredOutputProto(t, map[string]any{}),
 			},
 			wantErr: invocation.ErrInvalidInvocation,
@@ -2493,7 +1941,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
 				TimeoutSeconds: 1,
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				ToolRefs:       []*proto.AgentToolRef{{App: "docs"}},
 				Output:         agentTextOutputProto(),
 			},
@@ -2508,7 +1955,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
 				TimeoutSeconds: 1,
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				Output:         agentTextOutputProto(),
 			},
 			wantCreated: true,
@@ -2521,8 +1967,7 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 				},
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
-				ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
-				Output:     agentTextOutputProto(),
+				Output: agentTextOutputProto(),
 			},
 			wantCreated: true,
 		},
@@ -2535,7 +1980,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			},
 			req: &proto.CreateAgentProviderTurnRequest{
 				TimeoutSeconds: -1,
-				ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 				Output:         agentTextOutputProto(),
 			},
 			wantErr: invocation.ErrInvalidInvocation,
@@ -2599,65 +2043,6 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 	}
 }
 
-func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	scopes := newAgentManagerTestTurnScopes()
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes: scopes,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		ToolRefsSet:    true,
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	req := alpha.createTurnReqs[0]
-	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
-		t.Fatalf("CreateTurn tool source = %q, want empty", req.GetToolSource())
-	}
-	if got := req.GetToolRefs(); len(got) != 0 {
-		t.Fatalf("CreateTurn tool refs = %#v, want none for explicit empty tool refs", got)
-	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
-	if scope.ToolSource != coreagent.ToolSourceModeUnspecified {
-		t.Fatalf("scope tool source = %q, want empty", scope.ToolSource)
-	}
-	if !scope.ToolRefsSet {
-		t.Fatalf("scope tool refs set = false, want true for explicit empty tool refs")
-	}
-	if got := scope.ToolRefs; len(got) != 0 {
-		t.Fatalf("scope tool refs = %#v, want none for explicit empty tool refs", got)
-	}
-	if got := scope.Tools; len(got) != 0 {
-		t.Fatalf("scope tools = %#v, want none for explicit empty tool refs", got)
-	}
-}
-
 func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
 	t.Parallel()
 
@@ -2696,7 +2081,6 @@ func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
-		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
 		Output:         agentTextOutputProto(),
 	})
 	if err == nil {

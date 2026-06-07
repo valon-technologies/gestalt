@@ -1173,17 +1173,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		CatalogConnection: connMaps.APIConnection,
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
-		Providers:                     providers,
-		Agent:                         prepared.Deps.AgentRuntime,
-		WorkflowTools:                 workflowTools,
-		TurnScopes:                    prepared.Deps.AgentTurnScopes,
-		ToolIDs:                       prepared.Deps.AgentToolIDs,
-		Invoker:                       sharedInvoker,
-		DefaultConnection:             connMaps.DefaultConnection,
-		CatalogConnection:             connMaps.APIConnection,
-		AgentConnections:              agentConnectionBindings(cfg),
-		SessionStart:                  agentSessionStartConfigs(cfg),
-		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
+		Providers:         providers,
+		Agent:             prepared.Deps.AgentRuntime,
+		WorkflowTools:     workflowTools,
+		TurnScopes:        prepared.Deps.AgentTurnScopes,
+		ToolIDs:           prepared.Deps.AgentToolIDs,
+		Invoker:           sharedInvoker,
+		DefaultConnection: connMaps.DefaultConnection,
+		CatalogConnection: connMaps.APIConnection,
+		AgentConnections:  agentConnectionBindings(cfg),
+		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))

@@ -219,7 +219,7 @@ export interface AgentToolRef {
 }
 
 export type AgentToolConfig =
-  | { none: Record<string, never>; catalog?: undefined }
+  | { none?: Record<string, never>; catalog?: undefined }
   | { none?: undefined; catalog: AgentCatalogToolConfig };
 
 export interface AgentCatalogToolConfig {

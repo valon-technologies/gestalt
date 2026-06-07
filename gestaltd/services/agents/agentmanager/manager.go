@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -59,7 +58,6 @@ const (
 	agentToolListDefaultPageSize = 100
 	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
-	agentDefaultToolNarrowingK   = 200
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
 )
@@ -131,25 +129,19 @@ type Config struct {
 	CatalogConnection map[string]string
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
-	// DefaultToolNarrowingThreshold controls when implicit default wildcard
-	// catalog scopes are narrowed to exactly mentioned providers. Nil uses the
-	// package default; zero means narrow whenever any visible catalog candidate
-	// exists.
-	DefaultToolNarrowingThreshold *int
 }
 
 type Manager struct {
-	providers                     *registry.ProviderMap[core.Provider]
-	agent                         AgentControl
-	workflowTools                 WorkflowSystemTools
-	turnScopes                    *agentturnscope.Store
-	toolIDs                       *agenttoolid.Codec
-	invoker                       invocation.Invoker
-	defaultConnection             map[string]string
-	catalogConnection             map[string]string
-	agentConnections              map[string][]string
-	sessionStart                  map[string]*coreagent.SessionStartConfig
-	defaultToolNarrowingThreshold int
+	providers         *registry.ProviderMap[core.Provider]
+	agent             AgentControl
+	workflowTools     WorkflowSystemTools
+	turnScopes        *agentturnscope.Store
+	toolIDs           *agenttoolid.Codec
+	invoker           invocation.Invoker
+	defaultConnection map[string]string
+	catalogConnection map[string]string
+	agentConnections  map[string][]string
+	sessionStart      map[string]*coreagent.SessionStartConfig
 }
 
 func New(cfg Config) *Manager {
@@ -164,9 +156,6 @@ func New(cfg Config) *Manager {
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
-		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
-			cfg.DefaultToolNarrowingThreshold,
-		),
 	}
 }
 
@@ -200,16 +189,6 @@ func cloneSessionStartConfig(src *coreagent.SessionStartConfig) *coreagent.Sessi
 		dst.Hooks[i] = hook
 	}
 	return dst
-}
-
-func effectiveAgentToolNarrowingThreshold(configured *int) int {
-	if configured == nil {
-		return agentDefaultToolNarrowingK
-	}
-	if *configured < 0 {
-		return 0
-	}
-	return *configured
 }
 
 func cloneStringSliceMap(src map[string][]string) map[string][]string {
@@ -396,19 +375,6 @@ func agentExecutionStatusFromProto(status proto.AgentExecutionStatus) (coreagent
 		return coreagent.ExecutionStatusWaitingForInput, nil
 	default:
 		return "", fmt.Errorf("unknown agent execution status %v", status)
-	}
-}
-
-func agentToolSourceModeFromProtoStrict(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
-	switch mode {
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED:
-		return coreagent.ToolSourceModeUnspecified
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG:
-		return coreagent.ToolSourceModeMCPCatalog
-	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE:
-		return coreagent.ToolSourceModeNone
-	default:
-		return coreagent.ToolSourceMode(fmt.Sprintf("unknown:%d", mode))
 	}
 }
 
@@ -830,35 +796,21 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(ownedSession.providerName))
-	toolRefs, err := normalizeToolRefs(agentwire.ToolRefsFromProto(req.GetToolRefs()))
-	if err != nil {
-		return nil, err
-	}
 	callerKind, callerName := agentCaller(ctx, req.GetContext(), ownedSession.providerName)
 	if callerKind != "" && callerName != "" {
 		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
 	}
-	toolSource, err := validateProviderTurnToolSource(agentToolSourceModeFromProtoStrict(req.GetToolSource()))
-	if err != nil {
-		return nil, err
+	if req.GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED || req.GetToolRefsSet() || len(req.GetToolRefs()) > 0 {
+		return nil, fmt.Errorf("%w: agent turn tools must be configured on the session", invocation.ErrInvalidInvocation)
 	}
-	toolRefsSet := req.GetToolRefsSet() || len(toolRefs) > 0
+	toolSource := coreagent.ToolSourceModeNone
+	var toolRefs []coreagent.ToolRef
+	toolRefsSet := true
 	if sessionScope, ok, err := m.sessionScopeForSession(ownedSession.providerName, ownedSession.session); err != nil {
 		return nil, err
 	} else if ok {
-		toolSource, toolRefs, toolRefsSet, err = agentTurnToolsFromSessionScope(sessionScope, toolSource, toolRefs, toolRefsSet)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) > 0 {
-			toolSource = coreagent.ToolSourceModeMCPCatalog
-		}
-		if toolSource == coreagent.ToolSourceModeUnspecified && len(toolRefs) == 0 && !toolRefsSet && defaultAgentTurnToolSource(ctx, ownedSession.provider) == coreagent.ToolSourceModeMCPCatalog {
-			toolSource = coreagent.ToolSourceModeMCPCatalog
-			toolRefs = m.defaultAgentTurnToolRefs(ctx, p, callerKind, callerName, agentwire.MessagesFromProto(req.GetMessages()))
-			toolRefsSet = len(toolRefs) > 0
-		}
+		toolSource = normalizeAgentToolSource(sessionScope.ToolSource)
+		toolRefs = append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...)
 	}
 	requestedOutput := agentOutputFromProto(req.GetOutput())
 	if err := validateAgentOutput(requestedOutput); err != nil {
@@ -884,11 +836,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	case coreagent.ToolSourceModeNone:
 		if len(toolRefs) > 0 {
 			return nil, fmt.Errorf("%w: toolRefs are not supported with agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
-		}
-		if supported, err := agentProviderSupportsToolSource(ctx, ownedSession.provider, toolSource); err != nil {
-			return nil, err
-		} else if !supported {
-			return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
 		}
 	case coreagent.ToolSourceModeUnspecified:
 	default:
@@ -2029,21 +1976,12 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 }
 
 func (m *Manager) agentSessionTools(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, config *proto.AgentToolConfig) (agentSessionTools, error) {
-	if config == nil {
+	if config == nil || config.GetSource() == nil {
 		return agentSessionTools{}, nil
 	}
 	switch source := config.GetSource().(type) {
 	case *proto.AgentToolConfig_None:
-		if supported, err := agentProviderSupportsToolSource(ctx, provider, coreagent.ToolSourceModeNone); err != nil {
-			return agentSessionTools{}, err
-		} else if !supported {
-			return agentSessionTools{}, fmt.Errorf("agent provider %q does not support tool source %q", providerName, coreagent.ToolSourceModeNone)
-		}
-		return agentSessionTools{
-			config:     &proto.AgentToolConfig{Source: &proto.AgentToolConfig_None{None: &proto.AgentNoTools{}}},
-			toolSource: coreagent.ToolSourceModeNone,
-			set:        true,
-		}, nil
+		return agentSessionTools{}, nil
 	case *proto.AgentToolConfig_Catalog:
 		if supported, err := agentProviderSupportsToolSource(ctx, provider, coreagent.ToolSourceModeMCPCatalog); err != nil {
 			return agentSessionTools{}, err
@@ -2780,23 +2718,6 @@ func operationAnnotationsToProto(annotations core.CapabilityAnnotations) *proto.
 		DestructiveHint: annotations.DestructiveHint,
 		OpenWorldHint:   annotations.OpenWorldHint,
 	}
-}
-
-func agentTurnToolsFromSessionScope(scope agentturnscope.Scope, requestedSource coreagent.ToolSourceMode, requestedRefs []coreagent.ToolRef, requestedRefsSet bool) (coreagent.ToolSourceMode, []coreagent.ToolRef, bool, error) {
-	sessionSource := normalizeAgentToolSource(scope.ToolSource)
-	if requestedSource != coreagent.ToolSourceModeUnspecified && requestedSource != sessionSource {
-		return "", nil, false, fmt.Errorf("%w: agent turn tool source %q does not match session tool source %q", invocation.ErrInvalidInvocation, requestedSource, sessionSource)
-	}
-	if requestedRefsSet {
-		if sessionSource == coreagent.ToolSourceModeNone && len(requestedRefs) > 0 {
-			return "", nil, false, fmt.Errorf("%w: toolRefs are not supported with agent tool source %q", invocation.ErrInvalidInvocation, sessionSource)
-		}
-		if !agentToolRefsWithinSessionScope(requestedRefs, scope.ToolRefs) {
-			return "", nil, false, fmt.Errorf("%w: agent turn toolRefs must be a subset of session toolRefs", invocation.ErrAuthorizationDenied)
-		}
-		return sessionSource, append([]coreagent.ToolRef(nil), requestedRefs...), true, nil
-	}
-	return sessionSource, append([]coreagent.ToolRef(nil), scope.ToolRefs...), true, nil
 }
 
 func agentToolRefsWithinSessionScope(requested, allowed []coreagent.ToolRef) bool {
@@ -4057,16 +3978,6 @@ func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMo
 	return source, nil
 }
 
-func validateProviderTurnToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
-	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
-	switch source {
-	case coreagent.ToolSourceModeUnspecified, coreagent.ToolSourceModeMCPCatalog, coreagent.ToolSourceModeNone:
-		return source, nil
-	default:
-		return "", fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, source)
-	}
-}
-
 func agentOutputFromProto(output *proto.AgentOutput) coreagent.Output {
 	if output == nil {
 		return coreagent.Output{}
@@ -4162,194 +4073,6 @@ func validateAgentStructuredValue(schema map[string]any, value map[string]any) e
 		return err
 	}
 	return nil
-}
-
-func defaultAgentTurnToolSource(ctx context.Context, provider coreagent.Provider) coreagent.ToolSourceMode {
-	if provider == nil {
-		return coreagent.ToolSourceModeUnspecified
-	}
-	caps, err := provider.GetCapabilities(ctx, &proto.GetAgentProviderCapabilitiesRequest{})
-	if err != nil {
-		return coreagent.ToolSourceModeUnspecified
-	}
-	if agentProviderCapabilitiesSupportToolSource(caps, coreagent.ToolSourceModeMCPCatalog) {
-		return coreagent.ToolSourceModeMCPCatalog
-	}
-	return coreagent.ToolSourceModeUnspecified
-}
-
-func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Principal, callerKind invocation.ProviderKind, callerName string, messages []coreagent.Message) []coreagent.ToolRef {
-	broadRefs := []coreagent.ToolRef{{App: agentToolSearchAllApp}}
-	if m == nil || m.providers == nil {
-		return broadRefs
-	}
-	if shouldUseResolvedUserToolScope(ctx, p, callerKind, callerName, broadRefs) {
-		return broadRefs
-	}
-	latestUserText := latestAgentUserMessageText(messages)
-	if strings.TrimSpace(latestUserText) == "" {
-		return broadRefs
-	}
-	mentionedProviders := m.exactMentionedAgentToolProviders(ctx, p, latestUserText)
-	if len(mentionedProviders) == 0 {
-		return broadRefs
-	}
-	largeCatalog, err := m.agentToolCandidateCountExceeds(ctx, p, broadRefs, m.defaultToolNarrowingThreshold)
-	if err != nil || !largeCatalog {
-		return broadRefs
-	}
-
-	narrowedRefs := make([]coreagent.ToolRef, 0, len(mentionedProviders))
-	for _, appName := range mentionedProviders {
-		hasCandidate, err := m.agentToolVisibleCandidateCountExceeds(ctx, p, []coreagent.ToolRef{{App: appName}}, 0)
-		if err != nil {
-			return broadRefs
-		}
-		if hasCandidate {
-			narrowedRefs = append(narrowedRefs, coreagent.ToolRef{App: appName})
-		}
-	}
-	if len(narrowedRefs) == 0 {
-		return broadRefs
-	}
-	return narrowedRefs
-}
-
-func latestAgentUserMessageText(messages []coreagent.Message) string {
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		if !strings.EqualFold(strings.TrimSpace(msg.Role), "user") {
-			continue
-		}
-		parts := make([]string, 0, 1+len(msg.Parts))
-		if text := strings.TrimSpace(msg.Text); text != "" {
-			parts = append(parts, text)
-		}
-		for j := range msg.Parts {
-			part := msg.Parts[j]
-			if part.Type != coreagent.MessagePartTypeText {
-				continue
-			}
-			if text := strings.TrimSpace(part.Text); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		return strings.Join(parts, " ")
-	}
-	return ""
-}
-
-func (m *Manager) exactMentionedAgentToolProviders(ctx context.Context, p *principal.Principal, text string) []string {
-	normalizedText := normalizeAgentToolMentionText(text)
-	if normalizedText == "" || m == nil || m.providers == nil {
-		return nil
-	}
-	out := make([]string, 0)
-	for _, appName := range m.providers.List() {
-		appName = strings.TrimSpace(appName)
-		if appName == "" {
-			continue
-		}
-		prov, err := m.providers.Get(appName)
-		if err != nil {
-			continue
-		}
-		if !m.allowsAgentProvider(ctx, p, appName) {
-			continue
-		}
-		aliases := []string{appName}
-		if displayName := strings.TrimSpace(prov.DisplayName()); displayName != "" {
-			aliases = append(aliases, displayName)
-		}
-		for _, alias := range aliases {
-			if exactAgentToolMention(normalizedText, alias) {
-				out = append(out, appName)
-				break
-			}
-		}
-	}
-	return out
-}
-
-func exactAgentToolMention(normalizedText, alias string) bool {
-	normalizedAlias := normalizeAgentToolMentionText(alias)
-	if normalizedAlias == "" {
-		return false
-	}
-	return strings.Contains(" "+normalizedText+" ", " "+normalizedAlias+" ")
-}
-
-func normalizeAgentToolMentionText(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	var b strings.Builder
-	lastSeparator := true
-	for _, r := range value {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			b.WriteRune(unicode.ToLower(r))
-			lastSeparator = false
-		default:
-			if !lastSeparator {
-				b.WriteByte(' ')
-				lastSeparator = true
-			}
-		}
-	}
-	return strings.Join(strings.Fields(b.String()), " ")
-}
-
-func (m *Manager) agentToolCandidateCountExceeds(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, threshold int) (bool, error) {
-	if threshold < 0 {
-		threshold = 0
-	}
-	count := 0
-	exceeded := false
-	visit := func() (bool, error) {
-		count++
-		if count > threshold {
-			exceeded = true
-			return false, nil
-		}
-		return true, nil
-	}
-	err := m.visitToolSearchCandidates(ctx, p, refs, "", true, false,
-		func(agentToolSearchCandidate) (bool, error) {
-			return visit()
-		},
-		func(agentToolUnavailableCandidate) (bool, error) {
-			return visit()
-		},
-	)
-	if err != nil {
-		return false, err
-	}
-	return exceeded, nil
-}
-
-func (m *Manager) agentToolVisibleCandidateCountExceeds(ctx context.Context, p *principal.Principal, refs []coreagent.ToolRef, threshold int) (bool, error) {
-	if threshold < 0 {
-		threshold = 0
-	}
-	count := 0
-	exceeded := false
-	err := m.visitToolSearchCandidates(ctx, p, refs, "", true, false,
-		func(agentToolSearchCandidate) (bool, error) {
-			count++
-			if count > threshold {
-				exceeded = true
-				return false, nil
-			}
-			return true, nil
-		},
-		nil,
-	)
-	if err != nil {
-		return false, err
-	}
-	return exceeded, nil
 }
 
 func agentTurnPermissions(ctx context.Context, p *principal.Principal, callerKind invocation.ProviderKind, callerName string, refs []coreagent.ToolRef) []core.AccessPermission {
