@@ -344,7 +344,7 @@ func workflowAgentSessionsFromOutputs(target *gestalt.BoundWorkflowTarget, stepI
 		}
 		providerName := strings.TrimSpace(step.Agent.Provider)
 		model := strings.TrimSpace(step.Agent.Model)
-		optionsKey := stableJSON(step.Agent.ModelOptions)
+		optionsKey := workflowAgentSessionOptionsKey(step.Agent)
 		state, exists := sessions[sessionKey]
 		if exists {
 			if state.providerName != providerName || state.model != model || state.options != optionsKey {

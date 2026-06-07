@@ -120,10 +120,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 	if sessionKey == "" {
 		sessionKey = stepID
 	}
-	optionsKey := stableJSON(map[string]any{
-		"model_options": agent.ModelOptions,
-		"tools":         agent.Tools,
-	})
+	optionsKey := workflowAgentSessionOptionsKey(agent)
 	state, ok := sessions[sessionKey]
 	if ok {
 		if state.providerName != providerName || state.model != model || state.options != optionsKey {
@@ -213,6 +210,16 @@ func workflowAgentSessionTools(refs []gestalt.AgentToolRef) gestalt.AgentToolCon
 		return nil
 	}
 	return &gestalt.AgentCatalogToolConfig{Refs: append([]gestalt.AgentToolRef(nil), refs...)}
+}
+
+func workflowAgentSessionOptionsKey(agent *gestalt.WorkflowStepAgentTurn) string {
+	if agent == nil {
+		return ""
+	}
+	return stableJSON(map[string]any{
+		"model_options": agent.ModelOptions,
+		"tools":         agent.Tools,
+	})
 }
 
 func waitForWorkflowAgentTurn(ctx context.Context, agent AgentClient, turn *gestalt.AgentTurn, interval time.Duration) (*gestalt.AgentTurn, error) {
