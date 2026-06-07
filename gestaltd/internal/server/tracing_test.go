@@ -236,7 +236,7 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"claude-sonnet"}`))
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"claude-sonnet","tools":{"catalog":{"refs":[{"app":"docs","operation":"search"}]}}}`))
 	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
 	sessionResp, err := http.DefaultClient.Do(sessionReq)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) {
 		t.Fatalf("session response missing id: %#v", session)
 	}
 
-	turnBody := `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"search docs"}],"toolRefs":[{"app":"docs","operation":"search"}]}`
+	turnBody := `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"search docs"}]}`
 	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(turnBody))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
@@ -275,6 +275,10 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) {
 	if agentSpan == nil {
 		t.Fatalf("expected create_turn agent.operation span, got spans: %v", spanNames(spans))
 	}
+	sessionSpan := findSpanWithAttr(spans, "agent.operation", "gestalt.agent.operation", "create_session")
+	if sessionSpan == nil {
+		t.Fatalf("expected create_session agent.operation span, got spans: %v", spanNames(spans))
+	}
 	providerSpan := findSpanWithAttr(spans, "agent.provider.operation", "gestalt.agent.operation", "create_turn")
 	if providerSpan == nil {
 		t.Fatal("expected create_turn agent.provider.operation span")
@@ -283,10 +287,11 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) {
 	if catalogSpan == nil {
 		t.Fatal("expected catalog.operation.resolve span")
 	}
-	for _, child := range []*tracetest.SpanStub{providerSpan, catalogSpan} {
-		if child.SpanContext.TraceID() != agentSpan.SpanContext.TraceID() {
-			t.Fatalf("span %q trace id = %s, want agent trace id %s", child.Name, child.SpanContext.TraceID(), agentSpan.SpanContext.TraceID())
-		}
+	if providerSpan.SpanContext.TraceID() != agentSpan.SpanContext.TraceID() {
+		t.Fatalf("span %q trace id = %s, want agent trace id %s", providerSpan.Name, providerSpan.SpanContext.TraceID(), agentSpan.SpanContext.TraceID())
+	}
+	if catalogSpan.SpanContext.TraceID() != sessionSpan.SpanContext.TraceID() {
+		t.Fatalf("span %q trace id = %s, want session trace id %s", catalogSpan.Name, catalogSpan.SpanContext.TraceID(), sessionSpan.SpanContext.TraceID())
 	}
 	assertSpanHasAttr(t, agentSpan, "gestalt.agent.provider", "managed")
 	assertSpanHasAttr(t, providerSpan, "gestalt.agent.provider", "managed")

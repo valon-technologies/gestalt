@@ -72,9 +72,6 @@ func ValidateCanonicalStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
 		}
 	}
-	if threshold := cfg.Server.Agent.DefaultToolNarrowingThreshold; threshold != nil && *threshold < 0 {
-		return fmt.Errorf("config validation: server.agent.defaultToolNarrowingThreshold must be non-negative")
-	}
 	if err := validateEgress(&cfg.Server.Egress); err != nil {
 		return err
 	}

@@ -128,8 +128,6 @@ class AgentCreateTurn:
     session_id: str = ""
     model: str = ""
     messages: Sequence[Any] | None = None
-    tool_refs: Sequence[Any] | None = None
-    tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
     output: Any | None = None
     metadata: Any | None = None
     idempotency_key: str = ""
@@ -2238,10 +2236,6 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
         session_id=data.get("session_id", ""),
         model=data.get("model", ""),
         messages=[_agent_message_value(item) for item in (data.get("messages") or [])],
-        tool_refs=[
-            _agent_tool_ref_value(item) for item in (data.get("tool_refs") or [])
-        ],
-        tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
         idempotency_key=data.get("idempotency_key", ""),
         timeout_seconds=timeout_seconds,
     )

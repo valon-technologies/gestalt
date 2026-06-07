@@ -2012,9 +2012,7 @@ type ServerConfig struct {
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 }
 
-type ServerAgentConfig struct {
-	DefaultToolNarrowingThreshold *int `yaml:"defaultToolNarrowingThreshold,omitempty"`
-}
+type ServerAgentConfig struct{}
 
 type ServerRuntimeConfig struct {
 	DefaultProvider string `yaml:"defaultProvider,omitempty"`

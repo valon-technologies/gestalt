@@ -1040,6 +1040,12 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 		Model:          "gpt-test",
 		ClientRef:      "plugin-session",
 		IdempotencyKey: "plugin-agent-session",
+		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{
+			Catalog: &proto.AgentCatalogToolConfig{Refs: []*proto.AgentToolRef{{
+				App:       "roadmap",
+				Operation: "sync",
+			}}},
+		}},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create agent session: %w", err)
@@ -1062,16 +1068,11 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 		SessionId:      sessionID,
 		Model:          "gpt-test",
 		IdempotencyKey: "plugin-agent-turn",
-		ToolSource:     proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_CATALOG,
 		Output: &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Text{
 				Text: &proto.AgentTextOutput{},
 			},
 		},
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "roadmap",
-			Operation: "sync",
-		}},
 		Metadata: turnMetadata,
 		Messages: []*proto.AgentMessage{{
 			Role: "user",

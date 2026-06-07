@@ -15,7 +15,6 @@ import {
   agentOutputToProto,
   agentMessageFromProto,
   agentMessageToProto,
-  agentToolRefToProto,
   agentTurnOutputFromProto,
   agentTurnDisplayFromProto,
 } from "./agent-conversions.ts";
@@ -24,14 +23,12 @@ import {
   AgentInteractionState,
   AgentInteractionType,
   AgentSessionState,
-  AgentToolSourceMode,
   agentToolConfigToProto,
   type AgentInteraction,
   type AgentOutput,
   type AgentMessage,
   type AgentSession,
   type AgentToolConfig,
-  type AgentToolRef,
   type AgentTurn,
   type AgentTurnEvent,
 } from "./agent.ts";
@@ -99,8 +96,6 @@ export interface AgentCreateTurn {
   sessionId: string;
   model?: string | undefined;
   messages?: readonly AgentMessage[] | undefined;
-  toolRefs?: readonly AgentToolRef[] | undefined;
-  toolSource?: AgentToolSourceMode | undefined;
   output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
@@ -258,8 +253,6 @@ class AgentImpl implements Agent {
         sessionId: request.sessionId,
         model: request.model ?? "",
         messages: request.messages?.map(agentMessageToProto) ?? [],
-        toolRefs: request.toolRefs?.map(agentToolRefToProto) ?? [],
-        toolSource: request.toolSource ?? AgentToolSourceMode.UNSPECIFIED,
         output: agentOutputToProto(request.output),
         metadata: optionalStruct(request.metadata),
         idempotencyKey: request.idempotencyKey ?? "",

@@ -120,7 +120,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 	if sessionKey == "" {
 		sessionKey = stepID
 	}
-	optionsKey := stableJSON(agent.ModelOptions)
+	optionsKey := workflowAgentSessionOptionsKey(agent)
 	state, ok := sessions[sessionKey]
 	if ok {
 		if state.providerName != providerName || state.model != model || state.options != optionsKey {
@@ -130,6 +130,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 		session, err := client.CreateSession(ctx, gestalt.AgentCreateSession{
 			ProviderName: providerName,
 			Model:        model,
+			Tools:        workflowAgentSessionTools(agent.Tools),
 			Metadata: map[string]any{
 				"workflow":       workflowContext,
 				"workflowStepId": stepID,
@@ -150,8 +151,6 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 		SessionID:      state.session.ID,
 		Model:          model,
 		Messages:       messages,
-		ToolRefs:       append([]gestalt.AgentToolRef(nil), agent.Tools...),
-		ToolRefsSet:    true,
 		Output:         agent.Output,
 		Metadata:       stepMetadata,
 		ModelOptions:   agent.ModelOptions,
@@ -204,6 +203,23 @@ func workflowAgentTurnMessages(agent *gestalt.WorkflowStepAgentTurn, req Request
 		messages = append(messages, gestalt.AgentMessage{Role: "user", Text: text})
 	}
 	return messages, nil
+}
+
+func workflowAgentSessionTools(refs []gestalt.AgentToolRef) gestalt.AgentToolConfig {
+	if len(refs) == 0 {
+		return nil
+	}
+	return &gestalt.AgentCatalogToolConfig{Refs: append([]gestalt.AgentToolRef(nil), refs...)}
+}
+
+func workflowAgentSessionOptionsKey(agent *gestalt.WorkflowStepAgentTurn) string {
+	if agent == nil {
+		return ""
+	}
+	return stableJSON(map[string]any{
+		"model_options": agent.ModelOptions,
+		"tools":         agent.Tools,
+	})
 }
 
 func waitForWorkflowAgentTurn(ctx context.Context, agent AgentClient, turn *gestalt.AgentTurn, interval time.Duration) (*gestalt.AgentTurn, error) {

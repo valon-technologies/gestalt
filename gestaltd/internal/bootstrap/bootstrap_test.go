@@ -65,6 +65,12 @@ func bootstrapTextAgentOutput() *proto.AgentOutput {
 	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
 }
 
+func bootstrapAgentCatalogToolConfig(refs ...*proto.AgentToolRef) *proto.AgentToolConfig {
+	return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{
+		Catalog: &proto.AgentCatalogToolConfig{Refs: refs},
+	}}
+}
+
 func bootstrapAgentRequestContext(t testing.TB, p *principal.Principal, callerName string) *proto.RequestContext {
 	t.Helper()
 	reqCtx, err := appaccessservice.RequestContextProto(principal.WithPrincipal(context.Background(), p), "", invocation.CallerProvider{
@@ -2304,6 +2310,11 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-1",
+		Tools: bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{
+			App:       "roadmap",
+			Operation: "sync",
+			Title:     "Roadmap sync",
+		}),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
@@ -2316,11 +2327,6 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "roadmap",
-			Operation: "sync",
-			Title:     "Roadmap sync",
-		}},
 	}
 
 	first, err := result.AgentManager.CreateTurn(ctx, p, req)
@@ -2375,13 +2381,21 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		t.Fatalf("tool callback bodies = %#v", toolBodies)
 	}
 
+	globalSession, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-empty-catalog",
+		Tools:        bootstrapAgentCatalogToolConfig(),
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession(empty catalog): %v", err)
+	}
 	_, err = result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
-		SessionId:      session.ID,
+		SessionId:      globalSession.ID,
 		IdempotencyKey: "global-search-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it without explicit tools"}},
-		ToolRefsSet:    true,
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
 	})
@@ -2395,18 +2409,14 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		t.Fatalf("global tool callback bodies = %#v, want no execution for empty catalog scope", globalToolBodies)
 	}
 
-	_, err = result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		IdempotencyKey: "scoped-unavailable-idempotency-key",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync ashby"}},
-		Output:         bootstrapTextAgentOutput(),
-		Context:        reqContext,
-		ToolRefs:       []*proto.AgentToolRef{{App: "ashby", Operation: "sync"}},
+	_, err = result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-scoped-unavailable",
+		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "ashby", Operation: "sync"}),
 	})
 	if err == nil || !strings.Contains(err.Error(), `no external credential stored for integration "ashby"`) {
-		t.Fatalf("AgentManager.CreateTurn(scoped unavailable) error = %v, want ashby credential error", err)
+		t.Fatalf("AgentManager.CreateSession(scoped unavailable) error = %v, want ashby credential error", err)
 	}
 }
 
@@ -2606,6 +2616,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-linear-search",
+		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "linear", Operation: "list_issues"}),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
@@ -2618,7 +2629,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
-		ToolRefs:       []*proto.AgentToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
@@ -2642,7 +2652,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my assigned tickets"}},
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
-		ToolRefs:       []*proto.AgentToolRef{{App: "linear", Operation: "list_issues"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(after unavailable hits): %v", err)
@@ -2745,6 +2754,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-candidate-search",
+		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "docs"}),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
@@ -2757,7 +2767,6 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "search docs"}},
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
-		ToolRefs:       []*proto.AgentToolRef{{App: "docs"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(search): %v", err)
@@ -2811,15 +2820,23 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	if destructiveOperation == "" {
 		t.Fatalf("listed tools = %#v, want visible destructive epsilon_delete", listResp.GetTools())
 	}
+	exactSession, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-candidate-load-ref",
+		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "docs", Operation: betaOperation}),
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession(exact ref): %v", err)
+	}
 	exact, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
-		SessionId:      session.ID,
+		SessionId:      exactSession.ID,
 		IdempotencyKey: "candidate-load-ref-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load beta docs"}},
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
-		ToolRefs:       []*proto.AgentToolRef{{App: "docs", Operation: betaOperation}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(exact ref): %v", err)
@@ -2835,18 +2852,26 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 		t.Fatalf("tool callback bodies after exact ref = %#v, want %s", toolBodies, betaOperation)
 	}
 
+	mixedSession, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "managed",
+		Model:        "gpt-test",
+		ClientRef:    "cli-session-candidate-mixed-global-exact-hidden",
+		Tools: bootstrapAgentCatalogToolConfig(
+			&proto.AgentToolRef{App: "*"},
+			&proto.AgentToolRef{App: "docs", Operation: "aardvark_admin"},
+		),
+	})
+	if err != nil {
+		t.Fatalf("AgentManager.CreateSession(mixed global exact hidden ref): %v", err)
+	}
 	mixed, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
-		SessionId:      session.ID,
+		SessionId:      mixedSession.ID,
 		IdempotencyKey: "candidate-mixed-global-exact-hidden-idempotency-key",
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load hidden docs"}},
 		Output:         bootstrapTextAgentOutput(),
 		Context:        reqContext,
-		ToolRefs: []*proto.AgentToolRef{
-			{App: "*"},
-			{App: "docs", Operation: "aardvark_admin"},
-		},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(mixed global exact hidden ref): %v", err)
@@ -2869,155 +2894,6 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	}
 	if !hiddenListed {
 		t.Fatalf("mixed global exact hidden listed tools = %#v, want aardvark_admin", listResponses[2].GetTools())
-	}
-}
-
-func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalogScope(t *testing.T) {
-	t.Parallel()
-
-	threshold := 0
-	cfg := validConfig()
-	cfg.Server.Agent.DefaultToolNarrowingThreshold = &threshold
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	factories := validFactories()
-	factories.Builtins = append(factories.Builtins,
-		&coretesting.StubIntegration{
-			N:        "linear",
-			DN:       "Linear",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name:        "linear",
-				DisplayName: "Linear",
-				Operations: []catalog.CatalogOperation{{
-					ID:       "issues",
-					Method:   http.MethodGet,
-					Title:    "Issues",
-					ReadOnly: true,
-				}},
-			},
-			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				body, err := json.Marshal(map[string]any{
-					"provider":  "linear",
-					"operation": operation,
-				})
-				if err != nil {
-					return nil, err
-				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-			},
-		},
-		&coretesting.StubIntegration{
-			N:        "github",
-			DN:       "GitHub",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name:        "github",
-				DisplayName: "GitHub",
-				Operations: []catalog.CatalogOperation{{
-					ID:       "issues",
-					Method:   http.MethodGet,
-					Title:    "Issues",
-					ReadOnly: true,
-				}},
-			},
-			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				body, err := json.Marshal(map[string]any{
-					"provider":  "github",
-					"operation": operation,
-				})
-				if err != nil {
-					return nil, err
-				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-			},
-		},
-	)
-
-	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "linear",
-		Operations: []string{"issues"},
-	}, {
-		App:        "github",
-		Operations: []string{"issues"},
-	}, {
-		App: "managed",
-	}})
-	p := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
-	}
-	ctx := principal.WithPrincipal(context.Background(), p)
-	reqContext := bootstrapAgentRequestContext(t, p, "managed")
-
-	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-		ClientRef:    "cli-session-configured-narrowing",
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession: %v", err)
-	}
-	turn, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		IdempotencyKey: "configured-narrowing-linear",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "show me my linear tickets"}},
-		Output:         bootstrapTextAgentOutput(),
-		Context:        reqContext,
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn: %v", err)
-	}
-	if turn == nil {
-		t.Fatal("AgentManager.CreateTurn returned nil turn")
-	}
-
-	provider.mu.Lock()
-	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
-	toolBodies := append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(listResponses) != 1 {
-		t.Fatalf("list response count = %d, want 1", len(listResponses))
-	}
-	tools := listResponses[0].GetTools()
-	if len(tools) != 1 || tools[0].GetRef().GetApp() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
-		t.Fatalf("listed tools = %#v, want only linear issues from configured narrowing", tools)
-	}
-	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) {
-		t.Fatalf("tool callback bodies = %#v, want linear execution", toolBodies)
 	}
 }
 
@@ -3104,6 +2980,7 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-http-slack-search",
+		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "*"}),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
@@ -3115,7 +2992,6 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
 		Output:         bootstrapTextAgentOutput(),
-		ToolRefs:       []*proto.AgentToolRef{{App: "*"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn wildcard scoped turn: %v", err)
@@ -3237,6 +3113,7 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-http-global-search",
+		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "*"}),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
@@ -3248,7 +3125,6 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
 		Output:         bootstrapTextAgentOutput(),
-		ToolRefs:       []*proto.AgentToolRef{{App: "*"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn global scoped turn: %v", err)
@@ -3895,6 +3771,10 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	session, err := result.AgentManager.CreateSession(fullCtx, full, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
+		Tools: bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{
+			App:       "roadmap",
+			Operation: "sync",
+		}),
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
@@ -3907,10 +3787,6 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
 		Output:         bootstrapTextAgentOutput(),
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "roadmap",
-			Operation: "sync",
-		}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn(first): %v", err)
@@ -3936,10 +3812,6 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Model:          "gpt-test",
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
 		Output:         bootstrapTextAgentOutput(),
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "roadmap",
-			Operation: "sync",
-		}},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, invocation.ErrAuthorizationDenied)
@@ -5457,6 +5329,10 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 	session, err := result.AgentManager.CreateSession(startCtx, systemPrincipal, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "reviewer",
 		Model:        "gpt-test",
+		Tools: bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{
+			App:       "roadmap",
+			Operation: "sync",
+		}),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -5466,10 +5342,6 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "roadmap",
-			Operation: "sync",
-		}},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -5648,6 +5520,10 @@ func TestBootstrapDoesNotRevokeAgentScopeWhenCancelReturnsLiveTurn(t *testing.T)
 	session, err := result.AgentManager.CreateSession(startCtx, systemPrincipal, &proto.CreateAgentProviderSessionRequest{
 		ProviderName: "reviewer",
 		Model:        "gpt-test",
+		Tools: bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{
+			App:       "roadmap",
+			Operation: "sync",
+		}),
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -5657,10 +5533,6 @@ func TestBootstrapDoesNotRevokeAgentScopeWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         bootstrapTextAgentOutput(),
-		ToolRefs: []*proto.AgentToolRef{{
-			App:       "roadmap",
-			Operation: "sync",
-		}},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
