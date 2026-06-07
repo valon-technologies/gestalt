@@ -857,9 +857,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.SessionId = ownedSession.session.ID
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.Model = strings.TrimSpace(req.GetModel())
-	providerReq.ToolRefs = agentwire.ToolRefsToProto(toolRefs)
-	providerReq.ToolRefsSet = toolRefsSet
-	providerReq.ToolSource = agentwire.ToolSourceModeToProto(toolSource)
 	providerReq.Tools = nil
 	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
