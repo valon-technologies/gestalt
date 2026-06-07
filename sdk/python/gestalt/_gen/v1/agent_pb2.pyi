@@ -174,11 +174,13 @@ class ResolvedAgentTool(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     PARAMETERS_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    REF_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     description: str
     parameters_schema: _struct_pb2.Struct
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., parameters_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    ref: _app_pb2.AgentToolRef
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., parameters_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., ref: _Optional[_Union[_app_pb2.AgentToolRef, _Mapping]] = ...) -> None: ...
 
 class AgentProviderCapabilities(_message.Message):
     __slots__ = ()
@@ -649,32 +651,6 @@ class ResolveAgentProviderInteractionRequest(_message.Message):
     context: _app_pb2.RequestContext
     def __init__(self, interaction_id: _Optional[str] = ..., resolution: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., turn_id: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
 
-class ExecuteAgentToolRequest(_message.Message):
-    __slots__ = ()
-    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
-    TURN_ID_FIELD_NUMBER: _ClassVar[int]
-    TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
-    TOOL_ID_FIELD_NUMBER: _ClassVar[int]
-    ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
-    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    session_id: str
-    turn_id: str
-    tool_call_id: str
-    tool_id: str
-    arguments: _struct_pb2.Struct
-    idempotency_key: str
-    context: _app_pb2.RequestContext
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_id: _Optional[str] = ..., arguments: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
-
-class ExecuteAgentToolResponse(_message.Message):
-    __slots__ = ()
-    STATUS_FIELD_NUMBER: _ClassVar[int]
-    BODY_FIELD_NUMBER: _ClassVar[int]
-    status: int
-    body: str
-    def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ...) -> None: ...
-
 class ListedAgentTool(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
@@ -698,73 +674,3 @@ class ListedAgentTool(_message.Message):
     tags: _containers.RepeatedScalarFieldContainer[str]
     search_text: str
     def __init__(self, id: _Optional[str] = ..., mcp_name: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., input_schema: _Optional[str] = ..., output_schema: _Optional[str] = ..., annotations: _Optional[_Union[_app_pb2.OperationAnnotations, _Mapping]] = ..., ref: _Optional[_Union[_app_pb2.AgentToolRef, _Mapping]] = ..., tags: _Optional[_Iterable[str]] = ..., search_text: _Optional[str] = ...) -> None: ...
-
-class ListAgentToolsRequest(_message.Message):
-    __slots__ = ()
-    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
-    TURN_ID_FIELD_NUMBER: _ClassVar[int]
-    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
-    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    QUERY_FIELD_NUMBER: _ClassVar[int]
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    session_id: str
-    turn_id: str
-    page_size: int
-    page_token: str
-    query: str
-    context: _app_pb2.RequestContext
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., query: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
-
-class ListAgentToolsResponse(_message.Message):
-    __slots__ = ()
-    TOOLS_FIELD_NUMBER: _ClassVar[int]
-    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    tools: _containers.RepeatedCompositeFieldContainer[ListedAgentTool]
-    next_page_token: str
-    def __init__(self, tools: _Optional[_Iterable[_Union[ListedAgentTool, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
-
-class ResolveAgentConnectionRequest(_message.Message):
-    __slots__ = ()
-    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
-    TURN_ID_FIELD_NUMBER: _ClassVar[int]
-    CONNECTION_FIELD_NUMBER: _ClassVar[int]
-    INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    CONTEXT_FIELD_NUMBER: _ClassVar[int]
-    session_id: str
-    turn_id: str
-    connection: str
-    instance: str
-    context: _app_pb2.RequestContext
-    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
-
-class ResolvedAgentConnection(_message.Message):
-    __slots__ = ()
-    class HeadersEntry(_message.Message):
-        __slots__ = ()
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: str
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-    class ParamsEntry(_message.Message):
-        __slots__ = ()
-        KEY_FIELD_NUMBER: _ClassVar[int]
-        VALUE_FIELD_NUMBER: _ClassVar[int]
-        key: str
-        value: str
-        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
-    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
-    CONNECTION_FIELD_NUMBER: _ClassVar[int]
-    INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    MODE_FIELD_NUMBER: _ClassVar[int]
-    HEADERS_FIELD_NUMBER: _ClassVar[int]
-    PARAMS_FIELD_NUMBER: _ClassVar[int]
-    EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
-    connection_id: str
-    connection: str
-    instance: str
-    mode: str
-    headers: _containers.ScalarMap[str, str]
-    params: _containers.ScalarMap[str, str]
-    expires_at: _timestamp_pb2.Timestamp
-    def __init__(self, connection_id: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., mode: _Optional[str] = ..., headers: _Optional[_Mapping[str, str]] = ..., params: _Optional[_Mapping[str, str]] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...

@@ -1414,9 +1414,8 @@ apps:
         ref: slack-workspace
 ```
 
-Agent providers use the same binding model. This lets an agent backend resolve a
-provider-owned model connection through `AgentHost.ResolveConnection` instead of
-receiving secrets in static config:
+Agent providers use the same binding model. This lets an agent backend use a
+provider-owned model connection without receiving secrets in static config:
 
 ```yaml
 connections:

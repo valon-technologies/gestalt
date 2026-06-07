@@ -73,11 +73,11 @@ message ResolvedAgentTool {
   string name = 2;
   string description = 3;
   google.protobuf.Struct parameters_schema = 5;
+  AgentToolRef ref = 6;
 }
 
 enum AgentToolSourceMode {
   reserved 1;
-  reserved "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG";
 
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
   AGENT_TOOL_SOURCE_MODE_CATALOG = 2;
@@ -163,7 +163,7 @@ message AgentSession {
 
 message CreateAgentProviderSessionRequest {
   reserved 6, 12, 14;
-  reserved "provider_options", "invocation_token", "workflow";
+  reserved "provider_options", "workflow";
 
   string session_id = 1;
   string idempotency_key = 2;
@@ -215,7 +215,7 @@ message AgentSessionStartHookOutput {
 
 message GetAgentProviderSessionRequest {
   reserved 3, 4;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string session_id = 1;
   SubjectContext subject = 2;
@@ -224,7 +224,7 @@ message GetAgentProviderSessionRequest {
 
 message ListAgentProviderSessionsRequest {
   reserved 7, 8;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   SubjectContext subject = 1;
   repeated string session_ids = 2;
@@ -245,7 +245,7 @@ message ListAgentProviderSessionsResponse {
 
 message UpdateAgentProviderSessionRequest {
   reserved 6, 7;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string session_id = 1;
   string client_ref = 2;
@@ -300,7 +300,7 @@ message AgentTurnDisplay {
 
 message CreateAgentProviderTurnRequest {
   reserved 9, 12, 13, 15, 17, 19, 20, 22;
-  reserved "provider_options", "tool_refs", "tool_source", "tool_grant", "run_grant", "tool_refs_set", "invocation_token", "workflow";
+  reserved "provider_options", "tool_refs", "tool_source", "tool_grant", "run_grant", "tool_refs_set", "workflow";
 
   string turn_id = 1;
   string session_id = 2;
@@ -336,7 +336,7 @@ message AgentOutput {
 
 message GetAgentProviderTurnRequest {
   reserved 3, 4;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string turn_id = 1;
   SubjectContext subject = 2;
@@ -345,7 +345,7 @@ message GetAgentProviderTurnRequest {
 
 message ListAgentProviderTurnsRequest {
   reserved 7, 8;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string session_id = 1;
   SubjectContext subject = 2;
@@ -367,7 +367,7 @@ message ListAgentProviderTurnsResponse {
 
 message CancelAgentProviderTurnRequest {
   reserved 4, 5;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string turn_id = 1;
   string reason = 2;
@@ -389,7 +389,7 @@ message AgentTurnEvent {
 
 message ListAgentProviderTurnEventsRequest {
   reserved 5, 6;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string turn_id = 1;
   int64 after_seq = 2;
@@ -404,7 +404,6 @@ message ListAgentProviderTurnEventsResponse {
 
 message GetAgentProviderInteractionRequest {
   reserved 3;
-  reserved "invocation_token";
 
   string interaction_id = 1;
   SubjectContext subject = 2;
@@ -413,7 +412,7 @@ message GetAgentProviderInteractionRequest {
 
 message ListAgentProviderInteractionsRequest {
   reserved 3, 4;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string turn_id = 1;
   SubjectContext subject = 2;
@@ -426,31 +425,13 @@ message ListAgentProviderInteractionsResponse {
 
 message ResolveAgentProviderInteractionRequest {
   reserved 4, 6;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string interaction_id = 1;
   google.protobuf.Struct resolution = 2;
   SubjectContext subject = 3;
   string turn_id = 5;
   RequestContext context = 7;
-}
-
-message ExecuteAgentToolRequest {
-  reserved 6, 8;
-  reserved "tool_grant", "run_grant";
-
-  string session_id = 1;
-  string turn_id = 2;
-  string tool_call_id = 3;
-  string tool_id = 4;
-  google.protobuf.Struct arguments = 5;
-  string idempotency_key = 7;
-  RequestContext context = 9;
-}
-
-message ExecuteAgentToolResponse {
-  int32 status = 1;
-  string body = 2;
 }
 
 message ListedAgentTool {
@@ -464,44 +445,6 @@ message ListedAgentTool {
   AgentToolRef ref = 8;
   repeated string tags = 9;
   string search_text = 10;
-}
-
-message ListAgentToolsRequest {
-  reserved 5, 6;
-  reserved "tool_grant", "run_grant";
-
-  string session_id = 1;
-  string turn_id = 2;
-  int32 page_size = 3;
-  string page_token = 4;
-  string query = 7;
-  RequestContext context = 8;
-}
-
-message ListAgentToolsResponse {
-  repeated ListedAgentTool tools = 1;
-  string next_page_token = 2;
-}
-
-message ResolveAgentConnectionRequest {
-  reserved 5;
-  reserved "run_grant";
-
-  string session_id = 1;
-  string turn_id = 2;
-  string connection = 3;
-  string instance = 4;
-  RequestContext context = 6;
-}
-
-message ResolvedAgentConnection {
-  string connection_id = 1;
-  string connection = 2;
-  string instance = 3;
-  string mode = 4;
-  map<string, string> headers = 5;
-  map<string, string> params = 6;
-  google.protobuf.Timestamp expires_at = 7;
 }
 
 // AgentProvider is the authoritative agent data boundary. Read RPCs for
@@ -525,10 +468,4 @@ service AgentProvider {
   rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse);
   rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction);
   rpc GetCapabilities(GetAgentProviderCapabilitiesRequest) returns (AgentProviderCapabilities);
-}
-
-service AgentHost {
-  rpc ListTools(ListAgentToolsRequest) returns (ListAgentToolsResponse);
-  rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
-  rpc ResolveConnection(ResolveAgentConnectionRequest) returns (ResolvedAgentConnection);
 }

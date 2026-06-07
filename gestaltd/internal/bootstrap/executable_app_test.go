@@ -3738,9 +3738,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	agentRuntime := &agentRuntime{defaultProviderName: "managed", providers: map[string]coreagent.Provider{"managed": agentProvider}}
 	broker := invocation.NewBroker(&pluginProviders.Providers, services.Users, services.ExternalCredentials)
 	turnScopes := newTestAgentTurnScopes()
-	agentRuntime.SetTurnScopes(turnScopes)
-	agentRuntime.SetToolIDCodec(newTestAgentToolIDs(t))
-	agentRuntime.SetInvoker(broker)
 	manager := agentmanager.New(agentmanager.Config{
 		Providers:  &pluginProviders.Providers,
 		Agent:      agentRuntime,
@@ -3891,8 +3888,11 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {
 		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnMetadata)
 	}
-	if len(turnReq.Tools) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", turnReq.Tools)
+	if len(turnReq.Tools) != 1 {
+		t.Fatalf("CreateTurn tools = %#v, want one resolved catalog tool", turnReq.Tools)
+	}
+	if ref := turnReq.Tools[0].GetRef(); ref.GetApp() != "roadmap" || ref.GetOperation() != "sync" {
+		t.Fatalf("CreateTurn tool ref = %#v, want roadmap.sync", ref)
 	}
 }
 

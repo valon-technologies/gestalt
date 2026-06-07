@@ -455,9 +455,9 @@ structured output, interactions, resumable turns, prepared workspaces, and MCP
 catalog tool support.
 
 When a provider supports MCP catalog tools, Gestalt authorizes the caller's tool
-scope and the provider decides how to expose those tools to the model. Use the
-SDK `AgentHost` helpers to list authorized tools, execute selected tools, and
-resolve configured model connections.
+scope and passes the resolved tool set into the turn request. The provider
+decides how to expose those tools to the model and uses normal host-service
+clients for downstream app calls.
 
 Keep model-specific discovery, ranking, prompting, and aliases inside the
 provider.

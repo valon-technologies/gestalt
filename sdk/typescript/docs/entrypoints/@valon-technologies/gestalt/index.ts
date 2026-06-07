@@ -218,7 +218,6 @@ export {
 } from "../../../../src/s3.ts";
 export {
   AgentExecutionStatus,
-  AgentHost,
   AgentInteractionState,
   AgentInteractionType,
   AgentMessagePartType,
@@ -248,8 +247,6 @@ export {
   type CancelAgentProviderTurnRequest,
   type CreateAgentProviderSessionRequest,
   type CreateAgentProviderTurnRequest,
-  type ExecuteAgentToolRequest,
-  type ExecuteAgentToolResponse,
   type GetAgentProviderCapabilitiesRequest,
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
@@ -262,12 +259,8 @@ export {
   type ListAgentProviderTurnEventsResponse,
   type ListAgentProviderTurnsRequest,
   type ListAgentProviderTurnsResponse,
-  type ListAgentToolsRequest,
-  type ListAgentToolsResponse,
   type ListedAgentTool,
-  type ResolveAgentConnectionRequest,
   type ResolveAgentProviderInteractionRequest,
-  type ResolvedAgentConnection,
   type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
 } from "../../../../src/agent.ts";

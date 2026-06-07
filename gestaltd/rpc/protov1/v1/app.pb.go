@@ -1562,6 +1562,66 @@ func (x *RequestMetaContext) GetUserAgent() string {
 	return ""
 }
 
+type AgentInvocationContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderName  string                 `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	SessionId     string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	TurnId        string                 `protobuf:"bytes,3,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentInvocationContext) Reset() {
+	*x = AgentInvocationContext{}
+	mi := &file_v1_app_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentInvocationContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentInvocationContext) ProtoMessage() {}
+
+func (x *AgentInvocationContext) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_app_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentInvocationContext.ProtoReflect.Descriptor instead.
+func (*AgentInvocationContext) Descriptor() ([]byte, []int) {
+	return file_v1_app_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AgentInvocationContext) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *AgentInvocationContext) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *AgentInvocationContext) GetTurnId() string {
+	if x != nil {
+		return x.TurnId
+	}
+	return ""
+}
+
 // RequestContext bundles the caller, credential, access, and host metadata for
 // one operation.
 type RequestContext struct {
@@ -1580,15 +1640,16 @@ type RequestContext struct {
 	ToolRefs []*AgentToolRef `protobuf:"bytes,9,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
 	// Preserves the distinction between an omitted tool-ref context and an
 	// explicitly empty inherited tool-ref context.
-	ToolRefsSet   bool                `protobuf:"varint,10,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
-	RequestMeta   *RequestMetaContext `protobuf:"bytes,11,opt,name=request_meta,json=requestMeta,proto3" json:"request_meta,omitempty"`
+	ToolRefsSet   bool                    `protobuf:"varint,10,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
+	RequestMeta   *RequestMetaContext     `protobuf:"bytes,11,opt,name=request_meta,json=requestMeta,proto3" json:"request_meta,omitempty"`
+	Agent         *AgentInvocationContext `protobuf:"bytes,12,opt,name=agent,proto3" json:"agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RequestContext) Reset() {
 	*x = RequestContext{}
-	mi := &file_v1_app_proto_msgTypes[19]
+	mi := &file_v1_app_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1600,7 +1661,7 @@ func (x *RequestContext) String() string {
 func (*RequestContext) ProtoMessage() {}
 
 func (x *RequestContext) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[19]
+	mi := &file_v1_app_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1613,7 +1674,7 @@ func (x *RequestContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestContext.ProtoReflect.Descriptor instead.
 func (*RequestContext) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{19}
+	return file_v1_app_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RequestContext) GetSubject() *SubjectContext {
@@ -1693,6 +1754,13 @@ func (x *RequestContext) GetRequestMeta() *RequestMetaContext {
 	return nil
 }
 
+func (x *RequestContext) GetAgent() *AgentInvocationContext {
+	if x != nil {
+		return x.Agent
+	}
+	return nil
+}
+
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 // plugin-local subject resolution hook.
 type HTTPSubjectRequest struct {
@@ -1714,7 +1782,7 @@ type HTTPSubjectRequest struct {
 
 func (x *HTTPSubjectRequest) Reset() {
 	*x = HTTPSubjectRequest{}
-	mi := &file_v1_app_proto_msgTypes[20]
+	mi := &file_v1_app_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1726,7 +1794,7 @@ func (x *HTTPSubjectRequest) String() string {
 func (*HTTPSubjectRequest) ProtoMessage() {}
 
 func (x *HTTPSubjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[20]
+	mi := &file_v1_app_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1739,7 +1807,7 @@ func (x *HTTPSubjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HTTPSubjectRequest.ProtoReflect.Descriptor instead.
 func (*HTTPSubjectRequest) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{20}
+	return file_v1_app_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *HTTPSubjectRequest) GetBinding() string {
@@ -1832,7 +1900,7 @@ type ResolveHTTPSubjectRequest struct {
 
 func (x *ResolveHTTPSubjectRequest) Reset() {
 	*x = ResolveHTTPSubjectRequest{}
-	mi := &file_v1_app_proto_msgTypes[21]
+	mi := &file_v1_app_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1844,7 +1912,7 @@ func (x *ResolveHTTPSubjectRequest) String() string {
 func (*ResolveHTTPSubjectRequest) ProtoMessage() {}
 
 func (x *ResolveHTTPSubjectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[21]
+	mi := &file_v1_app_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1857,7 +1925,7 @@ func (x *ResolveHTTPSubjectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveHTTPSubjectRequest.ProtoReflect.Descriptor instead.
 func (*ResolveHTTPSubjectRequest) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{21}
+	return file_v1_app_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ResolveHTTPSubjectRequest) GetRequest() *HTTPSubjectRequest {
@@ -1889,7 +1957,7 @@ type ResolveHTTPSubjectResponse struct {
 
 func (x *ResolveHTTPSubjectResponse) Reset() {
 	*x = ResolveHTTPSubjectResponse{}
-	mi := &file_v1_app_proto_msgTypes[22]
+	mi := &file_v1_app_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1901,7 +1969,7 @@ func (x *ResolveHTTPSubjectResponse) String() string {
 func (*ResolveHTTPSubjectResponse) ProtoMessage() {}
 
 func (x *ResolveHTTPSubjectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[22]
+	mi := &file_v1_app_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1914,7 +1982,7 @@ func (x *ResolveHTTPSubjectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveHTTPSubjectResponse.ProtoReflect.Descriptor instead.
 func (*ResolveHTTPSubjectResponse) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{22}
+	return file_v1_app_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ResolveHTTPSubjectResponse) GetSubject() *SubjectContext {
@@ -1954,7 +2022,7 @@ type ExecuteRequest struct {
 
 func (x *ExecuteRequest) Reset() {
 	*x = ExecuteRequest{}
-	mi := &file_v1_app_proto_msgTypes[23]
+	mi := &file_v1_app_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1966,7 +2034,7 @@ func (x *ExecuteRequest) String() string {
 func (*ExecuteRequest) ProtoMessage() {}
 
 func (x *ExecuteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[23]
+	mi := &file_v1_app_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1979,7 +2047,7 @@ func (x *ExecuteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteRequest.ProtoReflect.Descriptor instead.
 func (*ExecuteRequest) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{23}
+	return file_v1_app_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ExecuteRequest) GetOperation() string {
@@ -2045,7 +2113,7 @@ type GetSessionCatalogRequest struct {
 
 func (x *GetSessionCatalogRequest) Reset() {
 	*x = GetSessionCatalogRequest{}
-	mi := &file_v1_app_proto_msgTypes[24]
+	mi := &file_v1_app_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2057,7 +2125,7 @@ func (x *GetSessionCatalogRequest) String() string {
 func (*GetSessionCatalogRequest) ProtoMessage() {}
 
 func (x *GetSessionCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[24]
+	mi := &file_v1_app_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2070,7 +2138,7 @@ func (x *GetSessionCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionCatalogRequest.ProtoReflect.Descriptor instead.
 func (*GetSessionCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{24}
+	return file_v1_app_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetSessionCatalogRequest) GetToken() string {
@@ -2111,7 +2179,7 @@ type GetSessionCatalogResponse struct {
 
 func (x *GetSessionCatalogResponse) Reset() {
 	*x = GetSessionCatalogResponse{}
-	mi := &file_v1_app_proto_msgTypes[25]
+	mi := &file_v1_app_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2123,7 +2191,7 @@ func (x *GetSessionCatalogResponse) String() string {
 func (*GetSessionCatalogResponse) ProtoMessage() {}
 
 func (x *GetSessionCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[25]
+	mi := &file_v1_app_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2136,7 +2204,7 @@ func (x *GetSessionCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionCatalogResponse.ProtoReflect.Descriptor instead.
 func (*GetSessionCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{25}
+	return file_v1_app_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetSessionCatalogResponse) GetCatalog() *Catalog {
@@ -2159,7 +2227,7 @@ type StartProviderRequest struct {
 
 func (x *StartProviderRequest) Reset() {
 	*x = StartProviderRequest{}
-	mi := &file_v1_app_proto_msgTypes[26]
+	mi := &file_v1_app_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2171,7 +2239,7 @@ func (x *StartProviderRequest) String() string {
 func (*StartProviderRequest) ProtoMessage() {}
 
 func (x *StartProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[26]
+	mi := &file_v1_app_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2184,7 +2252,7 @@ func (x *StartProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartProviderRequest.ProtoReflect.Descriptor instead.
 func (*StartProviderRequest) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{26}
+	return file_v1_app_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *StartProviderRequest) GetName() string {
@@ -2218,7 +2286,7 @@ type StartProviderResponse struct {
 
 func (x *StartProviderResponse) Reset() {
 	*x = StartProviderResponse{}
-	mi := &file_v1_app_proto_msgTypes[27]
+	mi := &file_v1_app_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2230,7 +2298,7 @@ func (x *StartProviderResponse) String() string {
 func (*StartProviderResponse) ProtoMessage() {}
 
 func (x *StartProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_app_proto_msgTypes[27]
+	mi := &file_v1_app_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2243,7 +2311,7 @@ func (x *StartProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartProviderResponse.ProtoReflect.Descriptor instead.
 func (*StartProviderResponse) Descriptor() ([]byte, []int) {
-	return file_v1_app_proto_rawDescGZIP(), []int{27}
+	return file_v1_app_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *StartProviderResponse) GetProtocolVersion() int32 {
@@ -2328,7 +2396,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\aheaders\x18\x03 \x03(\v21.gestalt.provider.v1.OperationResult.HeadersEntryR\aheaders\x1a[\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
-	"\x05value\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.StringListR\x05value:\x028\x01\"\xe8\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.StringListR\x05value:\x028\x01\"\xd6\x02\n" +
 	"\x10AppInvokeRequest\x12\x10\n" +
 	"\x03app\x18\x02 \x01(\tR\x03app\x12\x1c\n" +
 	"\toperation\x18\x03 \x01(\tR\toperation\x12/\n" +
@@ -2340,7 +2408,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\b \x01(\tR\x0eidempotencyKey\x12'\n" +
 	"\x0fcredential_mode\x18\t \x01(\tR\x0ecredentialMode\x12=\n" +
 	"\acontext\x18\v \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vR\x10invocation_tokenR\bworkflow\"\xba\x02\n" +
+	"\x10\vR\bworkflow\"\xa8\x02\n" +
 	"\x17AppInvokeGraphQLRequest\x12\x10\n" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x12\x1a\n" +
 	"\bdocument\x18\x02 \x01(\tR\bdocument\x125\n" +
@@ -2350,7 +2418,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"connection\x12\x1a\n" +
 	"\binstance\x18\x05 \x01(\tR\binstance\x12'\n" +
 	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12=\n" +
-	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\aR\x10invocation_token\"\xf6\x01\n" +
+	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\a\"\xf6\x01\n" +
 	"\x0eSubjectContext\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
 	"\x15credential_subject_id\x18\x02 \x01(\tR\x13credentialSubjectId\x12\x14\n" +
@@ -2411,7 +2479,12 @@ const file_v1_app_proto_rawDesc = "" +
 	"\vremote_addr\x18\x02 \x01(\tR\n" +
 	"remoteAddr\x12\x1d\n" +
 	"\n" +
-	"user_agent\x18\x03 \x01(\tR\tuserAgent\"\xbe\x05\n" +
+	"user_agent\x18\x03 \x01(\tR\tuserAgent\"u\n" +
+	"\x16AgentInvocationContext\x12#\n" +
+	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x17\n" +
+	"\aturn_id\x18\x03 \x01(\tR\x06turnId\"\x81\x06\n" +
 	"\x0eRequestContext\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12F\n" +
 	"\n" +
@@ -2428,7 +2501,8 @@ const file_v1_app_proto_rawDesc = "" +
 	"\ttool_refs\x18\t \x03(\v2!.gestalt.provider.v1.AgentToolRefR\btoolRefs\x12\"\n" +
 	"\rtool_refs_set\x18\n" +
 	" \x01(\bR\vtoolRefsSet\x12J\n" +
-	"\frequest_meta\x18\v \x01(\v2'.gestalt.provider.v1.RequestMetaContextR\vrequestMeta\"\x98\x06\n" +
+	"\frequest_meta\x18\v \x01(\v2'.gestalt.provider.v1.RequestMetaContextR\vrequestMeta\x12A\n" +
+	"\x05agent\x18\f \x01(\v2+.gestalt.provider.v1.AgentInvocationContextR\x05agent\"\x98\x06\n" +
 	"\x12HTTPSubjectRequest\x12\x18\n" +
 	"\abinding\x18\x01 \x01(\tR\abinding\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x12\n" +
@@ -2458,7 +2532,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x1aResolveHTTPSubjectResponse\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12#\n" +
 	"\rreject_status\x18\x02 \x01(\x05R\frejectStatus\x12%\n" +
-	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xc7\x03\n" +
+	"\x0ereject_message\x18\x03 \x01(\tR\rrejectMessage\"\xb5\x03\n" +
 	"\x0eExecuteRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
@@ -2469,7 +2543,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\t \x01(\tR\x0eidempotencyKey\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\tR\x10invocation_token\"\xcb\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\b\x10\t\"\xcb\x02\n" +
 	"\x18GetSessionCatalogRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12p\n" +
 	"\x11connection_params\x18\x02 \x03(\v2C.gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
@@ -2514,7 +2588,7 @@ func file_v1_app_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_app_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_v1_app_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_v1_app_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_v1_app_proto_goTypes = []any{
 	(ConnectionMode)(0),                // 0: gestalt.provider.v1.ConnectionMode
 	(*CatalogParameter)(nil),           // 1: gestalt.provider.v1.CatalogParameter
@@ -2536,88 +2610,90 @@ var file_v1_app_proto_goTypes = []any{
 	(*ProviderContext)(nil),            // 17: gestalt.provider.v1.ProviderContext
 	(*InvocationContext)(nil),          // 18: gestalt.provider.v1.InvocationContext
 	(*RequestMetaContext)(nil),         // 19: gestalt.provider.v1.RequestMetaContext
-	(*RequestContext)(nil),             // 20: gestalt.provider.v1.RequestContext
-	(*HTTPSubjectRequest)(nil),         // 21: gestalt.provider.v1.HTTPSubjectRequest
-	(*ResolveHTTPSubjectRequest)(nil),  // 22: gestalt.provider.v1.ResolveHTTPSubjectRequest
-	(*ResolveHTTPSubjectResponse)(nil), // 23: gestalt.provider.v1.ResolveHTTPSubjectResponse
-	(*ExecuteRequest)(nil),             // 24: gestalt.provider.v1.ExecuteRequest
-	(*GetSessionCatalogRequest)(nil),   // 25: gestalt.provider.v1.GetSessionCatalogRequest
-	(*GetSessionCatalogResponse)(nil),  // 26: gestalt.provider.v1.GetSessionCatalogResponse
-	(*StartProviderRequest)(nil),       // 27: gestalt.provider.v1.StartProviderRequest
-	(*StartProviderResponse)(nil),      // 28: gestalt.provider.v1.StartProviderResponse
-	nil,                                // 29: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
-	nil,                                // 30: gestalt.provider.v1.OperationResult.HeadersEntry
-	nil,                                // 31: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
-	nil,                                // 32: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
-	nil,                                // 33: gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
-	nil,                                // 34: gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
-	nil,                                // 35: gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	(*structpb.Value)(nil),             // 36: google.protobuf.Value
-	(*structpb.Struct)(nil),            // 37: google.protobuf.Struct
-	(*emptypb.Empty)(nil),              // 38: google.protobuf.Empty
+	(*AgentInvocationContext)(nil),     // 20: gestalt.provider.v1.AgentInvocationContext
+	(*RequestContext)(nil),             // 21: gestalt.provider.v1.RequestContext
+	(*HTTPSubjectRequest)(nil),         // 22: gestalt.provider.v1.HTTPSubjectRequest
+	(*ResolveHTTPSubjectRequest)(nil),  // 23: gestalt.provider.v1.ResolveHTTPSubjectRequest
+	(*ResolveHTTPSubjectResponse)(nil), // 24: gestalt.provider.v1.ResolveHTTPSubjectResponse
+	(*ExecuteRequest)(nil),             // 25: gestalt.provider.v1.ExecuteRequest
+	(*GetSessionCatalogRequest)(nil),   // 26: gestalt.provider.v1.GetSessionCatalogRequest
+	(*GetSessionCatalogResponse)(nil),  // 27: gestalt.provider.v1.GetSessionCatalogResponse
+	(*StartProviderRequest)(nil),       // 28: gestalt.provider.v1.StartProviderRequest
+	(*StartProviderResponse)(nil),      // 29: gestalt.provider.v1.StartProviderResponse
+	nil,                                // 30: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
+	nil,                                // 31: gestalt.provider.v1.OperationResult.HeadersEntry
+	nil,                                // 32: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
+	nil,                                // 33: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
+	nil,                                // 34: gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
+	nil,                                // 35: gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	nil,                                // 36: gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	(*structpb.Value)(nil),             // 37: google.protobuf.Value
+	(*structpb.Struct)(nil),            // 38: google.protobuf.Struct
+	(*emptypb.Empty)(nil),              // 39: google.protobuf.Empty
 }
 var file_v1_app_proto_depIdxs = []int32{
-	36, // 0: gestalt.provider.v1.CatalogParameter.default:type_name -> google.protobuf.Value
+	37, // 0: gestalt.provider.v1.CatalogParameter.default:type_name -> google.protobuf.Value
 	2,  // 1: gestalt.provider.v1.CatalogOperation.annotations:type_name -> gestalt.provider.v1.OperationAnnotations
 	1,  // 2: gestalt.provider.v1.CatalogOperation.parameters:type_name -> gestalt.provider.v1.CatalogParameter
 	3,  // 3: gestalt.provider.v1.Catalog.operations:type_name -> gestalt.provider.v1.CatalogOperation
 	0,  // 4: gestalt.provider.v1.ProviderMetadata.connection_mode:type_name -> gestalt.provider.v1.ConnectionMode
-	29, // 5: gestalt.provider.v1.ProviderMetadata.connection_params:type_name -> gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
+	30, // 5: gestalt.provider.v1.ProviderMetadata.connection_params:type_name -> gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
 	4,  // 6: gestalt.provider.v1.ProviderMetadata.static_catalog:type_name -> gestalt.provider.v1.Catalog
-	30, // 7: gestalt.provider.v1.OperationResult.headers:type_name -> gestalt.provider.v1.OperationResult.HeadersEntry
-	37, // 8: gestalt.provider.v1.AppInvokeRequest.params:type_name -> google.protobuf.Struct
-	20, // 9: gestalt.provider.v1.AppInvokeRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	37, // 10: gestalt.provider.v1.AppInvokeGraphQLRequest.variables:type_name -> google.protobuf.Struct
-	20, // 11: gestalt.provider.v1.AppInvokeGraphQLRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	31, // 7: gestalt.provider.v1.OperationResult.headers:type_name -> gestalt.provider.v1.OperationResult.HeadersEntry
+	38, // 8: gestalt.provider.v1.AppInvokeRequest.params:type_name -> google.protobuf.Struct
+	21, // 9: gestalt.provider.v1.AppInvokeRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	38, // 10: gestalt.provider.v1.AppInvokeGraphQLRequest.variables:type_name -> google.protobuf.Struct
+	21, // 11: gestalt.provider.v1.AppInvokeGraphQLRequest.context:type_name -> gestalt.provider.v1.RequestContext
 	11, // 12: gestalt.provider.v1.SubjectContext.permissions:type_name -> gestalt.provider.v1.SubjectPermissionContext
 	10, // 13: gestalt.provider.v1.AgentToolRef.run_as:type_name -> gestalt.provider.v1.SubjectContext
 	10, // 14: gestalt.provider.v1.RequestContext.subject:type_name -> gestalt.provider.v1.SubjectContext
 	14, // 15: gestalt.provider.v1.RequestContext.credential:type_name -> gestalt.provider.v1.CredentialContext
 	15, // 16: gestalt.provider.v1.RequestContext.access:type_name -> gestalt.provider.v1.AccessContext
-	37, // 17: gestalt.provider.v1.RequestContext.workflow:type_name -> google.protobuf.Struct
+	38, // 17: gestalt.provider.v1.RequestContext.workflow:type_name -> google.protobuf.Struct
 	16, // 18: gestalt.provider.v1.RequestContext.host:type_name -> gestalt.provider.v1.HostContext
 	10, // 19: gestalt.provider.v1.RequestContext.agent_subject:type_name -> gestalt.provider.v1.SubjectContext
 	17, // 20: gestalt.provider.v1.RequestContext.caller:type_name -> gestalt.provider.v1.ProviderContext
 	18, // 21: gestalt.provider.v1.RequestContext.invocation:type_name -> gestalt.provider.v1.InvocationContext
 	12, // 22: gestalt.provider.v1.RequestContext.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
 	19, // 23: gestalt.provider.v1.RequestContext.request_meta:type_name -> gestalt.provider.v1.RequestMetaContext
-	31, // 24: gestalt.provider.v1.HTTPSubjectRequest.headers:type_name -> gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
-	32, // 25: gestalt.provider.v1.HTTPSubjectRequest.query:type_name -> gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
-	37, // 26: gestalt.provider.v1.HTTPSubjectRequest.params:type_name -> google.protobuf.Struct
-	33, // 27: gestalt.provider.v1.HTTPSubjectRequest.verified_claims:type_name -> gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
-	21, // 28: gestalt.provider.v1.ResolveHTTPSubjectRequest.request:type_name -> gestalt.provider.v1.HTTPSubjectRequest
-	20, // 29: gestalt.provider.v1.ResolveHTTPSubjectRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	10, // 30: gestalt.provider.v1.ResolveHTTPSubjectResponse.subject:type_name -> gestalt.provider.v1.SubjectContext
-	37, // 31: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
-	34, // 32: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
-	20, // 33: gestalt.provider.v1.ExecuteRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	35, // 34: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	20, // 35: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
-	4,  // 36: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
-	37, // 37: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
-	5,  // 38: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
-	13, // 39: gestalt.provider.v1.OperationResult.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
-	13, // 40: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
-	13, // 41: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry.value:type_name -> gestalt.provider.v1.StringList
-	38, // 42: gestalt.provider.v1.AppProvider.GetMetadata:input_type -> google.protobuf.Empty
-	27, // 43: gestalt.provider.v1.AppProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
-	24, // 44: gestalt.provider.v1.AppProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
-	22, // 45: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
-	25, // 46: gestalt.provider.v1.AppProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
-	8,  // 47: gestalt.provider.v1.App.Invoke:input_type -> gestalt.provider.v1.AppInvokeRequest
-	9,  // 48: gestalt.provider.v1.App.InvokeGraphQL:input_type -> gestalt.provider.v1.AppInvokeGraphQLRequest
-	6,  // 49: gestalt.provider.v1.AppProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
-	28, // 50: gestalt.provider.v1.AppProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
-	7,  // 51: gestalt.provider.v1.AppProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
-	23, // 52: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
-	26, // 53: gestalt.provider.v1.AppProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
-	7,  // 54: gestalt.provider.v1.App.Invoke:output_type -> gestalt.provider.v1.OperationResult
-	7,  // 55: gestalt.provider.v1.App.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
-	49, // [49:56] is the sub-list for method output_type
-	42, // [42:49] is the sub-list for method input_type
-	42, // [42:42] is the sub-list for extension type_name
-	42, // [42:42] is the sub-list for extension extendee
-	0,  // [0:42] is the sub-list for field type_name
+	20, // 24: gestalt.provider.v1.RequestContext.agent:type_name -> gestalt.provider.v1.AgentInvocationContext
+	32, // 25: gestalt.provider.v1.HTTPSubjectRequest.headers:type_name -> gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry
+	33, // 26: gestalt.provider.v1.HTTPSubjectRequest.query:type_name -> gestalt.provider.v1.HTTPSubjectRequest.QueryEntry
+	38, // 27: gestalt.provider.v1.HTTPSubjectRequest.params:type_name -> google.protobuf.Struct
+	34, // 28: gestalt.provider.v1.HTTPSubjectRequest.verified_claims:type_name -> gestalt.provider.v1.HTTPSubjectRequest.VerifiedClaimsEntry
+	22, // 29: gestalt.provider.v1.ResolveHTTPSubjectRequest.request:type_name -> gestalt.provider.v1.HTTPSubjectRequest
+	21, // 30: gestalt.provider.v1.ResolveHTTPSubjectRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	10, // 31: gestalt.provider.v1.ResolveHTTPSubjectResponse.subject:type_name -> gestalt.provider.v1.SubjectContext
+	38, // 32: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	35, // 33: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	21, // 34: gestalt.provider.v1.ExecuteRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	36, // 35: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	21, // 36: gestalt.provider.v1.GetSessionCatalogRequest.context:type_name -> gestalt.provider.v1.RequestContext
+	4,  // 37: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
+	38, // 38: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
+	5,  // 39: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
+	13, // 40: gestalt.provider.v1.OperationResult.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
+	13, // 41: gestalt.provider.v1.HTTPSubjectRequest.HeadersEntry.value:type_name -> gestalt.provider.v1.StringList
+	13, // 42: gestalt.provider.v1.HTTPSubjectRequest.QueryEntry.value:type_name -> gestalt.provider.v1.StringList
+	39, // 43: gestalt.provider.v1.AppProvider.GetMetadata:input_type -> google.protobuf.Empty
+	28, // 44: gestalt.provider.v1.AppProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
+	25, // 45: gestalt.provider.v1.AppProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
+	23, // 46: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:input_type -> gestalt.provider.v1.ResolveHTTPSubjectRequest
+	26, // 47: gestalt.provider.v1.AppProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
+	8,  // 48: gestalt.provider.v1.App.Invoke:input_type -> gestalt.provider.v1.AppInvokeRequest
+	9,  // 49: gestalt.provider.v1.App.InvokeGraphQL:input_type -> gestalt.provider.v1.AppInvokeGraphQLRequest
+	6,  // 50: gestalt.provider.v1.AppProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
+	29, // 51: gestalt.provider.v1.AppProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
+	7,  // 52: gestalt.provider.v1.AppProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
+	24, // 53: gestalt.provider.v1.AppProvider.ResolveHTTPSubject:output_type -> gestalt.provider.v1.ResolveHTTPSubjectResponse
+	27, // 54: gestalt.provider.v1.AppProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
+	7,  // 55: gestalt.provider.v1.App.Invoke:output_type -> gestalt.provider.v1.OperationResult
+	7,  // 56: gestalt.provider.v1.App.InvokeGraphQL:output_type -> gestalt.provider.v1.OperationResult
+	50, // [50:57] is the sub-list for method output_type
+	43, // [43:50] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_v1_app_proto_init() }
@@ -2633,7 +2709,7 @@ func file_v1_app_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_app_proto_rawDesc), len(file_v1_app_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   35,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

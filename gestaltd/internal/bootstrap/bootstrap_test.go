@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"net"
 	"net/http"
@@ -337,9 +336,11 @@ func bootstrapAgentToolsFromProto(src []*proto.ResolvedAgentTool) []coreagent.To
 			continue
 		}
 		out = append(out, coreagent.Tool{
-			ID:          tool.GetId(),
-			Name:        tool.GetName(),
-			Description: tool.GetDescription(),
+			ID:               tool.GetId(),
+			Name:             tool.GetName(),
+			Description:      tool.GetDescription(),
+			ParametersSchema: bootstrapAgentProtoStructToMap(tool.GetParametersSchema()),
+			Target:           bootstrapAgentToolTargetFromProto(tool.GetRef()),
 		})
 	}
 	return out
@@ -349,12 +350,41 @@ func bootstrapAgentToolsToProto(src []coreagent.Tool) []*proto.ResolvedAgentTool
 	out := make([]*proto.ResolvedAgentTool, 0, len(src))
 	for _, tool := range src {
 		out = append(out, &proto.ResolvedAgentTool{
-			Id:          tool.ID,
-			Name:        tool.Name,
-			Description: tool.Description,
+			Id:               tool.ID,
+			Name:             tool.Name,
+			Description:      tool.Description,
+			ParametersSchema: bootstrapAgentMapToProtoStruct(tool.ParametersSchema),
+			Ref:              agentwire.ToolRefToProto(bootstrapAgentToolRefFromTarget(tool.Target)),
 		})
 	}
 	return out
+}
+
+func bootstrapAgentToolTargetFromProto(ref *proto.AgentToolRef) coreagent.ToolTarget {
+	if ref == nil {
+		return coreagent.ToolTarget{}
+	}
+	return coreagent.ToolTarget{
+		System:         strings.TrimSpace(ref.GetSystem()),
+		App:            strings.TrimSpace(ref.GetApp()),
+		Operation:      strings.TrimSpace(ref.GetOperation()),
+		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.GetConnection())),
+		Instance:       strings.TrimSpace(ref.GetInstance()),
+		CredentialMode: core.ConnectionMode(strings.TrimSpace(ref.GetCredentialMode())),
+		RunAs:          agentwire.RunAsSubjectFromProto(ref.GetRunAs()),
+	}
+}
+
+func bootstrapAgentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
+	return coreagent.ToolRef{
+		System:         strings.TrimSpace(target.System),
+		App:            strings.TrimSpace(target.App),
+		Operation:      strings.TrimSpace(target.Operation),
+		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+		Instance:       strings.TrimSpace(target.Instance),
+		CredentialMode: core.NormalizeOptionalConnectionMode(target.CredentialMode),
+		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
+	}
 }
 
 func bootstrapAgentSessionStateFromProto(src proto.AgentSessionState) coreagent.SessionState {
@@ -700,10 +730,6 @@ func (p *recordingAgentProvider) CancelTurnRequests() []*proto.CancelAgentProvid
 type callbackAgentProvider struct {
 	*recordingAgentProvider
 	started                *runtimehost.StartedHostServices
-	socketPath             string
-	catalogSessions        map[string]bool
-	listRequests           []*proto.ListAgentToolsRequest
-	listResponses          []*proto.ListAgentToolsResponse
 	toolBodies             []string
 	resolveInteractionHook func(context.Context, *proto.ResolveAgentProviderInteractionRequest) error
 }
@@ -717,42 +743,17 @@ func (p *callbackSessionCatalogIntegration) CatalogForRequest(context.Context, s
 	return p.sessionCatalog, nil
 }
 
-type unavailableSessionCatalogIntegration struct {
-	coretesting.StubIntegration
-	err error
-}
-
-func (p *unavailableSessionCatalogIntegration) CatalogForRequest(context.Context, string) (*catalog.Catalog, error) {
-	return nil, p.err
-}
-
 func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callbackAgentProvider, error) {
 	if started == nil {
 		return nil, fmt.Errorf("started host services are required")
 	}
-	socketPath := strings.TrimSpace(started.SocketBinding().SocketPath)
-	if socketPath == "" {
-		return nil, fmt.Errorf("agent host socket binding is missing")
+	if strings.TrimSpace(started.SocketBinding().SocketPath) == "" {
+		return nil, fmt.Errorf("host service socket binding is missing")
 	}
 	return &callbackAgentProvider{
 		recordingAgentProvider: newRecordingAgentProvider(),
 		started:                started,
-		socketPath:             socketPath,
-		catalogSessions:        map[string]bool{},
 	}, nil
-}
-
-func (p *callbackAgentProvider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
-	session, err := p.recordingAgentProvider.CreateSession(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	if req.GetTools().GetCatalog() != nil {
-		p.mu.Lock()
-		p.catalogSessions[session.ID] = true
-		p.mu.Unlock()
-	}
-	return session, nil
 }
 
 func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -815,61 +816,47 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	}
 
 	outputBody := ""
-	p.mu.Lock()
-	catalogSession := p.catalogSessions[strings.TrimSpace(req.GetSessionId())]
-	p.mu.Unlock()
-	if catalogSession || len(req.GetTools()) > 0 {
+	if len(req.GetTools()) > 0 {
+		socketPath := strings.TrimSpace(p.started.SocketBinding().SocketPath)
+		if socketPath == "" {
+			cleanupPendingTurn()
+			return nil, fmt.Errorf("host service socket binding is missing")
+		}
 		conn, err := grpc.NewClient(
 			"passthrough:///localhost",
 			grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 				var d net.Dialer
-				return d.DialContext(ctx, "unix", p.socketPath)
+				return d.DialContext(ctx, "unix", socketPath)
 			}),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		if err != nil {
 			cleanupPendingTurn()
-			return nil, fmt.Errorf("dial agent host: %w", err)
+			return nil, fmt.Errorf("dial app host: %w", err)
 		}
 		defer func() { _ = conn.Close() }()
-		client := proto.NewAgentHostClient(conn)
 		tools := bootstrapAgentToolsFromProto(req.GetTools())
-		if len(tools) == 0 && catalogSession {
-			listReq := &proto.ListAgentToolsRequest{
-				SessionId: req.GetSessionId(),
-				TurnId:    turnID,
-				PageSize:  5,
-				Context:   req.GetContext(),
-			}
-			listResp, err := client.ListTools(ctx, listReq)
-			if err != nil {
-				cleanupPendingTurn()
-				return nil, err
-			}
-			p.listRequests = append(p.listRequests, gproto.Clone(listReq).(*proto.ListAgentToolsRequest))
-			p.listResponses = append(p.listResponses, gproto.Clone(listResp).(*proto.ListAgentToolsResponse))
-			for _, tool := range listResp.GetTools() {
-				tools = append(tools, coreagent.Tool{
-					ID:          tool.GetId(),
-					Name:        tool.GetMcpName(),
-					Description: tool.GetDescription(),
-				})
-			}
-		}
 		if len(tools) > 0 {
-			resp, err := client.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
-				SessionId:  req.GetSessionId(),
-				TurnId:     turnID,
-				ToolCallId: "tool-call-1",
-				ToolId:     tools[0].ID,
-				Context:    req.GetContext(),
-				Arguments: func() *structpb.Struct {
+			target := tools[0].Target
+			if strings.TrimSpace(target.App) == "" || strings.TrimSpace(target.Operation) == "" {
+				cleanupPendingTurn()
+				return nil, fmt.Errorf("resolved app tool target is missing")
+			}
+			resp, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+				App:            strings.TrimSpace(target.App),
+				Operation:      strings.TrimSpace(target.Operation),
+				Connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
+				Instance:       strings.TrimSpace(target.Instance),
+				CredentialMode: string(core.NormalizeOptionalConnectionMode(target.CredentialMode)),
+				Context:        req.GetContext(),
+				Params: func() *structpb.Struct {
 					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
 					if err != nil {
 						panic(err)
 					}
 					return value
 				}(),
+				IdempotencyKey: "tool-call-1",
 			})
 			if err != nil {
 				cleanupPendingTurn()
@@ -1423,76 +1410,6 @@ func hostServiceNames(hostServices []runtimehost.HostService) []string {
 		names = append(names, hostService.Name)
 	}
 	return names
-}
-
-func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
-	t.Helper()
-
-	hostService := requireHostService(t, hostServices, "agent_host")
-	if hostService.Register == nil {
-		t.Fatal("agent host register func is nil")
-	}
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	hostService.Register(srv)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	return proto.NewAgentHostClient(conn).ExecuteTool(context.Background(), req)
-}
-
-func invokeAgentHostListTools(t *testing.T, hostServices []runtimehost.HostService, req *proto.ListAgentToolsRequest) *proto.ListAgentToolsResponse {
-	t.Helper()
-
-	hostService := requireHostService(t, hostServices, "agent_host")
-	if hostService.Register == nil {
-		t.Fatal("agent host register func is nil")
-	}
-
-	lis := bufconn.Listen(1024 * 1024)
-	srv := grpc.NewServer()
-	hostService.Register(srv)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(func() {
-		srv.Stop()
-		_ = lis.Close()
-	})
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return lis.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("grpc.NewClient: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
-	resp, err := proto.NewAgentHostClient(conn).ListTools(context.Background(), req)
-	if err != nil {
-		t.Fatalf("ListTools: %v", err)
-	}
-	return resp
 }
 
 func withIndexedDBHostClient(t *testing.T, hostService runtimehost.HostService, fn func(proto.IndexedDBClient)) {
@@ -2144,7 +2061,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 
 	factories := validFactories()
 	seen := make(map[string]struct{}, len(cfg.Providers.Agent))
-	hostSockets := make(map[string]string, len(cfg.Providers.Agent))
+	providerHostServices := make(map[string][]string, len(cfg.Providers.Agent))
 	var seenMu sync.Mutex
 	factories.Agent = func(_ context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		var runtime struct {
@@ -2155,7 +2072,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 		}
 		seenMu.Lock()
 		seen[runtime.Name] = struct{}{}
-		hostSockets[name] = requireHostService(t, hostServices, "agent_host").Name
+		providerHostServices[name] = hostServiceNames(hostServices)
 		seenMu.Unlock()
 		return newRecordingAgentProvider(), nil
 	}
@@ -2173,9 +2090,6 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 	for _, name := range []string{"cleanup", "reviewer"} {
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing agent runtime name %q in %v", name, seen)
-		}
-		if got := hostSockets[name]; got != "agent_host" {
-			t.Fatalf("agent host env for %q = %q, want %q", name, got, "agent_host")
 		}
 	}
 	if got := result.AgentControl.ProviderNames(); !reflect.DeepEqual(got, []string{"cleanup", "reviewer"}) {
@@ -2383,8 +2297,11 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.GetCreatedBySubjectId() != p.SubjectID {
 		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", createTurnReq.GetCreatedBySubjectId(), p.SubjectID)
 	}
-	if len(createTurnReq.GetTools()) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
+	if len(createTurnReq.GetTools()) != 1 {
+		t.Fatalf("CreateTurn tools = %#v, want one resolved catalog tool", createTurnReq.GetTools())
+	}
+	if ref := createTurnReq.GetTools()[0].GetRef(); ref.GetApp() != "roadmap" || ref.GetOperation() != "sync" {
+		t.Fatalf("CreateTurn tool ref = %#v, want roadmap.sync", ref)
 	}
 	if createTurnReq.GetContext() == nil {
 		t.Fatal("CreateTurn context is empty")
@@ -2432,7 +2349,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	}
 }
 
-func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
+func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -2679,492 +2596,6 @@ func TestBootstrapAgentHostToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		t.Fatalf("tool callback bodies after unavailable hits = %#v, want exact catalog tool linear.list_issues", toolBodies)
 	}
 
-}
-
-func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	factories := validFactories()
-	hidden := false
-	destructive := true
-	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
-		N:        "docs",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{
-			Name:        "docs",
-			DisplayName: "Docs",
-			Description: "Search and inspect docs",
-			Operations: []catalog.CatalogOperation{
-				{ID: "alpha_search", Method: http.MethodGet, Title: "Docs alpha search", Description: "Search docs alpha", ReadOnly: true},
-				{ID: "beta_list", Method: http.MethodGet, Title: "Docs beta list", Description: "List docs beta", ReadOnly: true},
-				{ID: "delta_export", Method: http.MethodGet, Title: "Docs delta export", Description: "Export docs delta", ReadOnly: true},
-				{ID: "epsilon_delete", Method: http.MethodDelete, Title: "Docs epsilon delete", Description: "Delete docs epsilon", Annotations: catalog.CapabilityAnnotations{DestructiveHint: &destructive}},
-				{ID: "gamma_get", Method: http.MethodGet, Title: "Docs gamma get", Description: "Get docs gamma", ReadOnly: true},
-				{ID: "aardvark_admin", Method: http.MethodPost, Title: "Hidden docs admin", Description: "Hidden admin operation", Visible: &hidden},
-			},
-		},
-		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-			body, err := json.Marshal(map[string]any{
-				"provider":  "docs",
-				"operation": operation,
-			})
-			if err != nil {
-				return nil, err
-			}
-			return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-		},
-	})
-
-	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "docs",
-		Operations: []string{"aardvark_admin", "alpha_search", "beta_list", "delta_export", "epsilon_delete", "gamma_get"},
-	}, {
-		App: "managed",
-	}})
-	p := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
-	}
-	ctx := principal.WithPrincipal(context.Background(), p)
-	reqContext := bootstrapAgentRequestContext(t, p, "managed")
-
-	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-		ClientRef:    "cli-session-candidate-search",
-		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "docs"}),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession: %v", err)
-	}
-	turn, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		IdempotencyKey: "candidate-search-idempotency-key",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "search docs"}},
-		Output:         bootstrapTextAgentOutput(),
-		Context:        reqContext,
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn(search): %v", err)
-	}
-	if turn == nil {
-		t.Fatal("AgentManager.CreateTurn(search) returned nil turn")
-	}
-
-	provider.mu.Lock()
-	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
-	toolBodies := append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(listResponses) != 1 {
-		t.Fatalf("list response count = %d, want 1", len(listResponses))
-	}
-	listResp := listResponses[0]
-	if len(listResp.GetTools()) != 5 {
-		t.Fatalf("listed tools = %#v, want five visible docs tools", listResp.GetTools())
-	}
-	if len(toolBodies) != 1 {
-		t.Fatalf("tool callback bodies = %#v, want one listed tool execution", toolBodies)
-	}
-	var loadedBody map[string]string
-	if err := json.Unmarshal([]byte(toolBodies[0]), &loadedBody); err != nil {
-		t.Fatalf("tool callback body = %q: %v", toolBodies[0], err)
-	}
-	if loadedBody["provider"] != "docs" {
-		t.Fatalf("tool callback body = %#v, want docs provider", loadedBody)
-	}
-	loadedOperation := loadedBody["operation"]
-	if loadedOperation == "" || loadedOperation == "aardvark_admin" {
-		t.Fatalf("loaded operation = %q, want visible docs operation", loadedOperation)
-	}
-	var betaOperation string
-	var destructiveOperation string
-	for _, tool := range listResp.GetTools() {
-		ref := tool.GetRef()
-		if ref.GetOperation() == "aardvark_admin" {
-			t.Fatalf("listed hidden tool = %#v, want only visible tools for broad catalog", tool)
-		}
-		if ref.GetOperation() == "beta_list" {
-			betaOperation = ref.GetOperation()
-		}
-		if ref.GetOperation() == "epsilon_delete" {
-			destructiveOperation = ref.GetOperation()
-		}
-	}
-	if betaOperation == "" {
-		t.Fatalf("listed tools = %#v, want beta_list", listResp.GetTools())
-	}
-	if destructiveOperation == "" {
-		t.Fatalf("listed tools = %#v, want visible destructive epsilon_delete", listResp.GetTools())
-	}
-	exactSession, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-		ClientRef:    "cli-session-candidate-load-ref",
-		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "docs", Operation: betaOperation}),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession(exact ref): %v", err)
-	}
-	exact, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      exactSession.ID,
-		IdempotencyKey: "candidate-load-ref-idempotency-key",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load beta docs"}},
-		Output:         bootstrapTextAgentOutput(),
-		Context:        reqContext,
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn(exact ref): %v", err)
-	}
-	if exact == nil {
-		t.Fatal("AgentManager.CreateTurn(exact ref) returned nil turn")
-	}
-
-	provider.mu.Lock()
-	toolBodies = append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(toolBodies) != 2 || !strings.Contains(toolBodies[1], fmt.Sprintf(`"operation":"%s"`, betaOperation)) {
-		t.Fatalf("tool callback bodies after exact ref = %#v, want %s", toolBodies, betaOperation)
-	}
-
-	mixedSession, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-		ClientRef:    "cli-session-candidate-mixed-global-exact-hidden",
-		Tools: bootstrapAgentCatalogToolConfig(
-			&proto.AgentToolRef{App: "*"},
-			&proto.AgentToolRef{App: "docs", Operation: "aardvark_admin"},
-		),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession(mixed global exact hidden ref): %v", err)
-	}
-	mixed, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      mixedSession.ID,
-		IdempotencyKey: "candidate-mixed-global-exact-hidden-idempotency-key",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "load hidden docs"}},
-		Output:         bootstrapTextAgentOutput(),
-		Context:        reqContext,
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn(mixed global exact hidden ref): %v", err)
-	}
-	if mixed == nil {
-		t.Fatal("AgentManager.CreateTurn(mixed global exact hidden ref) returned nil turn")
-	}
-	provider.mu.Lock()
-	listResponses = append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
-	provider.mu.Unlock()
-	if len(listResponses) != 3 {
-		t.Fatalf("list response count after mixed global exact hidden ref = %d, want 3", len(listResponses))
-	}
-	hiddenListed := false
-	for _, tool := range listResponses[2].GetTools() {
-		if tool.GetRef().GetApp() == "docs" && tool.GetRef().GetOperation() == "aardvark_admin" {
-			hiddenListed = true
-			break
-		}
-	}
-	if !hiddenListed {
-		t.Fatalf("mixed global exact hidden listed tools = %#v, want aardvark_admin", listResponses[2].GetTools())
-	}
-}
-
-func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	factories := validFactories()
-	factories.Builtins = append(factories.Builtins, &coretesting.StubIntegration{
-		N:        "linear",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{
-			Name:        "linear",
-			DisplayName: "Linear",
-			Description: "Manage issues, projects, and teams.",
-			Operations: []catalog.CatalogOperation{{
-				ID:          "issues",
-				Method:      http.MethodGet,
-				Description: "All issues visible to the authenticated user. Can be filtered by assignee.",
-				ReadOnly:    true,
-			}},
-		},
-		ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-			body, err := json.Marshal(map[string]any{
-				"provider":  "linear",
-				"operation": operation,
-			})
-			if err != nil {
-				return nil, err
-			}
-			return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-		},
-	})
-
-	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	slackOnly := principal.CompilePermissions([]core.AccessPermission{{
-		App: "slack",
-		Operations: []string{
-			"events.reply",
-			"events.setStatus",
-		},
-	}, {
-		App: "managed",
-	}})
-	p := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceAPIToken,
-		TokenPermissions: slackOnly,
-		Scopes:           principal.PermissionApps(slackOnly),
-	}
-	ctx := invocation.WithInvocationSurface(principal.WithPrincipal(context.Background(), p), invocation.InvocationSurfaceHTTP)
-
-	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-		ClientRef:    "cli-session-http-slack-search",
-		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "*"}),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession: %v", err)
-	}
-	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "slack"), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		IdempotencyKey: "http-slack-linear-search",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
-		Output:         bootstrapTextAgentOutput(),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn wildcard scoped turn: %v", err)
-	}
-	if turn == nil {
-		t.Fatal("AgentManager.CreateTurn wildcard scoped turn returned nil")
-	}
-	provider.mu.Lock()
-	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
-	toolBodies := append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(listResponses) != 1 {
-		t.Fatalf("list response count = %d, want 1", len(listResponses))
-	}
-	if len(listResponses[0].GetTools()) != 0 {
-		t.Fatalf("listed tools = %#v, want none outside principal permissions", listResponses[0].GetTools())
-	}
-	if len(toolBodies) != 0 {
-		t.Fatalf("tool callback bodies = %#v, want no execution outside principal permissions", toolBodies)
-	}
-}
-
-func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"managed": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	factories := validFactories()
-	factories.Builtins = append(factories.Builtins,
-		&coretesting.StubIntegration{
-			N:        "linear",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name: "linear",
-				Operations: []catalog.CatalogOperation{{
-					ID:          "issues",
-					Method:      http.MethodGet,
-					Description: "All issues visible to the authenticated user.",
-					ReadOnly:    true,
-				}},
-			},
-			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				body, err := json.Marshal(map[string]any{
-					"provider":  "linear",
-					"operation": operation,
-				})
-				if err != nil {
-					return nil, err
-				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
-			},
-		},
-		&unavailableSessionCatalogIntegration{
-			StubIntegration: coretesting.StubIntegration{
-				N:        "ashby",
-				ConnMode: core.ConnectionModeSubject,
-				CatalogVal: &catalog.Catalog{
-					Name: "ashby",
-					Operations: []catalog.CatalogOperation{{
-						ID:          "candidates",
-						Method:      http.MethodGet,
-						Description: "All candidates visible to the authenticated user.",
-						ReadOnly:    true,
-					}},
-				},
-			},
-			err: invocation.ErrNoCredential,
-		},
-	)
-
-	var provider *callbackAgentProvider
-	factories.Agent = func(_ context.Context, _ string, _ yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
-		started, err := runtimehost.StartHostServices(hostServices)
-		if err != nil {
-			return nil, err
-		}
-		value, err := newCallbackAgentProvider(started)
-		if err != nil {
-			_ = started.Close()
-			return nil, err
-		}
-		provider = value
-		return value, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:        "linear",
-		Operations: []string{"issues"},
-	}, {
-		App:        "ashby",
-		Operations: []string{"candidates"},
-	}, {
-		App: "managed",
-	}})
-	p := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
-	}
-	ctx := invocation.WithInvocationSurface(principal.WithPrincipal(context.Background(), p), invocation.InvocationSurfaceHTTP)
-
-	session, err := result.AgentManager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "managed",
-		Model:        "gpt-test",
-		ClientRef:    "cli-session-http-global-search",
-		Tools:        bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{App: "*"}),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateSession: %v", err)
-	}
-	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(ctx, invocation.ProviderKindApp, "slack"), p, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		IdempotencyKey: "http-global-linear-search",
-		Model:          "gpt-test",
-		Messages:       []*proto.AgentMessage{{Role: "user", Text: "get my linear tickets"}},
-		Output:         bootstrapTextAgentOutput(),
-	})
-	if err != nil {
-		t.Fatalf("AgentManager.CreateTurn global scoped turn: %v", err)
-	}
-	if turn == nil {
-		t.Fatal("AgentManager.CreateTurn global scoped turn returned nil")
-	}
-
-	provider.mu.Lock()
-	listResponses := append([]*proto.ListAgentToolsResponse(nil), provider.listResponses...)
-	toolBodies := append([]string(nil), provider.toolBodies...)
-	provider.mu.Unlock()
-	if len(listResponses) != 1 {
-		t.Fatalf("list response count = %d, want 1", len(listResponses))
-	}
-	tools := listResponses[0].GetTools()
-	if len(tools) != 2 {
-		t.Fatalf("listed tools = %#v, want connected linear issues plus ashby unavailable sentinel", tools)
-	}
-	if tools[0].GetRef().GetApp() != "linear" || tools[0].GetRef().GetOperation() != "issues" {
-		t.Fatalf("first listed tool = %#v, want connected linear issues before unavailable sentinels", tools[0])
-	}
-	if tools[1].GetRef().GetApp() != "ashby" || tools[1].GetRef().GetOperation() != "" || tools[1].GetMcpName() != "ashby__no_credential" {
-		t.Fatalf("second listed tool = %#v, want ashby unavailable sentinel", tools[1])
-	}
-	if len(toolBodies) != 1 || !strings.Contains(toolBodies[0], `"provider":"linear"`) || !strings.Contains(toolBodies[0], `"operation":"issues"`) {
-		t.Fatalf("tool callback bodies = %#v, want executed linear issues", toolBodies)
-	}
 }
 
 func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing.T) {
@@ -3937,7 +3368,6 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	requireHostService(t, hostServices, "agent_host")
 	indexedDBService := requireHostService(t, hostServices, "indexeddb")
 
 	withIndexedDBHostClient(t, indexedDBService, func(client proto.IndexedDBClient) {
@@ -5278,332 +4708,6 @@ func TestBootstrapConfigManagedAgentStepsPreserveWorkflowSystemToolRefs(t *testi
 	}
 }
 
-func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
-	t.Parallel()
-
-	var requestPath atomic.Value
-	var requestBody atomic.Value
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		requestPath.Store(r.URL.Path)
-		requestBody.Store(string(body))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := validConfig()
-	cfg.Apps = map[string]*config.ProviderEntry{
-		"roadmap": {
-			ConnectionMode: providermanifestv1.ConnectionModeNone,
-			ResolvedManifest: &providermanifestv1.Manifest{
-				Spec: &providermanifestv1.Spec{
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						REST: &providermanifestv1.RESTSurface{
-							BaseURL: srv.URL,
-							Operations: []providermanifestv1.ProviderOperation{
-								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"reviewer": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	var capturedHostServices []runtimehost.HostService
-	providerImpl := newRecordingAgentProvider()
-	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
-		if name != "reviewer" {
-			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
-		}
-		capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
-		return providerImpl, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	systemPrincipal := &principal.Principal{SubjectID: "system:config", Kind: principal.Kind("system"), Source: principal.SourceEnv}
-	startCtx := principal.WithPrincipal(context.Background(), systemPrincipal)
-	session, err := result.AgentManager.CreateSession(startCtx, systemPrincipal, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "reviewer",
-		Model:        "gpt-test",
-		Tools: bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{
-			App:       "roadmap",
-			Operation: "sync",
-		}),
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(startCtx, invocation.ProviderKindApp, "roadmap"), systemPrincipal, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "gpt-test",
-		Output:         bootstrapTextAgentOutput(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	providerImpl.mu.Lock()
-	if len(providerImpl.createTurnRequests) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(providerImpl.createTurnRequests))
-	}
-	createTurnReq := providerImpl.createTurnRequests[0]
-	if stored := providerImpl.turns[turn.ID]; stored != nil {
-		stored.Status = coreagent.ExecutionStatusRunning
-		stored.CompletedAt = nil
-	}
-	providerImpl.mu.Unlock()
-	if createTurnReq.GetContext() == nil {
-		t.Fatal("CreateTurn context is empty")
-	}
-	if len(createTurnReq.GetTools()) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
-	}
-	listResp := invokeAgentHostListTools(t, capturedHostServices, &proto.ListAgentToolsRequest{
-		SessionId: session.ID,
-		TurnId:    turn.ID,
-		PageSize:  5,
-		Context:   createTurnReq.GetContext(),
-	})
-	if len(listResp.GetTools()) != 1 {
-		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
-	}
-	tool := listResp.GetTools()[0]
-	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
-	if err != nil {
-		t.Fatalf("structpb.NewStruct: %v", err)
-	}
-	resp, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  session.ID,
-		TurnId:     turn.ID,
-		ToolCallId: "tool-call-1",
-		ToolId:     tool.GetId(),
-		Arguments:  args,
-		Context:    createTurnReq.GetContext(),
-	})
-	if err != nil {
-		t.Fatalf("invoke agent host callback: %v", err)
-	}
-	if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
-		t.Fatalf("agent host callback response = %#v", resp)
-	}
-
-	if got, _ := requestPath.Load().(string); got != "/sync" {
-		t.Fatalf("request path = %q, want %q", got, "/sync")
-	}
-	if got, _ := requestBody.Load().(string); !strings.Contains(got, `"taskId":"task-123"`) {
-		t.Fatalf("request body = %q, want taskId payload", got)
-	}
-	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  "wrong-session",
-		TurnId:     turn.ID,
-		ToolCallId: "tool-call-mismatch",
-		ToolId:     tool.GetId(),
-		Arguments:  args,
-		Context:    createTurnReq.GetContext(),
-	}); status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("invoke agent host callback with mismatched session status = %s, want %s", status.Code(err), codes.PermissionDenied)
-	}
-	providerImpl.mu.Lock()
-	if stored := providerImpl.turns[turn.ID]; stored != nil {
-		stored.ID = "different-live-turn"
-		stored.SessionID = session.ID
-		stored.Status = coreagent.ExecutionStatusRunning
-		stored.CompletedAt = nil
-	}
-	providerImpl.mu.Unlock()
-	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  session.ID,
-		TurnId:     turn.ID,
-		ToolCallId: "tool-call-wrong-turn",
-		ToolId:     tool.GetId(),
-		Arguments:  args,
-		Context:    createTurnReq.GetContext(),
-	}); status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("invoke agent host callback with mismatched provider turn status = %s, want %s", status.Code(err), codes.PermissionDenied)
-	}
-	providerImpl.mu.Lock()
-	if stored := providerImpl.turns[turn.ID]; stored != nil {
-		stored.ID = turn.ID
-		stored.Status = coreagent.ExecutionStatusRunning
-		stored.CompletedAt = nil
-	}
-	providerImpl.mu.Unlock()
-
-	if _, err := result.AgentManager.CancelTurn(startCtx, systemPrincipal, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "done"}); err != nil {
-		t.Fatalf("CancelTurn: %v", err)
-	}
-	cancelRequests := providerImpl.CancelTurnRequests()
-	if len(cancelRequests) != 1 {
-		t.Fatalf("CancelTurn requests = %d, want 1", len(cancelRequests))
-	}
-	if cancelRequests[0].GetTurnId() != turn.ID {
-		t.Fatalf("CancelTurn turn_id = %q, want %q", cancelRequests[0].GetTurnId(), turn.ID)
-	}
-	providerImpl.mu.Lock()
-	if stored := providerImpl.turns[turn.ID]; stored != nil {
-		stored.Status = coreagent.ExecutionStatusRunning
-		stored.CompletedAt = nil
-	}
-	providerImpl.mu.Unlock()
-	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  session.ID,
-		TurnId:     turn.ID,
-		ToolCallId: "tool-call-2",
-		ToolId:     tool.GetId(),
-		Arguments:  args,
-		Context:    createTurnReq.GetContext(),
-	}); status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("invoke agent host callback after cancel status = %s, want %s", status.Code(err), codes.PermissionDenied)
-	}
-}
-
-func TestBootstrapDoesNotRevokeAgentScopeWhenCancelReturnsLiveTurn(t *testing.T) {
-	t.Parallel()
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusAccepted)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	defer srv.Close()
-
-	cfg := validConfig()
-	cfg.Apps = map[string]*config.ProviderEntry{
-		"roadmap": {
-			ConnectionMode: providermanifestv1.ConnectionModeNone,
-			ResolvedManifest: &providermanifestv1.Manifest{
-				Spec: &providermanifestv1.Spec{
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						REST: &providermanifestv1.RESTSurface{
-							BaseURL: srv.URL,
-							Operations: []providermanifestv1.ProviderOperation{
-								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	cfg.Providers.Agent = map[string]*config.ProviderEntry{
-		"reviewer": {
-			Source:  config.ProviderSource{Path: "stub"},
-			Default: true,
-		},
-	}
-
-	var capturedHostServices []runtimehost.HostService
-	providerImpl := newRecordingAgentProvider()
-	providerImpl.cancelTurnStatus = coreagent.ExecutionStatusRunning
-	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
-		if name != "reviewer" {
-			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
-		}
-		capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
-		return providerImpl, nil
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
-
-	systemPrincipal := &principal.Principal{SubjectID: "system:config", Kind: principal.Kind("system"), Source: principal.SourceEnv}
-	startCtx := principal.WithPrincipal(context.Background(), systemPrincipal)
-	session, err := result.AgentManager.CreateSession(startCtx, systemPrincipal, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "reviewer",
-		Model:        "gpt-test",
-		Tools: bootstrapAgentCatalogToolConfig(&proto.AgentToolRef{
-			App:       "roadmap",
-			Operation: "sync",
-		}),
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	turn, err := result.AgentManager.CreateTurn(invocation.WithCallerProvider(startCtx, invocation.ProviderKindApp, "roadmap"), systemPrincipal, &proto.CreateAgentProviderTurnRequest{
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "gpt-test",
-		Output:         bootstrapTextAgentOutput(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	providerImpl.mu.Lock()
-	createTurnReq := providerImpl.createTurnRequests[0]
-	if stored := providerImpl.turns[turn.ID]; stored != nil {
-		stored.Status = coreagent.ExecutionStatusRunning
-		stored.CompletedAt = nil
-	}
-	providerImpl.mu.Unlock()
-	if createTurnReq.GetContext() == nil {
-		t.Fatal("CreateTurn context is empty")
-	}
-	if len(createTurnReq.GetTools()) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want no preloaded tools", createTurnReq.GetTools())
-	}
-	listResp := invokeAgentHostListTools(t, capturedHostServices, &proto.ListAgentToolsRequest{
-		SessionId: session.ID,
-		TurnId:    turn.ID,
-		PageSize:  5,
-		Context:   createTurnReq.GetContext(),
-	})
-	if len(listResp.GetTools()) != 1 {
-		t.Fatalf("ListTools tools = %#v, want one tool", listResp.GetTools())
-	}
-	tool := listResp.GetTools()[0]
-	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
-	if err != nil {
-		t.Fatalf("structpb.NewStruct: %v", err)
-	}
-	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  session.ID,
-		TurnId:     turn.ID,
-		ToolCallId: "tool-call-before-cancel",
-		ToolId:     tool.GetId(),
-		Arguments:  args,
-		Context:    createTurnReq.GetContext(),
-	}); err != nil {
-		t.Fatalf("invoke agent host callback before cancel: %v", err)
-	}
-
-	if _, err := result.AgentManager.CancelTurn(startCtx, systemPrincipal, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "done"}); err == nil {
-		t.Fatal("CancelTurn error = nil, want live turn rejection")
-	} else if !strings.Contains(err.Error(), "returned live turn") {
-		t.Fatalf("CancelTurn error = %v, want live turn rejection", err)
-	}
-	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  session.ID,
-		TurnId:     turn.ID,
-		ToolCallId: "tool-call-after-live-cancel",
-		ToolId:     tool.GetId(),
-		Arguments:  args,
-		Context:    createTurnReq.GetContext(),
-	}); err != nil {
-		t.Fatalf("invoke agent host callback after live cancel: %v", err)
-	}
-}
-
 func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *testing.T) {
 	t.Parallel()
 
@@ -5633,13 +4737,11 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 
 	providerImpl := &generatedIDAgentProvider{}
-	var capturedHostServices []runtimehost.HostService
 	factories := validFactories()
-	factories.Agent = func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
+	factories.Agent = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreagent.Provider, error) {
 		if name != "reviewer" {
 			return nil, fmt.Errorf("agent name = %q, want %q", name, "reviewer")
 		}
-		capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 		return providerImpl, nil
 	}
 
@@ -5728,20 +4830,6 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	cancelRequests = providerImpl.CancelTurnRequests()
 	if len(cancelRequests) != 1 {
 		t.Fatalf("CancelTurn requests after idempotent replay = %d, want 1", len(cancelRequests))
-	}
-
-	args, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
-	if err != nil {
-		t.Fatalf("structpb.NewStruct: %v", err)
-	}
-	if _, err := invokeAgentHostCallback(t, capturedHostServices, &proto.ExecuteAgentToolRequest{
-		SessionId:  "agent-session-1",
-		TurnId:     "agent-turn-1",
-		ToolCallId: "tool-call-1",
-		ToolId:     tool.ID,
-		Arguments:  args,
-	}); status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("invoke agent host callback after mismatch status = %s, want %s", status.Code(err), codes.PermissionDenied)
 	}
 }
 

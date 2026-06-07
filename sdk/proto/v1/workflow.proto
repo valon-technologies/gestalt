@@ -253,7 +253,6 @@ message WorkflowSignal {
 
 message ApplyWorkflowProviderDefinitionRequest {
   reserved 3;
-  reserved "invocation_token";
 
   string provider_name = 1;
   WorkflowDefinitionSpec spec = 2;
@@ -264,7 +263,6 @@ message ApplyWorkflowProviderDefinitionRequest {
 
 message GetWorkflowProviderDefinitionRequest {
   reserved 2;
-  reserved "invocation_token";
 
   string definition_id = 1;
   RequestContext context = 3;
@@ -272,7 +270,6 @@ message GetWorkflowProviderDefinitionRequest {
 
 message ListWorkflowProviderDefinitionsRequest {
   reserved 1;
-  reserved "invocation_token";
 
   RequestContext context = 2;
 }
@@ -283,7 +280,6 @@ message ListWorkflowProviderDefinitionsResponse {
 
 message SetWorkflowProviderDefinitionPausedRequest {
   reserved 3;
-  reserved "invocation_token";
 
   string definition_id = 1;
   bool paused = 2;
@@ -293,7 +289,6 @@ message SetWorkflowProviderDefinitionPausedRequest {
 
 message SetWorkflowProviderActivationPausedRequest {
   reserved 4;
-  reserved "invocation_token";
 
   string definition_id = 1;
   string activation_id = 2;
@@ -304,7 +299,6 @@ message SetWorkflowProviderActivationPausedRequest {
 
 message DeleteWorkflowProviderDefinitionRequest {
   reserved 2;
-  reserved "invocation_token";
 
   string definition_id = 1;
   RequestContext context = 3;
@@ -312,7 +306,6 @@ message DeleteWorkflowProviderDefinitionRequest {
 
 message StartWorkflowProviderRunRequest {
   reserved 1, 8;
-  reserved "invocation_token";
 
   string idempotency_key = 2;
   string created_by_subject_id = 4;
@@ -327,7 +320,6 @@ message StartWorkflowProviderRunRequest {
 
 message GetWorkflowProviderRunRequest {
   reserved 3;
-  reserved "invocation_token";
 
   string run_id = 2;
   RequestContext context = 4;
@@ -335,7 +327,6 @@ message GetWorkflowProviderRunRequest {
 
 message ListWorkflowProviderRunsRequest {
   reserved 4;
-  reserved "invocation_token";
 
   int32 page_size = 1;
   string page_token = 2;
@@ -351,7 +342,6 @@ message ListWorkflowProviderRunsResponse {
 
 message CancelWorkflowProviderRunRequest {
   reserved 4;
-  reserved "invocation_token";
 
   string run_id = 2;
   string reason = 3;
@@ -360,7 +350,6 @@ message CancelWorkflowProviderRunRequest {
 
 message SignalWorkflowProviderRunRequest {
   reserved 3;
-  reserved "invocation_token";
 
   string run_id = 1;
   WorkflowSignal signal = 2;
@@ -369,7 +358,6 @@ message SignalWorkflowProviderRunRequest {
 
 message SignalOrStartWorkflowProviderRunRequest {
   reserved 8;
-  reserved "invocation_token";
 
   string workflow_key = 1;
   reserved 2;
@@ -393,7 +381,6 @@ message SignalWorkflowRunResponse {
 
 message DeliverWorkflowProviderEventRequest {
   reserved 4;
-  reserved "invocation_token";
 
   string app_name = 1;
   WorkflowEvent event = 2;
@@ -413,7 +400,6 @@ message WorkflowRunEvent {
 
 message GetWorkflowProviderRunEventsRequest {
   reserved 2;
-  reserved "invocation_token";
 
   string run_id = 1;
   RequestContext context = 3;
@@ -425,7 +411,6 @@ message GetWorkflowProviderRunEventsResponse {
 
 message GetWorkflowProviderRunOutputRequest {
   reserved 2;
-  reserved "invocation_token";
 
   string run_id = 1;
   RequestContext context = 3;

@@ -9,7 +9,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
@@ -121,24 +120,14 @@ func (p *recordingAuthorizationProvider) Ping(context.Context) error { return ni
 func (p *recordingAuthorizationProvider) Close() error               { return nil }
 
 type recordingAgentAppAuthorizer struct {
-	providerName string
-	turnID       string
-	principal    *principal.Principal
-	target       coreagent.ToolTarget
-	reqCtx       *proto.RequestContext
-	principalOut *principal.Principal
-	scope        agentturnscope.Scope
-	tool         coreagent.ListedTool
-	err          error
+	requests []AgentAppInvocationAuthorizationRequest
+	response AgentAppInvocationAuthorization
+	err      error
 }
 
-func (a *recordingAgentAppAuthorizer) Authorize(_ context.Context, providerName, turnID string, p *principal.Principal, target coreagent.ToolTarget, reqCtx *proto.RequestContext) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error) {
-	a.providerName = providerName
-	a.turnID = turnID
-	a.principal = p
-	a.target = target
-	a.reqCtx = reqCtx
-	return a.principalOut, a.scope, a.tool, a.err
+func (a *recordingAgentAppAuthorizer) AuthorizeAgentAppInvocation(_ context.Context, req AgentAppInvocationAuthorizationRequest) (AgentAppInvocationAuthorization, error) {
+	a.requests = append(a.requests, req)
+	return a.response, a.err
 }
 
 func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
@@ -227,11 +216,18 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	authz := &recordingAuthorizationProvider{allowed: false}
 	invoker := &recordingAppInvocation{}
 	agentAuth := &recordingAgentAppAuthorizer{
-		principalOut: &principal.Principal{
-			SubjectID:           "user:runner",
-			CredentialSubjectID: "user:runner",
-		},
-		scope: agentturnscope.Scope{
+		response: AgentAppInvocationAuthorization{
+			Principal: &principal.Principal{
+				SubjectID:           "user:runner",
+				CredentialSubjectID: "user:runner",
+			},
+			CredentialMode: core.ConnectionModeSubject,
+			Connection:     "team-primary",
+			Instance:       "workspace-1",
+			RunAs: &core.RunAsSubject{
+				SubjectID:           "service_account:automation",
+				CredentialSubjectID: "service_account:automation",
+			},
 			ToolRefs: []coreagent.ToolRef{{
 				App:            "slack",
 				Operation:      "chat.postMessage",
@@ -240,29 +236,22 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 			}},
 			ToolRefsSet: true,
 		},
-		tool: coreagent.ListedTool{Target: coreagent.ToolTarget{
-			App:            "slack",
-			Operation:      "chat.postMessage",
-			Connection:     "team-primary",
-			Instance:       "workspace-1",
-			CredentialMode: core.ConnectionModeSubject,
-			RunAs: &core.RunAsSubject{
-				SubjectID:           "service_account:automation",
-				CredentialSubjectID: "service_account:automation",
-			},
-		}},
 	}
 	server := NewAppServer(
 		invoker,
 		WithAuthorizationProvider(authz),
-		WithAgentAppInvocationAuthorizer(agentAuth.Authorize),
+		WithAgentAppInvocationAuthorizer(agentAuth),
 		WithCallerApp("alpha", nil),
 	)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
-	reqCtx := requestContextWithCallerKind(t, "agent", "alpha", nil)
-	reqCtx.Invocation.RequestId = "turn-1"
+	reqCtx := requestContextWithCallerKind(t, "workflow", "temporal", nil)
+	reqCtx.Agent = &proto.AgentInvocationContext{
+		ProviderName: "alpha",
+		SessionId:    "session-1",
+		TurnId:       "turn-1",
+	}
 	reqCtx.ToolRefsSet = true
 	reqCtx.ToolRefs = []*proto.AgentToolRef{{
 		App:       "github",
@@ -286,11 +275,21 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	if len(authz.requests) != 0 {
 		t.Fatalf("authorization requests = %d, want 0 for agent turn", len(authz.requests))
 	}
-	if agentAuth.providerName != "alpha" || agentAuth.turnID != "turn-1" {
-		t.Fatalf("agent authorization turn = %s/%s, want alpha/turn-1", agentAuth.providerName, agentAuth.turnID)
+	if len(agentAuth.requests) != 1 {
+		t.Fatalf("agent authorization requests = %d, want 1", len(agentAuth.requests))
 	}
-	if agentAuth.target.App != "slack" || agentAuth.target.Operation != "chat.postMessage" || agentAuth.target.Connection != "forged-request-connection" || agentAuth.target.CredentialMode != core.ConnectionModeSubject {
-		t.Fatalf("agent authorization target = %s.%s/%s/%s", agentAuth.target.App, agentAuth.target.Operation, agentAuth.target.Connection, agentAuth.target.CredentialMode)
+	gotReq := agentAuth.requests[0]
+	if gotReq.AgentProviderName != "alpha" {
+		t.Fatalf("agent authorization agent provider = %q, want alpha", gotReq.AgentProviderName)
+	}
+	if gotReq.CallerKind != invocation.ProviderKindWorkflow || gotReq.CallerName != "temporal" {
+		t.Fatalf("agent authorization caller = %s/%s, want workflow/temporal", gotReq.CallerKind, gotReq.CallerName)
+	}
+	if gotReq.Agent.ProviderName != "alpha" || gotReq.Agent.SessionID != "session-1" || gotReq.Agent.TurnID != "turn-1" {
+		t.Fatalf("agent authorization context = %#v, want alpha/session-1/turn-1", gotReq.Agent)
+	}
+	if gotReq.App != "slack" || gotReq.Operation != "chat.postMessage" || gotReq.Connection != "forged-request-connection" || gotReq.CredentialMode != core.ConnectionModeSubject {
+		t.Fatalf("agent authorization target = %s.%s/%s/%s", gotReq.App, gotReq.Operation, gotReq.Connection, gotReq.CredentialMode)
 	}
 	if invoker.subjectID != "service_account:automation" || invoker.credentialSubjectID != "service_account:automation" {
 		t.Fatalf("invocation principal = %s/%s, want delegated automation subject", invoker.subjectID, invoker.credentialSubjectID)
@@ -309,6 +308,42 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	}
 	if len(invoker.toolRefs) != 1 || invoker.toolRefs[0].App != "slack" || invoker.toolRefs[0].Operation != "chat.postMessage" {
 		t.Fatalf("tool refs = %#v, want authorized slack chat.postMessage refs", invoker.toolRefs)
+	}
+}
+
+func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
+	t.Parallel()
+
+	agentAuth := &recordingAgentAppAuthorizer{
+		response: AgentAppInvocationAuthorization{
+			Principal: &principal.Principal{SubjectID: "user:runner"},
+		},
+	}
+	server := NewAppServer(
+		&recordingAppInvocation{},
+		WithAgentAppInvocationAuthorizer(agentAuth),
+		WithCallerApp("beta", nil),
+	)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	reqCtx := requestContextWithCallerKind(t, "workflow", "temporal", nil)
+	reqCtx.Agent = &proto.AgentInvocationContext{
+		ProviderName: "alpha",
+		SessionId:    "session-1",
+		TurnId:       "turn-1",
+	}
+
+	_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "slack",
+		Operation: "chat.postMessage",
+		Context:   reqCtx,
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("Invoke status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+	if len(agentAuth.requests) != 0 {
+		t.Fatalf("agent authorization requests = %d, want 0", len(agentAuth.requests))
 	}
 }
 

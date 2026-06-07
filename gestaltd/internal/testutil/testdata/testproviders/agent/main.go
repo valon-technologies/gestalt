@@ -12,7 +12,6 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -106,7 +105,6 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		req.Output,
 		req.CreatedBySubjectID,
 		strings.TrimSpace(req.ExecutionRef),
-		req.Context,
 	)
 	return turn, err
 }
@@ -258,7 +256,6 @@ func (p *agentProvider) startTurn(
 	requestedOutput *gestalt.AgentOutput,
 	createdBySubjectID string,
 	executionRef string,
-	reqCtx *proto.RequestContext,
 ) (*gestalt.AgentTurn, *gestalt.AgentInteraction, error) {
 	if turnID == "" {
 		turnID = "agent-turn-1"
@@ -301,23 +298,11 @@ func (p *agentProvider) startTurn(
 	p.mu.Unlock()
 
 	if len(tools) > 0 {
-		host, err := gestalt.AgentHost()
+		app, err := gestalt.AppFromContext(ctx)
 		if err != nil {
-			output["host_error"] = err.Error()
+			output["app_error"] = err.Error()
 		} else {
-			defer func() {
-				if closeErr := host.Close(); closeErr != nil && output["host_error"] == nil {
-					output["host_error"] = closeErr.Error()
-				}
-			}()
-
-			resp, err := host.ExecuteTool(ctx, gestalt.AgentHostExecuteToolInput{
-				SessionID:      sessionID,
-				TurnID:         turnID,
-				ToolCallID:     "call-1",
-				ToolID:         tools[0].ID,
-				Arguments:      map[string]any{"taskId": "task-123"},
-				Context:        reqCtx,
+			resp, err := app.Invoke(ctx, "roadmap", "sync", map[string]any{"taskId": "task-123"}, &gestalt.InvokeOptions{
 				IdempotencyKey: " tool-call-key-1 ",
 			})
 			if err != nil {

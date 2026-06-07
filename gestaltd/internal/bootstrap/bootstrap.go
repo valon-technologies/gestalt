@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
@@ -38,7 +37,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -871,8 +869,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	deps.AgentRuntime = agentRuntime
-	deps.AgentRuntime.SetTurnScopes(agentTurnScopes)
-	deps.AgentRuntime.SetToolIDCodec(agentToolIDs)
 
 	selectedAuthName, authProviders, err := buildAuthProviders(cfg, factories, deps)
 	if err != nil {
@@ -1149,8 +1145,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 		invocation.WithAuthorizationProvider(authorizationProvider),
 	)
-	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
-	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
 		failPendingStartupProviders(prepared.Deps, err)
@@ -1184,7 +1178,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
-	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", audit, invocation.WithoutRateLimit()))
 	providersReady, connAuthResolver, manualConnAuthResolver, _ = providerBuilds.Start(ctx, prepared.Deps, buildProvider)
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)
@@ -2015,14 +2008,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}
 	}
-	agentHostService := runtimehost.HostService{
-		Name:           "agent_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentHost_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
-		},
-	}
-	hostServices, err := buildProviderHostServices(name, deps, agentHostService)
+	hostServices, err := buildProviderHostServices(name, deps)
 	if err != nil {
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}

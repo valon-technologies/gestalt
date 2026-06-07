@@ -453,6 +453,7 @@ class ResolvedAgentTool:
     name: str = ""
     description: str = ""
     parameters_schema: JsonObjectInput | None = None
+    ref: AgentToolRef | None = None
 
 
 @dataclass(slots=True)
@@ -582,23 +583,6 @@ class GetAgentProviderCapabilitiesRequest:
 
 
 @dataclass(slots=True)
-class ExecuteAgentToolRequest:
-    session_id: str = ""
-    turn_id: str = ""
-    tool_call_id: str = ""
-    tool_id: str = ""
-    arguments: JsonObjectInput | None = None
-    idempotency_key: str = ""
-    context: Any | None = None
-
-
-@dataclass(slots=True)
-class ExecuteAgentToolResponse:
-    status: int = 0
-    body: str = ""
-
-
-@dataclass(slots=True)
 class AgentToolAnnotations:
     read_only_hint: bool | None = None
     idempotent_hint: bool | None = None
@@ -618,42 +602,6 @@ class ListedAgentTool:
     ref: AgentToolRef | None = None
     tags: Iterable[str] = field(default_factory=list)
     search_text: str = ""
-
-
-@dataclass(slots=True)
-class ListAgentToolsResponse:
-    tools: Iterable[ListedAgentTool] = field(default_factory=list)
-    next_page_token: str = ""
-
-
-@dataclass(slots=True)
-class ListAgentToolsRequest:
-    session_id: str = ""
-    turn_id: str = ""
-    page_size: int = 0
-    page_token: str = ""
-    query: str = ""
-    context: Any | None = None
-
-
-@dataclass(slots=True)
-class ResolveAgentConnectionRequest:
-    session_id: str = ""
-    turn_id: str = ""
-    connection: str = ""
-    instance: str = ""
-    context: Any | None = None
-
-
-@dataclass(slots=True)
-class ResolvedAgentConnection:
-    connection_id: str = ""
-    connection: str = ""
-    instance: str = ""
-    mode: str = ""
-    headers: Mapping[str, str] = field(default_factory=dict)
-    params: Mapping[str, str] = field(default_factory=dict)
-    expires_at: TimestampInput = None
 
 
 def create_agent_provider_session_request_from_proto(
@@ -1273,6 +1221,7 @@ def resolved_agent_tool_from_proto(value: Any) -> ResolvedAgentTool:
         parameters_schema=struct_to_dict(value.parameters_schema)
         if has_field(value, "parameters_schema")
         else None,
+        ref=agent_tool_ref_from_proto(value.ref) if has_field(value, "ref") else None,
     )
 
 
@@ -1472,17 +1421,6 @@ def list_agent_interactions_response_from_proto(
     )
 
 
-def execute_agent_tool_response_from_proto(value: Any) -> ExecuteAgentToolResponse:
-    return ExecuteAgentToolResponse(status=_int_field(value.status), body=value.body)
-
-
-def list_agent_tools_response_from_proto(value: Any) -> ListAgentToolsResponse:
-    return ListAgentToolsResponse(
-        tools=[listed_agent_tool_from_proto(tool) for tool in value.tools],
-        next_page_token=value.next_page_token,
-    )
-
-
 def listed_agent_tool_from_proto(value: Any) -> ListedAgentTool:
     return ListedAgentTool(
         id=value.id,
@@ -1598,69 +1536,6 @@ def agent_tool_annotations_to_proto(value: Any) -> Any:
         out.destructive_hint = data["destructive_hint"]
     if data.get("open_world_hint") is not None:
         out.open_world_hint = data["open_world_hint"]
-    return out
-
-
-def resolved_agent_connection_from_proto(value: Any) -> ResolvedAgentConnection:
-    return ResolvedAgentConnection(
-        connection_id=value.connection_id,
-        connection=value.connection,
-        instance=value.instance,
-        mode=value.mode,
-        headers=dict(value.headers),
-        params=dict(value.params),
-        expires_at=datetime_from_timestamp(value.expires_at)
-        if has_field(value, "expires_at")
-        else None,
-    )
-
-
-def execute_agent_tool_request_to_proto(
-    value: ExecuteAgentToolRequest | Mapping[str, Any],
-) -> Any:
-    request = _coerce(value, ExecuteAgentToolRequest, "ExecuteAgentToolRequest")
-    out = pb.ExecuteAgentToolRequest(
-        session_id=request.session_id,
-        turn_id=request.turn_id,
-        tool_call_id=request.tool_call_id,
-        tool_id=request.tool_id,
-        idempotency_key=request.idempotency_key,
-    )
-    _copy_struct(out, "arguments", request.arguments)
-    _copy_message(out, "context", request.context)
-    return out
-
-
-def list_agent_tools_request_to_proto(
-    value: ListAgentToolsRequest | Mapping[str, Any],
-) -> Any:
-    request = _coerce(value, ListAgentToolsRequest, "ListAgentToolsRequest")
-    out = pb.ListAgentToolsRequest(
-        session_id=request.session_id,
-        turn_id=request.turn_id,
-        page_size=_int_field(request.page_size),
-        page_token=request.page_token,
-        query=request.query,
-    )
-    _copy_message(out, "context", request.context)
-    return out
-
-
-def resolve_agent_connection_request_to_proto(
-    value: ResolveAgentConnectionRequest | Mapping[str, Any],
-) -> Any:
-    request = _coerce(
-        value,
-        ResolveAgentConnectionRequest,
-        "ResolveAgentConnectionRequest",
-    )
-    out = pb.ResolveAgentConnectionRequest(
-        session_id=request.session_id,
-        turn_id=request.turn_id,
-        connection=request.connection,
-        instance=request.instance,
-    )
-    _copy_message(out, "context", request.context)
     return out
 
 
@@ -1908,116 +1783,6 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
     """Create agent messages from dictionaries."""
 
     return [agent_message_from_dict(message) for message in messages]
-
-
-class AgentHostProtocol(Protocol):
-    """Fakeable contract for agent host tool calls."""
-
-    def close(self) -> None:
-        """Close the client."""
-
-    def execute_tool(
-        self,
-        request: ExecuteAgentToolRequest | Mapping[str, Any],
-        *,
-        timeout_seconds: float | None = None,
-    ) -> ExecuteAgentToolResponse:
-        """Execute a host tool."""
-
-    def list_tools(
-        self,
-        request: ListAgentToolsRequest | Mapping[str, Any] | None = None,
-        *,
-        timeout_seconds: float | None = None,
-        **kwargs: Any,
-    ) -> ListAgentToolsResponse:
-        """List host tools."""
-
-    def resolve_connection(
-        self,
-        request: ResolveAgentConnectionRequest | Mapping[str, Any] | None = None,
-        *,
-        timeout_seconds: float | None = None,
-        **kwargs: Any,
-    ) -> ResolvedAgentConnection:
-        """Resolve an agent connection."""
-
-
-class AgentHost:
-    """Client for the agent host service available inside agent providers.
-
-    ``AgentHost`` reads ``GESTALT_HOST_SERVICE_SOCKET`` and its optional relay
-    token from the environment and exposes the host RPCs that agent providers
-    use to discover and call tools during a turn.
-    """
-
-    def __init__(self) -> None:
-        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
-        if not target:
-            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
-        self._channel = host_service_channel("agent host", target, token=relay_token)
-        self._stub = pb_grpc.AgentHostStub(self._channel)
-
-    def close(self) -> None:
-        """Close the underlying gRPC channel."""
-
-        self._channel.close()
-
-    def execute_tool(
-        self,
-        request: ExecuteAgentToolRequest | Mapping[str, Any],
-        *,
-        timeout_seconds: float | None = None,
-    ) -> ExecuteAgentToolResponse:
-        """Execute a host tool using native request fields."""
-
-        response = _grpc_call(
-            self._stub.ExecuteTool,
-            execute_agent_tool_request_to_proto(request),
-            timeout_seconds=timeout_seconds,
-        )
-        return execute_agent_tool_response_from_proto(response)
-
-    def list_tools(
-        self,
-        request: ListAgentToolsRequest | Mapping[str, Any],
-        *,
-        timeout_seconds: float | None = None,
-    ) -> ListAgentToolsResponse:
-        """List host tools visible to the current agent request."""
-
-        response = _grpc_call(
-            self._stub.ListTools,
-            list_agent_tools_request_to_proto(request),
-            timeout_seconds=timeout_seconds,
-        )
-        return list_agent_tools_response_from_proto(response)
-
-    def resolve_connection(
-        self,
-        request: ResolveAgentConnectionRequest | Mapping[str, Any],
-        *,
-        timeout_seconds: float | None = None,
-    ) -> ResolvedAgentConnection:
-        """Resolve an agent connection for the current turn."""
-
-        response = _grpc_call(
-            self._stub.ResolveConnection,
-            resolve_agent_connection_request_to_proto(request),
-            timeout_seconds=timeout_seconds,
-        )
-        return resolved_agent_connection_from_proto(response)
-
-    def __enter__(self) -> AgentHost:
-        """Return the client for ``with`` statements."""
-
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        """Close the client at the end of a context manager block."""
-
-        self.close()
 
 
 def _agent_message_value(value: Any) -> Any:

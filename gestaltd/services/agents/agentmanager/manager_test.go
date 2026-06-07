@@ -13,12 +13,14 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -1321,9 +1323,9 @@ func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		t.Fatalf("CreateTurn calls = %d, want 1", len(alpha.createTurnReqs))
 	}
 	providerReqCtx := alpha.createTurnReqs[0].GetContext()
-	requireAgentManagerRequestContextCaller(t, providerReqCtx, invocation.ProviderKindAgent, "alpha")
-	if got := providerReqCtx.GetInvocation().GetRequestId(); got != turn.ID {
-		t.Fatalf("provider request id = %q, want turn id %q", got, turn.ID)
+	requireAgentManagerRequestContextCaller(t, providerReqCtx, invocation.ProviderKindApp, "sats")
+	if agent := providerReqCtx.GetAgent(); agent.GetProviderName() != "alpha" || agent.GetSessionId() != session.ID || agent.GetTurnId() != turn.ID {
+		t.Fatalf("provider request agent context = %#v, want alpha/%s/%s", agent, session.ID, turn.ID)
 	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
 	if len(scope.ListedTools) != 1 || scope.ListedTools[0].Target.App != "slack" || scope.ListedTools[0].Target.Operation != "chat.postMessage" {
@@ -1338,43 +1340,54 @@ func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		t.Fatalf("Put delegated turn scope: %v", err)
 	}
 
-	target := coreagent.ToolTarget{
-		App:       "slack",
-		Operation: "chat.postMessage",
+	req := appaccessservice.AgentAppInvocationAuthorizationRequest{
+		AgentProviderName: "alpha",
+		CallerKind:        invocation.ProviderKindApp,
+		CallerName:        "sats",
+		Agent: invocation.AgentInvocationContext{
+			ProviderName: "alpha",
+			SessionID:    session.ID,
+			TurnID:       turn.ID,
+		},
+		Principal:      appaccessservice.PrincipalFromSubjectContext(providerReqCtx.GetSubject()),
+		App:            "slack",
+		Operation:      "chat.postMessage",
+		RequestContext: providerReqCtx,
 	}
-	authorized, authorizedScope, authorizedTool, err := manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ID, p, target, providerReqCtx)
+	authorized, err := manager.AuthorizeAgentAppInvocation(context.Background(), req)
 	if err != nil {
 		t.Fatalf("AuthorizeAgentAppInvocation: %v", err)
 	}
-	if authorized == nil || authorized.SubjectID != p.SubjectID || authorized.CredentialSubjectID != p.CredentialSubjectID {
-		t.Fatalf("authorized principal = %#v, want %s/%s", authorized, p.SubjectID, p.CredentialSubjectID)
+	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
+		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
 	}
-	if _, ok := authorized.TokenPermissions["slack"]["chat.postMessage"]; !ok {
-		t.Fatalf("authorized permissions = %#v, want only persisted slack chat.postMessage scope", authorized.TokenPermissions)
+	if _, ok := authorized.Principal.TokenPermissions["slack"]["chat.postMessage"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want only persisted slack chat.postMessage scope", authorized.Principal.TokenPermissions)
 	}
-	if authorizedTool.Target.CredentialMode != core.ConnectionModeSubject {
-		t.Fatalf("credential mode = %q, want subject", authorizedTool.Target.CredentialMode)
+	if authorized.CredentialMode != core.ConnectionModeSubject {
+		t.Fatalf("credential mode = %q, want subject", authorized.CredentialMode)
 	}
-	if authorizedTool.Target.Connection != "team-primary" {
-		t.Fatalf("connection = %q, want team-primary", authorizedTool.Target.Connection)
+	if authorized.Connection != "team-primary" {
+		t.Fatalf("connection = %q, want team-primary", authorized.Connection)
 	}
-	if !core.RunAsSubjectsEqual(authorizedTool.Target.RunAs, runAs) {
-		t.Fatalf("runAs = %#v, want %#v", authorizedTool.Target.RunAs, runAs)
+	if !core.RunAsSubjectsEqual(authorized.RunAs, runAs) {
+		t.Fatalf("runAs = %#v, want %#v", authorized.RunAs, runAs)
 	}
-	if !authorizedScope.ToolRefsSet || len(authorizedScope.ToolRefs) != 1 || authorizedScope.ToolRefs[0].App != "slack" || authorizedScope.ToolRefs[0].Operation != "chat.postMessage" {
-		t.Fatalf("authorized tool refs = %#v, set=%v; want persisted slack chat.postMessage refs", authorizedScope.ToolRefs, authorizedScope.ToolRefsSet)
+	if !authorized.ToolRefsSet || len(authorized.ToolRefs) != 1 || authorized.ToolRefs[0].App != "slack" || authorized.ToolRefs[0].Operation != "chat.postMessage" {
+		t.Fatalf("authorized tool refs = %#v, set=%v; want persisted slack chat.postMessage refs", authorized.ToolRefs, authorized.ToolRefsSet)
 	}
 	if alpha.getTurnCalls != 1 {
 		t.Fatalf("GetTurn calls = %d, want 1 live-turn validation", alpha.getTurnCalls)
 	}
 
-	target.Operation = "chat.delete"
-	_, _, _, err = manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ID, p, target, providerReqCtx)
+	req.Operation = "chat.delete"
+	_, err = manager.AuthorizeAgentAppInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
 		t.Fatalf("AuthorizeAgentAppInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
-	target.Operation = "chat.postMessage"
-	_, _, _, err = manager.AuthorizeAgentAppInvocation(context.Background(), "beta", turn.ID, p, target, providerReqCtx)
+	req.Operation = "chat.postMessage"
+	req.AgentProviderName = "beta"
+	_, err = manager.AuthorizeAgentAppInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
 		t.Fatalf("AuthorizeAgentAppInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
@@ -1400,7 +1413,7 @@ func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
 		},
 	}}
 
-	tool, ok := matchingAgentAppInvocationTool(tools, coreagent.ToolTarget{
+	tool, ok := matchingAgentAppInvocationTool(tools, appaccessservice.AgentAppInvocationAuthorizationRequest{
 		App:       "slack",
 		Operation: "chat.postMessage",
 	})
@@ -1418,13 +1431,13 @@ func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
 		Instance:       "workspace-2",
 		CredentialMode: core.ConnectionModeSubject,
 	}})
-	if _, ok := matchingAgentAppInvocationTool(tools, coreagent.ToolTarget{
+	if _, ok := matchingAgentAppInvocationTool(tools, appaccessservice.AgentAppInvocationAuthorizationRequest{
 		App:       "slack",
 		Operation: "chat.postMessage",
 	}); ok {
 		t.Fatal("matchingAgentAppInvocationTool without selectors matched ambiguous tools")
 	}
-	tool, ok = matchingAgentAppInvocationTool(tools, coreagent.ToolTarget{
+	tool, ok = matchingAgentAppInvocationTool(tools, appaccessservice.AgentAppInvocationAuthorizationRequest{
 		App:        "slack",
 		Operation:  "chat.postMessage",
 		Connection: "team-secondary",
@@ -1434,6 +1447,140 @@ func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
 	}
 	if got := tool.Target.Instance; got != "workspace-2" {
 		t.Fatalf("instance = %q, want workspace-2", got)
+	}
+}
+
+func TestAuthorizeAgentWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
+	t.Parallel()
+
+	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
+	slack.ConnMode = core.ConnectionModeSubject
+	alpha := newRouteCountingAgentProvider("alpha")
+	scopes := newAgentManagerTestTurnScopes()
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, slack),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": alpha},
+		},
+		TurnScopes: scopes,
+		WorkflowTools: projectionWorkflowSystemTools{tools: map[string]coreagent.Tool{
+			"definitions.apply": {
+				Name:             "Apply definition",
+				ParametersSchema: map[string]any{"type": "object"},
+				Target:           coreagent.ToolTarget{System: coreagent.SystemToolWorkflow, Operation: "definitions.apply"},
+			},
+		}},
+	})
+	p := &principal.Principal{
+		SubjectID:           principal.UserSubjectID("user-1"),
+		CredentialSubjectID: principal.UserSubjectID("user-1"),
+	}
+	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "sats")
+
+	session, err := manager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
+			Refs: []*proto.AgentToolRef{
+				{System: coreagent.SystemToolWorkflow, Operation: "definitions.apply"},
+				{
+					App:            "slack",
+					Operation:      "chat.postMessage",
+					Connection:     "team-primary",
+					CredentialMode: string(core.ConnectionModeSubject),
+				},
+			},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		SessionId:      session.ID,
+		Model:          "test-model",
+		Output:         agentTextOutputProto(),
+		TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	providerReqCtx := alpha.createTurnReqs[0].GetContext()
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{
+		{
+			ID: "notify",
+			App: &coreworkflow.AppCall{
+				Name:           "slack",
+				Operation:      "chat.postMessage",
+				Connection:     "team-primary",
+				CredentialMode: core.ConnectionModeSubject,
+			},
+		},
+		{
+			ID: "follow-up",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "alpha",
+				Model:        "test-model",
+				ToolRefs: []coreagent.ToolRef{{
+					App:            "slack",
+					Operation:      "chat.postMessage",
+					Connection:     "team-primary",
+					CredentialMode: core.ConnectionModeSubject,
+				}},
+			},
+		},
+	}}
+	req := appaccessservice.AgentWorkflowInvocationAuthorizationRequest{
+		AgentProviderName: "alpha",
+		CallerKind:        invocation.ProviderKindApp,
+		CallerName:        "sats",
+		Agent: invocation.AgentInvocationContext{
+			ProviderName: "alpha",
+			SessionID:    session.ID,
+			TurnID:       turn.ID,
+		},
+		Principal:      appaccessservice.PrincipalFromSubjectContext(providerReqCtx.GetSubject()),
+		Operation:      "definitions.apply",
+		Target:         &target,
+		RequestContext: providerReqCtx,
+	}
+	authorized, err := manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	if err != nil {
+		t.Fatalf("AuthorizeAgentWorkflowInvocation: %v", err)
+	}
+	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
+		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
+	}
+	if _, ok := authorized.Principal.TokenPermissions["slack"]["chat.postMessage"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want slack chat.postMessage scope", authorized.Principal.TokenPermissions)
+	}
+	if _, ok := authorized.Principal.TokenPermissions["alpha"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want current agent provider scope for self-agent step", authorized.Principal.TokenPermissions)
+	}
+	if alpha.getTurnCalls != 1 {
+		t.Fatalf("GetTurn calls = %d, want 1 live-turn validation", alpha.getTurnCalls)
+	}
+
+	req.Operation = "runs.start"
+	_, err = manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("AuthorizeAgentWorkflowInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+	req.Operation = "definitions.apply"
+	outsideTarget := target
+	outsideTarget.Steps = append([]coreworkflow.Step(nil), target.Steps...)
+	outsideTarget.Steps[0].App = &coreworkflow.AppCall{Name: "slack", Operation: "chat.delete"}
+	req.Target = &outsideTarget
+	_, err = manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("AuthorizeAgentWorkflowInvocation unlisted target status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+	req.Target = &target
+	req.AgentProviderName = "beta"
+	_, err = manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("AuthorizeAgentWorkflowInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 }
 
@@ -1489,28 +1636,52 @@ func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 		t.Fatalf("provider-owned turn scope alias %q was not stored", turn.ID)
 	}
 	providerReqCtx := alpha.createTurnReqs[0].GetContext()
-	target := coreagent.ToolTarget{
-		App:       "slack",
-		Operation: "chat.postMessage",
-	}
+	executionRefReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
+	executionRefReqCtx.Agent.TurnId = turn.ExecutionRef
 
-	authorized, _, _, err := manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ExecutionRef, p, target, providerReqCtx)
+	authorized, err := manager.AuthorizeAgentAppInvocation(context.Background(), appaccessservice.AgentAppInvocationAuthorizationRequest{
+		AgentProviderName: "alpha",
+		CallerKind:        invocation.ProviderKindApp,
+		CallerName:        "sats",
+		Agent: invocation.AgentInvocationContext{
+			ProviderName: "alpha",
+			SessionID:    session.ID,
+			TurnID:       turn.ExecutionRef,
+		},
+		Principal:      appaccessservice.PrincipalFromSubjectContext(providerReqCtx.GetSubject()),
+		App:            "slack",
+		Operation:      "chat.postMessage",
+		RequestContext: executionRefReqCtx,
+	})
 	if err != nil {
 		t.Fatalf("AuthorizeAgentAppInvocation with execution ref: %v", err)
 	}
-	if authorized == nil || authorized.SubjectID != p.SubjectID {
-		t.Fatalf("authorized principal = %#v, want %s", authorized, p.SubjectID)
+	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
+		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
 	}
 
 	providerOwnedReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
-	providerOwnedReqCtx.Invocation.RequestId = turn.ID
+	providerOwnedReqCtx.Agent.TurnId = turn.ID
 
-	authorized, _, _, err = manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ID, p, target, providerOwnedReqCtx)
+	authorized, err = manager.AuthorizeAgentAppInvocation(context.Background(), appaccessservice.AgentAppInvocationAuthorizationRequest{
+		AgentProviderName: "alpha",
+		CallerKind:        invocation.ProviderKindApp,
+		CallerName:        "sats",
+		Agent: invocation.AgentInvocationContext{
+			ProviderName: "alpha",
+			SessionID:    session.ID,
+			TurnID:       turn.ID,
+		},
+		Principal:      appaccessservice.PrincipalFromSubjectContext(providerReqCtx.GetSubject()),
+		App:            "slack",
+		Operation:      "chat.postMessage",
+		RequestContext: providerOwnedReqCtx,
+	})
 	if err != nil {
 		t.Fatalf("AuthorizeAgentAppInvocation with provider turn id: %v", err)
 	}
-	if authorized == nil || authorized.SubjectID != p.SubjectID {
-		t.Fatalf("authorized principal = %#v, want %s", authorized, p.SubjectID)
+	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
+		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
 	}
 	if alpha.getTurnCalls != 2 {
 		t.Fatalf("GetTurn calls = %d, want 2 provider-owned turn lookups", alpha.getTurnCalls)

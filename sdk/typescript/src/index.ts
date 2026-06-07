@@ -336,7 +336,6 @@ export {
   type WriteOptions,
 } from "./s3.ts";
 export {
-  AgentHost,
   AgentExecutionStatus,
   AgentInteractionState,
   AgentInteractionType,
@@ -373,14 +372,10 @@ export {
   type CancelAgentProviderTurnRequest,
   type CreateAgentProviderSessionRequest,
   type CreateAgentProviderTurnRequest,
-  type ExecuteAgentToolRequest,
-  type ExecuteAgentToolResponse,
   type GetAgentProviderCapabilitiesRequest,
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
   type GetAgentProviderTurnRequest,
-  type ListAgentToolsRequest,
-  type ListAgentToolsResponse,
   type ListAgentProviderInteractionsRequest,
   type ListAgentProviderInteractionsResponse,
   type ListAgentProviderSessionsRequest,
@@ -390,9 +385,7 @@ export {
   type ListAgentProviderTurnsRequest,
   type ListAgentProviderTurnsResponse,
   type ListedAgentTool,
-  type ResolveAgentConnectionRequest,
   type ResolveAgentProviderInteractionRequest,
-  type ResolvedAgentConnection,
   type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
 } from "./agent.ts";

@@ -41,7 +41,7 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, target, definitionGeneration, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller)
+	providerName, provider, target, definitionGeneration, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller, workflowManagerOperationRunsStart)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +238,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	phase = "resolve_provider_target"
 	var provider coreworkflow.Provider
 	var definitionGeneration int64
-	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller)
+	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller, workflowManagerOperationRunsSignalOrStart)
 	if err != nil {
 		if failure, ok := workflowTargetAuthorizationFailure(err); ok {
 			phase = "authorize_target"

@@ -150,6 +150,7 @@ type ResolvedAgentTool struct {
 	Name             string
 	Description      string
 	ParametersSchema map[string]any
+	Ref              *AgentToolRef
 }
 
 type AgentToolRef struct {
@@ -433,21 +434,6 @@ type ResolveAgentProviderInteractionRequest struct {
 	Context       *proto.RequestContext
 }
 
-type ExecuteAgentToolRequest struct {
-	SessionID      string
-	TurnID         string
-	ToolCallID     string
-	ToolID         string
-	Arguments      map[string]any
-	IdempotencyKey string
-	Context        *proto.RequestContext
-}
-
-type ExecuteAgentToolResponse struct {
-	Status int32
-	Body   string
-}
-
 type AgentToolAnnotations struct {
 	ReadOnlyHint    *bool
 	IdempotentHint  *bool
@@ -466,38 +452,6 @@ type ListedAgentTool struct {
 	Ref          *AgentToolRef
 	Tags         []string
 	SearchText   string
-}
-
-type ListAgentToolsRequest struct {
-	SessionID string
-	TurnID    string
-	PageSize  int32
-	PageToken string
-	Query     string
-	Context   *proto.RequestContext
-}
-
-type ListAgentToolsResponse struct {
-	Tools         []ListedAgentTool
-	NextPageToken string
-}
-
-type ResolveAgentConnectionRequest struct {
-	SessionID  string
-	TurnID     string
-	Connection string
-	Instance   string
-	Context    *proto.RequestContext
-}
-
-type ResolvedAgentConnection struct {
-	ConnectionID string
-	Connection   string
-	Instance     string
-	Mode         string
-	Headers      map[string]string
-	Params       map[string]string
-	ExpiresAt    *time.Time
 }
 
 type (

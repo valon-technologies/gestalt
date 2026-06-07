@@ -303,6 +303,16 @@ class RequestMetaContext(_message.Message):
     user_agent: str
     def __init__(self, client_ip: _Optional[str] = ..., remote_addr: _Optional[str] = ..., user_agent: _Optional[str] = ...) -> None: ...
 
+class AgentInvocationContext(_message.Message):
+    __slots__ = ()
+    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    TURN_ID_FIELD_NUMBER: _ClassVar[int]
+    provider_name: str
+    session_id: str
+    turn_id: str
+    def __init__(self, provider_name: _Optional[str] = ..., session_id: _Optional[str] = ..., turn_id: _Optional[str] = ...) -> None: ...
+
 class RequestContext(_message.Message):
     __slots__ = ()
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
@@ -316,6 +326,7 @@ class RequestContext(_message.Message):
     TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
     TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     REQUEST_META_FIELD_NUMBER: _ClassVar[int]
+    AGENT_FIELD_NUMBER: _ClassVar[int]
     subject: SubjectContext
     credential: CredentialContext
     access: AccessContext
@@ -327,7 +338,8 @@ class RequestContext(_message.Message):
     tool_refs: _containers.RepeatedCompositeFieldContainer[AgentToolRef]
     tool_refs_set: bool
     request_meta: RequestMetaContext
-    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., caller: _Optional[_Union[ProviderContext, _Mapping]] = ..., invocation: _Optional[_Union[InvocationContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ..., request_meta: _Optional[_Union[RequestMetaContext, _Mapping]] = ...) -> None: ...
+    agent: AgentInvocationContext
+    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., caller: _Optional[_Union[ProviderContext, _Mapping]] = ..., invocation: _Optional[_Union[InvocationContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ..., request_meta: _Optional[_Union[RequestMetaContext, _Mapping]] = ..., agent: _Optional[_Union[AgentInvocationContext, _Mapping]] = ...) -> None: ...
 
 class HTTPSubjectRequest(_message.Message):
     __slots__ = ()

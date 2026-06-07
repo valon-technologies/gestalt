@@ -7,7 +7,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
@@ -48,32 +47,6 @@ func subjectToProto(subject core.RunAsSubject) *proto.SubjectContext {
 	return agentwire.RunAsSubjectToProto(&subject)
 }
 
-func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
-	return &proto.ListedAgentTool{
-		Id:           tool.ToolID,
-		McpName:      tool.MCPName,
-		Title:        tool.Title,
-		Description:  tool.Description,
-		Tags:         append([]string(nil), tool.Tags...),
-		SearchText:   tool.SearchText,
-		InputSchema:  tool.InputSchemaJSON,
-		OutputSchema: tool.OutputSchemaJSON,
-		Annotations:  operationAnnotationsToProto(tool.Annotations),
-		Ref:          agentwire.ToolRefToProto(tool.Ref),
-	}
-}
-
-func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentTool {
-	if len(tools) == 0 {
-		return nil
-	}
-	out := make([]*proto.ListedAgentTool, 0, len(tools))
-	for i := range tools {
-		out = append(out, listedAgentToolToProto(tools[i]))
-	}
-	return out
-}
-
 func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
 	return agentwire.ToolSourceModeFromProto(mode)
 }
@@ -89,18 +62,6 @@ func agentToolSourceModesFromProto(modes []proto.AgentToolSourceMode) []coreagen
 		}
 	}
 	return out
-}
-
-func operationAnnotationsToProto(value catalog.CapabilityAnnotations) *proto.OperationAnnotations {
-	if value.ReadOnlyHint == nil && value.IdempotentHint == nil && value.DestructiveHint == nil && value.OpenWorldHint == nil {
-		return nil
-	}
-	return &proto.OperationAnnotations{
-		ReadOnlyHint:    value.ReadOnlyHint,
-		IdempotentHint:  value.IdempotentHint,
-		DestructiveHint: value.DestructiveHint,
-		OpenWorldHint:   value.OpenWorldHint,
-	}
 }
 
 func agentExecutionStatusToProto(status coreagent.ExecutionStatus) proto.AgentExecutionStatus {

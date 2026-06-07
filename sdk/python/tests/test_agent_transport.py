@@ -6,7 +6,6 @@ import os
 import tempfile
 import unittest
 from concurrent import futures
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from importlib import resources
 from typing import Any
@@ -31,7 +30,6 @@ from gestalt import (
     AgentCatalogToolConfig,
     AgentCreateSession,
     AgentCreateTurn,
-    AgentHost,
     AgentInteraction,
     AgentMessage,
     AgentMessagePart,
@@ -50,17 +48,14 @@ from gestalt import (
     AgentTurnEvent,
     AgentTurnOutput,
     Error,
-    ExecuteAgentToolRequest,
     ListAgentProviderInteractionsResponse,
     ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsResponse,
-    ListAgentToolsRequest,
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
     Request,
-    ResolveAgentConnectionRequest,
     WarningsProvider,
     _runtime,
     agent_message_from_dict,
@@ -83,16 +78,10 @@ struct_pb2: Any = _struct_pb2
 
 _runtime_server: grpc.Server | None = None
 _host_server: grpc.Server | None = None
-_manager_server: grpc.Server | None = None
 _runtime_socket = ""
 _host_socket = ""
-_manager_socket = ""
 _previous_envs: dict[str, str | None] = {}
 _provider: "_AgentRuntimeProvider"
-_host_relay_tokens: list[str] = []
-_host_list_requests: list[dict[str, Any]] = []
-_host_execute_requests: list[dict[str, Any]] = []
-_host_connection_requests: list[dict[str, Any]] = []
 _manager_requests: list[dict[str, Any]] = []
 _manager_contexts: list[dict[str, Any]] = []
 _manager_workflows: list[dict[str, Any]] = []
@@ -104,11 +93,6 @@ def _native_context_subject_id(context: Any) -> str:
     if context is None or not context.HasField("subject"):
         return ""
     return context.subject.id
-
-
-@dataclass
-class ToolArguments:
-    query: str
 
 
 class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
@@ -311,98 +295,6 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             interactions=True,
             resumable_turns=True,
             reasoning_summaries=False,
-        )
-
-
-class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
-    def ListTools(self, request: Any, context: grpc.ServicerContext) -> Any:
-        _record_host_relay_tokens(context)
-        _host_list_requests.append(
-            {
-                "session_id": request.session_id,
-                "turn_id": request.turn_id,
-                "page_size": request.page_size,
-                "page_token": request.page_token,
-                "subject_id": request.context.subject.id
-                if request.HasField("context")
-                else "",
-                "query": request.query,
-            }
-        )
-        if request.page_token == "large":
-            return agent_pb2.ListAgentToolsResponse(
-                tools=[
-                    agent_pb2.ListedAgentTool(
-                        id="tool-large",
-                        mcp_name="large__tool",
-                        title="Large tool",
-                        description="x" * (5 * 1024 * 1024),
-                        input_schema='{"type":"object"}',
-                    )
-                ]
-            )
-        return agent_pb2.ListAgentToolsResponse(
-            tools=[
-                agent_pb2.ListedAgentTool(
-                    id="tool-1",
-                    mcp_name="slack__chat_post_message",
-                    title="Send Slack message",
-                    description="Send a direct message",
-                    input_schema='{"type":"object"}',
-                    ref=app_pb2.AgentToolRef(
-                        app="slack",
-                        operation="chat.postMessage",
-                    ),
-                )
-            ],
-            next_page_token="next-1",
-        )
-
-    def ExecuteTool(self, request: Any, context: grpc.ServicerContext) -> Any:
-        _record_host_relay_tokens(context)
-        _host_execute_requests.append(
-            {
-                "session_id": request.session_id,
-                "turn_id": request.turn_id,
-                "tool_call_id": request.tool_call_id,
-                "tool_id": request.tool_id,
-                "arguments": json_format.MessageToDict(
-                    request.arguments,
-                    preserving_proto_field_name=True,
-                )
-                if request.HasField("arguments")
-                else {},
-                "idempotency_key": request.idempotency_key,
-                "subject_id": request.context.subject.id
-                if request.HasField("context")
-                else "",
-            }
-        )
-        return agent_pb2.ExecuteAgentToolResponse(
-            status=207,
-            body=f"{request.session_id}:{request.turn_id}:{request.tool_call_id}:{request.tool_id}:{request.idempotency_key}",
-        )
-
-    def ResolveConnection(self, request: Any, context: grpc.ServicerContext) -> Any:
-        _record_host_relay_tokens(context)
-        _host_connection_requests.append(
-            {
-                "session_id": request.session_id,
-                "turn_id": request.turn_id,
-                "connection": request.connection,
-                "instance": request.instance,
-                "subject_id": request.context.subject.id
-                if request.HasField("context")
-                else "",
-            }
-        )
-        return agent_pb2.ResolvedAgentConnection(
-            connection_id="vertex-ai",
-            connection=request.connection,
-            instance=request.instance,
-            mode="subject",
-            headers={"authorization": "Bearer token"},
-            params={"endpoint": "vertex-endpoint"},
         )
 
 
@@ -648,14 +540,6 @@ def _record_manager_workflow(request: Any) -> None:
     )
 
 
-def _record_host_relay_tokens(context: grpc.ServicerContext) -> None:
-    _host_relay_tokens.extend(
-        value
-        for key, value in context.invocation_metadata()
-        if key == "x-gestalt-host-service-relay-token"
-    )
-
-
 def _fresh_socket(name: str) -> str:
     path = os.path.join(tempfile.gettempdir(), f"{name}-{os.getpid()}.sock")
     if os.path.exists(path):
@@ -664,13 +548,12 @@ def _fresh_socket(name: str) -> str:
 
 
 def setUpModule() -> None:
-    global _runtime_server, _host_server, _manager_server
-    global _runtime_socket, _host_socket, _manager_socket, _provider
+    global _runtime_server, _host_server
+    global _runtime_socket, _host_socket, _provider
 
     _provider = _AgentRuntimeProvider()
     _runtime_socket = _fresh_socket("py-agent-runtime")
     _host_socket = _fresh_socket("py-agent-host")
-    _manager_socket = _fresh_socket("py-agent")
 
     _runtime_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     adapter = _runtime._servable_target(_provider, runtime_kind=ProviderKind.AGENT)
@@ -679,21 +562,12 @@ def setUpModule() -> None:
     _runtime_server.start()
 
     _host_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    agent_pb2_grpc.add_AgentHostServicer_to_server(_AgentHostServicer(), _host_server)
     agent_pb2_grpc.add_AgentProviderServicer_to_server(
         _AgentServicer(),
         _host_server,
     )
     _host_server.add_insecure_port(f"unix:{_host_socket}")
     _host_server.start()
-
-    _manager_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    agent_pb2_grpc.add_AgentProviderServicer_to_server(
-        _AgentServicer(),
-        _manager_server,
-    )
-    _manager_server.add_insecure_port(f"unix:{_manager_socket}")
-    _manager_server.start()
 
     for env_name, value in {
         ENV_HOST_SERVICE_SOCKET: _host_socket,
@@ -709,10 +583,10 @@ def tearDownModule() -> None:
             os.environ.pop(env_name, None)
         else:
             os.environ[env_name] = previous
-    for server in (_runtime_server, _host_server, _manager_server):
+    for server in (_runtime_server, _host_server):
         if server is not None:
             server.stop(grace=0).wait()
-    for path in (_runtime_socket, _host_socket, _manager_socket):
+    for path in (_runtime_socket, _host_socket):
         if path and os.path.exists(path):
             os.remove(path)
 
@@ -722,10 +596,6 @@ class AgentTransportTests(unittest.TestCase):
         _provider.configured.clear()
         _provider.context_subject_ids.clear()
         _provider.session_tools.clear()
-        _host_relay_tokens.clear()
-        _host_list_requests.clear()
-        _host_execute_requests.clear()
-        _host_connection_requests.clear()
         _manager_requests.clear()
         _manager_contexts.clear()
         _manager_workflows.clear()
@@ -1121,108 +991,6 @@ class AgentTransportTests(unittest.TestCase):
             server.stop(grace=0).wait()
             if os.path.exists(socket_path):
                 os.remove(socket_path)
-
-    def test_agent_host_roundtrip(self) -> None:
-        request_context = app_pb2.RequestContext(
-            subject=app_pb2.SubjectContext(id="user:agent-host")
-        )
-        with AgentHost() as host:
-            list_response = host.list_tools(
-                ListAgentToolsRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    page_size=10,
-                    page_token="page-0",
-                    query="person",
-                    context=request_context,
-                ),
-            )
-            response = host.execute_tool(
-                ExecuteAgentToolRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    tool_call_id="call-7",
-                    tool_id="lookup",
-                    arguments=ToolArguments(query="Ada Lovelace"),
-                    context=request_context,
-                    idempotency_key="tool-call-key-7",
-                ),
-            )
-            connection = host.resolve_connection(
-                ResolveAgentConnectionRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    connection="model",
-                    instance="default",
-                    context=request_context,
-                ),
-            )
-
-        self.assertEqual(len(list_response.tools), 1)
-        self.assertEqual(list_response.tools[0].mcp_name, "slack__chat_post_message")
-        self.assertEqual(list_response.next_page_token, "next-1")
-        self.assertEqual(response.status, 207)
-        self.assertEqual(
-            response.body, "session-1:turn-1:call-7:lookup:tool-call-key-7"
-        )
-        self.assertEqual(connection.connection_id, "vertex-ai")
-        self.assertEqual(connection.headers["authorization"], "Bearer token")
-        self.assertEqual(connection.params["endpoint"], "vertex-endpoint")
-        self.assertEqual(
-            _host_relay_tokens, ["relay-token-py", "relay-token-py", "relay-token-py"]
-        )
-        self.assertEqual(
-            _host_list_requests,
-            [
-                {
-                    "session_id": "session-1",
-                    "turn_id": "turn-1",
-                    "page_size": 10,
-                    "page_token": "page-0",
-                    "subject_id": "user:agent-host",
-                    "query": "person",
-                }
-            ],
-        )
-        self.assertEqual(
-            _host_execute_requests,
-            [
-                {
-                    "session_id": "session-1",
-                    "turn_id": "turn-1",
-                    "tool_call_id": "call-7",
-                    "tool_id": "lookup",
-                    "arguments": {"query": "Ada Lovelace"},
-                    "idempotency_key": "tool-call-key-7",
-                    "subject_id": "user:agent-host",
-                }
-            ],
-        )
-        self.assertEqual(
-            _host_connection_requests,
-            [
-                {
-                    "session_id": "session-1",
-                    "turn_id": "turn-1",
-                    "connection": "model",
-                    "instance": "default",
-                    "subject_id": "user:agent-host",
-                }
-            ],
-        )
-
-    def test_agent_host_accepts_large_internal_responses(self) -> None:
-        with AgentHost() as host:
-            list_response = host.list_tools(
-                ListAgentToolsRequest(
-                    session_id="session-1",
-                    turn_id="turn-1",
-                    page_token="large",
-                )
-            )
-
-        self.assertEqual(list_response.tools[0].id, "tool-large")
-        self.assertEqual(len(list_response.tools[0].description), 5 * 1024 * 1024)
 
     def test_agent_roundtrip(self) -> None:
         context = app_pb2.RequestContext(

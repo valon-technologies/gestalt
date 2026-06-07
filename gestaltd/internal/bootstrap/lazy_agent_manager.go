@@ -8,7 +8,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
@@ -147,12 +147,20 @@ func (l *lazyAgentManager) ResolveInteraction(ctx context.Context, p *principal.
 	return target.ResolveInteraction(ctx, p, req)
 }
 
-func (l *lazyAgentManager) AuthorizeAgentAppInvocation(ctx context.Context, providerName, turnID string, requestPrincipal *principal.Principal, targetTool coreagent.ToolTarget, reqCtx *proto.RequestContext) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error) {
+func (l *lazyAgentManager) AuthorizeAgentAppInvocation(ctx context.Context, req appaccessservice.AgentAppInvocationAuthorizationRequest) (appaccessservice.AgentAppInvocationAuthorization, error) {
 	target, err := l.current()
 	if err != nil {
-		return nil, agentturnscope.Scope{}, coreagent.ListedTool{}, err
+		return appaccessservice.AgentAppInvocationAuthorization{}, err
 	}
-	return target.AuthorizeAgentAppInvocation(ctx, providerName, turnID, requestPrincipal, targetTool, reqCtx)
+	return target.AuthorizeAgentAppInvocation(ctx, req)
+}
+
+func (l *lazyAgentManager) AuthorizeAgentWorkflowInvocation(ctx context.Context, req appaccessservice.AgentWorkflowInvocationAuthorizationRequest) (appaccessservice.AgentWorkflowInvocationAuthorization, error) {
+	target, err := l.current()
+	if err != nil {
+		return appaccessservice.AgentWorkflowInvocationAuthorization{}, err
+	}
+	return target.AuthorizeAgentWorkflowInvocation(ctx, req)
 }
 
 func (l *lazyAgentManager) current() (*agentmanager.Manager, error) {

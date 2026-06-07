@@ -93,7 +93,7 @@ message OperationResult {
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
 message AppInvokeRequest {
   reserved 7, 10;
-  reserved "invocation_token", "workflow";
+  reserved "workflow";
 
   string app = 2;
   string operation = 3;
@@ -109,7 +109,6 @@ message AppInvokeRequest {
 // through Gestalt.
 message AppInvokeGraphQLRequest {
   reserved 6;
-  reserved "invocation_token";
 
   string app = 1;
   string document = 2;
@@ -194,6 +193,12 @@ message RequestMetaContext {
   string user_agent = 3;
 }
 
+message AgentInvocationContext {
+  string provider_name = 1;
+  string session_id = 2;
+  string turn_id = 3;
+}
+
 // RequestContext bundles the caller, credential, access, and host metadata for
 // one operation.
 message RequestContext {
@@ -213,6 +218,7 @@ message RequestContext {
   // explicitly empty inherited tool-ref context.
   bool tool_refs_set = 10;
   RequestMetaContext request_meta = 11;
+  AgentInvocationContext agent = 12;
 }
 
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional
@@ -252,7 +258,6 @@ message ResolveHTTPSubjectResponse {
 // ExecuteRequest invokes one executable operation.
 message ExecuteRequest {
   reserved 8;
-  reserved "invocation_token";
 
   string operation = 1;
   google.protobuf.Struct params = 2;
