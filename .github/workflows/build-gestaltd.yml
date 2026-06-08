@@ -136,6 +136,7 @@ jobs:
     steps:
       - name: Skip irrelevant changes
         if: ${{ needs.resolve-ref.outputs.should_validate == 'false' }}
+        working-directory: .
         run: echo "No Gestaltd-related changes detected; required check satisfied."
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -209,6 +210,7 @@ jobs:
     steps:
       - name: Skip irrelevant changes
         if: ${{ needs.resolve-ref.outputs.should_validate == 'false' }}
+        working-directory: .
         run: echo "No Gestaltd-related changes detected; required check satisfied."
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
