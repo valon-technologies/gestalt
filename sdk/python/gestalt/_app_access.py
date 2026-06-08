@@ -53,6 +53,8 @@ class AppProtocol(Protocol):
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
+        credential_mode: str = "",
+        timeout_seconds: float | None = None,
     ) -> JsonValue:
         """Invoke one operation on another app."""
 
@@ -65,6 +67,8 @@ class AppProtocol(Protocol):
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
+        credential_mode: str = "",
+        timeout_seconds: float | None = None,
     ) -> Response[bytes]:
         """Invoke one operation on another app and return the raw transport result."""
 
@@ -122,6 +126,8 @@ class _AppClient:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
+        credential_mode: str = "",
+        timeout_seconds: float | None = None,
     ) -> JsonValue:
         """Invoke one operation on another app.
 
@@ -140,6 +146,8 @@ class _AppClient:
                 connection=connection,
                 instance=instance,
                 idempotency_key=idempotency_key,
+                credential_mode=credential_mode,
+                timeout_seconds=timeout_seconds,
             ),
         )
 
@@ -152,6 +160,8 @@ class _AppClient:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
+        credential_mode: str = "",
+        timeout_seconds: float | None = None,
     ) -> Response[bytes]:
         """Invoke one operation on another app and return the raw transport result."""
 
@@ -161,6 +171,7 @@ class _AppClient:
             connection=connection,
             instance=instance,
             idempotency_key=idempotency_key.strip(),
+            credential_mode=credential_mode.strip(),
         )
         message = _struct_from_dict(params)
         if message is not None:
@@ -168,7 +179,9 @@ class _AppClient:
         if self._context is not None:
             request.context.CopyFrom(self._context)
 
-        return _response_from_proto(self._stub.Invoke(request))
+        return _response_from_proto(
+            self._stub.Invoke(request, timeout=_positive_float(timeout_seconds))
+        )
 
     def invoke_graphql(
         self,
@@ -260,6 +273,13 @@ def _struct_from_dict_optional(
         return None
 
     return _struct_from_normalized_object(normalized)
+
+
+def _positive_float(value: float | None) -> float | None:
+    if value is None:
+        return None
+    timeout = float(value)
+    return timeout if timeout > 0 else None
 
 
 def _app_channel(raw_target: str, *, token: str = "") -> grpc.Channel:

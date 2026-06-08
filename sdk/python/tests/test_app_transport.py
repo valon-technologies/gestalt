@@ -71,6 +71,18 @@ class _AppServicer(app_pb2_grpc.AppServicer):
             else {}
         )
         _invoke_contexts.append(request_context)
+        body = {
+            "app": request.app,
+            "operation": request.operation,
+            "params": params,
+            "params_present": request.HasField("params"),
+            "connection": request.connection,
+            "instance": request.instance,
+            "idempotency_key": request.idempotency_key,
+            "context": request_context,
+        }
+        if request.credential_mode:
+            body["credential_mode"] = request.credential_mode
         return app_pb2.OperationResult(
             status=200,
             headers={
@@ -78,18 +90,7 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                     values=["https://example.test/created"]
                 )
             },
-            body=json.dumps(
-                {
-                    "app": request.app,
-                    "operation": request.operation,
-                    "params": params,
-                    "params_present": request.HasField("params"),
-                    "connection": request.connection,
-                    "instance": request.instance,
-                    "idempotency_key": request.idempotency_key,
-                    "context": request_context,
-                }
-            ).encode("utf-8"),
+            body=json.dumps(body).encode("utf-8"),
         )
 
     def InvokeGraphQL(self, request, context):
@@ -197,6 +198,8 @@ class AppTransportTests(unittest.TestCase):
                 connection="work",
                 instance="prod",
                 idempotency_key=" issue-1026-create ",
+                credential_mode="subject",
+                timeout_seconds=5,
             )
 
         self.assertEqual(response.status, 200)
@@ -217,6 +220,7 @@ class AppTransportTests(unittest.TestCase):
                 "connection": "work",
                 "instance": "prod",
                 "idempotency_key": "issue-1026-create",
+                "credential_mode": "subject",
                 "context": {
                     "subject": {
                         "id": "user:ada",
