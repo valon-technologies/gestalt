@@ -24,6 +24,7 @@ type connectManualRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
+	ServiceAccountID string            `json:"serviceAccountId"`
 	Credential       string            `json:"credential"`
 	Credentials      map[string]string `json:"credentials"`
 	ConnectionParams map[string]string `json:"connectionParams"`
@@ -78,7 +79,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectID, manualInstance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance)
+	subjectID, manualInstance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance, req.ServiceAccountID)
 	if err != nil {
 		auditErr = err
 		return
@@ -210,8 +211,8 @@ func (s *Server) resolveConnectionProvider(w http.ResponseWriter, integration, r
 	return prov, connection, nil
 }
 
-func (s *Server) resolveCredentialConnectionSetup(w http.ResponseWriter, r *http.Request, requestedInstance string) (string, string, error) {
-	subjectID, err := s.resolveCredentialSubjectID(w, r)
+func (s *Server) resolveCredentialConnectionSetup(w http.ResponseWriter, r *http.Request, requestedInstance, serviceAccountID string) (string, string, error) {
+	subjectID, err := s.resolveCredentialSubjectID(w, r, serviceAccountID)
 	if err != nil {
 		return "", "", err
 	}

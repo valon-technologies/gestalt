@@ -2503,6 +2503,18 @@ func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, r
 	return &proto.ListRelationshipsResponse{Relationships: out}, nil
 }
 
+type serviceAccountCredentialAuthorizationProvider struct {
+	core.AuthorizationProvider
+
+	allowed  bool
+	requests []*proto.CheckAccessRequest
+}
+
+func (p *serviceAccountCredentialAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	p.requests = append(p.requests, req)
+	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
+}
+
 func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
 	name := strings.TrimSpace(req.GetFilter().GetName())
 	out := []*proto.AuthorizationModelResourceType{}
@@ -8655,6 +8667,94 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 }
 
+func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	const serviceAccountSubjectID = "service_account:oauth-bot"
+
+	svc := testutil.NewStubServices(t)
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
+		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			if code != "good-code" {
+				return nil, fmt.Errorf("bad code")
+			}
+			return &core.TokenResponse{AccessToken: "service-account-oauth-token"}, nil
+		},
+	}
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "oauth-service-account"},
+		authURL:         "https://auth.example.com/oauth/authorize",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"oauth-service-account": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("oauth-service-account", handler)
+		cfg.Authorization = authz
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"oauth-service-account","serviceAccountId":"oauth-bot"}`))
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(startResp.Body)
+		t.Fatalf("start status = %d, want 200: %s", startResp.StatusCode, body)
+	}
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decode start response: %v", err)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	callbackReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+	callbackResp, err := noRedirect.Do(callbackReq)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusSeeOther {
+		body, _ := io.ReadAll(callbackResp.Body)
+		t.Fatalf("callback status = %d, want 303: %s", callbackResp.StatusCode, body)
+	}
+
+	tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), serviceAccountSubjectID)
+	if err != nil {
+		t.Fatalf("ListCredentials(service account): %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("service account tokens len = %d, want 1", len(tokens))
+	}
+	if got := tokens[0].AccessToken; got != "service-account-oauth-token" {
+		t.Fatalf("stored access token = %q, want service-account-oauth-token", got)
+	}
+	if len(authz.requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	}
+	authReq := authz.requests[0]
+	if authReq.GetSubject().GetType() != "subject" || !strings.HasPrefix(authReq.GetSubject().GetId(), "user:") {
+		t.Fatalf("authorization subject = %+v, want user subject", authReq.GetSubject())
+	}
+	if got := authReq.GetAction().GetName(); got != "manages" {
+		t.Fatalf("authorization action = %q, want manages", got)
+	}
+	if resource := authReq.GetResource(); resource.GetType() != "service_account" || resource.GetId() != serviceAccountSubjectID {
+		t.Fatalf("authorization resource = %+v, want service_account/%s", resource, serviceAccountSubjectID)
+	}
+}
+
 func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Parallel()
 
@@ -13010,6 +13110,210 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 				t.Fatalf("token data = %+v, want %+v", tokenData, tc.wantTokenData)
 			}
 		})
+	}
+}
+
+func TestConnectManual_ServiceAccountIDStoresCredentialForServiceAccount(t *testing.T) {
+	t.Parallel()
+
+	const serviceAccountSubjectID = "service_account:manual-bot"
+
+	svc := testutil.NewStubServices(t)
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-service-account"},
+		})
+		cfg.DefaultConnection = map[string]string{"manual-service-account": config.AppConnectionName}
+		cfg.Authorization = authz
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account","serviceAccountId":"service_account:manual-bot","credential":"manual-service-account-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), serviceAccountSubjectID)
+	if err != nil {
+		t.Fatalf("ListCredentials(service account): %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("service account tokens len = %d, want 1", len(tokens))
+	}
+	if got := tokens[0].AccessToken; got != "manual-service-account-token" {
+		t.Fatalf("stored access token = %q, want manual-service-account-token", got)
+	}
+	if len(authz.requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	}
+	authReq := authz.requests[0]
+	if authReq.GetSubject().GetType() != "subject" || !strings.HasPrefix(authReq.GetSubject().GetId(), "user:") {
+		t.Fatalf("authorization subject = %+v, want user subject", authReq.GetSubject())
+	}
+	if got := authReq.GetAction().GetName(); got != "manages" {
+		t.Fatalf("authorization action = %q, want manages", got)
+	}
+	if resource := authReq.GetResource(); resource.GetType() != "service_account" || resource.GetId() != serviceAccountSubjectID {
+		t.Fatalf("authorization resource = %+v, want service_account/%s", resource, serviceAccountSubjectID)
+	}
+}
+
+func TestConnectManual_ServiceAccountIDRequiresManagesAuthorization(t *testing.T) {
+	t.Parallel()
+
+	const serviceAccountSubjectID = "service_account:manual-bot"
+
+	svc := testutil.NewStubServices(t)
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: false}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-service-account-denied"},
+		})
+		cfg.DefaultConnection = map[string]string{"manual-service-account-denied": config.AppConnectionName}
+		cfg.Authorization = authz
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-denied","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 403: %s", resp.StatusCode, body)
+	}
+	if len(authz.requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	}
+	authReq := authz.requests[0]
+	if got := authReq.GetAction().GetName(); got != "manages" {
+		t.Fatalf("authorization action = %q, want manages", got)
+	}
+	if resource := authReq.GetResource(); resource.GetType() != "service_account" || resource.GetId() != serviceAccountSubjectID {
+		t.Fatalf("authorization resource = %+v, want service_account/%s", resource, serviceAccountSubjectID)
+	}
+	tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), serviceAccountSubjectID)
+	if err != nil {
+		t.Fatalf("ListCredentials(service account): %v", err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("service account tokens len = %d, want 0", len(tokens))
+	}
+}
+
+func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t *testing.T) {
+	t.Parallel()
+
+	const serviceAccountSubjectID = "service_account:manual-bot"
+
+	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
+	}))
+	testutil.CloseOnCleanup(t, discoverySrv)
+
+	svc := testutil.NewStubServices(t)
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "service-account-manager@test.local"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProviderWithCapabilities{
+			stubManualProvider: stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-service-account-pending"},
+			},
+			discovery: &core.DiscoveryConfig{
+				URL:      discoverySrv.URL,
+				IDPath:   "id",
+				NamePath: "name",
+				Metadata: map[string]string{"workspace": "workspace"},
+			},
+		})
+		cfg.DefaultConnection = map[string]string{"manual-service-account-pending": config.AppConnectionName}
+		cfg.Authorization = authz
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-pending","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
+	req.Header.Set("Authorization", "Bearer session-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("connect request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("connect status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var connectResp struct {
+		Status       string `json:"status"`
+		PendingToken string `json:"pendingToken"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&connectResp); err != nil {
+		t.Fatalf("decode connect response: %v", err)
+	}
+	if connectResp.Status != "selection_required" || connectResp.PendingToken == "" {
+		t.Fatalf("connect response = %+v, want selection_required with pending token", connectResp)
+	}
+
+	authz.allowed = false
+	form := url.Values{
+		"pending_token":   {connectResp.PendingToken},
+		"candidate_index": {"0"},
+	}
+	selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/pending-connection", strings.NewReader(form.Encode()))
+	selectReq.Header.Set("Authorization", "Bearer session-token")
+	selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	selectResp, err := http.DefaultClient.Do(selectReq)
+	if err != nil {
+		t.Fatalf("select request: %v", err)
+	}
+	defer func() { _ = selectResp.Body.Close() }()
+	if selectResp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(selectResp.Body)
+		t.Fatalf("select status = %d, want 403: %s", selectResp.StatusCode, body)
+	}
+	if len(authz.requests) != 2 {
+		t.Fatalf("authorization requests = %d, want 2", len(authz.requests))
+	}
+	for idx, authReq := range authz.requests {
+		if got := authReq.GetAction().GetName(); got != "manages" {
+			t.Fatalf("authorization request %d action = %q, want manages", idx, got)
+		}
+		if resource := authReq.GetResource(); resource.GetType() != "service_account" || resource.GetId() != serviceAccountSubjectID {
+			t.Fatalf("authorization request %d resource = %+v, want service_account/%s", idx, resource, serviceAccountSubjectID)
+		}
+	}
+	tokens, err := svc.ExternalCredentials.ListCredentials(context.Background(), serviceAccountSubjectID)
+	if err != nil {
+		t.Fatalf("ListCredentials(service account): %v", err)
+	}
+	if len(tokens) != 0 {
+		t.Fatalf("service account tokens len = %d, want 0", len(tokens))
 	}
 }
 
