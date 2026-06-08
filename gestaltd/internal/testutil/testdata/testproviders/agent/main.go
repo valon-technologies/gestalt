@@ -302,7 +302,7 @@ func (p *agentProvider) startTurn(
 		if err != nil {
 			output["app_error"] = err.Error()
 		} else {
-			resp, err := app.Invoke(ctx, "roadmap", "sync", map[string]any{"taskId": "task-123"}, &gestalt.InvokeOptions{
+			resp, err := app.InvokeRaw(ctx, "roadmap", "sync", map[string]any{"taskId": "task-123"}, &gestalt.InvokeOptions{
 				IdempotencyKey: " tool-call-key-1 ",
 			})
 			if err != nil {

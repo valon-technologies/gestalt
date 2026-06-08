@@ -88,7 +88,7 @@ func TestAgentCreateTurnReportsProviderDeadlineAsUnavailable(t *testing.T) {
 		t.Fatalf("decode session: %v", err)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+session["id"].(string)+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+session["id"].(string)+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -167,7 +167,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 	}
 	provider.mu.Unlock()
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/session-managed/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.Header.Set("Authorization", "Bearer "+plaintext)
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -909,7 +909,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if !gotProvider.Capabilities.StreamingText || !gotProvider.Capabilities.BoundedListHydration {
 		t.Fatalf("provider capabilities = %#v, want streaming text and catalog listing", gotProvider.Capabilities)
 	}
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -934,7 +934,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("provider turn tool ref = %#v, want docs.search", ref)
 	}
 
-	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?after=0&limit=10", nil)
+	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?provider=managed&after=0&limit=10", nil)
 	eventsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	eventsResp, err := http.DefaultClient.Do(eventsReq)
 	if err != nil {
@@ -958,7 +958,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("turn.completed display = %#v, want omitted", events[2]["display"])
 	}
 
-	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", nil)
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", nil)
 	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	listResp, err := http.DefaultClient.Do(listReq)
 	if err != nil {
@@ -1013,7 +1013,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("provider list sessions request subject = %#v, want caller subject", got.Subject)
 	}
 
-	summaryTurnsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?summary=true&limit=1&status=succeeded", nil)
+	summaryTurnsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed&summary=true&limit=1&status=succeeded", nil)
 	summaryTurnsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	summaryTurnsResp, err := http.DefaultClient.Do(summaryTurnsReq)
 	if err != nil {
@@ -1044,7 +1044,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("provider list turns request subject = %#v, want caller subject", got.Subject)
 	}
 
-	cancelReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/turns/"+turnID+"/cancel", bytes.NewBufferString(`{"reason":"stop"}`))
+	cancelReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/turns/"+turnID+"/cancel?provider=managed", bytes.NewBufferString(`{"reason":"stop"}`))
 	cancelReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	cancelResp, err := http.DefaultClient.Do(cancelReq)
 	if err != nil {
@@ -1226,7 +1226,7 @@ func TestAgentTurnOmittedToolsDefaultToNone(t *testing.T) {
 
 	createTurn := func(name, body string, wantStatus int) string {
 		t.Helper()
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(body))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(body))
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -1309,7 +1309,7 @@ func TestAgentCreateTurnUsesNoToolsWithStructuredOutput(t *testing.T) {
 
 	createTurn := func(name, body string, wantStatus int) {
 		t.Helper()
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(body))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(body))
 		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -1380,7 +1380,7 @@ func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1425,7 +1425,7 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"output":{"text":{}},"messages":[{"role":"user","text":"lookup"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"metadata":{"emitToolEvents":true,"nilDisplayAliases":true},"output":{"text":{}},"messages":[{"role":"user","text":"lookup"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1437,7 +1437,7 @@ func TestAgentTurnEventsNormalizeToolPayloads(t *testing.T) {
 	}
 	turnID := turn["id"].(string)
 
-	eventsResp, err := http.Get(ts.URL + "/api/v1/agent/turns/" + turnID + "/events?after=0&limit=10")
+	eventsResp, err := http.Get(ts.URL + "/api/v1/agent/turns/" + turnID + "/events?provider=managed&after=0&limit=10")
 	if err != nil {
 		t.Fatalf("list events: %v", err)
 	}
@@ -1531,7 +1531,7 @@ func TestAgentSessionAndTurnMetrics(t *testing.T) {
 		t.Fatalf("session response missing id: %#v", session)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "metric-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1588,7 +1588,7 @@ func TestAgentSessionsAndTurnsRoundTripWithoutAuth(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"hello"}]}`))
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
 		t.Fatalf("create turn: %v", err)
@@ -1650,7 +1650,7 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1675,7 +1675,7 @@ func TestAgentTurnEventStreamSendsHeartbeatBeforeEvents(t *testing.T) {
 
 	streamCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=0&limit=10", nil)
+	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?provider=managed&after=0&limit=10", nil)
 	streamReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	streamResp, err := http.DefaultClient.Do(streamReq)
 	if err != nil {
@@ -1769,7 +1769,7 @@ func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *test
 	}
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"output":{"text":{}},"messages":[{"role":"user","text":"wait"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1794,7 +1794,7 @@ func TestAgentTurnEventStreamReportsProviderContextErrorWhileRequestOpen(t *test
 
 	streamCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=0&limit=10", nil)
+	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?provider=managed&after=0&limit=10", nil)
 	streamReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	streamResp, err := http.DefaultClient.Do(streamReq)
 	if err != nil {
@@ -1871,7 +1871,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	_ = json.NewDecoder(sessionResp.Body).Decode(&session)
 	sessionID := session["id"].(string)
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"metadata":{"requireInteraction":true},"output":{"text":{}},"messages":[{"role":"user","text":"proceed"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(`{"metadata":{"requireInteraction":true},"output":{"text":{}},"messages":[{"role":"user","text":"proceed"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, _ := http.DefaultClient.Do(turnReq)
 	defer func() { _ = turnResp.Body.Close() }()
@@ -1881,7 +1881,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 
 	blockedCtx, blockedCancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer blockedCancel()
-	blockedReq, _ := http.NewRequestWithContext(blockedCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=0&limit=1&until=blocked_or_terminal", nil)
+	blockedReq, _ := http.NewRequestWithContext(blockedCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?provider=managed&after=0&limit=1&until=blocked_or_terminal", nil)
 	blockedReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	blockedResp, err := http.DefaultClient.Do(blockedReq)
 	if err != nil {
@@ -1933,7 +1933,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 
 	streamCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?after=1&limit=10", nil)
+	streamReq, _ := http.NewRequestWithContext(streamCtx, http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events/stream?provider=managed&after=1&limit=10", nil)
 	streamReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	streamResp, err := http.DefaultClient.Do(streamReq)
 	if err != nil {
@@ -1941,7 +1941,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	}
 	defer func() { _ = streamResp.Body.Close() }()
 
-	interactionsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/interactions", nil)
+	interactionsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/interactions?provider=managed", nil)
 	interactionsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	interactionsResp, _ := http.DefaultClient.Do(interactionsReq)
 	defer func() { _ = interactionsResp.Body.Close() }()
@@ -1952,7 +1952,7 @@ func TestAgentInteractionResolutionAndEventStream(t *testing.T) {
 	}
 	interactionID := interactions[0]["id"].(string)
 
-	resolveReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/turns/"+turnID+"/interactions/"+interactionID+"/resolve", bytes.NewBufferString(`{"resolution":{"approved":true}}`))
+	resolveReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/turns/"+turnID+"/interactions/"+interactionID+"/resolve?provider=managed", bytes.NewBufferString(`{"resolution":{"approved":true}}`))
 	resolveReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	resolveResp, err := http.DefaultClient.Do(resolveReq)
 	if err != nil {

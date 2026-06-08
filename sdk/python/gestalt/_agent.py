@@ -103,6 +103,7 @@ class AgentCreateSession:
 
 @dataclass(slots=True)
 class AgentGetSession:
+    provider_name: str = ""
     session_id: str = ""
 
 
@@ -116,6 +117,7 @@ class AgentListSessions:
 
 @dataclass(slots=True)
 class AgentUpdateSession:
+    provider_name: str = ""
     session_id: str = ""
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
@@ -124,6 +126,7 @@ class AgentUpdateSession:
 
 @dataclass(slots=True)
 class AgentCreateTurn:
+    provider_name: str = ""
     session_id: str = ""
     model: str = ""
     messages: Sequence[Any] | None = None
@@ -136,11 +139,13 @@ class AgentCreateTurn:
 
 @dataclass(slots=True)
 class AgentGetTurn:
+    provider_name: str = ""
     turn_id: str = ""
 
 
 @dataclass(slots=True)
 class AgentListTurns:
+    provider_name: str = ""
     session_id: str = ""
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     limit: int = 0
@@ -149,12 +154,14 @@ class AgentListTurns:
 
 @dataclass(slots=True)
 class AgentCancelTurn:
+    provider_name: str = ""
     turn_id: str = ""
     reason: str = ""
 
 
 @dataclass(slots=True)
 class AgentListTurnEvents:
+    provider_name: str = ""
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
@@ -162,11 +169,13 @@ class AgentListTurnEvents:
 
 @dataclass(slots=True)
 class AgentListInteractions:
+    provider_name: str = ""
     turn_id: str = ""
 
 
 @dataclass(slots=True)
 class AgentResolveInteraction:
+    provider_name: str = ""
     turn_id: str = ""
     interaction_id: str = ""
     resolution: Any | None = None
@@ -1838,7 +1847,10 @@ def _agent_get_session_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.GetAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.GetAgentProviderSessionRequest(session_id=data.get("session_id", ""))
+    return pb.GetAgentProviderSessionRequest(
+        provider_name=data.get("provider_name", ""),
+        session_id=data.get("session_id", ""),
+    )
 
 
 def _agent_list_sessions_request(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1858,6 +1870,7 @@ def _agent_update_session_request(value: Any | None = None, **kwargs: Any) -> An
         return _copy(value)
     data = _data(value, kwargs)
     request = pb.UpdateAgentProviderSessionRequest(
+        provider_name=data.get("provider_name", ""),
         session_id=data.get("session_id", ""),
         client_ref=data.get("client_ref", ""),
         state=data.get("state", AGENT_SESSION_STATE_UNSPECIFIED),
@@ -1879,6 +1892,7 @@ def _agent_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if timeout_seconds < 0:
         raise ValueError("agent create turn timeout_seconds must not be negative")
     request = pb.CreateAgentProviderTurnRequest(
+        provider_name=data.get("provider_name", ""),
         session_id=data.get("session_id", ""),
         model=data.get("model", ""),
         messages=[_agent_message_value(item) for item in (data.get("messages") or [])],
@@ -1897,7 +1911,10 @@ def _agent_get_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.GetAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.GetAgentProviderTurnRequest(turn_id=data.get("turn_id", ""))
+    return pb.GetAgentProviderTurnRequest(
+        provider_name=data.get("provider_name", ""),
+        turn_id=data.get("turn_id", ""),
+    )
 
 
 def _agent_list_turns_request(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1905,6 +1922,7 @@ def _agent_list_turns_request(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.ListAgentProviderTurnsRequest(
+        provider_name=data.get("provider_name", ""),
         session_id=data.get("session_id", ""),
         status=data.get("status", AGENT_EXECUTION_STATUS_UNSPECIFIED),
         limit=data.get("limit", 0),
@@ -1917,6 +1935,7 @@ def _agent_cancel_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.CancelAgentProviderTurnRequest(
+        provider_name=data.get("provider_name", ""),
         turn_id=data.get("turn_id", ""),
         reason=data.get("reason", ""),
     )
@@ -1927,6 +1946,7 @@ def _agent_list_turn_events_request(value: Any | None = None, **kwargs: Any) -> 
         return _copy(value)
     data = _data(value, kwargs)
     return pb.ListAgentProviderTurnEventsRequest(
+        provider_name=data.get("provider_name", ""),
         turn_id=data.get("turn_id", ""),
         after_seq=data.get("after_seq", 0),
         limit=data.get("limit", 0),
@@ -1937,7 +1957,10 @@ def _agent_list_interactions_request(value: Any | None = None, **kwargs: Any) ->
     if isinstance(value, pb.ListAgentProviderInteractionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.ListAgentProviderInteractionsRequest(turn_id=data.get("turn_id", ""))
+    return pb.ListAgentProviderInteractionsRequest(
+        provider_name=data.get("provider_name", ""),
+        turn_id=data.get("turn_id", ""),
+    )
 
 
 def _agent_resolve_interaction_request(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1945,6 +1968,7 @@ def _agent_resolve_interaction_request(value: Any | None = None, **kwargs: Any) 
         return _copy(value)
     data = _data(value, kwargs)
     request = pb.ResolveAgentProviderInteractionRequest(
+        provider_name=data.get("provider_name", ""),
         turn_id=data.get("turn_id", ""),
         interaction_id=data.get("interaction_id", ""),
     )

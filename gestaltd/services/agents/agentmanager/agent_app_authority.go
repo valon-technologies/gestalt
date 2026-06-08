@@ -179,8 +179,9 @@ func (m *Manager) getAgentInvocationTurn(ctx context.Context, provider coreagent
 		}
 		seen[turnID] = struct{}{}
 		turn, err := provider.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-			TurnId:  turnID,
-			Context: reqCtx,
+			TurnId:       turnID,
+			ProviderName: strings.TrimSpace(scope.ProviderName),
+			Context:      reqCtx,
 			Subject: &proto.SubjectContext{
 				Id:                  strings.TrimSpace(scope.SubjectID),
 				CredentialSubjectId: strings.TrimSpace(scope.CredentialSubjectID),

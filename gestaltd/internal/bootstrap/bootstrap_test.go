@@ -2252,6 +2252,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	req := &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "demo-idempotency-key",
@@ -2320,6 +2321,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		t.Fatalf("AgentManager.CreateSession(empty catalog): %v", err)
 	}
 	_, err = result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      globalSession.ID,
 		IdempotencyKey: "global-search-idempotency-key",
@@ -2551,6 +2553,7 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "linear-search-idempotency-key",
@@ -2574,6 +2577,7 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 	}
 
 	second, err := result.AgentManager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "linear-search-after-unavailable-idempotency-key",
@@ -2761,6 +2765,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -2778,7 +2783,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 		t.Fatalf("turn = %#v, want waiting_for_input", turn)
 	}
 
-	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{TurnId: turn.ID})
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{ProviderName: "managed", TurnId: turn.ID})
 	if err != nil {
 		t.Fatalf("AgentManager.ListInteractions: %v", err)
 	}
@@ -2798,6 +2803,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 	}
 
 	resolved, err := result.AgentManager.ResolveInteraction(startCtx, p, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  "managed",
 		TurnId:        turn.ID,
 		InteractionId: interactions[0].ID,
 		Resolution:    bootstrapAgentMapToProtoStruct(map[string]any{"approved": true}),
@@ -2809,7 +2815,7 @@ func TestBootstrapAgentManagerResolvesProviderOwnedInteractions(t *testing.T) {
 		t.Fatalf("resolved interaction = %#v, want resolved approved interaction", resolved)
 	}
 
-	resolvedInteractions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{TurnId: turn.ID})
+	resolvedInteractions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{ProviderName: "managed", TurnId: turn.ID})
 	if err != nil {
 		t.Fatalf("AgentManager.ListInteractions(resolved): %v", err)
 	}
@@ -2865,6 +2871,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -2882,7 +2889,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 		t.Fatalf("turn = %#v, want waiting_for_input", turn)
 	}
 
-	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{TurnId: turn.ID})
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{ProviderName: "managed", TurnId: turn.ID})
 	if err != nil {
 		t.Fatalf("AgentManager.ListInteractions: %v", err)
 	}
@@ -2898,6 +2905,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundWhenProviderInter
 	}
 
 	_, err = result.AgentManager.ResolveInteraction(startCtx, p, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  "managed",
 		TurnId:        turn.ID,
 		InteractionId: interactions[0].ID,
 		Resolution:    bootstrapAgentMapToProtoStruct(map[string]any{"approved": true}),
@@ -2952,6 +2960,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -2966,7 +2975,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
 	}
 
-	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{TurnId: turn.ID})
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{ProviderName: "managed", TurnId: turn.ID})
 	if err != nil {
 		t.Fatalf("AgentManager.ListInteractions: %v", err)
 	}
@@ -2986,6 +2995,7 @@ func TestBootstrapAgentManagerResolveInteractionReturnsNotFoundOnProviderInterac
 	}
 
 	_, err = result.AgentManager.ResolveInteraction(startCtx, p, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  "managed",
 		TurnId:        turn.ID,
 		InteractionId: interactions[0].ID,
 		Resolution:    bootstrapAgentMapToProtoStruct(map[string]any{"approved": true}),
@@ -3040,6 +3050,7 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -3060,7 +3071,7 @@ func TestBootstrapAgentManagerListInteractionsRejectsMissingSessionID(t *testing
 	}
 	provider.mu.Unlock()
 
-	if _, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{TurnId: turn.ID}); err == nil {
+	if _, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{ProviderName: "managed", TurnId: turn.ID}); err == nil {
 		t.Fatal("ListInteractions error = nil, want missing session id failure")
 	} else if !strings.Contains(err.Error(), `for session "", want "`+session.ID+`"`) {
 		t.Fatalf("ListInteractions error = %v, want missing session id failure", err)
@@ -3112,6 +3123,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(startCtx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "gpt-test",
@@ -3126,7 +3138,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 		t.Fatalf("AgentManager.CreateTurn: %v", err)
 	}
 
-	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{TurnId: turn.ID})
+	interactions, err := result.AgentManager.ListInteractions(startCtx, p, &proto.ListAgentProviderInteractionsRequest{ProviderName: "managed", TurnId: turn.ID})
 	if err != nil {
 		t.Fatalf("AgentManager.ListInteractions: %v", err)
 	}
@@ -3146,6 +3158,7 @@ func TestBootstrapAgentManagerResolveInteractionRejectsMissingSessionID(t *testi
 	}
 
 	if _, err := result.AgentManager.ResolveInteraction(startCtx, p, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  "managed",
 		TurnId:        turn.ID,
 		InteractionId: interactions[0].ID,
 		Resolution:    bootstrapAgentMapToProtoStruct(map[string]any{"approved": true}),
@@ -3224,6 +3237,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	}
 
 	first, err := result.AgentManager.CreateTurn(fullCtx, full, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "same-run",
@@ -3249,6 +3263,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
 
 	_, err = result.AgentManager.CreateTurn(restrictedCtx, restricted, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "same-run",

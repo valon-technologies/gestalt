@@ -633,8 +633,9 @@ func (p *agentProviderWithTracking) cancelProviderTurn(turnID string, reason str
 		return nil
 	}
 	_, cancelErr := p.delegate.CancelTurn(context.Background(), &proto.CancelAgentProviderTurnRequest{
-		TurnId: turnID,
-		Reason: strings.TrimSpace(reason),
+		ProviderName: strings.TrimSpace(p.providerName),
+		TurnId:       turnID,
+		Reason:       strings.TrimSpace(reason),
 	})
 	if cancelErr != nil && !errors.Is(cancelErr, core.ErrNotFound) {
 		return cancelErr
