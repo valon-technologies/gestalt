@@ -72,6 +72,7 @@ export interface AgentCreateSession {
 
 /** Shape accepted when fetching an agent session through the agent facade. */
 export interface AgentGetSession {
+  providerName?: string | undefined;
   sessionId: string;
 }
 
@@ -85,6 +86,7 @@ export interface AgentListSessions {
 
 /** Shape accepted when updating an agent session through the agent facade. */
 export interface AgentUpdateSession {
+  providerName?: string | undefined;
   sessionId: string;
   clientRef?: string | undefined;
   state?: AgentSessionState | undefined;
@@ -93,6 +95,7 @@ export interface AgentUpdateSession {
 
 /** Shape accepted when creating an agent turn through the agent facade. */
 export interface AgentCreateTurn {
+  providerName?: string | undefined;
   sessionId: string;
   model?: string | undefined;
   messages?: readonly AgentMessage[] | undefined;
@@ -105,11 +108,13 @@ export interface AgentCreateTurn {
 
 /** Shape accepted when fetching an agent turn through the agent facade. */
 export interface AgentGetTurn {
+  providerName?: string | undefined;
   turnId: string;
 }
 
 /** Shape accepted when listing agent turns through the agent facade. */
 export interface AgentListTurns {
+  providerName?: string | undefined;
   sessionId: string;
   status?: AgentExecutionStatus | undefined;
   limit?: number | undefined;
@@ -118,12 +123,14 @@ export interface AgentListTurns {
 
 /** Shape accepted when cancelling an agent turn through the agent facade. */
 export interface AgentCancelTurn {
+  providerName?: string | undefined;
   turnId: string;
   reason?: string | undefined;
 }
 
 /** Shape accepted when listing events for an agent turn. */
 export interface AgentListTurnEvents {
+  providerName?: string | undefined;
   turnId: string;
   afterSeq?: bigint | number | undefined;
   limit?: number | undefined;
@@ -131,11 +138,13 @@ export interface AgentListTurnEvents {
 
 /** Shape accepted when listing agent interactions. */
 export interface AgentListInteractions {
+  providerName?: string | undefined;
   turnId: string;
 }
 
 /** Shape accepted when resolving an agent interaction. */
 export interface AgentResolveInteraction {
+  providerName?: string | undefined;
   turnId: string;
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
@@ -207,6 +216,7 @@ class AgentImpl implements Agent {
   async getSession(request: AgentGetSession): Promise<AgentSession> {
     return agentSessionFromProto(
       await this.client.getSession({
+        providerName: request.providerName ?? "",
         sessionId: request.sessionId,
         context: this.context,
       }),
@@ -233,6 +243,7 @@ class AgentImpl implements Agent {
   ): Promise<AgentSession> {
     return agentSessionFromProto(
       await this.client.updateSession({
+        providerName: request.providerName ?? "",
         sessionId: request.sessionId,
         clientRef: request.clientRef ?? "",
         state: request.state ?? AgentSessionState.UNSPECIFIED,
@@ -250,6 +261,7 @@ class AgentImpl implements Agent {
     }
     return agentTurnFromProto(
       await this.client.createTurn({
+        providerName: request.providerName ?? "",
         sessionId: request.sessionId,
         model: request.model ?? "",
         messages: request.messages?.map(agentMessageToProto) ?? [],
@@ -267,6 +279,7 @@ class AgentImpl implements Agent {
   async getTurn(request: AgentGetTurn): Promise<AgentTurn> {
     return agentTurnFromProto(
       await this.client.getTurn({
+        providerName: request.providerName ?? "",
         turnId: request.turnId,
         context: this.context,
       }),
@@ -276,6 +289,7 @@ class AgentImpl implements Agent {
   /** Lists turns for an agent session. */
   async listTurns(request: AgentListTurns): Promise<AgentTurn[]> {
     const response = await this.client.listTurns({
+      providerName: request.providerName ?? "",
       sessionId: request.sessionId,
       context: this.context,
       status: request.status ?? AgentExecutionStatus.UNSPECIFIED,
@@ -289,6 +303,7 @@ class AgentImpl implements Agent {
   async cancelTurn(request: AgentCancelTurn): Promise<AgentTurn> {
     return agentTurnFromProto(
       await this.client.cancelTurn({
+        providerName: request.providerName ?? "",
         turnId: request.turnId,
         reason: request.reason ?? "",
         context: this.context,
@@ -301,6 +316,7 @@ class AgentImpl implements Agent {
     request: AgentListTurnEvents,
   ): Promise<AgentTurnEvent[]> {
     const response = await this.client.listTurnEvents({
+      providerName: request.providerName ?? "",
       turnId: request.turnId,
       afterSeq: BigInt(request.afterSeq ?? 0),
       limit: request.limit ?? 0,
@@ -314,6 +330,7 @@ class AgentImpl implements Agent {
     request: AgentListInteractions,
   ): Promise<AgentInteraction[]> {
     const response = await this.client.listInteractions({
+      providerName: request.providerName ?? "",
       turnId: request.turnId,
       context: this.context,
     });
@@ -326,6 +343,7 @@ class AgentImpl implements Agent {
   ): Promise<AgentInteraction> {
     return agentInteractionFromProto(
       await this.client.resolveInteraction({
+        providerName: request.providerName ?? "",
         turnId: request.turnId,
         interactionId: request.interactionId,
         resolution: optionalStruct(request.resolution),

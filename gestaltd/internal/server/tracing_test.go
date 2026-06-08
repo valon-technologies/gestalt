@@ -257,7 +257,7 @@ func TestTracing_AgentTurnTraceTree(t *testing.T) {
 	}
 
 	turnBody := `{"timeoutSeconds":120,"output":{"text":{}},"messages":[{"role":"user","text":"search docs"}]}`
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(turnBody))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns?provider=managed", bytes.NewBufferString(turnBody))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "agent-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {

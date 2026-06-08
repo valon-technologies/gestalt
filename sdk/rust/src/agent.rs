@@ -500,12 +500,14 @@ pub struct AgentSessionStartHookOutput {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GetAgentProviderSessionRequest {
+    pub provider_name: String,
     pub session_id: String,
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderSessionsRequest {
+    pub provider_name: String,
     pub subject: Option<Subject>,
     pub session_ids: Vec<String>,
     pub state: AgentSessionState,
@@ -520,6 +522,7 @@ pub struct ListAgentProviderSessionsResponse {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UpdateAgentProviderSessionRequest {
+    pub provider_name: String,
     pub session_id: String,
     pub client_ref: String,
     pub state: AgentSessionState,
@@ -579,6 +582,7 @@ pub struct AgentTurnDisplay {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CreateAgentProviderTurnRequest {
+    pub provider_name: String,
     pub turn_id: String,
     pub session_id: String,
     pub idempotency_key: String,
@@ -625,12 +629,14 @@ impl AgentOutput {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GetAgentProviderTurnRequest {
+    pub provider_name: String,
     pub turn_id: String,
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderTurnsRequest {
+    pub provider_name: String,
     pub session_id: String,
     pub subject: Option<Subject>,
     pub turn_ids: Vec<String>,
@@ -646,6 +652,7 @@ pub struct ListAgentProviderTurnsResponse {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CancelAgentProviderTurnRequest {
+    pub provider_name: String,
     pub turn_id: String,
     pub reason: String,
     pub subject: Option<Subject>,
@@ -666,6 +673,7 @@ pub struct AgentTurnEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderTurnEventsRequest {
+    pub provider_name: String,
     pub turn_id: String,
     pub after_seq: i64,
     pub limit: i32,
@@ -685,6 +693,7 @@ pub struct GetAgentProviderInteractionRequest {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderInteractionsRequest {
+    pub provider_name: String,
     pub turn_id: String,
     pub subject: Option<Subject>,
 }
@@ -696,6 +705,7 @@ pub struct ListAgentProviderInteractionsResponse {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ResolveAgentProviderInteractionRequest {
+    pub provider_name: String,
     pub interaction_id: String,
     pub resolution: Option<AgentJson>,
     pub subject: Option<Subject>,
@@ -1322,6 +1332,7 @@ fn create_turn_request_from_proto(
         ));
     }
     Ok(CreateAgentProviderTurnRequest {
+        provider_name: value.provider_name,
         turn_id: value.turn_id,
         session_id: value.session_id,
         idempotency_key: value.idempotency_key,
@@ -1645,6 +1656,7 @@ where
         let session = scope_request_context(
             context,
             self.provider.get_session(GetAgentProviderSessionRequest {
+                provider_name: request.provider_name,
                 session_id: request.session_id,
                 subject: agent_subject_from_proto(request.subject),
             }),
@@ -1666,6 +1678,7 @@ where
             context,
             self.provider
                 .list_sessions(ListAgentProviderSessionsRequest {
+                    provider_name: request.provider_name,
                     subject: agent_subject_from_proto(request.subject),
                     session_ids: request.session_ids,
                     state: AgentSessionState::from_i32_lossy(request.state),
@@ -1695,6 +1708,7 @@ where
             context,
             self.provider
                 .update_session(UpdateAgentProviderSessionRequest {
+                    provider_name: request.provider_name,
                     session_id: request.session_id,
                     client_ref: request.client_ref,
                     state: AgentSessionState::from_i32_lossy(request.state),
@@ -1738,6 +1752,7 @@ where
         let turn = scope_request_context(
             context,
             self.provider.get_turn(GetAgentProviderTurnRequest {
+                provider_name: request.provider_name,
                 turn_id: request.turn_id,
                 subject: agent_subject_from_proto(request.subject),
             }),
@@ -1758,6 +1773,7 @@ where
         let response = scope_request_context(
             context,
             self.provider.list_turns(ListAgentProviderTurnsRequest {
+                provider_name: request.provider_name,
                 session_id: request.session_id,
                 subject: agent_subject_from_proto(request.subject),
                 turn_ids: request.turn_ids,
@@ -1787,6 +1803,7 @@ where
         let turn = scope_request_context(
             context,
             self.provider.cancel_turn(CancelAgentProviderTurnRequest {
+                provider_name: request.provider_name,
                 turn_id: request.turn_id,
                 reason: request.reason,
                 subject: agent_subject_from_proto(request.subject),
@@ -1809,6 +1826,7 @@ where
             context,
             self.provider
                 .list_turn_events(ListAgentProviderTurnEventsRequest {
+                    provider_name: request.provider_name,
                     turn_id: request.turn_id,
                     after_seq: request.after_seq,
                     limit: request.limit,
@@ -1859,6 +1877,7 @@ where
             context,
             self.provider
                 .list_interactions(ListAgentProviderInteractionsRequest {
+                    provider_name: request.provider_name,
                     turn_id: request.turn_id,
                     subject: agent_subject_from_proto(request.subject),
                 }),
@@ -1887,6 +1906,7 @@ where
             context,
             self.provider
                 .resolve_interaction(ResolveAgentProviderInteractionRequest {
+                    provider_name: request.provider_name,
                     interaction_id: request.interaction_id,
                     resolution: json_from_struct(request.resolution),
                     subject: agent_subject_from_proto(request.subject),

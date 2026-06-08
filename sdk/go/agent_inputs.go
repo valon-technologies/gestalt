@@ -13,7 +13,8 @@ type AgentCreateSession struct {
 }
 
 type AgentGetSession struct {
-	SessionID string
+	ProviderName string
+	SessionID    string
 }
 
 type AgentListSessions struct {
@@ -24,13 +25,15 @@ type AgentListSessions struct {
 }
 
 type AgentUpdateSession struct {
-	SessionID string
-	ClientRef string
-	State     AgentSessionState
-	Metadata  any
+	ProviderName string
+	SessionID    string
+	ClientRef    string
+	State        AgentSessionState
+	Metadata     any
 }
 
 type AgentCreateTurn struct {
+	ProviderName   string
 	SessionID      string
 	Model          string
 	Messages       []AgentMessage
@@ -42,32 +45,38 @@ type AgentCreateTurn struct {
 }
 
 type AgentGetTurn struct {
-	TurnID string
+	ProviderName string
+	TurnID       string
 }
 
 type AgentListTurns struct {
-	SessionID   string
-	Status      AgentExecutionStatus
-	Limit       int32
-	SummaryOnly bool
+	ProviderName string
+	SessionID    string
+	Status       AgentExecutionStatus
+	Limit        int32
+	SummaryOnly  bool
 }
 
 type AgentCancelTurn struct {
-	TurnID string
-	Reason string
+	ProviderName string
+	TurnID       string
+	Reason       string
 }
 
 type AgentListTurnEvents struct {
-	TurnID   string
-	AfterSeq int64
-	Limit    int32
+	ProviderName string
+	TurnID       string
+	AfterSeq     int64
+	Limit        int32
 }
 
 type AgentListInteractions struct {
-	TurnID string
+	ProviderName string
+	TurnID       string
 }
 
 type AgentResolveInteraction struct {
+	ProviderName  string
 	TurnID        string
 	InteractionID string
 	Resolution    any
@@ -110,7 +119,10 @@ func newAgentCreateSessionRequest(input AgentCreateSession) (*proto.CreateAgentP
 }
 
 func newAgentGetSessionRequest(input AgentGetSession) *proto.GetAgentProviderSessionRequest {
-	return &proto.GetAgentProviderSessionRequest{SessionId: input.SessionID}
+	return &proto.GetAgentProviderSessionRequest{
+		ProviderName: input.ProviderName,
+		SessionId:    input.SessionID,
+	}
 }
 
 func newAgentListSessionsRequest(input AgentListSessions) *proto.ListAgentProviderSessionsRequest {
@@ -128,10 +140,11 @@ func newAgentUpdateSessionRequest(input AgentUpdateSession) (*proto.UpdateAgentP
 		return nil, err
 	}
 	return &proto.UpdateAgentProviderSessionRequest{
-		SessionId: input.SessionID,
-		ClientRef: input.ClientRef,
-		State:     proto.AgentSessionState(input.State),
-		Metadata:  metadata,
+		ProviderName: input.ProviderName,
+		SessionId:    input.SessionID,
+		ClientRef:    input.ClientRef,
+		State:        proto.AgentSessionState(input.State),
+		Metadata:     metadata,
 	}, nil
 }
 
@@ -156,6 +169,7 @@ func newAgentCreateTurnRequest(input AgentCreateTurn) (*proto.CreateAgentProvide
 		return nil, err
 	}
 	return &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   input.ProviderName,
 		SessionId:      input.SessionID,
 		Model:          input.Model,
 		Messages:       messages,
@@ -168,35 +182,44 @@ func newAgentCreateTurnRequest(input AgentCreateTurn) (*proto.CreateAgentProvide
 }
 
 func newAgentGetTurnRequest(input AgentGetTurn) *proto.GetAgentProviderTurnRequest {
-	return &proto.GetAgentProviderTurnRequest{TurnId: input.TurnID}
+	return &proto.GetAgentProviderTurnRequest{
+		ProviderName: input.ProviderName,
+		TurnId:       input.TurnID,
+	}
 }
 
 func newAgentListTurnsRequest(input AgentListTurns) *proto.ListAgentProviderTurnsRequest {
 	return &proto.ListAgentProviderTurnsRequest{
-		SessionId:   input.SessionID,
-		Status:      proto.AgentExecutionStatus(input.Status),
-		Limit:       input.Limit,
-		SummaryOnly: input.SummaryOnly,
+		ProviderName: input.ProviderName,
+		SessionId:    input.SessionID,
+		Status:       proto.AgentExecutionStatus(input.Status),
+		Limit:        input.Limit,
+		SummaryOnly:  input.SummaryOnly,
 	}
 }
 
 func newAgentCancelTurnRequest(input AgentCancelTurn) *proto.CancelAgentProviderTurnRequest {
 	return &proto.CancelAgentProviderTurnRequest{
-		TurnId: input.TurnID,
-		Reason: input.Reason,
+		ProviderName: input.ProviderName,
+		TurnId:       input.TurnID,
+		Reason:       input.Reason,
 	}
 }
 
 func newAgentListTurnEventsRequest(input AgentListTurnEvents) *proto.ListAgentProviderTurnEventsRequest {
 	return &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:   input.TurnID,
-		AfterSeq: input.AfterSeq,
-		Limit:    input.Limit,
+		ProviderName: input.ProviderName,
+		TurnId:       input.TurnID,
+		AfterSeq:     input.AfterSeq,
+		Limit:        input.Limit,
 	}
 }
 
 func newAgentListInteractionsRequest(input AgentListInteractions) *proto.ListAgentProviderInteractionsRequest {
-	return &proto.ListAgentProviderInteractionsRequest{TurnId: input.TurnID}
+	return &proto.ListAgentProviderInteractionsRequest{
+		ProviderName: input.ProviderName,
+		TurnId:       input.TurnID,
+	}
 }
 
 func newAgentResolveInteractionRequest(input AgentResolveInteraction) (*proto.ResolveAgentProviderInteractionRequest, error) {
@@ -205,6 +228,7 @@ func newAgentResolveInteractionRequest(input AgentResolveInteraction) (*proto.Re
 		return nil, err
 	}
 	return &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  input.ProviderName,
 		TurnId:        input.TurnID,
 		InteractionId: input.InteractionID,
 		Resolution:    resolution,

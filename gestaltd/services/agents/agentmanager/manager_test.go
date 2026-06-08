@@ -839,8 +839,9 @@ func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 		t.Fatalf("session scope listed tools = %d, want %d", len(scope.ListedTools), toolCount)
 	}
 	if _, err := manager.UpdateSession(context.Background(), p, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: session.ID,
-		State:     proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
+		ProviderName: "alpha",
+		SessionId:    session.ID,
+		State:        proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
 	}); err != nil {
 		t.Fatalf("UpdateSession archive: %v", err)
 	}
@@ -1259,6 +1260,7 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
@@ -1311,6 +1313,7 @@ func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
@@ -1498,6 +1501,7 @@ func TestAuthorizeAgentWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
@@ -1617,6 +1621,7 @@ func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		SessionId:      session.ID,
 		IdempotencyKey: "provider-owned-turn",
 		Model:          "test-model",
@@ -1722,6 +1727,7 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 	}
 	manager.turnScopes.DeleteSession("alpha", session.ID)
 	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		SessionId:      session.ID,
 		Model:          "test-model",
 		Output:         agentTextOutputProto(),
@@ -1763,8 +1769,9 @@ func TestUpdateSessionPreservesReservedLifecycleMetadata(t *testing.T) {
 	provider.sessions[session.ID].Metadata["__gestalt.lifecycle.sessionStart.results.setup"] = map[string]any{"exitCode": 0}
 
 	updated, err := manager.UpdateSession(context.Background(), p, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: session.ID,
-		Metadata:  mustProtoStruct(t, map[string]any{"caller": "updated"}),
+		ProviderName: "alpha",
+		SessionId:    session.ID,
+		Metadata:     mustProtoStruct(t, map[string]any{"caller": "updated"}),
 	})
 	if err != nil {
 		t.Fatalf("UpdateSession: %v", err)
@@ -1777,7 +1784,7 @@ func TestUpdateSessionPreservesReservedLifecycleMetadata(t *testing.T) {
 	}
 }
 
-func TestManagerGetSessionContinuesAfterProviderUnavailable(t *testing.T) {
+func TestManagerFollowUpsUseRequestedProvider(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1793,97 +1800,116 @@ func TestManagerGetSessionContinuesAfterProviderUnavailable(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{Agent: control})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-	session := &coreagent.Session{
+	alphaSession := &coreagent.Session{
 		ID:                 "session-1",
 		ProviderName:       "alpha",
 		State:              coreagent.SessionStateActive,
 		CreatedBySubjectID: principal.UserSubjectID("user-1"),
 	}
-	alpha.sessions[session.ID] = session
-	beta.getSessionErr = status.Error(codes.Unavailable, "provider restarting")
+	betaSession := &coreagent.Session{
+		ID:                 "session-1",
+		ProviderName:       "beta",
+		State:              coreagent.SessionStateActive,
+		CreatedBySubjectID: principal.UserSubjectID("user-1"),
+	}
+	alphaTurn := &coreagent.Turn{
+		ID:                 "turn-1",
+		SessionID:          alphaSession.ID,
+		ProviderName:       "alpha",
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "alpha"}},
+		CreatedBySubjectID: principal.UserSubjectID("user-1"),
+	}
+	betaTurn := &coreagent.Turn{
+		ID:                 "turn-1",
+		SessionID:          betaSession.ID,
+		ProviderName:       "beta",
+		Status:             coreagent.ExecutionStatusSucceeded,
+		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "beta"}},
+		CreatedBySubjectID: principal.UserSubjectID("user-1"),
+	}
+	alpha.sessions[alphaSession.ID] = alphaSession
+	alpha.turns[alphaTurn.ID] = alphaTurn
+	beta.sessions[betaSession.ID] = betaSession
+	beta.turns[betaTurn.ID] = betaTurn
 
-	got, err := manager.GetSession(ctx, p, &proto.GetAgentProviderSessionRequest{SessionId: session.ID})
+	gotSession, err := manager.GetSession(ctx, p, &proto.GetAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		SessionId:    alphaSession.ID,
+	})
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
-	if got.ProviderName != "alpha" || got.ID != session.ID {
-		t.Fatalf("GetSession = %+v, want alpha session", got)
+	if gotSession.ProviderName != "alpha" || gotSession.ID != alphaSession.ID {
+		t.Fatalf("GetSession = %+v, want alpha session", gotSession)
 	}
-	if beta.getSessionCalls != 1 || alpha.getSessionCalls != 1 {
-		t.Fatalf("GetSession calls = beta:%d alpha:%d, want 1 each", beta.getSessionCalls, alpha.getSessionCalls)
+	if alpha.getSessionCalls != 1 || beta.getSessionCalls != 0 {
+		t.Fatalf("GetSession calls = alpha:%d beta:%d, want only alpha", alpha.getSessionCalls, beta.getSessionCalls)
 	}
-}
 
-func TestManagerGetSessionReturnsRetainedProviderErrorAfterFanoutMiss(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	alpha := newRouteCountingAgentProvider("alpha")
-	beta := newRouteCountingAgentProvider("beta")
-	control := &routeCountingAgentControl{
-		defaultName: "alpha",
-		names:       []string{"beta", "alpha"},
-		providers: map[string]*routeCountingAgentProvider{
-			"alpha": alpha,
-			"beta":  beta,
-		},
-	}
-	manager := newTestManager(t, Config{Agent: control})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-	beta.getSessionErr = status.Error(codes.Unavailable, "provider restarting")
-
-	_, err := manager.GetSession(ctx, p, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"})
-	if status.Code(err) != codes.Unavailable {
-		t.Fatalf("GetSession error = %v, want retained unavailable", err)
-	}
-	if beta.getSessionCalls != 1 || alpha.getSessionCalls != 1 {
-		t.Fatalf("GetSession calls = beta:%d alpha:%d, want 1 each", beta.getSessionCalls, alpha.getSessionCalls)
-	}
-}
-
-func TestManagerGetTurnContinuesAfterProviderUnavailable(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	alpha := newRouteCountingAgentProvider("alpha")
-	beta := newRouteCountingAgentProvider("beta")
-	control := &routeCountingAgentControl{
-		defaultName: "alpha",
-		names:       []string{"beta", "alpha"},
-		providers: map[string]*routeCountingAgentProvider{
-			"alpha": alpha,
-			"beta":  beta,
-		},
-	}
-	manager := newTestManager(t, Config{Agent: control})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-	session := &coreagent.Session{
-		ID:                 "session-1",
-		ProviderName:       "alpha",
-		State:              coreagent.SessionStateActive,
-		CreatedBySubjectID: principal.UserSubjectID("user-1"),
-	}
-	turn := &coreagent.Turn{
-		ID:                 "turn-1",
-		SessionID:          session.ID,
-		ProviderName:       "alpha",
-		Status:             coreagent.ExecutionStatusSucceeded,
-		Output:             coreagent.TurnOutput{Text: &coreagent.TurnTextOutput{Text: "done"}},
-		CreatedBySubjectID: principal.UserSubjectID("user-1"),
-	}
-	alpha.sessions[session.ID] = session
-	alpha.turns[turn.ID] = turn
-	beta.getTurnErr = status.Error(codes.Unavailable, "provider restarting")
-
-	got, err := manager.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{TurnId: turn.ID})
+	alpha.getSessionCalls = 0
+	alpha.getTurnCalls = 0
+	gotTurn, err := manager.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{
+		ProviderName: "alpha",
+		TurnId:       alphaTurn.ID,
+	})
 	if err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
-	if got.ProviderName != "alpha" || got.ID != turn.ID {
-		t.Fatalf("GetTurn = %+v, want alpha turn", got)
+	if gotTurn.ProviderName != "alpha" || gotTurn.ID != alphaTurn.ID || gotTurn.Output.Text.Text != "alpha" {
+		t.Fatalf("GetTurn = %+v, want alpha turn", gotTurn)
 	}
-	if beta.getTurnCalls != 1 || alpha.getTurnCalls != 1 {
-		t.Fatalf("GetTurn calls = beta:%d alpha:%d, want 1 each", beta.getTurnCalls, alpha.getTurnCalls)
+	if alpha.getTurnCalls != 1 || alpha.getSessionCalls != 1 || beta.getTurnCalls != 0 || beta.getSessionCalls != 0 {
+		t.Fatalf("GetTurn calls = alpha turn:%d session:%d beta turn:%d session:%d, want only alpha", alpha.getTurnCalls, alpha.getSessionCalls, beta.getTurnCalls, beta.getSessionCalls)
+	}
+
+	created, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
+		SessionId:      alphaSession.ID,
+		Model:          "test-model",
+		Output:         agentTextOutputProto(),
+		TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if created.ProviderName != "alpha" {
+		t.Fatalf("CreateTurn provider = %q, want alpha", created.ProviderName)
+	}
+	if len(alpha.createTurnReqs) != 1 || len(beta.createTurnReqs) != 0 {
+		t.Fatalf("CreateTurn calls = alpha:%d beta:%d, want only alpha", len(alpha.createTurnReqs), len(beta.createTurnReqs))
+	}
+}
+
+func TestManagerFollowUpsRequireProviderName(t *testing.T) {
+	t.Parallel()
+
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": newRouteCountingAgentProvider("alpha"),
+			},
+		},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	if _, err := manager.GetSession(context.Background(), p, &proto.GetAgentProviderSessionRequest{SessionId: "session-1"}); !errors.Is(err, ErrAgentProviderRequired) {
+		t.Fatalf("GetSession error = %v, want ErrAgentProviderRequired", err)
+	}
+	if _, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		SessionId:      "session-1",
+		Output:         agentTextOutputProto(),
+		TimeoutSeconds: 1,
+	}); !errors.Is(err, ErrAgentProviderRequired) {
+		t.Fatalf("CreateTurn error = %v, want ErrAgentProviderRequired", err)
+	}
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"}); !errors.Is(err, ErrAgentProviderRequired) {
+		t.Fatalf("GetTurn error = %v, want ErrAgentProviderRequired", err)
+	}
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{TurnId: "turn-1"}); !errors.Is(err, ErrAgentProviderRequired) {
+		t.Fatalf("CancelTurn error = %v, want ErrAgentProviderRequired", err)
 	}
 }
 
@@ -1912,6 +1938,7 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(context.Background(), owner, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -1921,16 +1948,17 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 		t.Fatalf("CreateTurn: %v", err)
 	}
 
-	if _, err := manager.GetSession(context.Background(), viewer, &proto.GetAgentProviderSessionRequest{SessionId: session.ID}); err != nil {
+	if _, err := manager.GetSession(context.Background(), viewer, &proto.GetAgentProviderSessionRequest{ProviderName: "alpha", SessionId: session.ID}); err != nil {
 		t.Fatalf("GetSession as visible non-owner: %v", err)
 	}
-	if _, err := manager.GetTurn(context.Background(), viewer, &proto.GetAgentProviderTurnRequest{TurnId: turn.ID}); err != nil {
+	if _, err := manager.GetTurn(context.Background(), viewer, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", TurnId: turn.ID}); err != nil {
 		t.Fatalf("GetTurn as visible non-owner: %v", err)
 	}
-	if _, err := manager.UpdateSession(context.Background(), viewer, &proto.UpdateAgentProviderSessionRequest{SessionId: session.ID, ClientRef: "viewer-edit"}); !errors.Is(err, core.ErrNotFound) {
+	if _, err := manager.UpdateSession(context.Background(), viewer, &proto.UpdateAgentProviderSessionRequest{ProviderName: "alpha", SessionId: session.ID, ClientRef: "viewer-edit"}); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("UpdateSession as visible non-owner error = %v, want not found", err)
 	}
 	if _, err := manager.CreateTurn(context.Background(), viewer, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -1938,13 +1966,14 @@ func TestManagerVisibleNonOwnedSessionReadsButCannotWrite(t *testing.T) {
 	}); !errors.Is(err, ErrAgentSessionNotFound) {
 		t.Fatalf("CreateTurn as visible non-owner error = %v, want session not found", err)
 	}
-	if _, err := manager.CancelTurn(context.Background(), viewer, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "viewer-cancel"}); !errors.Is(err, core.ErrNotFound) {
+	if _, err := manager.CancelTurn(context.Background(), viewer, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", TurnId: turn.ID, Reason: "viewer-cancel"}); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("CancelTurn as visible non-owner error = %v, want not found", err)
 	}
 	if got := alpha.turns[turn.ID].Status; got != coreagent.ExecutionStatusRunning {
 		t.Fatalf("turn status after non-owner cancel = %q, want running", got)
 	}
 	if _, err := manager.ResolveInteraction(context.Background(), viewer, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  "alpha",
 		TurnId:        turn.ID,
 		InteractionId: "interaction-1",
 		Resolution:    mustProtoStruct(t, map[string]any{"value": true}),
@@ -1981,6 +2010,7 @@ func TestManagerWorkflowTurnAccessRequiresSameRunAndStepScope(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		Context:        run1,
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
@@ -1995,19 +2025,19 @@ func TestManagerWorkflowTurnAccessRequiresSameRunAndStepScope(t *testing.T) {
 		t.Fatalf("turn scope = %#v, want workflow temporal run-1/review", scope)
 	}
 
-	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{Context: run1, TurnId: turn.ID}); err != nil {
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", Context: run1, TurnId: turn.ID}); err != nil {
 		t.Fatalf("GetTurn same workflow run: %v", err)
 	}
-	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{Context: run2, TurnId: turn.ID}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", Context: run2, TurnId: turn.ID}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("GetTurn different workflow run error = %v, want authorization denied", err)
 	}
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{Context: run2, TurnId: turn.ID, Reason: "wrong run"}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", Context: run2, TurnId: turn.ID, Reason: "wrong run"}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("CancelTurn different workflow run error = %v, want authorization denied", err)
 	}
 	if got := alpha.turns[turn.ID].Status; got != coreagent.ExecutionStatusRunning {
 		t.Fatalf("turn status after denied cancel = %q, want running", got)
 	}
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{Context: run1, TurnId: turn.ID, Reason: "done"}); err != nil {
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", Context: run1, TurnId: turn.ID, Reason: "done"}); err != nil {
 		t.Fatalf("CancelTurn same workflow run: %v", err)
 	}
 }
@@ -2037,6 +2067,7 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "turn-replay",
@@ -2051,7 +2082,7 @@ func TestManagerCreateTurnAcceptsProviderOwnedIDForIdempotentReplay(t *testing.T
 	}
 
 	alpha.getTurnCalls = 0
-	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{TurnId: "provider-turn-1"}); err != nil {
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", TurnId: "provider-turn-1"}); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
 	if alpha.getTurnCalls != 1 {
@@ -2185,8 +2216,9 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 	p := &principal.Principal{SubjectID: subjectID}
 
 	_, err := manager.ListTurns(context.Background(), p, &proto.ListAgentProviderTurnsRequest{
-		SessionId:   "session-1",
-		SummaryOnly: true,
+		ProviderName: "unbounded",
+		SessionId:    "session-1",
+		SummaryOnly:  true,
 	})
 	if !errors.Is(err, ErrAgentBoundedListUnsupported) {
 		t.Fatalf("ListTurns error = %v, want ErrAgentBoundedListUnsupported", err)
@@ -2218,6 +2250,7 @@ func TestManagerListTurnsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if _, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -2229,9 +2262,10 @@ func TestManagerListTurnsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *
 	provider.capabilitiesErr = status.Error(codes.Unavailable, "sandbox is redeploying")
 
 	_, err = manager.ListTurns(ctx, p, &proto.ListAgentProviderTurnsRequest{
-		SessionId:   session.ID,
-		SummaryOnly: true,
-		Limit:       10,
+		ProviderName: "alpha",
+		SessionId:    session.ID,
+		SummaryOnly:  true,
+		Limit:        10,
 	})
 	if status.Code(err) != codes.Unavailable {
 		t.Fatalf("ListTurns error = %v, want unavailable capability error", err)
@@ -2266,6 +2300,7 @@ func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -2397,6 +2432,7 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 				t.Fatalf("CreateSession: %v", err)
 			}
 			req := tt.req
+			req.ProviderName = "alpha"
 			req.SessionId = session.ID
 			req.Model = "test-model"
 			_, err = manager.CreateTurn(context.Background(), p, req)
@@ -2464,6 +2500,7 @@ func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
 	}
 
 	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -2499,6 +2536,7 @@ func TestManagerCancelTurnRevokesTurnScopeWithoutBootstrapWrapper(t *testing.T) 
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -2511,7 +2549,7 @@ func TestManagerCancelTurnRevokesTurnScopeWithoutBootstrapWrapper(t *testing.T) 
 		t.Fatalf("scope before cancel is revoked")
 	}
 
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "done"}); err != nil {
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", TurnId: turn.ID, Reason: "done"}); err != nil {
 		t.Fatalf("CancelTurn: %v", err)
 	}
 	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID); !scope.Revoked {
@@ -2545,6 +2583,7 @@ func TestManagerCancelTurnRevokesExecutionRefScopeWithoutBootstrapWrapper(t *tes
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "alpha",
 		TimeoutSeconds: 1,
 		SessionId:      session.ID,
 		IdempotencyKey: "provider-owned-turn",
@@ -2564,7 +2603,7 @@ func TestManagerCancelTurnRevokesExecutionRefScopeWithoutBootstrapWrapper(t *tes
 		t.Fatalf("execution-ref scope before cancel is revoked")
 	}
 
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{TurnId: turn.ID, Reason: "done"}); err != nil {
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", TurnId: turn.ID, Reason: "done"}); err != nil {
 		t.Fatalf("CancelTurn: %v", err)
 	}
 	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ExecutionRef); !scope.Revoked {

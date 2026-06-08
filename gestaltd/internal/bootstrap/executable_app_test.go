@@ -1063,6 +1063,7 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 	}
 
 	turn, err := client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   "managed",
 		Context:        reqCtx,
 		TimeoutSeconds: 1,
 		SessionId:      sessionID,
@@ -1088,8 +1089,9 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 	}
 
 	interactions, err := client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
-		Context: reqCtx,
-		TurnId:  turnID,
+		ProviderName: "managed",
+		Context:      reqCtx,
+		TurnId:       turnID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list agent interactions: %w", err)
@@ -1109,6 +1111,7 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 		return nil, fmt.Errorf("build interaction resolution: %w", err)
 	}
 	resolved, err := client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  "managed",
 		Context:       reqCtx,
 		TurnId:        turnID,
 		InteractionId: interactionID,
@@ -1119,18 +1122,20 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 	}
 
 	fetched, err := client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
-		Context: reqCtx,
-		TurnId:  turnID,
+		ProviderName: "managed",
+		Context:      reqCtx,
+		TurnId:       turnID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get agent turn: %w", err)
 	}
 
 	events, err := client.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
-		Context:  reqCtx,
-		TurnId:   turnID,
-		AfterSeq: 0,
-		Limit:    10,
+		ProviderName: "managed",
+		Context:      reqCtx,
+		TurnId:       turnID,
+		AfterSeq:     0,
+		Limit:        10,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list agent turn events: %w", err)

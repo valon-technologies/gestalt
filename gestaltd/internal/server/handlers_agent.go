@@ -510,8 +510,12 @@ func (s *Server) getAgentSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	sessionID := chi.URLParam(r, "sessionID")
-	session, err := s.agentRuns.GetSession(r.Context(), p, &proto.GetAgentProviderSessionRequest{SessionId: strings.TrimSpace(sessionID)})
+	session, err := s.agentRuns.GetSession(r.Context(), p, &proto.GetAgentProviderSessionRequest{
+		ProviderName: providerName,
+		SessionId:    strings.TrimSpace(sessionID),
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
 		return
@@ -524,6 +528,7 @@ func (s *Server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	sessionID := chi.URLParam(r, "sessionID")
 	var req agentSessionUpdateRequest
 	if r.Body != nil {
@@ -544,10 +549,11 @@ func (s *Server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session, err := s.agentRuns.UpdateSession(r.Context(), p, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: strings.TrimSpace(sessionID),
-		ClientRef: strings.TrimSpace(req.ClientRef),
-		State:     state,
-		Metadata:  metadata,
+		ProviderName: providerName,
+		SessionId:    strings.TrimSpace(sessionID),
+		ClientRef:    strings.TrimSpace(req.ClientRef),
+		State:        state,
+		Metadata:     metadata,
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
@@ -561,6 +567,7 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	sessionID := chi.URLParam(r, "sessionID")
 	var req agentTurnCreateRequest
 	var presence agentTurnCreateRequestPresence
@@ -603,6 +610,7 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turn, err := s.agentRuns.CreateTurn(r.Context(), p, &proto.CreateAgentProviderTurnRequest{
+		ProviderName:   providerName,
 		IdempotencyKey: idempotencyKey,
 		Model:          strings.TrimSpace(req.Model),
 		SessionId:      strings.TrimSpace(sessionID),
@@ -674,6 +682,7 @@ func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	sessionID := chi.URLParam(r, "sessionID")
 	statusFilter, err := agentExecutionStatusFromRequest(r.URL.Query().Get("status"))
 	if err != nil {
@@ -685,10 +694,11 @@ func (s *Server) listAgentTurns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turns, err := s.agentRuns.ListTurns(r.Context(), p, &proto.ListAgentProviderTurnsRequest{
-		SessionId:   sessionID,
-		Status:      statusFilter,
-		Limit:       int32(limit),
-		SummaryOnly: summaryOnly,
+		ProviderName: providerName,
+		SessionId:    sessionID,
+		Status:       statusFilter,
+		Limit:        int32(limit),
+		SummaryOnly:  summaryOnly,
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "session", sessionID, nil, err)
@@ -709,8 +719,12 @@ func (s *Server) getAgentTurn(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	turnID := chi.URLParam(r, "turnID")
-	turn, err := s.agentRuns.GetTurn(r.Context(), p, &proto.GetAgentProviderTurnRequest{TurnId: strings.TrimSpace(turnID)})
+	turn, err := s.agentRuns.GetTurn(r.Context(), p, &proto.GetAgentProviderTurnRequest{
+		ProviderName: providerName,
+		TurnId:       strings.TrimSpace(turnID),
+	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
 		return
@@ -723,6 +737,7 @@ func (s *Server) cancelAgentTurn(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	turnID := chi.URLParam(r, "turnID")
 	var req agentTurnCancelRequest
 	if r.Body != nil {
@@ -733,8 +748,9 @@ func (s *Server) cancelAgentTurn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	turn, err := s.agentRuns.CancelTurn(r.Context(), p, &proto.CancelAgentProviderTurnRequest{
-		TurnId: strings.TrimSpace(turnID),
-		Reason: req.Reason,
+		ProviderName: providerName,
+		TurnId:       strings.TrimSpace(turnID),
+		Reason:       req.Reason,
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
@@ -748,15 +764,17 @@ func (s *Server) listAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	turnID := chi.URLParam(r, "turnID")
 	afterSeq, limit, ok := parseAgentTurnEventQuery(w, r)
 	if !ok {
 		return
 	}
 	events, err := s.agentRuns.ListTurnEvents(r.Context(), p, &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:   strings.TrimSpace(turnID),
-		AfterSeq: afterSeq,
-		Limit:    int32(limit),
+		ProviderName: providerName,
+		TurnId:       strings.TrimSpace(turnID),
+		AfterSeq:     afterSeq,
+		Limit:        int32(limit),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
@@ -774,6 +792,7 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	turnID := chi.URLParam(r, "turnID")
 	afterSeq, limit, ok := parseAgentTurnEventQuery(w, r)
 	if !ok {
@@ -785,9 +804,10 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:   strings.TrimSpace(turnID),
-		AfterSeq: afterSeq,
-		Limit:    int32(limit),
+		ProviderName: providerName,
+		TurnId:       strings.TrimSpace(turnID),
+		AfterSeq:     afterSeq,
+		Limit:        int32(limit),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
@@ -876,9 +896,10 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		if pageFull {
 			events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
-				TurnId:   strings.TrimSpace(turnID),
-				AfterSeq: afterSeq,
-				Limit:    int32(limit),
+				ProviderName: providerName,
+				TurnId:       strings.TrimSpace(turnID),
+				AfterSeq:     afterSeq,
+				Limit:        int32(limit),
 			})
 			if err != nil {
 				writeStreamError(err)
@@ -887,16 +908,17 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 			pageFull = writeEvents(events)
 			continue
 		}
-		done, err := s.agentTurnStreamDone(ctx, p, turnID, until)
+		done, err := s.agentTurnStreamDone(ctx, p, providerName, turnID, until)
 		if err != nil {
 			writeStreamError(err)
 			return
 		}
 		if done {
 			events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
-				TurnId:   strings.TrimSpace(turnID),
-				AfterSeq: afterSeq,
-				Limit:    int32(limit),
+				ProviderName: providerName,
+				TurnId:       strings.TrimSpace(turnID),
+				AfterSeq:     afterSeq,
+				Limit:        int32(limit),
 			})
 			if err != nil {
 				writeStreamError(err)
@@ -916,9 +938,10 @@ func (s *Server) streamAgentTurnEvents(w http.ResponseWriter, r *http.Request) {
 				writeHeartbeat("keepalive")
 			}
 			events, err := s.agentRuns.ListTurnEvents(ctx, p, &proto.ListAgentProviderTurnEventsRequest{
-				TurnId:   strings.TrimSpace(turnID),
-				AfterSeq: afterSeq,
-				Limit:    int32(limit),
+				ProviderName: providerName,
+				TurnId:       strings.TrimSpace(turnID),
+				AfterSeq:     afterSeq,
+				Limit:        int32(limit),
 			})
 			if err != nil {
 				writeStreamError(err)
@@ -947,9 +970,11 @@ func (s *Server) listAgentTurnInteractions(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	turnID := chi.URLParam(r, "turnID")
 	interactions, err := s.agentRuns.ListInteractions(r.Context(), p, &proto.ListAgentProviderInteractionsRequest{
-		TurnId: strings.TrimSpace(turnID),
+		ProviderName: providerName,
+		TurnId:       strings.TrimSpace(turnID),
 	})
 	if err != nil {
 		s.writeAgentManagerError(w, r, "turn", turnID, nil, err)
@@ -967,6 +992,7 @@ func (s *Server) resolveAgentInteraction(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	providerName := strings.TrimSpace(r.URL.Query().Get("provider"))
 	turnID := chi.URLParam(r, "turnID")
 	interactionID := chi.URLParam(r, "interactionID")
 	var req agentInteractionResolveRequest
@@ -983,6 +1009,7 @@ func (s *Server) resolveAgentInteraction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	interaction, err := s.agentRuns.ResolveInteraction(r.Context(), p, &proto.ResolveAgentProviderInteractionRequest{
+		ProviderName:  providerName,
 		TurnId:        strings.TrimSpace(turnID),
 		InteractionId: strings.TrimSpace(interactionID),
 		Resolution:    resolution,
@@ -1102,8 +1129,11 @@ func parseAgentTurnEventStreamUntil(w http.ResponseWriter, r *http.Request) (str
 	}
 }
 
-func (s *Server) agentTurnStreamDone(ctx context.Context, p *principal.Principal, turnID string, until string) (bool, error) {
-	turn, err := s.agentRuns.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{TurnId: strings.TrimSpace(turnID)})
+func (s *Server) agentTurnStreamDone(ctx context.Context, p *principal.Principal, providerName, turnID string, until string) (bool, error) {
+	turn, err := s.agentRuns.GetTurn(ctx, p, &proto.GetAgentProviderTurnRequest{
+		ProviderName: strings.TrimSpace(providerName),
+		TurnId:       strings.TrimSpace(turnID),
+	})
 	if err != nil {
 		return false, err
 	}

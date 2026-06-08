@@ -265,6 +265,7 @@ export interface AgentPreparedWorkspace {
 }
 
 export interface CreateAgentProviderSessionRequest {
+  providerName?: string | undefined;
   sessionId: string;
   idempotencyKey: string;
   model: string;
@@ -279,6 +280,7 @@ export interface CreateAgentProviderSessionRequest {
 }
 
 export interface GetAgentProviderSessionRequest {
+  providerName?: string | undefined;
   sessionId: string;
   subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
@@ -299,6 +301,7 @@ export interface ListAgentProviderSessionsResponse {
 }
 
 export interface UpdateAgentProviderSessionRequest {
+  providerName?: string | undefined;
   sessionId: string;
   clientRef: string;
   state: AgentSessionState;
@@ -348,6 +351,7 @@ export interface AgentTurnDisplay {
 }
 
 export interface CreateAgentProviderTurnRequest {
+  providerName?: string | undefined;
   turnId: string;
   sessionId: string;
   idempotencyKey: string;
@@ -376,12 +380,14 @@ export type AgentOutput =
   | { text?: undefined; structured: AgentStructuredOutput };
 
 export interface GetAgentProviderTurnRequest {
+  providerName?: string | undefined;
   turnId: string;
   subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
 }
 
 export interface ListAgentProviderTurnsRequest {
+  providerName?: string | undefined;
   sessionId: string;
   subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
@@ -396,6 +402,7 @@ export interface ListAgentProviderTurnsResponse {
 }
 
 export interface CancelAgentProviderTurnRequest {
+  providerName?: string | undefined;
   turnId: string;
   reason: string;
   subject?: Subject | undefined;
@@ -415,6 +422,7 @@ export interface AgentTurnEvent {
 }
 
 export interface ListAgentProviderTurnEventsRequest {
+  providerName?: string | undefined;
   turnId: string;
   afterSeq: bigint;
   limit: number;
@@ -447,6 +455,7 @@ export interface GetAgentProviderInteractionRequest {
 }
 
 export interface ListAgentProviderInteractionsRequest {
+  providerName?: string | undefined;
   turnId: string;
   subject?: Subject | undefined;
   context?: ProtoRequestContext | undefined;
@@ -457,6 +466,7 @@ export interface ListAgentProviderInteractionsResponse {
 }
 
 export interface ResolveAgentProviderInteractionRequest {
+  providerName?: string | undefined;
   turnId?: string | undefined;
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
@@ -704,6 +714,7 @@ function createAgentProviderSessionRequestFromProto(
   request: ProtoCreateAgentProviderSessionRequest,
 ): CreateAgentProviderSessionRequest {
   return {
+    providerName: request.providerName,
     sessionId: request.sessionId,
     idempotencyKey: request.idempotencyKey,
     model: request.model,
@@ -738,6 +749,7 @@ function getAgentProviderSessionRequestFromProto(
   request: ProtoGetAgentProviderSessionRequest,
 ): GetAgentProviderSessionRequest {
   return {
+    providerName: request.providerName,
     sessionId: request.sessionId,
     subject: agentRequestSubjectFromProto(request),
     context: request.context,
@@ -790,6 +802,7 @@ function createAgentProviderTurnRequestFromProto(
     );
   }
   return {
+    providerName: request.providerName,
     turnId: request.turnId,
     sessionId: request.sessionId,
     idempotencyKey: request.idempotencyKey,
@@ -811,6 +824,7 @@ function getAgentProviderTurnRequestFromProto(
   request: ProtoGetAgentProviderTurnRequest,
 ): GetAgentProviderTurnRequest {
   return {
+    providerName: request.providerName,
     turnId: request.turnId,
     subject: agentRequestSubjectFromProto(request),
     context: request.context,
@@ -821,6 +835,7 @@ function listAgentProviderTurnsRequestFromProto(
   request: ProtoListAgentProviderTurnsRequest,
 ): ListAgentProviderTurnsRequest {
   return {
+    providerName: request.providerName,
     sessionId: request.sessionId,
     subject: agentRequestSubjectFromProto(request),
     context: request.context,
@@ -835,6 +850,7 @@ function cancelAgentProviderTurnRequestFromProto(
   request: ProtoCancelAgentProviderTurnRequest,
 ): CancelAgentProviderTurnRequest {
   return {
+    providerName: request.providerName,
     turnId: request.turnId,
     reason: request.reason,
     subject: agentRequestSubjectFromProto(request),
@@ -846,6 +862,7 @@ function listAgentProviderTurnEventsRequestFromProto(
   request: ProtoListAgentProviderTurnEventsRequest,
 ): ListAgentProviderTurnEventsRequest {
   return {
+    providerName: request.providerName,
     turnId: request.turnId,
     afterSeq: request.afterSeq,
     limit: request.limit,
@@ -868,6 +885,7 @@ function listAgentProviderInteractionsRequestFromProto(
   request: ProtoListAgentProviderInteractionsRequest,
 ): ListAgentProviderInteractionsRequest {
   return {
+    providerName: request.providerName,
     turnId: request.turnId,
     subject: agentRequestSubjectFromProto(request),
     context: request.context,
@@ -878,6 +896,7 @@ function resolveAgentProviderInteractionRequestFromProto(
   request: ProtoResolveAgentProviderInteractionRequest,
 ): ResolveAgentProviderInteractionRequest {
   return {
+    providerName: request.providerName,
     turnId: request.turnId,
     interactionId: request.interactionId,
     resolution: optionalObjectFromStruct(request.resolution),

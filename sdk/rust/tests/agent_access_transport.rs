@@ -575,6 +575,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("create session");
     let fetched_session = manager
         .get_session(AgentGetSession {
+            provider_name: "openai".to_string(),
             session_id: "session-managed-1".to_string(),
         })
         .await
@@ -588,6 +589,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("list sessions");
     let updated_session = manager
         .update_session(AgentUpdateSession {
+            provider_name: "openai".to_string(),
             session_id: "session-managed-1".to_string(),
             client_ref: "cli-session-2".to_string(),
             state: AgentSessionState::Archived,
@@ -597,6 +599,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("update session");
     let created_turn = manager
         .create_turn(AgentCreateTurn {
+            provider_name: "openai".to_string(),
             session_id: "session-managed-1".to_string(),
             model: "gpt-5.1".to_string(),
             messages: vec![AgentMessage {
@@ -619,12 +622,14 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("create turn");
     let fetched_turn = manager
         .get_turn(AgentGetTurn {
+            provider_name: "openai".to_string(),
             turn_id: "turn-managed-1".to_string(),
         })
         .await
         .expect("get turn");
     let listed_turns = manager
         .list_turns(AgentListTurns {
+            provider_name: "openai".to_string(),
             session_id: "session-managed-1".to_string(),
             ..Default::default()
         })
@@ -632,6 +637,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("list turns");
     let canceled_turn = manager
         .cancel_turn(AgentCancelTurn {
+            provider_name: "openai".to_string(),
             turn_id: "turn-managed-1".to_string(),
             reason: "user canceled".to_string(),
         })
@@ -639,6 +645,7 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("cancel turn");
     let turn_events = manager
         .list_turn_events(AgentListTurnEvents {
+            provider_name: "openai".to_string(),
             turn_id: "turn-managed-1".to_string(),
             after_seq: 0,
             limit: 10,
@@ -647,12 +654,14 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
         .expect("list turn events");
     let interactions = manager
         .list_interactions(AgentListInteractions {
+            provider_name: "openai".to_string(),
             turn_id: "turn-managed-1".to_string(),
         })
         .await
         .expect("list interactions");
     let resolved = manager
         .resolve_interaction(AgentResolveInteraction {
+            provider_name: "openai".to_string(),
             turn_id: "turn-managed-1".to_string(),
             interaction_id: "interaction-1".to_string(),
             resolution: Some(serde_json::json!({
@@ -825,6 +834,7 @@ async fn agent_create_turn_accepts_native_values() {
     .expect("connect agent");
     let created_turn = manager
         .create_turn(AgentCreateTurn {
+            provider_name: "openai".to_string(),
             session_id: "session-managed-1".to_string(),
             model: "gpt-5.1".to_string(),
             messages: vec![AgentMessage {
@@ -922,6 +932,7 @@ async fn request_agent_uses_embedded_context() {
             .expect("request agent");
     let response = manager
         .get_session(AgentGetSession {
+            provider_name: "openai".to_string(),
             session_id: "session-managed-1".to_string(),
         })
         .await

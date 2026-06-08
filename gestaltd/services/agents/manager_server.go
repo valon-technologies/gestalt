@@ -155,7 +155,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 	if sessionID == "" {
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
-	if err := s.authorizeWorkflowAgentRequest(reqCtx, "", req.GetModel()); err != nil {
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), req.GetModel()); err != nil {
 		return nil, err
 	}
 	turn, err := s.manager.CreateTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
@@ -177,7 +177,7 @@ func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProvide
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	if err := s.authorizeWorkflowAgentRequest(reqCtx, "", ""); err != nil {
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), ""); err != nil {
 		return nil, err
 	}
 	turn, err := s.manager.GetTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)
@@ -232,7 +232,7 @@ func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentP
 	if turnID == "" {
 		return nil, status.Error(codes.InvalidArgument, "turn_id is required")
 	}
-	if err := s.authorizeWorkflowAgentRequest(reqCtx, "", ""); err != nil {
+	if err := s.authorizeWorkflowAgentRequest(reqCtx, req.GetProviderName(), ""); err != nil {
 		return nil, err
 	}
 	turn, err := s.manager.CancelTurn(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), req)

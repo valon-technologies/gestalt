@@ -59,6 +59,7 @@ pub struct AgentCreateSession {
 /// Input for fetching an agent session.
 #[derive(Clone, Debug, Default)]
 pub struct AgentGetSession {
+    pub provider_name: String,
     pub session_id: String,
 }
 
@@ -85,6 +86,7 @@ impl Default for AgentListSessions {
 /// Input for updating an agent session.
 #[derive(Clone, Debug)]
 pub struct AgentUpdateSession {
+    pub provider_name: String,
     pub session_id: String,
     pub client_ref: String,
     pub state: AgentSessionState,
@@ -94,6 +96,7 @@ pub struct AgentUpdateSession {
 impl Default for AgentUpdateSession {
     fn default() -> Self {
         Self {
+            provider_name: String::new(),
             session_id: String::new(),
             client_ref: String::new(),
             state: AgentSessionState::Unspecified,
@@ -105,6 +108,7 @@ impl Default for AgentUpdateSession {
 /// Input for creating an agent turn.
 #[derive(Clone, Debug)]
 pub struct AgentCreateTurn {
+    pub provider_name: String,
     pub session_id: String,
     pub model: String,
     pub messages: Vec<AgentMessage>,
@@ -118,12 +122,14 @@ pub struct AgentCreateTurn {
 /// Input for fetching an agent turn.
 #[derive(Clone, Debug, Default)]
 pub struct AgentGetTurn {
+    pub provider_name: String,
     pub turn_id: String,
 }
 
 /// Input for listing agent turns.
 #[derive(Clone, Debug)]
 pub struct AgentListTurns {
+    pub provider_name: String,
     pub session_id: String,
     pub status: AgentExecutionStatus,
     pub limit: i32,
@@ -133,6 +139,7 @@ pub struct AgentListTurns {
 impl Default for AgentListTurns {
     fn default() -> Self {
         Self {
+            provider_name: String::new(),
             session_id: String::new(),
             status: AgentExecutionStatus::Unspecified,
             limit: 0,
@@ -144,6 +151,7 @@ impl Default for AgentListTurns {
 /// Input for canceling an agent turn.
 #[derive(Clone, Debug, Default)]
 pub struct AgentCancelTurn {
+    pub provider_name: String,
     pub turn_id: String,
     pub reason: String,
 }
@@ -151,6 +159,7 @@ pub struct AgentCancelTurn {
 /// Input for listing agent turn events.
 #[derive(Clone, Debug, Default)]
 pub struct AgentListTurnEvents {
+    pub provider_name: String,
     pub turn_id: String,
     pub after_seq: i64,
     pub limit: i32,
@@ -159,12 +168,14 @@ pub struct AgentListTurnEvents {
 /// Input for listing agent interactions.
 #[derive(Clone, Debug, Default)]
 pub struct AgentListInteractions {
+    pub provider_name: String,
     pub turn_id: String,
 }
 
 /// Input for resolving an agent interaction.
 #[derive(Clone, Debug, Default)]
 pub struct AgentResolveInteraction {
+    pub provider_name: String,
     pub turn_id: String,
     pub interaction_id: String,
     pub resolution: Option<serde_json::Value>,
@@ -257,6 +268,7 @@ pub(crate) fn new_agent_get_session_request(
     input: AgentGetSession,
 ) -> pb::GetAgentProviderSessionRequest {
     pb::GetAgentProviderSessionRequest {
+        provider_name: input.provider_name,
         session_id: input.session_id,
         ..Default::default()
     }
@@ -278,6 +290,7 @@ pub(crate) fn new_agent_update_session_request(
     input: AgentUpdateSession,
 ) -> crate::Result<pb::UpdateAgentProviderSessionRequest> {
     Ok(pb::UpdateAgentProviderSessionRequest {
+        provider_name: input.provider_name,
         session_id: input.session_id,
         client_ref: input.client_ref,
         state: input.state.as_i32(),
@@ -295,6 +308,7 @@ pub(crate) fn new_agent_create_turn_request(
         ));
     }
     Ok(pb::CreateAgentProviderTurnRequest {
+        provider_name: input.provider_name,
         session_id: input.session_id,
         model: input.model,
         messages: new_agent_messages(input.messages)?,
@@ -312,6 +326,7 @@ pub(crate) fn new_agent_create_turn_request(
 
 pub(crate) fn new_agent_get_turn_request(input: AgentGetTurn) -> pb::GetAgentProviderTurnRequest {
     pb::GetAgentProviderTurnRequest {
+        provider_name: input.provider_name,
         turn_id: input.turn_id,
         ..Default::default()
     }
@@ -321,6 +336,7 @@ pub(crate) fn new_agent_list_turns_request(
     input: AgentListTurns,
 ) -> pb::ListAgentProviderTurnsRequest {
     pb::ListAgentProviderTurnsRequest {
+        provider_name: input.provider_name,
         session_id: input.session_id,
         status: input.status.as_i32(),
         limit: input.limit,
@@ -333,6 +349,7 @@ pub(crate) fn new_agent_cancel_turn_request(
     input: AgentCancelTurn,
 ) -> pb::CancelAgentProviderTurnRequest {
     pb::CancelAgentProviderTurnRequest {
+        provider_name: input.provider_name,
         turn_id: input.turn_id,
         reason: input.reason,
         ..Default::default()
@@ -343,6 +360,7 @@ pub(crate) fn new_agent_list_turn_events_request(
     input: AgentListTurnEvents,
 ) -> pb::ListAgentProviderTurnEventsRequest {
     pb::ListAgentProviderTurnEventsRequest {
+        provider_name: input.provider_name,
         turn_id: input.turn_id,
         after_seq: input.after_seq,
         limit: input.limit,
@@ -354,6 +372,7 @@ pub(crate) fn new_agent_list_interactions_request(
     input: AgentListInteractions,
 ) -> pb::ListAgentProviderInteractionsRequest {
     pb::ListAgentProviderInteractionsRequest {
+        provider_name: input.provider_name,
         turn_id: input.turn_id,
         ..Default::default()
     }
@@ -363,6 +382,7 @@ pub(crate) fn new_agent_resolve_interaction_request(
     input: AgentResolveInteraction,
 ) -> crate::Result<pb::ResolveAgentProviderInteractionRequest> {
     Ok(pb::ResolveAgentProviderInteractionRequest {
+        provider_name: input.provider_name,
         turn_id: input.turn_id,
         interaction_id: input.interaction_id,
         resolution: input

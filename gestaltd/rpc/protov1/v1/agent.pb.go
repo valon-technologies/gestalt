@@ -1814,6 +1814,7 @@ type GetAgentProviderSessionRequest struct {
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,6,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1867,6 +1868,13 @@ func (x *GetAgentProviderSessionRequest) GetContext() *RequestContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *GetAgentProviderSessionRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
 }
 
 type ListAgentProviderSessionsRequest struct {
@@ -2017,6 +2025,7 @@ type UpdateAgentProviderSessionRequest struct {
 	Metadata      *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
 	Subject       *SubjectContext        `protobuf:"bytes,5,opt,name=subject,proto3" json:"subject,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,8,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,9,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2091,6 +2100,13 @@ func (x *UpdateAgentProviderSessionRequest) GetContext() *RequestContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *UpdateAgentProviderSessionRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
 }
 
 type AgentTurn struct {
@@ -2518,6 +2534,7 @@ type CreateAgentProviderTurnRequest struct {
 	TimeoutSeconds int32           `protobuf:"varint,18,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
 	Output         *AgentOutput    `protobuf:"bytes,21,opt,name=output,proto3" json:"output,omitempty"`
 	Context        *RequestContext `protobuf:"bytes,23,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName   string          `protobuf:"bytes,24,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2648,6 +2665,13 @@ func (x *CreateAgentProviderTurnRequest) GetContext() *RequestContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *CreateAgentProviderTurnRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
 }
 
 type AgentTextOutput struct {
@@ -2817,6 +2841,7 @@ type GetAgentProviderTurnRequest struct {
 	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
 	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,6,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2872,6 +2897,13 @@ func (x *GetAgentProviderTurnRequest) GetContext() *RequestContext {
 	return nil
 }
 
+func (x *GetAgentProviderTurnRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
 type ListAgentProviderTurnsRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -2886,6 +2918,7 @@ type ListAgentProviderTurnsRequest struct {
 	// direct lookup.
 	SummaryOnly   bool            `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
 	Context       *RequestContext `protobuf:"bytes,9,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string          `protobuf:"bytes,10,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2969,6 +3002,13 @@ func (x *ListAgentProviderTurnsRequest) GetContext() *RequestContext {
 	return nil
 }
 
+func (x *ListAgentProviderTurnsRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
 type ListAgentProviderTurnsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Turns         []*AgentTurn           `protobuf:"bytes,1,rep,name=turns,proto3" json:"turns,omitempty"`
@@ -3019,6 +3059,7 @@ type CancelAgentProviderTurnRequest struct {
 	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 	Subject       *SubjectContext        `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,6,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,7,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3079,6 +3120,13 @@ func (x *CancelAgentProviderTurnRequest) GetContext() *RequestContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *CancelAgentProviderTurnRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
 }
 
 type AgentTurnEvent struct {
@@ -3196,6 +3244,7 @@ type ListAgentProviderTurnEventsRequest struct {
 	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	Subject       *SubjectContext        `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,7,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,8,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3263,6 +3312,13 @@ func (x *ListAgentProviderTurnEventsRequest) GetContext() *RequestContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *ListAgentProviderTurnEventsRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
 }
 
 type ListAgentProviderTurnEventsResponse struct {
@@ -3374,6 +3430,7 @@ type ListAgentProviderInteractionsRequest struct {
 	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
 	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,6,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3429,6 +3486,13 @@ func (x *ListAgentProviderInteractionsRequest) GetContext() *RequestContext {
 	return nil
 }
 
+func (x *ListAgentProviderInteractionsRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
 type ListAgentProviderInteractionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Interactions  []*AgentInteraction    `protobuf:"bytes,1,rep,name=interactions,proto3" json:"interactions,omitempty"`
@@ -3480,6 +3544,7 @@ type ResolveAgentProviderInteractionRequest struct {
 	Subject       *SubjectContext        `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
 	TurnId        string                 `protobuf:"bytes,5,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
 	Context       *RequestContext        `protobuf:"bytes,7,opt,name=context,proto3" json:"context,omitempty"`
+	ProviderName  string                 `protobuf:"bytes,8,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3547,6 +3612,13 @@ func (x *ResolveAgentProviderInteractionRequest) GetContext() *RequestContext {
 		return x.Context
 	}
 	return nil
+}
+
+func (x *ResolveAgentProviderInteractionRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
 }
 
 type ListedAgentTool struct {
@@ -3800,12 +3872,13 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
 	"\x1bAgentSessionStartHookOutput\x12-\n" +
 	"\x12additional_context\x18\x01 \x01(\bR\x11additionalContext\x12\x1a\n" +
-	"\bmetadata\x18\x02 \x01(\bR\bmetadata\"\xd3\x01\n" +
+	"\bmetadata\x18\x02 \x01(\bR\bmetadata\"\xf8\x01\n" +
 	"\x1eGetAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12=\n" +
 	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bworkflow\"\xf3\x02\n" +
+	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\x06 \x01(\tR\fproviderNameJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bworkflow\"\xf3\x02\n" +
 	" ListAgentProviderSessionsRequest\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12\x1f\n" +
 	"\vsession_ids\x18\x02 \x03(\tR\n" +
@@ -3816,7 +3889,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\rprovider_name\x18\x06 \x01(\tR\fproviderName\x12=\n" +
 	"\acontext\x18\t \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\bworkflow\"b\n" +
 	"!ListAgentProviderSessionsResponse\x12=\n" +
-	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\xe8\x02\n" +
+	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\x8d\x03\n" +
 	"!UpdateAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
@@ -3825,7 +3898,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x05state\x18\x03 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x123\n" +
 	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12=\n" +
 	"\asubject\x18\x05 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\bworkflow\"\xc7\x05\n" +
+	"\acontext\x18\b \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\t \x01(\tR\fproviderNameJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\bworkflow\"\xc7\x05\n" +
 	"\tAgentTurn\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3867,7 +3941,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06action\x18\n" +
 	" \x01(\tR\x06action\x12\x16\n" +
 	"\x06format\x18\v \x01(\tR\x06format\x12\x1a\n" +
-	"\blanguage\x18\f \x01(\tR\blanguage\"\xca\x06\n" +
+	"\blanguage\x18\f \x01(\tR\blanguage\"\xef\x06\n" +
 	"\x1eCreateAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1d\n" +
 	"\n" +
@@ -3884,7 +3958,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\rmodel_options\x18\x10 \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12'\n" +
 	"\x0ftimeout_seconds\x18\x12 \x01(\x05R\x0etimeoutSeconds\x128\n" +
 	"\x06output\x18\x15 \x01(\v2 .gestalt.provider.v1.AgentOutputR\x06output\x12=\n" +
-	"\acontext\x18\x17 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\t\x10\n" +
+	"\acontext\x18\x17 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\x18 \x01(\tR\fproviderNameJ\x04\b\t\x10\n" +
 	"J\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10J\x04\b\x11\x10\x12J\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b\x16\x10\x17R\x10provider_optionsR\ttool_refsR\vtool_sourceR\n" +
 	"tool_grantR\trun_grantR\rtool_refs_setR\bworkflow\"\x11\n" +
 	"\x0fAgentTextOutput\"H\n" +
@@ -3895,11 +3970,12 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\n" +
 	"structured\x18\x02 \x01(\v2*.gestalt.provider.v1.AgentStructuredOutputH\x00R\n" +
 	"structuredB\x06\n" +
-	"\x04kind\"\xca\x01\n" +
+	"\x04kind\"\xef\x01\n" +
 	"\x1bGetAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12=\n" +
 	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bworkflow\"\xe9\x02\n" +
+	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\x06 \x01(\tR\fproviderNameJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bworkflow\"\x8e\x03\n" +
 	"\x1dListAgentProviderTurnsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12=\n" +
@@ -3908,14 +3984,17 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06status\x18\x04 \x01(\x0e2).gestalt.provider.v1.AgentExecutionStatusR\x06status\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12!\n" +
 	"\fsummary_only\x18\x06 \x01(\bR\vsummaryOnly\x12=\n" +
-	"\acontext\x18\t \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\bworkflow\"V\n" +
+	"\acontext\x18\t \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\n" +
+	" \x01(\tR\fproviderNameJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\bworkflow\"V\n" +
 	"\x1eListAgentProviderTurnsResponse\x124\n" +
-	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"\xe5\x01\n" +
+	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"\x8a\x02\n" +
 	"\x1eCancelAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12=\n" +
 	"\asubject\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\bworkflow\"\xc0\x02\n" +
+	"\acontext\x18\x06 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\a \x01(\tR\fproviderNameJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\bworkflow\"\xc0\x02\n" +
 	"\x0eAgentTurnEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12\x10\n" +
@@ -3928,25 +4007,27 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x04data\x18\a \x01(\v2\x17.google.protobuf.StructR\x04data\x129\n" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12?\n" +
-	"\adisplay\x18\t \x01(\v2%.gestalt.provider.v1.AgentTurnDisplayR\adisplay\"\x84\x02\n" +
+	"\adisplay\x18\t \x01(\v2%.gestalt.provider.v1.AgentTurnDisplayR\adisplay\"\xa9\x02\n" +
 	"\"ListAgentProviderTurnEventsRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1b\n" +
 	"\tafter_seq\x18\x02 \x01(\x03R\bafterSeq\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12=\n" +
 	"\asubject\x18\x04 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\a \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\bworkflow\"b\n" +
+	"\acontext\x18\a \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\b \x01(\tR\fproviderNameJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\bworkflow\"b\n" +
 	"#ListAgentProviderTurnEventsResponse\x12;\n" +
 	"\x06events\x18\x01 \x03(\v2#.gestalt.provider.v1.AgentTurnEventR\x06events\"\xcf\x01\n" +
 	"\"GetAgentProviderInteractionRequest\x12%\n" +
 	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\x12=\n" +
 	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04\"\xd3\x01\n" +
+	"\acontext\x18\x04 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04\"\xf8\x01\n" +
 	"$ListAgentProviderInteractionsRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12=\n" +
 	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12=\n" +
-	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bworkflow\"r\n" +
+	"\acontext\x18\x05 \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\x06 \x01(\tR\fproviderNameJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\bworkflow\"r\n" +
 	"%ListAgentProviderInteractionsResponse\x12I\n" +
-	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\xb5\x02\n" +
+	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\xda\x02\n" +
 	"&ResolveAgentProviderInteractionRequest\x12%\n" +
 	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\x127\n" +
 	"\n" +
@@ -3954,7 +4035,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"resolution\x12=\n" +
 	"\asubject\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12\x17\n" +
 	"\aturn_id\x18\x05 \x01(\tR\x06turnId\x12=\n" +
-	"\acontext\x18\a \x01(\v2#.gestalt.provider.v1.RequestContextR\acontextJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\bworkflow\"\xf3\x02\n" +
+	"\acontext\x18\a \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12#\n" +
+	"\rprovider_name\x18\b \x01(\tR\fproviderNameJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\bworkflow\"\xf3\x02\n" +
 	"\x0fListedAgentTool\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bmcp_name\x18\x02 \x01(\tR\amcpName\x12\x14\n" +

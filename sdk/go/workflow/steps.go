@@ -148,6 +148,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 		return nil, "", err
 	}
 	turn, err := client.CreateTurn(ctx, gestalt.AgentCreateTurn{
+		ProviderName:   state.providerName,
 		SessionID:      state.session.ID,
 		Model:          model,
 		Messages:       messages,
@@ -160,10 +161,10 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 	if err != nil {
 		return nil, "", err
 	}
-	turn, err = waitForWorkflowAgentTurn(ctx, client, turn, e.agentPollInterval)
+	turn, err = waitForWorkflowAgentTurn(ctx, client, state.providerName, turn, e.agentPollInterval)
 	if err != nil {
 		if turn != nil && strings.TrimSpace(turn.ID) != "" {
-			_, _ = client.CancelTurn(context.WithoutCancel(ctx), gestalt.AgentCancelTurn{TurnID: turn.ID, Reason: err.Error()})
+			_, _ = client.CancelTurn(context.WithoutCancel(ctx), gestalt.AgentCancelTurn{ProviderName: state.providerName, TurnID: turn.ID, Reason: err.Error()})
 		}
 		return nil, workflowAgentTurnID(turn), err
 	}
@@ -173,7 +174,7 @@ func (e *Executor) invokeAgentStep(ctx context.Context, req Request, stepIndex i
 	case gestalt.AgentExecutionStatusCanceled:
 		return nil, turn.ID, fmt.Errorf("workflow agent turn %q was canceled: %s", turn.ID, strings.TrimSpace(turn.StatusMessage))
 	case gestalt.AgentExecutionStatusWaitingForInput:
-		_, _ = client.CancelTurn(context.WithoutCancel(ctx), gestalt.AgentCancelTurn{TurnID: turn.ID, Reason: "workflow agent step turn cannot wait for input"})
+		_, _ = client.CancelTurn(context.WithoutCancel(ctx), gestalt.AgentCancelTurn{ProviderName: state.providerName, TurnID: turn.ID, Reason: "workflow agent step turn cannot wait for input"})
 		return nil, turn.ID, fmt.Errorf("workflow agent turn %q is waiting for input", turn.ID)
 	default:
 		return nil, turn.ID, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
@@ -222,7 +223,7 @@ func workflowAgentSessionOptionsKey(agent *gestalt.WorkflowStepAgentTurn) string
 	})
 }
 
-func waitForWorkflowAgentTurn(ctx context.Context, agent AgentClient, turn *gestalt.AgentTurn, interval time.Duration) (*gestalt.AgentTurn, error) {
+func waitForWorkflowAgentTurn(ctx context.Context, agent AgentClient, providerName string, turn *gestalt.AgentTurn, interval time.Duration) (*gestalt.AgentTurn, error) {
 	if turn == nil || strings.TrimSpace(turn.ID) == "" {
 		return nil, fmt.Errorf("workflow agent turn is missing")
 	}
@@ -241,7 +242,7 @@ func waitForWorkflowAgentTurn(ctx context.Context, agent AgentClient, turn *gest
 		case <-ctx.Done():
 			return current, ctx.Err()
 		case <-ticker.C:
-			next, err := agent.GetTurn(ctx, gestalt.AgentGetTurn{TurnID: current.ID})
+			next, err := agent.GetTurn(ctx, gestalt.AgentGetTurn{ProviderName: providerName, TurnID: current.ID})
 			if err != nil {
 				return current, err
 			}
