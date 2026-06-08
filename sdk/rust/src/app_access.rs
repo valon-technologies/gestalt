@@ -1,5 +1,6 @@
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use tokio::net::UnixStream;
 use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
@@ -11,6 +12,7 @@ use tower::service_fn;
 
 use crate::OperationResult;
 use crate::api::{Request, current_request_context};
+use crate::app_decode::{decode_app_result, decode_graphql_result};
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{self as pb, app_client::AppClient as ProtoAppClient};
 use crate::protocol;
@@ -36,6 +38,21 @@ pub enum AppError {
     /// The host returned a protocol value the SDK could not represent.
     #[error("{0}")]
     Protocol(String),
+    /// The app invocation response decoded to an invocation error.
+    #[error("{0}")]
+    Invoke(#[source] Box<crate::InvokeError>),
+}
+
+impl From<crate::InvokeError> for AppError {
+    fn from(error: crate::InvokeError) -> Self {
+        Self::Invoke(Box::new(error))
+    }
+}
+
+impl From<Box<crate::InvokeError>> for AppError {
+    fn from(error: Box<crate::InvokeError>) -> Self {
+        Self::Invoke(error)
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -71,8 +88,22 @@ pub trait AppContract: Send {
         operation: String,
         params: serde_json::Value,
         options: Option<InvokeOptions>,
+    ) -> std::result::Result<serde_json::Value, AppError>;
+    async fn invoke_raw(
+        &mut self,
+        plugin: String,
+        operation: String,
+        params: serde_json::Value,
+        options: Option<InvokeOptions>,
     ) -> std::result::Result<OperationResult, AppError>;
     async fn invoke_graphql(
+        &mut self,
+        plugin: String,
+        document: String,
+        variables: Option<serde_json::Value>,
+        options: Option<InvokeGraphQLOptions>,
+    ) -> std::result::Result<serde_json::Value, AppError>;
+    async fn invoke_graphql_raw(
         &mut self,
         plugin: String,
         document: String,
@@ -127,7 +158,24 @@ impl App {
     }
 
     /// Invokes one operation on another app.
-    pub async fn invoke<P>(
+    pub async fn invoke<P, T>(
+        &mut self,
+        plugin: &str,
+        operation: &str,
+        params: P,
+        options: Option<InvokeOptions>,
+    ) -> std::result::Result<T, AppError>
+    where
+        P: Serialize,
+        T: DeserializeOwned,
+    {
+        let result = self.invoke_raw(plugin, operation, params, options).await?;
+        let decoded = decode_app_result(plugin, operation, &result)?;
+        Ok(serde_json::from_value(decoded)?)
+    }
+
+    /// Invokes one operation on another app and returns the raw transport result.
+    pub async fn invoke_raw<P>(
         &mut self,
         plugin: &str,
         operation: &str,
@@ -176,7 +224,26 @@ impl App {
     }
 
     /// Invokes another plugin's GraphQL surface.
-    pub async fn invoke_graphql<V>(
+    pub async fn invoke_graphql<V, T>(
+        &mut self,
+        plugin: &str,
+        document: &str,
+        variables: Option<V>,
+        options: Option<InvokeGraphQLOptions>,
+    ) -> std::result::Result<T, AppError>
+    where
+        V: Serialize,
+        T: DeserializeOwned,
+    {
+        let result = self
+            .invoke_graphql_raw(plugin, document, variables, options)
+            .await?;
+        let decoded = decode_graphql_result(plugin, &result)?;
+        Ok(serde_json::from_value(decoded)?)
+    }
+
+    /// Invokes another plugin's GraphQL surface and returns the raw transport result.
+    pub async fn invoke_graphql_raw<V>(
         &mut self,
         plugin: &str,
         document: &str,
@@ -239,8 +306,18 @@ impl AppContract for App {
         operation: String,
         params: serde_json::Value,
         options: Option<InvokeOptions>,
+    ) -> std::result::Result<serde_json::Value, AppError> {
+        App::invoke::<_, serde_json::Value>(self, &plugin, &operation, params, options).await
+    }
+
+    async fn invoke_raw(
+        &mut self,
+        plugin: String,
+        operation: String,
+        params: serde_json::Value,
+        options: Option<InvokeOptions>,
     ) -> std::result::Result<OperationResult, AppError> {
-        App::invoke(self, &plugin, &operation, params, options).await
+        App::invoke_raw(self, &plugin, &operation, params, options).await
     }
 
     async fn invoke_graphql(
@@ -249,8 +326,19 @@ impl AppContract for App {
         document: String,
         variables: Option<serde_json::Value>,
         options: Option<InvokeGraphQLOptions>,
+    ) -> std::result::Result<serde_json::Value, AppError> {
+        App::invoke_graphql::<_, serde_json::Value>(self, &plugin, &document, variables, options)
+            .await
+    }
+
+    async fn invoke_graphql_raw(
+        &mut self,
+        plugin: String,
+        document: String,
+        variables: Option<serde_json::Value>,
+        options: Option<InvokeGraphQLOptions>,
     ) -> std::result::Result<OperationResult, AppError> {
-        App::invoke_graphql(self, &plugin, &document, variables, options).await
+        App::invoke_graphql_raw(self, &plugin, &document, variables, options).await
     }
 }
 

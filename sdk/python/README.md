@@ -87,6 +87,29 @@ and timestamp fields use timezone-aware `datetime` values. Workflow helpers such
 APIs should accept native Python values and keep transport serialization inside
 SDK adapters.
 
+## App invocation migration
+
+`request.app().invoke(...)` and `request.app().invoke_graphql(...)` now decode
+JSON responses and unwrap only Gestalt success envelopes shaped as
+`{"status": "success", "data": ...}`.
+
+```python
+with request.app() as app:
+    # before
+    raw = app.invoke_raw("github", "get_issue", params)
+    issue = raw.decode_json()
+
+    # after
+    issue = app.invoke("github", "get_issue", params)
+
+    # escape hatch
+    raw = app.invoke_raw("github", "get_issue", params)
+```
+
+Typed GraphQL invocation raises `InvokeError` when the decoded top-level
+payload has a non-empty `errors` list. Use `invoke_graphql_raw()` for callers
+that need to classify GraphQL errors themselves.
+
 ## API reference
 
 The authored Python API reference is generated with Sphinx from the SDK's

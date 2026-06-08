@@ -112,6 +112,30 @@ TypeScript types are not enough to describe runtime payloads. Use the schema
 builders for every operation input and output that should appear in the
 Gestalt catalog.
 
+## App invocation migration
+
+`request.app()` returns an app client whose `invoke<T>()` and
+`invokeGraphQL<T>()` methods decode JSON responses and unwrap only Gestalt
+success envelopes shaped as `{ status: "success", data: ... }`.
+
+```ts
+const app = await request.app();
+
+// before
+const raw = await app.invokeRaw("github", "get_issue", params);
+const issue = raw.json<Issue>();
+
+// after
+const issue = await app.invoke<Issue>("github", "get_issue", params);
+
+// escape hatch
+const raw = await app.invokeRaw("github", "get_issue", params);
+```
+
+Typed GraphQL invocation throws `InvokeError` when the decoded top-level
+payload has a non-empty `errors` array. Use `invokeGraphQLRaw()` for callers
+that need to classify GraphQL errors themselves.
+
 ## Runtime and build entrypoints
 
 Source-mode runtime:

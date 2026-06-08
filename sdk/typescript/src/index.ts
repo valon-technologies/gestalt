@@ -81,6 +81,7 @@ export {
   type AppGraphQLInvokeOptions,
   type AppInvokeOptions,
 } from "./app-access.ts";
+export { InvokeError } from "./invoke-error.ts";
 export {
   Agent,
   type AgentCancelTurn,

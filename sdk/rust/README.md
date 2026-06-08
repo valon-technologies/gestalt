@@ -92,6 +92,36 @@ a host-service backend.
 The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `Workflow`, `AgentHost`, `Agent`, and `App`.
 
+## App invocation migration
+
+`App::invoke::<_, T>()` and `App::invoke_graphql::<_, T>()` now decode JSON
+responses into the requested `T` and unwrap only Gestalt success envelopes
+shaped as `{ "status": "success", "data": ... }`.
+
+```rust,no_run
+# async fn example(mut app: gestalt::App, params: serde_json::Value) -> Result<(), gestalt::AppError> {
+#[derive(serde::Deserialize)]
+struct Issue {
+    id: u64,
+}
+
+// before
+let raw = app.invoke_raw("github", "get_issue", params.clone(), None).await?;
+let issue: Issue = serde_json::from_value(raw.json()?)?;
+
+// after
+let issue: Issue = app.invoke("github", "get_issue", params, None).await?;
+
+// escape hatch
+let raw = app.invoke_raw("github", "get_issue", serde_json::json!({}), None).await?;
+# Ok(())
+# }
+```
+
+Typed GraphQL invocation returns `InvokeError` when the decoded top-level
+payload has a non-empty `errors` array. Use `invoke_graphql_raw()` for callers
+that need to classify GraphQL errors themselves.
+
 `AgentProvider` implementations receive and return native structs such as
 `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
 `AgentTurnEvent`. Structured payload fields use `serde_json::Value` and

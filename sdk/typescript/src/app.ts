@@ -24,6 +24,7 @@ import {
   type HTTPSubjectResolutionContext,
   type HTTPSubjectResolver,
 } from "./http-subject.ts";
+import { operationResult } from "./app-decode.ts";
 import {
   isProviderBase,
   ProviderBase,
@@ -336,11 +337,11 @@ export class AppProvider extends ProviderBase {
         ? entry.output.parse(responseBody, "$response")
         : responseBody;
 
-      return {
+      return operationResult({
         status: response?.status ?? 200,
         headers: normalizeResponseHeaders(response?.headers),
         body: JSON.stringify(body),
-      };
+      });
     } catch (error) {
       return errorResult(500, errorMessage(error));
     }
@@ -453,13 +454,13 @@ function normalizeOperationInput(
 }
 
 function errorResult(status: number, message: string): OperationResult {
-  return {
+  return operationResult({
     status,
     headers: normalizeResponseHeaders(),
     body: JSON.stringify({
       error: message,
     }),
-  };
+  });
 }
 
 /**

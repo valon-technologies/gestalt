@@ -24,7 +24,7 @@ func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocat
 	if closer, ok := client.(interface{ Close() error }); ok {
 		defer func() { _ = closer.Close() }()
 	}
-	result, err := client.Invoke(ctx, call.App, call.Operation, call.Params, &gestalt.InvokeOptions{
+	result, err := client.InvokeRaw(ctx, call.App, call.Operation, call.Params, &gestalt.InvokeOptions{
 		Connection:      call.Connection,
 		Instance:        call.Instance,
 		CredentialMode:  call.CredentialMode,

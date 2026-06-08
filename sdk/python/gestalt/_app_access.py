@@ -7,6 +7,7 @@ from urllib import parse as _urlparse
 import grpc
 
 from ._api import Request, Response, ResponseHeaders
+from ._app_decode import decode_app_result, decode_graphql_result
 from ._gen.v1 import app_pb2 as _pb
 from ._gen.v1 import app_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
@@ -18,6 +19,7 @@ from ._grpc_transport import (
 )
 from ._protocol import (
     JsonObjectInput,
+    JsonValue,
     _struct_from_normalized_object,
     json_from_native,
     string_lists_from_proto_map,
@@ -51,8 +53,20 @@ class AppProtocol(Protocol):
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> JsonValue:
         """Invoke one operation on another app."""
+
+    def invoke_raw(
+        self,
+        plugin: str,
+        operation: str,
+        params: JsonObjectInput | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+        idempotency_key: str = "",
+    ) -> Response[str]:
+        """Invoke one operation on another app and return the raw transport result."""
 
     def invoke_graphql(
         self,
@@ -63,8 +77,20 @@ class AppProtocol(Protocol):
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> JsonValue:
         """Invoke another app's GraphQL surface."""
+
+    def invoke_graphql_raw(
+        self,
+        plugin: str,
+        document: str,
+        variables: JsonObjectInput | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+        idempotency_key: str = "",
+    ) -> Response[str]:
+        """Invoke another app's GraphQL surface and return the raw transport result."""
 
 class _AppClient:
     """Transport-backed implementation for invoking sibling app operations.
@@ -96,13 +122,38 @@ class _AppClient:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> JsonValue:
         """Invoke one operation on another app.
 
         ``params`` accepts a JSON-compatible object. ``connection`` and
         ``instance`` select the connected account or provider instance that the
         target app should invoke against.
         """
+
+        return decode_app_result(
+            plugin,
+            operation,
+            self.invoke_raw(
+                plugin,
+                operation,
+                params,
+                connection=connection,
+                instance=instance,
+                idempotency_key=idempotency_key,
+            ),
+        )
+
+    def invoke_raw(
+        self,
+        plugin: str,
+        operation: str,
+        params: JsonObjectInput | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+        idempotency_key: str = "",
+    ) -> Response[str]:
+        """Invoke one operation on another app and return the raw transport result."""
 
         request = pb.AppInvokeRequest(
             app=plugin,
@@ -128,8 +179,32 @@ class _AppClient:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> JsonValue:
         """Invoke another plugin's GraphQL surface."""
+
+        return decode_graphql_result(
+            plugin,
+            self.invoke_graphql_raw(
+                plugin,
+                document,
+                variables,
+                connection=connection,
+                instance=instance,
+                idempotency_key=idempotency_key,
+            ),
+        )
+
+    def invoke_graphql_raw(
+        self,
+        plugin: str,
+        document: str,
+        variables: JsonObjectInput | None = None,
+        *,
+        connection: str = "",
+        instance: str = "",
+        idempotency_key: str = "",
+    ) -> Response[str]:
+        """Invoke another plugin's GraphQL surface and return the raw transport result."""
 
         trimmed_document = document.strip()
         if not trimmed_document:

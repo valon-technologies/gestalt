@@ -121,7 +121,7 @@ test("App forwards request context to operation and GraphQL calls", async () => 
       request("", {}, {}, {}, {}, {}, "request-key", {}, {}, [], false, context),
     );
 
-    const first = await app.invoke(
+    const first = await app.invokeRaw(
       "github",
       "get_issue",
       { issue_number: 42 },
@@ -142,7 +142,7 @@ test("App forwards request context to operation and GraphQL calls", async () => 
       idempotencyKey: "issue-42-create",
     });
 
-    const graphql = await app.invokeGraphQL(
+    const graphql = await app.invokeGraphQLRaw(
       "linear",
       "query Viewer { viewer { id } }",
       {
@@ -277,7 +277,7 @@ test("App honors tcp target env and relay token env", async () => {
         id: "user:user-123",
       }),
     })));
-    const response = await app.invoke("github", "get_issue");
+    const response = await app.invokeRaw("github", "get_issue");
 
     expect(response.status).toBe(204);
     expect(JSON.parse(response.body)).toEqual({
@@ -303,4 +303,9 @@ test("App honors tcp target env and relay token env", async () => {
       });
     }
   }
+});
+
+test("Request.app creates an app client", async () => {
+  const req = request();
+  await expect(req.app()).rejects.toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
 });

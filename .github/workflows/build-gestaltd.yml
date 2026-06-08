@@ -132,9 +132,6 @@ jobs:
     needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: gestaltd
 
     steps:
       - name: Skip irrelevant changes
@@ -155,10 +152,12 @@ jobs:
 
       - name: Install Buf
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        working-directory: gestaltd
         run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
 
       - name: Check go mod tidy
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        working-directory: gestaltd
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
@@ -206,9 +205,6 @@ jobs:
     needs: resolve-ref
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: gestaltd
 
     steps:
       - name: Skip irrelevant changes
@@ -233,6 +229,7 @@ jobs:
 
       - name: Run tests
         if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
+        working-directory: gestaltd
         run: go test ./...
 
   coverage:
@@ -241,9 +238,6 @@ jobs:
     if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: gestaltd
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -257,6 +251,7 @@ jobs:
           cache-dependency-path: gestaltd/go.sum
 
       - name: Run coverage
+        working-directory: gestaltd
         run: go test -coverprofile=coverage.out ./...
 
       - name: Upload coverage

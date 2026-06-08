@@ -2,6 +2,7 @@
  * Common request and response types shared across authored Gestalt providers.
  */
 import type { AgentToolRef } from "./agent.ts";
+import { App } from "./app-access.ts";
 import type { RequestContext as ProtoRequestContext } from "./internal/gen/v1/app_pb.ts";
 
 export interface Subject {
@@ -75,6 +76,7 @@ export interface Request {
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;
   __requestContext?: ProtoRequestContext | undefined;
+  app(): Promise<App>;
 }
 
 /**
@@ -104,6 +106,7 @@ export interface OperationResult {
   status: number;
   headers: Record<string, string[]>;
   body: string;
+  json<T = unknown>(): T;
 }
 
 /**
@@ -174,7 +177,7 @@ export function request(
   toolRefsSet = false,
   requestContext?: ProtoRequestContext,
 ): Request {
-  return {
+  const req: Omit<Request, "app"> = {
     token,
     connectionParams: {
       ...connectionParams,
@@ -223,6 +226,13 @@ export function request(
     __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
   };
+  return attachRequestHelpers(req);
+}
+
+export function attachRequestHelpers<T extends Omit<Request, "app">>(input: T): Request {
+  const req = input as unknown as Request;
+  req.app = async () => new App(req);
+  return req;
 }
 
 export function cloneSubjectInput<T extends SubjectInput | Subject>(subject: T): T {

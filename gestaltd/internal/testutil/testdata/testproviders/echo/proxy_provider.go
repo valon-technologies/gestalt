@@ -238,7 +238,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 				Instance:   instance,
 			}
 		}
-		result, err := invoker.Invoke(ctx, input.App, input.Operation, input.Params, opts)
+		result, err := invoker.InvokeRaw(ctx, input.App, input.Operation, input.Params, opts)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil
@@ -282,7 +282,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 				Instance:   instance,
 			}
 		}
-		result, err := invoker.InvokeGraphQL(ctx, input.App, input.Document, input.Variables, opts)
+		result, err := invoker.InvokeGraphQLRaw(ctx, input.App, input.Document, input.Variables, opts)
 		if err != nil {
 			envelope["error"] = err.Error()
 			return jsonResult(http.StatusOK, envelope), nil

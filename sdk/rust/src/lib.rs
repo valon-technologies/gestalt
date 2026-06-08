@@ -5,6 +5,7 @@ mod agent;
 mod agent_access;
 mod api;
 mod app_access;
+mod app_decode;
 mod auth;
 mod auth_server;
 mod cache;
@@ -73,6 +74,7 @@ pub use api::{
     Subject, current_request_context, ok, with_request_context,
 };
 pub use app_access::{App, AppContract, AppError, InvokeGraphQLOptions, InvokeOptions};
+pub use app_decode::InvokeError;
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,

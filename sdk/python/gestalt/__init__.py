@@ -37,6 +37,7 @@ from ._api import (
     field,
     parse_subject_id,
 )
+from ._app_decode import InvokeError
 
 _AGENT_PROTOCOL_EXPORTS = (
     "AGENT_EXECUTION_STATUS_CANCELED",
@@ -545,6 +546,7 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "InvokeError",
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,

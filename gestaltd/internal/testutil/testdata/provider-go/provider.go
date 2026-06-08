@@ -154,7 +154,7 @@ func (p *Provider) invokeRequestContext(ctx context.Context, _ InvokeRequestCont
 		return gestalt.Response[RequestContextOutput]{}, err
 	}
 
-	result, err := invoker.Invoke(ctx, "example", "request_context", nil, nil)
+	result, err := invoker.InvokeRaw(ctx, "example", "request_context", nil, nil)
 	if err != nil {
 		return gestalt.Response[RequestContextOutput]{}, err
 	}

@@ -23,6 +23,8 @@ type InvokeOptions struct {
 	CredentialMode string
 	// WorkflowContext attaches workflow metadata to the downstream operation request.
 	WorkflowContext map[string]any
+	// Timeout bounds the host-service RPC when greater than zero.
+	Timeout time.Duration
 }
 
 // InvokeGraphQLOptions selects a target connection for a GraphQL surface invocation.
@@ -33,6 +35,8 @@ type InvokeGraphQLOptions struct {
 	Instance string
 	// IdempotencyKey is forwarded to the target operation.
 	IdempotencyKey string
+	// Timeout bounds the host-service RPC when greater than zero.
+	Timeout time.Duration
 }
 
 type appClient struct {
@@ -42,8 +46,10 @@ type appClient struct {
 
 // App is the fakeable contract for app invocation calls.
 type App interface {
-	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
-	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error)
+	Invoke(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (any, error)
+	InvokeRaw(ctx context.Context, app string, operation string, params any, opts *InvokeOptions) (*OperationResult, error)
+	InvokeGraphQL(ctx context.Context, app string, document string, variables any, opts *InvokeGraphQLOptions) (any, error)
+	InvokeGraphQLRaw(ctx context.Context, app string, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error)
 }
 
 var sharedAppTransport sharedManagerTransport[proto.AppClient]
@@ -94,7 +100,16 @@ func (c *appClient) Close() error {
 }
 
 // Invoke calls one operation on another app.
-func (c *appClient) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *appClient) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (any, error) {
+	result, err := c.InvokeRaw(ctx, app, operation, params, opts)
+	if err != nil {
+		return nil, err
+	}
+	return decodeAppOperationResult(app, operation, result)
+}
+
+// InvokeRaw calls one operation on another app and returns the raw transport result.
+func (c *appClient) InvokeRaw(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("app: client is not initialized")
 	}
@@ -130,6 +145,11 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 			}
 			req.Context.Workflow = workflow
 		}
+		if opts.Timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+			defer cancel()
+		}
 	}
 
 	resp, err := c.client.Invoke(ctx, req)
@@ -144,7 +164,16 @@ func (c *appClient) Invoke(ctx context.Context, app, operation string, params an
 }
 
 // InvokeGraphQL calls another plugin's GraphQL surface.
-func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error) {
+func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeGraphQLOptions) (any, error) {
+	result, err := c.InvokeGraphQLRaw(ctx, app, document, variables, opts)
+	if err != nil {
+		return nil, err
+	}
+	return decodeAppGraphQLResult(app, result)
+}
+
+// InvokeGraphQLRaw calls another plugin's GraphQL surface and returns the raw transport result.
+func (c *appClient) InvokeGraphQLRaw(ctx context.Context, app, document string, variables any, opts *InvokeGraphQLOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("app: client is not initialized")
 	}
@@ -175,6 +204,11 @@ func (c *appClient) InvokeGraphQL(ctx context.Context, app, document string, var
 		req.Connection = opts.Connection
 		req.Instance = opts.Instance
 		req.IdempotencyKey = strings.TrimSpace(opts.IdempotencyKey)
+		if opts.Timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
+			defer cancel()
+		}
 	}
 
 	resp, err := c.client.InvokeGraphQL(ctx, req)

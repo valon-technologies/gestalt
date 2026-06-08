@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from dataclasses import MISSING
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, cast
 
-from ._protocol import JsonObject
+from ._protocol import JsonObject, JsonValue
 
 if TYPE_CHECKING:
     from typing_extensions import dataclass_transform
@@ -157,6 +158,15 @@ class Response(Generic[T]):
     status: int | None
     body: T
     headers: ResponseHeaders | None = None
+
+    def decode_json(self) -> JsonValue:
+        """Decode the raw response body without app envelope handling."""
+
+        if not isinstance(self.body, str):
+            raise TypeError("response body is not a string")
+        if self.body.strip() == "":
+            return {}
+        return cast(JsonValue, json.loads(self.body))
 
 
 def OK(body: T, headers: ResponseHeaders | None = None) -> Response[T]:

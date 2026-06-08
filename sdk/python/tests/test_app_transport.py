@@ -190,7 +190,7 @@ class AppTransportTests(unittest.TestCase):
         request = Request(context=context)
 
         with request.app() as client:
-            response = client.invoke(
+            response = client.invoke_raw(
                 "github",
                 "get_issue",
                 IssueParams(repo="valon-technologies/gestalt", issue_number=1026),
@@ -253,7 +253,7 @@ class AppTransportTests(unittest.TestCase):
             subject=app_pb2.SubjectContext(id="user:graphql")
         )
         with _AppClient(Request(context=context)) as client:
-            response = client.invoke_graphql(
+            response = client.invoke_graphql_raw(
                 "linear",
                 "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
                 {"team": "eng"},
@@ -301,7 +301,7 @@ class AppTransportTests(unittest.TestCase):
 
     def test_direct_client_roundtrip(self) -> None:
         with _AppClient(Request()) as client:
-            response = client.invoke("slack", "plain_text")
+            response = client.invoke_raw("slack", "plain_text")
 
         self.assertEqual(response.status, 200)
         self.assertEqual(response.body, "plain response")
@@ -315,7 +315,7 @@ class AppTransportTests(unittest.TestCase):
 
     def test_empty_dict_params_are_preserved_as_present(self) -> None:
         with _AppClient(Request()) as client:
-            response = client.invoke("github", "get_issue", {})
+            response = client.invoke_raw("github", "get_issue", {})
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
@@ -340,7 +340,7 @@ class AppTransportTests(unittest.TestCase):
         )
 
         with request.app() as client:
-            response = client.invoke("github", "get_issue", {})
+            response = client.invoke_raw("github", "get_issue", {})
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
@@ -366,7 +366,7 @@ class AppTransportTests(unittest.TestCase):
         os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-python"
         try:
             with _AppClient(Request()) as client:
-                response = client.invoke("github", "plain_text")
+                response = client.invoke_raw("github", "plain_text")
 
             self.assertEqual(response.status, 200)
             self.assertEqual(response.body, "plain response")
@@ -400,7 +400,7 @@ class AppTransportTests(unittest.TestCase):
         os.environ["https_proxy"] = "http://127.0.0.1:1"
         try:
             with _AppClient(Request()) as client:
-                response = client.invoke("github", "plain_text")
+                response = client.invoke_raw("github", "plain_text")
 
             self.assertEqual(response.status, 200)
             self.assertEqual(response.body, "plain response")
