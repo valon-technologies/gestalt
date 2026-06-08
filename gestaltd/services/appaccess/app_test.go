@@ -120,12 +120,12 @@ func (p *recordingAuthorizationProvider) Ping(context.Context) error { return ni
 func (p *recordingAuthorizationProvider) Close() error               { return nil }
 
 type recordingAgentAppAuthorizer struct {
-	requests []AgentAppInvocationAuthorizationRequest
-	response AgentAppInvocationAuthorization
+	requests []invocation.AgentAppAuthorizationRequest
+	response invocation.AgentAppAuthorization
 	err      error
 }
 
-func (a *recordingAgentAppAuthorizer) AuthorizeAgentAppInvocation(_ context.Context, req AgentAppInvocationAuthorizationRequest) (AgentAppInvocationAuthorization, error) {
+func (a *recordingAgentAppAuthorizer) AuthorizeAppInvocation(_ context.Context, req invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error) {
 	a.requests = append(a.requests, req)
 	return a.response, a.err
 }
@@ -216,7 +216,7 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	authz := &recordingAuthorizationProvider{allowed: false}
 	invoker := &recordingAppInvocation{}
 	agentAuth := &recordingAgentAppAuthorizer{
-		response: AgentAppInvocationAuthorization{
+		response: invocation.AgentAppAuthorization{
 			Principal: &principal.Principal{
 				SubjectID:           "user:runner",
 				CredentialSubjectID: "user:runner",
@@ -315,7 +315,7 @@ func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
 	t.Parallel()
 
 	agentAuth := &recordingAgentAppAuthorizer{
-		response: AgentAppInvocationAuthorization{
+		response: invocation.AgentAppAuthorization{
 			Principal: &principal.Principal{SubjectID: "user:runner"},
 		},
 	}

@@ -24,7 +24,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -1780,12 +1779,12 @@ func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Pr
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) AuthorizeAgentAppInvocation(context.Context, appaccessservice.AgentAppInvocationAuthorizationRequest) (appaccessservice.AgentAppInvocationAuthorization, error) {
-	return appaccessservice.AgentAppInvocationAuthorization{}, fmt.Errorf("agent manager is not available")
+func (unavailableAgentManager) AuthorizeAppInvocation(context.Context, invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error) {
+	return invocation.AgentAppAuthorization{}, fmt.Errorf("agent manager is not available")
 }
 
-func (unavailableAgentManager) AuthorizeAgentWorkflowInvocation(context.Context, appaccessservice.AgentWorkflowInvocationAuthorizationRequest) (appaccessservice.AgentWorkflowInvocationAuthorization, error) {
-	return appaccessservice.AgentWorkflowInvocationAuthorization{}, fmt.Errorf("agent manager is not available")
+func (unavailableAgentManager) AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error) {
+	return invocation.AgentWorkflowAuthorization{}, fmt.Errorf("agent manager is not available")
 }
 
 func mapToYAMLNode(value map[string]any) (yaml.Node, error) {

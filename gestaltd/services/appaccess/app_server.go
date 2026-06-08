@@ -8,7 +8,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -32,57 +31,12 @@ type AppServer struct {
 	authorization  core.AuthorizationProvider
 	callerName     string
 	accessProfiles AppAccessProfiles
-	agentAppAuth   AgentAppInvocationAuthorizer
+	agentAppAuth   interface {
+		AuthorizeAppInvocation(context.Context, invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error)
+	}
 }
 
 type AppServerOption func(*AppServer)
-
-type AgentAppInvocationAuthorizer interface {
-	AuthorizeAgentAppInvocation(context.Context, AgentAppInvocationAuthorizationRequest) (AgentAppInvocationAuthorization, error)
-}
-
-type AgentWorkflowInvocationAuthorizer interface {
-	AuthorizeAgentWorkflowInvocation(context.Context, AgentWorkflowInvocationAuthorizationRequest) (AgentWorkflowInvocationAuthorization, error)
-}
-
-type AgentAppInvocationAuthorizationRequest struct {
-	AgentProviderName string
-	CallerKind        invocation.ProviderKind
-	CallerName        string
-	Agent             invocation.AgentInvocationContext
-	Principal         *principal.Principal
-	App               string
-	Operation         string
-	Connection        string
-	Instance          string
-	CredentialMode    core.ConnectionMode
-	RequestContext    *proto.RequestContext
-}
-
-type AgentAppInvocationAuthorization struct {
-	Principal      *principal.Principal
-	CredentialMode core.ConnectionMode
-	Connection     string
-	Instance       string
-	RunAs          *core.RunAsSubject
-	ToolRefs       []coreagent.ToolRef
-	ToolRefsSet    bool
-}
-
-type AgentWorkflowInvocationAuthorizationRequest struct {
-	AgentProviderName string
-	CallerKind        invocation.ProviderKind
-	CallerName        string
-	Agent             invocation.AgentInvocationContext
-	Principal         *principal.Principal
-	Operation         string
-	Target            *coreworkflow.Target
-	RequestContext    *proto.RequestContext
-}
-
-type AgentWorkflowInvocationAuthorization struct {
-	Principal *principal.Principal
-}
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOption {
 	return func(s *AppServer) {
@@ -90,7 +44,9 @@ func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOpt
 	}
 }
 
-func WithAgentAppInvocationAuthorizer(authorizer AgentAppInvocationAuthorizer) AppServerOption {
+func WithAgentAppInvocationAuthorizer(authorizer interface {
+	AuthorizeAppInvocation(context.Context, invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error)
+}) AppServerOption {
 	return func(s *AppServer) {
 		s.agentAppAuth = authorizer
 	}
@@ -361,11 +317,11 @@ func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestI
 	return nil
 }
 
-func (s *AppServer) authorizeAgentAppInvocation(ctx context.Context, callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) (AgentAppInvocationAuthorization, error) {
+func (s *AppServer) authorizeAgentAppInvocation(ctx context.Context, callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) (invocation.AgentAppAuthorization, error) {
 	if s == nil || s.agentAppAuth == nil {
-		return AgentAppInvocationAuthorization{}, status.Error(codes.FailedPrecondition, "agent app invocation authorizer is required")
+		return invocation.AgentAppAuthorization{}, status.Error(codes.FailedPrecondition, "agent app invocation authorizer is required")
 	}
-	return s.agentAppAuth.AuthorizeAgentAppInvocation(ctx, AgentAppInvocationAuthorizationRequest{
+	return s.agentAppAuth.AuthorizeAppInvocation(ctx, invocation.AgentAppAuthorizationRequest{
 		AgentProviderName: strings.TrimSpace(s.callerName),
 		CallerKind:        callCtx.callerProviderKind,
 		CallerName:        callCtx.callerName,

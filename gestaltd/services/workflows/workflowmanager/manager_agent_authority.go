@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
@@ -33,7 +32,7 @@ func (m *Manager) authorizeAgentWorkflowTarget(ctx context.Context, p *principal
 	if err != nil {
 		return nil, err
 	}
-	authorized, err := m.agentManager.AuthorizeAgentWorkflowInvocation(ctx, appaccessservice.AgentWorkflowInvocationAuthorizationRequest{
+	authorized, err := m.agentManager.AuthorizeWorkflowInvocation(ctx, invocation.AgentWorkflowAuthorizationRequest{
 		AgentProviderName: strings.TrimSpace(agent.ProviderName),
 		CallerKind:        caller.Kind,
 		CallerName:        caller.Name,

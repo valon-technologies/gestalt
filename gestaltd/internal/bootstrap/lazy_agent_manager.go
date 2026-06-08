@@ -8,8 +8,8 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type lazyAgentManager struct {
@@ -147,20 +147,20 @@ func (l *lazyAgentManager) ResolveInteraction(ctx context.Context, p *principal.
 	return target.ResolveInteraction(ctx, p, req)
 }
 
-func (l *lazyAgentManager) AuthorizeAgentAppInvocation(ctx context.Context, req appaccessservice.AgentAppInvocationAuthorizationRequest) (appaccessservice.AgentAppInvocationAuthorization, error) {
+func (l *lazyAgentManager) AuthorizeAppInvocation(ctx context.Context, req invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error) {
 	target, err := l.current()
 	if err != nil {
-		return appaccessservice.AgentAppInvocationAuthorization{}, err
+		return invocation.AgentAppAuthorization{}, err
 	}
-	return target.AuthorizeAgentAppInvocation(ctx, req)
+	return target.AuthorizeAppInvocation(ctx, req)
 }
 
-func (l *lazyAgentManager) AuthorizeAgentWorkflowInvocation(ctx context.Context, req appaccessservice.AgentWorkflowInvocationAuthorizationRequest) (appaccessservice.AgentWorkflowInvocationAuthorization, error) {
+func (l *lazyAgentManager) AuthorizeWorkflowInvocation(ctx context.Context, req invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error) {
 	target, err := l.current()
 	if err != nil {
-		return appaccessservice.AgentWorkflowInvocationAuthorization{}, err
+		return invocation.AgentWorkflowAuthorization{}, err
 	}
-	return target.AuthorizeAgentWorkflowInvocation(ctx, req)
+	return target.AuthorizeWorkflowInvocation(ctx, req)
 }
 
 func (l *lazyAgentManager) current() (*agentmanager.Manager, error) {
