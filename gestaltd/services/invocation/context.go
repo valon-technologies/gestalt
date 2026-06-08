@@ -68,6 +68,12 @@ type ToolRefsContext struct {
 	Refs []coreagent.ToolRef
 }
 
+type AgentInvocationContext struct {
+	ProviderName string
+	SessionID    string
+	TurnID       string
+}
+
 type ProviderKind string
 
 const (
@@ -89,6 +95,7 @@ type accessCtxKey struct{}
 type hostCtxKey struct{}
 type workflowCtxKey struct{}
 type toolRefsCtxKey struct{}
+type agentInvocationCtxKey struct{}
 type internalConnectionAccessCtxKey struct{}
 
 type InvocationSurface string
@@ -257,6 +264,27 @@ func ToolRefsContextFromContext(ctx context.Context) ToolRefsContext {
 	refs, _ := ctx.Value(toolRefsCtxKey{}).(ToolRefsContext)
 	refs.Refs = cloneToolRefs(refs.Refs)
 	return refs
+}
+
+func WithAgentInvocationContext(ctx context.Context, agent AgentInvocationContext) context.Context {
+	agent = normalizeAgentInvocationContext(agent)
+	if agent == (AgentInvocationContext{}) {
+		return ctx
+	}
+	return context.WithValue(ctx, agentInvocationCtxKey{}, agent)
+}
+
+func AgentInvocationContextFromContext(ctx context.Context) AgentInvocationContext {
+	agent, _ := ctx.Value(agentInvocationCtxKey{}).(AgentInvocationContext)
+	return normalizeAgentInvocationContext(agent)
+}
+
+func normalizeAgentInvocationContext(agent AgentInvocationContext) AgentInvocationContext {
+	return AgentInvocationContext{
+		ProviderName: strings.TrimSpace(agent.ProviderName),
+		SessionID:    strings.TrimSpace(agent.SessionID),
+		TurnID:       strings.TrimSpace(agent.TurnID),
+	}
 }
 
 func cloneToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {

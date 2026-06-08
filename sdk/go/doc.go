@@ -60,8 +60,7 @@
 // Workflow and agent provider surfaces use native Go structs. The SDK owns the
 // generated provider protocol conversion at the transport boundary.
 //
-// Host-service capabilities include [Cache], [Workflow], [AgentHost],
-// [Agent], and [App].
+// Host-service capabilities include [Cache], [Workflow], [Agent], and [App].
 // Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
 // capability interfaces rather than transport-specific client types.
 //
@@ -95,13 +94,13 @@
 // SecretsProvider, WorkflowProvider, AgentProvider, and RuntimeProvider.
 //
 // Use the host-service capabilities when provider code needs to call sibling
-// services exposed by gestaltd. These include Cache, Workflow, AgentHost,
-// Agent, and App. Apps use
+// services exposed by gestaltd. These include Cache, Workflow, Agent, and App.
+// Apps use
 // [IndexedDB] and [S3] for datastore and object storage bindings.
 //
-// Workflow, Agent, and AgentHost use native Go request and response structs at
-// provider boundaries. Generated protocol messages stay inside the SDK
-// transport adapter.
+// Workflow and Agent use native Go request and response structs at provider
+// boundaries. Generated protocol messages stay inside the SDK transport
+// adapter.
 //
 // See https://gestaltd.ai/reference/sdk for the SDK overview.
 // See https://gestaltd.ai/providers/apps for the typed app authoring flow.

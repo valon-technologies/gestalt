@@ -270,6 +270,7 @@ func resolvedAgentToolFromProto(value *proto.ResolvedAgentTool) ResolvedAgentToo
 		Name:             value.GetName(),
 		Description:      value.GetDescription(),
 		ParametersSchema: mapFromStruct(value.GetParametersSchema()),
+		Ref:              agentToolRefPtrFromProto(value.GetRef()),
 	}
 }
 
@@ -299,6 +300,14 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		System:         value.GetSystem(),
 		RunAs:          subjectFromProto(value.GetRunAs()),
 	}
+}
+
+func agentToolRefPtrFromProto(value *proto.AgentToolRef) *AgentToolRef {
+	if value == nil {
+		return nil
+	}
+	out := agentToolRefFromProto(value)
+	return &out
 }
 
 func agentToolRefsFromProto(values []*proto.AgentToolRef) []AgentToolRef {
@@ -1116,16 +1125,6 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 	}
 }
 
-func executeAgentToolResponseFromProto(value *proto.ExecuteAgentToolResponse) *ExecuteAgentToolResponse {
-	if value == nil {
-		return nil
-	}
-	return &ExecuteAgentToolResponse{
-		Status: value.GetStatus(),
-		Body:   value.GetBody(),
-	}
-}
-
 func listedAgentToolFromProto(value *proto.ListedAgentTool) ListedAgentTool {
 	if value == nil {
 		return ListedAgentTool{}
@@ -1186,16 +1185,6 @@ func listedAgentToolsToProto(values []ListedAgentTool) []*proto.ListedAgentTool 
 	return out
 }
 
-func listAgentToolsResponseFromProto(value *proto.ListAgentToolsResponse) *ListAgentToolsResponse {
-	if value == nil {
-		return nil
-	}
-	return &ListAgentToolsResponse{
-		Tools:         listedAgentToolsFromProto(value.GetTools()),
-		NextPageToken: value.GetNextPageToken(),
-	}
-}
-
 func agentToolAnnotationsFromProto(value *proto.OperationAnnotations) *AgentToolAnnotations {
 	if value == nil {
 		return nil
@@ -1225,21 +1214,6 @@ func agentToolRefPtrToProto(value *AgentToolRef) *proto.AgentToolRef {
 		return nil
 	}
 	return agentToolRefToProto(*value)
-}
-
-func resolvedAgentConnectionFromProto(value *proto.ResolvedAgentConnection) *ResolvedAgentConnection {
-	if value == nil {
-		return nil
-	}
-	return &ResolvedAgentConnection{
-		ConnectionID: value.GetConnectionId(),
-		Connection:   value.GetConnection(),
-		Instance:     value.GetInstance(),
-		Mode:         value.GetMode(),
-		Headers:      cloneAgentStringMap(value.GetHeaders()),
-		Params:       cloneAgentStringMap(value.GetParams()),
-		ExpiresAt:    timePtrFromTimestampUnchecked(value.GetExpiresAt()),
-	}
 }
 
 func timePtrFromTimestampUnchecked(value *timestamppb.Timestamp) *time.Time {

@@ -457,7 +457,12 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 		Name:           "workflow_provider",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowProvider_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(appName, manager, deps.Authorization))
+			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(
+				appName,
+				manager,
+				deps.Authorization,
+				workflowservice.WithAgentWorkflowInvocationAuthorizer(deps.AgentManager),
+			))
 		},
 	}
 }
@@ -498,14 +503,12 @@ func buildAppInvocationHostService(appName string, deps Deps) runtimehost.HostSe
 		Name:           "app",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			opts := []appaccessservice.AppServerOption{
+			proto.RegisterAppServer(srv, appaccessservice.NewServer(
+				invoker,
 				appaccessservice.WithAuthorizationProvider(deps.Authorization),
+				appaccessservice.WithAgentAppInvocationAuthorizer(deps.AgentManager),
 				appaccessservice.WithCallerApp(appName, deps.AppAccessProfiles[strings.TrimSpace(appName)]),
-			}
-			if manager, ok := deps.AgentManager.(*lazyAgentManager); ok {
-				opts = append(opts, appaccessservice.WithAgentAppInvocationAuthorizer(manager.AuthorizeAgentAppInvocation))
-			}
-			proto.RegisterAppServer(srv, appaccessservice.NewServer(invoker, opts...))
+			))
 		},
 	}
 }

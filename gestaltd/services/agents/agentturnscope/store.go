@@ -160,34 +160,6 @@ func (s *Store) Get(providerName, sessionID, turnID string) (Scope, bool) {
 	return cloneScope(*scope), true
 }
 
-func (s *Store) GetByTurnID(providerName, turnID string) (Scope, bool) {
-	providerName = strings.TrimSpace(providerName)
-	turnID = strings.TrimSpace(turnID)
-	if providerName == "" || turnID == "" || s == nil {
-		return Scope{}, false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var found *Scope
-	for key, scope := range s.scopes {
-		if scope == nil {
-			continue
-		}
-		keyProvider, keyTurnID, ok := scopeKeyProviderAndTurn(key)
-		if !ok || keyProvider != providerName || keyTurnID != turnID {
-			continue
-		}
-		if found != nil && found != scope {
-			return Scope{}, false
-		}
-		found = scope
-	}
-	if found == nil {
-		return Scope{}, false
-	}
-	return cloneScope(*found), true
-}
-
 func (s *Store) GetSession(providerName, sessionID string) (Scope, bool) {
 	key := sessionScopeKey(providerName, sessionID)
 	if key == "" || s == nil {
@@ -219,18 +191,6 @@ func sessionScopeKey(providerName, sessionID string) string {
 		return ""
 	}
 	return providerName + "\x00" + sessionID
-}
-
-func scopeKeyProviderAndTurn(key string) (string, string, bool) {
-	providerName, rest, ok := strings.Cut(key, "\x00")
-	if !ok {
-		return "", "", false
-	}
-	_, turnID, ok := strings.Cut(rest, "\x00")
-	if !ok {
-		return "", "", false
-	}
-	return providerName, turnID, true
 }
 
 func cloneScope(src Scope) Scope {

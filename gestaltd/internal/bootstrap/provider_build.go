@@ -24,6 +24,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
@@ -1629,7 +1630,7 @@ func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan RuntimePlacement
 		return cloned
 	}
 	// Hosted agent bundles include loopback host allowances for local SDK
-	// transports. Once the agent host is exposed over the public relay, those
+	// transports. Once the agent provider is exposed over the public relay, those
 	// loopback hosts are no longer relevant and can spuriously force hosted
 	// runtimes into proxy-enforced egress mode.
 	out := cloned[:0]
@@ -1777,6 +1778,14 @@ func (unavailableAgentManager) ListInteractions(context.Context, *principal.Prin
 
 func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Principal, *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error) {
 	return nil, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) AuthorizeAgentAppInvocation(context.Context, appaccessservice.AgentAppInvocationAuthorizationRequest) (appaccessservice.AgentAppInvocationAuthorization, error) {
+	return appaccessservice.AgentAppInvocationAuthorization{}, fmt.Errorf("agent manager is not available")
+}
+
+func (unavailableAgentManager) AuthorizeAgentWorkflowInvocation(context.Context, appaccessservice.AgentWorkflowInvocationAuthorizationRequest) (appaccessservice.AgentWorkflowInvocationAuthorization, error) {
+	return appaccessservice.AgentWorkflowInvocationAuthorization{}, fmt.Errorf("agent manager is not available")
 }
 
 func mapToYAMLNode(value map[string]any) (yaml.Node, error) {

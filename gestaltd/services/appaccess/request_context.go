@@ -29,6 +29,7 @@ type ProviderRequestContext struct {
 	internalConnection bool
 	connection         string
 	workflow           map[string]any
+	agent              invocation.AgentInvocationContext
 	access             invocation.AccessContext
 	host               invocation.HostContext
 	toolRefs           []coreagent.ToolRef
@@ -75,6 +76,13 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 		out.ToolRefs = agentwire.ToolRefsToProto(toolRefs.Refs)
 		out.ToolRefsSet = true
 	}
+	if agent := invocation.AgentInvocationContextFromContext(ctx); agent != (invocation.AgentInvocationContext{}) {
+		out.Agent = &proto.AgentInvocationContext{
+			ProviderName: agent.ProviderName,
+			SessionId:    agent.SessionID,
+			TurnId:       agent.TurnID,
+		}
+	}
 
 	if publicBaseURL = strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"); publicBaseURL == "" {
 		publicBaseURL = strings.TrimRight(strings.TrimSpace(invocation.HostContextFromContext(ctx).PublicBaseURL), "/")
@@ -118,7 +126,7 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 	if out.Invocation != nil && out.Invocation.RequestId == "" && out.Invocation.Depth == 0 && len(out.Invocation.CallChain) == 0 && out.Invocation.Surface == "" && !out.Invocation.InternalConnectionAccess && out.Invocation.Connection == "" {
 		out.Invocation = nil
 	}
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil && out.Caller == nil && out.Invocation == nil && out.RequestMeta == nil {
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Agent == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil && out.Caller == nil && out.Invocation == nil && out.RequestMeta == nil {
 		return nil, nil
 	}
 	return &out, nil
@@ -151,6 +159,9 @@ func MergeRequestContext(existing, fallback *proto.RequestContext) *proto.Reques
 	}
 	if merged.GetWorkflow() == nil && fallback.GetWorkflow() != nil {
 		merged.Workflow = fallback.GetWorkflow()
+	}
+	if merged.GetAgent() == nil && fallback.GetAgent() != nil {
+		merged.Agent = fallback.GetAgent()
 	}
 	if !merged.GetToolRefsSet() && fallback.GetToolRefsSet() {
 		merged.ToolRefs = append([]*proto.AgentToolRef(nil), fallback.GetToolRefs()...)
@@ -185,7 +196,7 @@ func ProviderRequestContextFromProto(reqCtx *proto.RequestContext, expectedKind 
 		return ProviderRequestContext{}, status.Error(codes.FailedPrecondition, "provider caller context is required")
 	}
 	if expected := strings.TrimSpace(expectedName); expected != "" && callerName != expected {
-		return ProviderRequestContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match host service caller %q", callerName, expected)
+		return ProviderRequestContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match serving provider %q", callerName, expected)
 	}
 
 	out := ProviderRequestContext{
@@ -201,6 +212,7 @@ func ProviderRequestContextFromProto(reqCtx *proto.RequestContext, expectedKind 
 			Instance:   reqCtx.GetCredential().GetInstance(),
 		},
 		workflow: workflowFromProviderRequestContext(reqCtx.GetWorkflow()),
+		agent:    agentFromProviderRequestContext(reqCtx.GetAgent()),
 		access: invocation.AccessContext{
 			Policy: reqCtx.GetAccess().GetPolicy(),
 			Role:   reqCtx.GetAccess().GetRole(),
@@ -246,6 +258,10 @@ func (c ProviderRequestContext) Workflow() map[string]any {
 	return invocation.CloneWorkflowContext(c.workflow)
 }
 
+func (c ProviderRequestContext) Agent() invocation.AgentInvocationContext {
+	return c.agent
+}
+
 func (c ProviderRequestContext) WithWorkflow(workflow *structpb.Struct) ProviderRequestContext {
 	if workflow == nil {
 		return c
@@ -283,11 +299,14 @@ func (c ProviderRequestContext) Restore(ctx context.Context, connectionOverride 
 	if c.surface != "" {
 		ctx = invocation.WithInvocationSurface(ctx, c.surface)
 	}
-	if c.internalConnection {
+	if c.internalConnection && c.agent == (invocation.AgentInvocationContext{}) {
 		ctx = invocation.WithInternalConnectionAccess(ctx)
 	}
 	if c.workflow != nil {
 		ctx = invocation.WithWorkflowContext(ctx, invocation.CloneWorkflowContext(c.workflow))
+	}
+	if c.agent != (invocation.AgentInvocationContext{}) {
+		ctx = invocation.WithAgentInvocationContext(ctx, c.agent)
 	}
 	if c.access != (invocation.AccessContext{}) {
 		ctx = invocation.WithAccessContext(ctx, c.access)
@@ -403,6 +422,17 @@ func workflowFromProviderRequestContext(workflow *structpb.Struct) map[string]an
 		return nil
 	}
 	return invocation.CloneWorkflowContext(workflow.AsMap())
+}
+
+func agentFromProviderRequestContext(agent *proto.AgentInvocationContext) invocation.AgentInvocationContext {
+	if agent == nil {
+		return invocation.AgentInvocationContext{}
+	}
+	return invocation.AgentInvocationContext{
+		ProviderName: strings.TrimSpace(agent.GetProviderName()),
+		SessionID:    strings.TrimSpace(agent.GetSessionId()),
+		TurnID:       strings.TrimSpace(agent.GetTurnId()),
+	}
 }
 
 func permissionSetToSubjectPermissionContext(set principal.PermissionSet) []*proto.SubjectPermissionContext {

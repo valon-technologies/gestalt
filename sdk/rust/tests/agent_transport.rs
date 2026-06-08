@@ -1,25 +1,18 @@
 #[path = "../src/generated.rs"]
 mod generated;
 
-mod support_protocol;
-
 #[allow(dead_code)]
 mod helpers;
 
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use generated::v1::agent_host_server::{
-    AgentHost as AgentHostRpc, AgentHostServer as AgentHostGrpcServer,
-};
 use generated::v1::agent_provider_client::AgentProviderClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use generated::v1::{self as pb, ConfigureProviderRequest, ProviderKind};
 use gestalt::proto::v1 as sdk_pb;
 use gestalt::{
-    AgentExecutionStatus, AgentHost, AgentHostExecuteToolInput, AgentHostListToolsInput,
-    AgentHostResolveConnectionInput, AgentInteraction, AgentInteractionState, AgentInteractionType,
+    AgentExecutionStatus, AgentInteraction, AgentInteractionState, AgentInteractionType,
     AgentMessagePartType, AgentProvider, AgentProviderCapabilities, AgentSession,
     AgentSessionState, AgentToolConfigSource, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
     AgentTurnOutput, AgentTurnTextOutput, CancelAgentProviderTurnRequest,
@@ -33,21 +26,8 @@ use gestalt::{
     ResolveAgentProviderInteractionRequest, RuntimeMetadata, UpdateAgentProviderSessionRequest,
 };
 use hyper_util::rt::tokio::TokioIo;
-use serde::Serialize;
-use tokio::net::{TcpListener, UnixListener, UnixStream};
-use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
-use tonic::transport::{Endpoint, Server};
-use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-
-#[derive(Serialize)]
-struct LookupArguments {
-    query: String,
-}
-
-#[derive(Serialize)]
-struct BadLookupArguments {
-    score: f64,
-}
+use tokio::net::UnixStream;
+use tonic::transport::Endpoint;
 use tower::service_fn;
 
 #[derive(Default)]
@@ -63,44 +43,6 @@ struct TestAgentProvider {
 struct SessionTools {
     tool_ref_operation: String,
     listed_tool_mcp_name: String,
-}
-
-#[derive(Default, Clone)]
-struct TestAgentHostService {
-    relay_tokens: Arc<Mutex<Vec<String>>>,
-    list_requests: Arc<Mutex<Vec<HostListRequest>>>,
-    execute_requests: Arc<Mutex<Vec<HostExecuteRequest>>>,
-    connection_requests: Arc<Mutex<Vec<HostConnectionRequest>>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct HostListRequest {
-    session_id: String,
-    turn_id: String,
-    page_size: i32,
-    page_token: String,
-    query: String,
-    subject_id: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct HostExecuteRequest {
-    session_id: String,
-    turn_id: String,
-    tool_call_id: String,
-    tool_id: String,
-    arguments: Option<serde_json::Value>,
-    subject_id: String,
-    idempotency_key: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct HostConnectionRequest {
-    session_id: String,
-    turn_id: String,
-    connection: String,
-    instance: String,
-    subject_id: String,
 }
 
 #[gestalt::async_trait]
@@ -416,119 +358,6 @@ impl AgentProvider for TestAgentProvider {
             bounded_list_hydration: true,
             supported_tool_sources: vec![AgentToolSourceMode::Catalog, AgentToolSourceMode::None],
         })
-    }
-}
-
-#[tonic::async_trait]
-impl AgentHostRpc for TestAgentHostService {
-    async fn list_tools(
-        &self,
-        request: GrpcRequest<pb::ListAgentToolsRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ListAgentToolsResponse>, Status> {
-        let request = request.into_inner();
-        self.list_requests
-            .lock()
-            .expect("lock list requests")
-            .push(HostListRequest {
-                session_id: request.session_id.clone(),
-                turn_id: request.turn_id.clone(),
-                page_size: request.page_size,
-                page_token: request.page_token.clone(),
-                query: request.query.clone(),
-                subject_id: request
-                    .context
-                    .as_ref()
-                    .and_then(|context| context.subject.as_ref())
-                    .map(|subject| subject.id.clone())
-                    .unwrap_or_default(),
-            });
-        Ok(GrpcResponse::new(pb::ListAgentToolsResponse {
-            tools: vec![pb::ListedAgentTool {
-                id: format!("{}:{}:lookup", request.session_id, request.turn_id),
-                mcp_name: "search__lookup".to_string(),
-                title: "lookup".to_string(),
-                description: "Look up records".to_string(),
-                input_schema: r#"{"type":"object"}"#.to_string(),
-                r#ref: Some(pb::AgentToolRef {
-                    app: "search".to_string(),
-                    operation: "lookup".to_string(),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            }],
-            next_page_token: "next-1".to_string(),
-        }))
-    }
-
-    async fn execute_tool(
-        &self,
-        request: GrpcRequest<pb::ExecuteAgentToolRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ExecuteAgentToolResponse>, Status> {
-        if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
-            self.relay_tokens
-                .lock()
-                .expect("lock relay tokens")
-                .push(token.to_str().expect("relay token ascii").to_string());
-        }
-        let request = request.into_inner();
-        self.execute_requests
-            .lock()
-            .expect("lock execute requests")
-            .push(HostExecuteRequest {
-                session_id: request.session_id.clone(),
-                turn_id: request.turn_id.clone(),
-                tool_call_id: request.tool_call_id.clone(),
-                tool_id: request.tool_id.clone(),
-                arguments: request
-                    .arguments
-                    .as_ref()
-                    .map(support_protocol::json_from_struct),
-                subject_id: request
-                    .context
-                    .as_ref()
-                    .and_then(|context| context.subject.as_ref())
-                    .map(|subject| subject.id.clone())
-                    .unwrap_or_default(),
-                idempotency_key: request.idempotency_key.clone(),
-            });
-        Ok(GrpcResponse::new(pb::ExecuteAgentToolResponse {
-            status: 207,
-            body: format!(
-                "{}:{}:{}:{}",
-                request.session_id, request.turn_id, request.tool_call_id, request.tool_id
-            ),
-        }))
-    }
-
-    async fn resolve_connection(
-        &self,
-        request: GrpcRequest<pb::ResolveAgentConnectionRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::ResolvedAgentConnection>, Status> {
-        let request = request.into_inner();
-        self.connection_requests
-            .lock()
-            .expect("lock connection requests")
-            .push(HostConnectionRequest {
-                session_id: request.session_id.clone(),
-                turn_id: request.turn_id.clone(),
-                connection: request.connection.clone(),
-                instance: request.instance.clone(),
-                subject_id: request
-                    .context
-                    .as_ref()
-                    .and_then(|context| context.subject.as_ref())
-                    .map(|subject| subject.id.clone())
-                    .unwrap_or_default(),
-            });
-        Ok(GrpcResponse::new(pb::ResolvedAgentConnection {
-            connection_id: "vertex-ai".to_string(),
-            connection: request.connection,
-            instance: request.instance,
-            mode: "subject".to_string(),
-            headers: BTreeMap::from([("authorization".to_string(), "Bearer token".to_string())]),
-            params: BTreeMap::from([("endpoint".to_string(), "vertex-endpoint".to_string())]),
-            ..Default::default()
-        }))
     }
 }
 
@@ -852,200 +681,6 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
 
     serve_task.abort();
     let _ = serve_task.await;
-}
-
-#[tokio::test]
-async fn agent_host_client_round_trip_over_unix_socket() {
-    let _env_lock = helpers::env_lock().lock().await;
-    let host_socket = helpers::temp_socket("gestalt-rust-agent-host.sock");
-    let _agent_host_env =
-        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, host_socket.as_os_str());
-    let host_service = TestAgentHostService::default();
-
-    let host_socket_for_task = host_socket.clone();
-    let served_service = host_service.clone();
-    let host_task = tokio::spawn(async move {
-        let listener = UnixListener::bind(&host_socket_for_task).expect("bind agent host socket");
-        Server::builder()
-            .add_service(AgentHostGrpcServer::new(served_service))
-            .serve_with_incoming(UnixListenerStream::new(listener))
-            .await
-            .expect("serve agent host");
-    });
-
-    helpers::wait_for_socket(&host_socket).await;
-
-    let request_context = Some(sdk_pb::RequestContext {
-        subject: Some(sdk_pb::SubjectContext {
-            id: "user:agent-host".to_string(),
-            ..Default::default()
-        }),
-        ..Default::default()
-    });
-    let mut host = AgentHost::connect()
-        .await
-        .expect("connect agent host")
-        .with_request_context(request_context.clone());
-    let listed = host
-        .list_tools(AgentHostListToolsInput {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            page_size: 10,
-            page_token: "page-0".to_string(),
-            query: "lookup".to_string(),
-        })
-        .await
-        .expect("list tools");
-    assert_eq!(listed.tools.len(), 1);
-    assert_eq!(listed.tools[0].mcp_name, "search__lookup");
-    assert_eq!(listed.next_page_token, "next-1");
-
-    let invoked = host
-        .execute_tool(
-            AgentHostExecuteToolInput {
-                session_id: "session-1".to_string(),
-                turn_id: "turn-1".to_string(),
-                tool_call_id: "call-7".to_string(),
-                tool_id: "lookup".to_string(),
-                idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
-                arguments: None,
-            }
-            .with_arguments(LookupArguments {
-                query: "Ada Lovelace".to_string(),
-            })
-            .expect("typed tool arguments"),
-        )
-        .await
-        .expect("execute tool");
-    assert_eq!(invoked.status, 207);
-    assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
-    let bad_arguments = AgentHostExecuteToolInput::default().with_arguments("not-object");
-    assert!(
-        bad_arguments.is_err(),
-        "non-object tool arguments should fail"
-    );
-    let bad_arguments = AgentHostExecuteToolInput::default().with_arguments(BadLookupArguments {
-        score: f64::INFINITY,
-    });
-    assert!(
-        bad_arguments.is_err(),
-        "non-finite tool arguments should fail"
-    );
-
-    let resolved_connection = host
-        .resolve_connection(AgentHostResolveConnectionInput {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            connection: "model".to_string(),
-            instance: "default".to_string(),
-        })
-        .await
-        .expect("resolve connection");
-    assert_eq!(resolved_connection.connection_id, "vertex-ai");
-    assert_eq!(
-        resolved_connection.headers.get("authorization"),
-        Some(&"Bearer token".to_string())
-    );
-    assert_eq!(
-        resolved_connection.params.get("endpoint"),
-        Some(&"vertex-endpoint".to_string())
-    );
-
-    assert_eq!(
-        *host_service
-            .list_requests
-            .lock()
-            .expect("lock list requests"),
-        vec![HostListRequest {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            page_size: 10,
-            page_token: "page-0".to_string(),
-            query: "lookup".to_string(),
-            subject_id: "user:agent-host".to_string(),
-        }]
-    );
-    assert_eq!(
-        *host_service
-            .execute_requests
-            .lock()
-            .expect("lock execute requests"),
-        vec![HostExecuteRequest {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            tool_call_id: "call-7".to_string(),
-            tool_id: "lookup".to_string(),
-            arguments: Some(serde_json::json!({
-                "query": "Ada Lovelace"
-            })),
-            subject_id: "user:agent-host".to_string(),
-            idempotency_key: "agent/simple:agent-runtime:turn-1:call-7".to_string(),
-        }]
-    );
-    assert_eq!(
-        *host_service
-            .connection_requests
-            .lock()
-            .expect("lock connection requests"),
-        vec![HostConnectionRequest {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            connection: "model".to_string(),
-            instance: "default".to_string(),
-            subject_id: "user:agent-host".to_string(),
-        }]
-    );
-
-    host_task.abort();
-    let _ = host_task.await;
-}
-
-#[tokio::test]
-async fn agent_host_client_round_trip_over_tcp_and_sends_relay_token() {
-    let _env_lock = helpers::env_lock().lock().await;
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("bind tcp listener");
-    let address = listener.local_addr().expect("local addr");
-    let _agent_host_env =
-        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
-    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
-
-    let host_service = TestAgentHostService::default();
-    let served_service = host_service.clone();
-    let host_task = tokio::spawn(async move {
-        Server::builder()
-            .add_service(AgentHostGrpcServer::new(served_service))
-            .serve_with_incoming(TcpListenerStream::new(listener))
-            .await
-            .expect("serve agent host");
-    });
-
-    let mut host = AgentHost::connect().await.expect("connect agent host");
-    let invoked = host
-        .execute_tool(AgentHostExecuteToolInput {
-            session_id: "session-1".to_string(),
-            turn_id: "turn-1".to_string(),
-            tool_call_id: "call-7".to_string(),
-            tool_id: "lookup".to_string(),
-            ..Default::default()
-        })
-        .await
-        .expect("execute tool");
-
-    assert_eq!(invoked.status, 207);
-    assert_eq!(invoked.body, "session-1:turn-1:call-7:lookup");
-    assert_eq!(
-        host_service
-            .relay_tokens
-            .lock()
-            .expect("lock relay tokens")
-            .clone(),
-        vec!["relay-token-rust".to_string()]
-    );
-
-    host_task.abort();
-    let _ = host_task.await;
 }
 
 fn configured_name(provider: &TestAgentProvider) -> String {

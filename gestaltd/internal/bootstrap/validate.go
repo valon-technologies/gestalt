@@ -72,9 +72,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
 	)
-	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	workflowTools := newWorkflowSystemTools(prepared.WorkflowManager, prepared.Deps.WorkflowRuntime)
-	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
 	prepared.WorkflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
 		Providers:         providers,
 		Workflow:          prepared.Deps.WorkflowRuntime,
@@ -96,7 +94,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
-	prepared.Deps.AgentRuntime.SetToolSearcher(prepared.AgentManager)
 	prepared.AppInvocation.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "app", nil, invocation.WithoutRateLimit()))
 	providersReady, _, _, errResolver = providerBuilds.Start(ctx, prepared.Deps, buildProviderForValidation)
 	extraWorkflows, extraAgents, err := buildWorkflowsAndAgents(ctx, cfg, factories, prepared.Deps)

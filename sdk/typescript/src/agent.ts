@@ -5,20 +5,10 @@ import {
 import {
   Code,
   ConnectError,
-  createClient,
-  type Client,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import {
-  createHostServiceGrpcTransport,
-  hostServiceMetadataInterceptors,
-  parseHostServiceTarget,
-  ENV_HOST_SERVICE_SOCKET,
-  ENV_HOST_SERVICE_TOKEN,
-} from "./host-service.ts";
 
 import {
-  AgentHost as AgentHostService,
   AgentInteractionSchema,
   AgentProvider as AgentProviderService,
   AgentProviderCapabilitiesSchema,
@@ -32,15 +22,12 @@ import {
   AgentMessagePartType as ProtoAgentMessagePartType,
   AgentSessionState as ProtoAgentSessionState,
   AgentToolSourceMode as ProtoAgentToolSourceMode,
-  ExecuteAgentToolRequestSchema,
   GetAgentProviderCapabilitiesRequestSchema,
-  ListAgentToolsRequestSchema,
   ListedAgentToolSchema,
   ListAgentProviderInteractionsResponseSchema,
   ListAgentProviderSessionsResponseSchema,
   ListAgentProviderTurnEventsResponseSchema,
   ListAgentProviderTurnsResponseSchema,
-  ResolveAgentConnectionRequestSchema,
   type AgentToolConfig as ProtoAgentToolConfig,
   type AgentInteraction as ProtoAgentInteraction,
   type AgentMessagePartImageRef as ProtoAgentMessagePartImageRef,
@@ -52,22 +39,16 @@ import {
   type CancelAgentProviderTurnRequest as ProtoCancelAgentProviderTurnRequest,
   type CreateAgentProviderSessionRequest as ProtoCreateAgentProviderSessionRequest,
   type CreateAgentProviderTurnRequest as ProtoCreateAgentProviderTurnRequest,
-  type ExecuteAgentToolRequest as ProtoExecuteAgentToolRequest,
-  type ExecuteAgentToolResponse as ProtoExecuteAgentToolResponse,
   type GetAgentProviderCapabilitiesRequest as ProtoGetAgentProviderCapabilitiesRequest,
   type GetAgentProviderInteractionRequest as ProtoGetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest as ProtoGetAgentProviderSessionRequest,
   type GetAgentProviderTurnRequest as ProtoGetAgentProviderTurnRequest,
-  type ListAgentToolsRequest as ProtoListAgentToolsRequest,
-  type ListAgentToolsResponse as ProtoListAgentToolsResponse,
   type ListAgentProviderInteractionsRequest as ProtoListAgentProviderInteractionsRequest,
   type ListAgentProviderSessionsRequest as ProtoListAgentProviderSessionsRequest,
   type ListAgentProviderTurnEventsRequest as ProtoListAgentProviderTurnEventsRequest,
   type ListAgentProviderTurnsRequest as ProtoListAgentProviderTurnsRequest,
   type ListedAgentTool as ProtoListedAgentTool,
-  type ResolveAgentConnectionRequest as ProtoResolveAgentConnectionRequest,
   type ResolveAgentProviderInteractionRequest as ProtoResolveAgentProviderInteractionRequest,
-  type ResolvedAgentConnection as ProtoResolvedAgentConnection,
   type ResolvedAgentTool as ProtoResolvedAgentTool,
   type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
@@ -96,7 +77,6 @@ import {
   agentTurnDisplayToProto,
 } from "./agent-conversions.ts";
 import {
-  dateFromTimestamp,
   timestampFromDate,
   type JsonInput,
   type JsonObjectInput,
@@ -231,6 +211,7 @@ export interface ResolvedAgentTool {
   name?: string | undefined;
   description?: string | undefined;
   parametersSchema?: JsonObjectInput | undefined;
+  ref?: AgentToolRef | undefined;
 }
 
 export interface AgentProviderCapabilities {
@@ -485,21 +466,6 @@ export interface ResolveAgentProviderInteractionRequest {
 
 export interface GetAgentProviderCapabilitiesRequest {}
 
-export interface ExecuteAgentToolRequest {
-  sessionId: string;
-  turnId: string;
-  toolCallId: string;
-  toolId: string;
-  arguments?: JsonObjectInput | undefined;
-  idempotencyKey?: string | undefined;
-  context?: ProtoRequestContext | undefined;
-}
-
-export interface ExecuteAgentToolResponse {
-  status: number;
-  body: string;
-}
-
 export interface AgentToolAnnotations {
   readOnlyHint?: boolean | undefined;
   idempotentHint?: boolean | undefined;
@@ -518,48 +484,6 @@ export interface ListedAgentTool {
   ref?: AgentToolRef | undefined;
   tags: readonly string[];
   searchText: string;
-}
-
-export interface ListAgentToolsRequest {
-  sessionId: string;
-  turnId: string;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-  query?: string | undefined;
-  context?: ProtoRequestContext | undefined;
-}
-
-export interface ListAgentToolsResponse {
-  tools: readonly ListedAgentTool[];
-  nextPageToken: string;
-}
-
-export interface ResolveAgentConnectionRequest {
-  sessionId: string;
-  turnId: string;
-  connection: string;
-  instance?: string | undefined;
-  context?: ProtoRequestContext | undefined;
-}
-
-export interface ResolvedAgentConnection {
-  connectionId: string;
-  connection: string;
-  instance: string;
-  mode: string;
-  headers: Record<string, string>;
-  params: Record<string, string>;
-  expiresAt?: Date | undefined;
-}
-/** Fakeable client contract for agent host calls. */
-export interface AgentHost {
-  executeTool(
-    request: ExecuteAgentToolRequest,
-  ): Promise<ExecuteAgentToolResponse>;
-  listTools(request: ListAgentToolsRequest): Promise<ListAgentToolsResponse>;
-  resolveConnection(
-    request: ResolveAgentConnectionRequest,
-  ): Promise<ResolvedAgentConnection>;
 }
 
 /** Handlers and runtime metadata for an agent provider. */
@@ -605,7 +529,7 @@ export interface AgentProviderOptions extends ProviderBaseOptions {
   ) => MaybePromise<AgentProviderCapabilities>;
 }
 
-/** Runtime provider implementation for the Gestalt agent host contract. */
+/** Runtime provider implementation for the Gestalt agent provider contract. */
 export class AgentProvider extends ProviderBase {
   readonly kind = "agent" as const;
 
@@ -1054,6 +978,7 @@ function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgent
     name: tool.name,
     description: tool.description,
     parametersSchema: optionalObjectFromStruct(tool.parametersSchema),
+    ref: tool.ref === undefined ? undefined : agentToolRefFromProto(tool.ref),
   };
 }
 
@@ -1093,49 +1018,6 @@ function agentSubjectPermissionsFromProto(
 
 function optionalTimestamp(value?: Date | undefined) {
   return value === undefined ? undefined : timestampFromDate(value);
-}
-
-function executeToolRequestToProto(
-  request: ExecuteAgentToolRequest,
-): ProtoExecuteAgentToolRequest {
-  return create(ExecuteAgentToolRequestSchema, {
-    sessionId: request.sessionId,
-    turnId: request.turnId,
-    toolCallId: request.toolCallId,
-    toolId: request.toolId,
-    arguments: optionalStruct(request.arguments),
-    idempotencyKey: request.idempotencyKey ?? "",
-    context: request.context,
-  });
-}
-
-function executeToolResponseFromProto(
-  response: ProtoExecuteAgentToolResponse,
-): ExecuteAgentToolResponse {
-  return {
-    status: response.status,
-    body: response.body,
-  };
-}
-
-function listToolsRequestToProto(request: ListAgentToolsRequest): ProtoListAgentToolsRequest {
-  return create(ListAgentToolsRequestSchema, {
-    sessionId: request.sessionId,
-    turnId: request.turnId,
-    pageSize: request.pageSize ?? 0,
-    pageToken: request.pageToken ?? "",
-    query: request.query ?? "",
-    context: request.context,
-  });
-}
-
-function listToolsResponseFromProto(
-  response: ProtoListAgentToolsResponse,
-): ListAgentToolsResponse {
-  return {
-    tools: response.tools.map(listedToolFromProto),
-    nextPageToken: response.nextPageToken,
-  };
 }
 
 function listedToolFromProto(tool: ProtoListedAgentTool): ListedAgentTool {
@@ -1221,34 +1103,6 @@ export function agentToolConfigToProto(
   };
 }
 
-function resolveConnectionRequestToProto(
-  request: ResolveAgentConnectionRequest,
-): ProtoResolveAgentConnectionRequest {
-  return create(ResolveAgentConnectionRequestSchema, {
-    sessionId: request.sessionId,
-    turnId: request.turnId,
-    connection: request.connection,
-    instance: request.instance ?? "",
-    context: request.context,
-  });
-}
-
-function resolvedConnectionFromProto(
-  connection: ProtoResolvedAgentConnection,
-): ResolvedAgentConnection {
-  return {
-    connectionId: connection.connectionId,
-    connection: connection.connection,
-    instance: connection.instance,
-    mode: connection.mode,
-    headers: { ...connection.headers },
-    params: { ...connection.params },
-    expiresAt: connection.expiresAt === undefined
-      ? undefined
-      : dateFromTimestamp(connection.expiresAt),
-  };
-}
-
 /** Runtime type guard for agent providers loaded from user modules. */
 export function isAgentProvider(value: unknown): value is AgentProvider {
   return (
@@ -1260,52 +1114,6 @@ export function isAgentProvider(value: unknown): value is AgentProvider {
       "createSession" in value &&
       "createTurn" in value)
   );
-}
-
-/** Client for the agent host service available inside agent providers. */
-class AgentHostImpl implements AgentHost {
-  private readonly client: Client<typeof AgentHostService>;
-
-  constructor() {
-    const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
-    if (!target) {
-      throw new Error(`agent host: ${ENV_HOST_SERVICE_SOCKET} is not set`);
-    }
-    const relayToken = process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
-    const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("agent host", target),
-      hostServiceMetadataInterceptors(relayToken, ""),
-    );
-    this.client = createClient(AgentHostService, transport);
-  }
-
-  /** Executes a host tool using an agent protocol request message. */
-  async executeTool(
-    request: ExecuteAgentToolRequest,
-  ): Promise<ExecuteAgentToolResponse> {
-    return executeToolResponseFromProto(
-      await this.client.executeTool(executeToolRequestToProto(request)),
-    );
-  }
-
-  /** Lists host tools visible to the current agent request. */
-  async listTools(
-    request: ListAgentToolsRequest,
-  ): Promise<ListAgentToolsResponse> {
-    return listToolsResponseFromProto(
-      await this.client.listTools(listToolsRequestToProto(request)),
-    );
-  }
-
-  /** Resolves a configured agent connection for the current turn. */
-  async resolveConnection(
-    request: ResolveAgentConnectionRequest,
-  ): Promise<ResolvedAgentConnection> {
-    return resolvedConnectionFromProto(
-      await this.client.resolveConnection(resolveConnectionRequestToProto(request)),
-    );
-  }
-
 }
 
 /** Builds the Connect service implementation used by the TypeScript runtime. */
@@ -1465,8 +1273,6 @@ function listInteractionsResult(
 ): readonly AgentInteraction[] {
   return "interactions" in value ? value.interactions : value;
 }
-
-export const AgentHost = AgentHostImpl;
 
 async function requireAgentProviderHandler<Request, Response>(
   action: string,

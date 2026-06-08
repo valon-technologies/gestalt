@@ -279,16 +279,6 @@ type ListedTool struct {
 	Hidden           bool
 }
 
-type ResolvedConnection struct {
-	ConnectionID string
-	Connection   string
-	Instance     string
-	Mode         core.ConnectionMode
-	Headers      map[string]string
-	Params       map[string]string
-	ExpiresAt    *time.Time
-}
-
 type InteractionType string
 
 const (

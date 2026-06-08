@@ -8,10 +8,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -32,10 +32,57 @@ type AppServer struct {
 	authorization  core.AuthorizationProvider
 	callerName     string
 	accessProfiles AppAccessProfiles
-	agentAppAuth   func(context.Context, string, string, *principal.Principal, coreagent.ToolTarget, *proto.RequestContext) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error)
+	agentAppAuth   AgentAppInvocationAuthorizer
 }
 
 type AppServerOption func(*AppServer)
+
+type AgentAppInvocationAuthorizer interface {
+	AuthorizeAgentAppInvocation(context.Context, AgentAppInvocationAuthorizationRequest) (AgentAppInvocationAuthorization, error)
+}
+
+type AgentWorkflowInvocationAuthorizer interface {
+	AuthorizeAgentWorkflowInvocation(context.Context, AgentWorkflowInvocationAuthorizationRequest) (AgentWorkflowInvocationAuthorization, error)
+}
+
+type AgentAppInvocationAuthorizationRequest struct {
+	AgentProviderName string
+	CallerKind        invocation.ProviderKind
+	CallerName        string
+	Agent             invocation.AgentInvocationContext
+	Principal         *principal.Principal
+	App               string
+	Operation         string
+	Connection        string
+	Instance          string
+	CredentialMode    core.ConnectionMode
+	RequestContext    *proto.RequestContext
+}
+
+type AgentAppInvocationAuthorization struct {
+	Principal      *principal.Principal
+	CredentialMode core.ConnectionMode
+	Connection     string
+	Instance       string
+	RunAs          *core.RunAsSubject
+	ToolRefs       []coreagent.ToolRef
+	ToolRefsSet    bool
+}
+
+type AgentWorkflowInvocationAuthorizationRequest struct {
+	AgentProviderName string
+	CallerKind        invocation.ProviderKind
+	CallerName        string
+	Agent             invocation.AgentInvocationContext
+	Principal         *principal.Principal
+	Operation         string
+	Target            *coreworkflow.Target
+	RequestContext    *proto.RequestContext
+}
+
+type AgentWorkflowInvocationAuthorization struct {
+	Principal *principal.Principal
+}
 
 func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOption {
 	return func(s *AppServer) {
@@ -43,7 +90,7 @@ func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOpt
 	}
 }
 
-func WithAgentAppInvocationAuthorizer(authorizer func(context.Context, string, string, *principal.Principal, coreagent.ToolTarget, *proto.RequestContext) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error)) AppServerOption {
+func WithAgentAppInvocationAuthorizer(authorizer AgentAppInvocationAuthorizer) AppServerOption {
 	return func(s *AppServer) {
 		s.agentAppAuth = authorizer
 	}
@@ -159,6 +206,7 @@ type requestInvocationContext struct {
 	credentialModeOverride core.ConnectionMode
 	operationProfile       AppOperationProfile
 	workflow               map[string]any
+	agent                  invocation.AgentInvocationContext
 	agentToolRefs          []coreagent.ToolRef
 	agentToolRefsSet       bool
 	authorizedConnection   string
@@ -176,25 +224,25 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.R
 	if err != nil {
 		return requestInvocationContext{}, err
 	}
-	if callCtx.callerProviderKind == invocation.ProviderKindAgent {
-		authorizedPrincipal, scope, tool, err := s.authorizeAgentAppInvocation(ctx, callCtx, targetApp, targetOperation, rawConnection, rawInstance, credentialMode)
+	if callCtx.agent != (invocation.AgentInvocationContext{}) {
+		authorized, err := s.authorizeAgentAppInvocation(ctx, callCtx, targetApp, targetOperation, rawConnection, rawInstance, credentialMode)
 		if err != nil {
 			return requestInvocationContext{}, err
 		}
-		if authorizedPrincipal != nil {
-			callCtx.principal = authorizedPrincipal
+		if authorized.Principal != nil {
+			callCtx.principal = authorized.Principal
 		}
-		if mode := core.NormalizeOptionalConnectionMode(tool.Target.CredentialMode); mode != "" {
-			callCtx.credentialModeOverride = mode
+		if authorized.CredentialMode != "" {
+			callCtx.credentialModeOverride = authorized.CredentialMode
 		}
-		callCtx.authorizedConnection = core.ResolveConnectionAlias(strings.TrimSpace(tool.Target.Connection))
-		callCtx.authorizedInstance = strings.TrimSpace(tool.Target.Instance)
+		callCtx.authorizedConnection = strings.TrimSpace(authorized.Connection)
+		callCtx.authorizedInstance = strings.TrimSpace(authorized.Instance)
 		callCtx.authorizedSelectors = true
-		if runAs := core.NormalizeRunAsSubject(tool.Target.RunAs); runAs != nil {
+		if runAs := core.NormalizeRunAsSubject(authorized.RunAs); runAs != nil {
 			callCtx.operationProfile.Delegation.RunAs = runAs
 		}
-		if scope.ToolRefsSet {
-			callCtx.agentToolRefs = append([]coreagent.ToolRef(nil), scope.ToolRefs...)
+		if authorized.ToolRefsSet {
+			callCtx.agentToolRefs = append([]coreagent.ToolRef(nil), authorized.ToolRefs...)
 			callCtx.agentToolRefsSet = true
 		}
 		return callCtx, nil
@@ -207,6 +255,9 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.R
 			callCtx.credentialModeOverride = credentialMode
 		}
 		return callCtx, nil
+	}
+	if callCtx.callerProviderKind == invocation.ProviderKindAgent {
+		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "agent app invocation context is required")
 	}
 	if err := s.authorizeAppInvocation(ctx, callCtx, appInvocationAuthorizationResourceTypeOperation, appInvocationOperationResourceID(targetApp, targetOperation), targetApp, targetOperation); err != nil {
 		return requestInvocationContext{}, err
@@ -235,7 +286,7 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *
 	if err != nil {
 		return requestInvocationContext{}, err
 	}
-	if callCtx.callerProviderKind == invocation.ProviderKindAgent {
+	if callCtx.agent != (invocation.AgentInvocationContext{}) || callCtx.callerProviderKind == invocation.ProviderKindAgent {
 		return requestInvocationContext{}, status.Error(codes.PermissionDenied, "agent callers may only invoke listed app operations")
 	}
 	if err := s.authorizeAppInvocation(ctx, callCtx, appInvocationAuthorizationResourceTypeSurface, appInvocationSurfaceResourceID(targetApp, surface), targetApp, surface); err != nil {
@@ -262,8 +313,15 @@ func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocat
 	if callerKind != invocation.ProviderKindApp && callerKind != invocation.ProviderKindWorkflow && callerKind != invocation.ProviderKindAgent {
 		return requestInvocationContext{}, status.Errorf(codes.FailedPrecondition, "%s caller context is not supported for app invocation", callerKind)
 	}
-	if expected := strings.TrimSpace(s.callerName); expected != "" && callerName != expected {
-		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match host service caller %q", callerName, expected)
+	agent := agentFromRequestContext(reqCtx)
+	if expected := strings.TrimSpace(s.callerName); expected != "" {
+		if agent != (invocation.AgentInvocationContext{}) {
+			if strings.TrimSpace(agent.ProviderName) != expected {
+				return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "agent invocation context provider %q does not match serving provider %q", strings.TrimSpace(agent.ProviderName), expected)
+			}
+		} else if callerName != expected {
+			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "provider caller context %q does not match serving provider %q", callerName, expected)
+		}
 	}
 	return requestInvocationContext{
 		callerName:         callerName,
@@ -271,6 +329,7 @@ func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocat
 		principal:          PrincipalFromSubjectContext(reqCtx.GetSubject()),
 		credential:         credentialFromRequestContext(reqCtx),
 		workflow:           workflowFromRequestContext(reqCtx),
+		agent:              agent,
 		requestContext:     reqCtx,
 	}, nil
 }
@@ -302,24 +361,23 @@ func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestI
 	return nil
 }
 
-func (s *AppServer) authorizeAgentAppInvocation(ctx context.Context, callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error) {
+func (s *AppServer) authorizeAgentAppInvocation(ctx context.Context, callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) (AgentAppInvocationAuthorization, error) {
 	if s == nil || s.agentAppAuth == nil {
-		return nil, agentturnscope.Scope{}, coreagent.ListedTool{}, status.Error(codes.FailedPrecondition, "agent app invocation authorizer is required")
+		return AgentAppInvocationAuthorization{}, status.Error(codes.FailedPrecondition, "agent app invocation authorizer is required")
 	}
-	turnID := ""
-	if meta := invocationMetaFromRequestContext(callCtx.requestContext); meta != nil {
-		turnID = strings.TrimSpace(meta.RequestID)
-	}
-	if turnID == "" {
-		return nil, agentturnscope.Scope{}, coreagent.ListedTool{}, status.Error(codes.FailedPrecondition, "agent turn request context is required")
-	}
-	return s.agentAppAuth(ctx, strings.TrimSpace(callCtx.callerName), turnID, callCtx.principal, coreagent.ToolTarget{
-		App:            targetApp,
-		Operation:      targetOperation,
-		Connection:     strings.TrimSpace(rawConnection),
-		Instance:       strings.TrimSpace(rawInstance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(credentialMode),
-	}, callCtx.requestContext)
+	return s.agentAppAuth.AuthorizeAgentAppInvocation(ctx, AgentAppInvocationAuthorizationRequest{
+		AgentProviderName: strings.TrimSpace(s.callerName),
+		CallerKind:        callCtx.callerProviderKind,
+		CallerName:        callCtx.callerName,
+		Agent:             callCtx.agent,
+		Principal:         callCtx.principal,
+		App:               targetApp,
+		Operation:         targetOperation,
+		Connection:        strings.TrimSpace(rawConnection),
+		Instance:          strings.TrimSpace(rawInstance),
+		CredentialMode:    credentialMode,
+		RequestContext:    callCtx.requestContext,
+	})
 }
 
 func authorizeWorkflowAppInvocation(callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) error {
@@ -423,6 +481,9 @@ func restoreRequestInvocationContext(ctx context.Context, callCtx requestInvocat
 	if callCtx.workflow != nil {
 		ctx = invocation.WithWorkflowContext(ctx, invocation.CloneWorkflowContext(callCtx.workflow))
 	}
+	if callCtx.agent != (invocation.AgentInvocationContext{}) {
+		ctx = invocation.WithAgentInvocationContext(ctx, callCtx.agent)
+	}
 	ctx = applyInheritedRequestContext(ctx, callCtx.requestContext)
 	if callCtx.agentToolRefsSet {
 		ctx = invocation.WithToolRefsContext(ctx, callCtx.agentToolRefs)
@@ -459,6 +520,17 @@ func workflowFromRequestContext(reqCtx *proto.RequestContext) map[string]any {
 		return invocation.CloneWorkflowContext(workflow.AsMap())
 	}
 	return nil
+}
+
+func agentFromRequestContext(reqCtx *proto.RequestContext) invocation.AgentInvocationContext {
+	if reqCtx == nil || reqCtx.GetAgent() == nil {
+		return invocation.AgentInvocationContext{}
+	}
+	return invocation.AgentInvocationContext{
+		ProviderName: strings.TrimSpace(reqCtx.GetAgent().GetProviderName()),
+		SessionID:    strings.TrimSpace(reqCtx.GetAgent().GetSessionId()),
+		TurnID:       strings.TrimSpace(reqCtx.GetAgent().GetTurnId()),
+	}
 }
 
 func invocationMetaFromRequestContext(reqCtx *proto.RequestContext) *invocation.InvocationMeta {

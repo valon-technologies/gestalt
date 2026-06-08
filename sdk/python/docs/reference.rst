@@ -241,10 +241,7 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
    ListAgentProviderTurnsResponse
    ListAgentProviderTurnEventsResponse
    ListAgentProviderInteractionsResponse
-   ExecuteAgentToolResponse
-   ListAgentToolsResponse
    ListedAgentTool
-   ResolvedAgentConnection
 
 .. autoclass:: AgentPreparedWorkspace
 
@@ -286,13 +283,7 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
 
 .. autoclass:: ListAgentProviderInteractionsResponse
 
-.. autoclass:: ExecuteAgentToolResponse
-
-.. autoclass:: ListAgentToolsResponse
-
 .. autoclass:: ListedAgentTool
-
-.. autoclass:: ResolvedAgentConnection
 
 .. _python-agent-dictionary-helpers:
 
@@ -731,7 +722,6 @@ These clients connect to host services made available to a provider process by
    :nosignatures:
 
    ENV_RUNTIME_SESSION_ID
-   AgentHost
    Agent
    AppProtocol
    RuntimeLogHost
@@ -740,11 +730,6 @@ These clients connect to host services made available to a provider process by
    Workflow
 
 .. autodata:: ENV_RUNTIME_SESSION_ID
-
-.. autoclass:: AgentHost
-   :members:
-   :special-members: __enter__, __exit__
-   :exclude-members: __dict__, __module__, __weakref__
 
 .. autoclass:: Agent
    :members:

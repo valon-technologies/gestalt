@@ -37,11 +37,6 @@ type WorkspaceProvider interface {
 	SupportsWorkspaceRequests() bool
 }
 
-type Host interface {
-	ListTools(ctx context.Context, req ListToolsRequest) (*ListToolsResponse, error)
-	ExecuteTool(ctx context.Context, req ExecuteToolRequest) (*ExecuteToolResponse, error)
-}
-
 type UnimplementedProvider struct{}
 
 func (UnimplementedProvider) CreateSession(context.Context, *proto.CreateAgentProviderSessionRequest) (*Session, error) {

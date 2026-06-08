@@ -24,7 +24,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
 | Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`RuntimeProvider`] | Host-service backends implemented as Rust providers. |
 | Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_definition`], [`new_workflow_run`], [`new_workflow_signal`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
-| Host-service clients | [`Cache`], [`S3`], [`Workflow`], [`AgentHost`], [`Agent`], [`App`] | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Host-service clients | [`Cache`], [`S3`], [`Workflow`], [`Agent`], [`App`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
 
 ## Quick start
@@ -90,7 +90,7 @@ a host-service backend.
 | `RuntimeProvider` | `export_runtime_provider!` | Hosted app execution backends. |
 
 The crate also exposes clients for sibling host services, including `Cache`,
-`S3`, `Workflow`, `AgentHost`, `Agent`, and `App`.
+`S3`, `Workflow`, `Agent`, and `App`.
 
 ## App invocation migration
 
@@ -125,9 +125,8 @@ that need to classify GraphQL errors themselves.
 `AgentProvider` implementations receive and return native structs such as
 `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
 `AgentTurnEvent`. Structured payload fields use `serde_json::Value` and
-timestamp fields use `SystemTime`; the SDK runtime owns transport serialization at
-the transport boundary. `AgentHost` includes plain-input helpers for listing
-tools, executing tools, and resolving connections during one turn.
+timestamp fields use `SystemTime`; the SDK runtime owns transport serialization
+at the transport boundary.
 Workflow builders such as `new_bound_workflow_target`,
 `new_workflow_definition`, `new_workflow_run`, and `new_workflow_signal`
 accept SDK-owned input structs and preserve request shape without asking
@@ -146,7 +145,7 @@ The crate exposes higher-level authoring APIs:
 - `AuthenticationProvider`, `CacheProvider`, `S3Provider`, `SecretsProvider`,
   `WorkflowProvider`, `AgentProvider`, and `RuntimeProvider` model
   executable provider runtimes.
-- `Cache`, `S3`, `Workflow`, `AgentHost`, `Agent`, and `App` call sibling host
+- `Cache`, `S3`, `Workflow`, `Agent`, and `App` call sibling host
   services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.

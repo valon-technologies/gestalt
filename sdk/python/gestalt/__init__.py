@@ -95,8 +95,6 @@ _AGENT_PROTOCOL_EXPORTS = (
     "CancelAgentProviderTurnRequest",
     "CreateAgentProviderSessionRequest",
     "CreateAgentProviderTurnRequest",
-    "ExecuteAgentToolRequest",
-    "ExecuteAgentToolResponse",
     "GetAgentProviderCapabilitiesRequest",
     "GetAgentProviderInteractionRequest",
     "GetAgentProviderSessionRequest",
@@ -109,12 +107,8 @@ _AGENT_PROTOCOL_EXPORTS = (
     "ListAgentProviderTurnEventsResponse",
     "ListAgentProviderTurnsRequest",
     "ListAgentProviderTurnsResponse",
-    "ListAgentToolsRequest",
-    "ListAgentToolsResponse",
     "ListedAgentTool",
     "ResolvedAgentTool",
-    "ResolvedAgentConnection",
-    "ResolveAgentConnectionRequest",
     "ResolveAgentProviderInteractionRequest",
     "UpdateAgentProviderSessionRequest",
 )
@@ -145,8 +139,6 @@ _AGENT_HELPER_EXPORTS = (
     "AgentToolRef",
     "AgentWorkspaceGitCheckout",
     "AgentWorkspace",
-    "AgentHost",
-    "AgentHostProtocol",
     "agent_actor_from_dict",
     "agent_actor_to_dict",
     "agent_message_from_dict",
@@ -390,8 +382,6 @@ _WORKFLOW_HELPER_EXPORTS = (
 )
 
 _LAZY_EXPORTS = {
-    "AgentHost": ("._agent", "AgentHost"),
-    "AgentHostProtocol": ("._agent", "AgentHostProtocol"),
     "Agent": ("._agent", "Agent"),
     "AgentProtocol": ("._agent", "AgentProtocol"),
     "AgentProvider": ("._providers", "AgentProvider"),
@@ -555,7 +545,6 @@ __all__ = [
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
     *_WORKFLOW_HELPER_EXPORTS,
-    "AgentHost",
     "Agent",
     "AgentProvider",
     "AlreadyExistsError",

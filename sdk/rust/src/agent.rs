@@ -1,106 +1,16 @@
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use hyper_util::rt::TokioIo;
 use prost_types::{Struct, Timestamp, Value};
 use serde::Serialize;
-use tokio::net::UnixStream;
 use tonic::codegen::async_trait;
-use tonic::metadata::MetadataValue;
-use tonic::service::Interceptor;
-use tonic::service::interceptor::InterceptedService;
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-use tower::service_fn;
 
-use crate::api::{RuntimeMetadata, Subject, current_request_context, scope_request_context};
-use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
+use crate::api::{RuntimeMetadata, Subject, scope_request_context};
 use crate::error::Result as ProviderResult;
-use crate::generated::v1::{
-    self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
-};
+use crate::generated::v1::{self as pb};
 use crate::protocol;
 use crate::rpc_status::rpc_status;
-
-type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
-
-const AGENT_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
-
-#[derive(Debug, thiserror::Error)]
-/// Errors returned by [`AgentHost`].
-pub enum AgentHostError {
-    /// The host-service transport could not be created.
-    #[error("{0}")]
-    Transport(#[from] tonic::transport::Error),
-    /// The host-service RPC returned a gRPC status.
-    #[error("{0}")]
-    Status(#[from] tonic::Status),
-    /// Plain input could not be converted into the protocol request shape.
-    #[error("{0}")]
-    Input(#[from] crate::Error),
-    /// Required environment or target configuration was invalid.
-    #[error("{0}")]
-    Env(String),
-}
-
-/// Plain input for listing tools available to one agent turn.
-#[derive(Debug, Clone, Default)]
-pub struct AgentHostListToolsInput {
-    /// Agent session ID.
-    pub session_id: String,
-    /// Agent turn ID.
-    pub turn_id: String,
-    /// Maximum number of tools to return.
-    pub page_size: i32,
-    /// Opaque page token returned by a previous list call.
-    pub page_token: String,
-    /// Optional server-side tool search query.
-    pub query: String,
-}
-
-/// Plain input for executing a host tool during one agent turn.
-#[derive(Debug, Clone, Default)]
-pub struct AgentHostExecuteToolInput {
-    /// Agent session ID.
-    pub session_id: String,
-    /// Agent turn ID.
-    pub turn_id: String,
-    /// Tool call ID from the agent message.
-    pub tool_call_id: String,
-    /// Host tool ID to execute.
-    pub tool_id: String,
-    /// JSON object to pass as tool arguments.
-    pub arguments: Option<serde_json::Value>,
-    /// Caller-supplied idempotency key for retries.
-    pub idempotency_key: String,
-}
-
-impl AgentHostExecuteToolInput {
-    /// Returns this input with JSON object arguments serialized from a typed value.
-    pub fn with_arguments<T: Serialize>(mut self, arguments: T) -> ProviderResult<Self> {
-        let arguments = protocol::json_from_serializable(arguments)?;
-        if !arguments.is_object() {
-            return Err(crate::Error::bad_request(
-                "agent host tool arguments must serialize to a JSON object",
-            ));
-        }
-        self.arguments = Some(arguments);
-        Ok(self)
-    }
-}
-
-/// Plain input for resolving a configured connection during one agent turn.
-#[derive(Debug, Clone, Default)]
-pub struct AgentHostResolveConnectionInput {
-    /// Agent session ID.
-    pub session_id: String,
-    /// Agent turn ID.
-    pub turn_id: String,
-    /// Connection name to resolve.
-    pub connection: String,
-    /// Optional connection instance.
-    pub instance: String,
-}
 
 /// Native JSON object used by authored agent providers.
 pub type AgentJson = serde_json::Value;
@@ -411,6 +321,7 @@ pub struct ResolvedAgentTool {
     pub name: String,
     pub description: String,
     pub parameters_schema: Option<AgentJson>,
+    pub r#ref: Option<AgentToolRef>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -791,12 +702,6 @@ pub struct ResolveAgentProviderInteractionRequest {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ExecuteAgentToolResponse {
-    pub status: i32,
-    pub body: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentToolAnnotations {
     pub read_only_hint: Option<bool>,
     pub idempotent_hint: Option<bool>,
@@ -816,23 +721,6 @@ pub struct ListedAgentTool {
     pub r#ref: Option<AgentToolRef>,
     pub tags: Vec<String>,
     pub search_text: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ListAgentToolsResponse {
-    pub tools: Vec<ListedAgentTool>,
-    pub next_page_token: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ResolvedAgentConnection {
-    pub connection_id: String,
-    pub connection: String,
-    pub instance: String,
-    pub mode: String,
-    pub headers: std::collections::HashMap<String, String>,
-    pub params: std::collections::HashMap<String, String>,
-    pub expires_at: Option<SystemTime>,
 }
 
 /// Creates a native agent message.
@@ -911,7 +799,7 @@ pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
     }
 }
 
-/// Creates an agent workspace request payload for the agent host service.
+/// Creates an agent workspace request payload for the agent provider service.
 pub(crate) fn new_agent_workspace(input: AgentWorkspace) -> pb::AgentWorkspace {
     pb::AgentWorkspace {
         checkouts: input
@@ -959,237 +847,6 @@ fn infer_agent_message_part_type(input: &AgentMessagePart) -> AgentMessagePartTy
     } else {
         AgentMessagePartType::Unspecified
     }
-}
-
-#[async_trait]
-/// Fakeable client contract for agent host calls.
-pub trait AgentHostApi: Send {
-    async fn execute_tool(
-        &mut self,
-        input: AgentHostExecuteToolInput,
-    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError>;
-    async fn list_tools(
-        &mut self,
-        input: AgentHostListToolsInput,
-    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError>;
-    async fn resolve_connection(
-        &mut self,
-        input: AgentHostResolveConnectionInput,
-    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError>;
-}
-
-/// Client for the agent host service available inside agent providers.
-pub struct AgentHost {
-    client: ProtoAgentHostClient<AgentHostTransport>,
-    context: Option<pb::RequestContext>,
-}
-
-impl AgentHost {
-    /// Connects to the agent host service described by the environment.
-    pub async fn connect() -> std::result::Result<Self, AgentHostError> {
-        let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
-            .map_err(|_| AgentHostError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
-        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
-        let channel = match parse_agent_host_target(&target)? {
-            AgentHostTarget::Unix(path) => connect_unix(path).await?,
-            AgentHostTarget::Tcp(address) => {
-                Endpoint::from_shared(format!("http://{address}"))?
-                    .connect()
-                    .await?
-            }
-            AgentHostTarget::Tls(address) => {
-                Endpoint::from_shared(format!("https://{address}"))?
-                    .tls_config(ClientTlsConfig::new().with_native_roots())?
-                    .connect()
-                    .await?
-            }
-        };
-        Ok(Self {
-            client: ProtoAgentHostClient::with_interceptor(
-                channel,
-                agent_host_relay_token_interceptor(relay_token.trim())?,
-            ),
-            context: current_request_context(),
-        })
-    }
-
-    /// Returns a copy of this client that forwards the supplied request context on host calls.
-    pub fn with_request_context(mut self, context: Option<pb::RequestContext>) -> Self {
-        self.context = context;
-        self
-    }
-
-    /// Executes a host tool using native request fields.
-    pub async fn execute_tool(
-        &mut self,
-        input: AgentHostExecuteToolInput,
-    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError> {
-        let request = pb::ExecuteAgentToolRequest {
-            session_id: input.session_id,
-            turn_id: input.turn_id,
-            tool_call_id: input.tool_call_id,
-            tool_id: input.tool_id,
-            arguments: input
-                .arguments
-                .map(protocol::struct_from_json)
-                .transpose()?,
-            context: self.context.clone(),
-            idempotency_key: input.idempotency_key,
-        };
-        Ok(execute_tool_response_from_proto(
-            self.client.execute_tool(request).await?.into_inner(),
-        ))
-    }
-
-    /// Lists host tools visible to the current agent request.
-    pub async fn list_tools(
-        &mut self,
-        input: AgentHostListToolsInput,
-    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError> {
-        let request = pb::ListAgentToolsRequest {
-            session_id: input.session_id,
-            turn_id: input.turn_id,
-            context: self.context.clone(),
-            page_size: input.page_size,
-            page_token: input.page_token,
-            query: input.query,
-        };
-        Ok(list_tools_response_from_proto(
-            self.client.list_tools(request).await?.into_inner(),
-        ))
-    }
-
-    /// Resolves a configured agent connection for the current turn.
-    pub async fn resolve_connection(
-        &mut self,
-        input: AgentHostResolveConnectionInput,
-    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
-        let request = pb::ResolveAgentConnectionRequest {
-            session_id: input.session_id,
-            turn_id: input.turn_id,
-            connection: input.connection,
-            instance: input.instance,
-            context: self.context.clone(),
-        };
-        resolved_connection_from_proto(self.client.resolve_connection(request).await?.into_inner())
-            .map_err(AgentHostError::Input)
-    }
-}
-
-#[async_trait]
-impl AgentHostApi for AgentHost {
-    async fn execute_tool(
-        &mut self,
-        input: AgentHostExecuteToolInput,
-    ) -> std::result::Result<ExecuteAgentToolResponse, AgentHostError> {
-        AgentHost::execute_tool(self, input).await
-    }
-
-    async fn list_tools(
-        &mut self,
-        input: AgentHostListToolsInput,
-    ) -> std::result::Result<ListAgentToolsResponse, AgentHostError> {
-        AgentHost::list_tools(self, input).await
-    }
-
-    async fn resolve_connection(
-        &mut self,
-        input: AgentHostResolveConnectionInput,
-    ) -> std::result::Result<ResolvedAgentConnection, AgentHostError> {
-        AgentHost::resolve_connection(self, input).await
-    }
-}
-
-async fn connect_unix(
-    socket_path: String,
-) -> std::result::Result<Channel, tonic::transport::Error> {
-    Endpoint::try_from("http://[::]:50051")?
-        .connect_with_connector(service_fn(move |_: Uri| {
-            let path = socket_path.clone();
-            async move { UnixStream::connect(path).await.map(TokioIo::new) }
-        }))
-        .await
-}
-
-#[derive(Clone)]
-struct AgentHostRelayTokenInterceptor {
-    token: Option<MetadataValue<tonic::metadata::Ascii>>,
-}
-
-impl Interceptor for AgentHostRelayTokenInterceptor {
-    fn call(
-        &mut self,
-        mut request: tonic::Request<()>,
-    ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
-        if let Some(token) = self.token.clone() {
-            request
-                .metadata_mut()
-                .insert(AGENT_HOST_RELAY_TOKEN_HEADER, token);
-        }
-        Ok(request)
-    }
-}
-
-fn agent_host_relay_token_interceptor(
-    token: &str,
-) -> std::result::Result<AgentHostRelayTokenInterceptor, AgentHostError> {
-    let trimmed = token.trim();
-    let token = if trimmed.is_empty() {
-        None
-    } else {
-        Some(MetadataValue::try_from(trimmed).map_err(|err| {
-            AgentHostError::Env(format!("agent host: invalid relay token metadata: {err}"))
-        })?)
-    };
-    Ok(AgentHostRelayTokenInterceptor { token })
-}
-
-enum AgentHostTarget {
-    Unix(String),
-    Tcp(String),
-    Tls(String),
-}
-
-fn parse_agent_host_target(raw: &str) -> std::result::Result<AgentHostTarget, AgentHostError> {
-    let target = raw.trim();
-    if target.is_empty() {
-        return Err(AgentHostError::Env(
-            "agent host: transport target is required".to_string(),
-        ));
-    }
-    if let Some(address) = target.strip_prefix("tcp://") {
-        let address = address.trim();
-        if address.is_empty() {
-            return Err(AgentHostError::Env(format!(
-                "agent host: tcp target {raw:?} is missing host:port"
-            )));
-        }
-        return Ok(AgentHostTarget::Tcp(address.to_string()));
-    }
-    if let Some(address) = target.strip_prefix("tls://") {
-        let address = address.trim();
-        if address.is_empty() {
-            return Err(AgentHostError::Env(format!(
-                "agent host: tls target {raw:?} is missing host:port"
-            )));
-        }
-        return Ok(AgentHostTarget::Tls(address.to_string()));
-    }
-    if let Some(path) = target.strip_prefix("unix://") {
-        let path = path.trim();
-        if path.is_empty() {
-            return Err(AgentHostError::Env(format!(
-                "agent host: unix target {raw:?} is missing a socket path"
-            )));
-        }
-        return Ok(AgentHostTarget::Unix(path.to_string()));
-    }
-    if target.contains("://") {
-        return Err(AgentHostError::Env(format!(
-            "agent host: unsupported target scheme in {raw:?}"
-        )));
-    }
-    Ok(AgentHostTarget::Unix(target.to_string()))
 }
 
 fn json_from_struct(value: Option<Struct>) -> Option<AgentJson> {
@@ -1678,6 +1335,7 @@ fn create_turn_request_from_proto(
                 name: tool.name,
                 description: tool.description,
                 parameters_schema: json_from_struct(tool.parameters_schema),
+                r#ref: tool.r#ref.map(agent_tool_ref_from_proto),
             })
             .collect(),
         output: required_agent_output_from_proto(value.output)?,
@@ -1691,15 +1349,6 @@ fn create_turn_request_from_proto(
         timeout_seconds: value.timeout_seconds,
         context: value.context,
     })
-}
-
-fn execute_tool_response_from_proto(
-    value: pb::ExecuteAgentToolResponse,
-) -> ExecuteAgentToolResponse {
-    ExecuteAgentToolResponse {
-        status: value.status,
-        body: value.body,
-    }
 }
 
 fn listed_tool_from_proto(value: pb::ListedAgentTool) -> ListedAgentTool {
@@ -1786,31 +1435,6 @@ pub(crate) fn new_agent_tool_config(value: AgentToolConfig) -> pb::AgentToolConf
         None => None,
     };
     pb::AgentToolConfig { source }
-}
-
-fn list_tools_response_from_proto(value: pb::ListAgentToolsResponse) -> ListAgentToolsResponse {
-    ListAgentToolsResponse {
-        tools: value
-            .tools
-            .into_iter()
-            .map(listed_tool_from_proto)
-            .collect(),
-        next_page_token: value.next_page_token,
-    }
-}
-
-fn resolved_connection_from_proto(
-    value: pb::ResolvedAgentConnection,
-) -> ProviderResult<ResolvedAgentConnection> {
-    Ok(ResolvedAgentConnection {
-        connection_id: value.connection_id,
-        connection: value.connection,
-        instance: value.instance,
-        mode: value.mode,
-        headers: value.headers.into_iter().collect(),
-        params: value.params.into_iter().collect(),
-        expires_at: time_from_timestamp(value.expires_at)?,
-    })
 }
 
 #[async_trait]

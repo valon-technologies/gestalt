@@ -216,8 +216,15 @@ func (m *Manager) resolveDefinitionSpec(ctx context.Context, p *principal.Princi
 	if spec.ID == "" {
 		return coreworkflow.DefinitionSpec{}, fmt.Errorf("%w: workflow definition id is required", invocation.ErrInvalidInvocation)
 	}
-	target, err := m.resolveTarget(ctx, p, spec.Target)
+	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, workflowManagerOperationDefinitionsApply, spec.Target, invocation.CallerProvider{})
 	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	target, err := m.resolveTarget(ctx, authorizedPrincipal, spec.Target)
+	if err != nil {
+		return coreworkflow.DefinitionSpec{}, err
+	}
+	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, target, invocation.CallerProvider{}); err != nil {
 		return coreworkflow.DefinitionSpec{}, err
 	}
 	activations, err := normalizeDefinitionActivations(spec.Activations)

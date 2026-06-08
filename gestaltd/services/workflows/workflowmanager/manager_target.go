@@ -23,7 +23,7 @@ func (m *Manager) resolveProvider(ctx context.Context, providerName string) (str
 	return m.workflow.ResolveProvider(ctx, strings.TrimSpace(providerName))
 }
 
-func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, definitionID string, caller invocation.CallerProvider) (string, coreworkflow.Provider, coreworkflow.Target, int64, error) {
+func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, definitionID string, caller invocation.CallerProvider, operation string) (string, coreworkflow.Provider, coreworkflow.Target, int64, error) {
 	definitionID = strings.TrimSpace(definitionID)
 	if definitionID == "" {
 		return "", nil, coreworkflow.Target{}, 0, fmt.Errorf("%w: workflow definition_id is required", invocation.ErrInvalidInvocation)
@@ -36,11 +36,18 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if definition == nil || definition.Definition == nil {
 		return "", nil, coreworkflow.Target{}, 0, core.ErrNotFound
 	}
-	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target)
+	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, operation, definition.Definition.Target, caller)
+	if err != nil {
+		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, err
+	}
+	resolvedTarget, err := m.resolveTarget(ctx, authorizedPrincipal, definition.Definition.Target)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, 0, err
 	}
-	if decision := m.checkResolvedAgentToolAuthorization(ctx, p, resolvedTarget); !decision.allowed {
+	if _, err := m.authorizeAgentWorkflowTarget(ctx, authorizedPrincipal, workflowManagerOperationTargetScopeOnly, resolvedTarget, caller); err != nil {
+		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, err
+	}
+	if decision := m.checkResolvedAgentToolAuthorization(ctx, authorizedPrincipal, resolvedTarget); !decision.allowed {
 		return definition.ProviderName, definition.provider, coreworkflow.Target{}, 0, workflowTargetAuthorizationError{failure: decision.failure}
 	}
 	return definition.ProviderName, definition.provider, resolvedTarget, definition.Definition.Generation, nil
@@ -306,6 +313,11 @@ func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure,
 }
 
 func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
+	authorizedPrincipal, err := m.authorizeAgentWorkflowTarget(ctx, p, workflowManagerOperationTargetScopeOnly, target, invocation.CallerProvider{})
+	if err != nil {
+		return false
+	}
+	p = authorizedPrincipal
 	return m.checkTargetAuthorization(ctx, p, target).allowed
 }
 
