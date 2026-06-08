@@ -10,11 +10,6 @@ on:
       - 'gestaltd/**'
       - '!gestaltd/rpc/protov1/**'
   pull_request:
-    paths:
-      - '.dockerignore'
-      - '.github/workflows/build-gestaltd.yml'
-      - 'gestaltd/**'
-      - '!gestaltd/rpc/protov1/**'
 
   workflow_dispatch:
     inputs:
@@ -34,6 +29,7 @@ jobs:
     outputs:
       publish: ${{ steps.resolve.outputs.publish }}
       sha: ${{ steps.resolve.outputs.sha }}
+      should_validate: ${{ steps.resolve.outputs.should_validate }}
       version: ${{ steps.resolve.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -43,6 +39,8 @@ jobs:
       - name: Resolve commit
         id: resolve
         env:
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha || '' }}
           REQUESTED_GESTALT_REF: ${{ github.event.inputs.gestalt_ref || '' }}
         run: |
           set -euo pipefail
@@ -68,9 +66,64 @@ jobs:
             publish="true"
           fi
 
+          should_validate="true"
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            validate_exact_paths=(
+              ".dockerignore"
+              ".github/workflows/build-gestaltd.yml"
+            )
+            validate_path_prefixes=(
+              "gestaltd/"
+            )
+            ignore_path_prefixes=(
+              "gestaltd/rpc/protov1/"
+            )
+
+            should_validate="false"
+            base_sha="${PULL_REQUEST_BASE_SHA}"
+            head_sha="${PULL_REQUEST_HEAD_SHA:-${sha}}"
+
+            if [[ -z "${base_sha}" ]]; then
+              echo "Pull request base SHA is unavailable; running Gestaltd validation." >&2
+              should_validate="true"
+            elif changed_files="$(git diff --name-only "${base_sha}" "${head_sha}")"; then
+              while IFS= read -r changed_file; do
+                for ignored_prefix in "${ignore_path_prefixes[@]}"; do
+                  if [[ "${changed_file}" == "${ignored_prefix}"* ]]; then
+                    continue 2
+                  fi
+                done
+
+                for exact_path in "${validate_exact_paths[@]}"; do
+                  if [[ "${changed_file}" == "${exact_path}" ]]; then
+                    should_validate="true"
+                    break
+                  fi
+                done
+                if [[ "${should_validate}" == "true" ]]; then
+                  break
+                fi
+
+                for path_prefix in "${validate_path_prefixes[@]}"; do
+                  if [[ "${changed_file}" == "${path_prefix}"* ]]; then
+                    should_validate="true"
+                    break
+                  fi
+                done
+                if [[ "${should_validate}" == "true" ]]; then
+                  break
+                fi
+              done <<< "${changed_files}"
+            else
+              echo "Unable to diff pull request files; running Gestaltd validation." >&2
+              should_validate="true"
+            fi
+          fi
+
           {
             echo "sha=${sha}"
             echo "publish=${publish}"
+            echo "should_validate=${should_validate}"
             echo "version=0.0.0-ci+g${sha:0:12}"
           } >> "${GITHUB_OUTPUT}"
 
@@ -84,25 +137,34 @@ jobs:
         working-directory: gestaltd
 
     steps:
+      - name: Skip irrelevant changes
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'false' }}
+        run: echo "No Gestaltd-related changes detected; required check satisfied."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
 
       - name: Set up Go
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: gestaltd/go.mod
           cache-dependency-path: gestaltd/go.sum
 
       - name: Install Buf
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
 
       - name: Check go mod tidy
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
 
       - name: Verify checked-in generated bindings
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           repo_root="$(git rev-parse --show-toplevel)"
           cd "$repo_root/sdk/proto"
@@ -111,11 +173,13 @@ jobs:
           git diff --exit-code -- gestaltd/rpc/protov1/v1/*.pb.go gestaltd/rpc/protov1/v1/*_grpc.pb.go
 
       - name: Check generated proto package split
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           repo_root="$(git rev-parse --show-toplevel)"
           bash "$repo_root/.github/scripts/check-go-proto-split.sh" "$repo_root/gestaltd"
 
       - name: Verify checked-in routinggen output
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           repo_root="$(git rev-parse --show-toplevel)"
           cd "$repo_root/gestaltd/services/cache" && go generate ./...
@@ -129,6 +193,7 @@ jobs:
             gestaltd/services/s3/routing_s3_object_access_gen.go
 
       - name: Run golangci-lint
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:
           version: v2.11.3
@@ -146,25 +211,34 @@ jobs:
         working-directory: gestaltd
 
     steps:
+      - name: Skip irrelevant changes
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'false' }}
+        run: echo "No Gestaltd-related changes detected; required check satisfied."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
 
       - name: Set up Go
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: gestaltd/go.mod
           cache-dependency-path: gestaltd/go.sum
 
       - name: Set up Helm
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Run tests
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: go test ./...
 
   coverage:
     name: Go Coverage
     needs: resolve-ref
+    if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -253,22 +327,31 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Skip irrelevant changes
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'false' }}
+        run: echo "No Gestaltd-related changes detected; required check satisfied."
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
 
       - name: Set up Helm
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
 
       - name: Helm lint
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: helm lint gestaltd/deploy/helm/gestaltd
 
       - name: Helm template (default chart profile)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           helm template test-release gestaltd/deploy/helm/gestaltd \
             > /tmp/rendered-default.yaml
 
       - name: Helm template (ingress)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           helm template test-release gestaltd/deploy/helm/gestaltd \
             --set ingress.enabled=true \
@@ -278,12 +361,14 @@ jobs:
             > /tmp/rendered-ingress.yaml
 
       - name: Helm template
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           helm template test-release gestaltd/deploy/helm/gestaltd \
             -f gestaltd/deploy/helm/gestaltd/ci-values.yaml \
             > /tmp/rendered.yaml
 
       - name: Install kubeconform
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           set -euo pipefail
           version="v0.7.0"
@@ -304,26 +389,32 @@ jobs:
           tar xzf "${archive_path}" -C /usr/local/bin kubeconform
 
       - name: Validate Kubernetes schemas
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered.yaml
 
       - name: Validate Kubernetes schemas (default chart profile)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered-default.yaml
 
       - name: Validate Kubernetes schemas (ingress)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered-ingress.yaml
 
       - name: Helm template (preparation)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: |
           helm template test-release gestaltd/deploy/helm/gestaltd \
             -f gestaltd/deploy/helm/gestaltd/ci-values-preparation.yaml \
             > /tmp/rendered-preparation.yaml
 
       - name: Validate Kubernetes schemas (preparation)
+        if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
         run: kubeconform -strict -summary /tmp/rendered-preparation.yaml
 
   docker-build:
     name: Docker Image Build
     needs: resolve-ref
+    if: ${{ needs.resolve-ref.outputs.should_validate == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
