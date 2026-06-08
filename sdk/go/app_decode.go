@@ -21,25 +21,41 @@ func decodeAppGraphQLResult(app string, result *OperationResult) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	object, ok := decoded.(map[string]any)
-	if !ok {
+	if result == nil {
 		return decoded, nil
+	}
+	parsed, parseErr := parseOperationResultJSON(result.Body)
+	if parseErr == nil {
+		if err := graphQLErrors(app, result.Body, parsed); err != nil {
+			return nil, err
+		}
+	}
+	if err := graphQLErrors(app, result.Body, decoded); err != nil {
+		return nil, err
+	}
+	return decoded, nil
+}
+
+func graphQLErrors(app, rawBody string, value any) error {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
 	}
 	errorsValue, ok := object["errors"]
 	if !ok {
-		return decoded, nil
+		return nil
 	}
 	errors, ok := errorsValue.([]any)
 	if !ok || len(errors) == 0 {
-		return decoded, nil
+		return nil
 	}
-	return nil, &InvokeError{
+	return &InvokeError{
 		App:       app,
 		Operation: "graphql",
 		Code:      "graphql_errors",
 		Message:   graphqlErrorMessage(errors),
 		Body:      object,
-		RawBody:   result.Body,
+		RawBody:   rawBody,
 	}
 }
 

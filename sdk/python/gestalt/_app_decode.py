@@ -36,18 +36,27 @@ def decode_app_result(app: str, operation: str, result: Response[str]) -> JsonVa
 
 def decode_graphql_result(app: str, result: Response[str]) -> JsonValue:
     decoded = decode_app_result(app, "graphql", result)
-    if isinstance(decoded, dict):
-        errors = decoded.get("errors")
-        if isinstance(errors, list) and errors:
-            raise InvokeError(
-                _graphql_error_message(errors),
-                app=app,
-                operation="graphql",
-                code="graphql_errors",
-                body=decoded,
-                raw_body=result.body,
-            )
+    try:
+        _raise_graphql_errors(app, result.body, parse_operation_result_json(result.body))
+    except ValueError:
+        pass
+    _raise_graphql_errors(app, result.body, decoded)
     return decoded
+
+
+def _raise_graphql_errors(app: str, raw_body: str, value: JsonValue) -> None:
+    if not isinstance(value, dict):
+        return
+    errors = value.get("errors")
+    if isinstance(errors, list) and errors:
+        raise InvokeError(
+            _graphql_error_message(errors),
+            app=app,
+            operation="graphql",
+            code="graphql_errors",
+            body=value,
+            raw_body=raw_body,
+        )
 
 
 def decode_app_body(app: str, operation: str, status: int, body: str) -> JsonValue:
