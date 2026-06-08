@@ -10,7 +10,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc/codes"
@@ -26,7 +25,7 @@ type agentInvocationScopeRequest struct {
 	RequestContext    *proto.RequestContext
 }
 
-func (m *Manager) AuthorizeAgentAppInvocation(ctx context.Context, req appaccessservice.AgentAppInvocationAuthorizationRequest) (appaccessservice.AgentAppInvocationAuthorization, error) {
+func (m *Manager) AuthorizeAppInvocation(ctx context.Context, req invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error) {
 	scope, err := m.authorizeAgentInvocationScope(ctx, agentInvocationScopeRequest{
 		AgentProviderName: req.AgentProviderName,
 		CallerKind:        req.CallerKind,
@@ -36,17 +35,17 @@ func (m *Manager) AuthorizeAgentAppInvocation(ctx context.Context, req appaccess
 		RequestContext:    req.RequestContext,
 	})
 	if err != nil {
-		return appaccessservice.AgentAppInvocationAuthorization{}, err
+		return invocation.AgentAppAuthorization{}, err
 	}
 	tool, ok := matchingAgentAppInvocationTool(scope.ListedTools, req)
 	if !ok {
-		return appaccessservice.AgentAppInvocationAuthorization{}, status.Errorf(codes.PermissionDenied, "agent turn may not invoke %s.%s", strings.TrimSpace(req.App), strings.TrimSpace(req.Operation))
+		return invocation.AgentAppAuthorization{}, status.Errorf(codes.PermissionDenied, "agent turn may not invoke %s.%s", strings.TrimSpace(req.App), strings.TrimSpace(req.Operation))
 	}
 	p := agentScopePrincipal(scope)
 	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
-		return appaccessservice.AgentAppInvocationAuthorization{}, status.Error(codes.FailedPrecondition, "agent turn scope subject is required")
+		return invocation.AgentAppAuthorization{}, status.Error(codes.FailedPrecondition, "agent turn scope subject is required")
 	}
-	return appaccessservice.AgentAppInvocationAuthorization{
+	return invocation.AgentAppAuthorization{
 		Principal:      p,
 		CredentialMode: core.NormalizeOptionalConnectionMode(tool.Target.CredentialMode),
 		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(tool.Target.Connection)),
@@ -57,7 +56,7 @@ func (m *Manager) AuthorizeAgentAppInvocation(ctx context.Context, req appaccess
 	}, nil
 }
 
-func (m *Manager) AuthorizeAgentWorkflowInvocation(ctx context.Context, req appaccessservice.AgentWorkflowInvocationAuthorizationRequest) (appaccessservice.AgentWorkflowInvocationAuthorization, error) {
+func (m *Manager) AuthorizeWorkflowInvocation(ctx context.Context, req invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error) {
 	scope, err := m.authorizeAgentInvocationScope(ctx, agentInvocationScopeRequest{
 		AgentProviderName: req.AgentProviderName,
 		CallerKind:        req.CallerKind,
@@ -67,27 +66,27 @@ func (m *Manager) AuthorizeAgentWorkflowInvocation(ctx context.Context, req appa
 		RequestContext:    req.RequestContext,
 	})
 	if err != nil {
-		return appaccessservice.AgentWorkflowInvocationAuthorization{}, err
+		return invocation.AgentWorkflowAuthorization{}, err
 	}
 	if operation := strings.TrimSpace(req.Operation); operation != "" && !agentWorkflowOperationAllowed(scope, operation) {
-		return appaccessservice.AgentWorkflowInvocationAuthorization{}, status.Errorf(codes.PermissionDenied, "agent turn may not invoke workflow.%s", operation)
+		return invocation.AgentWorkflowAuthorization{}, status.Errorf(codes.PermissionDenied, "agent turn may not invoke workflow.%s", operation)
 	}
 	var target *coreworkflow.Target
 	if req.Target != nil {
 		copied := *req.Target
 		target = &copied
 		if err := validateAgentWorkflowTargetScope(scope, copied); err != nil {
-			return appaccessservice.AgentWorkflowInvocationAuthorization{}, err
+			return invocation.AgentWorkflowAuthorization{}, err
 		}
 	}
 	p := agentScopePrincipal(scope)
 	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
-		return appaccessservice.AgentWorkflowInvocationAuthorization{}, status.Error(codes.FailedPrecondition, "agent turn scope subject is required")
+		return invocation.AgentWorkflowAuthorization{}, status.Error(codes.FailedPrecondition, "agent turn scope subject is required")
 	}
 	if target != nil {
 		p = agentWorkflowPrincipalForTarget(p, scope, *target)
 	}
-	return appaccessservice.AgentWorkflowInvocationAuthorization{Principal: p}, nil
+	return invocation.AgentWorkflowAuthorization{Principal: p}, nil
 }
 
 func (m *Manager) authorizeAgentInvocationScope(ctx context.Context, req agentInvocationScopeRequest) (agentturnscope.Scope, error) {
@@ -224,7 +223,7 @@ func agentInvocationTurnIDMatches(value, scopeTurnID, requestedTurnID string) bo
 	return value != "" && (value == strings.TrimSpace(scopeTurnID) || value == strings.TrimSpace(requestedTurnID))
 }
 
-func matchingAgentAppInvocationTool(tools []coreagent.ListedTool, req appaccessservice.AgentAppInvocationAuthorizationRequest) (coreagent.ListedTool, bool) {
+func matchingAgentAppInvocationTool(tools []coreagent.ListedTool, req invocation.AgentAppAuthorizationRequest) (coreagent.ListedTool, bool) {
 	targetApp := strings.TrimSpace(req.App)
 	targetOperation := strings.TrimSpace(req.Operation)
 	targetConnection := core.ResolveConnectionAlias(strings.TrimSpace(req.Connection))

@@ -30,12 +30,16 @@ type ProviderServer struct {
 	appName       string
 	manager       ManagerService
 	authorization core.AuthorizationProvider
-	agentAuth     appaccessservice.AgentWorkflowInvocationAuthorizer
+	agentAuth     interface {
+		AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error)
+	}
 }
 
 type ProviderServerOption func(*ProviderServer)
 
-func WithAgentWorkflowInvocationAuthorizer(authorizer appaccessservice.AgentWorkflowInvocationAuthorizer) ProviderServerOption {
+func WithAgentWorkflowInvocationAuthorizer(authorizer interface {
+	AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error)
+}) ProviderServerOption {
 	return func(s *ProviderServer) {
 		s.agentAuth = authorizer
 	}
@@ -565,7 +569,7 @@ func (s *ProviderServer) authorizeWorkflowAccess(ctx context.Context, authCtx wo
 		if s == nil || s.agentAuth == nil {
 			return nil, status.Error(codes.FailedPrecondition, "agent workflow invocation authorizer is required")
 		}
-		authorized, err := s.agentAuth.AuthorizeAgentWorkflowInvocation(ctx, appaccessservice.AgentWorkflowInvocationAuthorizationRequest{
+		authorized, err := s.agentAuth.AuthorizeWorkflowInvocation(ctx, invocation.AgentWorkflowAuthorizationRequest{
 			AgentProviderName: strings.TrimSpace(s.appName),
 			CallerKind:        authCtx.Caller().Kind,
 			CallerName:        authCtx.Caller().Name,

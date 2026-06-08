@@ -1275,7 +1275,7 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 	}
 }
 
-func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
+func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 	t.Parallel()
 
 	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
@@ -1343,7 +1343,7 @@ func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		t.Fatalf("Put delegated turn scope: %v", err)
 	}
 
-	req := appaccessservice.AgentAppInvocationAuthorizationRequest{
+	req := invocation.AgentAppAuthorizationRequest{
 		AgentProviderName: "alpha",
 		CallerKind:        invocation.ProviderKindApp,
 		CallerName:        "sats",
@@ -1357,9 +1357,9 @@ func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		Operation:      "chat.postMessage",
 		RequestContext: providerReqCtx,
 	}
-	authorized, err := manager.AuthorizeAgentAppInvocation(context.Background(), req)
+	authorized, err := manager.AuthorizeAppInvocation(context.Background(), req)
 	if err != nil {
-		t.Fatalf("AuthorizeAgentAppInvocation: %v", err)
+		t.Fatalf("AuthorizeAppInvocation: %v", err)
 	}
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
 		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
@@ -1384,15 +1384,15 @@ func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 	}
 
 	req.Operation = "chat.delete"
-	_, err = manager.AuthorizeAgentAppInvocation(context.Background(), req)
+	_, err = manager.AuthorizeAppInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
-		t.Fatalf("AuthorizeAgentAppInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+		t.Fatalf("AuthorizeAppInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 	req.Operation = "chat.postMessage"
 	req.AgentProviderName = "beta"
-	_, err = manager.AuthorizeAgentAppInvocation(context.Background(), req)
+	_, err = manager.AuthorizeAppInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
-		t.Fatalf("AuthorizeAgentAppInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+		t.Fatalf("AuthorizeAppInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 }
 
@@ -1416,7 +1416,7 @@ func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
 		},
 	}}
 
-	tool, ok := matchingAgentAppInvocationTool(tools, appaccessservice.AgentAppInvocationAuthorizationRequest{
+	tool, ok := matchingAgentAppInvocationTool(tools, invocation.AgentAppAuthorizationRequest{
 		App:       "slack",
 		Operation: "chat.postMessage",
 	})
@@ -1434,13 +1434,13 @@ func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
 		Instance:       "workspace-2",
 		CredentialMode: core.ConnectionModeSubject,
 	}})
-	if _, ok := matchingAgentAppInvocationTool(tools, appaccessservice.AgentAppInvocationAuthorizationRequest{
+	if _, ok := matchingAgentAppInvocationTool(tools, invocation.AgentAppAuthorizationRequest{
 		App:       "slack",
 		Operation: "chat.postMessage",
 	}); ok {
 		t.Fatal("matchingAgentAppInvocationTool without selectors matched ambiguous tools")
 	}
-	tool, ok = matchingAgentAppInvocationTool(tools, appaccessservice.AgentAppInvocationAuthorizationRequest{
+	tool, ok = matchingAgentAppInvocationTool(tools, invocation.AgentAppAuthorizationRequest{
 		App:        "slack",
 		Operation:  "chat.postMessage",
 		Connection: "team-secondary",
@@ -1453,7 +1453,7 @@ func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
 	}
 }
 
-func TestAuthorizeAgentWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
+func TestAuthorizeWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 	t.Parallel()
 
 	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
@@ -1535,7 +1535,7 @@ func TestAuthorizeAgentWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 			},
 		},
 	}}
-	req := appaccessservice.AgentWorkflowInvocationAuthorizationRequest{
+	req := invocation.AgentWorkflowAuthorizationRequest{
 		AgentProviderName: "alpha",
 		CallerKind:        invocation.ProviderKindApp,
 		CallerName:        "sats",
@@ -1549,9 +1549,9 @@ func TestAuthorizeAgentWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 		Target:         &target,
 		RequestContext: providerReqCtx,
 	}
-	authorized, err := manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	authorized, err := manager.AuthorizeWorkflowInvocation(context.Background(), req)
 	if err != nil {
-		t.Fatalf("AuthorizeAgentWorkflowInvocation: %v", err)
+		t.Fatalf("AuthorizeWorkflowInvocation: %v", err)
 	}
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
 		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
@@ -1567,28 +1567,28 @@ func TestAuthorizeAgentWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 	}
 
 	req.Operation = "runs.start"
-	_, err = manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	_, err = manager.AuthorizeWorkflowInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
-		t.Fatalf("AuthorizeAgentWorkflowInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+		t.Fatalf("AuthorizeWorkflowInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 	req.Operation = "definitions.apply"
 	outsideTarget := target
 	outsideTarget.Steps = append([]coreworkflow.Step(nil), target.Steps...)
 	outsideTarget.Steps[0].App = &coreworkflow.AppCall{Name: "slack", Operation: "chat.delete"}
 	req.Target = &outsideTarget
-	_, err = manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	_, err = manager.AuthorizeWorkflowInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
-		t.Fatalf("AuthorizeAgentWorkflowInvocation unlisted target status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+		t.Fatalf("AuthorizeWorkflowInvocation unlisted target status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 	req.Target = &target
 	req.AgentProviderName = "beta"
-	_, err = manager.AuthorizeAgentWorkflowInvocation(context.Background(), req)
+	_, err = manager.AuthorizeWorkflowInvocation(context.Background(), req)
 	if got := status.Code(err); got != codes.PermissionDenied {
-		t.Fatalf("AuthorizeAgentWorkflowInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+		t.Fatalf("AuthorizeWorkflowInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 }
 
-func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
+func TestAuthorizeAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 	t.Parallel()
 
 	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
@@ -1644,7 +1644,7 @@ func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 	executionRefReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
 	executionRefReqCtx.Agent.TurnId = turn.ExecutionRef
 
-	authorized, err := manager.AuthorizeAgentAppInvocation(context.Background(), appaccessservice.AgentAppInvocationAuthorizationRequest{
+	authorized, err := manager.AuthorizeAppInvocation(context.Background(), invocation.AgentAppAuthorizationRequest{
 		AgentProviderName: "alpha",
 		CallerKind:        invocation.ProviderKindApp,
 		CallerName:        "sats",
@@ -1659,7 +1659,7 @@ func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 		RequestContext: executionRefReqCtx,
 	})
 	if err != nil {
-		t.Fatalf("AuthorizeAgentAppInvocation with execution ref: %v", err)
+		t.Fatalf("AuthorizeAppInvocation with execution ref: %v", err)
 	}
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
 		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
@@ -1668,7 +1668,7 @@ func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 	providerOwnedReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
 	providerOwnedReqCtx.Agent.TurnId = turn.ID
 
-	authorized, err = manager.AuthorizeAgentAppInvocation(context.Background(), appaccessservice.AgentAppInvocationAuthorizationRequest{
+	authorized, err = manager.AuthorizeAppInvocation(context.Background(), invocation.AgentAppAuthorizationRequest{
 		AgentProviderName: "alpha",
 		CallerKind:        invocation.ProviderKindApp,
 		CallerName:        "sats",
@@ -1683,7 +1683,7 @@ func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 		RequestContext: providerOwnedReqCtx,
 	})
 	if err != nil {
-		t.Fatalf("AuthorizeAgentAppInvocation with provider turn id: %v", err)
+		t.Fatalf("AuthorizeAppInvocation with provider turn id: %v", err)
 	}
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
 		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)

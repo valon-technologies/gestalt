@@ -116,8 +116,8 @@ type Service interface {
 	ListTurnEvents(ctx context.Context, p *principal.Principal, req *proto.ListAgentProviderTurnEventsRequest) ([]*coreagent.TurnEvent, error)
 	ListInteractions(ctx context.Context, p *principal.Principal, req *proto.ListAgentProviderInteractionsRequest) ([]*coreagent.Interaction, error)
 	ResolveInteraction(ctx context.Context, p *principal.Principal, req *proto.ResolveAgentProviderInteractionRequest) (*coreagent.Interaction, error)
-	AuthorizeAgentAppInvocation(context.Context, appaccessservice.AgentAppInvocationAuthorizationRequest) (appaccessservice.AgentAppInvocationAuthorization, error)
-	AuthorizeAgentWorkflowInvocation(context.Context, appaccessservice.AgentWorkflowInvocationAuthorizationRequest) (appaccessservice.AgentWorkflowInvocationAuthorization, error)
+	AuthorizeAppInvocation(context.Context, invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error)
+	AuthorizeWorkflowInvocation(context.Context, invocation.AgentWorkflowAuthorizationRequest) (invocation.AgentWorkflowAuthorization, error)
 }
 
 type Config struct {
