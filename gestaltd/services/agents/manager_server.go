@@ -17,6 +17,7 @@ import (
 )
 
 type ManagerService interface {
+	ExecuteTool(context.Context, *principal.Principal, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
 	CreateSession(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
 	GetSession(context.Context, *principal.Principal, *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error)
 	ListSessions(context.Context, *principal.Principal, *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error)
@@ -320,6 +321,36 @@ func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProvide
 	return nil, status.Error(codes.Unimplemented, "agent get capabilities is not available through the public provider facade")
 }
 
+func (s *ProviderServer) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	reqCtx, err := s.toolRequestContext(req.GetContext())
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.manager.ExecuteTool(s.restoreRequestContext(ctx, reqCtx), reqCtx.Principal(), coreagent.ExecuteToolRequest{
+		ProviderName:   strings.TrimSpace(s.pluginName),
+		SessionID:      strings.TrimSpace(req.GetSessionId()),
+		TurnID:         strings.TrimSpace(req.GetTurnId()),
+		ToolCallID:     strings.TrimSpace(req.GetToolCallId()),
+		ToolID:         strings.TrimSpace(req.GetToolId()),
+		Arguments:      mapFromStruct(req.GetArguments()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		Context:        req.GetContext(),
+	})
+	if err != nil {
+		return nil, agentManagerStatusError(err)
+	}
+	if resp == nil {
+		return &proto.ExecuteAgentToolResponse{}, nil
+	}
+	return &proto.ExecuteAgentToolResponse{
+		Status: int32(resp.Status),
+		Body:   resp.Body,
+	}, nil
+}
+
 func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
 	out, err := appaccessservice.ProviderRequestContextFromProto(reqCtx, "", s.pluginName)
 	if err != nil {
@@ -331,6 +362,19 @@ func (s *ProviderServer) requestContext(reqCtx *proto.RequestContext) (appaccess
 	default:
 		return out, status.Errorf(codes.FailedPrecondition, "%s caller context is not supported for agent provider invocation", out.CallerKind())
 	}
+}
+
+func (s *ProviderServer) toolRequestContext(reqCtx *proto.RequestContext) (appaccessservice.ProviderRequestContext, error) {
+	out, err := appaccessservice.ProviderRequestContextFromProto(reqCtx, "", "")
+	if err != nil {
+		return out, err
+	}
+	switch out.CallerKind() {
+	case invocation.ProviderKindApp, invocation.ProviderKindWorkflow, invocation.ProviderKindAgent:
+	default:
+		return out, status.Errorf(codes.FailedPrecondition, "%s caller context is not supported for agent tool execution", out.CallerKind())
+	}
+	return out, nil
 }
 
 func (s *ProviderServer) restoreRequestContext(ctx context.Context, reqCtx appaccessservice.ProviderRequestContext) context.Context {

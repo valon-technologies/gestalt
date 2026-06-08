@@ -67,6 +67,10 @@ func (s *recordingManagerService) ListTurns(ctx context.Context, p *principal.Pr
 	return nil, errors.New("unexpected ListTurns call")
 }
 
+func (s *recordingManagerService) ExecuteTool(context.Context, *principal.Principal, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	return nil, errors.New("unexpected ExecuteTool call")
+}
+
 func (s *recordingManagerService) CancelTurn(ctx context.Context, p *principal.Principal, req *proto.CancelAgentProviderTurnRequest) (*coreagent.Turn, error) {
 	if s.cancelTurn != nil {
 		return s.cancelTurn(ctx, p, req)

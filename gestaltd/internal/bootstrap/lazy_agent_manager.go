@@ -59,6 +59,14 @@ func (l *lazyAgentManager) ListTools(ctx context.Context, p *principal.Principal
 	return target.ListTools(ctx, p, req)
 }
 
+func (l *lazyAgentManager) ExecuteTool(ctx context.Context, p *principal.Principal, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ExecuteTool(ctx, p, req)
+}
+
 func (l *lazyAgentManager) CreateSession(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	target, err := l.current()
 	if err != nil {

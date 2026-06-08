@@ -456,6 +456,24 @@ message ListedAgentTool {
   string search_text = 10;
 }
 
+message ExecuteAgentToolRequest {
+  reserved 6, 8;
+  reserved "tool_grant", "run_grant";
+
+  string session_id = 1;
+  string turn_id = 2;
+  string tool_call_id = 3;
+  string tool_id = 4;
+  google.protobuf.Struct arguments = 5;
+  string idempotency_key = 7;
+  RequestContext context = 9;
+}
+
+message ExecuteAgentToolResponse {
+  int32 status = 1;
+  string body = 2;
+}
+
 // AgentProvider is the authoritative agent data boundary. Read RPCs for
 // sessions, turns, turn events, and interactions should use provider-owned
 // control-plane state and should not require a live execution sandbox,
@@ -477,4 +495,6 @@ service AgentProvider {
   rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse);
   rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction);
   rpc GetCapabilities(GetAgentProviderCapabilitiesRequest) returns (AgentProviderCapabilities);
+
+  rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
 }

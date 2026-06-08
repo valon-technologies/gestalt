@@ -32,6 +32,7 @@ const (
 	AgentProvider_ListInteractions_FullMethodName   = "/gestalt.provider.v1.AgentProvider/ListInteractions"
 	AgentProvider_ResolveInteraction_FullMethodName = "/gestalt.provider.v1.AgentProvider/ResolveInteraction"
 	AgentProvider_GetCapabilities_FullMethodName    = "/gestalt.provider.v1.AgentProvider/GetCapabilities"
+	AgentProvider_ExecuteTool_FullMethodName        = "/gestalt.provider.v1.AgentProvider/ExecuteTool"
 )
 
 // AgentProviderClient is the client API for AgentProvider service.
@@ -56,6 +57,7 @@ type AgentProviderClient interface {
 	ListInteractions(ctx context.Context, in *ListAgentProviderInteractionsRequest, opts ...grpc.CallOption) (*ListAgentProviderInteractionsResponse, error)
 	ResolveInteraction(ctx context.Context, in *ResolveAgentProviderInteractionRequest, opts ...grpc.CallOption) (*AgentInteraction, error)
 	GetCapabilities(ctx context.Context, in *GetAgentProviderCapabilitiesRequest, opts ...grpc.CallOption) (*AgentProviderCapabilities, error)
+	ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error)
 }
 
 type agentProviderClient struct {
@@ -196,6 +198,16 @@ func (c *agentProviderClient) GetCapabilities(ctx context.Context, in *GetAgentP
 	return out, nil
 }
 
+func (c *agentProviderClient) ExecuteTool(ctx context.Context, in *ExecuteAgentToolRequest, opts ...grpc.CallOption) (*ExecuteAgentToolResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExecuteAgentToolResponse)
+	err := c.cc.Invoke(ctx, AgentProvider_ExecuteTool_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AgentProviderServer is the server API for AgentProvider service.
 // All implementations must embed UnimplementedAgentProviderServer
 // for forward compatibility.
@@ -218,6 +230,7 @@ type AgentProviderServer interface {
 	ListInteractions(context.Context, *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error)
 	ResolveInteraction(context.Context, *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error)
 	GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error)
+	ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error)
 	mustEmbedUnimplementedAgentProviderServer()
 }
 
@@ -266,6 +279,9 @@ func (UnimplementedAgentProviderServer) ResolveInteraction(context.Context, *Res
 }
 func (UnimplementedAgentProviderServer) GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetCapabilities not implemented")
+}
+func (UnimplementedAgentProviderServer) ExecuteTool(context.Context, *ExecuteAgentToolRequest) (*ExecuteAgentToolResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExecuteTool not implemented")
 }
 func (UnimplementedAgentProviderServer) mustEmbedUnimplementedAgentProviderServer() {}
 func (UnimplementedAgentProviderServer) testEmbeddedByValue()                       {}
@@ -522,6 +538,24 @@ func _AgentProvider_GetCapabilities_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AgentProvider_ExecuteTool_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExecuteAgentToolRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AgentProviderServer).ExecuteTool(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AgentProvider_ExecuteTool_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AgentProviderServer).ExecuteTool(ctx, req.(*ExecuteAgentToolRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AgentProvider_ServiceDesc is the grpc.ServiceDesc for AgentProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -580,6 +614,10 @@ var AgentProvider_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetCapabilities",
 			Handler:    _AgentProvider_GetCapabilities_Handler,
+		},
+		{
+			MethodName: "ExecuteTool",
+			Handler:    _AgentProvider_ExecuteTool_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

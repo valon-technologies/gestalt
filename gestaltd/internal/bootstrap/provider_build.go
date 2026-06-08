@@ -1735,6 +1735,10 @@ func (unavailableAgentManager) ListTools(context.Context, *principal.Principal, 
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
+func (unavailableAgentManager) ExecuteTool(context.Context, *principal.Principal, coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error) {
+	return nil, fmt.Errorf("agent manager is not available")
+}
+
 func (unavailableAgentManager) CreateSession(context.Context, *principal.Principal, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }

@@ -7,6 +7,22 @@ type ResolveToolsRequest struct {
 	ToolSource ToolSourceMode
 }
 
+type ExecuteToolRequest struct {
+	ProviderName   string
+	SessionID      string
+	TurnID         string
+	ToolCallID     string
+	ToolID         string
+	Arguments      map[string]any
+	IdempotencyKey string
+	Context        *proto.RequestContext
+}
+
+type ExecuteToolResponse struct {
+	Status int
+	Body   string
+}
+
 type ListToolsRequest struct {
 	ProviderName string
 	SessionID    string

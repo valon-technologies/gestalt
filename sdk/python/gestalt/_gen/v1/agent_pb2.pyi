@@ -692,3 +692,29 @@ class ListedAgentTool(_message.Message):
     tags: _containers.RepeatedScalarFieldContainer[str]
     search_text: str
     def __init__(self, id: _Optional[str] = ..., mcp_name: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., input_schema: _Optional[str] = ..., output_schema: _Optional[str] = ..., annotations: _Optional[_Union[_app_pb2.OperationAnnotations, _Mapping]] = ..., ref: _Optional[_Union[_app_pb2.AgentToolRef, _Mapping]] = ..., tags: _Optional[_Iterable[str]] = ..., search_text: _Optional[str] = ...) -> None: ...
+
+class ExecuteAgentToolRequest(_message.Message):
+    __slots__ = ()
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    TURN_ID_FIELD_NUMBER: _ClassVar[int]
+    TOOL_CALL_ID_FIELD_NUMBER: _ClassVar[int]
+    TOOL_ID_FIELD_NUMBER: _ClassVar[int]
+    ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
+    CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    turn_id: str
+    tool_call_id: str
+    tool_id: str
+    arguments: _struct_pb2.Struct
+    idempotency_key: str
+    context: _app_pb2.RequestContext
+    def __init__(self, session_id: _Optional[str] = ..., turn_id: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., tool_id: _Optional[str] = ..., arguments: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ...) -> None: ...
+
+class ExecuteAgentToolResponse(_message.Message):
+    __slots__ = ()
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    BODY_FIELD_NUMBER: _ClassVar[int]
+    status: int
+    body: str
+    def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ...) -> None: ...
