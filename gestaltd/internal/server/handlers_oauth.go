@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
@@ -51,10 +50,14 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
-	if conn, ok := s.effectiveConnectionDef(req.Integration, connection); ok {
-		if mode := config.ConnectionModeForConnection(conn); mode != "" {
-			connectionMode = metricutil.NormalizeConnectionMode(mode)
-		}
+	p := PrincipalFromContext(r.Context())
+	selected, ok := s.requireConfiguredConnection(w, req.Integration, connection)
+	if !ok {
+		auditErr = errors.New("connection is not configured")
+		return
+	}
+	if selected.Mode != "" {
+		connectionMode = metricutil.NormalizeConnectionMode(selected.Mode)
 	}
 
 	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)
@@ -76,7 +79,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	auditTarget = connectionAuditTarget(req.Integration, connection, instance)
 
-	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
+	connParams, ok := resolveConnectionParams(w, selected.ParamDefs, req.ConnectionParams)
 	if !ok {
 		auditErr = errors.New("invalid connection parameters")
 		return
@@ -95,7 +98,6 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authURL, verifier = handler.StartOAuth("_", req.Scopes)
 	}
 
-	p := PrincipalFromContext(r.Context())
 	authSource := ""
 	if p != nil {
 		authSource = p.AuthSource()
@@ -212,6 +214,20 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	if prov != nil {
 		connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
+	selected, connErr := s.configuredConnectionInfo(providerName, state.Connection)
+	if connErr != nil {
+		auditErr = errors.New("connection is not configured")
+		writeCallbackError(
+			http.StatusBadRequest,
+			connErr.Error(),
+			providerName+" connection failed",
+			"Gestalt could not finish saving this connection. Start the connection again from Integrations.",
+		)
+		return
+	}
+	if selected.Mode != "" {
+		connectionMode = metricutil.NormalizeConnectionMode(selected.Mode)
+	}
 
 	var exchangeOpts []oauth.ExchangeOption
 	connParams := state.ConnectionParams
@@ -237,7 +253,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	metadata, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
+	metadata, metaErr := buildConnectionMetadata(selected.ParamDefs, connParams, tokenResp)
 	if metaErr != nil {
 		auditErr = errors.New("failed to extract connection metadata from token response")
 		slog.ErrorContext(r.Context(), "connection metadata extraction failed", "provider", providerName, "error", metaErr)
@@ -272,9 +288,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		TokenExpiresAt: tokenExpiresAt,
 		MetadataJSON:   metadata,
 	}
-	if conn, ok := s.effectiveConnectionDef(providerName, state.Connection); ok {
-		tm.ConnectionID = conn.ConnectionID
-	}
+	tm.ConnectionID = selected.Def.ConnectionID
 	tm.ActorSubjectID = state.ActorSubjectID
 	tm.ActorUserID = state.ActorUserID
 	tm.ActorAuthSource = state.ActorAuthSource

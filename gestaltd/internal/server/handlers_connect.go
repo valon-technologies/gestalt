@@ -62,14 +62,17 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
-	conn, hasConnectionDef := s.effectiveConnectionDef(req.Integration, manualConnection)
-	if hasConnectionDef {
-		mode := config.ConnectionModeForConnection(conn)
-		connectionMode = metricutil.NormalizeConnectionMode(mode)
-	}
 	p := PrincipalFromContext(r.Context())
+
+	selected, ok := s.requireConfiguredConnection(w, req.Integration, manualConnection)
+	if !ok {
+		auditErr = errors.New("connection is not configured")
+		return
+	}
+	conn := selected.Def
+	connectionMode = metricutil.NormalizeConnectionMode(selected.Mode)
 	auth := conn.Auth
-	if !manualConnectionAllowed(prov, conn, hasConnectionDef) {
+	if !manualConnectionAllowed(conn) {
 		auditErr = errors.New("integration does not support manual auth")
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
 		return
@@ -84,7 +87,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 
 	tokenExchange := manualTokenExchangeConfigured(auth)
 
-	effectiveCredential, credErr := buildEffectiveManualCredential(req, manualCredentialAuth(auth, prov, tokenExchange), tokenExchange)
+	effectiveCredential, credErr := buildEffectiveManualCredential(req, auth, tokenExchange)
 	if credErr != nil {
 		auditErr = credErr
 		writeError(w, http.StatusBadRequest, credErr.Error())
@@ -96,7 +99,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
+	connParams, ok := resolveConnectionParams(w, selected.ParamDefs, req.ConnectionParams)
 	if !ok {
 		auditErr = errors.New("invalid connection parameters")
 		return
@@ -110,7 +113,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	manualMeta, metaErr := buildConnectionMetadata(prov, connParams, tokenResp)
+	manualMeta, metaErr := buildConnectionMetadata(selected.ParamDefs, connParams, tokenResp)
 	if metaErr != nil {
 		auditErr = errors.New(metaErr.Error())
 		writeError(w, http.StatusBadRequest, metaErr.Error())
@@ -155,20 +158,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, result)
-}
-
-func manualCredentialAuth(auth config.ConnectionAuthDef, prov core.Provider, tokenExchange bool) config.ConnectionAuthDef {
-	if !tokenExchange || len(auth.Credentials) > 0 {
-		return auth
-	}
-	for _, field := range prov.CredentialFields() {
-		auth.Credentials = append(auth.Credentials, config.CredentialFieldDef{
-			Name:        field.Name,
-			Label:       field.Label,
-			Description: field.Description,
-		})
-	}
-	return auth
 }
 
 func manualTokenExchangeConfigured(auth config.ConnectionAuthDef) bool {
@@ -261,32 +250,33 @@ func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided 
 	return result, nil
 }
 
-func buildConnectionMetadata(prov core.Provider, userParams map[string]string, tokenResp *core.TokenResponse) (string, error) {
+func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams map[string]string, tokenResp *core.TokenResponse) (string, error) {
 	metadata := make(map[string]string)
 	for k, v := range userParams {
 		metadata[k] = v
 	}
 
-	if defs := prov.ConnectionParamDefs(); tokenResp != nil && tokenResp.Extra != nil {
-		for name, def := range defs {
-			if def.From == "token_response" {
-				field := def.Field
-				if field == "" {
-					field = name
-				}
-				val, ok := apiexec.ExtractJSONPath(tokenResp.Extra, field)
-				if !ok {
-					if def.Required {
-						return "", fmt.Errorf("token response missing required field %q for connection param %q", field, name)
-					}
-					continue
-				}
-				s := fmt.Sprintf("%v", val)
-				if !safeTokenResponseValue.MatchString(s) {
-					return "", fmt.Errorf("token response field %q for connection param %q contains invalid characters", field, name)
-				}
-				metadata[name] = s
+	for name, def := range defs {
+		if def.From == "token_response" {
+			if tokenResp == nil {
+				continue
 			}
+			field := def.Field
+			if field == "" {
+				field = name
+			}
+			val, ok := apiexec.ExtractJSONPath(tokenResp.Extra, field)
+			if !ok {
+				if def.Required {
+					return "", fmt.Errorf("token response missing required field %q for connection param %q", field, name)
+				}
+				continue
+			}
+			s := fmt.Sprintf("%v", val)
+			if !safeTokenResponseValue.MatchString(s) {
+				return "", fmt.Errorf("token response field %q for connection param %q contains invalid characters", field, name)
+			}
+			metadata[name] = s
 		}
 	}
 
@@ -504,11 +494,52 @@ func (s *Server) completeConnection(ctx context.Context, _ core.Provider, tm cre
 	return &connectionSetupResult{Status: "connected", Integration: tm.Integration}, nil
 }
 
-func manualConnectionAllowed(prov core.Provider, conn config.ConnectionDef, hasConnectionDef bool) bool {
-	if hasConnectionDef && authTypesContain(connectionAuthTypes(conn.Auth, nil), "manual") {
-		return true
+func manualConnectionAllowed(conn config.ConnectionDef) bool {
+	return authTypesContain(connectionAuthTypes(conn.Auth, nil), "manual")
+}
+
+type configuredConnectionInfo struct {
+	Def       config.ConnectionDef
+	Mode      core.ConnectionMode
+	ParamDefs map[string]core.ConnectionParamDef
+}
+
+func (s *Server) configuredConnectionInfo(integration, connection string) (configuredConnectionInfo, error) {
+	conn, ok := s.effectiveConnectionDef(integration, connection)
+	if !ok {
+		return configuredConnectionInfo{}, fmt.Errorf("connection %q is not configured for integration %q", connection, integration)
 	}
-	return authTypesContain(userFacingAuthTypes(prov.AuthTypes()), "manual")
+	return configuredConnectionInfo{
+		Def:       conn,
+		Mode:      config.ConnectionModeForConnection(conn),
+		ParamDefs: connectionParamDefsFromConfig(conn.ConnectionParams),
+	}, nil
+}
+
+func connectionParamDefsFromConfig(defs map[string]config.ConnectionParamDef) map[string]core.ConnectionParamDef {
+	if len(defs) == 0 {
+		return nil
+	}
+	out := make(map[string]core.ConnectionParamDef, len(defs))
+	for name, def := range defs {
+		out[name] = core.ConnectionParamDef{
+			Required:    def.Required,
+			Description: def.Description,
+			Default:     def.Default,
+			From:        def.From,
+			Field:       def.Field,
+		}
+	}
+	return out
+}
+
+func (s *Server) requireConfiguredConnection(w http.ResponseWriter, integration, connection string) (configuredConnectionInfo, bool) {
+	info, err := s.configuredConnectionInfo(integration, connection)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return configuredConnectionInfo{}, false
+	}
+	return info, true
 }
 
 func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCandidateInfo {
