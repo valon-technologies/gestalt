@@ -8,19 +8,20 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 type lazyAgentManager struct {
 	mu     sync.RWMutex
-	target agentmanager.Service
+	target *agentmanager.Manager
 }
 
 func newLazyAgentManager() *lazyAgentManager {
 	return &lazyAgentManager{}
 }
 
-func (l *lazyAgentManager) SetTarget(target agentmanager.Service) {
+func (l *lazyAgentManager) SetTarget(target *agentmanager.Manager) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.target = target
@@ -146,7 +147,15 @@ func (l *lazyAgentManager) ResolveInteraction(ctx context.Context, p *principal.
 	return target.ResolveInteraction(ctx, p, req)
 }
 
-func (l *lazyAgentManager) current() (agentmanager.Service, error) {
+func (l *lazyAgentManager) AuthorizeAgentAppInvocation(ctx context.Context, providerName, turnID string, requestPrincipal *principal.Principal, targetTool coreagent.ToolTarget, reqCtx *proto.RequestContext) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, agentturnscope.Scope{}, coreagent.ListedTool{}, err
+	}
+	return target.AuthorizeAgentAppInvocation(ctx, providerName, turnID, requestPrincipal, targetTool, reqCtx)
+}
+
+func (l *lazyAgentManager) current() (*agentmanager.Manager, error) {
 	l.mu.RLock()
 	target := l.target
 	l.mu.RUnlock()

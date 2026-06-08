@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
@@ -33,6 +35,7 @@ type recordingAppInvocation struct {
 	instance            string
 	operation           string
 	credentialMode      core.ConnectionMode
+	toolRefs            []coreagent.ToolRef
 	params              map[string]any
 	graphQLProviderName string
 	graphQLDocument     string
@@ -65,6 +68,9 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 	i.instance = instance
 	i.operation = operation
 	i.credentialMode = invocation.CredentialModeOverrideFromContext(ctx)
+	if refs := invocation.ToolRefsContextFromContext(ctx); refs.Set {
+		i.toolRefs = append([]coreagent.ToolRef(nil), refs.Refs...)
+	}
 	i.params = params
 	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
 }
@@ -113,6 +119,27 @@ func (p *recordingAuthorizationProvider) ListActiveModelResourceTypes(context.Co
 }
 func (p *recordingAuthorizationProvider) Ping(context.Context) error { return nil }
 func (p *recordingAuthorizationProvider) Close() error               { return nil }
+
+type recordingAgentAppAuthorizer struct {
+	providerName string
+	turnID       string
+	principal    *principal.Principal
+	target       coreagent.ToolTarget
+	reqCtx       *proto.RequestContext
+	principalOut *principal.Principal
+	scope        agentturnscope.Scope
+	tool         coreagent.ListedTool
+	err          error
+}
+
+func (a *recordingAgentAppAuthorizer) Authorize(_ context.Context, providerName, turnID string, p *principal.Principal, target coreagent.ToolTarget, reqCtx *proto.RequestContext) (*principal.Principal, agentturnscope.Scope, coreagent.ListedTool, error) {
+	a.providerName = providerName
+	a.turnID = turnID
+	a.principal = p
+	a.target = target
+	a.reqCtx = reqCtx
+	return a.principalOut, a.scope, a.tool, a.err
+}
 
 func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
 	t.Parallel()
@@ -191,6 +218,97 @@ func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
 	}
 	if invoker.idempotencyKey != "call-123" || invoker.params["title"] != "hello" {
 		t.Fatalf("request propagation idempotency=%q params=%v", invoker.idempotencyKey, invoker.params)
+	}
+}
+
+func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
+	t.Parallel()
+
+	authz := &recordingAuthorizationProvider{allowed: false}
+	invoker := &recordingAppInvocation{}
+	agentAuth := &recordingAgentAppAuthorizer{
+		principalOut: &principal.Principal{
+			SubjectID:           "user:runner",
+			CredentialSubjectID: "user:runner",
+		},
+		scope: agentturnscope.Scope{
+			ToolRefs: []coreagent.ToolRef{{
+				App:            "slack",
+				Operation:      "chat.postMessage",
+				Connection:     "team-primary",
+				CredentialMode: core.ConnectionModeSubject,
+			}},
+			ToolRefsSet: true,
+		},
+		tool: coreagent.ListedTool{Target: coreagent.ToolTarget{
+			App:            "slack",
+			Operation:      "chat.postMessage",
+			Connection:     "team-primary",
+			Instance:       "workspace-1",
+			CredentialMode: core.ConnectionModeSubject,
+			RunAs: &core.RunAsSubject{
+				SubjectID:           "service_account:automation",
+				CredentialSubjectID: "service_account:automation",
+			},
+		}},
+	}
+	server := NewAppServer(
+		invoker,
+		WithAuthorizationProvider(authz),
+		WithAgentAppInvocationAuthorizer(agentAuth.Authorize),
+		WithCallerApp("alpha", nil),
+	)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	reqCtx := requestContextWithCallerKind(t, "agent", "alpha", nil)
+	reqCtx.Invocation.RequestId = "turn-1"
+	reqCtx.ToolRefsSet = true
+	reqCtx.ToolRefs = []*proto.AgentToolRef{{
+		App:       "github",
+		Operation: "issues.create",
+	}}
+
+	resp, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:            "slack",
+		Operation:      "chat.postMessage",
+		Connection:     "forged-request-connection",
+		Instance:       "forged-request-instance",
+		CredentialMode: "subject",
+		Context:        reqCtx,
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.GetStatus() != 202 || resp.GetBody() != "accepted" {
+		t.Fatalf("Invoke response = %+v, want accepted", resp)
+	}
+	if len(authz.requests) != 0 {
+		t.Fatalf("authorization requests = %d, want 0 for agent turn", len(authz.requests))
+	}
+	if agentAuth.providerName != "alpha" || agentAuth.turnID != "turn-1" {
+		t.Fatalf("agent authorization turn = %s/%s, want alpha/turn-1", agentAuth.providerName, agentAuth.turnID)
+	}
+	if agentAuth.target.App != "slack" || agentAuth.target.Operation != "chat.postMessage" || agentAuth.target.Connection != "forged-request-connection" || agentAuth.target.CredentialMode != core.ConnectionModeSubject {
+		t.Fatalf("agent authorization target = %s.%s/%s/%s", agentAuth.target.App, agentAuth.target.Operation, agentAuth.target.Connection, agentAuth.target.CredentialMode)
+	}
+	if invoker.subjectID != "service_account:automation" || invoker.credentialSubjectID != "service_account:automation" {
+		t.Fatalf("invocation principal = %s/%s, want delegated automation subject", invoker.subjectID, invoker.credentialSubjectID)
+	}
+	if invoker.agentSubjectID != "user:runner" || invoker.runAsSubjectID != "service_account:automation" {
+		t.Fatalf("run-as audit = %s/%s, want user:runner/service_account:automation", invoker.agentSubjectID, invoker.runAsSubjectID)
+	}
+	if invoker.providerName != "slack" || invoker.operation != "chat.postMessage" || invoker.connection != "team-primary" || invoker.instance != "workspace-1" {
+		t.Fatalf("invocation target = %s.%s/%s/%s", invoker.providerName, invoker.operation, invoker.connection, invoker.instance)
+	}
+	if invoker.internalConnection {
+		t.Fatal("internal connection access = true, want false for agent-authorized invocation")
+	}
+	if invoker.credentialMode != core.ConnectionModeSubject {
+		t.Fatalf("credential mode = %q, want subject", invoker.credentialMode)
+	}
+	if len(invoker.toolRefs) != 1 || invoker.toolRefs[0].App != "slack" || invoker.toolRefs[0].Operation != "chat.postMessage" {
+		t.Fatalf("tool refs = %#v, want authorized slack chat.postMessage refs", invoker.toolRefs)
 	}
 }
 

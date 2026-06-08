@@ -779,11 +779,16 @@ func TestCreateSessionRejectsInvalidWorkflowScopeBeforeProviderCreate(t *testing
 func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 	t.Parallel()
 
-	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
+	const toolCount = agentToolListMaxPageSize + 7
+	operations := make([]string, toolCount)
+	for i := range operations {
+		operations[i] = fmt.Sprintf("fetch_%04d", i+1)
+	}
+	docs := agentCatalogTestProvider("docs", "Docs", operations...)
 	alpha := newRouteCountingAgentProvider("alpha")
 	scopes := newAgentManagerTestTurnScopes()
 	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, slack),
+		Providers: testutil.NewProviderRegistry(t, docs),
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
 			names:       []string{"alpha"},
@@ -798,8 +803,7 @@ func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 		Model:        "test-model",
 		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
 			Refs: []*proto.AgentToolRef{{
-				App:       "slack",
-				Operation: "chat.postMessage",
+				App: "docs",
 			}},
 		}}},
 	})
@@ -813,11 +817,11 @@ func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 	if catalogTools == nil {
 		t.Fatalf("provider session tools = %#v, want catalog", alpha.createSessionReqs[0].GetTools())
 	}
-	if got := catalogTools.GetRefs()[0].GetOperation(); got != "chat.postMessage" {
-		t.Fatalf("provider session tool ref operation = %q, want chat.postMessage", got)
+	if got := catalogTools.GetRefs()[0].GetApp(); got != "docs" {
+		t.Fatalf("provider session tool ref app = %q, want docs", got)
 	}
-	if got := catalogTools.GetTools()[0].GetRef().GetOperation(); got != "chat.postMessage" {
-		t.Fatalf("provider listed tool operation = %q, want chat.postMessage", got)
+	if len(catalogTools.GetTools()) != toolCount {
+		t.Fatalf("provider listed tools = %d, want %d", len(catalogTools.GetTools()), toolCount)
 	}
 	scope, ok := scopes.GetSession("alpha", session.ID)
 	if !ok {
@@ -826,11 +830,11 @@ func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 	if scope.ToolSource != coreagent.ToolSourceModeCatalog {
 		t.Fatalf("session scope tool source = %q, want catalog", scope.ToolSource)
 	}
-	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].Operation != "chat.postMessage" {
-		t.Fatalf("session scope refs = %#v, want slack chat.postMessage", scope.ToolRefs)
+	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "docs" {
+		t.Fatalf("session scope refs = %#v, want docs", scope.ToolRefs)
 	}
-	if len(scope.ListedTools) != 1 || scope.ListedTools[0].Ref.Operation != "chat.postMessage" {
-		t.Fatalf("session scope listed tools = %#v, want chat.postMessage", scope.ListedTools)
+	if len(scope.ListedTools) != toolCount {
+		t.Fatalf("session scope listed tools = %d, want %d", len(scope.ListedTools), toolCount)
 	}
 	if _, err := manager.UpdateSession(context.Background(), p, &proto.UpdateAgentProviderSessionRequest{
 		SessionId: session.ID,
@@ -1267,14 +1271,264 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 	}
 }
 
-func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
+func TestAuthorizeAgentAppInvocationUsesPersistedTurnScope(t *testing.T) {
 	t.Parallel()
 
 	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
-	github := agentCatalogTestProvider("github", "GitHub", "issues.create")
+	slack.ConnMode = core.ConnectionModeSubject
+	alpha := newRouteCountingAgentProvider("alpha")
+	scopes := newAgentManagerTestTurnScopes()
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, slack),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": alpha},
+		},
+		TurnScopes: scopes,
+	})
+	p := &principal.Principal{
+		SubjectID:           principal.UserSubjectID("user-1"),
+		CredentialSubjectID: principal.UserSubjectID("user-1"),
+	}
+	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "sats")
+
+	session, err := manager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
+			Refs: []*proto.AgentToolRef{{
+				App:            "slack",
+				Operation:      "chat.postMessage",
+				Connection:     "team-primary",
+				CredentialMode: string(core.ConnectionModeSubject),
+			}},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		SessionId:      session.ID,
+		Model:          "test-model",
+		Output:         agentTextOutputProto(),
+		TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn calls = %d, want 1", len(alpha.createTurnReqs))
+	}
+	providerReqCtx := alpha.createTurnReqs[0].GetContext()
+	requireAgentManagerRequestContextCaller(t, providerReqCtx, invocation.ProviderKindAgent, "alpha")
+	if got := providerReqCtx.GetInvocation().GetRequestId(); got != turn.ID {
+		t.Fatalf("provider request id = %q, want turn id %q", got, turn.ID)
+	}
+	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
+	if len(scope.ListedTools) != 1 || scope.ListedTools[0].Target.App != "slack" || scope.ListedTools[0].Target.Operation != "chat.postMessage" {
+		t.Fatalf("turn listed tools = %#v, want slack chat.postMessage", scope.ListedTools)
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:automation",
+		CredentialSubjectID: "service_account:automation",
+	}
+	scope.ListedTools[0].Target.RunAs = runAs
+	if err := scopes.Put(scope); err != nil {
+		t.Fatalf("Put delegated turn scope: %v", err)
+	}
+
+	target := coreagent.ToolTarget{
+		App:       "slack",
+		Operation: "chat.postMessage",
+	}
+	authorized, authorizedScope, authorizedTool, err := manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ID, p, target, providerReqCtx)
+	if err != nil {
+		t.Fatalf("AuthorizeAgentAppInvocation: %v", err)
+	}
+	if authorized == nil || authorized.SubjectID != p.SubjectID || authorized.CredentialSubjectID != p.CredentialSubjectID {
+		t.Fatalf("authorized principal = %#v, want %s/%s", authorized, p.SubjectID, p.CredentialSubjectID)
+	}
+	if _, ok := authorized.TokenPermissions["slack"]["chat.postMessage"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want only persisted slack chat.postMessage scope", authorized.TokenPermissions)
+	}
+	if authorizedTool.Target.CredentialMode != core.ConnectionModeSubject {
+		t.Fatalf("credential mode = %q, want subject", authorizedTool.Target.CredentialMode)
+	}
+	if authorizedTool.Target.Connection != "team-primary" {
+		t.Fatalf("connection = %q, want team-primary", authorizedTool.Target.Connection)
+	}
+	if !core.RunAsSubjectsEqual(authorizedTool.Target.RunAs, runAs) {
+		t.Fatalf("runAs = %#v, want %#v", authorizedTool.Target.RunAs, runAs)
+	}
+	if !authorizedScope.ToolRefsSet || len(authorizedScope.ToolRefs) != 1 || authorizedScope.ToolRefs[0].App != "slack" || authorizedScope.ToolRefs[0].Operation != "chat.postMessage" {
+		t.Fatalf("authorized tool refs = %#v, set=%v; want persisted slack chat.postMessage refs", authorizedScope.ToolRefs, authorizedScope.ToolRefsSet)
+	}
+	if alpha.getTurnCalls != 1 {
+		t.Fatalf("GetTurn calls = %d, want 1 live-turn validation", alpha.getTurnCalls)
+	}
+
+	target.Operation = "chat.delete"
+	_, _, _, err = manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ID, p, target, providerReqCtx)
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("AuthorizeAgentAppInvocation unlisted operation status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+	target.Operation = "chat.postMessage"
+	_, _, _, err = manager.AuthorizeAgentAppInvocation(context.Background(), "beta", turn.ID, p, target, providerReqCtx)
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("AuthorizeAgentAppInvocation wrong provider status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+}
+
+func TestMatchingAgentAppInvocationToolUsesOptionalSelectors(t *testing.T) {
+	t.Parallel()
+
+	tools := []coreagent.ListedTool{{
+		Target: coreagent.ToolTarget{
+			App:            "slack",
+			Operation:      "chat.postMessage",
+			Connection:     "team-primary",
+			Instance:       "workspace-1",
+			CredentialMode: core.ConnectionModeSubject,
+		},
+	}, {
+		Target: coreagent.ToolTarget{
+			App:            "github",
+			Operation:      "issues.create",
+			Connection:     "org-primary",
+			CredentialMode: core.ConnectionModeSubject,
+		},
+	}}
+
+	tool, ok := matchingAgentAppInvocationTool(tools, coreagent.ToolTarget{
+		App:       "slack",
+		Operation: "chat.postMessage",
+	})
+	if !ok {
+		t.Fatal("matchingAgentAppInvocationTool without selectors failed")
+	}
+	if got := tool.Target.Connection; got != "team-primary" {
+		t.Fatalf("connection = %q, want persisted team-primary", got)
+	}
+
+	tools = append(tools, coreagent.ListedTool{Target: coreagent.ToolTarget{
+		App:            "slack",
+		Operation:      "chat.postMessage",
+		Connection:     "team-secondary",
+		Instance:       "workspace-2",
+		CredentialMode: core.ConnectionModeSubject,
+	}})
+	if _, ok := matchingAgentAppInvocationTool(tools, coreagent.ToolTarget{
+		App:       "slack",
+		Operation: "chat.postMessage",
+	}); ok {
+		t.Fatal("matchingAgentAppInvocationTool without selectors matched ambiguous tools")
+	}
+	tool, ok = matchingAgentAppInvocationTool(tools, coreagent.ToolTarget{
+		App:        "slack",
+		Operation:  "chat.postMessage",
+		Connection: "team-secondary",
+	})
+	if !ok {
+		t.Fatal("matchingAgentAppInvocationTool with connection selector failed")
+	}
+	if got := tool.Target.Instance; got != "workspace-2" {
+		t.Fatalf("instance = %q, want workspace-2", got)
+	}
+}
+
+func TestAuthorizeAgentAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
+	t.Parallel()
+
+	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.turnIDOverride = "provider-turn-1"
+	scopes := newAgentManagerTestTurnScopes()
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, slack),
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": alpha},
+		},
+		TurnScopes: scopes,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	ctx := invocation.WithCallerProvider(context.Background(), invocation.ProviderKindApp, "sats")
+
+	session, err := manager.CreateSession(ctx, p, &proto.CreateAgentProviderSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
+			Refs: []*proto.AgentToolRef{{
+				App:       "slack",
+				Operation: "chat.postMessage",
+			}},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := manager.CreateTurn(ctx, p, &proto.CreateAgentProviderTurnRequest{
+		SessionId:      session.ID,
+		IdempotencyKey: "provider-owned-turn",
+		Model:          "test-model",
+		Output:         agentTextOutputProto(),
+		TimeoutSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if turn.ID != "provider-turn-1" {
+		t.Fatalf("CreateTurn ID = %q, want provider-turn-1", turn.ID)
+	}
+	if strings.TrimSpace(turn.ExecutionRef) == "" || turn.ExecutionRef == turn.ID {
+		t.Fatalf("CreateTurn ExecutionRef = %q, want generated execution ref distinct from provider turn ID", turn.ExecutionRef)
+	}
+	if _, ok := scopes.Get("alpha", session.ID, turn.ID); !ok {
+		t.Fatalf("provider-owned turn scope alias %q was not stored", turn.ID)
+	}
+	providerReqCtx := alpha.createTurnReqs[0].GetContext()
+	target := coreagent.ToolTarget{
+		App:       "slack",
+		Operation: "chat.postMessage",
+	}
+
+	authorized, _, _, err := manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ExecutionRef, p, target, providerReqCtx)
+	if err != nil {
+		t.Fatalf("AuthorizeAgentAppInvocation with execution ref: %v", err)
+	}
+	if authorized == nil || authorized.SubjectID != p.SubjectID {
+		t.Fatalf("authorized principal = %#v, want %s", authorized, p.SubjectID)
+	}
+
+	providerOwnedReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
+	providerOwnedReqCtx.Invocation.RequestId = turn.ID
+
+	authorized, _, _, err = manager.AuthorizeAgentAppInvocation(context.Background(), "alpha", turn.ID, p, target, providerOwnedReqCtx)
+	if err != nil {
+		t.Fatalf("AuthorizeAgentAppInvocation with provider turn id: %v", err)
+	}
+	if authorized == nil || authorized.SubjectID != p.SubjectID {
+		t.Fatalf("authorized principal = %#v, want %s", authorized, p.SubjectID)
+	}
+	if alpha.getTurnCalls != 2 {
+		t.Fatalf("GetTurn calls = %d, want 2 provider-owned turn lookups", alpha.getTurnCalls)
+	}
+}
+
+func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
+	t.Parallel()
+
+	const toolCount = agentToolListMaxPageSize + 7
+	operations := make([]string, toolCount)
+	for i := range operations {
+		operations[i] = fmt.Sprintf("fetch_%04d", i+1)
+	}
+	docs := agentCatalogTestProvider("docs", "Docs", operations...)
 	alpha := newRouteCountingAgentProvider("alpha")
 	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, slack, github),
+		Providers: testutil.NewProviderRegistry(t, docs),
 		Agent: &routeCountingAgentControl{
 			defaultName: "alpha",
 			names:       []string{"alpha"},
@@ -1288,8 +1542,7 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 		Model:        "test-model",
 		Tools: &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{Catalog: &proto.AgentCatalogToolConfig{
 			Refs: []*proto.AgentToolRef{{
-				App:       "slack",
-				Operation: "chat.postMessage",
+				App: "docs",
 			}},
 		}}},
 	})
@@ -1307,8 +1560,11 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 		t.Fatalf("CreateTurn: %v", err)
 	}
 	scope := requireAgentManagerTurnScope(t, manager.turnScopes, "alpha", session.ID, alpha.createTurnReqs[0].GetTurnId())
-	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "slack" {
-		t.Fatalf("turn scope refs = %#v, want durable slack scope", scope.ToolRefs)
+	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "docs" {
+		t.Fatalf("turn scope refs = %#v, want durable docs scope", scope.ToolRefs)
+	}
+	if len(scope.ListedTools) != toolCount {
+		t.Fatalf("turn listed tools = %d, want %d", len(scope.ListedTools), toolCount)
 	}
 }
 

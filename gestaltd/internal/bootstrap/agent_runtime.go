@@ -782,12 +782,7 @@ func resolveAgentTurnScope(scopes *agentturnscope.Store, reqCtx *proto.RequestCo
 	if scope.Revoked {
 		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scope is revoked", invocation.ErrAuthorizationDenied)
 	}
-	expectedKind := scope.CallerKind
-	expectedName := strings.TrimSpace(scope.CallerName)
-	if expectedKind == "" || expectedName == "" {
-		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, fmt.Errorf("%w: agent turn scope caller context is required", invocation.ErrInternal)
-	}
-	parsed, err := appaccessservice.ProviderRequestContextFromProto(reqCtx, expectedKind, expectedName)
+	parsed, err := appaccessservice.ProviderRequestContextFromProto(reqCtx, invocation.ProviderKindAgent, providerName)
 	if err != nil {
 		return agentturnscope.Scope{}, appaccessservice.ProviderRequestContext{}, err
 	}
