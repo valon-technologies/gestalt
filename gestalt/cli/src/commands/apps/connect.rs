@@ -86,6 +86,8 @@ struct StartOAuthRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     instance: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_account_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     connection_params: Option<&'a BTreeMap<String, String>>,
 }
 
@@ -99,6 +101,8 @@ struct ConnectManualRequest<'a> {
     connection: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     instance: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_account_id: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     connection_params: Option<&'a BTreeMap<String, String>>,
 }
@@ -251,10 +255,16 @@ pub fn connect(
     name: &str,
     connection: Option<&str>,
     instance: Option<&str>,
+    service_account_id: Option<&str>,
 ) -> Result<()> {
-    connect_with_browser_opener(client, name, connection, instance, |url| {
-        open::that(url).map(|_| ()).map_err(Into::into)
-    })
+    connect_with_browser_opener(
+        client,
+        name,
+        connection,
+        instance,
+        service_account_id,
+        |url| open::that(url).map(|_| ()).map_err(Into::into),
+    )
 }
 
 pub fn connect_with_browser_opener<F>(
@@ -262,6 +272,7 @@ pub fn connect_with_browser_opener<F>(
     name: &str,
     connection: Option<&str>,
     instance: Option<&str>,
+    service_account_id: Option<&str>,
     open_browser: F,
 ) -> Result<()>
 where
@@ -271,8 +282,10 @@ where
     let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
 
     match flow.mode {
-        ConnectMode::OAuth => start_oauth(client, &flow, instance, open_browser),
-        ConnectMode::Manual => connect_manual(client, &flow, instance),
+        ConnectMode::OAuth => {
+            start_oauth(client, &flow, instance, service_account_id, open_browser)
+        }
+        ConnectMode::Manual => connect_manual(client, &flow, instance, service_account_id),
     }
 }
 
@@ -280,6 +293,7 @@ fn start_oauth<F>(
     client: &ApiClient,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
+    service_account_id: Option<&str>,
     open_browser: F,
 ) -> Result<()>
 where
@@ -293,6 +307,7 @@ where
                 integration: flow.integration_name(),
                 connection: flow.connection_name(),
                 instance,
+                service_account_id,
                 connection_params: connection_params.as_ref(),
             },
         )
@@ -316,6 +331,7 @@ fn connect_manual(
     client: &ApiClient,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
+    service_account_id: Option<&str>,
 ) -> Result<()> {
     eprintln!(
         "Connecting {} with manual auth.",
@@ -339,6 +355,7 @@ fn connect_manual(
                     credentials: credentials.request(),
                     connection: flow.connection_name(),
                     instance,
+                    service_account_id,
                     connection_params: connection_params.as_ref(),
                 },
             )

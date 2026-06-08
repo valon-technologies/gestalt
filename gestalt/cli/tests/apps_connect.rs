@@ -47,6 +47,42 @@ fn test_connect_includes_connection_and_instance() {
         "acme_crm",
         Some("workspace"),
         Some("team-a"),
+        None,
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_connect_oauth_includes_service_account_id() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"acme_crm","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
+        )
+        .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","integration":"acme_crm","serviceAccountId":"service_account:nightly-sync"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::apps::connect_with_browser_opener(
+        &client,
+        "acme_crm",
+        Some("workspace"),
+        None,
+        Some("service_account:nightly-sync"),
         |_| Ok(()),
     );
 
@@ -86,6 +122,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() 
     let result = gestalt::commands::apps::connect_with_browser_opener(
         &client,
         "acme_crm",
+        None,
         None,
         None,
         move |url| {
@@ -131,6 +168,7 @@ fn test_connect_uses_user_facing_app_connection_name_on_the_wire() {
         &client,
         "acme_crm",
         Some("app"),
+        None,
         None,
         |_| Ok(()),
     );
@@ -237,6 +275,50 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
         .success()
         .stderr(predicate::str::contains("API region"))
         .stderr(predicate::str::contains("API key"))
+        .stderr(predicate::str::contains("Connected widget_metrics."));
+}
+
+#[test]
+fn test_manual_connect_includes_service_account_id_flag() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
+                "name":"widget_metrics",
+                "displayName":"Widget Metrics",
+                "connections":[{
+                    "name":"app",
+                    "authTypes":["manual"],
+                    "credentialFields":[{"name":"api_key","label":"API key"}]
+                }]
+            }]"#,
+        )
+        .create();
+    let _connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"app","credential":"wm-key","integration":"widget_metrics","serviceAccountId":"nightly-sync"}"#.to_string(),
+    ))
+    .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "app",
+            "connect",
+            "widget_metrics",
+            "--service-account-id",
+            "nightly-sync",
+        ])
+        .write_stdin("wm-key\n")
+        .assert()
+        .success()
         .stderr(predicate::str::contains("Connected widget_metrics."));
 }
 

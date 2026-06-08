@@ -115,6 +115,10 @@ pub enum AppCommands {
         /// Instance name to create or refresh
         #[arg(long)]
         instance: Option<String>,
+
+        /// Store the connection credential under this service account subject
+        #[arg(long = "service-account-id")]
+        service_account_id: Option<String>,
     },
     /// Describe an app operation
     Describe(DescribeArgs),
