@@ -13168,6 +13168,80 @@ func TestConnectManual_ServiceAccountIDStoresCredentialForServiceAccount(t *test
 	}
 }
 
+func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSubject(t *testing.T) {
+	t.Parallel()
+
+	const (
+		serviceAccountSubjectID = "service_account:manual-bot"
+		credentialSubjectID     = "service_account:reports"
+	)
+
+	svc := testutil.NewStubServices(t)
+	user, err := svc.Users.FindOrCreateUser(context.Background(), "api-user@test.local")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	exp := time.Now().Add(24 * time.Hour)
+	if err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
+		ID:                  "api-tok-service-account-credential-subject",
+		OwnerKind:           core.APITokenOwnerKindUser,
+		OwnerID:             user.ID,
+		CredentialSubjectID: credentialSubjectID,
+		Name:                "service account credential subject",
+		HashedToken:         hashed,
+		ExpiresAt:           &exp,
+	}); err != nil {
+		t.Fatalf("StoreAPIToken: %v", err)
+	}
+	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-service-account-invoker"},
+		})
+		cfg.DefaultConnection = map[string]string{"manual-service-account-invoker": config.AppConnectionName}
+		cfg.Authorization = authz
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-invoker","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if len(authz.requests) != 1 {
+		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
+	}
+	authReq := authz.requests[0]
+	if got, want := authReq.GetSubject().GetId(), principal.UserSubjectID(user.ID); got != want {
+		t.Fatalf("authorization subject id = %q, want invoking subject %q", got, want)
+	}
+	if got := authReq.GetSubject().GetId(); got == credentialSubjectID {
+		t.Fatalf("authorization subject id = %q, must not use credential subject", got)
+	}
+	if resource := authReq.GetResource(); resource.GetType() != "service_account" || resource.GetId() != serviceAccountSubjectID {
+		t.Fatalf("authorization resource = %+v, want service_account/%s", resource, serviceAccountSubjectID)
+	}
+}
+
 func TestConnectManual_ServiceAccountIDRequiresManagesAuthorization(t *testing.T) {
 	t.Parallel()
 

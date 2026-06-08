@@ -178,8 +178,7 @@ func (s *Server) authorizeServiceAccountCredentialManagement(ctx context.Context
 	if s == nil || s.authorization == nil {
 		return fmt.Errorf("authorization provider is required")
 	}
-	p = principal.Canonicalized(p)
-	subjectID := strings.TrimSpace(principal.EffectiveCredentialSubjectID(p))
+	subjectID := invokingPrincipalSubjectID(p)
 	if subjectID == "" {
 		return fmt.Errorf("not authenticated")
 	}
@@ -201,6 +200,20 @@ func (s *Server) authorizeServiceAccountCredentialManagement(ctx context.Context
 		return fmt.Errorf("service account credential management denied")
 	}
 	return nil
+}
+
+func invokingPrincipalSubjectID(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return ""
+	}
+	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
+		return subjectID
+	}
+	if userID := strings.TrimSpace(p.UserID); userID != "" {
+		return principal.UserSubjectID(userID)
+	}
+	return ""
 }
 
 func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
