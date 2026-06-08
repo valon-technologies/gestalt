@@ -460,12 +460,8 @@ func (s *Server) resolveAgentHarness(w http.ResponseWriter, r *http.Request) {
 		s.writeAgentManagerError(w, r, "provider", "", nil, err)
 		return
 	}
-	if err := s.access.Require(r.Context(), p, access.Request{
-		ResourceType:    providerName,
-		Action:          "provider.access",
-		CredentialScope: access.ProviderCredentialScope,
-	}); err != nil {
-		s.writeAgentManagerError(w, r, "provider", providerName, nil, err)
+	if !s.allowsAgentProvider(r.Context(), p, providerName) {
+		s.writeAgentManagerError(w, r, "provider", providerName, nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName))
 		return
 	}
 	entry := s.agentDefs[providerName]
@@ -1041,6 +1037,10 @@ func (s *Server) resolveAgentActor(w http.ResponseWriter, r *http.Request) (*pri
 		return nil, false
 	}
 	return p, true
+}
+
+func (s *Server) allowsAgentProvider(ctx context.Context, p *principal.Principal, providerName string) bool {
+	return principal.AllowsProviderPermission(p, providerName)
 }
 
 func resolveAgentIdempotencyKey(w http.ResponseWriter, r *http.Request, bodyValue string) (string, bool) {
@@ -1717,8 +1717,6 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound):
 		writeError(w, http.StatusNotFound, "agent interaction not found")
-	case access.IsPolicyUnavailable(err):
-		s.writeInvocationError(w, r, pluginName, operation, err)
 	case errors.Is(err, invocation.ErrProviderNotFound),
 		errors.Is(err, invocation.ErrOperationNotFound),
 		errors.Is(err, access.ErrNotAuthenticated),

@@ -608,8 +608,6 @@ func invocationStatusError(err error) error {
 		return nil
 	case errors.Is(err, access.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())
-	case access.IsPolicyUnavailable(err):
-		return status.Error(codes.Unavailable, err.Error())
 	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound):

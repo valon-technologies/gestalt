@@ -9,7 +9,6 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/workflowwire"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
@@ -30,12 +29,6 @@ func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, r
 	}()
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
-	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType: "gestalt",
-		Action:       workflowAuditOperationDefinitionApply,
-	}); err != nil {
-		return nil, err
 	}
 	providerName, provider, err := m.resolveProvider(ctx, strings.TrimSpace(req.ProviderName))
 	if err != nil {
@@ -112,11 +105,7 @@ func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) (
 				Definition:   definition,
 				provider:     provider,
 			}
-			accessible, err := m.definitionAccessible(ctx, p, managed)
-			if err != nil {
-				return nil, err
-			}
-			if accessible {
+			if m.definitionAccessible(ctx, p, managed) {
 				out = append(out, managed)
 			}
 		}
@@ -206,12 +195,6 @@ func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, 
 	}()
 	existing, err := m.requireOwnedDefinition(ctx, p, definitionID, "")
 	if err != nil {
-		return err
-	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType: "gestalt",
-		Action:       workflowAuditOperationDefinitionDelete,
-	}); err != nil {
 		return err
 	}
 	audit.setProvider(existing.ProviderName)
@@ -367,24 +350,17 @@ func (m *Manager) requireOwnedDefinition(ctx context.Context, p *principal.Princ
 	if err != nil {
 		return nil, err
 	}
-	accessible, err := m.definitionAccessible(ctx, p, definition)
-	if err != nil {
-		return nil, err
-	}
-	if !accessible {
+	if !m.definitionAccessible(ctx, p, definition) {
 		return nil, core.ErrNotFound
 	}
 	return definition, nil
 }
 
-func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) (bool, error) {
+func (m *Manager) definitionAccessible(ctx context.Context, p *principal.Principal, definition *ManagedDefinition) bool {
 	if definition == nil || definition.Definition == nil {
-		return false, nil
+		return false
 	}
-	if !workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) {
-		return false, nil
-	}
-	return m.storedTargetAllowed(ctx, p, definition.Definition.Target)
+	return workflowSubjectOwnedBy(definition.Definition.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, definition.Definition.Target)
 }
 
 func (m *Manager) providerNames() []string {

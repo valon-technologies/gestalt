@@ -80,7 +80,6 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      prepared.AgentManager,
 		Invoker:           sharedInvoker,
-		Access:            prepared.Deps.Access,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
 	}))

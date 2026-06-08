@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -127,7 +128,6 @@ type Config struct {
 	TurnScopes        *agentturnscope.Store
 	ToolIDs           *agenttoolid.Codec
 	Invoker           invocation.Invoker
-	Access            *access.Enforcer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	AgentConnections  map[string][]string
@@ -155,7 +155,6 @@ func New(cfg Config) *Manager {
 		turnScopes:        cfg.TurnScopes,
 		toolIDs:           cfg.ToolIDs,
 		invoker:           cfg.Invoker,
-		access:            cfg.Access,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
@@ -460,12 +459,8 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(providerName))
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType:    providerName,
-		Action:          "provider.access",
-		CredentialScope: access.ProviderCredentialScope,
-	}); err != nil {
-		return nil, err
+	if !m.allowsAgentProvider(ctx, p, providerName) {
+		return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)
 	}
 	metadata := protoutil.MapFromStruct(req.GetMetadata())
 	if err := validateAgentSessionUserMetadata(metadata); err != nil {
@@ -625,10 +620,7 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 	if len(req.GetSessionIds()) > 0 {
 		return m.listExactSessions(ctx, p, providerName, req.GetSessionIds(), state, limit, req.GetSummaryOnly(), req.GetContext())
 	}
-	candidates, err := m.providerCandidates(ctx, providerName)
-	if err == nil {
-		candidates, err = m.filterProviderCandidatesByAccess(ctx, p, candidates, providerName)
-	}
+	candidates, err := m.authorizedProviderCandidates(ctx, p, providerName)
 	if err != nil {
 		if !errors.Is(err, access.ErrDenied) {
 			return nil, err
@@ -1343,15 +1335,7 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	}
 	authorized := make([]namedAgentProvider, 0, len(candidates))
 	for _, candidate := range candidates {
-		allowed, err := m.access.Allowed(ctx, p, access.Request{
-			ResourceType:    candidate.name,
-			Action:          "provider.access",
-			CredentialScope: access.ProviderCredentialScope,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if allowed {
+		if m.allowsAgentProvider(ctx, p, candidate.name) {
 			authorized = append(authorized, candidate)
 		}
 	}
@@ -1382,11 +1366,12 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 	if err != nil {
 		return nil, err
 	}
-	candidates, err = m.filterProviderCandidatesByAccess(ctx, p, candidates, providerName)
+	candidates, err = filterProviderCandidatesByTokenPermission(p, candidates, providerName)
 	if err != nil {
 		return nil, err
 	}
 	var found *accessibleAgentSession
+	authDenied := false
 	for _, candidate := range candidates {
 		if !m.allowsAgentProvider(ctx, p, candidate.name) {
 			authDenied = true
@@ -1425,9 +1410,9 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 	if found == nil {
 		if authDenied {
 			if providerName = strings.TrimSpace(providerName); providerName != "" {
-				return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
+				return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)
 			}
-			return nil, invocation.ErrAuthorizationDenied
+			return nil, access.ErrDenied
 		}
 		return nil, core.ErrNotFound
 	}
@@ -1452,11 +1437,12 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 	if err != nil {
 		return nil, err
 	}
-	candidates, err = m.filterProviderCandidatesByAccess(ctx, p, candidates, providerName)
+	candidates, err = filterProviderCandidatesByTokenPermission(p, candidates, providerName)
 	if err != nil {
 		return nil, err
 	}
 	var found *accessibleAgentTurn
+	authDenied := false
 	for _, candidate := range candidates {
 		if !m.allowsAgentProvider(ctx, p, candidate.name) {
 			authDenied = true
@@ -1510,36 +1496,25 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 	if found == nil {
 		if authDenied {
 			if providerName = strings.TrimSpace(providerName); providerName != "" {
-				return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
+				return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)
 			}
-			return nil, invocation.ErrAuthorizationDenied
+			return nil, access.ErrDenied
 		}
 		return nil, core.ErrNotFound
 	}
 	return found, nil
 }
 
-func (m *Manager) filterProviderCandidatesByAccess(ctx context.Context, p *principal.Principal, candidates []namedAgentProvider, providerName string) ([]namedAgentProvider, error) {
+func filterProviderCandidatesByTokenPermission(p *principal.Principal, candidates []namedAgentProvider, providerName string) ([]namedAgentProvider, error) {
 	filtered := make([]namedAgentProvider, 0, len(candidates))
 	denied := false
 	for _, candidate := range candidates {
-		allowed, err := m.access.Allowed(ctx, p, access.Request{
-			ResourceType:    candidate.name,
-			Action:          "provider.access",
-			CredentialScope: access.ProviderCredentialScope,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if allowed {
+		if principal.AllowsProviderPermission(p, candidate.name) {
 			filtered = append(filtered, candidate)
 			continue
 		}
 		denied = true
 	}
-	// Denied provider candidates fail closed here; later not-found responses
-	// only mean the caller could search the candidate set and the object was
-	// absent.
 	if len(filtered) == 0 && denied {
 		if providerName = strings.TrimSpace(providerName); providerName != "" {
 			return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)
@@ -1567,11 +1542,12 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 	if err != nil {
 		return nil, err
 	}
-	candidates, err = m.filterProviderCandidatesByAccess(ctx, p, candidates, providerName)
+	candidates, err = filterProviderCandidatesByTokenPermission(p, candidates, providerName)
 	if err != nil {
 		return nil, err
 	}
 	var found *ownedAgentSession
+	authDenied := false
 	for _, candidate := range candidates {
 		if !m.allowsAgentProvider(ctx, p, candidate.name) {
 			authDenied = true
@@ -1612,9 +1588,9 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 	if found == nil {
 		if authDenied {
 			if providerName = strings.TrimSpace(providerName); providerName != "" {
-				return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
+				return nil, fmt.Errorf("%w: %s", access.ErrDenied, providerName)
 			}
-			return nil, invocation.ErrAuthorizationDenied
+			return nil, access.ErrDenied
 		}
 		return nil, core.ErrNotFound
 	}
@@ -1826,10 +1802,10 @@ func workflowTurnScope(ctx context.Context, reqContext *proto.RequestContext, ca
 		return "", "", err
 	}
 	if step.Kind != "agent" {
-		return "", "", fmt.Errorf("%w: workflow step %q is not an agent step", invocation.ErrAuthorizationDenied, step.ID)
+		return "", "", fmt.Errorf("%w: workflow step %q is not an agent step", access.ErrDenied, step.ID)
 	}
 	if step.AgentProvider != strings.TrimSpace(providerName) {
-		return "", "", fmt.Errorf("%w: workflow step %q may not invoke agent provider %q", invocation.ErrAuthorizationDenied, step.ID, strings.TrimSpace(providerName))
+		return "", "", fmt.Errorf("%w: workflow step %q may not invoke agent provider %q", access.ErrDenied, step.ID, strings.TrimSpace(providerName))
 	}
 	return step.RunID, step.ID, nil
 }
@@ -1845,19 +1821,19 @@ func (m *Manager) authorizeWorkflowTurnAccess(ctx context.Context, owned *access
 		return err
 	}
 	if callerName == "" || step.ProviderName != callerName {
-		return fmt.Errorf("%w: workflow caller %q does not match workflow context provider %q", invocation.ErrAuthorizationDenied, callerName, step.ProviderName)
+		return fmt.Errorf("%w: workflow caller %q does not match workflow context provider %q", access.ErrDenied, callerName, step.ProviderName)
 	}
 	if step.Kind != "agent" || step.AgentProvider != owned.providerName {
-		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
+		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", access.ErrDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
 	}
 	if model := strings.TrimSpace(step.Model); model != "" {
 		turnModel := strings.TrimSpace(owned.turn.Model)
 		sessionModel := strings.TrimSpace(owned.session.Model)
 		if turnModel != "" && turnModel != model {
-			return fmt.Errorf("%w: workflow %q step %q may not access agent model %q", invocation.ErrAuthorizationDenied, callerName, step.ID, turnModel)
+			return fmt.Errorf("%w: workflow %q step %q may not access agent model %q", access.ErrDenied, callerName, step.ID, turnModel)
 		}
 		if sessionModel != "" && sessionModel != model {
-			return fmt.Errorf("%w: workflow %q step %q may not access agent model %q", invocation.ErrAuthorizationDenied, callerName, step.ID, sessionModel)
+			return fmt.Errorf("%w: workflow %q step %q may not access agent model %q", access.ErrDenied, callerName, step.ID, sessionModel)
 		}
 	}
 	if m == nil || m.turnScopes == nil {
@@ -1865,13 +1841,13 @@ func (m *Manager) authorizeWorkflowTurnAccess(ctx context.Context, owned *access
 	}
 	scope, ok := m.turnScopes.Get(owned.providerName, owned.turn.SessionID, owned.turn.ID)
 	if !ok {
-		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
+		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", access.ErrDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
 	}
 	if scope.CallerKind != invocation.ProviderKindWorkflow ||
 		strings.TrimSpace(scope.CallerName) != callerName ||
 		strings.TrimSpace(scope.WorkflowRunID) != step.RunID ||
 		strings.TrimSpace(scope.WorkflowStepID) != step.ID {
-		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
+		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", access.ErrDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
 	}
 	return nil
 }
@@ -2449,6 +2425,10 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if operation == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool operation is required", invocation.ErrOperationNotFound)
 	}
+	if !m.allowProvider(ctx, p, appName) || !m.allowOperation(ctx, p, appName, operation) {
+		return coreagent.Tool{}, access.ErrDenied
+	}
+
 	connection := strings.TrimSpace(ref.Connection)
 	if connection != "" && !core.SafeConnectionValue(connection) {
 		return coreagent.Tool{}, fmt.Errorf("connection name contains invalid characters")
@@ -2469,6 +2449,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		return coreagent.Tool{}, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", access.ErrDenied)
 	}
 
+	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -2479,12 +2460,8 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if err != nil {
 		return coreagent.Tool{}, err
 	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType:    appName,
-		Action:          opMeta.ID,
-		CredentialScope: access.OperationCredentialScope,
-	}); err != nil {
-		return coreagent.Tool{}, err
+	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
+		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", access.ErrDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
 		connection = resolvedConnection
@@ -2668,15 +2645,7 @@ func (m *Manager) visitToolSearchCandidates(
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		allowed, err := m.access.Allowed(ctx, p, access.Request{
-			ResourceType:    appName,
-			Action:          "provider.access",
-			CredentialScope: access.ProviderCredentialScope,
-		})
-		if err != nil {
-			return err
-		}
-		if !allowed {
+		if !m.allowProvider(ctx, p, appName) {
 			continue
 		}
 		searchRefs := scope.refsForProvider(appName)
@@ -2689,14 +2658,16 @@ func (m *Manager) visitToolSearchCandidates(
 					if firstUnavailableErr == nil {
 						firstUnavailableErr = err
 					}
-					seenUnavailable = true
-					if visitUnavailable != nil {
-						keepGoing, visitErr := visitUnavailable(unavailableAgentToolCandidate(searchRef, err))
-						if visitErr != nil {
-							return visitErr
-						}
-						if !keepGoing {
-							return nil
+					if principal.AllowsProviderPermission(p, appName) {
+						seenUnavailable = true
+						if visitUnavailable != nil {
+							keepGoing, visitErr := visitUnavailable(unavailableAgentToolCandidate(searchRef, err))
+							if visitErr != nil {
+								return visitErr
+							}
+							if !keepGoing {
+								return nil
+							}
 						}
 					}
 					continue
@@ -2718,15 +2689,7 @@ func (m *Manager) visitToolSearchCandidates(
 					if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
 						continue
 					}
-					allowed, err := m.access.Allowed(ctx, p, access.Request{
-						ResourceType:    appName,
-						Action:          operation,
-						CredentialScope: access.OperationCredentialScope,
-					})
-					if err != nil {
-						return err
-					}
-					if !allowed {
+					if !m.allowOperation(ctx, p, appName, operation) || !principal.AllowsOperationPermission(p, appName, operation) {
 						continue
 					}
 					ref := searchCatalog.ref
@@ -2997,10 +2960,11 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
+	catalogCtx := invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
 	targets := m.catalogSelectorConfig().SessionCatalogTargets(appName, connection, instance)
 	if !shouldExpandAgentToolSearchCatalogTargets(ref, credentialMode) {
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
-			ctx,
+			catalogCtx,
 			prov,
 			appName,
 			resolver,
@@ -3017,7 +2981,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	expander, ok := m.invoker.(invocation.CatalogTargetExpander)
 	if !ok {
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
-			ctx,
+			catalogCtx,
 			prov,
 			appName,
 			resolver,
@@ -3030,7 +2994,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 		}
 		return []agentToolSearchCatalog{{ref: ref, catalog: cat}}, nil
 	}
-	targets, err = expander.ExpandCatalogTargets(ctx, p, appName, targets)
+	targets, err = expander.ExpandCatalogTargets(catalogCtx, p, appName, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -3050,7 +3014,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 			return nil, fmt.Errorf("instance name contains invalid characters")
 		}
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
-			ctx,
+			catalogCtx,
 			prov,
 			appName,
 			resolver,
@@ -3204,12 +3168,8 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if err := m.access.Require(ctx, p, access.Request{
-			ResourceType:    appName,
-			Action:          "provider.access",
-			CredentialScope: access.ProviderCredentialScope,
-		}); err != nil {
-			return err
+		if !m.allowsAgentProvider(ctx, p, appName) {
+			return fmt.Errorf("%w: %s", access.ErrDenied, appName)
 		}
 		connection := strings.TrimSpace(ref.Connection)
 		if connection != "" && !core.SafeConnectionValue(connection) {
@@ -3221,6 +3181,22 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 		}
 	}
 	return nil
+}
+
+func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
+	return true
+}
+
+func (m *Manager) allowsAgentProvider(ctx context.Context, p *principal.Principal, provider string) bool {
+	return m.allowProvider(ctx, p, provider) && principal.AllowsProviderPermission(p, provider)
+}
+
+func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
+	return true
+}
+
+func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
+	return invocation.AccessContext{}
 }
 
 func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {

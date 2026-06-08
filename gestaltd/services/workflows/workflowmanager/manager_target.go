@@ -132,6 +132,9 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		}
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 	}
+	if !m.allowProvider(ctx, p, appName) || !m.allowOperation(ctx, p, appName, operation) {
+		return coreworkflow.AppCall{}, access.ErrDenied
+	}
 	if credentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
 	}
@@ -146,6 +149,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		return coreworkflow.AppCall{}, fmt.Errorf("instance name contains invalid characters")
 	}
 
+	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -157,7 +161,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 		return coreworkflow.AppCall{}, err
 	}
 	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
-		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
+		return coreworkflow.AppCall{}, fmt.Errorf("%w: %s.%s", access.ErrDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
 		connection = resolvedConnection
@@ -201,6 +205,9 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	}
 	if target.Prompt.Template == "" && len(target.Messages) == 0 {
 		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: workflow target agent prompt or messages is required", invocation.ErrInvalidInvocation)
+	}
+	if !m.allowProvider(ctx, p, target.ProviderName) || !principal.AllowsProviderPermission(p, target.ProviderName) {
+		return coreworkflow.AgentTurn{}, fmt.Errorf("%w: %s", access.ErrDenied, target.ProviderName)
 	}
 	target.Model = strings.TrimSpace(target.Model)
 	target.SessionKey = strings.TrimSpace(target.SessionKey)
@@ -246,32 +253,64 @@ func isWorkflowProviderNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-type workflowTargetAccessError struct {
-	err error
+func (m *Manager) allowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
+	return true
 }
 
-func (e workflowTargetAccessError) Error() string { return core.ErrNotFound.Error() }
-func (e workflowTargetAccessError) Unwrap() error { return core.ErrNotFound }
-func (e workflowTargetAccessError) AccessError() error {
-	return e.err
+func (m *Manager) allowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
+	return true
 }
 
-func workflowTargetAccessErrorCause(err error) error {
-	var target interface{ AccessError() error }
-	if errors.As(err, &target) {
-		return target.AccessError()
+func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
+	return invocation.AccessContext{}
+}
+
+const (
+	targetAuthorizationComponentTarget        = "target"
+	targetAuthorizationComponentAgentProvider = "agent_provider"
+	targetAuthorizationComponentAgentToolRef  = "agent_tool_ref"
+	targetAuthorizationComponentAppStep       = "app_step"
+
+	targetAuthorizationReasonMissingAgentProvider               = "missing_agent_provider"
+	targetAuthorizationReasonAuthorizerProviderDenied           = "authorizer_provider_denied"
+	targetAuthorizationReasonPrincipalProviderPermissionDenied  = "principal_provider_permission_denied"
+	targetAuthorizationReasonMissingToolProvider                = "missing_tool_provider"
+	targetAuthorizationReasonInvalidSystemToolRef               = "invalid_system_tool_ref"
+	targetAuthorizationReasonNonExactToolRefWithSystemTools     = "non_exact_tool_ref_with_system_tools"
+	targetAuthorizationReasonAuthorizerOperationDenied          = "authorizer_operation_denied"
+	targetAuthorizationReasonPrincipalOperationPermissionDenied = "principal_operation_permission_denied"
+	targetAuthorizationReasonMissingAppStep                     = "missing_app_step"
+	targetAuthorizationReasonMissingAppProvider                 = "missing_app_provider"
+	targetAuthorizationReasonMissingAppOperation                = "missing_app_operation"
+)
+
+type targetAuthorizationDecision struct {
+	allowed bool
+	failure targetAuthorizationFailure
+}
+
+type targetAuthorizationFailure struct {
+	component    string
+	reason       string
+	provider     string
+	operation    string
+	toolRefIndex int
+}
+
+type workflowTargetAuthorizationError struct {
+	failure targetAuthorizationFailure
+}
+
+func (e workflowTargetAuthorizationError) Error() string { return core.ErrNotFound.Error() }
+func (e workflowTargetAuthorizationError) Unwrap() error { return core.ErrNotFound }
+
+func workflowTargetAuthorizationFailure(err error) (*targetAuthorizationFailure, bool) {
+	var targetErr workflowTargetAuthorizationError
+	if !errors.As(err, &targetErr) {
+		return nil, false
 	}
-	return nil
-}
-
-func (m *Manager) storedTargetAllowed(ctx context.Context, p *principal.Principal, target coreworkflow.Target) (bool, error) {
-	if err := m.authorizeWorkflowTarget(ctx, p, target, callerAppNameFromContext(ctx)); err != nil {
-		if access.IsPolicyUnavailable(err) {
-			return false, err
-		}
-		return false, nil
-	}
-	return true, nil
+	failure := targetErr.failure
+	return &failure, true
 }
 
 func (m *Manager) allowStoredTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target) bool {
@@ -296,12 +335,12 @@ func (m *Manager) checkResolvedAgentToolAuthorization(ctx context.Context, p *pr
 			}
 		}
 	}
-	return nil
+	return targetAuthorizationAllowed()
 }
 
 func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Principal, target coreworkflow.Target) targetAuthorizationDecision {
 	if len(target.Steps) == 0 {
-		return fmt.Errorf("%w: workflow target has no steps", access.ErrDenied)
+		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppStep, "", "", -1)
 	}
 	for stepIndex := range target.Steps {
 		step := target.Steps[stepIndex]
@@ -313,14 +352,13 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 		if step.Agent != nil {
 			agentProviderName := strings.TrimSpace(step.Agent.ProviderName)
 			if agentProviderName == "" {
-				return fmt.Errorf("%w: workflow agent provider is required", access.ErrDenied)
+				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonMissingAgentProvider, "", "", -1)
 			}
-			if err := m.access.Require(ctx, p, access.Request{
-				ResourceType:    agentProviderName,
-				Action:          "provider.access",
-				CredentialScope: access.ProviderCredentialScope,
-			}); err != nil {
-				return err
+			if !m.allowProvider(ctx, p, agentProviderName) {
+				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonAuthorizerProviderDenied, agentProviderName, "", -1)
+			}
+			if !principal.AllowsProviderPermission(p, agentProviderName) {
+				return targetAuthorizationDenied(targetAuthorizationComponentAgentProvider, targetAuthorizationReasonPrincipalProviderPermissionDenied, agentProviderName, "", -1)
 			}
 			hasSystemTools := workflowAgentToolRefsContainSystem(step.Agent.ToolRefs)
 			for i := range step.Agent.ToolRefs {
@@ -331,50 +369,61 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 		}
 		_ = stepIndex
 	}
-	return nil
+	return targetAuthorizationAllowed()
 }
 
 func (m *Manager) checkWorkflowStepAppAuthorization(ctx context.Context, p *principal.Principal, app *coreworkflow.AppCall, component string) targetAuthorizationDecision {
 	if app == nil {
-		return nil
+		return targetAuthorizationAllowed()
 	}
 	appName := strings.TrimSpace(app.Name)
 	operation := strings.TrimSpace(app.Operation)
 	if appName == "" {
-		return fmt.Errorf("%w: workflow app provider is required", access.ErrDenied)
+		return targetAuthorizationDenied(component, targetAuthorizationReasonMissingAppProvider, "", operation, -1)
 	}
 	if operation == "" {
-		return fmt.Errorf("%w: workflow app operation is required", access.ErrDenied)
+		return targetAuthorizationDenied(component, targetAuthorizationReasonMissingAppOperation, appName, "", -1)
 	}
-	return m.requireWorkflowAppOperationForCaller(ctx, p, callerAppName, appName, operation)
+	if !m.allowProvider(ctx, p, appName) {
+		return targetAuthorizationDenied(component, targetAuthorizationReasonAuthorizerProviderDenied, appName, operation, -1)
+	}
+	if !m.allowOperation(ctx, p, appName, operation) {
+		return targetAuthorizationDenied(component, targetAuthorizationReasonAuthorizerOperationDenied, appName, operation, -1)
+	}
+	if !principal.AllowsOperationPermission(p, appName, operation) {
+		return targetAuthorizationDenied(component, targetAuthorizationReasonPrincipalOperationPermissionDenied, appName, operation, -1)
+	}
+	return targetAuthorizationAllowed()
 }
 
-func (m *Manager) validateWorkflowAgentToolAuthorizationForCaller(ctx context.Context, p *principal.Principal, tool coreagent.ToolRef, hasSystemTools bool, index int, callerAppName string) error {
+func (m *Manager) checkWorkflowAgentToolAuthorization(ctx context.Context, p *principal.Principal, tool coreagent.ToolRef, hasSystemTools bool, index int) targetAuthorizationDecision {
 	if systemName := strings.TrimSpace(tool.System); systemName != "" {
 		if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(tool.Operation) == "" {
-			return fmt.Errorf("%w: workflow agent tool_refs[%d] system target is invalid", access.ErrDenied, index)
+			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", index)
 		}
 		if strings.TrimSpace(tool.App) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
-			return fmt.Errorf("%w: workflow agent tool_refs[%d] system target is invalid", access.ErrDenied, index)
+			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", index)
 		}
-		return nil
+		return targetAuthorizationAllowed()
 	}
 	appName := strings.TrimSpace(tool.App)
 	operation := strings.TrimSpace(tool.Operation)
 	if appName == "" {
-		return fmt.Errorf("%w: workflow agent tool_refs[%d] app is required", access.ErrDenied, index)
+		return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonMissingToolProvider, "", operation, index)
 	}
 	if hasSystemTools && (appName == "*" || operation == "") {
-		return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation", access.ErrDenied, index)
+		return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonNonExactToolRefWithSystemTools, appName, operation, index)
 	}
 	if operation == "" {
-		return m.access.Require(ctx, p, access.Request{
-			ResourceType:    appName,
-			Action:          "provider.access",
-			CredentialScope: access.ProviderCredentialScope,
-		})
+		if !m.allowProvider(ctx, p, appName) {
+			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonAuthorizerProviderDenied, appName, "", index)
+		}
+		if !principal.AllowsProviderPermission(p, appName) {
+			return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonPrincipalProviderPermissionDenied, appName, "", index)
+		}
+		return targetAuthorizationAllowed()
 	}
-	return m.requireWorkflowAppOperationForCaller(ctx, p, callerAppName, appName, operation)
+	return m.checkWorkflowStepAppAuthorization(ctx, p, &coreworkflow.AppCall{Name: appName, Operation: operation}, targetAuthorizationComponentAgentToolRef)
 }
 
 func targetAuthorizationAllowed() targetAuthorizationDecision {
@@ -391,7 +440,6 @@ func targetAuthorizationDenied(component, reason, provider, operation string, to
 			toolRefIndex: toolRefIndex,
 		},
 	}
-	m.log().WarnContext(ctx, "workflow target access denied", "error", err.Error())
 }
 
 func workflowAgentToolRefsContainSystem(refs []coreagent.ToolRef) bool {

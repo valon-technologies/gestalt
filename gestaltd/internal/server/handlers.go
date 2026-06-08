@@ -785,8 +785,6 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
 	case errors.Is(err, access.ErrNotAuthenticated):
 		writeError(w, http.StatusUnauthorized, "not authenticated")
-	case access.IsPolicyUnavailable(err):
-		writeError(w, http.StatusServiceUnavailable, err.Error())
 	case errors.Is(err, access.ErrDenied):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, access.ErrScopeDenied):

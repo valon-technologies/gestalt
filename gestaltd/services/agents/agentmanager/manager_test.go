@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
@@ -770,7 +771,7 @@ func TestCreateSessionRejectsInvalidWorkflowScopeBeforeProviderCreate(t *testing
 		ProviderName: "alpha",
 		Model:        "test-model",
 	})
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+	if !errors.Is(err, access.ErrDenied) {
 		t.Fatalf("CreateSession error = %v, want authorization denied", err)
 	}
 	if len(provider.createSessionReqs) != 0 {
@@ -2028,10 +2029,10 @@ func TestManagerWorkflowTurnAccessRequiresSameRunAndStepScope(t *testing.T) {
 	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", Context: run1, TurnId: turn.ID}); err != nil {
 		t.Fatalf("GetTurn same workflow run: %v", err)
 	}
-	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", Context: run2, TurnId: turn.ID}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", Context: run2, TurnId: turn.ID}); !errors.Is(err, access.ErrDenied) {
 		t.Fatalf("GetTurn different workflow run error = %v, want authorization denied", err)
 	}
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", Context: run2, TurnId: turn.ID, Reason: "wrong run"}); !errors.Is(err, invocation.ErrAuthorizationDenied) {
+	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", Context: run2, TurnId: turn.ID, Reason: "wrong run"}); !errors.Is(err, access.ErrDenied) {
 		t.Fatalf("CancelTurn different workflow run error = %v, want authorization denied", err)
 	}
 	if got := alpha.turns[turn.ID].Status; got != coreagent.ExecutionStatusRunning {

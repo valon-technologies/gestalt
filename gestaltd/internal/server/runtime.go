@@ -68,11 +68,19 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	managementAddr := cfg.Server.ManagementAddr()
 	mcpSlot := &switchableHandler{}
 	workflowProvidersReady := make(chan struct{})
+	authorizationName, authorizationEntry, err := cfg.SelectedAuthorizationProvider()
+	if err != nil {
+		return err
+	}
+	var authorizationProvider core.AuthorizationProvider
+	if authorizationEntry != nil {
+		authorizationProvider = result.Authorization[authorizationName]
+	}
 	baseConfig := Config{
 		Auth:                 result.Auth,
 		SelectedAuthProvider: result.SelectedAuthProvider,
 		AuthProviders:        result.AuthProviders,
-		Access:               result.Access,
+		Authorization:        authorizationProvider,
 		AuditSink:            result.AuditSink,
 		Services:             result.Services,
 		Providers:            result.Providers,
@@ -101,7 +109,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
 		PublicHostServices:   result.PublicHostServices,
 		Admin: AdminRouteConfig{
-			AuthorizationPolicy: strings.TrimSpace(cfg.Server.Admin.AuthorizationPolicy),
+			AuthorizationPolicy: cfg.Server.Admin.AuthorizationPolicy,
 			AllowedRoles:        append([]string(nil), cfg.Server.Admin.AllowedRoles...),
 		},
 		AdminUIProvider: strings.TrimSpace(cfg.Server.Admin.UI),

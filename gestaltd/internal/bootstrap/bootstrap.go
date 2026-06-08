@@ -225,7 +225,6 @@ type Result struct {
 	SelectedAuthProvider string
 	AuthProviders        map[string]core.AuthenticationProvider
 	Authorization        map[string]core.AuthorizationProvider
-	Access               *access.Enforcer
 	Services             *coredata.Services
 	ExtraIndexedDBs      []indexeddb.IndexedDB
 	ExtraCaches          []corecache.Cache
@@ -992,7 +991,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	} else {
 		deps.Authorization = authorizationProvider
 	}
-	deps.Access = access.NewEnforcer(deps.Authorization)
 	closeExternalCredentialsOnError := true
 	defer func() {
 		if closeExternalCredentialsOnError {
@@ -1141,7 +1139,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionRuntime(connRuntime.Resolve),
-		invocation.WithEnforcer(prepared.Deps.Access),
+		invocation.WithAuthorizationProvider(prepared.Deps.Authorization),
 	)
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
@@ -1160,7 +1158,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
-		Access:            prepared.Deps.Access,
 		Audit:             audit,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
@@ -1231,7 +1228,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
 		AuthProviders:                prepared.AuthProviders,
 		Authorization:                prepared.Authorization,
-		Access:                       prepared.Deps.Access,
 		Services:                     prepared.Services,
 		ExtraIndexedDBs:              prepared.ExtraIndexedDBs,
 		ExtraCaches:                  prepared.ExtraCaches,

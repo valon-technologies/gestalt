@@ -3272,8 +3272,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Messages:       []*proto.AgentMessage{{Role: "user", Text: "sync it"}},
 		Output:         bootstrapTextAgentOutput(),
 	})
-	if !errors.Is(err, access.ErrScopeDenied) {
-		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, access.ErrScopeDenied)
+	if !errors.Is(err, access.ErrDenied) {
+		t.Fatalf("AgentManager.CreateTurn(replay) error = %v, want %v", err, access.ErrDenied)
 	}
 
 	provider.mu.Lock()

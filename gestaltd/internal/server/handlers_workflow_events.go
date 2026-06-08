@@ -12,6 +12,7 @@ import (
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/access"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
@@ -45,15 +46,9 @@ func (s *Server) deliverWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	appName := strings.TrimSpace(req.Source)
-	if appName != "" {
-		if err := s.access.Require(r.Context(), p, access.Request{
-			ResourceType:    appName,
-			Action:          "provider.access",
-			CredentialScope: access.ProviderCredentialScope,
-		}); err != nil {
-			s.writeInvocationError(w, r, appName, "workflow.events.deliver", err)
-			return
-		}
+	if appName != "" && !principal.AllowsProviderPermission(p, appName) {
+		writeError(w, http.StatusForbidden, access.ErrDenied.Error())
+		return
 	}
 
 	event, err := s.workflowSchedules.DeliverEvent(r.Context(), p, workflowmanager.EventDeliver{
@@ -108,12 +103,6 @@ func (s *Server) writeWorkflowDeliverEventError(w http.ResponseWriter, r *http.R
 	case errors.Is(err, workflowmanager.ErrWorkflowEventSourceRequired),
 		errors.Is(err, workflowmanager.ErrWorkflowEventTypeRequired):
 		writeError(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, access.ErrNotAuthenticated):
-		writeError(w, http.StatusUnauthorized, "not authenticated")
-	case access.IsPolicyUnavailable(err):
-		writeError(w, http.StatusServiceUnavailable, err.Error())
-	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
-		writeError(w, http.StatusForbidden, err.Error())
 	default:
 		s.writeWorkflowDeliverEventProviderError(r.Context(), w, err)
 	}

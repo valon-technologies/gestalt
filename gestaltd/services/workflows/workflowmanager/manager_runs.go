@@ -46,12 +46,6 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if err != nil {
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType: "gestalt",
-		Action:       workflowAuditOperationRunStart,
-	}); err != nil {
-		return nil, err
-	}
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
 
@@ -134,12 +128,6 @@ func (m *Manager) CancelRun(ctx context.Context, p *principal.Principal, runID, 
 	if err != nil {
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType: "gestalt",
-		Action:       workflowAuditOperationRunCancel,
-	}); err != nil {
-		return nil, err
-	}
 	audit.setProvider(value.ProviderName)
 	if value.Run != nil {
 		audit.setWorkflowTarget(value.Run.Target)
@@ -183,12 +171,6 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	if err != nil {
 		return nil, err
 	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType: "gestalt",
-		Action:       workflowAuditOperationRunSignal,
-	}); err != nil {
-		return nil, err
-	}
 	audit.setProvider(value.ProviderName)
 	if value.Run != nil {
 		audit.setWorkflowTarget(value.Run.Target)
@@ -224,6 +206,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	phase := "validate_subject"
 	providerName := ""
 	var target coreworkflow.Target
+	var targetAuthFailure *targetAuthorizationFailure
 	p = principal.Canonicalized(p)
 	caller := workflowCaller(ctx, req.Caller)
 	ctx = withWorkflowCaller(ctx, caller)
@@ -242,7 +225,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 		}
 		audit.finish(ctx, err)
 		if err != nil {
-			m.logWorkflowSignalOrStartFailure(ctx, req, phase, err)
+			m.logWorkflowSignalOrStartFailure(ctx, req, phase, targetAuthFailure, err)
 		}
 	}()
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
@@ -258,17 +241,12 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	var definitionGeneration int64
 	providerName, provider, target, definitionGeneration, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.DefinitionID, caller, workflowManagerOperationRunsSignalOrStart)
 	if err != nil {
-		if workflowTargetAccessErrorCause(err) != nil {
+		if failure, ok := workflowTargetAuthorizationFailure(err); ok {
 			phase = "authorize_target"
+			targetAuthFailure = failure
 			audit.setProvider(providerName)
+			audit.setWorkflowTargetAuthorizationFailure(target, *failure)
 		}
-		return nil, err
-	}
-	if err := m.access.Require(ctx, p, access.Request{
-		ResourceType: "gestalt",
-		Action:       workflowAuditOperationRunSignalOrStart,
-	}); err != nil {
-		phase = "authorize_platform"
 		return nil, err
 	}
 	audit.setProvider(providerName)
@@ -320,7 +298,7 @@ func expectedDefinitionGeneration(requested, resolved int64) int64 {
 	return resolved
 }
 
-func (m *Manager) logWorkflowSignalOrStartFailure(ctx context.Context, req RunSignalOrStart, phase string, err error) {
+func (m *Manager) logWorkflowSignalOrStartFailure(ctx context.Context, req RunSignalOrStart, phase string, targetAuthFailure *targetAuthorizationFailure, err error) {
 	if err == nil {
 		return
 	}
@@ -335,7 +313,20 @@ func (m *Manager) logWorkflowSignalOrStartFailure(ctx context.Context, req RunSi
 	if errorCode := workflowManagerErrorCode(err); errorCode != "" {
 		attrs = append(attrs, "error_code", errorCode)
 	}
+	if targetAuthFailure != nil {
+		attrs = appendTargetAuthorizationFailureAttrs(attrs, *targetAuthFailure)
+	}
 	m.log().WarnContext(ctx, "workflow manager signal-or-start failed", attrs...)
+}
+
+func appendTargetAuthorizationFailureAttrs(attrs []any, failure targetAuthorizationFailure) []any {
+	if component := strings.TrimSpace(failure.component); component != "" {
+		attrs = append(attrs, "workflow_target_component", component)
+	}
+	if decision := workflowAuditTargetAuthorizationDecision(failure); decision != "" {
+		attrs = append(attrs, "authorization_decision", decision)
+	}
+	return attrs
 }
 
 func workflowManagerSHA256(value string) string {
@@ -358,9 +349,6 @@ func workflowManagerErrorCode(err error) string {
 }
 
 func workflowManagerErrorType(err error) string {
-	if accessErr := workflowTargetAccessErrorCause(err); accessErr != nil {
-		err = accessErr
-	}
 	switch {
 	case err == nil:
 		return ""
@@ -386,10 +374,6 @@ func workflowManagerErrorType(err error) string {
 		return "workflow_signal_name_required"
 	case errors.Is(err, access.ErrNotAuthenticated):
 		return "not_authenticated"
-	case access.IsPolicyUnavailable(err):
-		return "policy_unavailable"
-	case errors.Is(err, access.ErrScopeDenied):
-		return "scope_denied"
 	case errors.Is(err, access.ErrDenied):
 		return "authorization_denied"
 	case errors.Is(err, invocation.ErrInvalidInvocation):
@@ -473,24 +457,17 @@ func (m *Manager) requireOwnedRun(ctx context.Context, p *principal.Principal, r
 	if err != nil {
 		return nil, err
 	}
-	accessible, err := m.runAccessible(ctx, p, run)
-	if err != nil {
-		return nil, err
-	}
-	if !accessible {
+	if !m.runAccessible(ctx, p, run) {
 		return nil, core.ErrNotFound
 	}
 	return run, nil
 }
 
-func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run *ManagedRun) (bool, error) {
+func (m *Manager) runAccessible(ctx context.Context, p *principal.Principal, run *ManagedRun) bool {
 	if run == nil || run.Run == nil {
-		return false, nil
+		return false
 	}
-	if !workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) {
-		return false, nil
-	}
-	return m.storedTargetAllowed(ctx, p, run.Run.Target)
+	return workflowSubjectOwnedBy(run.Run.CreatedBySubjectID, p) && m.allowStoredTarget(ctx, p, run.Run.Target)
 }
 
 func managedSignalResponse(providerName string, provider coreworkflow.Provider, resp *coreworkflow.SignalRunResponse) (*ManagedRunSignal, error) {

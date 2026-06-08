@@ -386,8 +386,6 @@ func agentManagerStatusError(err error) error {
 		return status.Error(codes.Unauthenticated, err.Error())
 	case errors.Is(err, invocation.ErrInternal):
 		return status.Error(codes.Internal, err.Error())
-	case access.IsPolicyUnavailable(err):
-		return status.Error(codes.Unavailable, err.Error())
 	case errors.Is(err, access.ErrDenied), errors.Is(err, access.ErrScopeDenied):
 		return status.Error(codes.PermissionDenied, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentInteractionNotFound), errors.Is(err, invocation.ErrProviderNotFound), errors.Is(err, invocation.ErrOperationNotFound), errors.Is(err, core.ErrNotFound):

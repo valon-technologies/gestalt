@@ -48,7 +48,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/access"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
@@ -2314,24 +2313,32 @@ func TestMountedUIRoutes_PrefersNestedMount(t *testing.T) {
 	}
 }
 
-func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
+func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
 	user := seedUserRecord(t, svc, "ui-user", "ui-user@example.test", time.Now())
 	authz := &serverTestAuthorizationProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{
+			{
+				Name:                "dealHub",
+				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+			},
+			{
+				Name:                "brainPolicy",
+				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_ALLOW,
+			},
+			{
+				Name:                "gestaltAdmin",
+				DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+			},
+		},
 		relationships: []*proto.Relationship{
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
 				"admin",
 				"dealHub",
 				"dealHub",
-			),
-			testAuthorizationRelationship(
-				principal.UserSubjectID(user.ID),
-				"viewer",
-				"brainPolicy",
-				"brainPolicy",
 			),
 			testAuthorizationRelationship(
 				principal.UserSubjectID(user.ID),
@@ -2353,8 +2360,7 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 			},
 		}
 		cfg.Services = svc
-		cfg.Access = access.NewEnforcer(authz)
-		cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "gestaltAdmin"}
+		cfg.Authorization = authz
 		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:    "deal-hub-ui",
@@ -2402,6 +2408,12 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	if !bytes.Contains(body, []byte("deal-hub-shell")) {
 		t.Fatalf("protected mounted UI body = %q, want shell", body)
 	}
+	if len(authz.listRelationshipRequests) == 0 {
+		t.Fatal("authorization ListRelationships was not called")
+	}
+	if got := authz.listRelationshipRequests[0].GetFilter().GetResource().GetType(); got != "dealHub" {
+		t.Fatalf("relationship resource type = %q, want app resource type dealHub", got)
+	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
@@ -2417,6 +2429,9 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	if !bytes.Contains(body, []byte("brain-shell")) {
 		t.Fatalf("viewer mounted UI body = %q, want shell", body)
 	}
+	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "brainPolicy" {
+		t.Fatalf("relationship resource type = %q, want explicit AuthorizationPolicy brainPolicy", got)
+	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/brain/admin/settings", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
@@ -2426,8 +2441,6 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	}
 	body, _ = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	// AuthorizationProvider defaultAccessPolicy is no longer consulted for
-	// mounted UI routes; every allowed role must be allowed by CheckAccess.
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("admin mounted UI status = %d, want 403: %s", resp.StatusCode, body)
 	}
@@ -2446,27 +2459,67 @@ func TestPolicyBoundMountedUIRequiresExplicitCheckAccessRoles(t *testing.T) {
 	if !bytes.Contains(body, []byte("admin-shell")) {
 		t.Fatalf("admin UI body = %q, want shell", body)
 	}
+	if len(authz.listRelationshipRequests) < 2 {
+		t.Fatalf("authorization ListRelationships calls = %d, want at least 2", len(authz.listRelationshipRequests))
+	}
+	if got := authz.listRelationshipRequests[len(authz.listRelationshipRequests)-1].GetFilter().GetResource().GetType(); got != "gestaltAdmin" {
+		t.Fatalf("relationship resource type = %q, want gestaltAdmin", got)
+	}
 }
 
 type serverTestAuthorizationProvider struct {
 	core.AuthorizationProvider
 
-	relationships []*proto.Relationship
+	resourceTypes            []*proto.AuthorizationModelResourceType
+	relationships            []*proto.Relationship
+	listRelationshipRequests []*proto.ListRelationshipsRequest
 }
 
-func (p *serverTestAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+func (p *serverTestAuthorizationProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	p.listRelationshipRequests = append(p.listRelationshipRequests, req)
+	filter := req.GetFilter()
+	out := []*proto.Relationship{}
 	for _, relationship := range p.relationships {
-		tuple := relationship.GetTuple()
-		target := tuple.GetTarget().GetSubject()
-		if target.GetType() == req.GetSubject().GetType() &&
-			target.GetId() == req.GetSubject().GetId() &&
-			tuple.GetResource().GetType() == req.GetResource().GetType() &&
-			tuple.GetResource().GetId() == req.GetResource().GetId() &&
-			tuple.GetRelation() == req.GetAction().GetName() {
-			return &proto.CheckAccessResponse{Allowed: true}, nil
+		if !relationshipMatchesFilter(relationship, filter) {
+			continue
+		}
+		out = append(out, relationship)
+	}
+	return &proto.ListRelationshipsResponse{Relationships: out}, nil
+}
+
+func (p *serverTestAuthorizationProvider) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	name := strings.TrimSpace(req.GetFilter().GetName())
+	out := []*proto.AuthorizationModelResourceType{}
+	for _, resourceType := range p.resourceTypes {
+		if name != "" && strings.TrimSpace(resourceType.GetName()) != name {
+			continue
+		}
+		out = append(out, resourceType)
+	}
+	return &proto.ListActiveModelResourceTypesResponse{ResourceTypes: out}, nil
+}
+
+func relationshipMatchesFilter(relationship *proto.Relationship, filter *proto.RelationshipFilter) bool {
+	if relationship == nil || filter == nil {
+		return false
+	}
+	tuple := relationship.GetTuple()
+	if resource := filter.GetResource(); resource != nil {
+		if tuple.GetResource().GetType() != resource.GetType() || tuple.GetResource().GetId() != resource.GetId() {
+			return false
 		}
 	}
-	return &proto.CheckAccessResponse{Allowed: false}, nil
+	if relation := strings.TrimSpace(filter.GetRelation()); relation != "" && tuple.GetRelation() != relation {
+		return false
+	}
+	if target := filter.GetTarget().GetSubject(); target != nil {
+		subject := tuple.GetTarget().GetSubject()
+		if subject.GetType() != target.GetType() || subject.GetId() != target.GetId() {
+			return false
+		}
+	}
+	return true
 }
 
 func testAuthorizationRelationship(subjectID, relation, resourceType, resourceID string) *proto.Relationship {
