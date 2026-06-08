@@ -19,6 +19,7 @@ type Scope struct {
 	ProviderName        string
 	SessionID           string
 	TurnID              string
+	ProviderTurnID      string
 	CallerKind          invocation.ProviderKind
 	CallerName          string
 	WorkflowRunID       string
@@ -63,6 +64,9 @@ func (s *Store) Put(scope Scope) error {
 		s.scopes = map[string]*Scope{}
 	}
 	s.scopes[key] = &scope
+	if providerKey := scopeKey(scope.ProviderName, scope.SessionID, scope.ProviderTurnID); providerKey != "" && providerKey != key {
+		s.scopes[providerKey] = &scope
+	}
 	return nil
 }
 
@@ -73,6 +77,7 @@ func (s *Store) PutSession(scope Scope) error {
 		return fmt.Errorf("agent session scope requires provider and session")
 	}
 	scope.TurnID = ""
+	scope.ProviderTurnID = ""
 	if scope.ToolRefsSet || len(scope.ToolRefs) > 0 {
 		scope.ToolRefsSet = true
 	}
@@ -85,10 +90,10 @@ func (s *Store) PutSession(scope Scope) error {
 	return nil
 }
 
-func (s *Store) Alias(providerName, sessionID, turnID, aliasTurnID string) error {
+func (s *Store) BindProviderTurnID(providerName, sessionID, turnID, providerTurnID string) error {
 	key := scopeKey(providerName, sessionID, turnID)
-	aliasKey := scopeKey(providerName, sessionID, aliasTurnID)
-	if key == "" || aliasKey == "" || key == aliasKey {
+	providerKey := scopeKey(providerName, sessionID, providerTurnID)
+	if key == "" || providerKey == "" {
 		return nil
 	}
 	s.mu.Lock()
@@ -97,7 +102,10 @@ func (s *Store) Alias(providerName, sessionID, turnID, aliasTurnID string) error
 	if scope == nil {
 		return fmt.Errorf("agent turn scope not found")
 	}
-	s.scopes[aliasKey] = scope
+	scope.ProviderTurnID = strings.TrimSpace(providerTurnID)
+	if key != providerKey {
+		s.scopes[providerKey] = scope
+	}
 	return nil
 }
 
@@ -152,6 +160,34 @@ func (s *Store) Get(providerName, sessionID, turnID string) (Scope, bool) {
 	return cloneScope(*scope), true
 }
 
+func (s *Store) GetByTurnID(providerName, turnID string) (Scope, bool) {
+	providerName = strings.TrimSpace(providerName)
+	turnID = strings.TrimSpace(turnID)
+	if providerName == "" || turnID == "" || s == nil {
+		return Scope{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var found *Scope
+	for key, scope := range s.scopes {
+		if scope == nil {
+			continue
+		}
+		keyProvider, keyTurnID, ok := scopeKeyProviderAndTurn(key)
+		if !ok || keyProvider != providerName || keyTurnID != turnID {
+			continue
+		}
+		if found != nil && found != scope {
+			return Scope{}, false
+		}
+		found = scope
+	}
+	if found == nil {
+		return Scope{}, false
+	}
+	return cloneScope(*found), true
+}
+
 func (s *Store) GetSession(providerName, sessionID string) (Scope, bool) {
 	key := sessionScopeKey(providerName, sessionID)
 	if key == "" || s == nil {
@@ -185,13 +221,31 @@ func sessionScopeKey(providerName, sessionID string) string {
 	return providerName + "\x00" + sessionID
 }
 
+func scopeKeyProviderAndTurn(key string) (string, string, bool) {
+	providerName, rest, ok := strings.Cut(key, "\x00")
+	if !ok {
+		return "", "", false
+	}
+	_, turnID, ok := strings.Cut(rest, "\x00")
+	if !ok {
+		return "", "", false
+	}
+	return providerName, turnID, true
+}
+
 func cloneScope(src Scope) Scope {
 	callerKind := invocation.ProviderKind(strings.TrimSpace(string(src.CallerKind)))
 	callerName := strings.TrimSpace(src.CallerName)
+	turnID := strings.TrimSpace(src.TurnID)
+	providerTurnID := strings.TrimSpace(src.ProviderTurnID)
+	if providerTurnID == "" {
+		providerTurnID = turnID
+	}
 	return Scope{
 		ProviderName:        strings.TrimSpace(src.ProviderName),
 		SessionID:           strings.TrimSpace(src.SessionID),
-		TurnID:              strings.TrimSpace(src.TurnID),
+		TurnID:              turnID,
+		ProviderTurnID:      providerTurnID,
 		CallerKind:          callerKind,
 		CallerName:          callerName,
 		WorkflowRunID:       strings.TrimSpace(src.WorkflowRunID),

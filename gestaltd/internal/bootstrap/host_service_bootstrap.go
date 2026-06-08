@@ -498,11 +498,14 @@ func buildAppInvocationHostService(appName string, deps Deps) runtimehost.HostSe
 		Name:           "app",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.App_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAppServer(srv, appaccessservice.NewServer(
-				invoker,
+			opts := []appaccessservice.AppServerOption{
 				appaccessservice.WithAuthorizationProvider(deps.Authorization),
 				appaccessservice.WithCallerApp(appName, deps.AppAccessProfiles[strings.TrimSpace(appName)]),
-			))
+			}
+			if manager, ok := deps.AgentManager.(*lazyAgentManager); ok {
+				opts = append(opts, appaccessservice.WithAgentAppInvocationAuthorizer(manager.AuthorizeAgentAppInvocation))
+			}
+			proto.RegisterAppServer(srv, appaccessservice.NewServer(invoker, opts...))
 		},
 	}
 }

@@ -78,8 +78,8 @@ func putAgentRuntimeTurnScope(scopes *agentturnscope.Store, scope agentturnscope
 	}
 	return &proto.RequestContext{
 		Caller: &proto.ProviderContext{
-			Kind: string(scope.CallerKind),
-			Name: scope.CallerName,
+			Kind: string(invocation.ProviderKindAgent),
+			Name: scope.ProviderName,
 		},
 		Subject: &proto.SubjectContext{
 			Id:                  scope.SubjectID,
@@ -2925,8 +2925,8 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefScope(t *testing.
 	if err != nil {
 		t.Fatalf("Put turn scope: %v", err)
 	}
-	if err := turnScopes.Alias("simple", "session-1", "requested-turn-1", "provider-turn-1"); err != nil {
-		t.Fatalf("Alias provider-owned turn scope: %v", err)
+	if err := turnScopes.BindProviderTurnID("simple", "session-1", "requested-turn-1", "provider-turn-1"); err != nil {
+		t.Fatalf("Bind provider-owned turn scope: %v", err)
 	}
 	listResp, err := runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
 		ProviderName: "simple",
