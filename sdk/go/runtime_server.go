@@ -108,6 +108,8 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL
 	case ProviderKindRuntime:
 		return proto.ProviderKind_PROVIDER_KIND_RUNTIME
+	case ProviderKindTest:
+		return proto.ProviderKind_PROVIDER_KIND_TEST
 	default:
 		return proto.ProviderKind_PROVIDER_KIND_UNSPECIFIED
 	}
