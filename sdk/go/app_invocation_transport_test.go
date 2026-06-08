@@ -121,7 +121,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("App: %v", err)
 	}
 
-	result, err := client.Invoke(context.Background(), "github", "get_issue", invokeIssueParams{
+	result, err := client.InvokeRaw(context.Background(), "github", "get_issue", invokeIssueParams{
 		IssueNumber: 42,
 	}, &gestalt.InvokeOptions{
 		IdempotencyKey: " issue-42-create ",
@@ -139,7 +139,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if got := result.Headers.Get("Location"); got != "https://example.test/created" {
 		t.Fatalf("Invoke Location header = %q, want https://example.test/created", got)
 	}
-	result, err = client.Invoke(context.Background(), "github", "get_issue", invokeOmitEmptyParams{
+	result, err = client.InvokeRaw(context.Background(), "github", "get_issue", invokeOmitEmptyParams{
 		IssueNumber: 43,
 		Tags:        []string{},
 		Metadata:    map[string]string{},
@@ -150,7 +150,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if result.Status != 207 || result.Body != "relay-ok" {
 		t.Fatalf("Invoke omitempty result = %+v, want status=207 body=relay-ok", result)
 	}
-	graphQLResult, err := client.InvokeGraphQL(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
+	graphQLResult, err := client.InvokeGraphQLRaw(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
 		"team": "eng",
 	}, &gestalt.InvokeGraphQLOptions{
 		IdempotencyKey: " graphql-call-42 ",
@@ -258,8 +258,8 @@ func TestTransport_AppRequestBuilderCallerAndWorkflowContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("App: %v", err)
 	}
-	if _, err := client.Invoke(context.Background(), "slack", "events.addReaction", map[string]any{}, nil); err != nil {
-		t.Fatalf("Invoke: %v", err)
+	if _, err := client.InvokeRaw(context.Background(), "slack", "events.addReaction", map[string]any{}, nil); err != nil {
+		t.Fatalf("InvokeRaw: %v", err)
 	}
 
 	harness.mu.Lock()

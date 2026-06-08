@@ -179,7 +179,7 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
     .await
     .expect("connect app");
     let response = app
-        .invoke(
+        .invoke_raw(
             "github",
             "get_issue",
             IssueParams {
@@ -215,7 +215,7 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
         })
     );
     let err = app
-        .invoke("github", "bad", "not-object", None)
+        .invoke::<_, serde_json::Value>("github", "bad", "not-object", None)
         .await
         .expect_err("non-object params should fail");
     assert!(
@@ -223,7 +223,7 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
         "unexpected error: {err}"
     );
     let err = app
-        .invoke("github", "bad", BadNumberParams { score: f64::NAN }, None)
+        .invoke::<_, serde_json::Value>("github", "bad", BadNumberParams { score: f64::NAN }, None)
         .await
         .expect_err("non-finite params should fail");
     assert!(
@@ -231,7 +231,7 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
         "unexpected error: {err}"
     );
     let err = app
-        .invoke(
+        .invoke::<_, serde_json::Value>(
             "github",
             "bad",
             BTreeMap::from([(1_i32, "not-a-string-key".to_string())]),
@@ -294,7 +294,7 @@ async fn request_app_uses_embedded_context() {
             .await
             .expect("request app");
     let response = app
-        .invoke("linear", "search_issues", serde_json::json!({}), None)
+        .invoke_raw("linear", "search_issues", serde_json::json!({}), None)
         .await
         .expect("invoke nested operation");
 
@@ -345,7 +345,7 @@ async fn app_connects_over_tcp_and_forwards_relay_token() {
     .await
     .expect("connect app");
     let response = app
-        .invoke("github", "plain_text", serde_json::json!({}), None)
+        .invoke_raw("github", "plain_text", serde_json::json!({}), None)
         .await
         .expect("invoke nested operation");
 
@@ -387,7 +387,7 @@ async fn app_invokes_graphql_surface() {
     .await
     .expect("connect app");
     let response = app
-        .invoke_graphql(
+        .invoke_graphql_raw(
             "linear",
             "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
             Some(serde_json::json!({ "team": "eng" })),

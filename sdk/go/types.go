@@ -131,6 +131,21 @@ type OperationResult struct {
 	Body    string
 }
 
+// JSON decodes Body as JSON without applying app invocation envelope handling.
+func (r *OperationResult) JSON() (any, error) {
+	if r == nil {
+		return map[string]any{}, nil
+	}
+	value, err := parseOperationResultJSON(r.Body)
+	if err != nil {
+		return nil, &InvokeError{
+			Message: "operation result body is not valid JSON",
+			RawBody: r.Body,
+		}
+	}
+	return value, nil
+}
+
 type connectionParamsKey struct{}
 type subjectKey struct{}
 type agentSubjectKey struct{}

@@ -78,6 +78,7 @@ import {
 import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
 import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
 import {
+  attachRequestHelpers,
   errorMessage,
   parseSubjectId,
   type OperationResult,
@@ -832,7 +833,7 @@ function providerRequest(
   const credential = requestContext?.credential;
   const access = requestContext?.access;
   const host = requestContext?.host;
-  return {
+  return attachRequestHelpers({
     token,
     connectionParams: {
       ...connectionParams,
@@ -859,7 +860,7 @@ function providerRequest(
     },
     __requestContext: requestContext,
     idempotencyKey: idempotencyKey.trim(),
-  };
+  });
 }
 
 function providerSubject(subject?: ProtoSubjectContext): Subject {

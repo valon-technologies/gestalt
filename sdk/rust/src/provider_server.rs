@@ -43,6 +43,19 @@ pub struct OperationResult {
 }
 
 impl OperationResult {
+    /// Decodes the raw body as JSON without app invocation envelope handling.
+    pub fn json(&self) -> std::result::Result<Value, crate::InvokeError> {
+        crate::app_decode::parse_operation_result_json(&self.body).map_err(|_| crate::InvokeError {
+            app: String::new(),
+            operation: String::new(),
+            status: None,
+            code: None,
+            message: "operation result body is not valid JSON".to_string(),
+            body: None,
+            raw_body: self.body.clone(),
+        })
+    }
+
     /// Serializes a typed handler response.
     pub fn from_response<T: Serialize>(response: Response<T>) -> Self {
         let status = response.status.unwrap_or(200);

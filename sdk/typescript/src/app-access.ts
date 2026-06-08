@@ -2,6 +2,11 @@ import { createClient, type Client } from "@connectrpc/connect";
 
 import { App as AppService } from "./internal/gen/v1/app_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
+import {
+  decodeAppResult,
+  decodeGraphQLResult,
+  operationResult,
+} from "./app-decode.ts";
 import type { ConnectionMode } from "./app.ts";
 import {
   stringListsFromProto,
@@ -25,24 +30,37 @@ export interface AppInvokeOptions {
   idempotencyKey?: string;
   /** Credential mode requested for the target operation. */
   credentialMode?: ConnectionMode;
+  /** Timeout in milliseconds for the host-service RPC. */
+  timeoutMs?: number;
 }
 
 /** Options for invoking an app GraphQL surface. */
 export interface AppGraphQLInvokeOptions
-  extends Pick<AppInvokeOptions, "connection" | "instance" | "idempotencyKey"> {
+  extends Pick<AppInvokeOptions, "connection" | "instance" | "idempotencyKey" | "timeoutMs"> {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
 
 /** Fakeable contract for app invocation calls. */
 export interface App {
-  invoke(
+  invoke<T = unknown>(
+    app: string,
+    operation: string,
+    params?: JsonObjectInput,
+    options?: AppInvokeOptions,
+  ): Promise<T>;
+  invokeRaw(
     app: string,
     operation: string,
     params?: JsonObjectInput,
     options?: AppInvokeOptions,
   ): Promise<OperationResult>;
-  invokeGraphQL(
+  invokeGraphQL<T = unknown>(
+    app: string,
+    document: string,
+    options?: AppGraphQLInvokeOptions,
+  ): Promise<T>;
+  invokeGraphQLRaw(
     app: string,
     document: string,
     options?: AppGraphQLInvokeOptions,
@@ -72,7 +90,21 @@ class AppImpl implements App {
   }
 
   /** Invokes one operation on another app. */
-  async invoke(
+  async invoke<T = unknown>(
+    app: string,
+    operation: string,
+    params: JsonObjectInput = {},
+    options?: AppInvokeOptions,
+  ): Promise<T> {
+    return decodeAppResult<T>(
+      app,
+      operation,
+      await this.invokeRaw(app, operation, params, options),
+    );
+  }
+
+  /** Invokes one operation on another app and returns the raw transport result. */
+  async invokeRaw(
     app: string,
     operation: string,
     params: JsonObjectInput = {},
@@ -87,16 +119,28 @@ class AppImpl implements App {
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
       credentialMode: options?.credentialMode?.trim() ?? "",
       context: this.request.__requestContext,
-    });
-    return {
+    }, connectOptions(options?.timeoutMs));
+    return operationResult({
       status: response.status,
       headers: stringListsFromProto(response.headers),
       body: response.body,
-    };
+    });
   }
 
   /** Invokes another plugin's GraphQL surface. */
-  async invokeGraphQL(
+  async invokeGraphQL<T = unknown>(
+    app: string,
+    document: string,
+    options?: AppGraphQLInvokeOptions,
+  ): Promise<T> {
+    return decodeGraphQLResult<T>(
+      app,
+      await this.invokeGraphQLRaw(app, document, options),
+    );
+  }
+
+  /** Invokes another plugin's GraphQL surface and returns the raw transport result. */
+  async invokeGraphQLRaw(
     app: string,
     document: string,
     options?: AppGraphQLInvokeOptions,
@@ -116,14 +160,23 @@ class AppImpl implements App {
       instance: options?.instance ?? "",
       idempotencyKey: options?.idempotencyKey?.trim() ?? "",
       context: this.request.__requestContext,
-    });
-    return {
+    }, connectOptions(options?.timeoutMs));
+    return operationResult({
       status: response.status,
       headers: stringListsFromProto(response.headers),
       body: response.body,
-    };
+    });
   }
 
 }
 
 export const App = AppImpl;
+
+function connectOptions(timeoutMs?: number | undefined) {
+  if (timeoutMs === undefined || timeoutMs <= 0) {
+    return undefined;
+  }
+  return {
+    timeoutMs,
+  };
+}

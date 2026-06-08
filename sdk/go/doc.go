@@ -65,6 +65,18 @@
 // Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
 // capability interfaces rather than transport-specific client types.
 //
+// # App invocation migration
+//
+// App.Invoke and App.InvokeGraphQL now decode JSON responses and unwrap only
+// Gestalt success envelopes shaped as {"status":"success","data":...}. Use
+// InvokeAs or InvokeGraphQLAs when you want a concrete Go result type:
+//
+//	var issue Issue
+//	issue, err = gestalt.InvokeAs[Issue](ctx, app, "github", "get_issue", params, nil)
+//
+// Use App.InvokeRaw and App.InvokeGraphQLRaw when a caller needs the transport
+// OperationResult for custom classification or status handling.
+//
 // Runtime and telemetry helpers include [ServeProvider], [ProviderMetadata],
 // [TelemetryInstrumentationName], and the provider telemetry helpers.
 //

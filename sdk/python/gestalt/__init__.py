@@ -37,6 +37,7 @@ from ._api import (
     field,
     parse_subject_id,
 )
+from ._app_decode import InvokeError
 
 _AGENT_PROTOCOL_EXPORTS = (
     "AGENT_EXECUTION_STATUS_CANCELED",
