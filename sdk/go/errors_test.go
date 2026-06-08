@@ -32,7 +32,7 @@ func TestOperationResultFromErrorLogsSanitizedInternalErrors(t *testing.T) {
 	if result.Status != 500 {
 		t.Fatalf("status = %d, want 500", result.Status)
 	}
-	if result.Body != `{"error":"internal error"}` {
+	if string(result.Body) != `{"error":"internal error"}` {
 		t.Fatalf("body = %q, want %q", result.Body, `{"error":"internal error"}`)
 	}
 	if !strings.Contains(string(output), "internal error in Gestalt operation: boom") {

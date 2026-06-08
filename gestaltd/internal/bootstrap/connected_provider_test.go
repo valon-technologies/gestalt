@@ -54,13 +54,13 @@ func (p *connectedCapabilityProvider) Catalog() *catalog.Catalog {
 	}
 }
 func (p *connectedCapabilityProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 }
 func (p *connectedCapabilityProvider) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
 	return p.Catalog(), nil
 }
 func (p *connectedCapabilityProvider) InvokeGraphQL(_ context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"data":{"viewer":{"id":"U456"}}}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"data":{"viewer":{"id":"U456"}}}`)}, nil
 }
 func (p *connectedCapabilityProvider) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/start?state=" + state
@@ -152,13 +152,13 @@ func (p *connectedBasicProvider) Catalog() *catalog.Catalog {
 	}
 }
 func (p *connectedBasicProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 }
 func (p *connectedBasicProvider) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
 	return p.Catalog(), nil
 }
 func (p *connectedBasicProvider) InvokeGraphQL(_ context.Context, _ core.GraphQLRequest, _ string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"data":{"viewer":{"id":"U456"}}}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"data":{"viewer":{"id":"U456"}}}`)}, nil
 }
 func (p *connectedBasicProvider) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/start?state=" + state

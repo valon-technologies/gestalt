@@ -56,7 +56,7 @@ func operationResultFromToolResultWithBody(result *mcpgo.CallToolResult, mode re
 	opResult := &core.OperationResult{
 		Status:  http.StatusOK,
 		Headers: headers,
-		Body:    string(body),
+		Body:    body,
 	}
 	if result != nil {
 		opResult.MCPResult = result
@@ -71,7 +71,7 @@ func flattenedOperationResultFromToolResult(result *mcpgo.CallToolResult) (*core
 	opResult := &core.OperationResult{
 		Status:  http.StatusOK,
 		Headers: headers,
-		Body:    `{}`,
+		Body:    []byte(`{}`),
 	}
 	if result == nil {
 		return opResult, nil
@@ -79,7 +79,7 @@ func flattenedOperationResultFromToolResult(result *mcpgo.CallToolResult) (*core
 	opResult.MCPResult = result
 	if result.IsError {
 		opResult.Status = http.StatusBadGateway
-		opResult.Body = `{"error":"operation failed"}`
+		opResult.Body = []byte(`{"error":"operation failed"}`)
 		return opResult, nil
 	}
 	body, err := flattenedToolResultBody(result)
@@ -90,26 +90,26 @@ func flattenedOperationResultFromToolResult(result *mcpgo.CallToolResult) (*core
 	return opResult, nil
 }
 
-func flattenedToolResultBody(result *mcpgo.CallToolResult) (string, error) {
+func flattenedToolResultBody(result *mcpgo.CallToolResult) ([]byte, error) {
 	if result.StructuredContent != nil {
 		body, err := json.Marshal(result.StructuredContent)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return string(body), nil
+		return body, nil
 	}
 
 	if len(result.Content) == 1 {
 		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok && json.Valid([]byte(strings.TrimSpace(text.Text))) {
-			return text.Text, nil
+			return []byte(text.Text), nil
 		}
 	}
 
 	body, err := json.Marshal(map[string]any{"content": result.Content})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(body), nil
+	return body, nil
 }
 
 func MarshalToolResultEnvelope(result *mcpgo.CallToolResult) ([]byte, error) {

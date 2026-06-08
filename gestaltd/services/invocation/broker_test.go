@@ -186,7 +186,7 @@ func TestBrokerInvokeAllowsExplicitConnectionForResolvedPluginTransport(t *testi
 				if token != "" {
 					t.Fatalf("token = %q, want empty", token)
 				}
-				return &core.OperationResult{Status: 200, Body: "ok"}, nil
+				return &core.OperationResult{Status: 200, Body: []byte("ok")}, nil
 			},
 		},
 		operationConnections: map[string]string{"assistant.reconcileStuckRequests": "default"},
@@ -217,7 +217,7 @@ func TestBrokerInvokeAllowsExplicitConnectionForResolvedPluginTransport(t *testi
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if result.Body != "ok" {
+	if string(result.Body) != "ok" {
 		t.Fatalf("result body = %q, want ok", result.Body)
 	}
 	if !executed {
@@ -275,7 +275,7 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 			if token != "" {
 				t.Fatalf("token = %q, want empty", token)
 			}
-			return &core.OperationResult{Status: 200, Body: "ok"}, nil
+			return &core.OperationResult{Status: 200, Body: []byte("ok")}, nil
 		},
 	}
 	authz := &recordingAuthorizationProvider{allowed: true}
@@ -297,7 +297,7 @@ func TestBrokerInvokeChecksAuthorizationBeforeExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if result.Body != "ok" {
+	if string(result.Body) != "ok" {
 		t.Fatalf("result body = %q, want ok", result.Body)
 	}
 	if !executed {

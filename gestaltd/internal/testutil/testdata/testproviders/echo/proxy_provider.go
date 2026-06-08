@@ -425,7 +425,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		name, _ := params["name"].(string)
 		val, ok := os.LookupEnv(name)
 		body, _ := json.Marshal(map[string]any{"name": name, "value": val, "found": ok})
-		return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
 
 	case "read_file":
 		path, _ := params["path"].(string)
@@ -433,17 +433,17 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			if os.IsPermission(err) {
 				body, _ := json.Marshal(map[string]any{"error": err.Error()})
-				return &gestalt.OperationResult{Status: http.StatusForbidden, Body: string(body)}, nil
+				return &gestalt.OperationResult{Status: http.StatusForbidden, Body: body}, nil
 			}
 			if os.IsNotExist(err) {
 				body, _ := json.Marshal(map[string]any{"error": err.Error()})
-				return &gestalt.OperationResult{Status: http.StatusNotFound, Body: string(body)}, nil
+				return &gestalt.OperationResult{Status: http.StatusNotFound, Body: body}, nil
 			}
 			body, _ := json.Marshal(map[string]any{"error": err.Error()})
-			return &gestalt.OperationResult{Status: http.StatusInternalServerError, Body: string(body)}, nil
+			return &gestalt.OperationResult{Status: http.StatusInternalServerError, Body: body}, nil
 		}
 		body, _ := json.Marshal(map[string]any{"content": string(data)})
-		return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
 
 	case "make_http_request":
 		targetURL, _ := params["url"].(string)
@@ -460,7 +460,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		resp, err := client.Get(targetURL)
 		if err != nil {
 			body, _ := json.Marshal(map[string]any{"error": err.Error()})
-			return &gestalt.OperationResult{Status: http.StatusBadGateway, Body: string(body)}, nil
+			return &gestalt.OperationResult{Status: http.StatusBadGateway, Body: body}, nil
 		}
 		defer func() { _ = resp.Body.Close() }()
 		respBody, _ := io.ReadAll(resp.Body)
@@ -468,7 +468,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			"status": resp.StatusCode,
 			"body":   string(respBody),
 		})
-		return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
 
 	case "indexeddb_roundtrip":
 		binding, _ := params["binding"].(string)
@@ -501,7 +501,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return nil, err
 		}
 		body, _ := json.Marshal(record)
-		return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
 
 	case "s3_roundtrip":
 		binding, _ := params["binding"].(string)
@@ -551,7 +551,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			"etag":  stat.ETag,
 			"found": len(page.Objects) > 0,
 		})
-		return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+		return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
 
 	default:
 		return p.inner.Execute(ctx, operation, params, token)
@@ -846,12 +846,12 @@ func timeBody(value time.Time) any {
 	return value
 }
 
-func decodeResultBody(body string) any {
+func decodeResultBody(body []byte) any {
 	var decoded any
-	if err := json.Unmarshal([]byte(body), &decoded); err == nil {
+	if err := json.Unmarshal(body, &decoded); err == nil {
 		return decoded
 	}
-	return body
+	return string(body)
 }
 
 func testTLSConfigFromEnv() *tls.Config {
@@ -882,5 +882,5 @@ func testTLSConfigFromEnv() *tls.Config {
 
 func jsonResult(status int, body any) *gestalt.OperationResult {
 	data, _ := json.Marshal(body)
-	return &gestalt.OperationResult{Status: status, Body: string(data)}
+	return &gestalt.OperationResult{Status: status, Body: data}
 }

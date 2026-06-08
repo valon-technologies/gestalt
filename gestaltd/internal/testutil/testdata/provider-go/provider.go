@@ -160,7 +160,7 @@ func (p *Provider) invokeRequestContext(ctx context.Context, _ InvokeRequestCont
 	}
 
 	var out RequestContextOutput
-	if err := json.Unmarshal([]byte(result.Body), &out); err != nil {
+	if err := json.Unmarshal(result.Body, &out); err != nil {
 		return gestalt.Response[RequestContextOutput]{}, err
 	}
 	return gestalt.OK(out), nil

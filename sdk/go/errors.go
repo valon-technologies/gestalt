@@ -158,12 +158,12 @@ func operationResult(status int, message string) *OperationResult {
 	}
 }
 
-func operationErrorBody(message string) string {
+func operationErrorBody(message string) []byte {
 	data, err := json.Marshal(map[string]string{operationErrorField: message})
 	if err != nil {
-		return internalErrorBodyFallback
+		return []byte(internalErrorBodyFallback)
 	}
-	return string(data)
+	return data
 }
 
 var (

@@ -7,6 +7,10 @@ from ._api import Response
 from ._protocol import JsonValue
 
 
+def _body_bytes(value: bytes | str) -> bytes:
+    return value.encode("utf-8") if isinstance(value, str) else bytes(value)
+
+
 class InvokeError(Exception):
     """Decoded app invocation failure."""
 
@@ -19,22 +23,22 @@ class InvokeError(Exception):
         status: int | None = None,
         code: str | None = None,
         body: JsonValue = None,
-        raw_body: str = "",
+        raw_body: bytes | str = b"",
     ) -> None:
         self.app = app
         self.operation = operation
         self.status = status
         self.code = code
         self.body = body
-        self.raw_body = raw_body
+        self.raw_body = _body_bytes(raw_body)
         super().__init__(message)
 
 
-def decode_app_result(app: str, operation: str, result: Response[str]) -> JsonValue:
+def decode_app_result(app: str, operation: str, result: Response[bytes]) -> JsonValue:
     return decode_app_body(app, operation, int(result.status or 0), result.body)
 
 
-def decode_graphql_result(app: str, result: Response[str]) -> JsonValue:
+def decode_graphql_result(app: str, result: Response[bytes]) -> JsonValue:
     decoded = decode_app_result(app, "graphql", result)
     try:
         _raise_graphql_errors(app, result.body, parse_operation_result_json(result.body))
@@ -44,7 +48,7 @@ def decode_graphql_result(app: str, result: Response[str]) -> JsonValue:
     return decoded
 
 
-def _raise_graphql_errors(app: str, raw_body: str, value: JsonValue) -> None:
+def _raise_graphql_errors(app: str, raw_body: bytes, value: JsonValue) -> None:
     if not isinstance(value, dict):
         return
     errors = value.get("errors")
@@ -59,7 +63,7 @@ def _raise_graphql_errors(app: str, raw_body: str, value: JsonValue) -> None:
         )
 
 
-def decode_app_body(app: str, operation: str, status: int, body: str) -> JsonValue:
+def decode_app_body(app: str, operation: str, status: int, body: bytes) -> JsonValue:
     try:
         parsed = parse_operation_result_json(body)
     except ValueError:
@@ -106,8 +110,8 @@ def decode_app_body(app: str, operation: str, status: int, body: str) -> JsonVal
     return parsed
 
 
-def parse_operation_result_json(body: str) -> JsonValue:
-    if body.strip() == "":
+def parse_operation_result_json(body: bytes) -> JsonValue:
+    if body.strip() == b"":
         return {}
     return cast(JsonValue, json.loads(body))
 

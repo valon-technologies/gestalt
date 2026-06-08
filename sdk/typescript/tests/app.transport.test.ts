@@ -24,6 +24,10 @@ import {
 import { structFromObject } from "../src/protocol.ts";
 import { removeTempDir } from "./helpers.ts";
 
+function bytes(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
 test("App forwards request context to operation and GraphQL calls", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-app-"));
   const socketPath = join(tempDir, "plugin-app.sock");
@@ -67,12 +71,12 @@ test("App forwards request context to operation and GraphQL calls", async () => 
                   values: ["https://example.test/created"],
                 },
               },
-              body: JSON.stringify({
+              body: bytes(JSON.stringify({
                 app: input.app,
                 operation: input.operation,
                 subjectId: input.context?.subject?.id ?? "",
                 idempotencyKey: input.idempotencyKey,
-              }),
+              })),
             });
           },
           async invokeGraphQL(input) {
@@ -84,12 +88,12 @@ test("App forwards request context to operation and GraphQL calls", async () => 
             });
             return create(OperationResultSchema, {
               status: 208,
-              body: JSON.stringify({
+              body: bytes(JSON.stringify({
                 app: input.app,
                 document: input.document,
                 subjectId: input.context?.subject?.id ?? "",
                 idempotencyKey: input.idempotencyKey,
-              }),
+              })),
             });
           },
         } satisfies Partial<ServiceImpl<typeof AppService>>,
@@ -135,7 +139,13 @@ test("App forwards request context to operation and GraphQL calls", async () => 
     expect(first.headers).toEqual({
       Location: ["https://example.test/created"],
     });
-    expect(JSON.parse(first.body)).toEqual({
+    expect(first.text()).toBe(JSON.stringify({
+      app: "github",
+      operation: "get_issue",
+      subjectId: "user:user-123",
+      idempotencyKey: "issue-42-create",
+    }));
+    expect(first.json<Record<string, unknown>>()).toEqual({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",
@@ -150,7 +160,7 @@ test("App forwards request context to operation and GraphQL calls", async () => 
       },
     );
     expect(graphql.status).toBe(208);
-    expect(JSON.parse(graphql.body)).toEqual({
+    expect(graphql.json<Record<string, unknown>>()).toEqual({
       app: "linear",
       document: "query Viewer { viewer { id } }",
       subjectId: "user:user-123",
@@ -242,11 +252,11 @@ test("App honors tcp target env and relay token env", async () => {
         async invoke(input) {
           return create(OperationResultSchema, {
             status: 204,
-            body: JSON.stringify({
+            body: bytes(JSON.stringify({
               app: input.app,
               operation: input.operation,
               subjectId: input.context?.subject?.id ?? "",
-            }),
+            })),
           });
         },
       } satisfies Partial<ServiceImpl<typeof AppService>>);
@@ -280,7 +290,7 @@ test("App honors tcp target env and relay token env", async () => {
     const response = await app.invokeRaw("github", "get_issue");
 
     expect(response.status).toBe(204);
-    expect(JSON.parse(response.body)).toEqual({
+    expect(response.json<Record<string, unknown>>()).toEqual({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",

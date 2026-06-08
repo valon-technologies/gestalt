@@ -65,7 +65,7 @@ class AppProtocol(Protocol):
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> Response[bytes]:
         """Invoke one operation on another app and return the raw transport result."""
 
     def invoke_graphql(
@@ -89,7 +89,7 @@ class AppProtocol(Protocol):
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> Response[bytes]:
         """Invoke another app's GraphQL surface and return the raw transport result."""
 
 class _AppClient:
@@ -152,7 +152,7 @@ class _AppClient:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> Response[bytes]:
         """Invoke one operation on another app and return the raw transport result."""
 
         request = pb.AppInvokeRequest(
@@ -203,7 +203,7 @@ class _AppClient:
         connection: str = "",
         instance: str = "",
         idempotency_key: str = "",
-    ) -> Response[str]:
+    ) -> Response[bytes]:
         """Invoke another plugin's GraphQL surface and return the raw transport result."""
 
         trimmed_document = document.strip()
@@ -309,10 +309,10 @@ def _with_app_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
     return grpc.intercept_channel(channel, interceptor)
 
 
-def _response_from_proto(response: Any) -> Response[str]:
-    return Response[str](
+def _response_from_proto(response: Any) -> Response[bytes]:
+    return Response[bytes](
         status=int(response.status),
-        body=cast(str, response.body),
+        body=bytes(response.body),
         headers=cast(
             ResponseHeaders,
             string_lists_from_proto_map(getattr(response, "headers", {})),

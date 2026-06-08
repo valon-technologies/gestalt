@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import dataclasses
 import json
 from dataclasses import MISSING
@@ -159,14 +160,56 @@ class Response(Generic[T]):
     body: T
     headers: ResponseHeaders | None = None
 
+    @property
+    def ok(self) -> bool:
+        """Return whether the response status is in the HTTP 2xx range."""
+
+        status = int(self.status or 0)
+        return 200 <= status < 300
+
+    def bytes(self) -> builtins.bytes:
+        """Return the response body as bytes."""
+
+        if isinstance(self.body, builtins.bytes):
+            return builtins.bytes(self.body)
+        if isinstance(self.body, bytearray):
+            return builtins.bytes(self.body)
+        if isinstance(self.body, str):
+            return self.body.encode("utf-8")
+        raise TypeError("response body is not bytes or text")
+
+    def text(self) -> str:
+        """Decode the response body as UTF-8 text."""
+
+        if isinstance(self.body, str):
+            return self.body
+        return self.bytes().decode("utf-8", errors="replace")
+
     def decode_json(self) -> JsonValue:
         """Decode the raw response body without app envelope handling."""
 
-        if not isinstance(self.body, str):
-            raise TypeError("response body is not a string")
-        if self.body.strip() == "":
+        body = self.bytes()
+        if body.strip() == b"":
             return {}
-        return cast(JsonValue, json.loads(self.body))
+        return cast(JsonValue, json.loads(body))
+
+    def raise_for_status(self) -> Response[T]:
+        """Raise ``InvokeError`` when the response has a non-2xx status."""
+
+        if self.ok:
+            return self
+        from ._app_decode import InvokeError
+
+        try:
+            body = self.decode_json()
+        except ValueError:
+            body = None
+        raise InvokeError(
+            f"app invoke failed with status {int(self.status or 0)}",
+            status=int(self.status or 0),
+            body=body,
+            raw_body=self.bytes(),
+        )
 
 
 def OK(body: T, headers: ResponseHeaders | None = None) -> Response[T]:

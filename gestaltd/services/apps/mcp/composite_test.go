@@ -85,7 +85,7 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 	comp := composite.New("notion", apiProv, mcpUp)
 	providers := testutil.NewProviderRegistry(t, comp)
 	invoker := &testutil.StubInvoker{
-		Result: &core.OperationResult{Status: http.StatusOK, Body: `{"from":"invoker"}`},
+		Result: &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"from":"invoker"}`)},
 	}
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   invoker,
@@ -140,7 +140,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 			N: "notion",
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				invokerCalled = op
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"api"}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"from":"api"}`)}, nil
 			},
 		},
 		ops:     coreintegration.OperationsList(apiCat),
@@ -220,7 +220,7 @@ func TestComposite_ExecuteDelegatesToAPI(t *testing.T) {
 			N: "notion",
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				executedOp = op
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"id":"page1"}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"id":"page1"}`)}, nil
 			},
 		},
 		ops:     coreintegration.OperationsList(apiCat),

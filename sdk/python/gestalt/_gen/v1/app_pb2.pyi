@@ -147,9 +147,9 @@ class OperationResult(_message.Message):
     BODY_FIELD_NUMBER: _ClassVar[int]
     HEADERS_FIELD_NUMBER: _ClassVar[int]
     status: int
-    body: str
+    body: bytes
     headers: _containers.MessageMap[str, StringList]
-    def __init__(self, status: _Optional[int] = ..., body: _Optional[str] = ..., headers: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
+    def __init__(self, status: _Optional[int] = ..., body: _Optional[bytes] = ..., headers: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
 
 class AppInvokeRequest(_message.Message):
     __slots__ = ()

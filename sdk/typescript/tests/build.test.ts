@@ -67,6 +67,10 @@ import {
   waitForPath,
 } from "./helpers.ts";
 
+function jsonBody(body: Uint8Array): unknown {
+  return JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(body)) as unknown;
+}
+
 async function expectConnectCode(
   promise: Promise<unknown>,
   code: Code,
@@ -338,7 +342,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
           }),
         }),
       );
-      expect(JSON.parse(result.body)).toEqual({
+      expect(jsonBody(result.body)).toEqual({
         message: "Hello, Ada.",
         configuredName: `fixture-${label}`,
         region: "iad",
@@ -361,7 +365,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
         }),
       );
       expect(countResult.status).toBe(200);
-      expect(JSON.parse(countResult.body)).toEqual({
+      expect(jsonBody(countResult.body)).toEqual({
         count: 7,
       });
 
@@ -374,7 +378,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
         }),
       );
       expect(decodeError.status).toBe(400);
-      expect(JSON.parse(decodeError.body)).toEqual({
+      expect(jsonBody(decodeError.body)).toEqual({
         error: "$.count must be an integer",
       });
 
@@ -473,7 +477,7 @@ test("buildProviderBinary compiles a app provider executable without an explicit
         },
       }),
     );
-    expect(JSON.parse(result.body)).toEqual({
+    expect(jsonBody(result.body)).toEqual({
       message: "Hello, Ada.",
     });
   } finally {
@@ -534,7 +538,7 @@ test("buildProviderBinary falls through null exports to the next app candidate",
         },
       }),
     );
-    expect(JSON.parse(result.body)).toEqual({
+    expect(jsonBody(result.body)).toEqual({
       message: "Hello, Ada.",
     });
   } finally {

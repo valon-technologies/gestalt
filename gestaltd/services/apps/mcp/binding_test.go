@@ -384,7 +384,7 @@ func TestNewServer_SanitizesInvalidToolNamesAndRoutesOriginalOperation(t *testin
 			N: "github",
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				invokedOp = op
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		[]core.Operation{{Name: "github_actions/cancel-workflow-run.v1", Method: http.MethodPost}},
@@ -432,7 +432,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 				invokedParams = params
 				return &core.OperationResult{
 					Status: http.StatusOK,
-					Body:   `{"result":"ok"}`,
+					Body:   []byte(`{"result":"ok"}`),
 				}, nil
 			},
 		},
@@ -499,7 +499,7 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 				if p == nil || p.UserID == "" {
 					t.Fatal("expected authenticated principal")
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		Providers: providers,
@@ -567,7 +567,7 @@ func TestNewServer_ToolCallValidatesArgumentsAgainstOriginalOperation(t *testing
 		Invoker: &testutil.StubInvoker{
 			InvokeFn: func(_ context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
 				invoked = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		Providers: providers,
@@ -632,7 +632,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusForbidden,
-					Body:   "access denied",
+					Body:   []byte("access denied"),
 				}, nil
 			},
 		},
@@ -1027,7 +1027,7 @@ func TestNewServer_NoneModeInstanceHydrationUsesRequestedInstance(t *testing.T) 
 		Invoker: &testutil.StubInvoker{
 			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 				called = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		TokenResolver: &stubTokenResolver{
@@ -1088,7 +1088,7 @@ func TestNewServer_InstanceCallFailsClosedWhenHydrationFailsOnStaticCollision(t 
 		Invoker: &testutil.StubInvoker{
 			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 				called = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		TokenResolver: &stubTokenResolver{
@@ -1141,7 +1141,7 @@ func TestNewServer_DefaultInstanceCallFailsClosedWhenHydrationFailsOnStaticColli
 		Invoker: &testutil.StubInvoker{
 			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 				called = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		TokenResolver: &stubTokenResolver{
@@ -1177,7 +1177,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				seenToken = token
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
@@ -1256,7 +1256,7 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					seenToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 				},
 			},
 			cat: &catalog.Catalog{
@@ -1324,7 +1324,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 			N:        "app",
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: token}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(token)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "plugin_echo", Description: "Plugin-backed echo", Method: http.MethodGet}},
@@ -1334,7 +1334,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 			N:        "api",
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: token}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(token)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "api_echo", Description: "API-backed echo", Method: http.MethodGet}},
@@ -1425,7 +1425,7 @@ func TestNewServer_DirectCallerRoutedThroughInvoker(t *testing.T) {
 	}
 
 	invoker := &testutil.StubInvoker{
-		Result: &core.OperationResult{Status: 200, Body: `{"ok":true}`},
+		Result: &core.OperationResult{Status: 200, Body: []byte(`{"ok":true}`)},
 	}
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -1510,7 +1510,7 @@ func TestNewServer_DirectCallerInvokerReceivesPrincipal(t *testing.T) {
 	}
 
 	invoker := &testutil.StubInvoker{
-		Result: &core.OperationResult{Status: 200, Body: `{"ok":true}`},
+		Result: &core.OperationResult{Status: 200, Body: []byte(`{"ok":true}`)},
 	}
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{

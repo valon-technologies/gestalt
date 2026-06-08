@@ -254,7 +254,7 @@ func (p *preparedProviderStub) Catalog() *catalog.Catalog {
 	return p.catalog.Clone()
 }
 func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: 202, Body: `{}`}, nil
+	return &core.OperationResult{Status: 202, Body: []byte(`{}`)}, nil
 }
 
 func (p *preparedProviderStub) CallTool(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {

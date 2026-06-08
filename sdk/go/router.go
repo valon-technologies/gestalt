@@ -373,7 +373,7 @@ func Register[P any, In any, Out any](
 			if err != nil {
 				return nil, newOperationError(http.StatusInternalServerError, fmt.Sprintf("marshal response for %q: %v", op.ID, err), err)
 			}
-			return &OperationResult{Status: status, Headers: jsonResponseHeaders(resp.Headers), Body: string(body)}, nil
+			return &OperationResult{Status: status, Headers: jsonResponseHeaders(resp.Headers), Body: body}, nil
 		},
 	}
 }

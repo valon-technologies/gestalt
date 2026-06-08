@@ -124,7 +124,7 @@ func TestDoGETWithQueryAndPathParams(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["path"] != "/items/abc123" {
@@ -160,7 +160,7 @@ func TestDoPOSTWithJSONBody(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["query"] != "hello" {
@@ -201,7 +201,7 @@ func TestDoUsesCustomAuthHeaderAndBodyOverride(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["auth"] != "Token abc123" {
@@ -235,7 +235,7 @@ func TestDoReturnsUpstreamHTTPError(t *testing.T) {
 	if upstreamErr.Status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", upstreamErr.Status, http.StatusBadRequest)
 	}
-	if upstreamErr.Body != `{"error":{"message":"invalid parameter: limit"}}` {
+	if string(upstreamErr.Body) != `{"error":{"message":"invalid parameter: limit"}}` {
 		t.Fatalf("body = %q", upstreamErr.Body)
 	}
 	if got := upstreamErr.Headers.Get("Content-Type"); got != "application/json" {
@@ -272,7 +272,7 @@ func TestDoGraphQLBasicQuery(t *testing.T) {
 	}
 
 	var data map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+	if err := json.Unmarshal(result.Body, &data); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	viewer := data["viewer"].(map[string]any)
@@ -313,7 +313,7 @@ func TestDoGraphQLWithVariables(t *testing.T) {
 	}
 
 	var data map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+	if err := json.Unmarshal(result.Body, &data); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	repos := data["repos"].([]any)
@@ -387,7 +387,7 @@ func TestDoGraphQLAuthHeaders(t *testing.T) {
 		}
 
 		var data map[string]any
-		if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+		if err := json.Unmarshal(result.Body, &data); err != nil {
 			t.Fatalf("json.Unmarshal: %v", err)
 		}
 		if data["auth"] != "Bearer gh-token" {
@@ -419,7 +419,7 @@ func TestDoGraphQLAuthHeaders(t *testing.T) {
 		}
 
 		var data map[string]any
-		if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+		if err := json.Unmarshal(result.Body, &data); err != nil {
 			t.Fatalf("json.Unmarshal: %v", err)
 		}
 		if data["auth"] != "Token custom-val" {

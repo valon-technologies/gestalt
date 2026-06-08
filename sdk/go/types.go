@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -131,7 +132,7 @@ type Host struct {
 type OperationResult struct {
 	Status  int
 	Headers http.Header
-	Body    string
+	Body    []byte
 }
 
 // JSON decodes Body as JSON without applying app invocation envelope handling.
@@ -147,6 +148,41 @@ func (r *OperationResult) JSON() (any, error) {
 		}
 	}
 	return value, nil
+}
+
+// OK reports whether Status is in the HTTP 2xx range.
+func (r *OperationResult) OK() bool {
+	return r != nil && r.Status >= 200 && r.Status < 300
+}
+
+// Bytes returns a copy of Body.
+func (r *OperationResult) Bytes() []byte {
+	if r == nil || r.Body == nil {
+		return nil
+	}
+	return append([]byte(nil), r.Body...)
+}
+
+// Text decodes Body as UTF-8 text.
+func (r *OperationResult) Text() string {
+	if r == nil {
+		return ""
+	}
+	return string(r.Body)
+}
+
+// RequireOK returns an InvokeError when Status is outside the HTTP 2xx range.
+func (r *OperationResult) RequireOK() error {
+	if r == nil || r.OK() {
+		return nil
+	}
+	value, _ := r.JSON()
+	return &InvokeError{
+		Status:  r.Status,
+		Message: fmt.Sprintf("app invoke failed with status %d", r.Status),
+		Body:    value,
+		RawBody: r.Body,
+	}
 }
 
 type connectionParamsKey struct{}

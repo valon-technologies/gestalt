@@ -647,7 +647,7 @@ func (x *ProviderMetadata) GetMaxProtocolVersion() int32 {
 type OperationResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        int32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body          string                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
 	Headers       map[string]*StringList `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -690,11 +690,11 @@ func (x *OperationResult) GetStatus() int32 {
 	return 0
 }
 
-func (x *OperationResult) GetBody() string {
+func (x *OperationResult) GetBody() []byte {
 	if x != nil {
 		return x.Body
 	}
-	return ""
+	return nil
 }
 
 func (x *OperationResult) GetHeaders() map[string]*StringList {
@@ -2392,7 +2392,7 @@ const file_v1_app_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2'.gestalt.provider.v1.ConnectionParamDefR\x05value:\x028\x01\"\xe7\x01\n" +
 	"\x0fOperationResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
-	"\x04body\x18\x02 \x01(\tR\x04body\x12K\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\x12K\n" +
 	"\aheaders\x18\x03 \x03(\v21.gestalt.provider.v1.OperationResult.HeadersEntryR\aheaders\x1a[\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +

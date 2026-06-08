@@ -46,7 +46,7 @@ func (p *manualMetricsProvider) Catalog() *catalog.Catalog {
 	return serverTestCatalogFromOperations(p.name, nil)
 }
 func (p *manualMetricsProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
-	return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
 }
 
 type metricsHostIssuedSessionAuth struct {
@@ -234,7 +234,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 			StubIntegration: coretesting.StubIntegration{
 				N: providerName,
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"token":"` + token + `"}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"token":"` + token + `"}`)}, nil
 				},
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -374,9 +374,9 @@ func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
 				ConnMode: core.ConnectionModeNone,
 				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
 					if operation == "lookup" {
-						return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"missing"}`}, nil
+						return &core.OperationResult{Status: http.StatusNotFound, Body: []byte(`{"error":"missing"}`)}, nil
 					}
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"operation":"` + operation + `"}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"operation":"` + operation + `"}`)}, nil
 				},
 			},
 			catalog: &catalog.Catalog{
@@ -735,9 +735,9 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 				defer func() { operationDone <- struct{}{} }()
 				bindingsSeen <- invocation.HTTPBindingFromContext(ctx)
 				if operation == "receive_event" {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 				}
-				return &core.OperationResult{Status: http.StatusNotFound, Body: `{}`}, nil
+				return &core.OperationResult{Status: http.StatusNotFound, Body: []byte(`{}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "receive_event", Method: http.MethodPost}},

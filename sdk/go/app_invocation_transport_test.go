@@ -66,7 +66,7 @@ func (h *pluginAppTransportHarness) Invoke(ctx context.Context, req *proto.AppIn
 		Headers: map[string]*proto.StringList{
 			"Location": &proto.StringList{Values: []string{"https://example.test/created"}},
 		},
-		Body: "relay-ok",
+		Body: []byte("relay-ok"),
 	}, nil
 }
 
@@ -82,7 +82,7 @@ func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *prot
 
 	return &proto.OperationResult{
 		Status: 208,
-		Body:   "graphql-ok",
+		Body:   []byte("graphql-ok"),
 	}, nil
 }
 
@@ -133,7 +133,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if result.Status != 207 || result.Body != "relay-ok" {
+	if result.Status != 207 || string(result.Body) != "relay-ok" {
 		t.Fatalf("Invoke result = %+v, want status=207 body=relay-ok", result)
 	}
 	if got := result.Headers.Get("Location"); got != "https://example.test/created" {
@@ -147,7 +147,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke omitempty params: %v", err)
 	}
-	if result.Status != 207 || result.Body != "relay-ok" {
+	if result.Status != 207 || string(result.Body) != "relay-ok" {
 		t.Fatalf("Invoke omitempty result = %+v, want status=207 body=relay-ok", result)
 	}
 	graphQLResult, err := client.InvokeGraphQLRaw(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
@@ -158,7 +158,7 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeGraphQL: %v", err)
 	}
-	if graphQLResult.Status != 208 || graphQLResult.Body != "graphql-ok" {
+	if graphQLResult.Status != 208 || string(graphQLResult.Body) != "graphql-ok" {
 		t.Fatalf("InvokeGraphQL result = %+v, want status=208 body=graphql-ok", graphQLResult)
 	}
 	if _, err := client.Invoke(context.Background(), "github", "bad", time.Now(), nil); err == nil {

@@ -862,7 +862,7 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 				cleanupPendingTurn()
 				return nil, err
 			}
-			outputBody = resp.GetBody()
+			outputBody = string(resp.GetBody())
 		}
 	}
 
@@ -2154,7 +2154,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusAccepted, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusAccepted, Body: body}, nil
 			},
 		},
 		&coretesting.StubIntegration{
@@ -2448,7 +2448,7 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			},
 		},
 		&coretesting.StubIntegration{
@@ -2490,7 +2490,7 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			},
 		},
 	)
@@ -5424,7 +5424,7 @@ func TestBootstrapAllowsAppConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *tes
 	if err != nil {
 		t.Fatalf("Execute(status): %v", err)
 	}
-	if statusResult.Status != http.StatusOK || !strings.Contains(statusResult.Body, `"ok":true`) {
+	if statusResult.Status != http.StatusOK || !strings.Contains(string(statusResult.Body), `"ok":true`) {
 		t.Fatalf("status result = %+v, want 200 with ok body", statusResult)
 	}
 
@@ -5432,7 +5432,7 @@ func TestBootstrapAllowsAppConfiguredWithBothOpenAPIAndGraphQLAPISurfaces(t *tes
 	if err != nil {
 		t.Fatalf("Execute(viewer): %v", err)
 	}
-	if viewerResult.Status != http.StatusOK || !strings.Contains(viewerResult.Body, `"Platform"`) {
+	if viewerResult.Status != http.StatusOK || !strings.Contains(string(viewerResult.Body), `"Platform"`) {
 		t.Fatalf("viewer result = %+v, want 200 with graphql body", viewerResult)
 	}
 }

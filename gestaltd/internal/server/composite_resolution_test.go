@@ -32,7 +32,7 @@ func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *tes
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				gotToken = token
-				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token))}, nil
 			},
 		},
 		catalog: serverTestCatalog("notion", []catalog.CatalogOperation{

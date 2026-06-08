@@ -37,7 +37,7 @@ func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocat
 	out := &AppResult{}
 	if result != nil {
 		out.Status = result.Status
-		out.Body = result.Body
+		out.Body = string(result.Body)
 	}
 	return out, nil
 }

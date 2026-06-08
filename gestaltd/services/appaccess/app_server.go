@@ -582,7 +582,7 @@ func appOperationResult(result *core.OperationResult, err error) (*proto.Operati
 		if statusCode, ok := invocation.OperationErrorResultStatus(err); ok {
 			return &proto.OperationResult{
 				Status: int32(statusCode),
-				Body:   err.Error(),
+				Body:   []byte(err.Error()),
 			}, nil
 		}
 		return nil, invocationStatusError(err)

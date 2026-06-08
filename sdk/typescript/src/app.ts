@@ -340,7 +340,7 @@ export class AppProvider extends ProviderBase {
       return operationResult({
         status: response?.status ?? 200,
         headers: normalizeResponseHeaders(response?.headers),
-        body: JSON.stringify(body),
+        body: encodeOperationBody(body),
       });
     } catch (error) {
       return errorResult(500, errorMessage(error));
@@ -457,10 +457,14 @@ function errorResult(status: number, message: string): OperationResult {
   return operationResult({
     status,
     headers: normalizeResponseHeaders(),
-    body: JSON.stringify({
+    body: encodeOperationBody({
       error: message,
     }),
   });
+}
+
+function encodeOperationBody(body: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(body));
 }
 
 /**

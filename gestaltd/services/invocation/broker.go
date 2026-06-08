@@ -362,11 +362,11 @@ func (b *Broker) observePlugin5xxResult(ctx context.Context, span trace.Span, p 
 	b.log().WarnContext(ctx, "provider operation returned 5xx result", attrs...)
 }
 
-func truncateResultBodyForLog(body string) string {
+func truncateResultBodyForLog(body []byte) string {
 	if len(body) <= resultBodyLogLimit {
-		return body
+		return string(body)
 	}
-	return body[:resultBodyLogLimit]
+	return string(body[:resultBodyLogLimit])
 }
 
 func resultSubjectID(p *principal.Principal) string {

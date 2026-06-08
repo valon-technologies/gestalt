@@ -53,5 +53,5 @@ func (p *echoProvider) Execute(_ context.Context, operation string, params map[s
 	if err != nil {
 		return nil, fmt.Errorf("marshaling params: %w", err)
 	}
-	return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+	return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
 }

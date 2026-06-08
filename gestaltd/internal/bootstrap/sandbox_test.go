@@ -143,7 +143,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("echo status = %d, body = %s", result.Status, result.Body)
 	}
-	if result.Body != `{"message":"hello"}` {
+	if string(result.Body) != `{"message":"hello"}` {
 		t.Fatalf("echo body = %q", result.Body)
 	}
 }
@@ -227,7 +227,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("greet status = %d, body = %s", result.Status, result.Body)
 	}
-	if result.Body != `{"message":"Hello from sandbox, Gestalt!"}` {
+	if string(result.Body) != `{"message":"Hello from sandbox, Gestalt!"}` {
 		t.Fatalf("greet body = %q", result.Body)
 	}
 }
@@ -327,7 +327,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	}
 
 	var body map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if bodyStr, ok := body["body"].(string); !ok || !strings.Contains(bodyStr, "allowed-response") {
@@ -389,7 +389,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	}
 
 	var body map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if bodyStr, ok := body["body"].(string); ok && strings.Contains(bodyStr, "should-not-see-this") {

@@ -52,7 +52,7 @@ func TestBaseExecuteDispatchesToEndpoint(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["path"] != "/api/items" {
@@ -90,7 +90,7 @@ func TestBaseTokenParserOverridesAuthorization(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["auth"] != "Token abc123" {
@@ -130,7 +130,7 @@ func TestBaseExecuteStaticHeadersReachUpstream(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["header"] != headerValue {
@@ -171,7 +171,7 @@ func TestBaseExecuteRequestAuthOverridesStaticAuthorizationHeader(t *testing.T) 
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["auth"] != "Bearer secret-token" {
@@ -241,7 +241,7 @@ func TestBaseExecuteFuncOverridesDefaultExecution(t *testing.T) {
 	b := &Base{
 		Auth: mockAuth{},
 		ExecuteFunc: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-			return &core.OperationResult{Status: 299, Body: "custom-" + operation}, nil
+			return &core.OperationResult{Status: 299, Body: []byte("custom-" + operation)}, nil
 		},
 	}
 
@@ -252,7 +252,7 @@ func TestBaseExecuteFuncOverridesDefaultExecution(t *testing.T) {
 	if result.Status != 299 {
 		t.Fatalf("status = %d, want 299", result.Status)
 	}
-	if result.Body != "custom-anything" {
+	if string(result.Body) != "custom-anything" {
 		t.Fatalf("body = %q, want %q", result.Body, "custom-anything")
 	}
 }
@@ -293,7 +293,7 @@ func TestBaseExecuteRoutesGraphQLOperations(t *testing.T) {
 	}
 
 	var data map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+	if err := json.Unmarshal(result.Body, &data); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	viewer := data["viewer"].(map[string]any)
@@ -332,7 +332,7 @@ func TestBaseExecuteGraphQLWithVariables(t *testing.T) {
 	}
 
 	var data map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+	if err := json.Unmarshal(result.Body, &data); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	repos := data["repos"].(map[string]any)
@@ -400,7 +400,7 @@ func TestBaseExecuteGraphQLWithTokenParser(t *testing.T) {
 	}
 
 	var data map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
+	if err := json.Unmarshal(result.Body, &data); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if data["auth"] != "Token my-token" {
@@ -459,7 +459,7 @@ func TestBaseExecuteBasicAuthStyle(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 

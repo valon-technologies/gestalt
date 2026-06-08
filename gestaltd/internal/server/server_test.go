@@ -663,7 +663,7 @@ func (i *relayTestInvoker) Invoke(ctx context.Context, _ *principal.Principal, p
 	i.operation = operation
 	i.idempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
 	i.params = maps.Clone(params)
-	return &core.OperationResult{Status: 202, Body: "relayed"}, nil
+	return &core.OperationResult{Status: 202, Body: []byte("relayed")}, nil
 }
 
 type relayTestInvokerCall struct {
@@ -3636,7 +3636,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 			N:        "open",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: "open:" + op}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte("open:" + op)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
@@ -3646,7 +3646,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 			N:        "locked",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: "locked:" + op}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte("locked:" + op)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
@@ -6520,7 +6520,7 @@ func TestExecuteOperation(t *testing.T) {
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
-					Body:   fmt.Sprintf(`{"operation":%q}`, op),
+					Body:   []byte(fmt.Sprintf(`{"operation":%q}`, op)),
 				}, nil
 			},
 		},
@@ -6584,7 +6584,7 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 				if p == nil || p.Identity == nil || p.Identity.Email == "" {
 					t.Fatal("expected authenticated principal")
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		}
 	})
@@ -6649,7 +6649,7 @@ func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
-					Body:   fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token),
+					Body:   []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)),
 				}, nil
 			},
 		},
@@ -6727,7 +6727,7 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				called = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{
@@ -6805,7 +6805,7 @@ func TestExecuteOperation_UsesResolvedConnectionForSessionCatalogOperation(t *te
 					if gotOperation != operation {
 						t.Fatalf("operation = %q, want %q", gotOperation, operation)
 					}
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 				},
 			},
 		},
@@ -6867,7 +6867,7 @@ func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *tes
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				return &core.OperationResult{
 					Status: http.StatusOK,
-					Body:   fmt.Sprintf(`{"token":%q}`, token),
+					Body:   []byte(fmt.Sprintf(`{"token":%q}`, token)),
 				}, nil
 			},
 		},
@@ -7509,7 +7509,7 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token))}, nil
 				},
 			},
 		},
@@ -7594,7 +7594,7 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token))}, nil
 				},
 			},
 		},
@@ -7669,7 +7669,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token))}, nil
 				},
 			},
 		},
@@ -7752,7 +7752,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token))}, nil
 				},
 			},
 		},
@@ -7828,7 +7828,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 				ConnMode: core.ConnectionModeSubject,
 				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
 					gotToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token))}, nil
 				},
 			},
 		},
@@ -9592,7 +9592,7 @@ func TestExecuteOperation_POST(t *testing.T) {
 				text, _ := params["text"].(string)
 				return &core.OperationResult{
 					Status: http.StatusOK,
-					Body:   fmt.Sprintf(`{"text":%q}`, text),
+					Body:   []byte(fmt.Sprintf(`{"text":%q}`, text)),
 				}, nil
 			},
 		},
@@ -10318,7 +10318,7 @@ func (s *stubNonOAuthProvider) Execute(ctx context.Context, op string, params ma
 	if s.execFn != nil {
 		return s.execFn(ctx, op, params, token)
 	}
-	return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
 }
 
 func serverTestCatalogFromOperations(name string, ops []core.Operation) *catalog.Catalog {
@@ -10460,7 +10460,7 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 				N: "fake",
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					refreshedToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 				},
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -10521,7 +10521,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 				N: "fake",
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					usedToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 				},
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -10619,7 +10619,7 @@ func TestExecuteOperation_RefreshPassesThroughStoredTokenWhenRefreshDoesNotApply
 						N: "fake",
 						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 							usedToken = token
-							return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+							return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
 						},
 					},
 					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -10716,7 +10716,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 					StubIntegration: coretesting.StubIntegration{
 						N: "fake",
 						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-							return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+							return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
 						},
 					},
 					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -10809,7 +10809,7 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 						N: "fake",
 						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 							usedToken = token
-							return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+							return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 						},
 					},
 					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -10866,7 +10866,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 				N: "fake",
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					usedToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
 				},
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -10979,7 +10979,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 				if token != "" {
 					t.Errorf("expected empty token for ConnectionModeNone, got %q", token)
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{
@@ -11017,7 +11017,7 @@ func TestExecuteOperation_EchoProvider(t *testing.T) {
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, params map[string]any, _ string) (*core.OperationResult, error) {
 				body, _ := json.Marshal(params)
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			},
 		},
 		ops: []core.Operation{
@@ -11066,7 +11066,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 					"query": params["q"],
 					"token": token,
 				})
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "search", Method: http.MethodGet}},
@@ -11552,7 +11552,7 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 						N: "fake",
 						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 							usedToken = token
-							return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+							return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 						},
 					},
 					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -11636,7 +11636,7 @@ func TestRefresh_UsesResolvedConnectionTokenURL(t *testing.T) {
 				N: "fake",
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					usedToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 				},
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -12138,7 +12138,7 @@ func TestMaxBodySize(t *testing.T) {
 		StubIntegration: coretesting.StubIntegration{
 			N: "test-int",
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{
@@ -12297,7 +12297,7 @@ func TestExecuteOperation_UpstreamUnauthorizedRequiresReconnect(t *testing.T) {
 	invoker := &testutil.StubInvoker{
 		Err: &apiexec.UpstreamHTTPError{
 			Status: http.StatusUnauthorized,
-			Body:   "",
+			Body:   []byte(""),
 		},
 	}
 
@@ -12835,7 +12835,7 @@ func TestExecuteOperation_ConnectionModeSubjectUsesSubjectCredential(t *testing.
 			N:        "svc",
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(fmt.Sprintf(`{"token":%q}`, token))}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "do", Method: http.MethodGet}},
@@ -13377,7 +13377,7 @@ func TestRefresh_UsesManualTokenExchangeHandlers(t *testing.T) {
 			N: "manual-refresh",
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 				usedToken = token
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
@@ -13438,7 +13438,7 @@ func TestAPITokenScopes_EnforcedDuringInvocation(t *testing.T) {
 			N:        "alpha",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
@@ -13448,7 +13448,7 @@ func TestAPITokenScopes_EnforcedDuringInvocation(t *testing.T) {
 			N:        "beta",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
@@ -13516,7 +13516,7 @@ func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
 			N:        "any-provider",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},

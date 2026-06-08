@@ -95,7 +95,7 @@ func doPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 		lastStatus = result.Status
 
 		var parsed any
-		if err := json.Unmarshal([]byte(result.Body), &parsed); err != nil {
+		if err := json.Unmarshal(result.Body, &parsed); err != nil {
 			return nil, fmt.Errorf("parsing paginated response: %w", err)
 		}
 
@@ -180,7 +180,7 @@ func combinedResult(status int, results []any) (*core.OperationResult, error) {
 	}
 	return &core.OperationResult{
 		Status: status,
-		Body:   string(data),
+		Body:   data,
 	}, nil
 }
 

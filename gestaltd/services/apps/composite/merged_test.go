@@ -55,7 +55,7 @@ func (p *fakeProvider) Execute(ctx context.Context, op string, params map[string
 	if p.execFn != nil {
 		return p.execFn(ctx, op, params, token)
 	}
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"source":"` + p.name + `"}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"source":"` + p.name + `"}`)}, nil
 }
 
 func (p *fakeProvider) Close() error { p.closed = true; return nil }
@@ -105,7 +105,7 @@ func TestNewMergedRoutesExecuteByOperationName(t *testing.T) {
 			ops:  []core.Operation{{Name: "list_items"}},
 			execFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				apiHit = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"api"}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"from":"api"}`)}, nil
 			},
 		}},
 		composite.BoundProvider{Provider: &fakeProvider{
@@ -113,7 +113,7 @@ func TestNewMergedRoutesExecuteByOperationName(t *testing.T) {
 			ops:  []core.Operation{{Name: "query"}},
 			execFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				pluginHit = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"app"}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"from":"app"}`)}, nil
 			},
 		}},
 	)
@@ -273,7 +273,7 @@ func TestMergedSessionCatalogRoutesDynamicOperation(t *testing.T) {
 				name: "graphql",
 				execFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 					dynamicHit = true
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"operation":"` + op + `"}`}, nil
+					return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"operation":"` + op + `"}`)}, nil
 				},
 			},
 			sessionCat: &catalog.Catalog{

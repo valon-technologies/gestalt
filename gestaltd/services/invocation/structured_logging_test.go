@@ -31,7 +31,7 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) {
 			N:        "myservice",
 			ConnMode: core.ConnectionModeSubject,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
@@ -145,7 +145,7 @@ func TestBrokerPlugin5xxResultObservability(t *testing.T) {
 					}},
 				},
 				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusInternalServerError, Body: longBody}, nil
+					return &core.OperationResult{Status: http.StatusInternalServerError, Body: []byte(longBody)}, nil
 				},
 			}
 

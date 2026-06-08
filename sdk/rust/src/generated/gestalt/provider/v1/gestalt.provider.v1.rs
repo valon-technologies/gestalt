@@ -120,8 +120,8 @@ pub struct ProviderMetadata {
 pub struct OperationResult {
     #[prost(int32, tag = "1")]
     pub status: i32,
-    #[prost(string, tag = "2")]
-    pub body: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub body: ::prost::alloc::vec::Vec<u8>,
     #[prost(btree_map = "string, message", tag = "3")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
 }

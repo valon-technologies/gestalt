@@ -24,7 +24,7 @@ func applyResponseMapping(result *core.OperationResult, cfg *ResponseMappingConf
 	}
 
 	var raw map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &raw); err != nil {
+	if err := json.Unmarshal(result.Body, &raw); err != nil {
 		return result
 	}
 
@@ -61,6 +61,6 @@ func applyResponseMapping(result *core.OperationResult, cfg *ResponseMappingConf
 	return &core.OperationResult{
 		Status:  result.Status,
 		Headers: result.Headers,
-		Body:    string(body),
+		Body:    body,
 	}
 }
