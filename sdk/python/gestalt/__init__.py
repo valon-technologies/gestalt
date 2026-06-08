@@ -546,6 +546,7 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "InvokeError",
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,

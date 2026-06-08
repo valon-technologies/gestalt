@@ -18,8 +18,8 @@ from ._grpc_transport import (
     secure_internal_channel,
 )
 from ._protocol import (
-    JsonValue,
     JsonObjectInput,
+    JsonValue,
     _struct_from_normalized_object,
     json_from_native,
     string_lists_from_proto_map,

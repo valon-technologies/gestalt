@@ -6,7 +6,6 @@ import unittest
 from gestalt import Response
 from gestalt._app_decode import InvokeError, decode_app_result, decode_graphql_result
 
-
 FIXTURE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "testdata" / "app_invoke"
 
 

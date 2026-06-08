@@ -40,7 +40,19 @@ pub enum AppError {
     Protocol(String),
     /// The app invocation response decoded to an invocation error.
     #[error("{0}")]
-    Invoke(#[from] crate::InvokeError),
+    Invoke(#[source] Box<crate::InvokeError>),
+}
+
+impl From<crate::InvokeError> for AppError {
+    fn from(error: crate::InvokeError) -> Self {
+        Self::Invoke(Box::new(error))
+    }
+}
+
+impl From<Box<crate::InvokeError>> for AppError {
+    fn from(error: Box<crate::InvokeError>) -> Self {
+        Self::Invoke(error)
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

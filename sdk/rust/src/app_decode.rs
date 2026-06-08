@@ -11,7 +11,7 @@ pub struct InvokeError {
     pub status: Option<u16>,
     pub code: Option<String>,
     pub message: String,
-    pub body: Option<Value>,
+    pub body: Option<Box<Value>>,
     pub raw_body: String,
 }
 
@@ -19,27 +19,27 @@ pub(crate) fn decode_app_result(
     app: &str,
     operation: &str,
     result: &OperationResult,
-) -> Result<Value, InvokeError> {
+) -> Result<Value, Box<InvokeError>> {
     decode_app_body(app, operation, result.status, &result.body)
 }
 
 pub(crate) fn decode_graphql_result(
     app: &str,
     result: &OperationResult,
-) -> Result<Value, InvokeError> {
+) -> Result<Value, Box<InvokeError>> {
     let decoded = decode_app_result(app, "graphql", result)?;
     if let Value::Object(object) = &decoded {
         if let Some(Value::Array(errors)) = object.get("errors") {
             if !errors.is_empty() {
-                return Err(InvokeError {
+                return Err(Box::new(InvokeError {
                     app: app.to_string(),
                     operation: "graphql".to_string(),
                     status: None,
                     code: Some("graphql_errors".to_string()),
                     message: graphql_error_message(errors),
-                    body: Some(decoded),
+                    body: Some(Box::new(decoded)),
                     raw_body: result.body.clone(),
-                });
+                }));
             }
         }
     }
@@ -58,11 +58,11 @@ fn decode_app_body(
     operation: &str,
     status: u16,
     body: &str,
-) -> Result<Value, InvokeError> {
+) -> Result<Value, Box<InvokeError>> {
     let parsed = match parse_operation_result_json(body) {
         Ok(value) => value,
         Err(_) if status >= 400 => {
-            return Err(InvokeError {
+            return Err(Box::new(InvokeError {
                 app: app.to_string(),
                 operation: operation.to_string(),
                 status: Some(status),
@@ -70,10 +70,10 @@ fn decode_app_body(
                 message: format!("app invoke failed with status {status}"),
                 body: None,
                 raw_body: body.to_string(),
-            });
+            }));
         }
         Err(_) => {
-            return Err(InvokeError {
+            return Err(Box::new(InvokeError {
                 app: app.to_string(),
                 operation: operation.to_string(),
                 status: None,
@@ -81,36 +81,36 @@ fn decode_app_body(
                 message: "app invoke response is not valid JSON".to_string(),
                 body: None,
                 raw_body: body.to_string(),
-            });
+            }));
         }
     };
 
     if status >= 400 {
         let (message, code) = message_code_from_body(&parsed);
-        return Err(InvokeError {
+        return Err(Box::new(InvokeError {
             app: app.to_string(),
             operation: operation.to_string(),
             status: Some(status),
             code,
             message: message.unwrap_or_else(|| format!("app invoke failed with status {status}")),
-            body: Some(parsed),
+            body: Some(Box::new(parsed)),
             raw_body: body.to_string(),
-        });
+        }));
     }
 
     if let Value::Object(object) = &parsed {
         if let Some(Value::String(status)) = object.get("status") {
             if status == "error" {
                 let (message, code) = message_code_from_body(&parsed);
-                return Err(InvokeError {
+                return Err(Box::new(InvokeError {
                     app: app.to_string(),
                     operation: operation.to_string(),
                     status: None,
                     code,
                     message: message.unwrap_or_else(|| "app invoke failed".to_string()),
-                    body: Some(parsed),
+                    body: Some(Box::new(parsed)),
                     raw_body: body.to_string(),
-                });
+                }));
             }
             if status == "success" && object.contains_key("data") {
                 return Ok(object.get("data").cloned().unwrap_or(Value::Null));
