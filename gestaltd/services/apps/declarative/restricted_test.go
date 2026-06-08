@@ -144,7 +144,7 @@ func TestCatalogPreservesOrder(t *testing.T) {
 func TestExecuteAllowed(t *testing.T) {
 	t.Parallel()
 
-	want := &core.OperationResult{Status: 200, Body: "ok"}
+	want := &core.OperationResult{Status: 200, Body: []byte("ok")}
 	inner := &stubWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N: "test_provider",
@@ -189,7 +189,7 @@ func TestRestrictedWithAliases(t *testing.T) {
 			N: "test_provider",
 			ExecuteFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				executedOp = op
-				return &core.OperationResult{Status: 200, Body: "ok"}, nil
+				return &core.OperationResult{Status: 200, Body: []byte("ok")}, nil
 			},
 		},
 		ops: sampleOps(),

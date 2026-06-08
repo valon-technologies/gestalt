@@ -1384,7 +1384,7 @@ def _provider_servicer(*, app: App) -> Any:
             except Exception as error:
                 traceback.print_exception(error)
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
-                body = json_body({"error": INTERNAL_ERROR_MESSAGE})
+                body = json_body({"error": INTERNAL_ERROR_MESSAGE}).encode("utf-8")
                 return app_pb2.OperationResult(
                     status=status,
                     body=body,

@@ -16,13 +16,17 @@ function fixture(name: string): string {
   return readFileSync(join(fixtureRoot, name), "utf8");
 }
 
+function bytes(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
 function expectJsonEqual(actual: unknown, expected: unknown): void {
   expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
 }
 
 test("app decode fixture behavior", () => {
   const result = (name: string, status = 200) =>
-    operationResult({ status, headers: {}, body: fixture(name) });
+    operationResult({ status, headers: {}, body: bytes(fixture(name)) });
 
   expectJsonEqual(decodeAppResult("github", "get_issue", result("success_envelope.json")), { id: 1 });
   expectJsonEqual(decodeAppResult("github", "get_issue", result("plain_ok.json")), {
@@ -62,8 +66,18 @@ test("app decode fixture behavior", () => {
 });
 
 test("OperationResult json helper does not unwrap envelopes", () => {
-  const raw = operationResult({ status: 200, headers: {}, body: fixture("success_envelope.json") });
+  const raw = operationResult({ status: 200, headers: {}, body: bytes(fixture("success_envelope.json")) });
   expectJsonEqual(raw.json(), { status: "success", data: { id: 1 } });
+  expect(raw.ok).toBe(true);
+  expect(raw.text()).toBe(fixture("success_envelope.json"));
+  expect(raw.bytes()).toEqual(bytes(fixture("success_envelope.json")));
+  expect(raw.requireOk()).toBe(raw);
+});
+
+test("OperationResult status helper raises InvokeError", () => {
+  const raw = operationResult({ status: 503, headers: {}, body: bytes("not json") });
+  expect(raw.ok).toBe(false);
+  expect(() => raw.requireOk()).toThrow(InvokeError);
 });
 
 test("InvokeError is exported and catchable", () => {
@@ -72,9 +86,10 @@ test("InvokeError is exported and catchable", () => {
     operation: "get_issue",
     status: 401,
     message: "unauthorized",
-    rawBody: fixture("http_401.json"),
+    rawBody: bytes(fixture("http_401.json")),
   });
   expect(error).toBeInstanceOf(Error);
   expect(error).toBeInstanceOf(InvokeError);
   expect(error.status).toBe(401);
+  expect(error.rawText()).toBe(fixture("http_401.json"));
 });

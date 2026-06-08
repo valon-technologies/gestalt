@@ -82,7 +82,7 @@ func TestDo_POSTWithQueryParams(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
@@ -128,7 +128,7 @@ func TestDo_GETWithArrayQueryFallback(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestDo_QueryParamsNil_DefaultPOSTBehavior(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 

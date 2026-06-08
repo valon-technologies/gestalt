@@ -38,11 +38,26 @@ pub struct OperationResult {
     pub status: u16,
     /// HTTP response headers.
     pub headers: BTreeMap<String, Vec<String>>,
-    /// JSON-encoded response body.
-    pub body: String,
+    /// Serialized response body bytes.
+    pub body: Vec<u8>,
 }
 
 impl OperationResult {
+    /// Returns whether the status is in the HTTP 2xx range.
+    pub fn ok(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+
+    /// Returns the raw response body bytes.
+    pub fn bytes(&self) -> &[u8] {
+        &self.body
+    }
+
+    /// Decodes the raw response body as UTF-8 text.
+    pub fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
+
     /// Decodes the raw body as JSON without app invocation envelope handling.
     pub fn json(&self) -> std::result::Result<Value, Box<crate::InvokeError>> {
         crate::app_decode::parse_operation_result_json(&self.body).map_err(|_| {
@@ -58,10 +73,26 @@ impl OperationResult {
         })
     }
 
+    /// Returns an invoke error when the status is outside the HTTP 2xx range.
+    pub fn require_ok(&self) -> std::result::Result<(), Box<crate::InvokeError>> {
+        if self.ok() {
+            return Ok(());
+        }
+        Err(Box::new(crate::InvokeError {
+            app: String::new(),
+            operation: String::new(),
+            status: Some(self.status),
+            code: None,
+            message: format!("app invoke failed with status {}", self.status),
+            body: self.json().ok().map(Box::new),
+            raw_body: self.body.clone(),
+        }))
+    }
+
     /// Serializes a typed handler response.
     pub fn from_response<T: Serialize>(response: Response<T>) -> Self {
         let status = response.status.unwrap_or(200);
-        match serde_json::to_string(&response.body) {
+        match serde_json::to_vec(&response.body) {
             Ok(body) => Self {
                 status,
                 headers: json_response_headers(response.headers),
@@ -89,7 +120,8 @@ impl OperationResult {
         Self {
             status,
             headers: json_response_headers(BTreeMap::new()),
-            body: serde_json::json!({ "error": message.into() }).to_string(),
+            body: serde_json::to_vec(&serde_json::json!({ "error": message.into() }))
+                .unwrap_or_else(|_| br#"{"error":"internal error"}"#.to_vec()),
         }
     }
 }

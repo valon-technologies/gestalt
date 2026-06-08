@@ -82,7 +82,7 @@ func TestCompositeExecuteDelegatesDynamicAPISessionOperation(t *testing.T) {
 			name: "api",
 			execFn: func(_ context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				dynamicHit = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"operation":"` + op + `"}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"operation":"` + op + `"}`)}, nil
 			},
 		},
 		sessionCat: &catalog.Catalog{

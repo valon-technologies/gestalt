@@ -49,7 +49,7 @@ func TestResponseMappingExtractsDataAndPagination(t *testing.T) {
 	}
 
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &parsed); err != nil {
+	if err := json.Unmarshal(result.Body, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
@@ -103,7 +103,7 @@ func TestResponseMappingNestedDataPath(t *testing.T) {
 	}
 
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &parsed); err != nil {
+	if err := json.Unmarshal(result.Body, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	data := parsed["data"].([]any)
@@ -138,7 +138,7 @@ func TestResponseMappingPassesThroughErrors(t *testing.T) {
 	if result.Status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", result.Status)
 	}
-	if result.Body != `{"error":"bad request"}` {
+	if string(result.Body) != `{"error":"bad request"}` {
 		t.Fatalf("error body should pass through unchanged, got %s", result.Body)
 	}
 }
@@ -175,7 +175,7 @@ func TestResponseMappingPassesThroughWhenDataPathMissing(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if result.Body != `{"id":"not_abc123","title":"Meeting notes","hasMore":true,"cursor":"next"}` {
+	if string(result.Body) != `{"id":"not_abc123","title":"Meeting notes","hasMore":true,"cursor":"next"}` {
 		t.Fatalf("body = %s, want original response", result.Body)
 	}
 }
@@ -201,7 +201,7 @@ func TestResponseMappingWithoutConfig(t *testing.T) {
 	}
 
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &parsed); err != nil {
+	if err := json.Unmarshal(result.Body, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if parsed["raw"] != "passthrough" {

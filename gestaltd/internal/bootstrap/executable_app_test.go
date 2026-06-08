@@ -577,7 +577,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "indexeddb_roundtrip":
 				store, _ := params["store"].(string)
 				id, _ := params["id"].(string)
@@ -591,7 +591,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "cache_roundtrip":
 				key, _ := params["key"].(string)
 				value, _ := params["value"].(string)
@@ -604,7 +604,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "s3_roundtrip":
 				key, _ := params["key"].(string)
 				value, _ := params["value"].(string)
@@ -617,7 +617,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "invoke_plugin":
 				targetApp, _ := params["app"].(string)
 				targetOperation, _ := params["operation"].(string)
@@ -634,7 +634,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "workflow_manager_roundtrip":
 				record, err := fakeHostedWorkflowManagerRoundTrip(fakeHostedAppRequestContext(ctx), env)
 				if err != nil {
@@ -644,7 +644,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "agent_manager_roundtrip":
 				record, err := fakeHostedAgentManagerRoundTrip(fakeHostedAppRequestContext(ctx), env)
 				if err != nil {
@@ -654,7 +654,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			case "make_http_request":
 				targetURL, _ := params["url"].(string)
 				record, err := fakeHostedMakeHTTPRequest(targetURL, env)
@@ -665,7 +665,7 @@ func (r *capturingBundleRuntime) startFakeHostedApp(req *proto.StartHostedAppReq
 				if err != nil {
 					return nil, err
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
 			default:
 				return nil, fmt.Errorf("unknown operation %q", operation)
 			}
@@ -1193,7 +1193,7 @@ func fakeHostedInvokePlugin(providerCtx context.Context, targetApp, targetOperat
 
 	envelope.OK = true
 	envelope.Status = int(resp.GetStatus())
-	if err := json.Unmarshal([]byte(resp.GetBody()), &envelope.Body); err != nil {
+	if err := json.Unmarshal(resp.GetBody(), &envelope.Body); err != nil {
 		return envelope, fmt.Errorf("decode nested invoke body: %w", err)
 	}
 	return envelope, nil
@@ -2048,7 +2048,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("greet status = %d", result.Status)
 	}
-	if result.Body != `{"message":"Hello from config, Gestalt!"}` {
+	if string(result.Body) != `{"message":"Hello from config, Gestalt!"}` {
 		t.Fatalf("greet body = %q", result.Body)
 	}
 
@@ -2061,7 +2061,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	}
 
 	var got map[string]string
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal(status): %v", err)
 	}
 	if got["name"] != "example" {
@@ -2155,7 +2155,7 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("greet status = %d, want %d", result.Status, http.StatusOK)
 	}
-	if result.Body != `{"message":"Hi, Ada!"}` {
+	if string(result.Body) != `{"message":"Hi, Ada!"}` {
 		t.Fatalf("greet body = %q", result.Body)
 	}
 }
@@ -2257,7 +2257,7 @@ paths:
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
-	if got := result.Body; got != `{"source":"config"}` {
+	if got := string(result.Body); got != `{"source":"config"}` {
 		t.Fatalf("body = %q, want %q", got, `{"source":"config"}`)
 	}
 	if got, _ := configPath.Load().(string); got != "/items" {
@@ -2544,7 +2544,7 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
-	if result.Body != `{"message":"hello"}` {
+	if string(result.Body) != `{"message":"hello"}` {
 		t.Fatalf("body = %q, want %q", result.Body, `{"message":"hello"}`)
 	}
 }
@@ -2640,7 +2640,7 @@ paths:
 	if apiResult.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", apiResult.Status, http.StatusOK)
 	}
-	if apiResult.Body != `{"source":"api"}` {
+	if string(apiResult.Body) != `{"source":"api"}` {
 		t.Fatalf("body = %q, want %q", apiResult.Body, `{"source":"api"}`)
 	}
 
@@ -3437,7 +3437,7 @@ func TestAppProcessEnvIsolation(t *testing.T) {
 		Value string `json:"value"`
 		Found bool   `json:"found"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+	if err := json.Unmarshal(result.Body, &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if env.Found {
@@ -3448,7 +3448,7 @@ func TestAppProcessEnvIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute read_env PATH: %v", err)
 	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+	if err := json.Unmarshal(result.Body, &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
@@ -3519,7 +3519,7 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		return env.Found && env.Value != ""
@@ -3582,7 +3582,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		Value string `json:"value"`
 		Found bool   `json:"found"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+	if err := json.Unmarshal(result.Body, &env); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
@@ -3635,7 +3635,7 @@ func TestAppWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		Value string `json:"value"`
 		Found bool   `json:"found"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+	if err := json.Unmarshal(result.Body, &env); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
@@ -3688,7 +3688,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		Value string `json:"value"`
 		Found bool   `json:"found"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+	if err := json.Unmarshal(result.Body, &env); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
@@ -3733,7 +3733,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 			if err != nil {
 				return nil, err
 			}
-			return &core.OperationResult{Status: http.StatusAccepted, Body: string(body)}, nil
+			return &core.OperationResult{Status: http.StatusAccepted, Body: body}, nil
 		},
 	}); err != nil {
 		t.Fatalf("Register roadmap provider: %v", err)
@@ -3839,7 +3839,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		Status        string   `json:"status"`
 		EventTypes    []string `json:"event_types"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &roundTrip); err != nil {
+	if err := json.Unmarshal(result.Body, &roundTrip); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if roundTrip.ProviderName != "managed" || roundTrip.SessionID == "" || roundTrip.TurnID == "" || roundTrip.InteractionID == "" {
@@ -4011,7 +4011,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 			} `json:"target"`
 		} `json:"definition"`
 	}
-	if err := json.Unmarshal([]byte(applyResult.Body), &applied); err != nil {
+	if err := json.Unmarshal(applyResult.Body, &applied); err != nil {
 		t.Fatalf("json.Unmarshal(apply): %v", err)
 	}
 	if applied.ProviderName != "basic" || applied.Definition.ID != "roadmap_sync" {
@@ -4034,7 +4034,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 		t.Fatalf("Execute(get_workflow_definition): %v", err)
 	}
 	var fetched map[string]any
-	if err := json.Unmarshal([]byte(getResult.Body), &fetched); err != nil {
+	if err := json.Unmarshal(getResult.Body, &fetched); err != nil {
 		t.Fatalf("json.Unmarshal(get): %v", err)
 	}
 	if fetched["provider_name"] != "basic" {
@@ -4053,7 +4053,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 			Paused bool `json:"paused"`
 		} `json:"definition"`
 	}
-	if err := json.Unmarshal([]byte(pauseDefinitionResult.Body), &pausedDefinition); err != nil {
+	if err := json.Unmarshal(pauseDefinitionResult.Body, &pausedDefinition); err != nil {
 		t.Fatalf("json.Unmarshal(definition pause): %v", err)
 	}
 	if !pausedDefinition.Definition.Paused {
@@ -4076,7 +4076,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 			} `json:"activations"`
 		} `json:"definition"`
 	}
-	if err := json.Unmarshal([]byte(pauseActivationResult.Body), &pausedActivation); err != nil {
+	if err := json.Unmarshal(pauseActivationResult.Body, &pausedActivation); err != nil {
 		t.Fatalf("json.Unmarshal(activation pause): %v", err)
 	}
 	if len(pausedActivation.Definition.Activations) != 1 || !pausedActivation.Definition.Activations[0].Paused {
@@ -4092,7 +4092,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 	var deleted struct {
 		Deleted bool `json:"deleted"`
 	}
-	if err := json.Unmarshal([]byte(deleteResult.Body), &deleted); err != nil {
+	if err := json.Unmarshal(deleteResult.Body, &deleted); err != nil {
 		t.Fatalf("json.Unmarshal(delete): %v", err)
 	}
 	if !deleted.Deleted {
@@ -4123,7 +4123,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 		Data       map[string]any `json:"data"`
 		Extensions map[string]any `json:"extensions"`
 	}
-	if err := json.Unmarshal([]byte(deliverEventResult.Body), &deliveredEvent); err != nil {
+	if err := json.Unmarshal(deliverEventResult.Body, &deliveredEvent); err != nil {
 		t.Fatalf("json.Unmarshal(deliver event): %v", err)
 	}
 	if deliveredEvent.ID == "" || deliveredEvent.Type != "roadmap.item.updated" || deliveredEvent.Source != "roadmap" || deliveredEvent.Subject != "item-123" {
@@ -4213,7 +4213,7 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	var deliveredEvent struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal([]byte(deliverEventResult.Body), &deliveredEvent); err != nil {
+	if err := json.Unmarshal(deliverEventResult.Body, &deliveredEvent); err != nil {
 		t.Fatalf("json.Unmarshal(deliver event): %v", err)
 	}
 	if deliveredEvent.ID == "" {
@@ -4237,7 +4237,7 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 	var applyBody struct {
 		Error string `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(applyResult.Body), &applyBody); err != nil {
+	if err := json.Unmarshal(applyResult.Body, &applyBody); err != nil {
 		t.Fatalf("json.Unmarshal(apply): %v", err)
 	}
 	if !strings.Contains(applyBody.Error, `workflow manager operation "definitions.apply" is not allowed`) {
@@ -4331,7 +4331,7 @@ func TestPluginInvokesInheritAmbientConnectionAndAllowOverride(t *testing.T) {
 			}
 
 			var got invokePluginEnvelope
-			if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+			if err := json.Unmarshal(result.Body, &got); err != nil {
 				t.Fatalf("json.Unmarshal: %v", err)
 			}
 			if !got.OK {
@@ -4394,7 +4394,7 @@ func TestPluginInvokesInheritResolvedCredentialConnection(t *testing.T) {
 	}
 
 	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !got.OK {
@@ -4438,7 +4438,7 @@ func TestPluginInvokesPreserveCallerScopes(t *testing.T) {
 	}
 
 	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if got.OK {
@@ -4479,7 +4479,7 @@ func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
 	}
 
 	var got requestContextBody
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if got.Credential.Connection != "work" {
@@ -4585,7 +4585,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 		Body                   map[string]any `json:"body"`
 		Error                  string         `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !got.OK {
@@ -4649,7 +4649,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 		Body   any    `json:"body"`
 		Error  string `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(missingResult.Body), &missingGot); err != nil {
+	if err := json.Unmarshal(missingResult.Body, &missingGot); err != nil {
 		t.Fatalf("json.Unmarshal missing credential: %v", err)
 	}
 	if !missingGot.OK {
@@ -4722,7 +4722,7 @@ func TestPluginInvokesDoNotLeakCallerAccessToPolicylessTargets(t *testing.T) {
 	}
 
 	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !got.OK {
@@ -4815,7 +4815,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				Body   any    `json:"body"`
 				Error  string `json:"error"`
 			}
-			if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+			if err := json.Unmarshal(result.Body, &got); err != nil {
 				t.Fatalf("json.Unmarshal: %v", err)
 			}
 			if tc.wantError == "" {
@@ -4899,7 +4899,7 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		return env.Found && env.Value != ""
@@ -5454,7 +5454,7 @@ func TestRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *tes
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal env result for %s: %v", envName, err)
 		}
 		return env.Value, env.Found
@@ -5556,7 +5556,7 @@ func TestRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapability
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal env result for %s: %v", envName, err)
 		}
 		if !env.Found {
@@ -5680,7 +5680,7 @@ func TestRuntimePublicIndexedDBRelayRoundTripsThroughHostedApp(t *testing.T) {
 	}
 
 	var record map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+	if err := json.Unmarshal(result.Body, &record); err != nil {
 		t.Fatalf("unmarshal indexeddb_roundtrip: %v", err)
 	}
 	if got := record["value"]; got != "ship-it" {
@@ -5796,7 +5796,7 @@ func TestRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(t *
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal env result for %s: %v", envName, err)
 		}
 		return env.Value, env.Found
@@ -5913,7 +5913,7 @@ func TestRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 	}
 
 	var record map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+	if err := json.Unmarshal(result.Body, &record); err != nil {
 		t.Fatalf("unmarshal cache_roundtrip: %v", err)
 	}
 	if got := record["found"]; got != true {
@@ -6035,7 +6035,7 @@ func TestRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 		Size  int64    `json:"size"`
 		Found bool     `json:"found"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal s3_roundtrip: %v", err)
 	}
 	if body.Body != "ship-it" {
@@ -6211,7 +6211,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 	}
 
 	var got invokePluginEnvelope
-	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+	if err := json.Unmarshal(result.Body, &got); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !got.OK {
@@ -6309,7 +6309,7 @@ func TestRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelCapa
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal env result for %s: %v", envName, err)
 		}
 		return env.Value, env.Found
@@ -6954,7 +6954,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		ActivationID string `json:"activation_id"`
 		Operation    string `json:"operation"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal workflow_manager_roundtrip: %v", err)
 	}
 	if body.ProviderName != "managed" {
@@ -7304,7 +7304,7 @@ func TestRuntimePublicEgressProxyRoundTripsThroughHostedApp(t *testing.T) {
 		Status int    `json:"status"`
 		Body   string `json:"body"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal make_http_request: %v", err)
 	}
 	if body.Status != http.StatusOK {
@@ -7512,7 +7512,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					t.Fatalf("Execute indexeddb_roundtrip: %v", err)
 				}
 				var record map[string]any
-				if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+				if err := json.Unmarshal(result.Body, &record); err != nil {
 					t.Fatalf("unmarshal record: %v", err)
 				}
 				if got := record["value"]; got != "ship-it" {
@@ -7803,7 +7803,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				t.Fatalf("Execute indexeddb_roundtrip: %v", err)
 			}
 			var record map[string]any
-			if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+			if err := json.Unmarshal(result.Body, &record); err != nil {
 				t.Fatalf("unmarshal record: %v", err)
 			}
 			if got := record["value"]; got != "ship-it" {
@@ -7916,7 +7916,7 @@ func TestPluginIndexedDBUsesSharedDefaultIndexedDB(t *testing.T) {
 		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
 	}
 	var record map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+	if err := json.Unmarshal(result.Body, &record); err != nil {
 		t.Fatalf("unmarshal record: %v", err)
 	}
 	if got := record["value"]; got != "stored" {
@@ -8041,7 +8041,7 @@ func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
 		Size  int64    `json:"size"`
 		Found bool     `json:"found"`
 	}
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal roundtrip body: %v", err)
 	}
 	if body.Body != "ship-it" {
@@ -8198,7 +8198,7 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 			Value string `json:"value"`
 			Found bool   `json:"found"`
 		}
-		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		if err := json.Unmarshal(result.Body, &env); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		return env.Found && env.Value != ""

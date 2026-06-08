@@ -10,7 +10,7 @@ type InvokeError struct {
 	Code      string
 	Message   string
 	Body      any
-	RawBody   string
+	RawBody   []byte
 }
 
 func (e *InvokeError) Error() string {

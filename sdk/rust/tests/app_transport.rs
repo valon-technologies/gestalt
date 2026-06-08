@@ -114,7 +114,8 @@ impl ProtoApp for TestAppServer {
 				"idempotency_key": request.idempotency_key,
 				"credential_mode": request.credential_mode,
 			})
-			.to_string(),
+			.to_string()
+            .into_bytes(),
 		}))
     }
 
@@ -148,7 +149,8 @@ impl ProtoApp for TestAppServer {
                 "instance": request.instance,
                 "idempotency_key": request.idempotency_key,
             })
-            .to_string(),
+            .to_string()
+            .into_bytes(),
         }))
     }
 }
@@ -202,7 +204,7 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
         Some(&vec!["https://example.test/created".to_string()])
     );
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&response.body).expect("parse response"),
+        serde_json::from_slice::<serde_json::Value>(&response.body).expect("parse response"),
         serde_json::json!({
             "context_subject_id": "user:app-access",
             "app": "github",
@@ -402,7 +404,7 @@ async fn app_invokes_graphql_surface() {
 
     assert_eq!(response.status, 208);
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(&response.body).expect("parse response"),
+        serde_json::from_slice::<serde_json::Value>(&response.body).expect("parse response"),
         serde_json::json!({
             "context_subject_id": "user:graphql-app-access",
             "app": "linear",

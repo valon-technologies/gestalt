@@ -223,7 +223,7 @@ func TestExecuteREST_CatalogQueryParam(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
@@ -292,7 +292,7 @@ func TestExecuteREST_WireNameQueryParam(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
@@ -363,7 +363,7 @@ func TestExecuteREST_WireNameBodyParam(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
 
@@ -423,7 +423,7 @@ func TestExecuteREST_CatalogHeaderParam(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 

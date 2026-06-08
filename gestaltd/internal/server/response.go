@@ -43,5 +43,5 @@ func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {
 		}
 	}
 	w.WriteHeader(result.Status)
-	_, _ = w.Write([]byte(result.Body))
+	_, _ = w.Write(result.Body)
 }

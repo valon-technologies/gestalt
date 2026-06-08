@@ -66,7 +66,7 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 	idempotencyKey := invocation.IdempotencyKeyFromContext(ctx)
 	return &core.OperationResult{
 		Status: 201,
-		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role, idempotencyKey, host.PublicBaseURL),
+		Body:   []byte(fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role, idempotencyKey, host.PublicBaseURL)),
 	}, nil
 }
 
@@ -251,7 +251,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Execute: %v", err)
 			}
-			if result.Status != 201 || result.Body != tc.wantExecuteBody {
+			if result.Status != 201 || string(result.Body) != tc.wantExecuteBody {
 				t.Fatalf("unexpected execute result: %+v", result)
 			}
 
@@ -703,7 +703,7 @@ func (s *unsupportedCapabilityProviderServer) StartProvider(context.Context, *pr
 }
 
 func (s *unsupportedCapabilityProviderServer) Execute(context.Context, *proto.ExecuteRequest) (*proto.OperationResult, error) {
-	return &proto.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+	return &proto.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
 }
 
 func (s *unsupportedCapabilityProviderServer) GetSessionCatalog(context.Context, *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {

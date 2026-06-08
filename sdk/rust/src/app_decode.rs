@@ -12,7 +12,7 @@ pub struct InvokeError {
     pub code: Option<String>,
     pub message: String,
     pub body: Option<Box<Value>>,
-    pub raw_body: String,
+    pub raw_body: Vec<u8>,
 }
 
 pub(crate) fn decode_app_result(
@@ -35,7 +35,7 @@ pub(crate) fn decode_graphql_result(
     Ok(decoded)
 }
 
-fn raise_graphql_errors(app: &str, raw_body: &str, value: &Value) -> Result<(), Box<InvokeError>> {
+fn raise_graphql_errors(app: &str, raw_body: &[u8], value: &Value) -> Result<(), Box<InvokeError>> {
     if let Value::Object(object) = value {
         if let Some(Value::Array(errors)) = object.get("errors") {
             if !errors.is_empty() {
@@ -46,7 +46,7 @@ fn raise_graphql_errors(app: &str, raw_body: &str, value: &Value) -> Result<(), 
                     code: Some("graphql_errors".to_string()),
                     message: graphql_error_message(errors),
                     body: Some(Box::new(value.clone())),
-                    raw_body: raw_body.to_string(),
+                    raw_body: raw_body.to_vec(),
                 }));
             }
         }
@@ -54,19 +54,20 @@ fn raise_graphql_errors(app: &str, raw_body: &str, value: &Value) -> Result<(), 
     Ok(())
 }
 
-pub(crate) fn parse_operation_result_json(body: &str) -> Result<Value, serde_json::Error> {
-    if body.trim().is_empty() {
+pub(crate) fn parse_operation_result_json(body: &[u8]) -> Result<Value, serde_json::Error> {
+    if body.iter().all(u8::is_ascii_whitespace) {
         return Ok(serde_json::json!({}));
     }
-    serde_json::from_str(body)
+    serde_json::from_slice(body)
 }
 
 fn decode_app_body(
     app: &str,
     operation: &str,
     status: u16,
-    body: &str,
+    body: &[u8],
 ) -> Result<Value, Box<InvokeError>> {
+    let raw_body = body.to_vec();
     let parsed = match parse_operation_result_json(body) {
         Ok(value) => value,
         Err(_) if status >= 400 => {
@@ -77,7 +78,7 @@ fn decode_app_body(
                 code: None,
                 message: format!("app invoke failed with status {status}"),
                 body: None,
-                raw_body: body.to_string(),
+                raw_body,
             }));
         }
         Err(_) => {
@@ -88,7 +89,7 @@ fn decode_app_body(
                 code: None,
                 message: "app invoke response is not valid JSON".to_string(),
                 body: None,
-                raw_body: body.to_string(),
+                raw_body,
             }));
         }
     };
@@ -102,7 +103,7 @@ fn decode_app_body(
             code,
             message: message.unwrap_or_else(|| format!("app invoke failed with status {status}")),
             body: Some(Box::new(parsed)),
-            raw_body: body.to_string(),
+            raw_body,
         }));
     }
 
@@ -117,7 +118,7 @@ fn decode_app_body(
                     code,
                     message: message.unwrap_or_else(|| "app invoke failed".to_string()),
                     body: Some(Box::new(parsed)),
-                    raw_body: body.to_string(),
+                    raw_body: raw_body.clone(),
                 }));
             }
             if status == "success" && object.contains_key("data") {
@@ -167,7 +168,7 @@ mod tests {
         OperationResult {
             status,
             headers: Default::default(),
-            body: body.to_string(),
+            body: body.as_bytes().to_vec(),
         }
     }
 

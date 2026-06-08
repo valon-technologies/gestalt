@@ -45,7 +45,7 @@ var (
 type UpstreamHTTPError struct {
 	Status  int
 	Headers http.Header
-	Body    string
+	Body    []byte
 	Cause   error
 }
 
@@ -56,7 +56,7 @@ func (e *UpstreamHTTPError) Error() string {
 	if e.Cause != nil {
 		return e.Cause.Error()
 	}
-	return fmt.Sprintf("HTTP %d: %s", e.Status, e.Body)
+	return fmt.Sprintf("HTTP %d: %s", e.Status, string(e.Body))
 }
 
 func (e *UpstreamHTTPError) Unwrap() error {
@@ -269,7 +269,7 @@ func doOnce(
 				return nil, resp.StatusCode, retryAfter, retryableStatusCodes[resp.StatusCode], &UpstreamHTTPError{
 					Status:  resp.StatusCode,
 					Headers: resp.Header.Clone(),
-					Body:    string(respBody),
+					Body:    respBody,
 					Cause:   err,
 				}
 			}
@@ -280,14 +280,14 @@ func doOnce(
 		return nil, resp.StatusCode, retryAfter, retryable, &UpstreamHTTPError{
 			Status:  resp.StatusCode,
 			Headers: resp.Header.Clone(),
-			Body:    string(respBody),
+			Body:    respBody,
 		}
 	}
 
 	return &core.OperationResult{
 		Status:  resp.StatusCode,
 		Headers: resp.Header,
-		Body:    string(respBody),
+		Body:    respBody,
 	}, resp.StatusCode, retryAfter, false, nil
 }
 
@@ -382,7 +382,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 		return nil, &UpstreamHTTPError{
 			Status:  resp.StatusCode,
 			Headers: resp.Header.Clone(),
-			Body:    string(respBody),
+			Body:    respBody,
 		}
 	}
 
@@ -402,9 +402,9 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 		}
 	}
 
-	resultBody := string(respBody)
+	resultBody := respBody
 	if raw, ok := parsed[graphqlRespKeyData]; ok {
-		resultBody = string(raw)
+		resultBody = raw
 	}
 
 	return &core.OperationResult{

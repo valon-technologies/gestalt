@@ -32,7 +32,7 @@ class OperationDefinition:
 @dataclass(frozen=True, slots=True)
 class OperationResult:
     status: int
-    body: str
+    body: bytes
     headers: dict[str, list[str]] = field(default_factory=dict)
 
 
@@ -92,7 +92,11 @@ def execute_operation(
             body = result
             headers = _json_headers(None)
 
-        return OperationResult(status=status, body=json_body(body), headers=headers)
+        return OperationResult(
+            status=status,
+            body=json_body(body).encode("utf-8"),
+            headers=headers,
+        )
     except Error as error:
         return _error_result(error.status, error.message)
     except Exception as error:
@@ -123,7 +127,7 @@ def _error_result(status: int, message: str) -> OperationResult:
     return OperationResult(
         status=status,
         headers=_json_headers(None),
-        body=json_body({"error": message}),
+        body=json_body({"error": message}).encode("utf-8"),
     )
 
 

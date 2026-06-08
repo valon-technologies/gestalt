@@ -105,8 +105,12 @@ export type ResponseHeaders = Readonly<Record<string, string | readonly string[]
 export interface OperationResult {
   status: number;
   headers: Record<string, string[]>;
-  body: string;
+  body: Uint8Array;
+  ok: boolean;
+  bytes(): Uint8Array;
+  text(): string;
   json<T = unknown>(): T;
+  requireOk(): OperationResult;
 }
 
 /**

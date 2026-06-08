@@ -2,12 +2,32 @@ import type { OperationResult } from "./api.ts";
 import { InvokeError } from "./invoke-error.ts";
 
 export function operationResult(
-  input: Omit<OperationResult, "json">,
+  input: Omit<OperationResult, "ok" | "bytes" | "text" | "json" | "requireOk">,
 ): OperationResult {
+  const body = new Uint8Array(input.body);
   return {
     ...input,
+    body,
+    ok: input.status >= 200 && input.status < 300,
+    bytes(): Uint8Array {
+      return new Uint8Array(body);
+    },
+    text(): string {
+      return decodeBodyText(body);
+    },
     json<T = unknown>(): T {
-      return parseOperationResultJson(input.body) as T;
+      return parseOperationResultJson(body) as T;
+    },
+    requireOk(): OperationResult {
+      if (input.status >= 200 && input.status < 300) {
+        return this;
+      }
+      throw new InvokeError({
+        status: input.status,
+        body: parseOperationResultJsonIfPossible(body),
+        rawBody: body,
+        message: `app invoke failed with status ${input.status}`,
+      });
     },
   };
 }
@@ -30,7 +50,7 @@ export function decodeGraphQLResult<T = unknown>(
   return decoded as T;
 }
 
-function throwGraphQLErrors(app: string, rawBody: string, value: unknown): void {
+function throwGraphQLErrors(app: string, rawBody: Uint8Array, value: unknown): void {
   if (!isRecord(value)) {
     return;
   }
@@ -51,7 +71,7 @@ function decodeAppBody(
   app: string,
   operation: string,
   status: number,
-  body: string,
+  body: Uint8Array,
 ): unknown {
   let parsed: unknown;
   try {
@@ -107,18 +127,31 @@ function decodeAppBody(
   return parsed;
 }
 
-function parseOperationResultJson(body: string): unknown {
-  if (body.trim() === "") {
+function parseOperationResultJson(body: Uint8Array): unknown {
+  const text = decodeBodyText(body);
+  if (text.trim() === "") {
     return {};
   }
   try {
-    return JSON.parse(body) as unknown;
+    return JSON.parse(text) as unknown;
   } catch {
     throw new InvokeError({
       message: "operation result body is not valid JSON",
       rawBody: body,
     });
   }
+}
+
+function parseOperationResultJsonIfPossible(body: Uint8Array): unknown {
+  try {
+    return parseOperationResultJson(body);
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeBodyText(body: Uint8Array): string {
+  return new TextDecoder("utf-8", { fatal: false }).decode(body);
 }
 
 function applyInvokeErrorFields(error: InvokeError, parsed: unknown): void {

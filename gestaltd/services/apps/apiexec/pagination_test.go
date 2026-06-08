@@ -50,7 +50,7 @@ func TestDoPaginatedCursor(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != 4 {
@@ -101,7 +101,7 @@ func TestDoPaginatedOffset(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != 5 {
@@ -141,7 +141,7 @@ func TestDoPaginatedMaxPages(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != maxPages {
@@ -185,7 +185,7 @@ func TestDoPaginatedEmptyResults(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != 2 {
@@ -269,7 +269,7 @@ func TestDoPaginatedPage(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != 3 {
@@ -319,7 +319,7 @@ func TestDoPaginatedNumericCursor(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != 3 {
@@ -421,7 +421,7 @@ func TestDoPaginatedNestedResultsPath(t *testing.T) {
 	}
 
 	var items []any
-	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+	if err := json.Unmarshal(result.Body, &items); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if len(items) != 3 {

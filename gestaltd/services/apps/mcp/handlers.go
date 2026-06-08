@@ -83,10 +83,11 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 			return orig, nil
 		}
 
+		body := string(result.Body)
 		if result.Status >= http.StatusBadRequest {
-			return mcpgo.NewToolResultError(result.Body), nil
+			return mcpgo.NewToolResultError(body), nil
 		}
-		return mcpgo.NewToolResultText(result.Body), nil
+		return mcpgo.NewToolResultText(body), nil
 	}
 }
 

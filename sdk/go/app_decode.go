@@ -1,6 +1,7 @@
 package gestalt
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -36,7 +37,7 @@ func decodeAppGraphQLResult(app string, result *OperationResult) (any, error) {
 	return decoded, nil
 }
 
-func graphQLErrors(app, rawBody string, value any) error {
+func graphQLErrors(app string, rawBody []byte, value any) error {
 	object, ok := value.(map[string]any)
 	if !ok {
 		return nil
@@ -109,7 +110,7 @@ func decodeValueAs[T any](decoded any, out *T) error {
 	return nil
 }
 
-func decodeAppBody(app, operation string, status int, body string) (any, error) {
+func decodeAppBody(app, operation string, status int, body []byte) (any, error) {
 	parsed, err := parseOperationResultJSON(body)
 	if status >= 400 {
 		invokeErr := &InvokeError{
@@ -156,12 +157,12 @@ func decodeAppBody(app, operation string, status int, body string) (any, error) 
 	return parsed, nil
 }
 
-func parseOperationResultJSON(body string) (any, error) {
-	if strings.TrimSpace(body) == "" {
+func parseOperationResultJSON(body []byte) (any, error) {
+	if len(bytes.TrimSpace(body)) == 0 {
 		return map[string]any{}, nil
 	}
 	var value any
-	decoder := json.NewDecoder(strings.NewReader(body))
+	decoder := json.NewDecoder(bytes.NewReader(body))
 	if err := decoder.Decode(&value); err != nil {
 		return nil, err
 	}

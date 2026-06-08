@@ -29,7 +29,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 			N:        "audit-prov",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "ping", Method: http.MethodPost}},
@@ -121,7 +121,7 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 			N:        "audit-fallback-prov",
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "ping", Method: http.MethodPost}},

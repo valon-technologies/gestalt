@@ -259,7 +259,7 @@ func TestBuildExecuteRoutesQueryParamsUsingCatalogMetadata(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 
@@ -377,7 +377,7 @@ func TestBuildAuthHeader(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["x_api_key"] != "my-secret-key" {
@@ -434,7 +434,7 @@ func TestBuildOAuthConnectionOverrideClearsOpenAPIManualAuth(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["authorization"] != "Bearer oauth-access-token" {
@@ -482,7 +482,7 @@ func TestBuildManualConnectionOverrideAppliesTokenPrefix(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["authorization"] != "token manual-access-token" {
@@ -539,7 +539,7 @@ func TestBuildAuthMapping(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["api_key"] != "k1" {
@@ -706,7 +706,7 @@ func TestBuildConfigOverridesAuthHeader(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["custom_header"] != "secret" {
@@ -1131,7 +1131,7 @@ func TestBuildAuthMappingFromConfig(t *testing.T) {
 	}
 
 	var resp map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &resp); err != nil {
+	if err := json.Unmarshal(result.Body, &resp); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if resp["api_key"] != "k1" {

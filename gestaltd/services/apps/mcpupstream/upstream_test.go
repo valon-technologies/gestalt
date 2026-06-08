@@ -170,7 +170,7 @@ func TestUpstream_ExecuteCallsTool(t *testing.T) {
 		t.Fatal("MCPResult is nil")
 	}
 	var body map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal body: %v", err)
 	}
 	if _, ok := body["content"].([]any); !ok {
@@ -195,7 +195,7 @@ func TestUpstream_ExecuteCallsTool(t *testing.T) {
 		t.Fatal("MCPResult is nil")
 	}
 	body = nil
-	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+	if err := json.Unmarshal(result.Body, &body); err != nil {
 		t.Fatalf("unmarshal body: %v", err)
 	}
 	if _, ok := body["content"].([]any); !ok {

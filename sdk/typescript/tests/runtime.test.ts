@@ -117,6 +117,10 @@ import {
   waitForPath,
 } from "./helpers.ts";
 
+function jsonBody(body: Uint8Array): unknown {
+  return JSON.parse(new TextDecoder("utf-8", { fatal: false }).decode(body)) as unknown;
+}
+
 async function expectConnectCode(
   promise: Promise<unknown>,
   code: Code,
@@ -535,7 +539,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
       },
     }),
   );
-  expect(JSON.parse(unconfiguredResult.body)).toMatchObject({
+  expect(jsonBody(unconfiguredResult.body)).toMatchObject({
     configuredName: "",
     configuredRegion: "",
   });
@@ -582,7 +586,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
       idempotencyKey: " tool-call-123 ",
     }),
   );
-  expect(JSON.parse(result.body)).toEqual({
+  expect(jsonBody(result.body)).toEqual({
     message: "Hello, Ada.",
     configuredName: "configured-provider",
     region: "iad",
@@ -942,7 +946,7 @@ export const app = defineApp({
       }),
     );
     expect(echoedBody.status).toBe(200);
-    expect(JSON.parse(echoedBody.body)).toEqual({
+    expect(jsonBody(echoedBody.body)).toEqual({
       body: "hello",
     });
 
@@ -952,7 +956,7 @@ export const app = defineApp({
       }),
     );
     expect(echoedStatusBody.status).toBe(200);
-    expect(JSON.parse(echoedStatusBody.body)).toEqual({
+    expect(jsonBody(echoedStatusBody.body)).toEqual({
       status: 42,
       body: "payload",
     });
@@ -967,7 +971,7 @@ export const app = defineApp({
       "application/json",
     ]);
     expect(created.headers["Location"]?.values).toEqual(["/items/new-id"]);
-    expect(JSON.parse(created.body)).toEqual({
+    expect(jsonBody(created.body)).toEqual({
       id: "new-id",
     });
 
@@ -977,7 +981,7 @@ export const app = defineApp({
       }),
     );
     expect(unknown.status).toBe(404);
-    expect(JSON.parse(unknown.body)).toEqual({
+    expect(jsonBody(unknown.body)).toEqual({
       error: "unknown operation",
     });
 
@@ -987,7 +991,7 @@ export const app = defineApp({
       }),
     );
     expect(exploded.status).toBe(500);
-    expect(JSON.parse(exploded.body)).toEqual({
+    expect(jsonBody(exploded.body)).toEqual({
       error: "boom",
     });
   } finally {
@@ -1973,7 +1977,7 @@ test("integration provider request context includes workflow metadata", async ()
     }),
   );
 
-  expect(JSON.parse(result.body)).toEqual({
+  expect(jsonBody(result.body)).toEqual({
     host: {
       publicBaseUrl: "https://gestalt.example.test",
     },
@@ -2047,7 +2051,7 @@ test("integration provider request context includes workflow metadata", async ()
     }),
   );
 
-  expect(JSON.parse(omittedToolRefs.body)).toMatchObject({
+  expect(jsonBody(omittedToolRefs.body)).toMatchObject({
     host: {
       publicBaseUrl: "https://gestalt.example.test",
     },

@@ -71,7 +71,7 @@ func (i *recordingAppInvocation) Invoke(ctx context.Context, p *principal.Princi
 		i.toolRefs = append([]coreagent.ToolRef(nil), refs.Refs...)
 	}
 	i.params = params
-	return &core.OperationResult{Status: 202, Body: "accepted"}, nil
+	return &core.OperationResult{Status: 202, Body: []byte("accepted")}, nil
 }
 
 func (i *recordingAppInvocation) InvokeGraphQL(ctx context.Context, _ *principal.Principal, providerName, _ string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
@@ -79,7 +79,7 @@ func (i *recordingAppInvocation) InvokeGraphQL(ctx context.Context, _ *principal
 	i.graphQLProviderName = providerName
 	i.graphQLDocument = request.Document
 	i.graphQLVariables = request.Variables
-	return &core.OperationResult{Status: 208, Body: "graphql-accepted"}, nil
+	return &core.OperationResult{Status: 208, Body: []byte("graphql-accepted")}, nil
 }
 
 type recordingAuthorizationProvider struct {
@@ -171,7 +171,7 @@ func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.GetStatus() != 202 || resp.GetBody() != "accepted" {
+	if resp.GetStatus() != 202 || string(resp.GetBody()) != "accepted" {
 		t.Fatalf("Invoke response = %+v, want accepted", resp)
 	}
 
@@ -269,7 +269,7 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.GetStatus() != 202 || resp.GetBody() != "accepted" {
+	if resp.GetStatus() != 202 || string(resp.GetBody()) != "accepted" {
 		t.Fatalf("Invoke response = %+v, want accepted", resp)
 	}
 	if len(authz.requests) != 0 {
@@ -374,7 +374,7 @@ func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeGraphQL: %v", err)
 	}
-	if resp.GetStatus() != 208 || resp.GetBody() != "graphql-accepted" {
+	if resp.GetStatus() != 208 || string(resp.GetBody()) != "graphql-accepted" {
 		t.Fatalf("InvokeGraphQL response = %+v, want graphql accepted", resp)
 	}
 	if got := authz.requests[0].GetResource().GetType() + ":" + authz.requests[0].GetResource().GetId(); got != "gestalt.app.surface:graph/surfaces/graphql" {
@@ -433,7 +433,7 @@ func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.GetStatus() != 202 || resp.GetBody() != "accepted" {
+	if resp.GetStatus() != 202 || string(resp.GetBody()) != "accepted" {
 		t.Fatalf("Invoke response = %+v, want accepted", resp)
 	}
 	if len(authz.requests) != 0 {

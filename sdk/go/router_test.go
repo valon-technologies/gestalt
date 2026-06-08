@@ -187,7 +187,7 @@ func TestRouterOperationExecution(t *testing.T) {
 	if got := result.Headers.Get("Location"); got != "/echo/hello" {
 		t.Fatalf("Location header = %q, want /echo/hello", got)
 	}
-	if result.Body != `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}` {
+	if string(result.Body) != `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}` {
 		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}`)
 	}
 
@@ -203,7 +203,7 @@ func TestRouterOperationExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute(with params): %v", err)
 	}
-	if result.Body != `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"subject","credential_subject_id":"user:user-123"}` {
+	if string(result.Body) != `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"subject","credential_subject_id":"user:user-123"}` {
 		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"subject","credential_subject_id":"user:user-123"}`)
 	}
 
@@ -233,7 +233,7 @@ func TestRouterOperationExecution(t *testing.T) {
 	if result.Status != http.StatusBadRequest {
 		t.Fatalf("bad_request status = %d, want %d", result.Status, http.StatusBadRequest)
 	}
-	if result.Body != `{"error":"invalid input"}` {
+	if string(result.Body) != `{"error":"invalid input"}` {
 		t.Fatalf("bad_request body = %q, want %q", result.Body, `{"error":"invalid input"}`)
 	}
 
@@ -244,7 +244,7 @@ func TestRouterOperationExecution(t *testing.T) {
 	if result.Status != http.StatusInternalServerError {
 		t.Fatalf("plain_error status = %d, want %d", result.Status, http.StatusInternalServerError)
 	}
-	if result.Body != `{"error":"internal error"}` {
+	if string(result.Body) != `{"error":"internal error"}` {
 		t.Fatalf("plain_error body = %q, want %q", result.Body, `{"error":"internal error"}`)
 	}
 

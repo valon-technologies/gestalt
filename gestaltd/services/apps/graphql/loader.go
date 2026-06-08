@@ -132,7 +132,7 @@ func SchemaFromResult(result *core.OperationResult) (*Schema, error) {
 	if result.Status >= http.StatusBadRequest {
 		return nil, fmt.Errorf("graphql introspection returned HTTP %d", result.Status)
 	}
-	return SchemaFromBody([]byte(result.Body))
+	return SchemaFromBody(result.Body)
 }
 
 func addOperations(schema *Schema, def *declarative.Definition, root *TypeName, isMutation bool, allowedOps map[string]*operationexposure.OperationOverride) error {

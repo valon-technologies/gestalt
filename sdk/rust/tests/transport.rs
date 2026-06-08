@@ -419,7 +419,7 @@ async fn serves_provider_requests_over_unix_socket() {
 
     assert_eq!(response.status, 200);
     assert_eq!(
-        response.body,
+        String::from_utf8_lossy(&response.body),
         r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_activation_id":"activation-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_app":"target","tool_ref_operation":"reviews.get","tool_ref_run_as":"service_account:review-worker"}"#
     );
 

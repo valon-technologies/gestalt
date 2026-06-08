@@ -9,12 +9,12 @@ import (
 )
 
 func TestDecodeAppResultSharedFixtures(t *testing.T) {
-	fixture := func(name string) string {
+	fixture := func(name string) []byte {
 		body, err := os.ReadFile(filepath.Join("..", "testdata", "app_invoke", name))
 		if err != nil {
 			t.Fatalf("read fixture %s: %v", name, err)
 		}
-		return string(body)
+		return body
 	}
 
 	tests := []struct {
@@ -45,12 +45,12 @@ func TestDecodeAppResultSharedFixtures(t *testing.T) {
 }
 
 func TestDecodeAppResultErrors(t *testing.T) {
-	fixture := func(name string) string {
+	fixture := func(name string) []byte {
 		body, err := os.ReadFile(filepath.Join("..", "testdata", "app_invoke", name))
 		if err != nil {
 			t.Fatalf("read fixture %s: %v", name, err)
 		}
-		return string(body)
+		return body
 	}
 
 	_, err := decodeAppOperationResult("github", "get_issue", &OperationResult{Status: 200, Body: fixture("error_envelope.json")})
@@ -63,12 +63,12 @@ func TestDecodeAppResultErrors(t *testing.T) {
 	}
 
 	_, err = decodeAppOperationResult("github", "get_issue", &OperationResult{Status: 401, Body: fixture("http_401.json")})
-	if !errors.As(err, &invokeErr) || invokeErr.Status != 401 || invokeErr.RawBody == "" {
+	if !errors.As(err, &invokeErr) || invokeErr.Status != 401 || len(invokeErr.RawBody) == 0 {
 		t.Fatalf("HTTP InvokeError = %+v err=%v", invokeErr, err)
 	}
 
 	_, err = decodeAppOperationResult("github", "get_issue", &OperationResult{Status: 200, Body: fixture("invalid_json.txt")})
-	if !errors.As(err, &invokeErr) || invokeErr.RawBody == "" {
+	if !errors.As(err, &invokeErr) || len(invokeErr.RawBody) == 0 {
 		t.Fatalf("invalid JSON InvokeError = %+v err=%v", invokeErr, err)
 	}
 }
@@ -80,7 +80,7 @@ func TestDecodeGraphQLResultErrors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read fixture: %v", err)
 			}
-			_, err = decodeAppGraphQLResult("linear", &OperationResult{Status: 200, Body: string(body)})
+			_, err = decodeAppGraphQLResult("linear", &OperationResult{Status: 200, Body: body})
 			var invokeErr *InvokeError
 			if !errors.As(err, &invokeErr) || invokeErr.Code != "graphql_errors" {
 				t.Fatalf("GraphQL error = %+v err=%v", invokeErr, err)

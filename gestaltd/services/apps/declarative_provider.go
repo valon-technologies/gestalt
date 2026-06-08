@@ -144,7 +144,7 @@ func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
 
 func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	if !declarativeHasOperation(p.Base.Catalog(), operation) {
-		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
+		return &core.OperationResult{Status: http.StatusNotFound, Body: []byte(`{"error":"unknown operation"}`)}, nil
 	}
 	parser, err := p.tokenParserForExecution(ctx, operation, params)
 	if err != nil {

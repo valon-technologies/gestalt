@@ -488,11 +488,12 @@ func TestProviderServerExecute(t *testing.T) {
 			if resp.GetStatus() != tt.wantStatus {
 				t.Fatalf("Status = %d, want %d", resp.GetStatus(), tt.wantStatus)
 			}
-			if tt.wantBody != "" && resp.GetBody() != tt.wantBody {
+			body := string(resp.GetBody())
+			if tt.wantBody != "" && body != tt.wantBody {
 				t.Fatalf("Body = %q, want %q", resp.GetBody(), tt.wantBody)
 			}
 			for _, want := range tt.wantBodyContain {
-				if !strings.Contains(resp.GetBody(), want) {
+				if !strings.Contains(body, want) {
 					t.Fatalf("Body = %q, want substring %q", resp.GetBody(), want)
 				}
 			}

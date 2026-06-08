@@ -102,7 +102,10 @@ async fn executes_registered_operation() {
         result.headers.get("Location").map(Vec::as_slice),
         Some(&["/echo".to_owned()][..])
     );
-    assert_eq!(result.body, r#"{"message":"hello"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&result.body),
+        r#"{"message":"hello"}"#
+    );
 }
 
 #[test]
@@ -349,7 +352,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .into_inner();
     assert_eq!(success.status, 200);
     assert_eq!(
-        success.body,
+        String::from_utf8_lossy(&success.body),
         r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"subject","idempotency_key":"tool-call-123"}"#
     );
 
@@ -362,7 +365,10 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute missing")
         .into_inner();
     assert_eq!(unknown.status, 404);
-    assert_eq!(unknown.body, r#"{"error":"unknown operation"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&unknown.body),
+        r#"{"error":"unknown operation"}"#
+    );
 
     let decode = client
         .execute(GrpcRequest::new(ExecuteRequest {
@@ -374,8 +380,9 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute decode")
         .into_inner();
     assert_eq!(decode.status, 400);
-    assert!(decode.body.contains("decode params for"));
-    assert!(decode.body.contains("greet"));
+    let decode_body = String::from_utf8_lossy(&decode.body);
+    assert!(decode_body.contains("decode params for"));
+    assert!(decode_body.contains("greet"));
 
     let handler_error = client
         .execute(GrpcRequest::new(ExecuteRequest {
@@ -386,7 +393,10 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute error")
         .into_inner();
     assert_eq!(handler_error.status, 500);
-    assert_eq!(handler_error.body, r#"{"error":"boom"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&handler_error.body),
+        r#"{"error":"boom"}"#
+    );
 
     let implicit_handler_error = client
         .execute(GrpcRequest::new(ExecuteRequest {
@@ -397,7 +407,10 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute implicit_error")
         .into_inner();
     assert_eq!(implicit_handler_error.status, 500);
-    assert_eq!(implicit_handler_error.body, r#"{"error":"internal error"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&implicit_handler_error.body),
+        r#"{"error":"internal error"}"#
+    );
 
     let not_found = client
         .execute(GrpcRequest::new(ExecuteRequest {
@@ -408,7 +421,10 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute not_found")
         .into_inner();
     assert_eq!(not_found.status, 404);
-    assert_eq!(not_found.body, r#"{"error":"record not found"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&not_found.body),
+        r#"{"error":"record not found"}"#
+    );
 
     let explicit_500 = client
         .execute(GrpcRequest::new(ExecuteRequest {
@@ -419,7 +435,10 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute explicit_500")
         .into_inner();
     assert_eq!(explicit_500.status, 500);
-    assert_eq!(explicit_500.body, r#"{"error":"service unavailable"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&explicit_500.body),
+        r#"{"error":"service unavailable"}"#
+    );
 
     let panic = client
         .execute(GrpcRequest::new(ExecuteRequest {
@@ -430,7 +449,10 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute panic")
         .into_inner();
     assert_eq!(panic.status, 500);
-    assert_eq!(panic.body, r#"{"error":"internal error"}"#);
+    assert_eq!(
+        String::from_utf8_lossy(&panic.body),
+        r#"{"error":"internal error"}"#
+    );
 
     serve_task.abort();
     let _ = serve_task.await;

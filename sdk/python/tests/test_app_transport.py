@@ -51,7 +51,7 @@ class _AppServicer(app_pb2_grpc.AppServicer):
         if request.operation == "plain_text":
             return app_pb2.OperationResult(
                 status=200,
-                body="plain response",
+                body=b"plain response",
             )
 
         params = (
@@ -89,7 +89,7 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                     "idempotency_key": request.idempotency_key,
                     "context": request_context,
                 }
-            ),
+            ).encode("utf-8"),
         )
 
     def InvokeGraphQL(self, request, context):
@@ -134,7 +134,7 @@ class _AppServicer(app_pb2_grpc.AppServicer):
                     "idempotency_key": request.idempotency_key,
                     "context": request_context,
                 }
-            ),
+            ).encode("utf-8"),
         )
 
 
@@ -205,7 +205,7 @@ class AppTransportTests(unittest.TestCase):
             {"Location": ["https://example.test/created"]},
         )
         self.assertEqual(
-            json.loads(response.body),
+            response.decode_json(),
             {
                 "app": "github",
                 "operation": "get_issue",
@@ -263,7 +263,7 @@ class AppTransportTests(unittest.TestCase):
 
         self.assertEqual(response.status, 208)
         self.assertEqual(
-            json.loads(response.body),
+            response.decode_json(),
             {
                 "app": "linear",
                 "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
@@ -304,7 +304,7 @@ class AppTransportTests(unittest.TestCase):
             response = client.invoke_raw("slack", "plain_text")
 
         self.assertEqual(response.status, 200)
-        self.assertEqual(response.body, "plain response")
+        self.assertEqual(response.text(), "plain response")
 
     def test_invoke_graphql_requires_nonempty_document(self) -> None:
         with _AppClient(Request()) as client:
@@ -319,7 +319,7 @@ class AppTransportTests(unittest.TestCase):
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
-            json.loads(response.body),
+            response.decode_json(),
             {
                 "app": "github",
                 "operation": "get_issue",
@@ -369,7 +369,7 @@ class AppTransportTests(unittest.TestCase):
                 response = client.invoke_raw("github", "plain_text")
 
             self.assertEqual(response.status, 200)
-            self.assertEqual(response.body, "plain response")
+            self.assertEqual(response.text(), "plain response")
             self.assertEqual(_relay_tokens, ["relay-token-python"])
         finally:
             if previous_socket is None:
@@ -403,7 +403,7 @@ class AppTransportTests(unittest.TestCase):
                 response = client.invoke_raw("github", "plain_text")
 
             self.assertEqual(response.status, 200)
-            self.assertEqual(response.body, "plain response")
+            self.assertEqual(response.text(), "plain response")
             self.assertEqual(_relay_tokens, ["relay-token-python"])
         finally:
             if previous_socket is None:

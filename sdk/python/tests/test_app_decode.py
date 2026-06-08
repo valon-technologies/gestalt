@@ -9,12 +9,12 @@ from gestalt._app_decode import InvokeError, decode_app_result, decode_graphql_r
 FIXTURE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "testdata" / "app_invoke"
 
 
-def fixture(name: str) -> str:
-    return (FIXTURE_ROOT / name).read_text()
+def fixture(name: str) -> bytes:
+    return (FIXTURE_ROOT / name).read_bytes()
 
 
 class AppDecodeTests(unittest.TestCase):
-    def result(self, name: str, status: int = 200) -> Response[str]:
+    def result(self, name: str, status: int = 200) -> Response[bytes]:
         return Response(status=status, headers={}, body=fixture(name))
 
     def test_app_decode_fixtures(self) -> None:
@@ -67,6 +67,19 @@ class AppDecodeTests(unittest.TestCase):
 
         with self.assertRaises(InvokeError):
             decode_app_result("github", "get_issue", self.result("invalid_json.txt"))
+
+    def test_response_helpers(self) -> None:
+        raw = self.result("success_envelope.json")
+        self.assertTrue(raw.ok)
+        self.assertEqual(raw.bytes(), fixture("success_envelope.json"))
+        self.assertEqual(raw.text(), fixture("success_envelope.json").decode("utf-8"))
+        self.assertEqual(raw.decode_json(), {"status": "success", "data": {"id": 1}})
+        self.assertIs(raw.raise_for_status(), raw)
+
+        failed = Response(status=503, headers={}, body=b"not json")
+        self.assertFalse(failed.ok)
+        with self.assertRaises(InvokeError):
+            failed.raise_for_status()
 
     def test_graphql_errors(self) -> None:
         self.assertEqual(

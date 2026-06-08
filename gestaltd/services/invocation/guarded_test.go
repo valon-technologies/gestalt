@@ -76,7 +76,7 @@ func (o *optionalInvoker) Invoke(ctx context.Context, p *principal.Principal, pr
 	if o.invoke != nil {
 		return o.invoke(ctx, p, providerName, instance, operation, params)
 	}
-	return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 }
 
 func (o *optionalInvoker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request invocation.GraphQLRequest) (*core.OperationResult, error) {
@@ -99,7 +99,7 @@ func guardTestProvider(name string) *stubProviderWithOps {
 			N:        name,
 			ConnMode: core.ConnectionModeNone,
 			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "ping", Method: http.MethodGet}},
@@ -388,7 +388,7 @@ func TestGuardedInvoker_OptionalGraphQLDelegates(t *testing.T) {
 			if strings.Join(meta.CallChain, ",") != strings.Join(wantChain, ",") {
 				t.Fatalf("expected call chain %v, got %v", wantChain, meta.CallChain)
 			}
-			return &core.OperationResult{Status: http.StatusAccepted, Body: `{"graphql":true}`}, nil
+			return &core.OperationResult{Status: http.StatusAccepted, Body: []byte(`{"graphql":true}`)}, nil
 		},
 	}
 	guarded := invocation.NewGuarded(base, nil, "test", sink, invocation.WithAllowedProviders([]string{"alpha"}), invocation.WithoutRateLimit())

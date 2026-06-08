@@ -86,7 +86,7 @@ message ProviderMetadata {
 // OperationResult is the serialized result returned from an Execute call.
 message OperationResult {
   int32 status = 1;
-  string body = 2;
+  bytes body = 2;
   map<string, StringList> headers = 3;
 }
 
