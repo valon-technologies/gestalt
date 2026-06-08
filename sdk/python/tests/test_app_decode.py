@@ -80,6 +80,9 @@ class AppDecodeTests(unittest.TestCase):
         with self.assertRaises(InvokeError) as error:
             decode_graphql_result("linear", self.result("graphql_errors.json"))
         self.assertEqual(error.exception.code, "graphql_errors")
+        with self.assertRaises(InvokeError) as envelope_error:
+            decode_graphql_result("linear", self.result("graphql_success_envelope_errors.json"))
+        self.assertEqual(envelope_error.exception.code, "graphql_errors")
 
 
 if __name__ == "__main__":

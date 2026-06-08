@@ -28,7 +28,15 @@ pub(crate) fn decode_graphql_result(
     result: &OperationResult,
 ) -> Result<Value, Box<InvokeError>> {
     let decoded = decode_app_result(app, "graphql", result)?;
-    if let Value::Object(object) = &decoded {
+    if let Ok(parsed) = parse_operation_result_json(&result.body) {
+        raise_graphql_errors(app, &result.body, &parsed)?;
+    }
+    raise_graphql_errors(app, &result.body, &decoded)?;
+    Ok(decoded)
+}
+
+fn raise_graphql_errors(app: &str, raw_body: &str, value: &Value) -> Result<(), Box<InvokeError>> {
+    if let Value::Object(object) = value {
         if let Some(Value::Array(errors)) = object.get("errors") {
             if !errors.is_empty() {
                 return Err(Box::new(InvokeError {
@@ -37,13 +45,13 @@ pub(crate) fn decode_graphql_result(
                     status: None,
                     code: Some("graphql_errors".to_string()),
                     message: graphql_error_message(errors),
-                    body: Some(Box::new(decoded)),
-                    raw_body: result.body.clone(),
+                    body: Some(Box::new(value.clone())),
+                    raw_body: raw_body.to_string(),
                 }));
             }
         }
     }
-    Ok(decoded)
+    Ok(())
 }
 
 pub(crate) fn parse_operation_result_json(body: &str) -> Result<Value, serde_json::Error> {
@@ -336,5 +344,14 @@ mod tests {
         )
         .expect_err("graphql errors");
         assert_eq!(err.code.as_deref(), Some("graphql_errors"));
+        let envelope_err = decode_graphql_result(
+            "linear",
+            &result(
+                include_str!("../../testdata/app_invoke/graphql_success_envelope_errors.json"),
+                200,
+            ),
+        )
+        .expect_err("enveloped graphql errors");
+        assert_eq!(envelope_err.code.as_deref(), Some("graphql_errors"));
     }
 }

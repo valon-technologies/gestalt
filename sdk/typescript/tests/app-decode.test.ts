@@ -56,6 +56,9 @@ test("app decode fixture behavior", () => {
     errors: { message: "not an array" },
   });
   expect(() => decodeGraphQLResult("linear", result("graphql_errors.json"))).toThrow(InvokeError);
+  expect(() => decodeGraphQLResult("linear", result("graphql_success_envelope_errors.json"))).toThrow(
+    InvokeError,
+  );
 });
 
 test("OperationResult json helper does not unwrap envelopes", () => {

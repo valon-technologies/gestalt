@@ -1,0 +1,11 @@
+{
+  "status": "success",
+  "data": {
+    "viewer": null
+  },
+  "errors": [
+    {
+      "message": "viewer failed"
+    }
+  ]
+}

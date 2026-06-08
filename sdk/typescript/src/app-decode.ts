@@ -25,20 +25,26 @@ export function decodeGraphQLResult<T = unknown>(
   result: OperationResult,
 ): T {
   const decoded = decodeAppResult<unknown>(app, "graphql", result);
-  if (isRecord(decoded)) {
-    const errors = decoded.errors;
-    if (Array.isArray(errors) && errors.length > 0) {
-      throw new InvokeError({
-        app,
-        operation: "graphql",
-        code: "graphql_errors",
-        message: graphqlErrorMessage(errors),
-        body: decoded,
-        rawBody: result.body,
-      });
-    }
-  }
+  throwGraphQLErrors(app, result.body, parseOperationResultJson(result.body));
+  throwGraphQLErrors(app, result.body, decoded);
   return decoded as T;
+}
+
+function throwGraphQLErrors(app: string, rawBody: string, value: unknown): void {
+  if (!isRecord(value)) {
+    return;
+  }
+  const errors = value.errors;
+  if (Array.isArray(errors) && errors.length > 0) {
+    throw new InvokeError({
+      app,
+      operation: "graphql",
+      code: "graphql_errors",
+      message: graphqlErrorMessage(errors),
+      body: value,
+      rawBody,
+    });
+  }
 }
 
 function decodeAppBody(
