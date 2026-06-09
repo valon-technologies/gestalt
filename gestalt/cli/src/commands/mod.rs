@@ -2,6 +2,7 @@ pub mod agents;
 mod app_errors;
 pub mod apps;
 pub mod auth;
+pub mod authorization;
 pub mod config;
 pub mod describe;
 pub mod init;
