@@ -11,8 +11,8 @@ message HelloWorldResponse {
   string message = 1;
 }
 
-// TestProvider models a minimal provider-kind-specific protocol used to verify
-// new provider kind registration and lifecycle wiring.
-service TestProvider {
+// Test models a minimal provider-kind-specific protocol used to verify new
+// provider kind registration and lifecycle wiring.
+service Test {
   rpc HelloWorld(HelloWorldRequest) returns (HelloWorldResponse);
 }

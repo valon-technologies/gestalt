@@ -32,7 +32,7 @@ type ExecutableConfig struct {
 
 type executableProvider struct {
 	proc      *runtimehost.AppProcess
-	runtime   proto.RuntimeProviderClient
+	runtime   proto.RuntimeClient
 	lifecycle proto.ProviderLifecycleClient
 
 	name        string
@@ -65,7 +65,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecutableConfig) (Provider,
 
 	return &executableProvider{
 		proc:        proc,
-		runtime:     proto.NewRuntimeProviderClient(proc.Conn()),
+		runtime:     proto.NewRuntimeClient(proc.Conn()),
 		lifecycle:   lifecycle,
 		name:        cfg.Name,
 		telemetry:   cfg.Telemetry,

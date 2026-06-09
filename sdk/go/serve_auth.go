@@ -13,6 +13,6 @@ func ServeAuthenticationProvider(ctx context.Context, auth AuthenticationProvide
 	return serveProvider(withProviderCloser(ctx, auth), func(srv *grpc.Server) {
 		server := newAuthenticationProviderServer(auth)
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuthentication, auth))
-		proto.RegisterAuthenticationProviderServer(srv, server)
+		proto.RegisterAuthenticationServer(srv, server)
 	})
 }

@@ -122,20 +122,20 @@ var RuntimeLogHost_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	RuntimeProvider_GetSupport_FullMethodName       = "/gestalt.provider.v1.RuntimeProvider/GetSupport"
-	RuntimeProvider_StartSession_FullMethodName     = "/gestalt.provider.v1.RuntimeProvider/StartSession"
-	RuntimeProvider_GetSession_FullMethodName       = "/gestalt.provider.v1.RuntimeProvider/GetSession"
-	RuntimeProvider_ListSessions_FullMethodName     = "/gestalt.provider.v1.RuntimeProvider/ListSessions"
-	RuntimeProvider_StopSession_FullMethodName      = "/gestalt.provider.v1.RuntimeProvider/StopSession"
-	RuntimeProvider_PrepareWorkspace_FullMethodName = "/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace"
-	RuntimeProvider_RemoveWorkspace_FullMethodName  = "/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace"
-	RuntimeProvider_StartApp_FullMethodName         = "/gestalt.provider.v1.RuntimeProvider/StartApp"
+	Runtime_GetSupport_FullMethodName       = "/gestalt.provider.v1.Runtime/GetSupport"
+	Runtime_StartSession_FullMethodName     = "/gestalt.provider.v1.Runtime/StartSession"
+	Runtime_GetSession_FullMethodName       = "/gestalt.provider.v1.Runtime/GetSession"
+	Runtime_ListSessions_FullMethodName     = "/gestalt.provider.v1.Runtime/ListSessions"
+	Runtime_StopSession_FullMethodName      = "/gestalt.provider.v1.Runtime/StopSession"
+	Runtime_PrepareWorkspace_FullMethodName = "/gestalt.provider.v1.Runtime/PrepareWorkspace"
+	Runtime_RemoveWorkspace_FullMethodName  = "/gestalt.provider.v1.Runtime/RemoveWorkspace"
+	Runtime_StartApp_FullMethodName         = "/gestalt.provider.v1.Runtime/StartApp"
 )
 
-// RuntimeProviderClient is the client API for RuntimeProvider service.
+// RuntimeClient is the client API for Runtime service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type RuntimeProviderClient interface {
+type RuntimeClient interface {
 	GetSupport(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*RuntimeSupport, error)
 	StartSession(ctx context.Context, in *StartRuntimeSessionRequest, opts ...grpc.CallOption) (*RuntimeSession, error)
 	GetSession(ctx context.Context, in *GetRuntimeSessionRequest, opts ...grpc.CallOption) (*RuntimeSession, error)
@@ -146,98 +146,98 @@ type RuntimeProviderClient interface {
 	StartApp(ctx context.Context, in *StartHostedAppRequest, opts ...grpc.CallOption) (*HostedApp, error)
 }
 
-type runtimeProviderClient struct {
+type runtimeClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewRuntimeProviderClient(cc grpc.ClientConnInterface) RuntimeProviderClient {
-	return &runtimeProviderClient{cc}
+func NewRuntimeClient(cc grpc.ClientConnInterface) RuntimeClient {
+	return &runtimeClient{cc}
 }
 
-func (c *runtimeProviderClient) GetSupport(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*RuntimeSupport, error) {
+func (c *runtimeClient) GetSupport(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*RuntimeSupport, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RuntimeSupport)
-	err := c.cc.Invoke(ctx, RuntimeProvider_GetSupport_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_GetSupport_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) StartSession(ctx context.Context, in *StartRuntimeSessionRequest, opts ...grpc.CallOption) (*RuntimeSession, error) {
+func (c *runtimeClient) StartSession(ctx context.Context, in *StartRuntimeSessionRequest, opts ...grpc.CallOption) (*RuntimeSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RuntimeSession)
-	err := c.cc.Invoke(ctx, RuntimeProvider_StartSession_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_StartSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) GetSession(ctx context.Context, in *GetRuntimeSessionRequest, opts ...grpc.CallOption) (*RuntimeSession, error) {
+func (c *runtimeClient) GetSession(ctx context.Context, in *GetRuntimeSessionRequest, opts ...grpc.CallOption) (*RuntimeSession, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RuntimeSession)
-	err := c.cc.Invoke(ctx, RuntimeProvider_GetSession_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_GetSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) ListSessions(ctx context.Context, in *ListRuntimeSessionsRequest, opts ...grpc.CallOption) (*ListRuntimeSessionsResponse, error) {
+func (c *runtimeClient) ListSessions(ctx context.Context, in *ListRuntimeSessionsRequest, opts ...grpc.CallOption) (*ListRuntimeSessionsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRuntimeSessionsResponse)
-	err := c.cc.Invoke(ctx, RuntimeProvider_ListSessions_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_ListSessions_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) StopSession(ctx context.Context, in *StopRuntimeSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *runtimeClient) StopSession(ctx context.Context, in *StopRuntimeSessionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, RuntimeProvider_StopSession_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_StopSession_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) PrepareWorkspace(ctx context.Context, in *PrepareRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*PrepareRuntimeWorkspaceResponse, error) {
+func (c *runtimeClient) PrepareWorkspace(ctx context.Context, in *PrepareRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*PrepareRuntimeWorkspaceResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PrepareRuntimeWorkspaceResponse)
-	err := c.cc.Invoke(ctx, RuntimeProvider_PrepareWorkspace_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_PrepareWorkspace_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) RemoveWorkspace(ctx context.Context, in *RemoveRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *runtimeClient) RemoveWorkspace(ctx context.Context, in *RemoveRuntimeWorkspaceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, RuntimeProvider_RemoveWorkspace_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_RemoveWorkspace_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *runtimeProviderClient) StartApp(ctx context.Context, in *StartHostedAppRequest, opts ...grpc.CallOption) (*HostedApp, error) {
+func (c *runtimeClient) StartApp(ctx context.Context, in *StartHostedAppRequest, opts ...grpc.CallOption) (*HostedApp, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HostedApp)
-	err := c.cc.Invoke(ctx, RuntimeProvider_StartApp_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Runtime_StartApp_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// RuntimeProviderServer is the server API for RuntimeProvider service.
-// All implementations must embed UnimplementedRuntimeProviderServer
+// RuntimeServer is the server API for Runtime service.
+// All implementations must embed UnimplementedRuntimeServer
 // for forward compatibility.
-type RuntimeProviderServer interface {
+type RuntimeServer interface {
 	GetSupport(context.Context, *emptypb.Empty) (*RuntimeSupport, error)
 	StartSession(context.Context, *StartRuntimeSessionRequest) (*RuntimeSession, error)
 	GetSession(context.Context, *GetRuntimeSessionRequest) (*RuntimeSession, error)
@@ -246,243 +246,243 @@ type RuntimeProviderServer interface {
 	PrepareWorkspace(context.Context, *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error)
 	RemoveWorkspace(context.Context, *RemoveRuntimeWorkspaceRequest) (*emptypb.Empty, error)
 	StartApp(context.Context, *StartHostedAppRequest) (*HostedApp, error)
-	mustEmbedUnimplementedRuntimeProviderServer()
+	mustEmbedUnimplementedRuntimeServer()
 }
 
-// UnimplementedRuntimeProviderServer must be embedded to have
+// UnimplementedRuntimeServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedRuntimeProviderServer struct{}
+type UnimplementedRuntimeServer struct{}
 
-func (UnimplementedRuntimeProviderServer) GetSupport(context.Context, *emptypb.Empty) (*RuntimeSupport, error) {
+func (UnimplementedRuntimeServer) GetSupport(context.Context, *emptypb.Empty) (*RuntimeSupport, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSupport not implemented")
 }
-func (UnimplementedRuntimeProviderServer) StartSession(context.Context, *StartRuntimeSessionRequest) (*RuntimeSession, error) {
+func (UnimplementedRuntimeServer) StartSession(context.Context, *StartRuntimeSessionRequest) (*RuntimeSession, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartSession not implemented")
 }
-func (UnimplementedRuntimeProviderServer) GetSession(context.Context, *GetRuntimeSessionRequest) (*RuntimeSession, error) {
+func (UnimplementedRuntimeServer) GetSession(context.Context, *GetRuntimeSessionRequest) (*RuntimeSession, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSession not implemented")
 }
-func (UnimplementedRuntimeProviderServer) ListSessions(context.Context, *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
+func (UnimplementedRuntimeServer) ListSessions(context.Context, *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListSessions not implemented")
 }
-func (UnimplementedRuntimeProviderServer) StopSession(context.Context, *StopRuntimeSessionRequest) (*emptypb.Empty, error) {
+func (UnimplementedRuntimeServer) StopSession(context.Context, *StopRuntimeSessionRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method StopSession not implemented")
 }
-func (UnimplementedRuntimeProviderServer) PrepareWorkspace(context.Context, *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error) {
+func (UnimplementedRuntimeServer) PrepareWorkspace(context.Context, *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrepareWorkspace not implemented")
 }
-func (UnimplementedRuntimeProviderServer) RemoveWorkspace(context.Context, *RemoveRuntimeWorkspaceRequest) (*emptypb.Empty, error) {
+func (UnimplementedRuntimeServer) RemoveWorkspace(context.Context, *RemoveRuntimeWorkspaceRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveWorkspace not implemented")
 }
-func (UnimplementedRuntimeProviderServer) StartApp(context.Context, *StartHostedAppRequest) (*HostedApp, error) {
+func (UnimplementedRuntimeServer) StartApp(context.Context, *StartHostedAppRequest) (*HostedApp, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartApp not implemented")
 }
-func (UnimplementedRuntimeProviderServer) mustEmbedUnimplementedRuntimeProviderServer() {}
-func (UnimplementedRuntimeProviderServer) testEmbeddedByValue()                         {}
+func (UnimplementedRuntimeServer) mustEmbedUnimplementedRuntimeServer() {}
+func (UnimplementedRuntimeServer) testEmbeddedByValue()                 {}
 
-// UnsafeRuntimeProviderServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to RuntimeProviderServer will
+// UnsafeRuntimeServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to RuntimeServer will
 // result in compilation errors.
-type UnsafeRuntimeProviderServer interface {
-	mustEmbedUnimplementedRuntimeProviderServer()
+type UnsafeRuntimeServer interface {
+	mustEmbedUnimplementedRuntimeServer()
 }
 
-func RegisterRuntimeProviderServer(s grpc.ServiceRegistrar, srv RuntimeProviderServer) {
-	// If the following call panics, it indicates UnimplementedRuntimeProviderServer was
+func RegisterRuntimeServer(s grpc.ServiceRegistrar, srv RuntimeServer) {
+	// If the following call panics, it indicates UnimplementedRuntimeServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&RuntimeProvider_ServiceDesc, srv)
+	s.RegisterService(&Runtime_ServiceDesc, srv)
 }
 
-func _RuntimeProvider_GetSupport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_GetSupport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).GetSupport(ctx, in)
+		return srv.(RuntimeServer).GetSupport(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_GetSupport_FullMethodName,
+		FullMethod: Runtime_GetSupport_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).GetSupport(ctx, req.(*emptypb.Empty))
+		return srv.(RuntimeServer).GetSupport(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_StartSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_StartSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartRuntimeSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).StartSession(ctx, in)
+		return srv.(RuntimeServer).StartSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_StartSession_FullMethodName,
+		FullMethod: Runtime_StartSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).StartSession(ctx, req.(*StartRuntimeSessionRequest))
+		return srv.(RuntimeServer).StartSession(ctx, req.(*StartRuntimeSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_GetSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_GetSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetRuntimeSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).GetSession(ctx, in)
+		return srv.(RuntimeServer).GetSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_GetSession_FullMethodName,
+		FullMethod: Runtime_GetSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).GetSession(ctx, req.(*GetRuntimeSessionRequest))
+		return srv.(RuntimeServer).GetSession(ctx, req.(*GetRuntimeSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_ListSessions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListRuntimeSessionsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).ListSessions(ctx, in)
+		return srv.(RuntimeServer).ListSessions(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_ListSessions_FullMethodName,
+		FullMethod: Runtime_ListSessions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).ListSessions(ctx, req.(*ListRuntimeSessionsRequest))
+		return srv.(RuntimeServer).ListSessions(ctx, req.(*ListRuntimeSessionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_StopSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_StopSession_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StopRuntimeSessionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).StopSession(ctx, in)
+		return srv.(RuntimeServer).StopSession(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_StopSession_FullMethodName,
+		FullMethod: Runtime_StopSession_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).StopSession(ctx, req.(*StopRuntimeSessionRequest))
+		return srv.(RuntimeServer).StopSession(ctx, req.(*StopRuntimeSessionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_PrepareWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_PrepareWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PrepareRuntimeWorkspaceRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).PrepareWorkspace(ctx, in)
+		return srv.(RuntimeServer).PrepareWorkspace(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_PrepareWorkspace_FullMethodName,
+		FullMethod: Runtime_PrepareWorkspace_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).PrepareWorkspace(ctx, req.(*PrepareRuntimeWorkspaceRequest))
+		return srv.(RuntimeServer).PrepareWorkspace(ctx, req.(*PrepareRuntimeWorkspaceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_RemoveWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_RemoveWorkspace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RemoveRuntimeWorkspaceRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).RemoveWorkspace(ctx, in)
+		return srv.(RuntimeServer).RemoveWorkspace(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_RemoveWorkspace_FullMethodName,
+		FullMethod: Runtime_RemoveWorkspace_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).RemoveWorkspace(ctx, req.(*RemoveRuntimeWorkspaceRequest))
+		return srv.(RuntimeServer).RemoveWorkspace(ctx, req.(*RemoveRuntimeWorkspaceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _RuntimeProvider_StartApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Runtime_StartApp_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartHostedAppRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RuntimeProviderServer).StartApp(ctx, in)
+		return srv.(RuntimeServer).StartApp(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RuntimeProvider_StartApp_FullMethodName,
+		FullMethod: Runtime_StartApp_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RuntimeProviderServer).StartApp(ctx, req.(*StartHostedAppRequest))
+		return srv.(RuntimeServer).StartApp(ctx, req.(*StartHostedAppRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// RuntimeProvider_ServiceDesc is the grpc.ServiceDesc for RuntimeProvider service.
+// Runtime_ServiceDesc is the grpc.ServiceDesc for Runtime service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var RuntimeProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.provider.v1.RuntimeProvider",
-	HandlerType: (*RuntimeProviderServer)(nil),
+var Runtime_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.Runtime",
+	HandlerType: (*RuntimeServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetSupport",
-			Handler:    _RuntimeProvider_GetSupport_Handler,
+			Handler:    _Runtime_GetSupport_Handler,
 		},
 		{
 			MethodName: "StartSession",
-			Handler:    _RuntimeProvider_StartSession_Handler,
+			Handler:    _Runtime_StartSession_Handler,
 		},
 		{
 			MethodName: "GetSession",
-			Handler:    _RuntimeProvider_GetSession_Handler,
+			Handler:    _Runtime_GetSession_Handler,
 		},
 		{
 			MethodName: "ListSessions",
-			Handler:    _RuntimeProvider_ListSessions_Handler,
+			Handler:    _Runtime_ListSessions_Handler,
 		},
 		{
 			MethodName: "StopSession",
-			Handler:    _RuntimeProvider_StopSession_Handler,
+			Handler:    _Runtime_StopSession_Handler,
 		},
 		{
 			MethodName: "PrepareWorkspace",
-			Handler:    _RuntimeProvider_PrepareWorkspace_Handler,
+			Handler:    _Runtime_PrepareWorkspace_Handler,
 		},
 		{
 			MethodName: "RemoveWorkspace",
-			Handler:    _RuntimeProvider_RemoveWorkspace_Handler,
+			Handler:    _Runtime_RemoveWorkspace_Handler,
 		},
 		{
 			MethodName: "StartApp",
-			Handler:    _RuntimeProvider_StartApp_Handler,
+			Handler:    _Runtime_StartApp_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

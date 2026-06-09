@@ -12,12 +12,12 @@ type Options struct {
 	UnaryTimeout time.Duration
 }
 
-func NewClient(grpcClient proto.AuthorizationProviderClient, opts Options) *Client {
+func NewClient(grpcClient proto.AuthorizationClient, opts Options) *Client {
 	return &Client{grpc: grpcClient, opts: opts}
 }
 
 func NewConn(conn grpc.ClientConnInterface, opts Options) *Client {
-	return NewClient(proto.NewAuthorizationProviderClient(conn), opts)
+	return NewClient(proto.NewAuthorizationClient(conn), opts)
 }
 
 func attachTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

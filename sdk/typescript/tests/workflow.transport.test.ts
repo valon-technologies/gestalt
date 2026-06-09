@@ -12,7 +12,7 @@ import {
   GetWorkflowProviderRunEventsRequestSchema,
   GetWorkflowProviderRunOutputRequestSchema,
   StartWorkflowProviderRunRequestSchema,
-  WorkflowProvider as WorkflowProviderService,
+  Workflow as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import { jsonObjectFromStruct, structFromObject } from "../src/protocol.ts";
 import {

@@ -268,7 +268,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	runtimeClient := proto.NewProviderLifecycleClient(conn)
-	agentClient := proto.NewAgentProviderClient(conn)
+	agentClient := proto.NewAgentClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()

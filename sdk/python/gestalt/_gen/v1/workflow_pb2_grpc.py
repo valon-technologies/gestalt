@@ -26,7 +26,7 @@ if _version_not_supported:
     )
 
 
-class WorkflowProviderStub(object):
+class WorkflowStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,83 +36,83 @@ class WorkflowProviderStub(object):
             channel: A grpc.Channel.
         """
         self.ApplyDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/ApplyDefinition',
+                '/gestalt.provider.v1.Workflow/ApplyDefinition',
                 request_serializer=v1_dot_workflow__pb2.ApplyWorkflowProviderDefinitionRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
         self.GetDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/GetDefinition',
+                '/gestalt.provider.v1.Workflow/GetDefinition',
                 request_serializer=v1_dot_workflow__pb2.GetWorkflowProviderDefinitionRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
         self.ListDefinitions = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/ListDefinitions',
+                '/gestalt.provider.v1.Workflow/ListDefinitions',
                 request_serializer=v1_dot_workflow__pb2.ListWorkflowProviderDefinitionsRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.ListWorkflowProviderDefinitionsResponse.FromString,
                 _registered_method=True)
         self.SetDefinitionPaused = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/SetDefinitionPaused',
+                '/gestalt.provider.v1.Workflow/SetDefinitionPaused',
                 request_serializer=v1_dot_workflow__pb2.SetWorkflowProviderDefinitionPausedRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
         self.SetActivationPaused = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/SetActivationPaused',
+                '/gestalt.provider.v1.Workflow/SetActivationPaused',
                 request_serializer=v1_dot_workflow__pb2.SetWorkflowProviderActivationPausedRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
         self.DeleteDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/DeleteDefinition',
+                '/gestalt.provider.v1.Workflow/DeleteDefinition',
                 request_serializer=v1_dot_workflow__pb2.DeleteWorkflowProviderDefinitionRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.StartRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/StartRun',
+                '/gestalt.provider.v1.Workflow/StartRun',
                 request_serializer=v1_dot_workflow__pb2.StartWorkflowProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowRun.FromString,
                 _registered_method=True)
         self.ListRuns = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/ListRuns',
+                '/gestalt.provider.v1.Workflow/ListRuns',
                 request_serializer=v1_dot_workflow__pb2.ListWorkflowProviderRunsRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.ListWorkflowProviderRunsResponse.FromString,
                 _registered_method=True)
         self.GetRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/GetRun',
+                '/gestalt.provider.v1.Workflow/GetRun',
                 request_serializer=v1_dot_workflow__pb2.GetWorkflowProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowRun.FromString,
                 _registered_method=True)
         self.GetRunEvents = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/GetRunEvents',
+                '/gestalt.provider.v1.Workflow/GetRunEvents',
                 request_serializer=v1_dot_workflow__pb2.GetWorkflowProviderRunEventsRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.GetWorkflowProviderRunEventsResponse.FromString,
                 _registered_method=True)
         self.GetRunOutput = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/GetRunOutput',
+                '/gestalt.provider.v1.Workflow/GetRunOutput',
                 request_serializer=v1_dot_workflow__pb2.GetWorkflowProviderRunOutputRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.GetWorkflowProviderRunOutputResponse.FromString,
                 _registered_method=True)
         self.CancelRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/CancelRun',
+                '/gestalt.provider.v1.Workflow/CancelRun',
                 request_serializer=v1_dot_workflow__pb2.CancelWorkflowProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowRun.FromString,
                 _registered_method=True)
         self.SignalRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/SignalRun',
+                '/gestalt.provider.v1.Workflow/SignalRun',
                 request_serializer=v1_dot_workflow__pb2.SignalWorkflowProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
                 _registered_method=True)
         self.SignalOrStartRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun',
+                '/gestalt.provider.v1.Workflow/SignalOrStartRun',
                 request_serializer=v1_dot_workflow__pb2.SignalOrStartWorkflowProviderRunRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
                 _registered_method=True)
         self.DeliverEvent = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/DeliverEvent',
+                '/gestalt.provider.v1.Workflow/DeliverEvent',
                 request_serializer=v1_dot_workflow__pb2.DeliverWorkflowProviderEventRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowEvent.FromString,
                 _registered_method=True)
 
 
-class WorkflowProviderServicer(object):
+class WorkflowServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def ApplyDefinition(self, request, context):
@@ -206,7 +206,7 @@ class WorkflowProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_WorkflowProviderServicer_to_server(servicer, server):
+def add_WorkflowServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'ApplyDefinition': grpc.unary_unary_rpc_method_handler(
                     servicer.ApplyDefinition,
@@ -285,13 +285,13 @@ def add_WorkflowProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.WorkflowProvider', rpc_method_handlers)
+            'gestalt.provider.v1.Workflow', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.WorkflowProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Workflow', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class WorkflowProvider(object):
+class Workflow(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -308,7 +308,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/ApplyDefinition',
+            '/gestalt.provider.v1.Workflow/ApplyDefinition',
             v1_dot_workflow__pb2.ApplyWorkflowProviderDefinitionRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
@@ -335,7 +335,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/GetDefinition',
+            '/gestalt.provider.v1.Workflow/GetDefinition',
             v1_dot_workflow__pb2.GetWorkflowProviderDefinitionRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
@@ -362,7 +362,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/ListDefinitions',
+            '/gestalt.provider.v1.Workflow/ListDefinitions',
             v1_dot_workflow__pb2.ListWorkflowProviderDefinitionsRequest.SerializeToString,
             v1_dot_workflow__pb2.ListWorkflowProviderDefinitionsResponse.FromString,
             options,
@@ -389,7 +389,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/SetDefinitionPaused',
+            '/gestalt.provider.v1.Workflow/SetDefinitionPaused',
             v1_dot_workflow__pb2.SetWorkflowProviderDefinitionPausedRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
@@ -416,7 +416,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/SetActivationPaused',
+            '/gestalt.provider.v1.Workflow/SetActivationPaused',
             v1_dot_workflow__pb2.SetWorkflowProviderActivationPausedRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
@@ -443,7 +443,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/DeleteDefinition',
+            '/gestalt.provider.v1.Workflow/DeleteDefinition',
             v1_dot_workflow__pb2.DeleteWorkflowProviderDefinitionRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -470,7 +470,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/StartRun',
+            '/gestalt.provider.v1.Workflow/StartRun',
             v1_dot_workflow__pb2.StartWorkflowProviderRunRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowRun.FromString,
             options,
@@ -497,7 +497,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/ListRuns',
+            '/gestalt.provider.v1.Workflow/ListRuns',
             v1_dot_workflow__pb2.ListWorkflowProviderRunsRequest.SerializeToString,
             v1_dot_workflow__pb2.ListWorkflowProviderRunsResponse.FromString,
             options,
@@ -524,7 +524,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/GetRun',
+            '/gestalt.provider.v1.Workflow/GetRun',
             v1_dot_workflow__pb2.GetWorkflowProviderRunRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowRun.FromString,
             options,
@@ -551,7 +551,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/GetRunEvents',
+            '/gestalt.provider.v1.Workflow/GetRunEvents',
             v1_dot_workflow__pb2.GetWorkflowProviderRunEventsRequest.SerializeToString,
             v1_dot_workflow__pb2.GetWorkflowProviderRunEventsResponse.FromString,
             options,
@@ -578,7 +578,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/GetRunOutput',
+            '/gestalt.provider.v1.Workflow/GetRunOutput',
             v1_dot_workflow__pb2.GetWorkflowProviderRunOutputRequest.SerializeToString,
             v1_dot_workflow__pb2.GetWorkflowProviderRunOutputResponse.FromString,
             options,
@@ -605,7 +605,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/CancelRun',
+            '/gestalt.provider.v1.Workflow/CancelRun',
             v1_dot_workflow__pb2.CancelWorkflowProviderRunRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowRun.FromString,
             options,
@@ -632,7 +632,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/SignalRun',
+            '/gestalt.provider.v1.Workflow/SignalRun',
             v1_dot_workflow__pb2.SignalWorkflowProviderRunRequest.SerializeToString,
             v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
             options,
@@ -659,7 +659,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun',
+            '/gestalt.provider.v1.Workflow/SignalOrStartRun',
             v1_dot_workflow__pb2.SignalOrStartWorkflowProviderRunRequest.SerializeToString,
             v1_dot_workflow__pb2.SignalWorkflowRunResponse.FromString,
             options,
@@ -686,7 +686,7 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/DeliverEvent',
+            '/gestalt.provider.v1.Workflow/DeliverEvent',
             v1_dot_workflow__pb2.DeliverWorkflowProviderEventRequest.SerializeToString,
             v1_dot_workflow__pb2.WorkflowEvent.FromString,
             options,

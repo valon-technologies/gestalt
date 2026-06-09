@@ -31,7 +31,7 @@ type ExecConfig struct {
 }
 
 type remoteExternalCredentialProvider struct {
-	client proto.ExternalCredentialProviderClient
+	client proto.ExternalCredentialsClient
 	closer io.Closer
 }
 
@@ -52,7 +52,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 	}
 
 	runtimeClient := proc.Lifecycle()
-	client := proto.NewExternalCredentialProviderClient(proc.Conn())
+	client := proto.NewExternalCredentialsClient(proc.Conn())
 	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err

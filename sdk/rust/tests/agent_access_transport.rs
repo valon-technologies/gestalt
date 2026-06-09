@@ -9,9 +9,7 @@ mod helpers;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::agent_provider_server::{
-    AgentProvider as ProtoAgentProvider, AgentProviderServer,
-};
+use generated::v1::agent_server::{Agent as ProtoAgentProvider, AgentServer};
 use generated::v1::{
     AgentExecutionStatus, AgentInteraction, AgentInteractionState as ProtoAgentInteractionState,
     AgentInteractionType, AgentMessagePartType, AgentProviderCapabilities, AgentSession,
@@ -957,7 +955,7 @@ async fn serve_agent(
     let listener = UnixListener::bind(socket).expect("bind unix listener");
 
     Server::builder()
-        .add_service(AgentProviderServer::new(server))
+        .add_service(AgentServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
         .await
 }
@@ -967,7 +965,7 @@ async fn serve_agent_tcp(
     listener: TcpListener,
 ) -> std::result::Result<(), tonic::transport::Error> {
     Server::builder()
-        .add_service(AgentProviderServer::new(server))
+        .add_service(AgentServer::new(server))
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
 }

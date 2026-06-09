@@ -76,7 +76,7 @@ func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewAuthenticationProviderClient(conn)
+	client := proto.NewAuthenticationClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()

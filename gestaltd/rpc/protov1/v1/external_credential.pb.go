@@ -1387,8 +1387,8 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x01\n" +
 	"\"ExchangeExternalCredentialResponse\x12[\n" +
-	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse2\xdb\x06\n" +
-	"\x1aExternalCredentialProvider\x12q\n" +
+	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse2\xd4\x06\n" +
+	"\x13ExternalCredentials\x12q\n" +
 	"\x10UpsertCredential\x124.gestalt.provider.v1.UpsertExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12k\n" +
 	"\rGetCredential\x121.gestalt.provider.v1.GetExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12|\n" +
 	"\x0fListCredentials\x123.gestalt.provider.v1.ListExternalCredentialsRequest\x1a4.gestalt.provider.v1.ListExternalCredentialsResponse\x12`\n" +
@@ -1459,20 +1459,20 @@ var file_v1_external_credential_proto_depIdxs = []int32{
 	8,  // 18: gestalt.provider.v1.ExchangeExternalCredentialRequest.auth:type_name -> gestalt.provider.v1.ExternalCredentialAuthConfig
 	21, // 19: gestalt.provider.v1.ExchangeExternalCredentialRequest.connection_params:type_name -> gestalt.provider.v1.ExchangeExternalCredentialRequest.ConnectionParamsEntry
 	12, // 20: gestalt.provider.v1.ExchangeExternalCredentialResponse.token_response:type_name -> gestalt.provider.v1.ExternalCredentialTokenResponse
-	2,  // 21: gestalt.provider.v1.ExternalCredentialProvider.UpsertCredential:input_type -> gestalt.provider.v1.UpsertExternalCredentialRequest
-	3,  // 22: gestalt.provider.v1.ExternalCredentialProvider.GetCredential:input_type -> gestalt.provider.v1.GetExternalCredentialRequest
-	4,  // 23: gestalt.provider.v1.ExternalCredentialProvider.ListCredentials:input_type -> gestalt.provider.v1.ListExternalCredentialsRequest
-	6,  // 24: gestalt.provider.v1.ExternalCredentialProvider.DeleteCredential:input_type -> gestalt.provider.v1.DeleteExternalCredentialRequest
-	9,  // 25: gestalt.provider.v1.ExternalCredentialProvider.ValidateCredentialConfig:input_type -> gestalt.provider.v1.ValidateExternalCredentialConfigRequest
-	10, // 26: gestalt.provider.v1.ExternalCredentialProvider.ResolveCredential:input_type -> gestalt.provider.v1.ResolveExternalCredentialRequest
-	13, // 27: gestalt.provider.v1.ExternalCredentialProvider.ExchangeCredential:input_type -> gestalt.provider.v1.ExchangeExternalCredentialRequest
-	0,  // 28: gestalt.provider.v1.ExternalCredentialProvider.UpsertCredential:output_type -> gestalt.provider.v1.ExternalCredential
-	0,  // 29: gestalt.provider.v1.ExternalCredentialProvider.GetCredential:output_type -> gestalt.provider.v1.ExternalCredential
-	5,  // 30: gestalt.provider.v1.ExternalCredentialProvider.ListCredentials:output_type -> gestalt.provider.v1.ListExternalCredentialsResponse
-	23, // 31: gestalt.provider.v1.ExternalCredentialProvider.DeleteCredential:output_type -> google.protobuf.Empty
-	23, // 32: gestalt.provider.v1.ExternalCredentialProvider.ValidateCredentialConfig:output_type -> google.protobuf.Empty
-	11, // 33: gestalt.provider.v1.ExternalCredentialProvider.ResolveCredential:output_type -> gestalt.provider.v1.ResolveExternalCredentialResponse
-	14, // 34: gestalt.provider.v1.ExternalCredentialProvider.ExchangeCredential:output_type -> gestalt.provider.v1.ExchangeExternalCredentialResponse
+	2,  // 21: gestalt.provider.v1.ExternalCredentials.UpsertCredential:input_type -> gestalt.provider.v1.UpsertExternalCredentialRequest
+	3,  // 22: gestalt.provider.v1.ExternalCredentials.GetCredential:input_type -> gestalt.provider.v1.GetExternalCredentialRequest
+	4,  // 23: gestalt.provider.v1.ExternalCredentials.ListCredentials:input_type -> gestalt.provider.v1.ListExternalCredentialsRequest
+	6,  // 24: gestalt.provider.v1.ExternalCredentials.DeleteCredential:input_type -> gestalt.provider.v1.DeleteExternalCredentialRequest
+	9,  // 25: gestalt.provider.v1.ExternalCredentials.ValidateCredentialConfig:input_type -> gestalt.provider.v1.ValidateExternalCredentialConfigRequest
+	10, // 26: gestalt.provider.v1.ExternalCredentials.ResolveCredential:input_type -> gestalt.provider.v1.ResolveExternalCredentialRequest
+	13, // 27: gestalt.provider.v1.ExternalCredentials.ExchangeCredential:input_type -> gestalt.provider.v1.ExchangeExternalCredentialRequest
+	0,  // 28: gestalt.provider.v1.ExternalCredentials.UpsertCredential:output_type -> gestalt.provider.v1.ExternalCredential
+	0,  // 29: gestalt.provider.v1.ExternalCredentials.GetCredential:output_type -> gestalt.provider.v1.ExternalCredential
+	5,  // 30: gestalt.provider.v1.ExternalCredentials.ListCredentials:output_type -> gestalt.provider.v1.ListExternalCredentialsResponse
+	23, // 31: gestalt.provider.v1.ExternalCredentials.DeleteCredential:output_type -> google.protobuf.Empty
+	23, // 32: gestalt.provider.v1.ExternalCredentials.ValidateCredentialConfig:output_type -> google.protobuf.Empty
+	11, // 33: gestalt.provider.v1.ExternalCredentials.ResolveCredential:output_type -> gestalt.provider.v1.ResolveExternalCredentialResponse
+	14, // 34: gestalt.provider.v1.ExternalCredentials.ExchangeCredential:output_type -> gestalt.provider.v1.ExchangeExternalCredentialResponse
 	28, // [28:35] is the sub-list for method output_type
 	21, // [21:28] is the sub-list for method input_type
 	21, // [21:21] is the sub-list for extension type_name

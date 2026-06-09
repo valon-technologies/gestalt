@@ -57,9 +57,8 @@ message AuthSessionSettings {
   int64 session_ttl_seconds = 1;
 }
 
-// AuthenticationProvider models the shared Gestalt authentication-provider
-// protocol.
-service AuthenticationProvider {
+// Authentication models the shared Gestalt authentication protocol.
+service Authentication {
   rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse);
   rpc CompleteLogin(CompleteLoginRequest) returns (AuthenticatedUser);
   rpc ValidateExternalToken(ValidateExternalTokenRequest) returns (AuthenticatedUser);

@@ -24,7 +24,7 @@ type ExecConfig struct {
 }
 
 type remoteSecretManager struct {
-	client proto.SecretsProviderClient
+	client proto.SecretsClient
 	closer io.Closer
 }
 
@@ -44,7 +44,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.SecretManager, err
 	}
 
 	runtimeClient := proc.Lifecycle()
-	secretsClient := proto.NewSecretsProviderClient(proc.Conn())
+	secretsClient := proto.NewSecretsClient(proc.Conn())
 
 	_, err = runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Name, cfg.Config)
 	if err != nil {

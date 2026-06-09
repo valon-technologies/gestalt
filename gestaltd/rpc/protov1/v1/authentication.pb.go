@@ -431,8 +431,8 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x1cValidateExternalTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"E\n" +
 	"\x13AuthSessionSettings\x12.\n" +
-	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\xa7\x03\n" +
-	"\x16AuthenticationProvider\x12]\n" +
+	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\x9f\x03\n" +
+	"\x0eAuthentication\x12]\n" +
 	"\n" +
 	"BeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a'.gestalt.provider.v1.BeginLoginResponse\x12b\n" +
 	"\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n" +
@@ -469,14 +469,14 @@ var file_v1_authentication_proto_depIdxs = []int32{
 	6, // 0: gestalt.provider.v1.AuthenticatedUser.claims:type_name -> gestalt.provider.v1.AuthenticatedUser.ClaimsEntry
 	7, // 1: gestalt.provider.v1.BeginLoginRequest.options:type_name -> gestalt.provider.v1.BeginLoginRequest.OptionsEntry
 	8, // 2: gestalt.provider.v1.CompleteLoginRequest.query:type_name -> gestalt.provider.v1.CompleteLoginRequest.QueryEntry
-	1, // 3: gestalt.provider.v1.AuthenticationProvider.BeginLogin:input_type -> gestalt.provider.v1.BeginLoginRequest
-	3, // 4: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:input_type -> gestalt.provider.v1.CompleteLoginRequest
-	4, // 5: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:input_type -> gestalt.provider.v1.ValidateExternalTokenRequest
-	9, // 6: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:input_type -> google.protobuf.Empty
-	2, // 7: gestalt.provider.v1.AuthenticationProvider.BeginLogin:output_type -> gestalt.provider.v1.BeginLoginResponse
-	0, // 8: gestalt.provider.v1.AuthenticationProvider.CompleteLogin:output_type -> gestalt.provider.v1.AuthenticatedUser
-	0, // 9: gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken:output_type -> gestalt.provider.v1.AuthenticatedUser
-	5, // 10: gestalt.provider.v1.AuthenticationProvider.GetSessionSettings:output_type -> gestalt.provider.v1.AuthSessionSettings
+	1, // 3: gestalt.provider.v1.Authentication.BeginLogin:input_type -> gestalt.provider.v1.BeginLoginRequest
+	3, // 4: gestalt.provider.v1.Authentication.CompleteLogin:input_type -> gestalt.provider.v1.CompleteLoginRequest
+	4, // 5: gestalt.provider.v1.Authentication.ValidateExternalToken:input_type -> gestalt.provider.v1.ValidateExternalTokenRequest
+	9, // 6: gestalt.provider.v1.Authentication.GetSessionSettings:input_type -> google.protobuf.Empty
+	2, // 7: gestalt.provider.v1.Authentication.BeginLogin:output_type -> gestalt.provider.v1.BeginLoginResponse
+	0, // 8: gestalt.provider.v1.Authentication.CompleteLogin:output_type -> gestalt.provider.v1.AuthenticatedUser
+	0, // 9: gestalt.provider.v1.Authentication.ValidateExternalToken:output_type -> gestalt.provider.v1.AuthenticatedUser
+	5, // 10: gestalt.provider.v1.Authentication.GetSessionSettings:output_type -> gestalt.provider.v1.AuthSessionSettings
 	7, // [7:11] is the sub-list for method output_type
 	3, // [3:7] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name

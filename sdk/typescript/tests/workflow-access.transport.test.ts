@@ -14,7 +14,7 @@ import {
   ListWorkflowProviderDefinitionsResponseSchema,
   SignalWorkflowRunResponseSchema,
   WorkflowDefinitionSchema,
-  WorkflowProvider as WorkflowProviderService,
+  Workflow as WorkflowProviderService,
   WorkflowRunSchema,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {

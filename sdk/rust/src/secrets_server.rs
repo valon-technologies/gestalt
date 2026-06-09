@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::generated::v1::secrets_provider_server::SecretsProvider as SecretsProviderGrpc;
+use crate::generated::v1::secrets_server::Secrets as SecretsProviderGrpc;
 use crate::generated::v1::{GetSecretRequest, GetSecretResponse};
 use crate::rpc_status::rpc_status;
 use crate::secrets::SecretsProvider;

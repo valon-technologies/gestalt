@@ -25,7 +25,7 @@ import (
 type ManagerService = workflowmanager.Service
 
 type ProviderServer struct {
-	proto.UnimplementedWorkflowProviderServer
+	proto.UnimplementedWorkflowServer
 
 	appName       string
 	manager       ManagerService
@@ -694,4 +694,4 @@ func workflowManagerStatusError(err error) error {
 	}
 }
 
-var _ proto.WorkflowProviderServer = (*ProviderServer)(nil)
+var _ proto.WorkflowServer = (*ProviderServer)(nil)

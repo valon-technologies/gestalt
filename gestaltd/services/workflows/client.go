@@ -34,7 +34,7 @@ type ExecConfig struct {
 }
 
 type RemoteConfig struct {
-	Client  proto.WorkflowProviderClient
+	Client  proto.WorkflowClient
 	Runtime proto.ProviderLifecycleClient
 	Closer  io.Closer
 	Config  map[string]any
@@ -44,7 +44,7 @@ type RemoteConfig struct {
 var startWorkflowProviderProcess = runtimehost.StartAppProcess
 
 type remoteWorkflow struct {
-	client  proto.WorkflowProviderClient
+	client  proto.WorkflowClient
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
 	name    string
@@ -68,7 +68,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreworkflow.Provider, 
 	}
 
 	runtimeClient := proc.Lifecycle()
-	workflowClient := proto.NewWorkflowProviderClient(proc.Conn())
+	workflowClient := proto.NewWorkflowClient(proc.Conn())
 	if _, err := runtimehost.ConfigureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_WORKFLOW, cfg.Name, cfg.Config); err != nil {
 		_ = proc.Close()
 		return nil, err

@@ -12,7 +12,7 @@ import (
 )
 
 type workflowIdempotencyHarness struct {
-	proto.UnimplementedWorkflowProviderServer
+	proto.UnimplementedWorkflowServer
 
 	mu      sync.Mutex
 	starts  []*proto.StartWorkflowProviderRunRequest
@@ -62,7 +62,7 @@ func TestWorkflowFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 
 	harness := &workflowIdempotencyHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowProviderServer(srv, harness)
+	proto.RegisterWorkflowServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

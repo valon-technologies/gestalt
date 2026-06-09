@@ -1625,7 +1625,7 @@ impl<P> AgentServer<P> {
 }
 
 #[async_trait]
-impl<P> pb::agent_provider_server::AgentProvider for AgentServer<P>
+impl<P> pb::agent_server::Agent for AgentServer<P>
 where
     P: AgentProvider,
 {

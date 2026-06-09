@@ -520,7 +520,7 @@ impl<P> WorkflowServer<P> {
 }
 
 #[async_trait]
-impl<P> pb::workflow_provider_server::WorkflowProvider for WorkflowServer<P>
+impl<P> pb::workflow_server::Workflow for WorkflowServer<P>
 where
     P: WorkflowProvider,
 {

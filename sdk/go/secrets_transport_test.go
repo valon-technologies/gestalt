@@ -54,7 +54,7 @@ func TestSecretsProviderRoundTrip(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewSecretsProviderClient(conn)
+	client := proto.NewSecretsClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()

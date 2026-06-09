@@ -866,7 +866,7 @@ pub mod app_server {
     }
 }
 /// Generated client implementations.
-pub mod agent_provider_client {
+pub mod agent_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -876,16 +876,16 @@ pub mod agent_provider_client {
     )]
     use tonic::codegen::http::Uri;
     use tonic::codegen::*;
-    /** AgentProvider is the authoritative agent data boundary. Read RPCs for
+    /** Agent is the authoritative agent data boundary. Read RPCs for
      sessions, turns, turn events, and interactions should use provider-owned
      control-plane state and should not require a live execution sandbox,
      pod-level transport, or cached tunnel.
     */
     #[derive(Debug, Clone)]
-    pub struct AgentProviderClient<T> {
+    pub struct AgentClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl AgentProviderClient<tonic::transport::Channel> {
+    impl AgentClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -896,7 +896,7 @@ pub mod agent_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> AgentProviderClient<T>
+    impl<T> AgentClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -914,7 +914,7 @@ pub mod agent_provider_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> AgentProviderClient<InterceptedService<T, F>>
+        ) -> AgentClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -927,7 +927,7 @@ pub mod agent_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            AgentProviderClient::new(InterceptedService::new(inner, interceptor))
+            AgentClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -969,12 +969,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/CreateSession",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/CreateSession");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "CreateSession",
             ));
             self.inner.unary(req, path, codec).await
@@ -988,14 +987,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/GetSession",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/GetSession");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "GetSession",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "GetSession"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1010,14 +1006,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/ListSessions",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/ListSessions");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "ListSessions",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "ListSessions"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1029,12 +1022,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/UpdateSession",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/UpdateSession");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "UpdateSession",
             ));
             self.inner.unary(req, path, codec).await
@@ -1048,14 +1040,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/CreateTurn",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/CreateTurn");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "CreateTurn",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "CreateTurn"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1067,13 +1056,10 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.AgentProvider/GetTurn");
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/GetTurn");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "GetTurn",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "GetTurn"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1088,14 +1074,10 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/ListTurns",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/ListTurns");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "ListTurns",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "ListTurns"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1107,14 +1089,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/CancelTurn",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/CancelTurn");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
-                "CancelTurn",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Agent", "CancelTurn"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -1129,12 +1108,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/ListTurnEvents",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/ListTurnEvents");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "ListTurnEvents",
             ));
             self.inner.unary(req, path, codec).await
@@ -1148,12 +1126,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/GetInteraction",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/GetInteraction");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "GetInteraction",
             ));
             self.inner.unary(req, path, codec).await
@@ -1170,12 +1147,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/ListInteractions",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/ListInteractions");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "ListInteractions",
             ));
             self.inner.unary(req, path, codec).await
@@ -1190,11 +1166,11 @@ pub mod agent_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/ResolveInteraction",
+                "/gestalt.provider.v1.Agent/ResolveInteraction",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "ResolveInteraction",
             ));
             self.inner.unary(req, path, codec).await
@@ -1209,12 +1185,11 @@ pub mod agent_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AgentProvider/GetCapabilities",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Agent/GetCapabilities");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AgentProvider",
+                "gestalt.provider.v1.Agent",
                 "GetCapabilities",
             ));
             self.inner.unary(req, path, codec).await
@@ -1222,7 +1197,7 @@ pub mod agent_provider_client {
     }
 }
 /// Generated server implementations.
-pub mod agent_provider_server {
+pub mod agent_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -1231,9 +1206,9 @@ pub mod agent_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with AgentProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with AgentServer.
     #[async_trait]
-    pub trait AgentProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Agent: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn create_session(
             &self,
@@ -1312,20 +1287,20 @@ pub mod agent_provider_server {
             request: tonic::Request<super::GetAgentProviderCapabilitiesRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentProviderCapabilities>, tonic::Status>;
     }
-    /** AgentProvider is the authoritative agent data boundary. Read RPCs for
+    /** Agent is the authoritative agent data boundary. Read RPCs for
      sessions, turns, turn events, and interactions should use provider-owned
      control-plane state and should not require a live execution sandbox,
      pod-level transport, or cached tunnel.
     */
     #[derive(Debug)]
-    pub struct AgentProviderServer<T> {
+    pub struct AgentServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> AgentProviderServer<T> {
+    impl<T> AgentServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -1373,9 +1348,9 @@ pub mod agent_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for AgentProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for AgentServer<T>
     where
-        T: AgentProvider,
+        T: Agent,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -1390,10 +1365,10 @@ pub mod agent_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AgentProvider/CreateSession" => {
+                "/gestalt.provider.v1.Agent/CreateSession" => {
                     #[allow(non_camel_case_types)]
-                    struct CreateSessionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct CreateSessionSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::CreateAgentProviderSessionRequest>
                         for CreateSessionSvc<T>
                     {
@@ -1404,9 +1379,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::CreateAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::create_session(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::create_session(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1432,10 +1406,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/GetSession" => {
+                "/gestalt.provider.v1.Agent/GetSession" => {
                     #[allow(non_camel_case_types)]
-                    struct GetSessionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct GetSessionSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::GetAgentProviderSessionRequest>
                         for GetSessionSvc<T>
                     {
@@ -1446,9 +1420,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::GetAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::get_session(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::get_session(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1474,10 +1447,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/ListSessions" => {
+                "/gestalt.provider.v1.Agent/ListSessions" => {
                     #[allow(non_camel_case_types)]
-                    struct ListSessionsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct ListSessionsSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::ListAgentProviderSessionsRequest>
                         for ListSessionsSvc<T>
                     {
@@ -1488,9 +1461,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::ListAgentProviderSessionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::list_sessions(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::list_sessions(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1516,10 +1488,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/UpdateSession" => {
+                "/gestalt.provider.v1.Agent/UpdateSession" => {
                     #[allow(non_camel_case_types)]
-                    struct UpdateSessionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct UpdateSessionSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::UpdateAgentProviderSessionRequest>
                         for UpdateSessionSvc<T>
                     {
@@ -1530,9 +1502,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::UpdateAgentProviderSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::update_session(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::update_session(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1558,10 +1529,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/CreateTurn" => {
+                "/gestalt.provider.v1.Agent/CreateTurn" => {
                     #[allow(non_camel_case_types)]
-                    struct CreateTurnSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct CreateTurnSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::CreateAgentProviderTurnRequest>
                         for CreateTurnSvc<T>
                     {
@@ -1572,9 +1543,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::CreateAgentProviderTurnRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::create_turn(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::create_turn(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1600,13 +1570,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/GetTurn" => {
+                "/gestalt.provider.v1.Agent/GetTurn" => {
                     #[allow(non_camel_case_types)]
-                    struct GetTurnSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::GetAgentProviderTurnRequest>
-                        for GetTurnSvc<T>
-                    {
+                    struct GetTurnSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent> tonic::server::UnaryService<super::GetAgentProviderTurnRequest> for GetTurnSvc<T> {
                         type Response = super::AgentTurn;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -1614,9 +1581,7 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::GetAgentProviderTurnRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::get_turn(&inner, request).await
-                            };
+                            let fut = async move { <T as Agent>::get_turn(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1642,11 +1607,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/ListTurns" => {
+                "/gestalt.provider.v1.Agent/ListTurns" => {
                     #[allow(non_camel_case_types)]
-                    struct ListTurnsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
-                        tonic::server::UnaryService<super::ListAgentProviderTurnsRequest>
+                    struct ListTurnsSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent> tonic::server::UnaryService<super::ListAgentProviderTurnsRequest>
                         for ListTurnsSvc<T>
                     {
                         type Response = super::ListAgentProviderTurnsResponse;
@@ -1656,9 +1620,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::ListAgentProviderTurnsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::list_turns(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::list_turns(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1684,10 +1647,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/CancelTurn" => {
+                "/gestalt.provider.v1.Agent/CancelTurn" => {
                     #[allow(non_camel_case_types)]
-                    struct CancelTurnSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct CancelTurnSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::CancelAgentProviderTurnRequest>
                         for CancelTurnSvc<T>
                     {
@@ -1698,9 +1661,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::CancelAgentProviderTurnRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::cancel_turn(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::cancel_turn(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1726,10 +1688,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/ListTurnEvents" => {
+                "/gestalt.provider.v1.Agent/ListTurnEvents" => {
                     #[allow(non_camel_case_types)]
-                    struct ListTurnEventsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct ListTurnEventsSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::ListAgentProviderTurnEventsRequest>
                         for ListTurnEventsSvc<T>
                     {
@@ -1741,7 +1703,7 @@ pub mod agent_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::list_turn_events(&inner, request).await
+                                <T as Agent>::list_turn_events(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1768,10 +1730,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/GetInteraction" => {
+                "/gestalt.provider.v1.Agent/GetInteraction" => {
                     #[allow(non_camel_case_types)]
-                    struct GetInteractionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct GetInteractionSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::GetAgentProviderInteractionRequest>
                         for GetInteractionSvc<T>
                     {
@@ -1782,9 +1744,8 @@ pub mod agent_provider_server {
                             request: tonic::Request<super::GetAgentProviderInteractionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AgentProvider>::get_interaction(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Agent>::get_interaction(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1810,10 +1771,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/ListInteractions" => {
+                "/gestalt.provider.v1.Agent/ListInteractions" => {
                     #[allow(non_camel_case_types)]
-                    struct ListInteractionsSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct ListInteractionsSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::ListAgentProviderInteractionsRequest>
                         for ListInteractionsSvc<T>
                     {
@@ -1825,7 +1786,7 @@ pub mod agent_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::list_interactions(&inner, request).await
+                                <T as Agent>::list_interactions(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1852,10 +1813,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/ResolveInteraction" => {
+                "/gestalt.provider.v1.Agent/ResolveInteraction" => {
                     #[allow(non_camel_case_types)]
-                    struct ResolveInteractionSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct ResolveInteractionSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::ResolveAgentProviderInteractionRequest>
                         for ResolveInteractionSvc<T>
                     {
@@ -1867,7 +1828,7 @@ pub mod agent_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::resolve_interaction(&inner, request).await
+                                <T as Agent>::resolve_interaction(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1894,10 +1855,10 @@ pub mod agent_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AgentProvider/GetCapabilities" => {
+                "/gestalt.provider.v1.Agent/GetCapabilities" => {
                     #[allow(non_camel_case_types)]
-                    struct GetCapabilitiesSvc<T: AgentProvider>(pub Arc<T>);
-                    impl<T: AgentProvider>
+                    struct GetCapabilitiesSvc<T: Agent>(pub Arc<T>);
+                    impl<T: Agent>
                         tonic::server::UnaryService<super::GetAgentProviderCapabilitiesRequest>
                         for GetCapabilitiesSvc<T>
                     {
@@ -1909,7 +1870,7 @@ pub mod agent_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AgentProvider>::get_capabilities(&inner, request).await
+                                <T as Agent>::get_capabilities(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1952,7 +1913,7 @@ pub mod agent_provider_server {
             }
         }
     }
-    impl<T> Clone for AgentProviderServer<T> {
+    impl<T> Clone for AgentServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -1965,13 +1926,13 @@ pub mod agent_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.AgentProvider";
-    impl<T> tonic::server::NamedService for AgentProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Agent";
+    impl<T> tonic::server::NamedService for AgentServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
 /// Generated client implementations.
-pub mod authentication_provider_client {
+pub mod authentication_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -1981,14 +1942,13 @@ pub mod authentication_provider_client {
     )]
     use tonic::codegen::http::Uri;
     use tonic::codegen::*;
-    /** AuthenticationProvider models the shared Gestalt authentication-provider
-     protocol.
+    /** Authentication models the shared Gestalt authentication protocol.
     */
     #[derive(Debug, Clone)]
-    pub struct AuthenticationProviderClient<T> {
+    pub struct AuthenticationClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl AuthenticationProviderClient<tonic::transport::Channel> {
+    impl AuthenticationClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -1999,7 +1959,7 @@ pub mod authentication_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> AuthenticationProviderClient<T>
+    impl<T> AuthenticationClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -2017,7 +1977,7 @@ pub mod authentication_provider_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> AuthenticationProviderClient<InterceptedService<T, F>>
+        ) -> AuthenticationClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -2030,7 +1990,7 @@ pub mod authentication_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            AuthenticationProviderClient::new(InterceptedService::new(inner, interceptor))
+            AuthenticationClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -2074,11 +2034,11 @@ pub mod authentication_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthenticationProvider/BeginLogin",
+                "/gestalt.provider.v1.Authentication/BeginLogin",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthenticationProvider",
+                "gestalt.provider.v1.Authentication",
                 "BeginLogin",
             ));
             self.inner.unary(req, path, codec).await
@@ -2093,11 +2053,11 @@ pub mod authentication_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthenticationProvider/CompleteLogin",
+                "/gestalt.provider.v1.Authentication/CompleteLogin",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthenticationProvider",
+                "gestalt.provider.v1.Authentication",
                 "CompleteLogin",
             ));
             self.inner.unary(req, path, codec).await
@@ -2112,11 +2072,11 @@ pub mod authentication_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken",
+                "/gestalt.provider.v1.Authentication/ValidateExternalToken",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthenticationProvider",
+                "gestalt.provider.v1.Authentication",
                 "ValidateExternalToken",
             ));
             self.inner.unary(req, path, codec).await
@@ -2132,11 +2092,11 @@ pub mod authentication_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings",
+                "/gestalt.provider.v1.Authentication/GetSessionSettings",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthenticationProvider",
+                "gestalt.provider.v1.Authentication",
                 "GetSessionSettings",
             ));
             self.inner.unary(req, path, codec).await
@@ -2144,7 +2104,7 @@ pub mod authentication_provider_client {
     }
 }
 /// Generated server implementations.
-pub mod authentication_provider_server {
+pub mod authentication_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -2153,9 +2113,9 @@ pub mod authentication_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with AuthenticationProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with AuthenticationServer.
     #[async_trait]
-    pub trait AuthenticationProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Authentication: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn begin_login(
             &self,
@@ -2177,18 +2137,17 @@ pub mod authentication_provider_server {
             request: tonic::Request<()>,
         ) -> std::result::Result<tonic::Response<super::AuthSessionSettings>, tonic::Status>;
     }
-    /** AuthenticationProvider models the shared Gestalt authentication-provider
-     protocol.
+    /** Authentication models the shared Gestalt authentication protocol.
     */
     #[derive(Debug)]
-    pub struct AuthenticationProviderServer<T> {
+    pub struct AuthenticationServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> AuthenticationProviderServer<T> {
+    impl<T> AuthenticationServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -2236,9 +2195,9 @@ pub mod authentication_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for AuthenticationProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for AuthenticationServer<T>
     where
-        T: AuthenticationProvider,
+        T: Authentication,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -2253,12 +2212,10 @@ pub mod authentication_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AuthenticationProvider/BeginLogin" => {
+                "/gestalt.provider.v1.Authentication/BeginLogin" => {
                     #[allow(non_camel_case_types)]
-                    struct BeginLoginSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<T: AuthenticationProvider>
-                        tonic::server::UnaryService<super::BeginLoginRequest> for BeginLoginSvc<T>
-                    {
+                    struct BeginLoginSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::BeginLoginRequest> for BeginLoginSvc<T> {
                         type Response = super::BeginLoginResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -2267,7 +2224,7 @@ pub mod authentication_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::begin_login(&inner, request).await
+                                <T as Authentication>::begin_login(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2294,11 +2251,10 @@ pub mod authentication_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthenticationProvider/CompleteLogin" => {
+                "/gestalt.provider.v1.Authentication/CompleteLogin" => {
                     #[allow(non_camel_case_types)]
-                    struct CompleteLoginSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<T: AuthenticationProvider>
-                        tonic::server::UnaryService<super::CompleteLoginRequest>
+                    struct CompleteLoginSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::CompleteLoginRequest>
                         for CompleteLoginSvc<T>
                     {
                         type Response = super::AuthenticatedUser;
@@ -2309,7 +2265,7 @@ pub mod authentication_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::complete_login(&inner, request).await
+                                <T as Authentication>::complete_login(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2336,10 +2292,10 @@ pub mod authentication_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken" => {
+                "/gestalt.provider.v1.Authentication/ValidateExternalToken" => {
                     #[allow(non_camel_case_types)]
-                    struct ValidateExternalTokenSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<T: AuthenticationProvider>
+                    struct ValidateExternalTokenSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication>
                         tonic::server::UnaryService<super::ValidateExternalTokenRequest>
                         for ValidateExternalTokenSvc<T>
                     {
@@ -2351,10 +2307,8 @@ pub mod authentication_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::validate_external_token(
-                                    &inner, request,
-                                )
-                                .await
+                                <T as Authentication>::validate_external_token(&inner, request)
+                                    .await
                             };
                             Box::pin(fut)
                         }
@@ -2381,17 +2335,16 @@ pub mod authentication_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings" => {
+                "/gestalt.provider.v1.Authentication/GetSessionSettings" => {
                     #[allow(non_camel_case_types)]
-                    struct GetSessionSettingsSvc<T: AuthenticationProvider>(pub Arc<T>);
-                    impl<T: AuthenticationProvider> tonic::server::UnaryService<()> for GetSessionSettingsSvc<T> {
+                    struct GetSessionSettingsSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<()> for GetSessionSettingsSvc<T> {
                         type Response = super::AuthSessionSettings;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthenticationProvider>::get_session_settings(&inner, request)
-                                    .await
+                                <T as Authentication>::get_session_settings(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2434,7 +2387,7 @@ pub mod authentication_provider_server {
             }
         }
     }
-    impl<T> Clone for AuthenticationProviderServer<T> {
+    impl<T> Clone for AuthenticationServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -2447,13 +2400,13 @@ pub mod authentication_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.AuthenticationProvider";
-    impl<T> tonic::server::NamedService for AuthenticationProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Authentication";
+    impl<T> tonic::server::NamedService for AuthenticationServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
 /// Generated client implementations.
-pub mod authorization_provider_client {
+pub mod authorization_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -2465,10 +2418,10 @@ pub mod authorization_provider_client {
     use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
-    pub struct AuthorizationProviderClient<T> {
+    pub struct AuthorizationClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl AuthorizationProviderClient<tonic::transport::Channel> {
+    impl AuthorizationClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -2479,7 +2432,7 @@ pub mod authorization_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> AuthorizationProviderClient<T>
+    impl<T> AuthorizationClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -2497,7 +2450,7 @@ pub mod authorization_provider_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> AuthorizationProviderClient<InterceptedService<T, F>>
+        ) -> AuthorizationClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -2510,7 +2463,7 @@ pub mod authorization_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            AuthorizationProviderClient::new(InterceptedService::new(inner, interceptor))
+            AuthorizationClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -2554,11 +2507,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/CheckAccess",
+                "/gestalt.provider.v1.Authorization/CheckAccess",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "CheckAccess",
             ));
             self.inner.unary(req, path, codec).await
@@ -2574,11 +2527,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany",
+                "/gestalt.provider.v1.Authorization/CheckAccessMany",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "CheckAccessMany",
             ));
             self.inner.unary(req, path, codec).await
@@ -2594,11 +2547,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/ListRelationships",
+                "/gestalt.provider.v1.Authorization/ListRelationships",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "ListRelationships",
             ));
             self.inner.unary(req, path, codec).await
@@ -2614,11 +2567,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/AddRelationship",
+                "/gestalt.provider.v1.Authorization/AddRelationship",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "AddRelationship",
             ));
             self.inner.unary(req, path, codec).await
@@ -2634,11 +2587,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship",
+                "/gestalt.provider.v1.Authorization/DeleteRelationship",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "DeleteRelationship",
             ));
             self.inner.unary(req, path, codec).await
@@ -2654,11 +2607,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState",
+                "/gestalt.provider.v1.Authorization/SetAuthorizationState",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "SetAuthorizationState",
             ));
             self.inner.unary(req, path, codec).await
@@ -2674,11 +2627,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef",
+                "/gestalt.provider.v1.Authorization/GetActiveModelRef",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "GetActiveModelRef",
             ));
             self.inner.unary(req, path, codec).await
@@ -2694,11 +2647,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel",
+                "/gestalt.provider.v1.Authorization/SetActiveModel",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "SetActiveModel",
             ));
             self.inner.unary(req, path, codec).await
@@ -2716,11 +2669,11 @@ pub mod authorization_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes",
+                "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.AuthorizationProvider",
+                "gestalt.provider.v1.Authorization",
                 "ListActiveModelResourceTypes",
             ));
             self.inner.unary(req, path, codec).await
@@ -2728,7 +2681,7 @@ pub mod authorization_provider_client {
     }
 }
 /// Generated server implementations.
-pub mod authorization_provider_server {
+pub mod authorization_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -2737,9 +2690,9 @@ pub mod authorization_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with AuthorizationProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with AuthorizationServer.
     #[async_trait]
-    pub trait AuthorizationProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Authorization: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn check_access(
             &self,
@@ -2791,14 +2744,14 @@ pub mod authorization_provider_server {
     }
     ///
     #[derive(Debug)]
-    pub struct AuthorizationProviderServer<T> {
+    pub struct AuthorizationServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> AuthorizationProviderServer<T> {
+    impl<T> AuthorizationServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -2846,9 +2799,9 @@ pub mod authorization_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for AuthorizationProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for AuthorizationServer<T>
     where
-        T: AuthorizationProvider,
+        T: Authorization,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -2863,11 +2816,10 @@ pub mod authorization_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.AuthorizationProvider/CheckAccess" => {
+                "/gestalt.provider.v1.Authorization/CheckAccess" => {
                     #[allow(non_camel_case_types)]
-                    struct CheckAccessSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::CheckAccessRequest>
+                    struct CheckAccessSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization> tonic::server::UnaryService<super::CheckAccessRequest>
                         for CheckAccessSvc<T>
                     {
                         type Response = super::CheckAccessResponse;
@@ -2878,7 +2830,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::check_access(&inner, request).await
+                                <T as Authorization>::check_access(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2905,10 +2857,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany" => {
+                "/gestalt.provider.v1.Authorization/CheckAccessMany" => {
                     #[allow(non_camel_case_types)]
-                    struct CheckAccessManySvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
+                    struct CheckAccessManySvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization>
                         tonic::server::UnaryService<super::CheckAccessManyRequest>
                         for CheckAccessManySvc<T>
                     {
@@ -2920,8 +2872,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::check_access_many(&inner, request)
-                                    .await
+                                <T as Authorization>::check_access_many(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2948,10 +2899,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/ListRelationships" => {
+                "/gestalt.provider.v1.Authorization/ListRelationships" => {
                     #[allow(non_camel_case_types)]
-                    struct ListRelationshipsSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
+                    struct ListRelationshipsSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization>
                         tonic::server::UnaryService<super::ListRelationshipsRequest>
                         for ListRelationshipsSvc<T>
                     {
@@ -2963,8 +2914,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::list_relationships(&inner, request)
-                                    .await
+                                <T as Authorization>::list_relationships(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2991,10 +2941,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/AddRelationship" => {
+                "/gestalt.provider.v1.Authorization/AddRelationship" => {
                     #[allow(non_camel_case_types)]
-                    struct AddRelationshipSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
+                    struct AddRelationshipSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization>
                         tonic::server::UnaryService<super::AddRelationshipRequest>
                         for AddRelationshipSvc<T>
                     {
@@ -3006,8 +2956,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::add_relationship(&inner, request)
-                                    .await
+                                <T as Authorization>::add_relationship(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3034,10 +2983,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship" => {
+                "/gestalt.provider.v1.Authorization/DeleteRelationship" => {
                     #[allow(non_camel_case_types)]
-                    struct DeleteRelationshipSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
+                    struct DeleteRelationshipSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization>
                         tonic::server::UnaryService<super::DeleteRelationshipRequest>
                         for DeleteRelationshipSvc<T>
                     {
@@ -3049,8 +2998,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::delete_relationship(&inner, request)
-                                    .await
+                                <T as Authorization>::delete_relationship(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3077,10 +3025,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState" => {
+                "/gestalt.provider.v1.Authorization/SetAuthorizationState" => {
                     #[allow(non_camel_case_types)]
-                    struct SetAuthorizationStateSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
+                    struct SetAuthorizationStateSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization>
                         tonic::server::UnaryService<super::SetAuthorizationStateRequest>
                         for SetAuthorizationStateSvc<T>
                     {
@@ -3092,10 +3040,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::set_authorization_state(
-                                    &inner, request,
-                                )
-                                .await
+                                <T as Authorization>::set_authorization_state(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3122,17 +3067,16 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef" => {
+                "/gestalt.provider.v1.Authorization/GetActiveModelRef" => {
                     #[allow(non_camel_case_types)]
-                    struct GetActiveModelRefSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider> tonic::server::UnaryService<()> for GetActiveModelRefSvc<T> {
+                    struct GetActiveModelRefSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization> tonic::server::UnaryService<()> for GetActiveModelRefSvc<T> {
                         type Response = super::GetActiveModelRefResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::get_active_model_ref(&inner, request)
-                                    .await
+                                <T as Authorization>::get_active_model_ref(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3159,11 +3103,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel" => {
+                "/gestalt.provider.v1.Authorization/SetActiveModel" => {
                     #[allow(non_camel_case_types)]
-                    struct SetActiveModelSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
-                        tonic::server::UnaryService<super::SetActiveModelRequest>
+                    struct SetActiveModelSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization> tonic::server::UnaryService<super::SetActiveModelRequest>
                         for SetActiveModelSvc<T>
                     {
                         type Response = super::SetActiveModelResponse;
@@ -3174,8 +3117,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::set_active_model(&inner, request)
-                                    .await
+                                <T as Authorization>::set_active_model(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -3202,10 +3144,10 @@ pub mod authorization_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes" => {
+                "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes" => {
                     #[allow(non_camel_case_types)]
-                    struct ListActiveModelResourceTypesSvc<T: AuthorizationProvider>(pub Arc<T>);
-                    impl<T: AuthorizationProvider>
+                    struct ListActiveModelResourceTypesSvc<T: Authorization>(pub Arc<T>);
+                    impl<T: Authorization>
                         tonic::server::UnaryService<super::ListActiveModelResourceTypesRequest>
                         for ListActiveModelResourceTypesSvc<T>
                     {
@@ -3217,7 +3159,7 @@ pub mod authorization_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AuthorizationProvider>::list_active_model_resource_types(
+                                <T as Authorization>::list_active_model_resource_types(
                                     &inner, request,
                                 )
                                 .await
@@ -3263,7 +3205,7 @@ pub mod authorization_provider_server {
             }
         }
     }
-    impl<T> Clone for AuthorizationProviderServer<T> {
+    impl<T> Clone for AuthorizationServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -3276,8 +3218,8 @@ pub mod authorization_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.AuthorizationProvider";
-    impl<T> tonic::server::NamedService for AuthorizationProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Authorization";
+    impl<T> tonic::server::NamedService for AuthorizationServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
@@ -6124,7 +6066,7 @@ pub mod runtime_log_host_server {
     }
 }
 /// Generated client implementations.
-pub mod runtime_provider_client {
+pub mod runtime_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -6136,10 +6078,10 @@ pub mod runtime_provider_client {
     use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
-    pub struct RuntimeProviderClient<T> {
+    pub struct RuntimeClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl RuntimeProviderClient<tonic::transport::Channel> {
+    impl RuntimeClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -6150,7 +6092,7 @@ pub mod runtime_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> RuntimeProviderClient<T>
+    impl<T> RuntimeClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -6168,7 +6110,7 @@ pub mod runtime_provider_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> RuntimeProviderClient<InterceptedService<T, F>>
+        ) -> RuntimeClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -6181,7 +6123,7 @@ pub mod runtime_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            RuntimeProviderClient::new(InterceptedService::new(inner, interceptor))
+            RuntimeClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -6223,14 +6165,11 @@ pub mod runtime_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/GetSupport",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Runtime/GetSupport");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
-                "GetSupport",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Runtime", "GetSupport"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -6242,12 +6181,11 @@ pub mod runtime_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/StartSession",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Runtime/StartSession");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
+                "gestalt.provider.v1.Runtime",
                 "StartSession",
             ));
             self.inner.unary(req, path, codec).await
@@ -6261,14 +6199,11 @@ pub mod runtime_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/GetSession",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Runtime/GetSession");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
-                "GetSession",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Runtime", "GetSession"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -6281,12 +6216,11 @@ pub mod runtime_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/ListSessions",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Runtime/ListSessions");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
+                "gestalt.provider.v1.Runtime",
                 "ListSessions",
             ));
             self.inner.unary(req, path, codec).await
@@ -6300,12 +6234,11 @@ pub mod runtime_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/StopSession",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Runtime/StopSession");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
+                "gestalt.provider.v1.Runtime",
                 "StopSession",
             ));
             self.inner.unary(req, path, codec).await
@@ -6323,11 +6256,11 @@ pub mod runtime_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace",
+                "/gestalt.provider.v1.Runtime/PrepareWorkspace",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
+                "gestalt.provider.v1.Runtime",
                 "PrepareWorkspace",
             ));
             self.inner.unary(req, path, codec).await
@@ -6342,11 +6275,11 @@ pub mod runtime_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace",
+                "/gestalt.provider.v1.Runtime/RemoveWorkspace",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
+                "gestalt.provider.v1.Runtime",
                 "RemoveWorkspace",
             ));
             self.inner.unary(req, path, codec).await
@@ -6360,20 +6293,17 @@ pub mod runtime_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.RuntimeProvider/StartApp",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Runtime/StartApp");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.RuntimeProvider",
-                "StartApp",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Runtime", "StartApp"));
             self.inner.unary(req, path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod runtime_provider_server {
+pub mod runtime_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -6382,9 +6312,9 @@ pub mod runtime_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with RuntimeProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with RuntimeServer.
     #[async_trait]
-    pub trait RuntimeProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Runtime: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn get_support(
             &self,
@@ -6431,14 +6361,14 @@ pub mod runtime_provider_server {
     }
     ///
     #[derive(Debug)]
-    pub struct RuntimeProviderServer<T> {
+    pub struct RuntimeServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> RuntimeProviderServer<T> {
+    impl<T> RuntimeServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -6486,9 +6416,9 @@ pub mod runtime_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for RuntimeProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for RuntimeServer<T>
     where
-        T: RuntimeProvider,
+        T: Runtime,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -6503,17 +6433,16 @@ pub mod runtime_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.RuntimeProvider/GetSupport" => {
+                "/gestalt.provider.v1.Runtime/GetSupport" => {
                     #[allow(non_camel_case_types)]
-                    struct GetSupportSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider> tonic::server::UnaryService<()> for GetSupportSvc<T> {
+                    struct GetSupportSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<()> for GetSupportSvc<T> {
                         type Response = super::RuntimeSupport;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as RuntimeProvider>::get_support(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Runtime>::get_support(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6539,11 +6468,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/StartSession" => {
+                "/gestalt.provider.v1.Runtime/StartSession" => {
                     #[allow(non_camel_case_types)]
-                    struct StartSessionSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
-                        tonic::server::UnaryService<super::StartRuntimeSessionRequest>
+                    struct StartSessionSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::StartRuntimeSessionRequest>
                         for StartSessionSvc<T>
                     {
                         type Response = super::RuntimeSession;
@@ -6553,9 +6481,8 @@ pub mod runtime_provider_server {
                             request: tonic::Request<super::StartRuntimeSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as RuntimeProvider>::start_session(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Runtime>::start_session(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6581,13 +6508,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/GetSession" => {
+                "/gestalt.provider.v1.Runtime/GetSession" => {
                     #[allow(non_camel_case_types)]
-                    struct GetSessionSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
-                        tonic::server::UnaryService<super::GetRuntimeSessionRequest>
-                        for GetSessionSvc<T>
-                    {
+                    struct GetSessionSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::GetRuntimeSessionRequest> for GetSessionSvc<T> {
                         type Response = super::RuntimeSession;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -6595,9 +6519,8 @@ pub mod runtime_provider_server {
                             request: tonic::Request<super::GetRuntimeSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as RuntimeProvider>::get_session(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Runtime>::get_session(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6623,11 +6546,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/ListSessions" => {
+                "/gestalt.provider.v1.Runtime/ListSessions" => {
                     #[allow(non_camel_case_types)]
-                    struct ListSessionsSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
-                        tonic::server::UnaryService<super::ListRuntimeSessionsRequest>
+                    struct ListSessionsSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::ListRuntimeSessionsRequest>
                         for ListSessionsSvc<T>
                     {
                         type Response = super::ListRuntimeSessionsResponse;
@@ -6637,9 +6559,8 @@ pub mod runtime_provider_server {
                             request: tonic::Request<super::ListRuntimeSessionsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as RuntimeProvider>::list_sessions(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Runtime>::list_sessions(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6665,11 +6586,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/StopSession" => {
+                "/gestalt.provider.v1.Runtime/StopSession" => {
                     #[allow(non_camel_case_types)]
-                    struct StopSessionSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
-                        tonic::server::UnaryService<super::StopRuntimeSessionRequest>
+                    struct StopSessionSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::StopRuntimeSessionRequest>
                         for StopSessionSvc<T>
                     {
                         type Response = ();
@@ -6679,9 +6599,8 @@ pub mod runtime_provider_server {
                             request: tonic::Request<super::StopRuntimeSessionRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as RuntimeProvider>::stop_session(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Runtime>::stop_session(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6707,10 +6626,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/PrepareWorkspace" => {
+                "/gestalt.provider.v1.Runtime/PrepareWorkspace" => {
                     #[allow(non_camel_case_types)]
-                    struct PrepareWorkspaceSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
+                    struct PrepareWorkspaceSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime>
                         tonic::server::UnaryService<super::PrepareRuntimeWorkspaceRequest>
                         for PrepareWorkspaceSvc<T>
                     {
@@ -6722,7 +6641,7 @@ pub mod runtime_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as RuntimeProvider>::prepare_workspace(&inner, request).await
+                                <T as Runtime>::prepare_workspace(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -6749,10 +6668,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/RemoveWorkspace" => {
+                "/gestalt.provider.v1.Runtime/RemoveWorkspace" => {
                     #[allow(non_camel_case_types)]
-                    struct RemoveWorkspaceSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
+                    struct RemoveWorkspaceSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime>
                         tonic::server::UnaryService<super::RemoveRuntimeWorkspaceRequest>
                         for RemoveWorkspaceSvc<T>
                     {
@@ -6764,7 +6683,7 @@ pub mod runtime_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as RuntimeProvider>::remove_workspace(&inner, request).await
+                                <T as Runtime>::remove_workspace(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -6791,13 +6710,10 @@ pub mod runtime_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.RuntimeProvider/StartApp" => {
+                "/gestalt.provider.v1.Runtime/StartApp" => {
                     #[allow(non_camel_case_types)]
-                    struct StartAppSvc<T: RuntimeProvider>(pub Arc<T>);
-                    impl<T: RuntimeProvider>
-                        tonic::server::UnaryService<super::StartHostedAppRequest>
-                        for StartAppSvc<T>
-                    {
+                    struct StartAppSvc<T: Runtime>(pub Arc<T>);
+                    impl<T: Runtime> tonic::server::UnaryService<super::StartHostedAppRequest> for StartAppSvc<T> {
                         type Response = super::HostedApp;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -6805,9 +6721,8 @@ pub mod runtime_provider_server {
                             request: tonic::Request<super::StartHostedAppRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as RuntimeProvider>::start_app(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Runtime>::start_app(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -6849,7 +6764,7 @@ pub mod runtime_provider_server {
             }
         }
     }
-    impl<T> Clone for RuntimeProviderServer<T> {
+    impl<T> Clone for RuntimeServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -6862,8 +6777,8 @@ pub mod runtime_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.RuntimeProvider";
-    impl<T> tonic::server::NamedService for RuntimeProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Runtime";
+    impl<T> tonic::server::NamedService for RuntimeServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
@@ -7798,7 +7713,7 @@ pub mod s3_object_access_server {
     }
 }
 /// Generated client implementations.
-pub mod secrets_provider_client {
+pub mod secrets_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -7808,13 +7723,13 @@ pub mod secrets_provider_client {
     )]
     use tonic::codegen::http::Uri;
     use tonic::codegen::*;
-    /** SecretsProvider models the shared Gestalt secrets-provider protocol.
+    /** Secrets models the shared Gestalt secrets protocol.
     */
     #[derive(Debug, Clone)]
-    pub struct SecretsProviderClient<T> {
+    pub struct SecretsClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl SecretsProviderClient<tonic::transport::Channel> {
+    impl SecretsClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -7825,7 +7740,7 @@ pub mod secrets_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> SecretsProviderClient<T>
+    impl<T> SecretsClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -7843,7 +7758,7 @@ pub mod secrets_provider_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> SecretsProviderClient<InterceptedService<T, F>>
+        ) -> SecretsClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -7856,7 +7771,7 @@ pub mod secrets_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            SecretsProviderClient::new(InterceptedService::new(inner, interceptor))
+            SecretsClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -7898,20 +7813,17 @@ pub mod secrets_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.SecretsProvider/GetSecret",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Secrets/GetSecret");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.SecretsProvider",
-                "GetSecret",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Secrets", "GetSecret"));
             self.inner.unary(req, path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod secrets_provider_server {
+pub mod secrets_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -7920,26 +7832,26 @@ pub mod secrets_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with SecretsProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with SecretsServer.
     #[async_trait]
-    pub trait SecretsProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Secrets: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn get_secret(
             &self,
             request: tonic::Request<super::GetSecretRequest>,
         ) -> std::result::Result<tonic::Response<super::GetSecretResponse>, tonic::Status>;
     }
-    /** SecretsProvider models the shared Gestalt secrets-provider protocol.
+    /** Secrets models the shared Gestalt secrets protocol.
     */
     #[derive(Debug)]
-    pub struct SecretsProviderServer<T> {
+    pub struct SecretsServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> SecretsProviderServer<T> {
+    impl<T> SecretsServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -7987,9 +7899,9 @@ pub mod secrets_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for SecretsProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for SecretsServer<T>
     where
-        T: SecretsProvider,
+        T: Secrets,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -8004,10 +7916,10 @@ pub mod secrets_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.SecretsProvider/GetSecret" => {
+                "/gestalt.provider.v1.Secrets/GetSecret" => {
                     #[allow(non_camel_case_types)]
-                    struct GetSecretSvc<T: SecretsProvider>(pub Arc<T>);
-                    impl<T: SecretsProvider> tonic::server::UnaryService<super::GetSecretRequest> for GetSecretSvc<T> {
+                    struct GetSecretSvc<T: Secrets>(pub Arc<T>);
+                    impl<T: Secrets> tonic::server::UnaryService<super::GetSecretRequest> for GetSecretSvc<T> {
                         type Response = super::GetSecretResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -8015,9 +7927,8 @@ pub mod secrets_provider_server {
                             request: tonic::Request<super::GetSecretRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as SecretsProvider>::get_secret(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Secrets>::get_secret(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -8059,7 +7970,7 @@ pub mod secrets_provider_server {
             }
         }
     }
-    impl<T> Clone for SecretsProviderServer<T> {
+    impl<T> Clone for SecretsServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -8072,13 +7983,13 @@ pub mod secrets_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.SecretsProvider";
-    impl<T> tonic::server::NamedService for SecretsProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Secrets";
+    impl<T> tonic::server::NamedService for SecretsServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
 /// Generated client implementations.
-pub mod test_provider_client {
+pub mod test_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -8088,14 +7999,14 @@ pub mod test_provider_client {
     )]
     use tonic::codegen::http::Uri;
     use tonic::codegen::*;
-    /** TestProvider models a minimal provider-kind-specific protocol used to verify
-     new provider kind registration and lifecycle wiring.
+    /** Test models a minimal provider-kind-specific protocol used to verify new
+     provider kind registration and lifecycle wiring.
     */
     #[derive(Debug, Clone)]
-    pub struct TestProviderClient<T> {
+    pub struct TestClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl TestProviderClient<tonic::transport::Channel> {
+    impl TestClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -8106,7 +8017,7 @@ pub mod test_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> TestProviderClient<T>
+    impl<T> TestClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -8121,10 +8032,7 @@ pub mod test_provider_client {
             let inner = tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> TestProviderClient<InterceptedService<T, F>>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> TestClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -8137,7 +8045,7 @@ pub mod test_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            TestProviderClient::new(InterceptedService::new(inner, interceptor))
+            TestClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -8180,20 +8088,16 @@ pub mod test_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.TestProvider/HelloWorld",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Test/HelloWorld");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.TestProvider",
-                "HelloWorld",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Test", "HelloWorld"));
             self.inner.unary(req, path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod test_provider_server {
+pub mod test_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -8202,27 +8106,27 @@ pub mod test_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with TestProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with TestServer.
     #[async_trait]
-    pub trait TestProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Test: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn hello_world(
             &self,
             request: tonic::Request<super::HelloWorldRequest>,
         ) -> std::result::Result<tonic::Response<super::HelloWorldResponse>, tonic::Status>;
     }
-    /** TestProvider models a minimal provider-kind-specific protocol used to verify
-     new provider kind registration and lifecycle wiring.
+    /** Test models a minimal provider-kind-specific protocol used to verify new
+     provider kind registration and lifecycle wiring.
     */
     #[derive(Debug)]
-    pub struct TestProviderServer<T> {
+    pub struct TestServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> TestProviderServer<T> {
+    impl<T> TestServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -8270,9 +8174,9 @@ pub mod test_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for TestProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for TestServer<T>
     where
-        T: TestProvider,
+        T: Test,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -8287,10 +8191,10 @@ pub mod test_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.TestProvider/HelloWorld" => {
+                "/gestalt.provider.v1.Test/HelloWorld" => {
                     #[allow(non_camel_case_types)]
-                    struct HelloWorldSvc<T: TestProvider>(pub Arc<T>);
-                    impl<T: TestProvider> tonic::server::UnaryService<super::HelloWorldRequest> for HelloWorldSvc<T> {
+                    struct HelloWorldSvc<T: Test>(pub Arc<T>);
+                    impl<T: Test> tonic::server::UnaryService<super::HelloWorldRequest> for HelloWorldSvc<T> {
                         type Response = super::HelloWorldResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -8298,9 +8202,8 @@ pub mod test_provider_server {
                             request: tonic::Request<super::HelloWorldRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as TestProvider>::hello_world(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Test>::hello_world(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -8342,7 +8245,7 @@ pub mod test_provider_server {
             }
         }
     }
-    impl<T> Clone for TestProviderServer<T> {
+    impl<T> Clone for TestServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -8355,13 +8258,13 @@ pub mod test_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.TestProvider";
-    impl<T> tonic::server::NamedService for TestProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Test";
+    impl<T> tonic::server::NamedService for TestServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
 /// Generated client implementations.
-pub mod workflow_provider_client {
+pub mod workflow_client {
     #![allow(
         unused_variables,
         dead_code,
@@ -8373,10 +8276,10 @@ pub mod workflow_provider_client {
     use tonic::codegen::*;
     ///
     #[derive(Debug, Clone)]
-    pub struct WorkflowProviderClient<T> {
+    pub struct WorkflowClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl WorkflowProviderClient<tonic::transport::Channel> {
+    impl WorkflowClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -8387,7 +8290,7 @@ pub mod workflow_provider_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> WorkflowProviderClient<T>
+    impl<T> WorkflowClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
@@ -8405,7 +8308,7 @@ pub mod workflow_provider_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> WorkflowProviderClient<InterceptedService<T, F>>
+        ) -> WorkflowClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -8418,7 +8321,7 @@ pub mod workflow_provider_client {
             <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
                 Into<StdError> + std::marker::Send + std::marker::Sync,
         {
-            WorkflowProviderClient::new(InterceptedService::new(inner, interceptor))
+            WorkflowClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -8462,11 +8365,11 @@ pub mod workflow_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/ApplyDefinition",
+                "/gestalt.provider.v1.Workflow/ApplyDefinition",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "ApplyDefinition",
             ));
             self.inner.unary(req, path, codec).await
@@ -8481,12 +8384,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/GetDefinition",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/GetDefinition");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "GetDefinition",
             ));
             self.inner.unary(req, path, codec).await
@@ -8504,11 +8406,11 @@ pub mod workflow_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/ListDefinitions",
+                "/gestalt.provider.v1.Workflow/ListDefinitions",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "ListDefinitions",
             ));
             self.inner.unary(req, path, codec).await
@@ -8524,11 +8426,11 @@ pub mod workflow_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/SetDefinitionPaused",
+                "/gestalt.provider.v1.Workflow/SetDefinitionPaused",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "SetDefinitionPaused",
             ));
             self.inner.unary(req, path, codec).await
@@ -8544,11 +8446,11 @@ pub mod workflow_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/SetActivationPaused",
+                "/gestalt.provider.v1.Workflow/SetActivationPaused",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "SetActivationPaused",
             ));
             self.inner.unary(req, path, codec).await
@@ -8563,11 +8465,11 @@ pub mod workflow_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/DeleteDefinition",
+                "/gestalt.provider.v1.Workflow/DeleteDefinition",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "DeleteDefinition",
             ));
             self.inner.unary(req, path, codec).await
@@ -8581,14 +8483,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/StartRun",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/StartRun");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
-                "StartRun",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Workflow", "StartRun"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8603,14 +8502,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/ListRuns",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/ListRuns");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
-                "ListRuns",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Workflow", "ListRuns"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8622,14 +8518,10 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/GetRun",
-            );
+            let path = http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/GetRun");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
-                "GetRun",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Workflow", "GetRun"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8644,12 +8536,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/GetRunEvents",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/GetRunEvents");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "GetRunEvents",
             ));
             self.inner.unary(req, path, codec).await
@@ -8666,12 +8557,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/GetRunOutput",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/GetRunOutput");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "GetRunOutput",
             ));
             self.inner.unary(req, path, codec).await
@@ -8685,14 +8575,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/CancelRun",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/CancelRun");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
-                "CancelRun",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Workflow", "CancelRun"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8705,14 +8592,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/SignalRun",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/SignalRun");
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
-                "SignalRun",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("gestalt.provider.v1.Workflow", "SignalRun"));
             self.inner.unary(req, path, codec).await
         }
         ///
@@ -8726,11 +8610,11 @@ pub mod workflow_provider_client {
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun",
+                "/gestalt.provider.v1.Workflow/SignalOrStartRun",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "SignalOrStartRun",
             ));
             self.inner.unary(req, path, codec).await
@@ -8744,12 +8628,11 @@ pub mod workflow_provider_client {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.WorkflowProvider/DeliverEvent",
-            );
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Workflow/DeliverEvent");
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.WorkflowProvider",
+                "gestalt.provider.v1.Workflow",
                 "DeliverEvent",
             ));
             self.inner.unary(req, path, codec).await
@@ -8757,7 +8640,7 @@ pub mod workflow_provider_client {
     }
 }
 /// Generated server implementations.
-pub mod workflow_provider_server {
+pub mod workflow_server {
     #![allow(
         unused_variables,
         dead_code,
@@ -8766,9 +8649,9 @@ pub mod workflow_provider_server {
         clippy::let_unit_value
     )]
     use tonic::codegen::*;
-    /// Generated trait containing gRPC methods that should be implemented for use with WorkflowProviderServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with WorkflowServer.
     #[async_trait]
-    pub trait WorkflowProvider: std::marker::Send + std::marker::Sync + 'static {
+    pub trait Workflow: std::marker::Send + std::marker::Sync + 'static {
         ///
         async fn apply_definition(
             &self,
@@ -8859,14 +8742,14 @@ pub mod workflow_provider_server {
     }
     ///
     #[derive(Debug)]
-    pub struct WorkflowProviderServer<T> {
+    pub struct WorkflowServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T> WorkflowProviderServer<T> {
+    impl<T> WorkflowServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -8914,9 +8797,9 @@ pub mod workflow_provider_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for WorkflowProviderServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for WorkflowServer<T>
     where
-        T: WorkflowProvider,
+        T: Workflow,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
@@ -8931,10 +8814,10 @@ pub mod workflow_provider_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.WorkflowProvider/ApplyDefinition" => {
+                "/gestalt.provider.v1.Workflow/ApplyDefinition" => {
                     #[allow(non_camel_case_types)]
-                    struct ApplyDefinitionSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct ApplyDefinitionSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::ApplyWorkflowProviderDefinitionRequest>
                         for ApplyDefinitionSvc<T>
                     {
@@ -8946,7 +8829,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::apply_definition(&inner, request).await
+                                <T as Workflow>::apply_definition(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -8973,10 +8856,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/GetDefinition" => {
+                "/gestalt.provider.v1.Workflow/GetDefinition" => {
                     #[allow(non_camel_case_types)]
-                    struct GetDefinitionSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct GetDefinitionSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::GetWorkflowProviderDefinitionRequest>
                         for GetDefinitionSvc<T>
                     {
@@ -8988,7 +8871,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::get_definition(&inner, request).await
+                                <T as Workflow>::get_definition(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9015,10 +8898,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/ListDefinitions" => {
+                "/gestalt.provider.v1.Workflow/ListDefinitions" => {
                     #[allow(non_camel_case_types)]
-                    struct ListDefinitionsSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct ListDefinitionsSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::ListWorkflowProviderDefinitionsRequest>
                         for ListDefinitionsSvc<T>
                     {
@@ -9030,7 +8913,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::list_definitions(&inner, request).await
+                                <T as Workflow>::list_definitions(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9057,10 +8940,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/SetDefinitionPaused" => {
+                "/gestalt.provider.v1.Workflow/SetDefinitionPaused" => {
                     #[allow(non_camel_case_types)]
-                    struct SetDefinitionPausedSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct SetDefinitionPausedSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<
                             super::SetWorkflowProviderDefinitionPausedRequest,
                         > for SetDefinitionPausedSvc<T>
@@ -9075,8 +8958,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::set_definition_paused(&inner, request)
-                                    .await
+                                <T as Workflow>::set_definition_paused(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9103,10 +8985,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/SetActivationPaused" => {
+                "/gestalt.provider.v1.Workflow/SetActivationPaused" => {
                     #[allow(non_camel_case_types)]
-                    struct SetActivationPausedSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct SetActivationPausedSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<
                             super::SetWorkflowProviderActivationPausedRequest,
                         > for SetActivationPausedSvc<T>
@@ -9121,8 +9003,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::set_activation_paused(&inner, request)
-                                    .await
+                                <T as Workflow>::set_activation_paused(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9149,10 +9030,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/DeleteDefinition" => {
+                "/gestalt.provider.v1.Workflow/DeleteDefinition" => {
                     #[allow(non_camel_case_types)]
-                    struct DeleteDefinitionSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct DeleteDefinitionSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::DeleteWorkflowProviderDefinitionRequest>
                         for DeleteDefinitionSvc<T>
                     {
@@ -9164,7 +9045,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::delete_definition(&inner, request).await
+                                <T as Workflow>::delete_definition(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9191,10 +9072,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/StartRun" => {
+                "/gestalt.provider.v1.Workflow/StartRun" => {
                     #[allow(non_camel_case_types)]
-                    struct StartRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct StartRunSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::StartWorkflowProviderRunRequest>
                         for StartRunSvc<T>
                     {
@@ -9205,9 +9086,8 @@ pub mod workflow_provider_server {
                             request: tonic::Request<super::StartWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as WorkflowProvider>::start_run(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Workflow>::start_run(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9233,10 +9113,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/ListRuns" => {
+                "/gestalt.provider.v1.Workflow/ListRuns" => {
                     #[allow(non_camel_case_types)]
-                    struct ListRunsSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct ListRunsSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::ListWorkflowProviderRunsRequest>
                         for ListRunsSvc<T>
                     {
@@ -9247,9 +9127,8 @@ pub mod workflow_provider_server {
                             request: tonic::Request<super::ListWorkflowProviderRunsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as WorkflowProvider>::list_runs(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Workflow>::list_runs(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9275,10 +9154,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/GetRun" => {
+                "/gestalt.provider.v1.Workflow/GetRun" => {
                     #[allow(non_camel_case_types)]
-                    struct GetRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct GetRunSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::GetWorkflowProviderRunRequest>
                         for GetRunSvc<T>
                     {
@@ -9289,9 +9168,8 @@ pub mod workflow_provider_server {
                             request: tonic::Request<super::GetWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as WorkflowProvider>::get_run(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Workflow>::get_run(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9317,10 +9195,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/GetRunEvents" => {
+                "/gestalt.provider.v1.Workflow/GetRunEvents" => {
                     #[allow(non_camel_case_types)]
-                    struct GetRunEventsSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct GetRunEventsSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::GetWorkflowProviderRunEventsRequest>
                         for GetRunEventsSvc<T>
                     {
@@ -9332,7 +9210,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::get_run_events(&inner, request).await
+                                <T as Workflow>::get_run_events(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9359,10 +9237,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/GetRunOutput" => {
+                "/gestalt.provider.v1.Workflow/GetRunOutput" => {
                     #[allow(non_camel_case_types)]
-                    struct GetRunOutputSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct GetRunOutputSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::GetWorkflowProviderRunOutputRequest>
                         for GetRunOutputSvc<T>
                     {
@@ -9374,7 +9252,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::get_run_output(&inner, request).await
+                                <T as Workflow>::get_run_output(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9401,10 +9279,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/CancelRun" => {
+                "/gestalt.provider.v1.Workflow/CancelRun" => {
                     #[allow(non_camel_case_types)]
-                    struct CancelRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct CancelRunSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::CancelWorkflowProviderRunRequest>
                         for CancelRunSvc<T>
                     {
@@ -9415,9 +9293,8 @@ pub mod workflow_provider_server {
                             request: tonic::Request<super::CancelWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as WorkflowProvider>::cancel_run(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Workflow>::cancel_run(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9443,10 +9320,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/SignalRun" => {
+                "/gestalt.provider.v1.Workflow/SignalRun" => {
                     #[allow(non_camel_case_types)]
-                    struct SignalRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct SignalRunSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::SignalWorkflowProviderRunRequest>
                         for SignalRunSvc<T>
                     {
@@ -9457,9 +9334,8 @@ pub mod workflow_provider_server {
                             request: tonic::Request<super::SignalWorkflowProviderRunRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as WorkflowProvider>::signal_run(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as Workflow>::signal_run(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -9485,10 +9361,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/SignalOrStartRun" => {
+                "/gestalt.provider.v1.Workflow/SignalOrStartRun" => {
                     #[allow(non_camel_case_types)]
-                    struct SignalOrStartRunSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct SignalOrStartRunSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::SignalOrStartWorkflowProviderRunRequest>
                         for SignalOrStartRunSvc<T>
                     {
@@ -9500,7 +9376,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::signal_or_start_run(&inner, request).await
+                                <T as Workflow>::signal_or_start_run(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9527,10 +9403,10 @@ pub mod workflow_provider_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.WorkflowProvider/DeliverEvent" => {
+                "/gestalt.provider.v1.Workflow/DeliverEvent" => {
                     #[allow(non_camel_case_types)]
-                    struct DeliverEventSvc<T: WorkflowProvider>(pub Arc<T>);
-                    impl<T: WorkflowProvider>
+                    struct DeliverEventSvc<T: Workflow>(pub Arc<T>);
+                    impl<T: Workflow>
                         tonic::server::UnaryService<super::DeliverWorkflowProviderEventRequest>
                         for DeliverEventSvc<T>
                     {
@@ -9542,7 +9418,7 @@ pub mod workflow_provider_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as WorkflowProvider>::deliver_event(&inner, request).await
+                                <T as Workflow>::deliver_event(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -9585,7 +9461,7 @@ pub mod workflow_provider_server {
             }
         }
     }
-    impl<T> Clone for WorkflowProviderServer<T> {
+    impl<T> Clone for WorkflowServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -9598,8 +9474,8 @@ pub mod workflow_provider_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &str = "gestalt.provider.v1.WorkflowProvider";
-    impl<T> tonic::server::NamedService for WorkflowProviderServer<T> {
+    pub const SERVICE_NAME: &str = "gestalt.provider.v1.Workflow";
+    impl<T> tonic::server::NamedService for WorkflowServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }

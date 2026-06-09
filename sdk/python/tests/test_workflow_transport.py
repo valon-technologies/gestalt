@@ -42,7 +42,7 @@ _manager_contexts: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
-class _WorkflowServicer(workflow_pb2_grpc.WorkflowProviderServicer):
+class _WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
     def ApplyDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _record_manager_context(request)
@@ -161,7 +161,7 @@ def setUpModule() -> None:
         os.remove(_socket_path)
 
     _server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
+    workflow_pb2_grpc.add_WorkflowServicer_to_server(
         _WorkflowServicer(), _server
     )
     _server.add_insecure_port(f"unix:{_socket_path}")

@@ -67,7 +67,7 @@ import {
 } from "../src/internal/gen/v1/runtime_provider_pb.ts";
 import {
   GetSecretRequestSchema,
-  SecretsProvider as SecretsProviderService,
+  Secrets as SecretsProviderService,
 } from "../src/internal/gen/v1/secrets_pb.ts";
 import {
   ConfigureProviderRequestSchema,

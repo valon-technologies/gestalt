@@ -13,10 +13,10 @@ import (
 
 // ExternalCredentialClient calls the host-managed external credential provider.
 type ExternalCredentialClient struct {
-	client proto.ExternalCredentialProviderClient
+	client proto.ExternalCredentialsClient
 }
 
-var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCredentialProviderClient]
+var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCredentialsClient]
 
 // ExternalCredentials connects to the ExternalCredentialProvider exposed by
 // gestaltd.
@@ -29,7 +29,7 @@ func ExternalCredentials() (*ExternalCredentialClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "external credentials", target, token, &sharedExternalCredentialTransport, proto.NewExternalCredentialProviderClient)
+	client, err := managerTransportClient(ctx, "external credentials", target, token, &sharedExternalCredentialTransport, proto.NewExternalCredentialsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func externalCredentialHostServiceMissing(err error) bool {
 	if status.Code(err) != codes.Unimplemented {
 		return false
 	}
-	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentialProvider")
+	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentials")
 }
 
 func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {

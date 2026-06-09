@@ -44,7 +44,7 @@ import {
   SubjectSchema,
   SubjectSetSchema,
   SubjectSetTypeSchema,
-  AuthorizationProvider as AuthorizationProviderService,
+  Authorization as AuthorizationProviderService,
   type AddRelationshipRequest as ProtoAddRelationshipRequest,
   type AddRelationshipResponse as ProtoAddRelationshipResponse,
   type AuthorizationModel as ProtoAuthorizationModel,

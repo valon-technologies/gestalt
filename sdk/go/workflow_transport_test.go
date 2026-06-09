@@ -16,7 +16,7 @@ import (
 )
 
 type workflowTransportHarness struct {
-	proto.UnimplementedWorkflowProviderServer
+	proto.UnimplementedWorkflowServer
 
 	mu          sync.Mutex
 	definitions []*proto.ApplyWorkflowProviderDefinitionRequest
@@ -78,7 +78,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &workflowTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowProviderServer(srv, harness)
+	proto.RegisterWorkflowServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -150,7 +150,7 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 
 	harness := &workflowTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowProviderServer(srv, harness)
+	proto.RegisterWorkflowServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

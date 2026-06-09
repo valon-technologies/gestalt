@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rv1/test.proto\x12\x13gestalt.provider.v1\"\x13\n\x11HelloWorldRequest\".\n\x12HelloWorldResponse\x12\x18\n\x07message\x18\x01 \x01(\tR\x07message2m\n\x0cTestProvider\x12]\n\nHelloWorld\x12&.gestalt.provider.v1.HelloWorldRequest\x1a\'.gestalt.provider.v1.HelloWorldResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rv1/test.proto\x12\x13gestalt.provider.v1\"\x13\n\x11HelloWorldRequest\".\n\x12HelloWorldResponse\x12\x18\n\x07message\x18\x01 \x01(\tR\x07message2e\n\x04Test\x12]\n\nHelloWorld\x12&.gestalt.provider.v1.HelloWorldRequest\x1a\'.gestalt.provider.v1.HelloWorldResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,6 +35,6 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_HELLOWORLDREQUEST']._serialized_end=57
   _globals['_HELLOWORLDRESPONSE']._serialized_start=59
   _globals['_HELLOWORLDRESPONSE']._serialized_end=105
-  _globals['_TESTPROVIDER']._serialized_start=107
-  _globals['_TESTPROVIDER']._serialized_end=216
+  _globals['_TEST']._serialized_start=107
+  _globals['_TEST']._serialized_end=208
 # @@protoc_insertion_point(module_scope)

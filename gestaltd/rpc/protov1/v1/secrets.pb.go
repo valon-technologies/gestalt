@@ -119,8 +119,8 @@ const file_v1_secrets_proto_rawDesc = "" +
 	"\x10GetSecretRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\")\n" +
 	"\x11GetSecretResponse\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value2m\n" +
-	"\x0fSecretsProvider\x12Z\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value2e\n" +
+	"\aSecrets\x12Z\n" +
 	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseB\xd8\x01\n" +
 	"\x17com.gestalt.provider.v1B\fSecretsProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
@@ -142,8 +142,8 @@ var file_v1_secrets_proto_goTypes = []any{
 	(*GetSecretResponse)(nil), // 1: gestalt.provider.v1.GetSecretResponse
 }
 var file_v1_secrets_proto_depIdxs = []int32{
-	0, // 0: gestalt.provider.v1.SecretsProvider.GetSecret:input_type -> gestalt.provider.v1.GetSecretRequest
-	1, // 1: gestalt.provider.v1.SecretsProvider.GetSecret:output_type -> gestalt.provider.v1.GetSecretResponse
+	0, // 0: gestalt.provider.v1.Secrets.GetSecret:input_type -> gestalt.provider.v1.GetSecretRequest
+	1, // 1: gestalt.provider.v1.Secrets.GetSecret:output_type -> gestalt.provider.v1.GetSecretResponse
 	1, // [1:2] is the sub-list for method output_type
 	0, // [0:1] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

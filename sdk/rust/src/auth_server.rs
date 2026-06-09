@@ -7,7 +7,7 @@ use crate::auth::{
     authenticated_user_to_proto, begin_login_request_from_proto, begin_login_response_to_proto,
     complete_login_request_from_proto,
 };
-use crate::generated::v1::authentication_provider_server::AuthenticationProvider as AuthenticationProviderGrpc;
+use crate::generated::v1::authentication_server::Authentication as AuthenticationProviderGrpc;
 use crate::generated::v1::{
     AuthSessionSettings as ProtoAuthSessionSettings, AuthenticatedUser as ProtoAuthenticatedUser,
     BeginLoginRequest as ProtoBeginLoginRequest, BeginLoginResponse as ProtoBeginLoginResponse,

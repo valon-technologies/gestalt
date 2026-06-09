@@ -456,11 +456,11 @@ message ListedAgentTool {
   string search_text = 10;
 }
 
-// AgentProvider is the authoritative agent data boundary. Read RPCs for
+// Agent is the authoritative agent data boundary. Read RPCs for
 // sessions, turns, turn events, and interactions should use provider-owned
 // control-plane state and should not require a live execution sandbox,
 // pod-level transport, or cached tunnel.
-service AgentProvider {
+service Agent {
   rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession);
   rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession);
   rpc ListSessions(ListAgentProviderSessionsRequest) returns (ListAgentProviderSessionsResponse);

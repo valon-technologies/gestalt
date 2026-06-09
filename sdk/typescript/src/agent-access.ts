@@ -4,7 +4,7 @@ import {
 } from "@connectrpc/connect";
 
 import {
-  AgentProvider as AgentProviderService,
+  Agent as AgentProviderService,
   type AgentInteraction as ProtoAgentInteraction,
   type AgentSession as ProtoAgentSession,
   type AgentTurn as ProtoAgentTurn,

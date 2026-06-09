@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/test.proto.
  */
 export const file_v1_test: GenFile = /*@__PURE__*/
-  fileDesc("Cg12MS90ZXN0LnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIhMKEUhlbGxvV29ybGRSZXF1ZXN0IiUKEkhlbGxvV29ybGRSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJMm0KDFRlc3RQcm92aWRlchJdCgpIZWxsb1dvcmxkEiYuZ2VzdGFsdC5wcm92aWRlci52MS5IZWxsb1dvcmxkUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuSGVsbG9Xb3JsZFJlc3BvbnNlYgZwcm90bzM");
+  fileDesc("Cg12MS90ZXN0LnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIhMKEUhlbGxvV29ybGRSZXF1ZXN0IiUKEkhlbGxvV29ybGRSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJMmUKBFRlc3QSXQoKSGVsbG9Xb3JsZBImLmdlc3RhbHQucHJvdmlkZXIudjEuSGVsbG9Xb3JsZFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkhlbGxvV29ybGRSZXNwb25zZWIGcHJvdG8z");
 
 /**
  * HelloWorldRequest carries no input fields. It exists to exercise the
@@ -48,14 +48,14 @@ export const HelloWorldResponseSchema: GenMessage<HelloWorldResponse> = /*@__PUR
   messageDesc(file_v1_test, 1);
 
 /**
- * TestProvider models a minimal provider-kind-specific protocol used to verify
- * new provider kind registration and lifecycle wiring.
+ * Test models a minimal provider-kind-specific protocol used to verify new
+ * provider kind registration and lifecycle wiring.
  *
- * @generated from service gestalt.provider.v1.TestProvider
+ * @generated from service gestalt.provider.v1.Test
  */
-export const TestProvider: GenService<{
+export const Test: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.TestProvider.HelloWorld
+   * @generated from rpc gestalt.provider.v1.Test.HelloWorld
    */
   helloWorld: {
     methodKind: "unary";

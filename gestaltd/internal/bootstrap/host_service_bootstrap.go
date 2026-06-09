@@ -74,9 +74,9 @@ func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool)
 	}
 	return runtimehost.HostService{
 		Name:           "authorization",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AuthorizationProvider_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.Authorization_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthorizationProviderServer(srv, authorizationservice.NewProviderServer(deps.Authorization))
+			proto.RegisterAuthorizationServer(srv, authorizationservice.NewProviderServer(deps.Authorization))
 		},
 	}, true
 }
@@ -455,9 +455,9 @@ func buildWorkflowProviderHostService(appName string, deps Deps) runtimehost.Hos
 	}
 	return runtimehost.HostService{
 		Name:           "workflow_provider",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowProvider_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.Workflow_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(
+			proto.RegisterWorkflowServer(srv, workflowservice.NewProviderServer(
 				appName,
 				manager,
 				deps.Authorization,
@@ -474,9 +474,9 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps) runtimeho
 	}
 	return runtimehost.HostService{
 		Name:           "agent_provider",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentProvider_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.Agent_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentProviderServer(srv, agentservice.NewProviderServer(
+			proto.RegisterAgentServer(srv, agentservice.NewProviderServer(
 				pluginName,
 				manager,
 			))
@@ -487,9 +487,9 @@ func buildPluginAgentProviderHostService(pluginName string, deps Deps) runtimeho
 func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialProvider) runtimehost.HostService {
 	return runtimehost.HostService{
 		Name:           "external_credentials",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.ExternalCredentialProvider_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.ExternalCredentials_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterExternalCredentialProviderServer(srv, externalcredentialsservice.NewProviderServer(provider))
+			proto.RegisterExternalCredentialsServer(srv, externalcredentialsservice.NewProviderServer(provider))
 		},
 	}
 }

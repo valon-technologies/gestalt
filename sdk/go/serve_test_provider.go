@@ -13,12 +13,12 @@ import (
 func ServeTestProvider(ctx context.Context, provider TestProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindTest, provider))
-		proto.RegisterTestProviderServer(srv, testProviderServer{provider: provider})
+		proto.RegisterTestServer(srv, testProviderServer{provider: provider})
 	})
 }
 
 type testProviderServer struct {
-	proto.UnimplementedTestProviderServer
+	proto.UnimplementedTestServer
 	provider TestProvider
 }
 

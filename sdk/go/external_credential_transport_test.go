@@ -155,7 +155,7 @@ func (*stubExternalCredentialProvider) ExchangeCredential(context.Context, *gest
 }
 
 type externalCredentialTransportHarness struct {
-	proto.UnimplementedExternalCredentialProviderServer
+	proto.UnimplementedExternalCredentialsServer
 
 	mu       sync.Mutex
 	requests []*proto.UpsertExternalCredentialRequest
@@ -202,7 +202,7 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	lifecycle := proto.NewProviderLifecycleClient(conn)
-	client := proto.NewExternalCredentialProviderClient(conn)
+	client := proto.NewExternalCredentialsClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()
@@ -281,7 +281,7 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &externalCredentialTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterExternalCredentialProviderServer(srv, harness)
+	proto.RegisterExternalCredentialsServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

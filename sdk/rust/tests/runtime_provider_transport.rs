@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, UNIX_EPOCH};
 
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use generated::v1::runtime_provider_client::RuntimeProviderClient;
+use generated::v1::runtime_client::RuntimeClient;
 use generated::v1::{
     AgentWorkspace, AgentWorkspaceGitCheckout, ConfigureProviderRequest,
     GetRuntimeSessionRequest as ProtoGetRuntimeSessionRequest,
@@ -207,7 +207,7 @@ async fn runtime_provider_transport_uses_native_trait_types() {
 
     let channel = connect_unix(&socket).await;
     let mut runtime = ProviderLifecycleClient::new(channel.clone());
-    let mut client = RuntimeProviderClient::new(channel);
+    let mut client = RuntimeClient::new(channel);
 
     let metadata = runtime
         .get_provider_identity(())

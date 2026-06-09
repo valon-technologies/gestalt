@@ -7,7 +7,7 @@ mod helpers;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use generated::v1::agent_provider_client::AgentProviderClient;
+use generated::v1::agent_client::AgentClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use generated::v1::{self as pb, ConfigureProviderRequest, ProviderKind};
 use gestalt::proto::v1 as sdk_pb;
@@ -413,7 +413,7 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
         .await
         .expect("configure provider");
 
-    let mut client = AgentProviderClient::new(channel);
+    let mut client = AgentClient::new(channel);
     let session = client
         .create_session(pb::CreateAgentProviderSessionRequest {
             session_id: "session-1".to_string(),

@@ -9,12 +9,12 @@ import { expect, test } from "bun:test";
 
 import {
   AgentExecutionStatus,
-  AgentProvider as AgentProviderService,
+  Agent as AgentProviderService,
   CreateAgentProviderSessionRequestSchema,
   CreateAgentProviderTurnRequestSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
-  AuthenticationProvider as AuthenticationProviderService,
+  Authentication as AuthenticationProviderService,
   BeginLoginRequestSchema,
 } from "../src/internal/gen/v1/authentication_pb.ts";
 import { Cache as CacheService } from "../src/internal/gen/v1/cache_pb.ts";
@@ -30,7 +30,7 @@ import {
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
   GetSecretRequestSchema,
-  SecretsProvider as SecretsProviderService,
+  Secrets as SecretsProviderService,
 } from "../src/internal/gen/v1/secrets_pb.ts";
 import { S3 as S3Service } from "../src/internal/gen/v1/s3_pb.ts";
 import {
@@ -41,7 +41,7 @@ import {
 import {
   ApplyWorkflowProviderDefinitionRequestSchema,
   StartWorkflowProviderRunRequestSchema,
-  WorkflowProvider as WorkflowProviderService,
+  Workflow as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   buildProviderBinary,

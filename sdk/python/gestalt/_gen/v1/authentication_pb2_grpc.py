@@ -26,9 +26,8 @@ if _version_not_supported:
     )
 
 
-class AuthenticationProviderStub(object):
-    """AuthenticationProvider models the shared Gestalt authentication-provider
-    protocol.
+class AuthenticationStub(object):
+    """Authentication models the shared Gestalt authentication protocol.
     """
 
     def __init__(self, channel):
@@ -38,30 +37,29 @@ class AuthenticationProviderStub(object):
             channel: A grpc.Channel.
         """
         self.BeginLogin = channel.unary_unary(
-                '/gestalt.provider.v1.AuthenticationProvider/BeginLogin',
+                '/gestalt.provider.v1.Authentication/BeginLogin',
                 request_serializer=v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
                 response_deserializer=v1_dot_authentication__pb2.BeginLoginResponse.FromString,
                 _registered_method=True)
         self.CompleteLogin = channel.unary_unary(
-                '/gestalt.provider.v1.AuthenticationProvider/CompleteLogin',
+                '/gestalt.provider.v1.Authentication/CompleteLogin',
                 request_serializer=v1_dot_authentication__pb2.CompleteLoginRequest.SerializeToString,
                 response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.ValidateExternalToken = channel.unary_unary(
-                '/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken',
+                '/gestalt.provider.v1.Authentication/ValidateExternalToken',
                 request_serializer=v1_dot_authentication__pb2.ValidateExternalTokenRequest.SerializeToString,
                 response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.GetSessionSettings = channel.unary_unary(
-                '/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings',
+                '/gestalt.provider.v1.Authentication/GetSessionSettings',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_authentication__pb2.AuthSessionSettings.FromString,
                 _registered_method=True)
 
 
-class AuthenticationProviderServicer(object):
-    """AuthenticationProvider models the shared Gestalt authentication-provider
-    protocol.
+class AuthenticationServicer(object):
+    """Authentication models the shared Gestalt authentication protocol.
     """
 
     def BeginLogin(self, request, context):
@@ -89,7 +87,7 @@ class AuthenticationProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AuthenticationProviderServicer_to_server(servicer, server):
+def add_AuthenticationServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'BeginLogin': grpc.unary_unary_rpc_method_handler(
                     servicer.BeginLogin,
@@ -113,15 +111,14 @@ def add_AuthenticationProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.AuthenticationProvider', rpc_method_handlers)
+            'gestalt.provider.v1.Authentication', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.AuthenticationProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Authentication', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AuthenticationProvider(object):
-    """AuthenticationProvider models the shared Gestalt authentication-provider
-    protocol.
+class Authentication(object):
+    """Authentication models the shared Gestalt authentication protocol.
     """
 
     @staticmethod
@@ -138,7 +135,7 @@ class AuthenticationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthenticationProvider/BeginLogin',
+            '/gestalt.provider.v1.Authentication/BeginLogin',
             v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
             v1_dot_authentication__pb2.BeginLoginResponse.FromString,
             options,
@@ -165,7 +162,7 @@ class AuthenticationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthenticationProvider/CompleteLogin',
+            '/gestalt.provider.v1.Authentication/CompleteLogin',
             v1_dot_authentication__pb2.CompleteLoginRequest.SerializeToString,
             v1_dot_authentication__pb2.AuthenticatedUser.FromString,
             options,
@@ -192,7 +189,7 @@ class AuthenticationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthenticationProvider/ValidateExternalToken',
+            '/gestalt.provider.v1.Authentication/ValidateExternalToken',
             v1_dot_authentication__pb2.ValidateExternalTokenRequest.SerializeToString,
             v1_dot_authentication__pb2.AuthenticatedUser.FromString,
             options,
@@ -219,7 +216,7 @@ class AuthenticationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthenticationProvider/GetSessionSettings',
+            '/gestalt.provider.v1.Authentication/GetSessionSettings',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_authentication__pb2.AuthSessionSettings.FromString,
             options,

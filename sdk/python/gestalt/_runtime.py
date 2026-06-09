@@ -489,7 +489,7 @@ def _register_authentication_services(server: Any, provider: AppProvider) -> Non
         _runtime_servicer(provider=provider, kind=ProviderKind.AUTHENTICATION),
         server,
     )
-    authentication_pb2_grpc.add_AuthenticationProviderServicer_to_server(
+    authentication_pb2_grpc.add_AuthenticationServicer_to_server(
         _authentication_servicer(provider=provider),
         server,
     )
@@ -511,7 +511,7 @@ def _register_authorization_services(server: Any, provider: AppProvider) -> None
         _runtime_servicer(provider=provider, kind=ProviderKind.AUTHORIZATION),
         server,
     )
-    authorization_pb2_grpc.add_AuthorizationProviderServicer_to_server(
+    authorization_pb2_grpc.add_AuthorizationServicer_to_server(
         _authorization_servicer(provider=provider),
         server,
     )
@@ -717,7 +717,7 @@ def _register_agent_services(server: Any, provider: AppProvider) -> None:
         _runtime_servicer(provider=provider, kind=ProviderKind.AGENT),
         server,
     )
-    agent_pb2_grpc.add_AgentProviderServicer_to_server(
+    agent_pb2_grpc.add_AgentServicer_to_server(
         _agent_provider_servicer(provider),
         server,
     )
@@ -739,7 +739,7 @@ def _register_runtime_provider_services(server: Any, provider: AppProvider) -> N
         _runtime_servicer(provider=provider, kind=ProviderKind.RUNTIME),
         server,
     )
-    runtime_provider_pb2_grpc.add_RuntimeProviderServicer_to_server(
+    runtime_provider_pb2_grpc.add_RuntimeServicer_to_server(
         _runtime_provider_servicer(provider),
         server,
     )
@@ -759,7 +759,7 @@ def _register_workflow_services(server: Any, provider: AppProvider) -> None:
         _runtime_servicer(provider=provider, kind=ProviderKind.WORKFLOW),
         server,
     )
-    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
+    workflow_pb2_grpc.add_WorkflowServicer_to_server(
         _workflow_provider_servicer(provider),
         server,
     )
@@ -768,7 +768,7 @@ def _register_workflow_services(server: Any, provider: AppProvider) -> None:
 def _agent_provider_servicer(provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
 
-    class AgentProviderServicer(agent_pb2_grpc.AgentProviderServicer):  # type: ignore[misc]
+    class AgentServicer(agent_pb2_grpc.AgentServicer):  # type: ignore[misc]
         def __init__(self, inner: AppProvider) -> None:
             self._provider = inner
 
@@ -873,13 +873,13 @@ def _agent_provider_servicer(provider: AppProvider) -> Any:
             )
             return _agent_native.agent_provider_capabilities_to_proto(result)
 
-    return AgentProviderServicer(provider)
+    return AgentServicer(provider)
 
 
 def _runtime_provider_servicer(provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
 
-    class RuntimeProviderServicer(runtime_provider_pb2_grpc.RuntimeProviderServicer):
+    class RuntimeServicer(runtime_provider_pb2_grpc.RuntimeServicer):
         def __init__(self, inner: AppProvider) -> None:
             self._provider = inner
 
@@ -1005,13 +1005,13 @@ def _runtime_provider_servicer(provider: AppProvider) -> Any:
             )
             return _runtime_provider_native.hosted_app_to_proto(result)
 
-    return RuntimeProviderServicer(provider)
+    return RuntimeServicer(provider)
 
 
 def _workflow_provider_servicer(provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
 
-    class WorkflowProviderServicer(workflow_pb2_grpc.WorkflowProviderServicer):
+    class WorkflowServicer(workflow_pb2_grpc.WorkflowServicer):
         def __init__(self, inner: AppProvider) -> None:
             self._provider = inner
 
@@ -1248,7 +1248,7 @@ def _workflow_provider_servicer(provider: AppProvider) -> Any:
             )
             return _workflow_native.workflow_event(result)
 
-    return WorkflowProviderServicer(provider)
+    return WorkflowServicer(provider)
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> AppProviderAdapter:
@@ -1265,7 +1265,7 @@ def _register_secrets_services(server: Any, provider: AppProvider) -> None:
         _runtime_servicer(provider=provider, kind=ProviderKind.SECRETS),
         server,
     )
-    secrets_pb2_grpc.add_SecretsProviderServicer_to_server(
+    secrets_pb2_grpc.add_SecretsServicer_to_server(
         _secrets_servicer(provider=provider),
         server,
     )
@@ -1516,7 +1516,7 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
     auth_provider = cast(AuthenticationProvider, provider)
 
     class AuthenticationServicer(
-        authentication_pb2_grpc.AuthenticationProviderServicer
+        authentication_pb2_grpc.AuthenticationServicer
     ):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
@@ -1582,7 +1582,7 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
     authorization_provider = cast(AuthorizationProvider, provider)
 
-    class AuthorizationServicer(authorization_pb2_grpc.AuthorizationProviderServicer):
+    class AuthorizationServicer(authorization_pb2_grpc.AuthorizationServicer):
         @_grpc_handler("authorization check access")
         def CheckAccess(self, request: Any, context: Any) -> Any:
             response = authorization_provider.check_access(
@@ -1711,7 +1711,7 @@ def _secrets_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
     secrets_provider = cast(SecretsProvider, provider)
 
-    class SecretsServicer(secrets_pb2_grpc.SecretsProviderServicer):
+    class SecretsServicer(secrets_pb2_grpc.SecretsServicer):
         @_grpc_handler("get secret")
         def GetSecret(self, request: Any, context: Any) -> Any:
             value = secrets_provider.get_secret(request.name)

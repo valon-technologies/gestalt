@@ -43,13 +43,13 @@ type HostedAppConn interface {
 
 type HostedAgentConn interface {
 	Lifecycle() proto.ProviderLifecycleClient
-	Agent() proto.AgentProviderClient
+	Agent() proto.AgentClient
 	Close() error
 }
 
 type HostedWorkflowConn interface {
 	Lifecycle() proto.ProviderLifecycleClient
-	Workflow() proto.WorkflowProviderClient
+	Workflow() proto.WorkflowClient
 	Close() error
 }
 

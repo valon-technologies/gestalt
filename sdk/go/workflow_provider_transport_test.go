@@ -93,7 +93,7 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	runtimeClient := proto.NewProviderLifecycleClient(conn)
-	workflowClient := proto.NewWorkflowProviderClient(conn)
+	workflowClient := proto.NewWorkflowClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()

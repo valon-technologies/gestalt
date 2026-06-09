@@ -17,12 +17,12 @@ import (
 func ServeRuntimeProvider(ctx context.Context, provider RuntimeProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindRuntime, provider))
-		proto.RegisterRuntimeProviderServer(srv, runtimeProviderServer{provider: provider})
+		proto.RegisterRuntimeServer(srv, runtimeProviderServer{provider: provider})
 	})
 }
 
 type runtimeProviderServer struct {
-	proto.UnimplementedRuntimeProviderServer
+	proto.UnimplementedRuntimeServer
 	provider RuntimeProvider
 }
 

@@ -11,7 +11,7 @@ import { expect, test } from "bun:test";
 
 import {
   AgentExecutionStatus,
-  AgentProvider as AgentProviderService,
+  Agent as AgentProviderService,
   AgentSessionSchema,
   AgentSessionState,
   AgentTurnSchema,

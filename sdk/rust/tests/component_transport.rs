@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use generated::v1::authentication_provider_client::AuthenticationProviderClient;
+use generated::v1::authentication_client::AuthenticationClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use generated::v1::s3_client::S3Client;
 use generated::v1::{
@@ -320,7 +320,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
 
     let channel = connect_unix(&socket).await;
     let mut runtime = ProviderLifecycleClient::new(channel.clone());
-    let mut auth = AuthenticationProviderClient::new(channel);
+    let mut auth = AuthenticationClient::new(channel);
 
     let metadata = runtime
         .get_provider_identity(())

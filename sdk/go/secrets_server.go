@@ -9,7 +9,7 @@ import (
 )
 
 type secretsServer struct {
-	proto.UnimplementedSecretsProviderServer
+	proto.UnimplementedSecretsServer
 	secrets SecretsProvider
 }
 
