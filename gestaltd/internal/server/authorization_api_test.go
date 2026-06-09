@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestAuthorizationAPICheckAccess(t *testing.T) {
@@ -127,6 +128,29 @@ func TestAuthorizationAPIDeleteRelationship(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIGetActiveModelRef(t *testing.T) {
+	authz := &authorizationAPITestProvider{}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Authorization = authz
+	})
+	defer ts.Close()
+	t.Parallel()
+
+	resp := doAuthorizationJSONRequest(t, http.MethodGet, ts.URL+"/api/v1/authorization/models/active", "")
+	defer closeResponseBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	var body map[string]map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["model"]["id"] != "model-1" || body["model"]["version"] != "v1" {
+		t.Fatalf("model = %#v, want model-1/v1", body["model"])
+	}
+}
+
 func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Response {
 	t.Helper()
 	var reader io.Reader
@@ -195,4 +219,14 @@ func (p *authorizationAPITestProvider) AddRelationship(_ context.Context, req *p
 func (p *authorizationAPITestProvider) DeleteRelationship(_ context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	p.deleteRelationshipRequest = req
 	return &proto.DeleteRelationshipResponse{}, nil
+}
+
+func (p *authorizationAPITestProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{
+		Model: &proto.AuthorizationModelRef{
+			Id:        "model-1",
+			Version:   "v1",
+			CreatedAt: timestamppb.Now(),
+		},
+	}, nil
 }
