@@ -322,6 +322,33 @@ pub enum AuthorizationModelCommands {
 pub enum AuthorizationActiveModelCommands {
     /// Get the active model reference
     Get,
+    /// List resource types in the active model
+    ResourceTypes {
+        #[command(subcommand)]
+        command: AuthorizationActiveModelResourceTypeCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationActiveModelResourceTypeCommands {
+    /// List active model resource types
+    List(AuthorizationActiveModelResourceTypeListArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationActiveModelResourceTypeListArgs {
+    /// Filter to one resource type name
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Filter by source layer, such as static_config or runtime
+    #[arg(long = "source-layer")]
+    pub source_layer: Option<String>,
+    /// Maximum number of resource types to return
+    #[arg(long = "page-size")]
+    pub page_size: Option<u32>,
+    /// Pagination cursor returned by a previous list response
+    #[arg(long = "page-token")]
+    pub page_token: Option<String>,
 }
 #[derive(Subcommand)]
 pub enum WorkflowCommands {

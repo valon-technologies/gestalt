@@ -151,6 +151,29 @@ func TestAuthorizationAPIGetActiveModelRef(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIListActiveModelResourceTypes(t *testing.T) {
+	authz := &authorizationAPITestProvider{}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Authorization = authz
+	})
+	defer ts.Close()
+	t.Parallel()
+
+	resp := doAuthorizationJSONRequest(t, http.MethodGet, ts.URL+"/api/v1/authorization/models/active/resource-types?name=group&sourceLayer=static_config&pageSize=10&pageToken=next", "")
+	defer closeResponseBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	req := authz.listResourceTypesRequest
+	if req.GetFilter().GetName() != "group" || req.GetFilter().GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG {
+		t.Fatalf("filter = %#v", req.GetFilter())
+	}
+	if req.GetPageSize() != 10 || req.GetPageToken() != "next" {
+		t.Fatalf("pagination = (%d, %q), want (10, next)", req.GetPageSize(), req.GetPageToken())
+	}
+}
+
 func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Response {
 	t.Helper()
 	var reader io.Reader
@@ -185,6 +208,7 @@ type authorizationAPITestProvider struct {
 	listRelationshipsRequest  *proto.ListRelationshipsRequest
 	addRelationshipRequest    *proto.AddRelationshipRequest
 	deleteRelationshipRequest *proto.DeleteRelationshipRequest
+	listResourceTypesRequest  *proto.ListActiveModelResourceTypesRequest
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -227,6 +251,16 @@ func (p *authorizationAPITestProvider) GetActiveModelRef(context.Context) (*prot
 			Id:        "model-1",
 			Version:   "v1",
 			CreatedAt: timestamppb.Now(),
+		},
+	}, nil
+}
+
+func (p *authorizationAPITestProvider) ListActiveModelResourceTypes(_ context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	p.listResourceTypesRequest = req
+	return &proto.ListActiveModelResourceTypesResponse{
+		ModelId: "model-1",
+		ResourceTypes: []*proto.AuthorizationModelResourceType{
+			{Name: "group", SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG},
 		},
 	}, nil
 }

@@ -88,6 +88,22 @@ func (s *Server) getAuthorizationActiveModelRef(w http.ResponseWriter, r *http.R
 	writeProtoJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) listAuthorizationActiveModelResourceTypes(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuthorizationProvider(w) {
+		return
+	}
+	req, ok := listAuthorizationActiveModelResourceTypesRequestFromQuery(w, r)
+	if !ok {
+		return
+	}
+	resp, err := s.authorization.ListActiveModelResourceTypes(r.Context(), req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeProtoJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {
 	if s.authorization == nil {
 		writeError(w, http.StatusPreconditionFailed, "authorization provider is not configured")
@@ -166,6 +182,26 @@ func listAuthorizationRelationshipsRequestFromQuery(w http.ResponseWriter, r *ht
 
 	return &proto.ListRelationshipsRequest{
 		Filter:    filter,
+		PageSize:  pageSize,
+		PageToken: strings.TrimSpace(queryValue(query, "pageToken", "page_token")),
+	}, true
+}
+
+func listAuthorizationActiveModelResourceTypesRequestFromQuery(w http.ResponseWriter, r *http.Request) (*proto.ListActiveModelResourceTypesRequest, bool) {
+	query := r.URL.Query()
+	pageSize, ok := parseOptionalInt32Query(w, queryValue(query, "pageSize", "page_size"), "pageSize")
+	if !ok {
+		return nil, false
+	}
+	sourceLayer, ok := sourceLayerFromQuery(w, queryValue(query, "sourceLayer", "source_layer"))
+	if !ok {
+		return nil, false
+	}
+	return &proto.ListActiveModelResourceTypesRequest{
+		Filter: &proto.AuthorizationModelResourceTypeFilter{
+			Name:        strings.TrimSpace(query.Get("name")),
+			SourceLayer: sourceLayer,
+		},
 		PageSize:  pageSize,
 		PageToken: strings.TrimSpace(queryValue(query, "pageToken", "page_token")),
 	}, true
