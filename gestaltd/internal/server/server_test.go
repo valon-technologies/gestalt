@@ -8692,6 +8692,13 @@ func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"oauth-service-account": testDefaultConnection}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"oauth-service-account": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: oauthConnectionDef(nil),
+				},
+			},
+		}
 		cfg.ConnectionAuth = testConnectionAuth("oauth-service-account", handler)
 		cfg.Authorization = authz
 		cfg.Services = svc
@@ -13126,6 +13133,11 @@ func TestConnectManual_ServiceAccountIDStoresCredentialForServiceAccount(t *test
 			StubIntegration: coretesting.StubIntegration{N: "manual-service-account"},
 		})
 		cfg.DefaultConnection = map[string]string{"manual-service-account": config.AppConnectionName}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"manual-service-account": {
+				Auth: &config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeManual},
+			},
+		}
 		cfg.Authorization = authz
 		cfg.Services = svc
 	})
@@ -13210,6 +13222,11 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 			StubIntegration: coretesting.StubIntegration{N: "manual-service-account-invoker"},
 		})
 		cfg.DefaultConnection = map[string]string{"manual-service-account-invoker": config.AppConnectionName}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"manual-service-account-invoker": {
+				Auth: &config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeManual},
+			},
+		}
 		cfg.Authorization = authz
 		cfg.Services = svc
 	})
@@ -13255,6 +13272,11 @@ func TestConnectManual_ServiceAccountIDRequiresManagesAuthorization(t *testing.T
 			StubIntegration: coretesting.StubIntegration{N: "manual-service-account-denied"},
 		})
 		cfg.DefaultConnection = map[string]string{"manual-service-account-denied": config.AppConnectionName}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"manual-service-account-denied": {
+				Auth: &config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeManual},
+			},
+		}
 		cfg.Authorization = authz
 		cfg.Services = svc
 	})
@@ -13326,6 +13348,14 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 			},
 		})
 		cfg.DefaultConnection = map[string]string{"manual-service-account-pending": config.AppConnectionName}
+		cfg.AppDefs = map[string]*config.ProviderEntry{
+			"manual-service-account-pending": {
+				Auth: &config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeManual},
+				ConnectionParams: map[string]config.ConnectionParamDef{
+					"workspace": {From: "selection", Field: "workspace"},
+				},
+			},
+		}
 		cfg.Authorization = authz
 		cfg.Services = svc
 	})
