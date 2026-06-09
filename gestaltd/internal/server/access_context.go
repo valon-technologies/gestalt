@@ -17,14 +17,6 @@ func requireUserCaller(w http.ResponseWriter, p *principal.Principal) error {
 	return errUserRequired
 }
 
-func managedSubjectCallerIsUnscoped(p *principal.Principal) bool {
-	p = principal.Canonicalized(p)
-	if p == nil || p.Source != principal.SourceAPIToken {
-		return true
-	}
-	return p.TokenPermissions == nil && len(p.Scopes) == 0
-}
-
 func canonicalServiceAccountSubjectID(subjectID string) (string, error) {
 	kind, id, ok := core.ParseSubjectID(subjectID)
 	if !ok || kind != coredata.ManagedSubjectKindServiceAccount || !validManagedSubjectLocalID(id) {

@@ -63,7 +63,12 @@ The CLI searches the current directory and then parent directories until it find
 
 ## App connect flags
 
-`gestalt app connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual authentication instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
+`gestalt app connect NAME` accepts `--connection`, `--instance`, and
+`--service-account-id`. Pass `--service-account-id` to store the connected
+external credential under a service account subject instead of the invoking
+user, after server-side authorization. When the selected connection uses manual
+authentication instead of OAuth, the CLI prompts for the required credential
+fields and connection parameters.
 
 ## App disconnect flags
 
@@ -88,6 +93,7 @@ This resolves to `chat.postMessage`. If the segments match a prefix shared by mu
 ```sh
 gestalt app list
 gestalt app connect notion --connection MCP
+gestalt app connect github --service-account-id nightly-sync
 gestalt app describe slack chat.postMessage
 gestalt app invoke slack chat postMessage \
   --connection app \

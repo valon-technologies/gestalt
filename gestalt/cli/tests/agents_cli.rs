@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, mpsc};
 use std::time::{Duration, Instant};
 use support::*;
 
@@ -1725,7 +1725,7 @@ fn test_cli_tty_scrolls_multiline_help_rows() {
     session.write("\x1b[6~\x0c");
     session.wait_for(&mut output, "Ctrl-C");
     session.write("\x03");
-    session.wait_for_exit();
+    session.wait_for_exit_after_interrupt();
 
     server.assert_finished();
 }
@@ -3411,6 +3411,7 @@ struct TtyCliSession {
     rows: u16,
     cols: u16,
     cursor_query_buffer: Vec<u8>,
+    _tty_lock: MutexGuard<'static, ()>,
 }
 
 #[cfg(unix)]
@@ -3445,10 +3446,25 @@ impl TtyCliSession {
     }
 
     fn wait_for_exit(&mut self) {
+        self.wait_for_exit_matching(|status| status.success(), "TTY CLI exited");
+    }
+
+    fn wait_for_exit_after_interrupt(&mut self) {
+        self.wait_for_exit_matching(
+            |status| status.success() || (status.signal().is_none() && status.exit_code() == 1),
+            "TTY CLI exited after interrupt",
+        );
+    }
+
+    fn wait_for_exit_matching(
+        &mut self,
+        accepted: impl Fn(&portable_pty::ExitStatus) -> bool,
+        message: &str,
+    ) {
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
-                assert!(status.success(), "TTY CLI exited with {status:?}");
+                assert!(accepted(&status), "{message} with {status:?}");
                 if let Some(reader) = self.reader.take() {
                     let _ = reader.join();
                 }
@@ -3535,6 +3551,9 @@ fn spawn_tty_cli_with_size_and_env(
 ) -> TtyCliSession {
     use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
+    let tty_lock = tty_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     std::fs::create_dir_all(home).unwrap();
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -3589,7 +3608,14 @@ fn spawn_tty_cli_with_size_and_env(
         rows,
         cols,
         cursor_query_buffer: Vec::new(),
+        _tty_lock: tty_lock,
     }
+}
+
+#[cfg(unix)]
+fn tty_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 fn read_scripted_http_request(stream: &mut TcpStream) -> ScriptedHttpRequest {

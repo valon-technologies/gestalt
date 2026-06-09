@@ -63,6 +63,45 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `POST` | `/api/v1/auth/start-oauth` | Start a app OAuth flow. |
 | `POST` | `/api/v1/auth/connect-manual` | Submit manual app credentials. |
 
+Both app connection endpoints resolve the credential owner from the authenticated
+caller by default. To provision the credential for a managed service account
+instead, include `serviceAccountId`. The value may be either the local service
+account ID, such as `nightly-sync`, or the canonical subject ID,
+`service_account:nightly-sync`. The invoking principal must be allowed by the
+authorization provider to perform `manages` on that `service_account` resource.
+The same `manages` check is applied when completing `/api/v1/auth/pending-connection`
+for a service-account credential.
+
+`POST /api/v1/auth/start-oauth` accepts:
+
+```json
+{
+  "integration": "github",
+  "connection": "default",
+  "instance": "automation",
+  "serviceAccountId": "nightly-sync",
+  "scopes": ["repo"],
+  "connectionParams": {}
+}
+```
+
+`POST /api/v1/auth/connect-manual` accepts:
+
+```json
+{
+  "integration": "model-api",
+  "connection": "default",
+  "instance": "automation",
+  "serviceAccountId": "service_account:nightly-sync",
+  "credential": "api-token",
+  "credentials": {
+    "client_id": "id-123",
+    "client_secret": "secret-456"
+  },
+  "connectionParams": {}
+}
+```
+
 ### Workflows
 
 | Method | Path | Purpose |

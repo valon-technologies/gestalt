@@ -19,6 +19,7 @@ type startOAuthRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
+	ServiceAccountID string            `json:"serviceAccountId"`
 	Scopes           []string          `json:"scopes"`
 	ConnectionParams map[string]string `json:"connectionParams"`
 }
@@ -72,7 +73,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectID, instance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance)
+	subjectID, instance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance, req.ServiceAccountID)
 	if err != nil {
 		auditErr = err
 		return

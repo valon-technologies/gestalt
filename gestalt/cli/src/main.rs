@@ -260,7 +260,14 @@ fn dispatch_app_command(
             name,
             connection,
             instance,
-        } => commands::apps::connect(&client, &name, connection.as_deref(), instance.as_deref()),
+            service_account_id,
+        } => commands::apps::connect(
+            &client,
+            &name,
+            connection.as_deref(),
+            instance.as_deref(),
+            service_account_id.as_deref(),
+        ),
         AppCommands::Disconnect {
             name,
             connection,

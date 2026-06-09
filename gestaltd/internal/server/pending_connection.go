@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -308,7 +307,12 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 			subjectID = principal.UserSubjectID(p.UserID)
 		}
 		if subjectID != state.Credential.SubjectID {
-			if !s.authorizeManagedSubjectPendingConnection(r.Context(), p, state.Credential.SubjectID) {
+			if _, err := canonicalServiceAccountSubjectID(state.Credential.SubjectID); err == nil {
+				if err := s.authorizeServiceAccountCredentialManagement(r.Context(), p, state.Credential.SubjectID); err != nil {
+					writeError(w, http.StatusForbidden, err.Error())
+					return nil, false
+				}
+			} else {
 				writeError(w, http.StatusNotFound, "pending connection not found")
 				return nil, false
 			}
@@ -326,22 +330,6 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	return nil, true
-}
-
-func (s *Server) authorizeManagedSubjectPendingConnection(ctx context.Context, p *principal.Principal, subjectID string) bool {
-	if _, err := canonicalServiceAccountSubjectID(subjectID); err != nil {
-		return false
-	}
-	if !managedSubjectCallerIsUnscoped(p) {
-		return false
-	}
-	if s.managedSubjects == nil {
-		return false
-	}
-	if _, err := s.managedSubjects.GetManagedSubject(ctx, subjectID); err != nil {
-		return false
-	}
-	return true
 }
 
 func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request) {

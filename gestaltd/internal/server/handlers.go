@@ -17,6 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 	"github.com/valon-technologies/gestalt/server/services/apps/mcphttp"
@@ -123,7 +124,10 @@ func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, 
 	return dbUser.ID, nil
 }
 
-func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Request) (string, error) {
+func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Request, serviceAccountID string) (string, error) {
+	if strings.TrimSpace(serviceAccountID) != "" {
+		return s.resolveServiceAccountCredentialSubjectID(w, r, serviceAccountID)
+	}
 	p := PrincipalFromContext(r.Context())
 	if p != nil {
 		if subjectID := strings.TrimSpace(p.CredentialSubjectID); subjectID != "" {
@@ -143,6 +147,73 @@ func (s *Server) resolveCredentialSubjectID(w http.ResponseWriter, r *http.Reque
 		return "", err
 	}
 	return principal.UserSubjectID(userID), nil
+}
+
+func (s *Server) resolveServiceAccountCredentialSubjectID(w http.ResponseWriter, r *http.Request, serviceAccountID string) (string, error) {
+	subjectID, err := canonicalServiceAccountCredentialSubjectID(serviceAccountID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return "", err
+	}
+	if err := s.authorizeServiceAccountCredentialManagement(r.Context(), PrincipalFromContext(r.Context()), subjectID); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return "", err
+	}
+	return subjectID, nil
+}
+
+func canonicalServiceAccountCredentialSubjectID(serviceAccountID string) (string, error) {
+	value := strings.TrimSpace(serviceAccountID)
+	if !strings.Contains(value, ":") {
+		value = "service_account:" + value
+	}
+	subjectID, err := canonicalServiceAccountSubjectID(value)
+	if err != nil {
+		return "", fmt.Errorf("serviceAccountId must be a service account id or canonical service_account:<id> subject ID")
+	}
+	return subjectID, nil
+}
+
+func (s *Server) authorizeServiceAccountCredentialManagement(ctx context.Context, p *principal.Principal, serviceAccountSubjectID string) error {
+	if s == nil || s.authorization == nil {
+		return fmt.Errorf("authorization provider is required")
+	}
+	subjectID := invokingPrincipalSubjectID(p)
+	if subjectID == "" {
+		return fmt.Errorf("not authenticated")
+	}
+	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
+		Subject: &proto.Subject{
+			Type: "subject",
+			Id:   subjectID,
+		},
+		Action: &proto.Action{Name: "manages"},
+		Resource: &proto.Resource{
+			Type: "service_account",
+			Id:   serviceAccountSubjectID,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("service account credential management denied: %w", err)
+	}
+	if resp == nil || !resp.GetAllowed() {
+		return fmt.Errorf("service account credential management denied")
+	}
+	return nil
+}
+
+func invokingPrincipalSubjectID(p *principal.Principal) string {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return ""
+	}
+	if subjectID := strings.TrimSpace(p.SubjectID); subjectID != "" {
+		return subjectID
+	}
+	if userID := strings.TrimSpace(p.UserID); userID != "" {
+		return principal.UserSubjectID(userID)
+	}
+	return ""
 }
 
 func (s *Server) healthCheck(w http.ResponseWriter, _ *http.Request) {
@@ -331,7 +402,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), name, "connection.disconnect", auditAllowed, auditErr, auditTarget)
 	}()
 
-	subjectID, err := s.resolveCredentialSubjectID(w, r)
+	subjectID, err := s.resolveCredentialSubjectID(w, r, "")
 	if err != nil {
 		auditErr = err
 		return
