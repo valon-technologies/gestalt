@@ -8581,7 +8581,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", body)
 	req.Header.Set("Authorization", "Bearer ignored")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -8644,7 +8644,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	testutil.CloseOnCleanup(t, invalidTS)
 
 	invalidBody := bytes.NewBufferString(`{"integration":"slack","connectionParams":{"unknown":"nope"}}`)
-	invalidReq, _ := http.NewRequest(http.MethodPost, invalidTS.URL+"/api/v1/auth/start-oauth", invalidBody)
+	invalidReq, _ := http.NewRequest(http.MethodPost, invalidTS.URL+"/api/v1/external-credentials/start-oauth", invalidBody)
 	invalidReq.Header.Set("Content-Type", "application/json")
 	invalidResp, err := http.DefaultClient.Do(invalidReq)
 	if err != nil {
@@ -8663,6 +8663,58 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 	if invalidAuditRecord["target_id"] != "slack/default/default" {
 		t.Fatalf("expected invalid audit target_id slack/default/default, got %v", invalidAuditRecord["target_id"])
+	}
+}
+
+func TestExternalCredentialLegacyAuthRoutes(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {})
+	testutil.CloseOnCleanup(t, ts)
+
+	tests := []struct {
+		name string
+		path string
+		body string
+		want int
+	}{
+		{
+			name: "start oauth",
+			path: "/api/v1/auth/start-oauth",
+			body: `{`,
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "connect manual",
+			path: "/api/v1/auth/connect-manual",
+			body: `{`,
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "pending connection",
+			path: "/api/v1/auth/pending-connection",
+			body: ``,
+			want: http.StatusBadRequest,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != tc.want {
+				t.Fatalf("legacy route %s status = %d, want %d", tc.path, resp.StatusCode, tc.want)
+			}
+		})
 	}
 }
 
@@ -8704,7 +8756,7 @@ func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"oauth-service-account","serviceAccountId":"oauth-bot"}`))
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", bytes.NewBufferString(`{"integration":"oauth-service-account","serviceAccountId":"oauth-bot"}`))
 	startReq.Header.Set("Content-Type", "application/json")
 	startResp, err := http.DefaultClient.Do(startReq)
 	if err != nil {
@@ -8764,7 +8816,7 @@ func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount
 func TestIntegrationOAuthCallback(t *testing.T) {
 	t.Parallel()
 
-	const pendingSelectionPath = "/api/v1/auth/pending-connection"
+	const pendingSelectionPath = "/api/v1/external-credentials/pending-connection"
 
 	t.Run("connected", func(t *testing.T) {
 		t.Parallel()
@@ -8836,7 +8888,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		startBody := bytes.NewBufferString(`{"integration":"oauth-svc"}`)
-		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer session-token")
 		startResp, err := http.DefaultClient.Do(startReq)
@@ -9003,7 +9055,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		testutil.CloseOnCleanup(t, ts)
 
 		startBody := bytes.NewBufferString(`{"integration":"oauth-svc"}`)
-		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer cli-api-token")
 		startResp, err := http.DefaultClient.Do(startReq)
@@ -10322,7 +10374,7 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	startBody := bytes.NewBufferString(`{"integration":"gitlab"}`)
-	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", startBody)
 	startReq.Header.Set("Content-Type", "application/json")
 	startResp, err := http.DefaultClient.Do(startReq)
 	if err != nil {
@@ -11304,7 +11356,7 @@ func TestConnectManual_OAuthProviderRejected(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"oauth-svc","credential":"some-key"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -11325,7 +11377,7 @@ func TestConnectManual_MissingFields(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -11346,7 +11398,7 @@ func TestConnectManual_UnknownIntegration(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"nonexistent","credential":"key"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -11370,7 +11422,7 @@ func TestStartOAuth_ManualProviderRejected(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"manual-svc","scopes":[]}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -11430,7 +11482,7 @@ func TestStartOAuth_MultiConnection_SelectsByConnectionName(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"multi","connection":"conn-b"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", body)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -11475,7 +11527,7 @@ func TestStartOAuth_MultiConnectionWithoutDefaultRequiresExplicitConnection(t *t
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"multi"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", body)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -11517,7 +11569,7 @@ func TestStartOAuth_MissingConnection_FailsCleanly(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	body := bytes.NewBufferString(`{"integration":"myint","connection":"nonexistent"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", body)
 	req.Header.Set("X-Dev-User-Email", "dev@example.com")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -11579,7 +11631,7 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	testutil.CloseOnCleanup(t, ts)
 
 	startBody := bytes.NewBufferString(`{"integration":"multi","connection":"conn-b"}`)
-	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/start-oauth", startBody)
 	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 	startReq.Header.Set("Content-Type", "application/json")
 	startResp, err := http.DefaultClient.Do(startReq)
@@ -13677,7 +13729,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			})
 			testutil.CloseOnCleanup(t, ts)
 
-			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(tc.requestBody))
+			req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(tc.requestBody))
 			req.Header.Set("Content-Type", "application/json")
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -13730,7 +13782,7 @@ func TestConnectManual_ServiceAccountIDStoresCredentialForServiceAccount(t *test
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account","serviceAccountId":"service_account:manual-bot","credential":"manual-service-account-token"}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account","serviceAccountId":"service_account:manual-bot","credential":"manual-service-account-token"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -13819,7 +13871,7 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-invoker","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-invoker","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
 	req.Header.Set("Authorization", "Bearer "+apiToken)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -13869,7 +13921,7 @@ func TestConnectManual_ServiceAccountIDRequiresManagesAuthorization(t *testing.T
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-denied","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-denied","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -13948,7 +14000,7 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-pending","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"manual-service-account-pending","serviceAccountId":"manual-bot","credential":"manual-service-account-token"}`))
 	req.Header.Set("Authorization", "Bearer session-token")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -13976,7 +14028,7 @@ func TestSelectPendingConnection_ServiceAccountIDRequiresManagesAuthorization(t 
 		"pending_token":   {connectResp.PendingToken},
 		"candidate_index": {"0"},
 	}
-	selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/pending-connection", strings.NewReader(form.Encode()))
+	selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/pending-connection", strings.NewReader(form.Encode()))
 	selectReq.Header.Set("Authorization", "Bearer session-token")
 	selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	selectResp, err := http.DefaultClient.Do(selectReq)
@@ -14068,7 +14120,7 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"looker-like","credentials":{"client_id":"id-123","client_secret":"secret-456"}}`))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"looker-like","credentials":{"client_id":"id-123","client_secret":"secret-456"}}`))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -14165,7 +14217,7 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"json-token","credentials":{"client_id":"json-id","client_secret":"json-secret"}}`))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"json-token","credentials":{"client_id":"json-id","client_secret":"json-secret"}}`))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -14242,7 +14294,7 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		rawReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"fallback-token","credential":"raw-token"}`))
+		rawReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"fallback-token","credential":"raw-token"}`))
 		rawReq.Header.Set("Content-Type", "application/json")
 		rawResp, err := http.DefaultClient.Do(rawReq)
 		if err != nil {
@@ -14257,7 +14309,7 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 			t.Fatalf("token endpoint calls after raw credential = %d, want 0", calls.Load())
 		}
 
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(`{"integration":"fallback-token","credentials":{"client_id":"fallback-id","client_secret":"fallback-secret"}}`))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(`{"integration":"fallback-token","credentials":{"client_id":"fallback-id","client_secret":"fallback-secret"}}`))
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -14329,7 +14381,7 @@ func TestConnectManual_TokenExchange(t *testing.T) {
 				})
 				testutil.CloseOnCleanup(t, ts)
 
-				req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", bytes.NewBufferString(body))
+				req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/external-credentials/connect-manual", bytes.NewBufferString(body))
 				req.Header.Set("Content-Type", "application/json")
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {

@@ -174,7 +174,7 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		t.Helper()
 
 		body := bytes.NewBufferString(`{"integration":"` + providerName + `"}`)
-		startReq, _ := http.NewRequest(http.MethodPost, oauthServer.URL+"/api/v1/auth/start-oauth", body)
+		startReq, _ := http.NewRequest(http.MethodPost, oauthServer.URL+"/api/v1/external-credentials/start-oauth", body)
 		startReq.Header.Set("Content-Type", "application/json")
 		startResp, err := http.DefaultClient.Do(startReq)
 		if err != nil {
@@ -508,7 +508,7 @@ func TestManualConnectionMetrics(t *testing.T) {
 	testutil.CloseOnCleanup(t, srv)
 
 	body := bytes.NewBufferString(`{"integration":"` + providerName + `","credentials":{"api_key":"secret"}}`)
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/connect-manual", body)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/external-credentials/connect-manual", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -538,7 +538,7 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 	testutil.CloseOnCleanup(t, srv)
 
 	startBody := bytes.NewBufferString(`{"integration":"typo-oauth"}`)
-	startReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/external-credentials/start-oauth", startBody)
 	startReq.Header.Set("Content-Type", "application/json")
 	startResp, err := http.DefaultClient.Do(startReq)
 	if err != nil {
@@ -550,7 +550,7 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 	}
 
 	manualBody := bytes.NewBufferString(`{"integration":"typo-manual","credential":"secret"}`)
-	manualReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/connect-manual", manualBody)
+	manualReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/external-credentials/connect-manual", manualBody)
 	manualReq.Header.Set("Content-Type", "application/json")
 	manualResp, err := http.DefaultClient.Do(manualReq)
 	if err != nil {

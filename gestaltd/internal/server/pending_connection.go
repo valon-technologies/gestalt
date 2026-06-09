@@ -15,7 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-const pendingConnectionPath = "/api/v1/auth/pending-connection"
+const pendingConnectionPath = "/api/v1/external-credentials/pending-connection"
 const pendingConnectionCookieName = "pending_connection_state"
 
 var pendingConnectionSelectionPage = template.Must(template.New("pending-connection-selection").Parse(`<!doctype html>

@@ -31,7 +31,7 @@ fn test_connect_includes_connection_and_instance() {
     let mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -66,7 +66,7 @@ fn test_connect_oauth_includes_service_account_id() {
     let mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -106,7 +106,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() 
     let mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -153,7 +153,7 @@ fn test_connect_uses_user_facing_app_connection_name_on_the_wire() {
     let mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -257,7 +257,7 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     let _connect = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/connect-manual",
+        "/api/v1/external-credentials/connect-manual",
         StatusCode::OK
     )
 		.match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -297,7 +297,7 @@ fn test_manual_connect_includes_service_account_id_flag() {
     let _connect = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/connect-manual",
+        "/api/v1/external-credentials/connect-manual",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -341,7 +341,7 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
     let _connect = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/connect-manual",
+        "/api/v1/external-credentials/connect-manual",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -353,7 +353,7 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
         r#"{
                 "status":"selection_required",
                 "integration":"manual-svc",
-                "selectionUrl":"/api/v1/auth/pending-connection",
+                "selectionUrl":"/api/v1/external-credentials/pending-connection",
                 "pendingToken":"pending-123",
                 "candidates":[
                     {"id":"site-a","name":"Site A"},
@@ -363,7 +363,10 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
     )
     .create();
     let _select = server
-        .mock(Method::POST.as_str(), "/api/v1/auth/pending-connection")
+        .mock(
+            Method::POST.as_str(),
+            "/api/v1/external-credentials/pending-connection",
+        )
         .match_header(
             header::AUTHORIZATION.as_str(),
             Matcher::Exact(test_bearer()),
@@ -417,7 +420,7 @@ fn test_connection_selection_uses_selected_connection_auth_type() {
     let _oauth = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -459,7 +462,7 @@ fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
     let _oauth = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -528,7 +531,7 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
     let _connect = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/connect-manual",
+        "/api/v1/external-credentials/connect-manual",
         StatusCode::OK
     )
 		.match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -560,7 +563,7 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
     let _connect = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/connect-manual",
+        "/api/v1/external-credentials/connect-manual",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)

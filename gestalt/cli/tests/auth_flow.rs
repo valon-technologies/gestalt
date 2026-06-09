@@ -10,7 +10,7 @@ fn test_start_oauth() {
     let mock = authed_json_mock!(
         server,
         Method::POST,
-        "/api/v1/auth/start-oauth",
+        "/api/v1/external-credentials/start-oauth",
         StatusCode::OK
     )
     .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
@@ -18,7 +18,9 @@ fn test_start_oauth() {
 
     let client = create_client(&server);
     let body = serde_json::json!({"integration": "acme_crm"});
-    let resp = client.post("/api/v1/auth/start-oauth", &body).unwrap();
+    let resp = client
+        .post("/api/v1/external-credentials/start-oauth", &body)
+        .unwrap();
 
     mock.assert();
     assert_eq!(resp["url"], "https://example.com/oauth");

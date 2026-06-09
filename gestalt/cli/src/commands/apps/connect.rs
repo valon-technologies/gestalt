@@ -302,7 +302,7 @@ where
     let connection_params = prompt_connection_params(flow.connection_param_defs())?;
     let resp = client
         .post(
-            "/api/v1/auth/start-oauth",
+            "/api/v1/external-credentials/start-oauth",
             &StartOAuthRequest {
                 integration: flow.integration_name(),
                 connection: flow.connection_name(),
@@ -349,7 +349,7 @@ fn connect_manual(
     let response: ConnectManualResponse = serde_json::from_value(
         client
             .post(
-                "/api/v1/auth/connect-manual",
+                "/api/v1/external-credentials/connect-manual",
                 &ConnectManualRequest {
                     integration: flow.integration_name(),
                     credentials: credentials.request(),

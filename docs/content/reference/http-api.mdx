@@ -20,7 +20,8 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
 | `POST` | `/api/v1/auth/logout` | Clears the current platform session. |
 | `GET` | `/api/v1/auth/callback` | Completes app OAuth. |
-| `POST` | `/api/v1/auth/pending-connection` | Render or finalize a multi-candidate connection choice using a pending connection token. |
+| `POST` | `/api/v1/external-credentials/pending-connection` | Render or finalize a multi-candidate connection choice using a pending connection token. |
+| `POST` | `/api/v1/auth/pending-connection` | Legacy alias for `/api/v1/external-credentials/pending-connection`. |
 | `GET`, `POST`, `PUT`, `PATCH`, or `DELETE` | `/api/v1/{app}/{hostedPath}` | Invoke a app-hosted HTTP binding declared by `spec.http` or `apps.<name>.http`. The route is verified by the binding's `security` scheme, not by Gestalt session authentication. |
 
 ## Authenticated User Routes
@@ -60,8 +61,10 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/auth/start-oauth` | Start a app OAuth flow. |
-| `POST` | `/api/v1/auth/connect-manual` | Submit manual app credentials. |
+| `POST` | `/api/v1/external-credentials/start-oauth` | Start a app OAuth flow. |
+| `POST` | `/api/v1/external-credentials/connect-manual` | Submit manual app credentials. |
+| `POST` | `/api/v1/auth/start-oauth` | Legacy alias for `/api/v1/external-credentials/start-oauth`. |
+| `POST` | `/api/v1/auth/connect-manual` | Legacy alias for `/api/v1/external-credentials/connect-manual`. |
 
 Both app connection endpoints resolve the credential owner from the authenticated
 caller by default. To provision the credential for a managed service account
@@ -69,10 +72,10 @@ instead, include `serviceAccountId`. The value may be either the local service
 account ID, such as `nightly-sync`, or the canonical subject ID,
 `service_account:nightly-sync`. The invoking principal must be allowed by the
 authorization provider to perform `manages` on that `service_account` resource.
-The same `manages` check is applied when completing `/api/v1/auth/pending-connection`
+The same `manages` check is applied when completing `/api/v1/external-credentials/pending-connection`
 for a service-account credential.
 
-`POST /api/v1/auth/start-oauth` accepts:
+`POST /api/v1/external-credentials/start-oauth` accepts:
 
 ```json
 {
@@ -85,7 +88,7 @@ for a service-account credential.
 }
 ```
 
-`POST /api/v1/auth/connect-manual` accepts:
+`POST /api/v1/external-credentials/connect-manual` accepts:
 
 ```json
 {

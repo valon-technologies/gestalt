@@ -46,6 +46,9 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Post("/{turnID}/interactions/{interactionID}/resolve", s.resolveAgentInteraction)
 		})
 
+		r.Post("/external-credentials/start-oauth", s.startIntegrationOAuth)
+		r.Post("/external-credentials/connect-manual", s.connectManual)
+		// Deprecated: keep these auth routes as backwards-compatible aliases while clients migrate to /external-credentials.
 		r.Post("/auth/start-oauth", s.startIntegrationOAuth)
 		r.Post("/auth/connect-manual", s.connectManual)
 
