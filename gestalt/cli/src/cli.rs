@@ -211,6 +211,11 @@ pub enum TokenCommands {
 pub enum AuthorizationCommands {
     /// Check whether a subject can perform an action on a resource
     CheckAccess(AuthorizationCheckAccessArgs),
+    /// Inspect and manage authorization relationships
+    Relationships {
+        #[command(subcommand)]
+        command: AuthorizationRelationshipCommands,
+    },
 }
 
 #[derive(Args)]
@@ -230,6 +235,43 @@ pub struct AuthorizationCheckAccessArgs {
     /// Resource type on the relationship tuple
     #[arg(long = "resource-type")]
     pub resource_type: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationRelationshipCommands {
+    /// List relationships
+    List(AuthorizationRelationshipListArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationRelationshipListArgs {
+    /// Filter by target subject id
+    #[arg(long = "subject-id")]
+    pub subject_id: Option<String>,
+    /// Filter by target subject type
+    #[arg(long = "subject-type")]
+    pub subject_type: Option<String>,
+    /// Filter to relationships with this relation name
+    #[arg(long)]
+    pub relation: Option<String>,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: Option<String>,
+    /// Filter to relationships whose resource has this id
+    #[arg(long = "resource-id")]
+    pub resource_id: Option<String>,
+    /// Filter by source layer, such as static_config or runtime
+    #[arg(long = "source-layer")]
+    pub source_layer: Option<String>,
+    /// Maximum number of relationships to return
+    #[arg(long = "page-size")]
+    pub page_size: Option<u32>,
+    /// Pagination cursor returned by a previous list response
+    #[arg(long = "page-token")]
+    pub page_token: Option<String>,
+    /// Optional path to a full ListRelationshipsRequest JSON file; use - to read from stdin
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
 }
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
