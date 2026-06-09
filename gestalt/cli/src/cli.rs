@@ -243,6 +243,8 @@ pub enum AuthorizationRelationshipCommands {
     List(AuthorizationRelationshipListArgs),
     /// Add a relationship from a JSON request file
     Add(AuthorizationRelationshipAddArgs),
+    /// Delete a subject relationship
+    Delete(AuthorizationRelationshipDeleteArgs),
 }
 
 #[derive(Args)]
@@ -281,6 +283,25 @@ pub struct AuthorizationRelationshipAddArgs {
     /// Required path to a full AddRelationshipRequest JSON file; use - to read from stdin
     #[arg(long = "input-file")]
     pub input_file: String,
+}
+
+#[derive(Args)]
+pub struct AuthorizationRelationshipDeleteArgs {
+    /// Target subject id
+    #[arg(long = "target-subject-id")]
+    pub target_subject_id: String,
+    /// Target subject type/namespace, usually subject
+    #[arg(long = "target-subject-type")]
+    pub target_subject_type: String,
+    /// Relation to delete from the resource
+    #[arg(long)]
+    pub relation: String,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: String,
+    /// Resource id on the relationship tuple
+    #[arg(long = "resource-id")]
+    pub resource_id: String,
 }
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
