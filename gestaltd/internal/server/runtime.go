@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
@@ -299,23 +298,20 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 		}
 	}
 
-	return mcpserver.NewStreamableHTTPServer(
-		gestaltmcp.NewServer(gestaltmcp.Config{
-			Invoker:           invoker,
-			TokenResolver:     broker,
-			AuditSink:         result.AuditSink,
-			Providers:         result.Providers,
-			AllowedProviders:  allowedProviders,
-			ToolPrefixes:      toolPrefixes,
-			IncludeREST:       includeREST,
-			MCPConnection:     mcpConnection,
-			CatalogProjection: projectionServer.publicCatalog,
-			InvocationValidator: func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error {
-				return projectionServer.validatePublicOperationInvocation(provName, prov, op, params, explicitConnection)
-			},
-		}),
-		mcpserver.WithStateLess(true),
-	), nil
+	return gestaltmcp.NewStatelessHTTPHandler(gestaltmcp.Config{
+		Invoker:           invoker,
+		TokenResolver:     broker,
+		AuditSink:         result.AuditSink,
+		Providers:         result.Providers,
+		AllowedProviders:  allowedProviders,
+		ToolPrefixes:      toolPrefixes,
+		IncludeREST:       includeREST,
+		MCPConnection:     mcpConnection,
+		CatalogProjection: projectionServer.publicCatalog,
+		InvocationValidator: func(ctx context.Context, provName string, prov core.Provider, op catalog.CatalogOperation, params map[string]any, explicitConnection string) error {
+			return projectionServer.validatePublicOperationInvocation(provName, prov, op, params, explicitConnection)
+		},
+	}), nil
 }
 
 func newHTTPServer(addr string, handler http.Handler) *http.Server {

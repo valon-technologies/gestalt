@@ -7,57 +7,13 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
 )
-
-func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog) {
-	m := buildToolMap(cfg, provName, cat)
-	for name := range m {
-		srv.AddTool(m[name].Tool, m[name].Handler)
-	}
-}
 
 func projectCatalog(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) *catalog.Catalog {
 	if cfg.CatalogProjection == nil || cat == nil {
 		return cat
 	}
 	return cfg.CatalogProjection(provName, prov, cat)
-}
-
-func buildToolMap(cfg Config, provName string, cat *catalog.Catalog) map[string]mcpserver.ServerTool {
-	tools := make(map[string]mcpserver.ServerTool, len(cat.Operations))
-	for i := range cat.Operations {
-		op := &cat.Operations[i]
-		if !catalogOperationProjectedToMCP(cfg, provName, *op) {
-			continue
-		}
-
-		name := toolName(cfg.ToolPrefixes, provName, op.ID)
-		if cfg.ToolTargets != nil {
-			cfg.ToolTargets.Store(name, provName, op.ID)
-		}
-
-		var tool mcpgo.Tool
-		if len(op.InputSchema) > 0 {
-			tool = mcpgo.NewToolWithRawSchema(name, op.Description, op.InputSchema)
-		} else {
-			tool = mcpgo.NewTool(name, mcpgo.WithDescription(op.Description))
-		}
-
-		tool.Annotations = mapAnnotations(op.Annotations)
-		if op.Title != "" {
-			tool.Annotations.Title = op.Title
-		} else {
-			tool.Annotations.Title = op.ID
-		}
-
-		if len(op.OutputSchema) > 0 {
-			tool.RawOutputSchema = op.OutputSchema
-		}
-
-		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: makeHandler(cfg, provName, op.ID, "")}
-	}
-	return tools
 }
 
 func catalogOperationProjectedToMCP(cfg Config, provName string, op catalog.CatalogOperation) bool {
