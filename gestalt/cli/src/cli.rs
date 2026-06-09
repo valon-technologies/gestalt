@@ -216,6 +216,11 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationRelationshipCommands,
     },
+    /// Inspect authorization models
+    Models {
+        #[command(subcommand)]
+        command: AuthorizationModelCommands,
+    },
 }
 
 #[derive(Args)]
@@ -302,6 +307,21 @@ pub struct AuthorizationRelationshipDeleteArgs {
     /// Resource id on the relationship tuple
     #[arg(long = "resource-id")]
     pub resource_id: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationModelCommands {
+    /// Inspect the active authorization model
+    Active {
+        #[command(subcommand)]
+        command: AuthorizationActiveModelCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationActiveModelCommands {
+    /// Get the active model reference
+    Get,
 }
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
