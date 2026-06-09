@@ -6,14 +6,11 @@ import (
 	"strings"
 )
 
-func renderPythonAuthorization(ir authorizationIR, outputs []outputConfig) ([]generatedFile, error) {
-	if len(outputs) != 1 {
-		return nil, fmt.Errorf("%s: python expects exactly one output", ir.Config.Proto)
-	}
-	path := outputs[0].Path
+func renderPythonProviderSDK(ir ProviderSDKIR) ([]generatedFile, error) {
+	path := "sdk/python/gestalt/" + ir.Config.Package["python"] + ".py"
 	var b strings.Builder
 	b.Write(generatedHeader(path))
-	b.WriteString(`from __future__ import annotations
+	fmt.Fprintf(&b, `from __future__ import annotations
 
 import datetime as dt
 import os
@@ -24,8 +21,8 @@ from typing import Any, Protocol
 
 from google.protobuf import empty_pb2 as _empty_pb2
 
-from ._gen.v1 import authorization_pb2 as _pb
-from ._gen.v1 import authorization_pb2_grpc as _pb_grpc
+from ._gen.v1 import %[1]s_pb2 as _pb
+from ._gen.v1 import %[1]s_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
@@ -43,8 +40,8 @@ from ._protocol import which_oneof as _which_oneof
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
-_shared_authorization_transport: dict[str, Any] = {}
-_shared_authorization_lock = threading.Lock()`)
+_shared_%[2]s_transport: dict[str, Any] = {}
+_shared_%[2]s_lock = threading.Lock()`, ir.ProtoFileBase, strings.ToLower(ir.Config.SDKName))
 	b.WriteString("\n\n")
 	for _, enum := range ir.Enums {
 		for _, value := range enum.Values {
@@ -53,14 +50,14 @@ _shared_authorization_lock = threading.Lock()`)
 		b.WriteString("\n")
 	}
 	for _, message := range ir.Messages {
-		renderPythonDataclass(&b, message)
+		renderPythonDataclass(&b, ir, message)
 	}
 	renderPythonClient(&b, ir)
 	renderPythonConversions(&b, ir)
 	return []generatedFile{{Path: path, Data: []byte(b.String())}}, nil
 }
 
-func renderPythonDataclass(b *strings.Builder, message irMessage) {
+func renderPythonDataclass(b *strings.Builder, ir ProviderSDKIR, message irMessage) {
 	if message.Empty {
 		return
 	}
@@ -68,7 +65,7 @@ func renderPythonDataclass(b *strings.Builder, message irMessage) {
 	fmt.Fprintf(b, "class %s:\n", message.PublicName)
 	if message.Oneof != nil {
 		for _, field := range message.Oneof.Variants {
-			fmt.Fprintf(b, "    %s: %s | None = None\n", field.PyName, pyType(field))
+			fmt.Fprintf(b, "    %s: %s | None = None\n", field.PyName, pyType(ir, field))
 		}
 		b.WriteString("\n")
 		b.WriteString("    def __post_init__(self) -> None:\n")
@@ -81,7 +78,7 @@ func renderPythonDataclass(b *strings.Builder, message irMessage) {
 		fmt.Fprintf(b, "            raise ValueError(%q)\n\n", message.PublicName+" accepts exactly one variant")
 		for _, field := range message.Oneof.Variants {
 			b.WriteString("    @classmethod\n")
-			fmt.Fprintf(b, "    def from_%s(cls, %s: %s) -> %q:\n", field.PyName, field.PyName, pyType(field), message.PublicName)
+			fmt.Fprintf(b, "    def from_%s(cls, %s: %s) -> %q:\n", field.PyName, field.PyName, pyType(ir, field), message.PublicName)
 			fmt.Fprintf(b, "        return cls(%s=%s)\n\n", field.PyName, field.PyName)
 		}
 		return
@@ -91,12 +88,20 @@ func renderPythonDataclass(b *strings.Builder, message irMessage) {
 		return
 	}
 	for _, field := range message.Fields {
-		fmt.Fprintf(b, "    %s: %s = %s\n", field.PyName, pyFieldType(field), pyDefaultValue(field))
+		fmt.Fprintf(b, "    %s: %s = %s\n", field.PyName, pyFieldType(ir, field), pyDefaultValue(field))
 	}
 	b.WriteString("\n\n")
 }
 
-func renderPythonClient(b *strings.Builder, ir authorizationIR) {
+func renderPythonClient(b *strings.Builder, ir ProviderSDKIR) {
+	serviceKind := strings.ToLower(ir.Config.SDKName)
+	sharedTransport := "_shared_" + serviceKind + "_transport"
+	sharedLock := "_shared_" + serviceKind + "_lock"
+	sharedClient := "_shared_" + serviceKind + "_client"
+	resolveTarget := "_resolve_" + serviceKind + "_socket_target"
+	initialized := "_" + serviceKind + "_initialized"
+	stubName := ir.ServiceName + "Stub"
+
 	b.WriteString("class ClientProtocol(Protocol):\n")
 	b.WriteString("    def __enter__(self) -> \"ClientProtocol\": ...\n")
 	b.WriteString("    def __exit__(self, *args: Any) -> None: ...\n")
@@ -110,7 +115,7 @@ func renderPythonClient(b *strings.Builder, ir authorizationIR) {
 	}
 	b.WriteString("\n\n")
 	b.WriteString("class Client:\n")
-	b.WriteString(`    def __new__(
+	fmt.Fprintf(b, `    def __new__(
         cls,
         socket_target: str | None = None,
         *,
@@ -118,7 +123,7 @@ func renderPythonClient(b *strings.Builder, ir authorizationIR) {
         _shared: bool = False,
     ) -> "Client":
         if not _shared and socket_target is None and _token is None:
-            return _shared_authorization_client()
+            return %[1]s()
         return super().__new__(cls)
 
     def __init__(
@@ -128,19 +133,21 @@ func renderPythonClient(b *strings.Builder, ir authorizationIR) {
         _token: str | None = None,
         _shared: bool = False,
     ) -> None:
-        if getattr(self, "_authorization_initialized", False):
+        if getattr(self, "%[2]s", False):
             return
-        target = _resolve_authorization_socket_target(socket_target)
+        target = %[3]s(socket_target)
         token = (_token if _token is not None else os.environ.get(ENV_HOST_SERVICE_TOKEN, "")).strip()
-        self._channel = host_service_channel("authorization", target, token=token)
-        self._stub = pb_grpc.AuthorizationProviderStub(self._channel)
+        self._channel = host_service_channel(%[4]q, target, token=token)
+        self._stub = pb_grpc.%[5]s(self._channel)
         self._closed = False
         self._shared = _shared
-        self._authorization_initialized = True
+        self.%[2]s = True
 
     def close(self) -> None:
         if self._shared:
-            return
+            with %[6]s:
+                if %[7]s.get("client") is self:
+                    %[7]s.clear()
         self._close_channel()
 
     def _close_channel(self) -> None:
@@ -149,54 +156,60 @@ func renderPythonClient(b *strings.Builder, ir authorizationIR) {
         self._closed = True
         self._channel.close()
 
-`)
+    def _require_open(self) -> None:
+        if self._closed:
+            raise RuntimeError(%[8]q)
+
+`, sharedClient, initialized, resolveTarget, serviceKind, stubName, sharedLock, sharedTransport, serviceKind+": client is closed")
 	for _, method := range ir.Methods {
 		output := ir.MessagesByName[method.OutputName]
 		if method.EmptyInput {
 			fmt.Fprintf(b, "    def %s(self) -> %s:\n", method.SnakeName, output.PublicName)
+			b.WriteString("        self._require_open()\n")
 			fmt.Fprintf(b, "        return %s_from_proto(self._stub.%s(getattr(_empty_pb2, \"Empty\")()))\n\n", pyFunctionPrefix(output), method.ProtoName)
 			continue
 		}
 		input := ir.MessagesByName[method.InputName]
 		fmt.Fprintf(b, "    def %s(self, request: %s) -> %s:\n", method.SnakeName, input.PublicName, output.PublicName)
+		b.WriteString("        self._require_open()\n")
 		fmt.Fprintf(b, "        return %s_from_proto(self._stub.%s(%s_to_proto(request)))\n\n", pyFunctionPrefix(output), method.ProtoName, pyFunctionPrefix(input))
 	}
-	b.WriteString(`    def __enter__(self) -> "Client":
+	fmt.Fprintf(b, `    def __enter__(self) -> "Client":
         return self
 
     def __exit__(self, *args: Any) -> None:
         self.close()
 
 
-def _shared_authorization_client() -> Client:
-    target = _resolve_authorization_socket_target()
+def %[1]s() -> Client:
+    target = %[2]s()
     token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
-    with _shared_authorization_lock:
-        client = _shared_authorization_transport.get("client")
-        if client is not None and _shared_authorization_transport.get("target") == target and _shared_authorization_transport.get("token") == token:
+    with %[3]s:
+        client = %[4]s.get("client")
+        if client is not None and %[4]s.get("target") == target and %[4]s.get("token") == token:
             return client
 
         client = Client(target, _token=token, _shared=True)
-        stale = _shared_authorization_transport.get("client")
-        _shared_authorization_transport["target"] = target
-        _shared_authorization_transport["token"] = token
-        _shared_authorization_transport["client"] = client
+        stale = %[4]s.get("client")
+        %[4]s["target"] = target
+        %[4]s["token"] = token
+        %[4]s["client"] = client
         if stale is not None:
             stale._close_channel()
         return client
 
 
-def _resolve_authorization_socket_target(socket_target: str | None = None) -> str:
+def %[2]s(socket_target: str | None = None) -> str:
     target = (socket_target if socket_target is not None else os.environ.get(ENV_HOST_SERVICE_SOCKET, "")).strip()
     if not target:
-        raise RuntimeError(f"authorization: {ENV_HOST_SERVICE_SOCKET} is not set")
+        raise RuntimeError(f"%[5]s: {ENV_HOST_SERVICE_SOCKET} is not set")
     return target
 
 
-`)
+`, sharedClient, resolveTarget, sharedLock, sharedTransport, serviceKind)
 }
 
-func renderPythonConversions(b *strings.Builder, ir authorizationIR) {
+func renderPythonConversions(b *strings.Builder, ir ProviderSDKIR) {
 	for _, message := range ir.Messages {
 		if message.Empty {
 			continue
@@ -262,7 +275,7 @@ func pySelfFields(receiver string, fields []irField) []string {
 	return out
 }
 
-func pyType(field irField) string {
+func pyType(ir ProviderSDKIR, field irField) string {
 	switch field.Kind {
 	case irKindString:
 		return "str"
@@ -275,14 +288,14 @@ func pyType(field irField) string {
 	case irKindTimestamp:
 		return "dt.datetime"
 	case irKindMessage:
-		return publicMessageName(field.MessageName)
+		return publicMessageName(ir.Config, field.MessageName)
 	default:
 		return "Any"
 	}
 }
 
-func pyFieldType(field irField) string {
-	base := pyType(field)
+func pyFieldType(ir ProviderSDKIR, field irField) string {
+	base := pyType(ir, field)
 	if field.Repeated {
 		return "list[" + base + "]"
 	}

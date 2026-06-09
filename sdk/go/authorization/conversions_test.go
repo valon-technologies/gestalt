@@ -6,6 +6,19 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
+func TestNilPropertiesEncodeAsEmptyStruct(t *testing.T) {
+	wire, err := SubjectToProto(&Subject{Type: "user", ID: "u1"})
+	if err != nil {
+		t.Fatalf("SubjectToProto: %v", err)
+	}
+	if wire.GetProperties() == nil {
+		t.Fatal("properties = nil, want empty Struct")
+	}
+	if len(wire.GetProperties().GetFields()) != 0 {
+		t.Fatalf("properties fields = %#v, want empty", wire.GetProperties().GetFields())
+	}
+}
+
 func TestUnsetOneofsRoundTrip(t *testing.T) {
 	if _, ok := relationshipTargetFromProto(&proto.RelationshipTarget{}).(RelationshipTargetUnset); !ok {
 		t.Fatalf("relationship target unset did not convert to RelationshipTargetUnset")
@@ -18,7 +31,7 @@ func TestUnsetOneofsRoundTrip(t *testing.T) {
 		t.Fatalf("relationship target kind = %#v, want nil", relationshipWire.GetKind())
 	}
 
-	allowedTargets := modelAllowedTargetsFromProto([]*proto.ModelAllowedTarget{{}})
+	allowedTargets := sliceModelAllowedTargetFromProto([]*proto.ModelAllowedTarget{{}})
 	if len(allowedTargets) != 1 {
 		t.Fatalf("allowed targets len = %d, want 1", len(allowedTargets))
 	}

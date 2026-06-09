@@ -339,7 +339,9 @@ class Client:
 
     def close(self) -> None:
         if self._shared:
-            return
+            with _shared_authorization_lock:
+                if _shared_authorization_transport.get("client") is self:
+                    _shared_authorization_transport.clear()
         self._close_channel()
 
     def _close_channel(self) -> None:
@@ -348,31 +350,44 @@ class Client:
         self._closed = True
         self._channel.close()
 
+    def _require_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("authorization: client is closed")
+
     def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
+        self._require_open()
         return check_access_response_from_proto(self._stub.CheckAccess(check_access_request_to_proto(request)))
 
     def check_access_many(self, request: CheckAccessManyRequest) -> CheckAccessManyResponse:
+        self._require_open()
         return check_access_many_response_from_proto(self._stub.CheckAccessMany(check_access_many_request_to_proto(request)))
 
     def list_relationships(self, request: ListRelationshipsRequest) -> ListRelationshipsResponse:
+        self._require_open()
         return list_relationships_response_from_proto(self._stub.ListRelationships(list_relationships_request_to_proto(request)))
 
     def add_relationship(self, request: AddRelationshipRequest) -> AddRelationshipResponse:
+        self._require_open()
         return add_relationship_response_from_proto(self._stub.AddRelationship(add_relationship_request_to_proto(request)))
 
     def delete_relationship(self, request: DeleteRelationshipRequest) -> DeleteRelationshipResponse:
+        self._require_open()
         return delete_relationship_response_from_proto(self._stub.DeleteRelationship(delete_relationship_request_to_proto(request)))
 
     def set_authorization_state(self, request: SetAuthorizationStateRequest) -> SetAuthorizationStateResponse:
+        self._require_open()
         return set_authorization_state_response_from_proto(self._stub.SetAuthorizationState(set_authorization_state_request_to_proto(request)))
 
     def get_active_model_ref(self) -> GetActiveModelRefResponse:
+        self._require_open()
         return get_active_model_ref_response_from_proto(self._stub.GetActiveModelRef(getattr(_empty_pb2, "Empty")()))
 
     def set_active_model(self, request: SetActiveModelRequest) -> SetActiveModelResponse:
+        self._require_open()
         return set_active_model_response_from_proto(self._stub.SetActiveModel(set_active_model_request_to_proto(request)))
 
     def list_active_model_resource_types(self, request: ListActiveModelResourceTypesRequest) -> ListActiveModelResourceTypesResponse:
+        self._require_open()
         return list_active_model_resource_types_response_from_proto(self._stub.ListActiveModelResourceTypes(list_active_model_resource_types_request_to_proto(request)))
 
     def __enter__(self) -> "Client":

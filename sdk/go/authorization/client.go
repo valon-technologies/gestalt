@@ -11,10 +11,12 @@ import (
 
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type Client struct {
+	conn   *grpc.ClientConn
 	client proto.AuthorizationProviderClient
 }
 
@@ -29,8 +31,6 @@ func WithTarget(target string) Option {
 		opts.target = target
 	}
 }
-
-var sharedTransport host.SharedTransport[proto.AuthorizationProviderClient]
 
 func New(ctx context.Context, opts ...Option) (*Client, error) {
 	cfg := options{}
@@ -52,11 +52,21 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 
 	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	client, err := host.ManagerClient(dialCtx, "authorization", target, token, &sharedTransport, proto.NewAuthorizationProviderClient)
+	conn, err := host.DialService(dialCtx, "authorization", target, token, "")
 	if err != nil {
 		return nil, err
 	}
-	return &Client{client: client}, nil
+	return &Client{conn: conn, client: proto.NewAuthorizationProviderClient(conn)}, nil
+}
+
+func (c *Client) Close() error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
+	conn := c.conn
+	c.conn = nil
+	c.client = nil
+	return conn.Close()
 }
 
 func (c *Client) CheckAccess(ctx context.Context, req CheckAccessRequest) (*CheckAccessResponse, error) {

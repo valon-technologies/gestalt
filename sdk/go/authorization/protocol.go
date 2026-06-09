@@ -12,7 +12,7 @@ import (
 
 func structFromMap(value map[string]any) (*structpb.Struct, error) {
 	if value == nil {
-		return nil, nil
+		value = map[string]any{}
 	}
 	normalized, err := normalizeJSON(value, "struct")
 	if err != nil {

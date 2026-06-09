@@ -8,10 +8,12 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-type authorizationIR struct {
+type ProviderSDKIR struct {
 	Config         serviceConfig
 	ProtoPackage   string
+	ProtoFileBase  string
 	ServiceName    string
+	Doc            string
 	Messages       []irMessage
 	MessagesByName map[string]irMessage
 	Enums          []irEnum
@@ -23,6 +25,7 @@ type irMessage struct {
 	ProtoName     string
 	FullName      string
 	PublicName    string
+	Doc           string
 	Fields        []irField
 	Oneof         *irOneof
 	Empty         bool
@@ -33,11 +36,14 @@ type irMessage struct {
 type irField struct {
 	ProtoName       string
 	JSONName        string
+	Number          int32
 	GoName          string
 	ProtoGoName     string
 	PyName          string
 	RustName        string
 	Kind            irFieldKind
+	Presence        irPresence
+	Doc             string
 	Repeated        bool
 	MessageName     string
 	EnumName        string
@@ -58,13 +64,24 @@ const (
 	irKindTimestamp irFieldKind = "timestamp"
 )
 
+type irPresence string
+
+const (
+	irPresenceNone     irPresence = "none"
+	irPresenceMessage  irPresence = "message"
+	irPresenceRepeated irPresence = "repeated"
+	irPresenceOneof    irPresence = "oneof"
+)
+
 type irOneof struct {
 	ProtoName string
+	Doc       string
 	Variants  []irField
 }
 
 type irEnum struct {
 	ProtoName string
+	Doc       string
 	Values    []irEnumValue
 }
 
@@ -73,6 +90,7 @@ type irEnumValue struct {
 	PublicName string
 	GoName     string
 	RustName   string
+	Doc        string
 	Number     int32
 }
 
@@ -80,21 +98,21 @@ type irMethod struct {
 	ProtoName  string
 	LowerName  string
 	SnakeName  string
+	Doc        string
 	InputName  string
 	OutputName string
 	EmptyInput bool
 	HumanLabel string
 }
 
-func buildAuthorizationIR(cfg serviceConfig, service protoreflect.ServiceDescriptor) (authorizationIR, error) {
-	if cfg.SDKName != "Authorization" {
-		return authorizationIR{}, fmt.Errorf("%s: unsupported sdk name %q", cfg.Proto, cfg.SDKName)
-	}
+func buildProviderSDKIR(cfg serviceConfig, service protoreflect.ServiceDescriptor) (ProviderSDKIR, error) {
 	file := service.ParentFile()
-	ir := authorizationIR{
+	ir := ProviderSDKIR{
 		Config:         cfg,
 		ProtoPackage:   string(file.Package()),
+		ProtoFileBase:  protoFileBase(file.Path()),
 		ServiceName:    string(service.Name()),
+		Doc:            descriptorDoc(service),
 		Messages:       make([]irMessage, 0, file.Messages().Len()),
 		MessagesByName: map[string]irMessage{},
 		Enums:          make([]irEnum, 0, file.Enums().Len()),
@@ -102,15 +120,24 @@ func buildAuthorizationIR(cfg serviceConfig, service protoreflect.ServiceDescrip
 		Methods:        make([]irMethod, 0, service.Methods().Len()),
 	}
 
+	reachableMessages, reachableEnums := collectReachableDescriptors(service)
 	for i := 0; i < file.Enums().Len(); i++ {
-		enum := buildIREnum(file.Enums().Get(i))
+		descriptor := file.Enums().Get(i)
+		if !reachableEnums[descriptor.FullName()] {
+			continue
+		}
+		enum := buildIREnum(descriptor)
 		ir.Enums = append(ir.Enums, enum)
 		ir.EnumsByName[enum.ProtoName] = enum
 	}
 	sort.Slice(ir.Enums, func(i, j int) bool { return ir.Enums[i].ProtoName < ir.Enums[j].ProtoName })
 
 	for i := 0; i < file.Messages().Len(); i++ {
-		message := buildIRMessage(file.Messages().Get(i))
+		descriptor := file.Messages().Get(i)
+		if !reachableMessages[descriptor.FullName()] {
+			continue
+		}
+		message := buildIRMessage(cfg, descriptor)
 		ir.Messages = append(ir.Messages, message)
 		ir.MessagesByName[message.ProtoName] = message
 	}
@@ -123,6 +150,7 @@ func buildAuthorizationIR(cfg serviceConfig, service protoreflect.ServiceDescrip
 			ProtoName:  string(method.Name()),
 			LowerName:  lowerFirst(string(method.Name())),
 			SnakeName:  snakeName(string(method.Name())),
+			Doc:        descriptorDoc(method),
 			InputName:  input,
 			OutputName: output,
 			EmptyInput: isEmptyDescriptor(method.Input()),
@@ -132,26 +160,59 @@ func buildAuthorizationIR(cfg serviceConfig, service protoreflect.ServiceDescrip
 	return ir, nil
 }
 
-func renderAuthorizationLanguage(ir authorizationIR, lang string, outputs []outputConfig) ([]generatedFile, error) {
+func collectReachableDescriptors(service protoreflect.ServiceDescriptor) (map[protoreflect.FullName]bool, map[protoreflect.FullName]bool) {
+	messages := map[protoreflect.FullName]bool{}
+	enums := map[protoreflect.FullName]bool{}
+	var visitMessage func(protoreflect.MessageDescriptor)
+	visitMessage = func(message protoreflect.MessageDescriptor) {
+		if message == nil || isEmptyDescriptor(message) || messages[message.FullName()] {
+			return
+		}
+		messages[message.FullName()] = true
+		fields := message.Fields()
+		for i := 0; i < fields.Len(); i++ {
+			field := fields.Get(i)
+			switch field.Kind() {
+			case protoreflect.EnumKind:
+				enums[field.Enum().FullName()] = true
+			case protoreflect.MessageKind, protoreflect.GroupKind:
+				switch field.Message().FullName() {
+				case "google.protobuf.Struct", "google.protobuf.Timestamp":
+				default:
+					visitMessage(field.Message())
+				}
+			}
+		}
+	}
+	for i := 0; i < service.Methods().Len(); i++ {
+		method := service.Methods().Get(i)
+		visitMessage(method.Input())
+		visitMessage(method.Output())
+	}
+	return messages, enums
+}
+
+func renderProviderSDKLanguage(ir ProviderSDKIR, lang string) ([]generatedFile, error) {
 	switch lang {
 	case "typescript":
-		return renderTypeScriptAuthorization(ir, outputs)
+		return renderTypeScriptProviderSDK(ir)
 	case "python":
-		return renderPythonAuthorization(ir, outputs)
+		return renderPythonProviderSDK(ir)
 	case "go":
-		return renderGoAuthorization(ir, outputs)
+		return renderGoProviderSDK(ir)
 	case "rust":
-		return renderRustAuthorization(ir, outputs)
+		return renderRustProviderSDK(ir)
 	default:
 		return nil, fmt.Errorf("%s: unsupported output language %q", ir.Config.Proto, lang)
 	}
 }
 
-func buildIRMessage(message protoreflect.MessageDescriptor) irMessage {
+func buildIRMessage(cfg serviceConfig, message protoreflect.MessageDescriptor) irMessage {
 	out := irMessage{
 		ProtoName:     string(message.Name()),
 		FullName:      string(message.FullName()),
-		PublicName:    publicMessageName(string(message.Name())),
+		PublicName:    publicMessageName(cfg, string(message.Name())),
+		Doc:           descriptorDoc(message),
 		Empty:         isEmptyDescriptor(message),
 		ProtoGoName:   string(message.Name()),
 		ProtoRustName: rustTypeName(string(message.Name())),
@@ -159,7 +220,8 @@ func buildIRMessage(message protoreflect.MessageDescriptor) irMessage {
 	fields := message.Fields()
 	var oneof *irOneof
 	if message.Oneofs().Len() > 0 {
-		oneof = &irOneof{ProtoName: string(message.Oneofs().Get(0).Name())}
+		descriptor := message.Oneofs().Get(0)
+		oneof = &irOneof{ProtoName: string(descriptor.Name()), Doc: descriptorDoc(descriptor)}
 	}
 	for i := 0; i < fields.Len(); i++ {
 		field := buildIRField(fields.Get(i))
@@ -179,13 +241,16 @@ func buildIRField(field protoreflect.FieldDescriptor) irField {
 	out := irField{
 		ProtoName:   string(field.Name()),
 		JSONName:    field.JSONName(),
+		Number:      int32(field.Number()),
 		GoName:      goFieldName(string(field.Name())),
 		ProtoGoName: protoGoFieldName(string(field.Name())),
 		PyName:      string(field.Name()),
 		RustName:    rustFieldName(string(field.Name())),
+		Doc:         descriptorDoc(field),
 		Repeated:    field.IsList(),
 		Oneof:       field.ContainingOneof() != nil,
 	}
+	out.Presence = fieldPresence(field)
 	switch field.Kind() {
 	case protoreflect.StringKind:
 		out.Kind = irKindString
@@ -221,7 +286,7 @@ func buildIRField(field protoreflect.FieldDescriptor) irField {
 }
 
 func buildIREnum(enum protoreflect.EnumDescriptor) irEnum {
-	out := irEnum{ProtoName: string(enum.Name())}
+	out := irEnum{ProtoName: string(enum.Name()), Doc: descriptorDoc(enum)}
 	prefix := enumValuePrefix(out.ProtoName)
 	for i := 0; i < enum.Values().Len(); i++ {
 		value := enum.Values().Get(i)
@@ -231,10 +296,29 @@ func buildIREnum(enum protoreflect.EnumDescriptor) irEnum {
 			PublicName: public,
 			GoName:     goEnumValueName(out.ProtoName, public),
 			RustName:   rustEnumValueName(public),
+			Doc:        descriptorDoc(value),
 			Number:     int32(value.Number()),
 		})
 	}
 	return out
+}
+
+func fieldPresence(field protoreflect.FieldDescriptor) irPresence {
+	if field.ContainingOneof() != nil {
+		return irPresenceOneof
+	}
+	if field.IsList() {
+		return irPresenceRepeated
+	}
+	if field.Kind() == protoreflect.MessageKind || field.Kind() == protoreflect.GroupKind {
+		return irPresenceMessage
+	}
+	return irPresenceNone
+}
+
+func descriptorDoc(descriptor protoreflect.Descriptor) string {
+	location := descriptor.ParentFile().SourceLocations().ByDescriptor(descriptor)
+	return strings.TrimSpace(location.LeadingComments)
 }
 
 func protoMessageName(message protoreflect.MessageDescriptor) string {
@@ -248,19 +332,11 @@ func isEmptyDescriptor(message protoreflect.MessageDescriptor) bool {
 	return message != nil && message.FullName() == "google.protobuf.Empty"
 }
 
-func publicMessageName(name string) string {
-	switch name {
-	case "AuthorizationModel":
-		return "Model"
-	case "AuthorizationModelResourceType":
-		return "ModelResourceType"
-	case "AuthorizationModelRef":
-		return "ModelRef"
-	case "AuthorizationModelResourceTypeFilter":
-		return "ModelResourceTypeFilter"
-	default:
-		return name
+func publicMessageName(cfg serviceConfig, name string) string {
+	if strings.HasPrefix(name, cfg.SDKName) && len(name) > len(cfg.SDKName) {
+		return strings.TrimPrefix(name, cfg.SDKName)
 	}
+	return name
 }
 
 func goFieldName(name string) string {
@@ -291,16 +367,7 @@ func rustEnumValueName(valueName string) string {
 }
 
 func rustTypeName(name string) string {
-	switch name {
-	case "AuthorizationModel":
-		return "AuthorizationModel"
-	case "AuthorizationModelResourceType":
-		return "AuthorizationModelResourceType"
-	case "AuthorizationModelRef":
-		return "AuthorizationModelRef"
-	default:
-		return name
-	}
+	return name
 }
 
 func rustFieldName(name string) string {
@@ -330,4 +397,12 @@ func snakeName(value string) string {
 		out = append(out, r)
 	}
 	return strings.ToLower(string(out))
+}
+
+func protoFileBase(path string) string {
+	base := path
+	if slash := strings.LastIndex(base, "/"); slash >= 0 {
+		base = base[slash+1:]
+	}
+	return strings.TrimSuffix(base, ".proto")
 }

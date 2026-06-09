@@ -42,7 +42,7 @@ const workspace: AgentWorkspace = {
 const jsonObject: JsonObject = { ok: true };
 const jsonValue: JsonValue = { nested: ["value"] };
 const egressMode: RuntimeEgressMode = RuntimeEgressMode.NONE;
-const authorizationSubject: Authorization.SubjectInput = {
+const authorizationSubject: Authorization.Subject = {
   type: "user",
   id: "user-1",
 };

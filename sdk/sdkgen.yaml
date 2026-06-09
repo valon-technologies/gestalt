@@ -7,23 +7,3 @@ services:
       python: authorization
       go: authorization
       rust: authorization
-    well_known_types:
-      google.protobuf.Struct:
-        semantic: json_object
-      google.protobuf.Timestamp:
-        semantic: timestamp_with_presence
-    enum_policy: preserve_unknown_numeric
-    oneof_policy: explicit_variants
-    outputs:
-      typescript:
-        - path: sdk/typescript/src/authorization.ts
-      python:
-        - path: sdk/python/gestalt/authorization.py
-      go:
-        - path: sdk/go/authorization/doc.go
-        - path: sdk/go/authorization/types.go
-        - path: sdk/go/authorization/protocol.go
-        - path: sdk/go/authorization/conversions.go
-        - path: sdk/go/authorization/client.go
-      rust:
-        - path: sdk/rust/src/authorization.rs

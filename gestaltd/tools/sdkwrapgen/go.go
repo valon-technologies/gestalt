@@ -8,45 +8,53 @@ import (
 	"strings"
 )
 
-func renderGoAuthorization(ir authorizationIR, outputs []outputConfig) ([]generatedFile, error) {
+func renderGoProviderSDK(ir ProviderSDKIR) ([]generatedFile, error) {
+	packagePath := "sdk/go/" + ir.Config.Package["go"]
+	outputs := []string{
+		packagePath + "/doc.go",
+		packagePath + "/types.go",
+		packagePath + "/protocol.go",
+		packagePath + "/conversions.go",
+		packagePath + "/client.go",
+	}
 	files := make([]generatedFile, 0, len(outputs))
-	for _, out := range outputs {
+	for _, path := range outputs {
 		var body string
 		switch {
-		case strings.HasSuffix(out.Path, "/doc.go"):
-			body = renderGoDoc()
-		case strings.HasSuffix(out.Path, "/types.go"):
+		case strings.HasSuffix(path, "/doc.go"):
+			body = renderGoDoc(ir)
+		case strings.HasSuffix(path, "/types.go"):
 			body = renderGoTypes(ir)
-		case strings.HasSuffix(out.Path, "/protocol.go"):
-			body = renderGoProtocol()
-		case strings.HasSuffix(out.Path, "/conversions.go"):
+		case strings.HasSuffix(path, "/protocol.go"):
+			body = renderGoProtocol(ir)
+		case strings.HasSuffix(path, "/conversions.go"):
 			body = renderGoConversions(ir)
-		case strings.HasSuffix(out.Path, "/client.go"):
+		case strings.HasSuffix(path, "/client.go"):
 			body = renderGoClient(ir)
 		default:
-			return nil, fmt.Errorf("%s: unsupported go output %s", ir.Config.Proto, out.Path)
+			return nil, fmt.Errorf("%s: unsupported go output %s", ir.Config.Proto, path)
 		}
-		data := append(generatedHeader(out.Path), []byte(body)...)
+		data := append(generatedHeader(path), []byte(body)...)
 		formatted, err := format.Source(data)
 		if err != nil {
-			return nil, fmt.Errorf("format %s: %w", out.Path, err)
+			return nil, fmt.Errorf("format %s: %w", path, err)
 		}
-		files = append(files, generatedFile{Path: out.Path, Data: formatted})
+		files = append(files, generatedFile{Path: path, Data: formatted})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
 }
 
-func renderGoDoc() string {
-	return `// Package authorization contains the canonical Gestalt Authorization SDK model
+func renderGoDoc(ir ProviderSDKIR) string {
+	return fmt.Sprintf(`// Package %s contains the canonical Gestalt %s SDK model
 // and gRPC host-service client.
-package authorization
-`
+package %s
+`, ir.Config.Package["go"], ir.Config.SDKName, ir.Config.Package["go"])
 }
 
-func renderGoTypes(ir authorizationIR) string {
+func renderGoTypes(ir ProviderSDKIR) string {
 	var b strings.Builder
-	b.WriteString("package authorization\n\n")
+	fmt.Fprintf(&b, "package %s\n\n", ir.Config.Package["go"])
 	b.WriteString("import \"time\"\n\n")
 	for i := range ir.Messages {
 		message := ir.Messages[i]
@@ -54,7 +62,7 @@ func renderGoTypes(ir authorizationIR) string {
 			continue
 		}
 		if message.Oneof != nil {
-			renderGoOneofType(&b, message)
+			renderGoOneofType(&b, ir, message)
 			continue
 		}
 		fmt.Fprintf(&b, "type %s struct {\n", message.PublicName)
@@ -77,12 +85,12 @@ func renderGoTypes(ir authorizationIR) string {
 	return b.String()
 }
 
-func renderGoOneofType(b *strings.Builder, message irMessage) {
+func renderGoOneofType(b *strings.Builder, ir ProviderSDKIR, message irMessage) {
 	fmt.Fprintf(b, "type %s interface {\n\tis%s()\n}\n\n", message.PublicName, message.PublicName)
 	for i := range message.Oneof.Variants {
 		field := message.Oneof.Variants[i]
 		variant := message.PublicName + goFieldName(field.ProtoName)
-		fmt.Fprintf(b, "type %s struct {\n\t%s %s\n}\n\n", variant, goFieldName(field.ProtoName), goOneofVariantType(field))
+		fmt.Fprintf(b, "type %s struct {\n\t%s %s\n}\n\n", variant, goFieldName(field.ProtoName), goOneofVariantType(ir, field))
 	}
 	fmt.Fprintf(b, "type %sUnset struct{}\n\n", message.PublicName)
 	for i := range message.Oneof.Variants {
@@ -95,13 +103,13 @@ func renderGoOneofType(b *strings.Builder, message irMessage) {
 		field := message.Oneof.Variants[i]
 		variant := message.PublicName + goFieldName(field.ProtoName)
 		name := goConstructorName(message, field)
-		fmt.Fprintf(b, "func %s(value %s) %s {\n\treturn %s{%s: value}\n}\n\n", name, goOneofVariantType(field), message.PublicName, variant, goFieldName(field.ProtoName))
+		fmt.Fprintf(b, "func %s(value %s) %s {\n\treturn %s{%s: value}\n}\n\n", name, goOneofVariantType(ir, field), message.PublicName, variant, goFieldName(field.ProtoName))
 	}
 	fmt.Fprintf(b, "func Unset%s() %s {\n\treturn %sUnset{}\n}\n\n", message.PublicName, message.PublicName, message.PublicName)
 }
 
-func renderGoProtocol() string {
-	return `package authorization
+func renderGoProtocol(ir ProviderSDKIR) string {
+	return "package " + ir.Config.Package["go"] + `
 
 import (
 	"encoding/json"
@@ -113,7 +121,7 @@ import (
 
 func structFromMap(value map[string]any) (*structpb.Struct, error) {
 	if value == nil {
-		return nil, nil
+		value = map[string]any{}
 	}
 	normalized, err := normalizeJSON(value, "struct")
 	if err != nil {
@@ -208,9 +216,13 @@ func normalizeJSON(value any, path string) (any, error) {
 }
 
 //nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
-func renderGoClient(ir authorizationIR) string {
+func renderGoClient(ir ProviderSDKIR) string {
+	pkg := ir.Config.Package["go"]
+	serviceKind := strings.ToLower(ir.Config.SDKName)
+	clientType := ir.ServiceName + "Client"
+	newClient := "New" + ir.ServiceName + "Client"
 	var b strings.Builder
-	b.WriteString(`package authorization
+	b.WriteString(fmt.Sprintf(`package %s
 
 import (
 	"context"
@@ -221,11 +233,13 @@ import (
 
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type Client struct {
-	client proto.AuthorizationProviderClient
+	conn   *grpc.ClientConn
+	client proto.%s
 }
 
 type Option func(*options)
@@ -240,8 +254,6 @@ func WithTarget(target string) Option {
 	}
 }
 
-var sharedTransport host.SharedTransport[proto.AuthorizationProviderClient]
-
 func New(ctx context.Context, opts ...Option) (*Client, error) {
 	cfg := options{}
 	for _, opt := range opts {
@@ -252,7 +264,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 	token := ""
 	var err error
 	if target == "" {
-		target, token, err = host.Target("authorization")
+		target, token, err = host.Target(%q)
 		if err != nil {
 			return nil, err
 		}
@@ -262,19 +274,29 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 
 	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	client, err := host.ManagerClient(dialCtx, "authorization", target, token, &sharedTransport, proto.NewAuthorizationProviderClient)
+	conn, err := host.DialService(dialCtx, %[3]q, target, token, "")
 	if err != nil {
 		return nil, err
 	}
-	return &Client{client: client}, nil
+	return &Client{conn: conn, client: proto.%[4]s(conn)}, nil
 }
 
-`)
+func (c *Client) Close() error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
+	conn := c.conn
+	c.conn = nil
+	c.client = nil
+	return conn.Close()
+}
+
+`, pkg, clientType, serviceKind, newClient))
 	for _, method := range ir.Methods {
 		output := ir.MessagesByName[method.OutputName]
 		if method.EmptyInput {
 			b.WriteString(fmt.Sprintf("func (c *Client) %s(ctx context.Context) (*%s, error) {\n", method.ProtoName, output.PublicName))
-			b.WriteString("\tif c == nil || c.client == nil {\n\t\treturn nil, fmt.Errorf(\"authorization: client is not initialized\")\n\t}\n")
+			b.WriteString(fmt.Sprintf("\tif c == nil || c.client == nil {\n\t\treturn nil, fmt.Errorf(%q)\n\t}\n", serviceKind+": client is not initialized"))
 			b.WriteString(fmt.Sprintf("\tresp, err := c.client.%s(ctx, &emptypb.Empty{})\n", method.ProtoName))
 			b.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 			b.WriteString(fmt.Sprintf("\treturn %sFromProto(resp), nil\n}\n\n", output.PublicName))
@@ -282,7 +304,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 		}
 		input := ir.MessagesByName[method.InputName]
 		b.WriteString(fmt.Sprintf("func (c *Client) %s(ctx context.Context, req %s) (*%s, error) {\n", method.ProtoName, input.PublicName, output.PublicName))
-		b.WriteString("\tif c == nil || c.client == nil {\n\t\treturn nil, fmt.Errorf(\"authorization: client is not initialized\")\n\t}\n")
+		b.WriteString(fmt.Sprintf("\tif c == nil || c.client == nil {\n\t\treturn nil, fmt.Errorf(%q)\n\t}\n", serviceKind+": client is not initialized"))
 		b.WriteString(fmt.Sprintf("\twire, err := %sToProto(&req)\n", input.PublicName))
 		b.WriteString("\tif err != nil {\n\t\treturn nil, err\n\t}\n")
 		b.WriteString(fmt.Sprintf("\tresp, err := c.client.%s(ctx, wire)\n", method.ProtoName))
@@ -292,7 +314,7 @@ func New(ctx context.Context, opts ...Option) (*Client, error) {
 	return b.String()
 }
 
-func goType(ir authorizationIR, field irField) string {
+func goType(ir ProviderSDKIR, field irField) string {
 	base := goBaseType(ir, field)
 	if field.Repeated {
 		if field.Kind == irKindMessage && !isGoOneofMessage(ir, field.MessageName) {
@@ -309,7 +331,7 @@ func goType(ir authorizationIR, field irField) string {
 	return base
 }
 
-func goBaseType(ir authorizationIR, field irField) string {
+func goBaseType(ir ProviderSDKIR, field irField) string {
 	switch field.Kind {
 	case irKindString:
 		return "string"
@@ -330,18 +352,18 @@ func goBaseType(ir authorizationIR, field irField) string {
 	}
 }
 
-func goOneofVariantType(field irField) string {
+func goOneofVariantType(ir ProviderSDKIR, field irField) string {
 	switch field.Kind {
 	case irKindString:
 		return "string"
 	case irKindMessage:
-		return publicMessageName(field.MessageName)
+		return publicMessageName(ir.Config, field.MessageName)
 	default:
 		return "any"
 	}
 }
 
-func isGoOneofMessage(ir authorizationIR, name string) bool {
+func isGoOneofMessage(ir ProviderSDKIR, name string) bool {
 	message, ok := ir.MessagesByName[name]
 	return ok && message.Oneof != nil
 }

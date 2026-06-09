@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-func renderGoConversions(ir authorizationIR) string {
+func renderGoConversions(ir ProviderSDKIR) string {
 	var b strings.Builder
-	b.WriteString(`package authorization
+	fmt.Fprintf(&b, `package %s
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-`)
+`, ir.Config.Package["go"])
 	for _, message := range ir.Messages {
 		if message.Empty {
 			continue
@@ -34,7 +34,7 @@ import (
 }
 
 //nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
-func renderGoMessageConversions(b *strings.Builder, ir authorizationIR, message irMessage) {
+func renderGoMessageConversions(b *strings.Builder, ir ProviderSDKIR, message irMessage) {
 	b.WriteString(fmt.Sprintf("func %sFromProto(in *proto.%s) *%s {\n", message.PublicName, message.ProtoName, message.PublicName))
 	b.WriteString("\tif in == nil {\n\t\treturn nil\n\t}\n")
 	b.WriteString(fmt.Sprintf("\treturn &%s{\n", message.PublicName))
@@ -58,7 +58,7 @@ func renderGoMessageConversions(b *strings.Builder, ir authorizationIR, message 
 }
 
 //nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
-func renderGoOneofConversions(b *strings.Builder, ir authorizationIR, message irMessage) {
+func renderGoOneofConversions(b *strings.Builder, ir ProviderSDKIR, message irMessage) {
 	lower := lowerFirst(message.PublicName)
 	b.WriteString(fmt.Sprintf("func %sFromProto(in *proto.%s) %s {\n", lower, message.ProtoName, message.PublicName))
 	b.WriteString("\tif in == nil {\n\t\treturn nil\n\t}\n")
@@ -68,7 +68,7 @@ func renderGoOneofConversions(b *strings.Builder, ir authorizationIR, message ir
 		wrapper := message.ProtoName + "_" + field.ProtoGoName
 		b.WriteString(fmt.Sprintf("\tcase *proto.%s:\n", wrapper))
 		if field.Kind == irKindMessage {
-			b.WriteString(fmt.Sprintf("\t\tvalue := %sFromProto(kind.%s)\n", publicMessageName(field.MessageName), field.ProtoGoName))
+			b.WriteString(fmt.Sprintf("\t\tvalue := %sFromProto(kind.%s)\n", publicMessageName(ir.Config, field.MessageName), field.ProtoGoName))
 			b.WriteString(fmt.Sprintf("\t\tif value == nil {\n\t\t\treturn %s{}\n\t\t}\n", variant))
 			b.WriteString(fmt.Sprintf("\t\treturn %s{%s: *value}\n", variant, field.ProtoGoName))
 		} else {
@@ -85,7 +85,7 @@ func renderGoOneofConversions(b *strings.Builder, ir authorizationIR, message ir
 		wrapper := message.ProtoName + "_" + field.ProtoGoName
 		b.WriteString(fmt.Sprintf("\tcase %s:\n", variant))
 		if field.Kind == irKindMessage {
-			b.WriteString(fmt.Sprintf("\t\twire, err := %sToProto(&value.%s)\n", publicMessageName(field.MessageName), field.ProtoGoName))
+			b.WriteString(fmt.Sprintf("\t\twire, err := %sToProto(&value.%s)\n", publicMessageName(ir.Config, field.MessageName), field.ProtoGoName))
 			b.WriteString("\t\tif err != nil {\n\t\t\treturn nil, err\n\t\t}\n")
 			b.WriteString(fmt.Sprintf("\t\treturn &proto.%s{Kind: &proto.%s{%s: wire}}, nil\n", message.ProtoName, wrapper, field.ProtoGoName))
 		} else {
@@ -96,7 +96,7 @@ func renderGoOneofConversions(b *strings.Builder, ir authorizationIR, message ir
 	b.WriteString(fmt.Sprintf("\tdefault:\n\t\treturn nil, fmt.Errorf(\"unsupported %s %%T\", in)\n\t}\n}\n\n", strings.ToLower(message.PublicName)))
 }
 
-func goFromProtoFieldExpr(ir authorizationIR, field irField, receiver string) string {
+func goFromProtoFieldExpr(ir ProviderSDKIR, field irField, receiver string) string {
 	getter := fmt.Sprintf("%s.Get%s()", receiver, field.ProtoGoName)
 	if field.Repeated {
 		return goFromProtoRepeatedExpr(ir, field, getter)
@@ -112,18 +112,18 @@ func goFromProtoFieldExpr(ir authorizationIR, field irField, receiver string) st
 		return fmt.Sprintf("timeFromProto(%s)", getter)
 	case irKindMessage:
 		if isGoOneofMessage(ir, field.MessageName) {
-			return fmt.Sprintf("%sFromProto(%s)", lowerFirst(publicMessageName(field.MessageName)), getter)
+			return fmt.Sprintf("%sFromProto(%s)", lowerFirst(publicMessageName(ir.Config, field.MessageName)), getter)
 		}
-		return fmt.Sprintf("%sFromProto(%s)", publicMessageName(field.MessageName), getter)
+		return fmt.Sprintf("%sFromProto(%s)", publicMessageName(ir.Config, field.MessageName), getter)
 	default:
 		return getter
 	}
 }
 
-func goFromProtoRepeatedExpr(ir authorizationIR, field irField, getter string) string {
+func goFromProtoRepeatedExpr(ir ProviderSDKIR, field irField, getter string) string {
 	switch field.Kind {
 	case irKindMessage:
-		name := "slice" + publicMessageName(field.MessageName) + "FromProto"
+		name := "slice" + publicMessageName(ir.Config, field.MessageName) + "FromProto"
 		return fmt.Sprintf("%s(%s)", name, getter)
 	default:
 		return fmt.Sprintf("append([]%s(nil), %s...)", goBaseType(ir, field), getter)
@@ -134,10 +134,10 @@ func fieldNeedsGoLocal(field irField) bool {
 	return field.Kind == irKindJSON || field.Kind == irKindTimestamp || field.Kind == irKindMessage
 }
 
-func goToProtoLocal(ir authorizationIR, field irField, expr, label string) string {
+func goToProtoLocal(ir ProviderSDKIR, field irField, expr, label string) string {
 	name := field.JSONName
 	if field.Repeated {
-		return fmt.Sprintf("\t%s, err := protoSlice%s(%s)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", name, publicMessageName(field.MessageName), expr, label)
+		return fmt.Sprintf("\t%s, err := protoSlice%s(%s)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", name, publicMessageName(ir.Config, field.MessageName), expr, label)
 	}
 	switch field.Kind {
 	case irKindJSON:
@@ -146,15 +146,15 @@ func goToProtoLocal(ir authorizationIR, field irField, expr, label string) strin
 		return fmt.Sprintf("\t%s := timestampFromTime(%s)\n", name, expr)
 	case irKindMessage:
 		if isGoOneofMessage(ir, field.MessageName) {
-			return fmt.Sprintf("\t%s, err := proto%s(%s)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", name, publicMessageName(field.MessageName), expr, label)
+			return fmt.Sprintf("\t%s, err := proto%s(%s)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", name, publicMessageName(ir.Config, field.MessageName), expr, label)
 		}
-		return fmt.Sprintf("\t%s, err := %sToProto(%s)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", name, publicMessageName(field.MessageName), expr, label)
+		return fmt.Sprintf("\t%s, err := %sToProto(%s)\n\tif err != nil {\n\t\treturn nil, fmt.Errorf(\"%s: %%w\", err)\n\t}\n", name, publicMessageName(ir.Config, field.MessageName), expr, label)
 	default:
 		return ""
 	}
 }
 
-func goToProtoFieldExpr(ir authorizationIR, field irField, expr, label string) string {
+func goToProtoFieldExpr(ir ProviderSDKIR, field irField, expr, label string) string {
 	if fieldNeedsGoLocal(field) {
 		return field.JSONName
 	}
@@ -167,7 +167,7 @@ func goToProtoFieldExpr(ir authorizationIR, field irField, expr, label string) s
 }
 
 //nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
-func renderGoSliceAndTimeHelpers(b *strings.Builder, ir authorizationIR) {
+func renderGoSliceAndTimeHelpers(b *strings.Builder, ir ProviderSDKIR) {
 	b.WriteString(`func timeFromProto(in *timestamppb.Timestamp) *time.Time {
 	if in == nil {
 		return nil
@@ -214,12 +214,4 @@ func timestampFromTime(in *time.Time) *timestamppb.Timestamp {
 		b.WriteString("\t\tif err != nil {\n\t\t\treturn nil, fmt.Errorf(\"[%d]: %w\", i, err)\n\t\t}\n")
 		b.WriteString("\t\tout = append(out, wire)\n\t}\n\treturn out, nil\n}\n\n")
 	}
-	b.WriteString(`func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []ModelAllowedTarget {
-	return sliceModelAllowedTargetFromProto(in)
-}
-
-func protoModelAllowedTargets(in []ModelAllowedTarget) ([]*proto.ModelAllowedTarget, error) {
-	return protoSliceModelAllowedTarget(in)
-}
-`)
 }

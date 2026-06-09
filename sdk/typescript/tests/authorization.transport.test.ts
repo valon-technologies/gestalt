@@ -118,6 +118,11 @@ test("Authorization custom target uses relay token env", async () => {
     expect(seenTokens).toEqual(["relay-token-typescript-authz"]);
 
     first.close();
+    await expect(first.checkAccess({
+      subject: { type: "user", id: "user-closed" },
+      action: { name: "read" },
+      resource: { type: "document", id: "doc-1" },
+    })).rejects.toThrow("authorization: client is closed");
 
     const second = Authorization({ target: `tcp://${address}` });
     expect(second).not.toBe(first);
@@ -167,7 +172,7 @@ test("Authorization custom target uses relay token env", async () => {
 
 test("Authorization provider service preserves absent properties and unset relationship targets", async () => {
   const seen: Array<{
-    subjectProperties: Authorization.SubjectInput["properties"];
+    subjectProperties: Authorization.Subject["properties"];
     targetKind: Authorization.RelationshipTarget["kind"] | undefined;
   }> = [];
   const provider = defineAuthorizationProvider({

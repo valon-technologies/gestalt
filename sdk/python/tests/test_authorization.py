@@ -89,6 +89,13 @@ class AuthorizationConversionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ModelAllowedTarget accepts exactly one variant"):
             authorization.model_allowed_target_to_proto(allowed)
 
+    def test_closed_client_rejects_rpc_before_using_transport(self) -> None:
+        client = object.__new__(authorization.Client)
+        client._closed = True
+
+        with self.assertRaisesRegex(RuntimeError, "authorization: client is closed"):
+            client.check_access(authorization.CheckAccessRequest())
+
 
 if __name__ == "__main__":
     unittest.main()

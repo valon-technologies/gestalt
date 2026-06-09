@@ -10,10 +10,11 @@ import (
 
 	protov1 "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	goproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-func TestValidateAuthorizationDescriptorContract(t *testing.T) {
+func TestValidateProviderDescriptorContract(t *testing.T) {
 	t.Parallel()
 
 	cfg := config{
@@ -34,19 +35,75 @@ func TestValidateAuthorizationDescriptorContract(t *testing.T) {
 	}
 }
 
-func TestValidateAuthorizationDescriptorContractRequiresTimestampRule(t *testing.T) {
+func TestReadConfigRejectsStaleOutputPaths(t *testing.T) {
 	t.Parallel()
 
-	cfg := config{
-		Version: 1,
-		Services: []serviceConfig{func() serviceConfig {
-			cfg := authorizationTestServiceConfig()
-			cfg.WellKnownTypes["google.protobuf.Timestamp"] = wellKnownTypeRule{Semantic: "json_object"}
-			return cfg
-		}()},
+	path := filepath.Join(t.TempDir(), "sdkgen.yaml")
+	if err := os.WriteFile(path, []byte(`version: 1
+services:
+  - proto: gestalt.provider.v1.AuthorizationProvider
+    sdk_name: Authorization
+    package:
+      typescript: Authorization
+      python: authorization
+      go: authorization
+      rust: authorization
+    outputs:
+      typescript:
+        - path: sdk/typescript/src/authorization.ts
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
-	if err := validateConfig(cfg); err == nil {
-		t.Fatal("validateConfig succeeded, want timestamp semantic error")
+
+	_, err := readConfig(path)
+	if err == nil {
+		t.Fatal("readConfig succeeded, want stale outputs field error")
+	}
+	if !strings.Contains(err.Error(), "field outputs not found") {
+		t.Fatalf("error = %q, want unknown outputs field", err)
+	}
+}
+
+func TestReadCheckedInConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := readConfig(filepath.Join("..", "..", "..", "sdk", "sdkgen.yaml"))
+	if err != nil {
+		t.Fatalf("readConfig: %v", err)
+	}
+	if err := validateConfig(cfg); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+	if len(cfg.Services) != 1 {
+		t.Fatalf("services len = %d, want 1", len(cfg.Services))
+	}
+}
+
+func TestValidateCLIInputsRequiresImageForOutput(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		outRoot string
+		printIR bool
+	}{
+		{name: "out root", outRoot: t.TempDir()},
+		{name: "print IR", printIR: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateCLIInputs("", tc.outRoot, tc.printIR)
+			if err == nil {
+				t.Fatal("validateCLIInputs succeeded, want missing image error")
+			}
+			if !strings.Contains(err.Error(), "-image is required") {
+				t.Fatalf("error = %q, want missing image error", err)
+			}
+		})
+	}
+	if err := validateCLIInputs("descriptor.binpb", t.TempDir(), true); err != nil {
+		t.Fatalf("validateCLIInputs with image: %v", err)
 	}
 }
 
@@ -73,7 +130,32 @@ func TestValidateImageReportsDescriptorParseErrors(t *testing.T) {
 	}
 }
 
-func TestValidateAuthorizationDescriptorContractRejectsFieldNumberDrift(t *testing.T) {
+func TestReadImageAcceptsTextDescriptor(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "image.textproto")
+	if err := os.WriteFile(path, []byte(`file: {
+  name: "v1/authorization.proto"
+  package: "gestalt.provider.v1"
+  syntax: "proto3"
+  message_type: {
+    name: "CheckAccessRequest"
+  }
+}
+`), 0o644); err != nil {
+		t.Fatalf("write image: %v", err)
+	}
+
+	image, err := readImage(path)
+	if err != nil {
+		t.Fatalf("readImage: %v", err)
+	}
+	if len(image.GetFile()) != 1 || image.GetFile()[0].GetName() != "v1/authorization.proto" {
+		t.Fatalf("image = %#v, want text descriptor file", image)
+	}
+}
+
+func TestProviderSDKIRReflectsDescriptorFieldNumberChanges(t *testing.T) {
 	t.Parallel()
 
 	cfg := config{
@@ -85,16 +167,21 @@ func TestValidateAuthorizationDescriptorContractRejectsFieldNumberDrift(t *testi
 	changedNumber := int32(99)
 	field.Number = &changedNumber
 
-	_, err := validateImage(cfg, image)
-	if err == nil {
-		t.Fatal("validateImage succeeded, want field number contract error")
+	services, err := validateImage(cfg, image)
+	if err != nil {
+		t.Fatalf("validateImage: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Subject contract mismatch") {
-		t.Fatalf("error = %q, want Subject contract mismatch", err)
+	ir, err := buildProviderSDKIR(cfg.Services[0], services[0])
+	if err != nil {
+		t.Fatalf("buildProviderSDKIR: %v", err)
+	}
+	subject := ir.MessagesByName["Subject"]
+	if len(subject.Fields) == 0 || subject.Fields[0].Number != changedNumber {
+		t.Fatalf("Subject.type number = %d, want %d", subject.Fields[0].Number, changedNumber)
 	}
 }
 
-func TestValidateAuthorizationDescriptorContractRejectsFieldTypeDrift(t *testing.T) {
+func TestProviderSDKIRReflectsDescriptorFieldTypeChanges(t *testing.T) {
 	t.Parallel()
 
 	cfg := config{
@@ -106,12 +193,18 @@ func TestValidateAuthorizationDescriptorContractRejectsFieldTypeDrift(t *testing
 	changedType := ".gestalt.provider.v1.Action"
 	field.TypeName = &changedType
 
-	_, err := validateImage(cfg, image)
-	if err == nil {
-		t.Fatal("validateImage succeeded, want field type contract error")
+	services, err := validateImage(cfg, image)
+	if err != nil {
+		t.Fatalf("validateImage: %v", err)
 	}
-	if !strings.Contains(err.Error(), "CheckAccessRequest contract mismatch") {
-		t.Fatalf("error = %q, want CheckAccessRequest contract mismatch", err)
+	ir, err := buildProviderSDKIR(cfg.Services[0], services[0])
+	if err != nil {
+		t.Fatalf("buildProviderSDKIR: %v", err)
+	}
+	request := ir.MessagesByName["CheckAccessRequest"]
+	assertFieldPresence(t, request, "subject", irPresenceMessage, irKindMessage)
+	if request.Fields[0].MessageName != "Action" {
+		t.Fatalf("CheckAccessRequest.subject message = %q, want Action", request.Fields[0].MessageName)
 	}
 }
 
@@ -130,13 +223,15 @@ func TestRenderGeneratedFilesIsDeterministic(t *testing.T) {
 		t.Fatalf("validateImage: %v", err)
 	}
 
-	first, err := renderGeneratedFiles(cfg, services)
+	firstRoot := t.TempDir()
+	first, err := writeGeneratedFiles(cfg, services, firstRoot)
 	if err != nil {
-		t.Fatalf("renderGeneratedFiles first: %v", err)
+		t.Fatalf("writeGeneratedFiles first: %v", err)
 	}
-	second, err := renderGeneratedFiles(cfg, services)
+	secondRoot := t.TempDir()
+	second, err := writeGeneratedFiles(cfg, services, secondRoot)
 	if err != nil {
-		t.Fatalf("renderGeneratedFiles second: %v", err)
+		t.Fatalf("writeGeneratedFiles second: %v", err)
 	}
 	if len(first) != len(second) {
 		t.Fatalf("generated files len = %d, want %d", len(first), len(second))
@@ -145,12 +240,196 @@ func TestRenderGeneratedFilesIsDeterministic(t *testing.T) {
 		if first[i].Path != second[i].Path {
 			t.Fatalf("file[%d] path = %q, want %q", i, first[i].Path, second[i].Path)
 		}
-		if !bytes.Equal(first[i].Data, second[i].Data) {
+		firstData, err := os.ReadFile(filepath.Join(firstRoot, filepath.FromSlash(first[i].Path)))
+		if err != nil {
+			t.Fatalf("read first %s: %v", first[i].Path, err)
+		}
+		secondData, err := os.ReadFile(filepath.Join(secondRoot, filepath.FromSlash(second[i].Path)))
+		if err != nil {
+			t.Fatalf("read second %s: %v", second[i].Path, err)
+		}
+		if !bytes.Equal(firstData, secondData) {
 			t.Fatalf("file[%d] %s was not deterministic", i, first[i].Path)
 		}
-		if !bytes.Contains(first[i].Data, []byte("Code generated by gestaltd/tools/sdkwrapgen. DO NOT EDIT.")) {
+		if !bytes.Contains(firstData, []byte("Code generated by gestaltd/tools/sdkwrapgen. DO NOT EDIT.")) {
 			t.Fatalf("file[%d] %s missing generated header", i, first[i].Path)
 		}
+	}
+}
+
+func TestRenderGeneratedFilesAcceptsDescriptorDerivedSecondProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		Version:  1,
+		Services: []serviceConfig{exampleTestServiceConfig()},
+	}
+	image := &descriptorpb.FileDescriptorSet{File: []*descriptorpb.FileDescriptorProto{{
+		Name:    goproto.String("v1/example.proto"),
+		Package: goproto.String("gestalt.provider.v1"),
+		Syntax:  goproto.String("proto3"),
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: goproto.String("ExampleRequest"),
+				Field: []*descriptorpb.FieldDescriptorProto{{
+					Name:   goproto.String("name"),
+					Number: goproto.Int32(1),
+					Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+					Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+				}},
+			},
+			{
+				Name: goproto.String("ExampleResponse"),
+				Field: []*descriptorpb.FieldDescriptorProto{{
+					Name:   goproto.String("ok"),
+					Number: goproto.Int32(1),
+					Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+					Type:   descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum(),
+				}},
+			},
+			{
+				Name: goproto.String("UnusedUnsupportedMessage"),
+				Field: []*descriptorpb.FieldDescriptorProto{{
+					Name:   goproto.String("count"),
+					Number: goproto.Int32(1),
+					Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+					Type:   descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum(),
+				}},
+			},
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{{
+			Name: goproto.String("ExampleProvider"),
+			Method: []*descriptorpb.MethodDescriptorProto{{
+				Name:       goproto.String("Check"),
+				InputType:  goproto.String(".gestalt.provider.v1.ExampleRequest"),
+				OutputType: goproto.String(".gestalt.provider.v1.ExampleResponse"),
+			}},
+		}},
+	}}}
+	services, err := validateImage(cfg, image)
+	if err != nil {
+		t.Fatalf("validateImage: %v", err)
+	}
+	files, err := renderGeneratedFiles(cfg, services)
+	if err != nil {
+		t.Fatalf("renderGeneratedFiles: %v", err)
+	}
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.Path)
+	}
+	sort.Strings(paths)
+	want := []string{
+		"sdk/go/example/client.go",
+		"sdk/go/example/conversions.go",
+		"sdk/go/example/doc.go",
+		"sdk/go/example/protocol.go",
+		"sdk/go/example/types.go",
+		"sdk/python/gestalt/example.py",
+		"sdk/rust/src/example.rs",
+		"sdk/typescript/src/example.ts",
+	}
+	if strings.Join(paths, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("generated paths:\n%s\nwant:\n%s", strings.Join(paths, "\n"), strings.Join(want, "\n"))
+	}
+	for _, file := range files {
+		if bytes.Contains(file.Data, []byte("UnusedUnsupportedMessage")) {
+			t.Fatalf("%s emitted unreachable message", file.Path)
+		}
+	}
+}
+
+func TestProviderSDKIRSemantics(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
+	}
+	services, err := validateImage(cfg, fileDescriptorSet(protov1.File_v1_authorization_proto))
+	if err != nil {
+		t.Fatalf("validateImage: %v", err)
+	}
+	ir, err := buildProviderSDKIR(cfg.Services[0], services[0])
+	if err != nil {
+		t.Fatalf("buildProviderSDKIR: %v", err)
+	}
+
+	subject := ir.MessagesByName["Subject"]
+	assertFieldPresence(t, subject, "type", irPresenceNone, irKindString)
+	assertFieldPresence(t, subject, "properties", irPresenceMessage, irKindJSON)
+	assertFieldPresence(t, ir.MessagesByName["CheckAccessManyRequest"], "requests", irPresenceRepeated, irKindMessage)
+
+	target := ir.MessagesByName["RelationshipTarget"]
+	if target.Oneof == nil || target.Oneof.ProtoName != "kind" {
+		t.Fatalf("RelationshipTarget oneof = %#v, want kind", target.Oneof)
+	}
+	if len(target.Oneof.Variants) != 3 {
+		t.Fatalf("RelationshipTarget variants len = %d, want 3", len(target.Oneof.Variants))
+	}
+	for _, field := range target.Oneof.Variants {
+		if field.Presence != irPresenceOneof {
+			t.Fatalf("RelationshipTarget.%s presence = %s, want %s", field.ProtoName, field.Presence, irPresenceOneof)
+		}
+	}
+
+	sourceLayer := ir.EnumsByName["SourceLayer"]
+	if sourceLayer.ProtoName != "SourceLayer" || len(sourceLayer.Values) != 3 {
+		t.Fatalf("SourceLayer enum = %#v", sourceLayer)
+	}
+}
+
+func TestProviderSDKIRCapturesDescriptorComments(t *testing.T) {
+	t.Parallel()
+
+	file := &descriptorpb.FileDescriptorProto{
+		Name:    goproto.String("commented.proto"),
+		Package: goproto.String("gestalt.provider.v1"),
+		Syntax:  goproto.String("proto3"),
+		MessageType: []*descriptorpb.DescriptorProto{{
+			Name: goproto.String("Subject"),
+			Field: []*descriptorpb.FieldDescriptorProto{{
+				Name:   goproto.String("type"),
+				Number: goproto.Int32(1),
+				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+			}},
+		}},
+		Service: []*descriptorpb.ServiceDescriptorProto{{
+			Name: goproto.String("AuthorizationProvider"),
+			Method: []*descriptorpb.MethodDescriptorProto{{
+				Name:       goproto.String("CheckAccess"),
+				InputType:  goproto.String(".gestalt.provider.v1.Subject"),
+				OutputType: goproto.String(".gestalt.provider.v1.Subject"),
+			}},
+		}},
+		SourceCodeInfo: &descriptorpb.SourceCodeInfo{Location: []*descriptorpb.SourceCodeInfo_Location{
+			{Path: []int32{4, 0}, Span: []int32{0, 0, 0}, LeadingComments: goproto.String(" Subject docs.\n")},
+			{Path: []int32{4, 0, 2, 0}, Span: []int32{1, 0, 0}, LeadingComments: goproto.String(" Type docs.\n")},
+			{Path: []int32{6, 0}, Span: []int32{2, 0, 0}, LeadingComments: goproto.String(" Service docs.\n")},
+			{Path: []int32{6, 0, 2, 0}, Span: []int32{3, 0, 0}, LeadingComments: goproto.String(" Method docs.\n")},
+		}},
+	}
+	fd, err := protodesc.NewFile(file, nil)
+	if err != nil {
+		t.Fatalf("NewFile: %v", err)
+	}
+	svc := fd.Services().ByName("AuthorizationProvider")
+	ir, err := buildProviderSDKIR(authorizationTestServiceConfig(), svc)
+	if err != nil {
+		t.Fatalf("buildProviderSDKIR: %v", err)
+	}
+	if ir.Doc != "Service docs." {
+		t.Fatalf("service doc = %q", ir.Doc)
+	}
+	if ir.MessagesByName["Subject"].Doc != "Subject docs." {
+		t.Fatalf("message doc = %q", ir.MessagesByName["Subject"].Doc)
+	}
+	if got := ir.MessagesByName["Subject"].Fields[0].Doc; got != "Type docs." {
+		t.Fatalf("field doc = %q", got)
+	}
+	if ir.Methods[0].Doc != "Method docs." {
+		t.Fatalf("method doc = %q", ir.Methods[0].Doc)
 	}
 }
 
@@ -233,29 +512,33 @@ func authorizationTestServiceConfig() serviceConfig {
 			"go":         "authorization",
 			"rust":       "authorization",
 		},
-		WellKnownTypes: map[string]wellKnownTypeRule{
-			"google.protobuf.Struct":    {Semantic: "json_object"},
-			"google.protobuf.Timestamp": {Semantic: "timestamp_with_presence"},
-		},
-		EnumPolicy:  "preserve_unknown_numeric",
-		OneofPolicy: "explicit_variants",
-		Outputs: map[string][]outputConfig{
-			"typescript": {{
-				Path: "sdk/typescript/src/authorization.ts",
-			}},
-			"python": {{
-				Path: "sdk/python/gestalt/authorization.py",
-			}},
-			"go": {
-				{Path: "sdk/go/authorization/doc.go"},
-				{Path: "sdk/go/authorization/types.go"},
-				{Path: "sdk/go/authorization/protocol.go"},
-				{Path: "sdk/go/authorization/conversions.go"},
-				{Path: "sdk/go/authorization/client.go"},
-			},
-			"rust": {{
-				Path: "sdk/rust/src/authorization.rs",
-			}},
+	}
+}
+
+func exampleTestServiceConfig() serviceConfig {
+	return serviceConfig{
+		Proto:   "gestalt.provider.v1.ExampleProvider",
+		SDKName: "Example",
+		Package: map[string]string{
+			"typescript": "Example",
+			"python":     "example",
+			"go":         "example",
+			"rust":       "example",
 		},
 	}
+}
+
+func assertFieldPresence(t *testing.T, message irMessage, protoName string, presence irPresence, kind irFieldKind) {
+	t.Helper()
+
+	for _, field := range message.Fields {
+		if field.ProtoName != protoName {
+			continue
+		}
+		if field.Presence != presence || field.Kind != kind {
+			t.Fatalf("%s.%s = presence %s kind %s, want presence %s kind %s", message.ProtoName, protoName, field.Presence, field.Kind, presence, kind)
+		}
+		return
+	}
+	t.Fatalf("%s.%s not found", message.ProtoName, protoName)
 }

@@ -80,22 +80,22 @@ export namespace Authorization {
     target?: string | undefined;
   }
 
-  export type SubjectInput = NativeMessage<typeof pb.SubjectSchema, {
+  export type Subject = NativeMessage<typeof pb.SubjectSchema, {
     properties?: JsonObjectInput | undefined;
   }>;
 
-  export type ActionInput = NativeMessage<typeof pb.ActionSchema, {
+  export type Action = NativeMessage<typeof pb.ActionSchema, {
     properties?: JsonObjectInput | undefined;
   }>;
 
-  export type ResourceInput = NativeMessage<typeof pb.ResourceSchema, {
+  export type Resource = NativeMessage<typeof pb.ResourceSchema, {
     properties?: JsonObjectInput | undefined;
   }>;
 
   export type CheckAccessRequest = NativeMessage<typeof pb.CheckAccessRequestSchema, {
-    subject?: SubjectInput | undefined;
-    action?: ActionInput | undefined;
-    resource?: ResourceInput | undefined;
+    subject?: Subject | undefined;
+    action?: Action | undefined;
+    resource?: Resource | undefined;
   }>;
 
   export type CheckAccessResponse = NativeMessage<typeof pb.CheckAccessResponseSchema>;
@@ -114,7 +114,7 @@ export namespace Authorization {
 
   export type RelationshipFilter = NativeMessage<typeof pb.RelationshipFilterSchema, {
     target?: RelationshipTarget | undefined;
-    resource?: ResourceInput | undefined;
+    resource?: Resource | undefined;
   }>;
 
   export type ListRelationshipsResponse = NativeMessage<typeof pb.ListRelationshipsResponseSchema, {
@@ -151,22 +151,22 @@ export namespace Authorization {
 
   export type RelationshipTuple = NativeMessage<typeof pb.RelationshipTupleSchema, {
     target?: RelationshipTarget | undefined;
-    resource?: ResourceInput | undefined;
+    resource?: Resource | undefined;
   }>;
 
   export type RelationshipTarget =
-    | { kind: "subject"; subject: SubjectInput }
-    | { kind: "resource"; resource: ResourceInput }
+    | { kind: "subject"; subject: Subject }
+    | { kind: "resource"; resource: Resource }
     | { kind: "subjectSet"; subjectSet: SubjectSet }
     | { kind: "unset" };
 
   export const RelationshipTarget = {
     unset: (): RelationshipTarget => ({ kind: "unset" }),
-    subject: (subject: SubjectInput): RelationshipTarget => ({
+    subject: (subject: Subject): RelationshipTarget => ({
       kind: "subject",
       subject,
     }),
-    resource: (resource: ResourceInput): RelationshipTarget => ({
+    resource: (resource: Resource): RelationshipTarget => ({
       kind: "resource",
       resource,
     }),
@@ -177,7 +177,7 @@ export namespace Authorization {
   } as const;
 
   export type SubjectSet = NativeMessage<typeof pb.SubjectSetSchema, {
-    resource?: ResourceInput | undefined;
+    resource?: Resource | undefined;
   }>;
 
   export type Model = NativeMessage<typeof pb.AuthorizationModelSchema, {
@@ -284,39 +284,54 @@ class AuthorizationImpl implements Authorization.Client {
     }
   }
 
+  private requireOpen(): void {
+    if (this.closed) {
+      throw new ConnectError("authorization: client is closed", Code.FailedPrecondition);
+    }
+  }
+
   async checkAccess(request: Authorization.CheckAccessRequest): Promise<Authorization.CheckAccessResponse> {
+    this.requireOpen();
     return fromProtoMessage("CheckAccessResponse", await this.client.checkAccess(toProtoMessage("CheckAccessRequest", request)));
   }
 
   async checkAccessMany(request: Authorization.CheckAccessManyRequest): Promise<Authorization.CheckAccessManyResponse> {
+    this.requireOpen();
     return fromProtoMessage("CheckAccessManyResponse", await this.client.checkAccessMany(toProtoMessage("CheckAccessManyRequest", request)));
   }
 
   async listRelationships(request: Authorization.ListRelationshipsRequest): Promise<Authorization.ListRelationshipsResponse> {
+    this.requireOpen();
     return fromProtoMessage("ListRelationshipsResponse", await this.client.listRelationships(toProtoMessage("ListRelationshipsRequest", request)));
   }
 
   async addRelationship(request: Authorization.AddRelationshipRequest): Promise<Authorization.AddRelationshipResponse> {
+    this.requireOpen();
     return fromProtoMessage("AddRelationshipResponse", await this.client.addRelationship(toProtoMessage("AddRelationshipRequest", request)));
   }
 
   async deleteRelationship(request: Authorization.DeleteRelationshipRequest): Promise<Authorization.DeleteRelationshipResponse> {
+    this.requireOpen();
     return fromProtoMessage("DeleteRelationshipResponse", await this.client.deleteRelationship(toProtoMessage("DeleteRelationshipRequest", request)));
   }
 
   async setAuthorizationState(request: Authorization.SetAuthorizationStateRequest): Promise<Authorization.SetAuthorizationStateResponse> {
+    this.requireOpen();
     return fromProtoMessage("SetAuthorizationStateResponse", await this.client.setAuthorizationState(toProtoMessage("SetAuthorizationStateRequest", request)));
   }
 
   async getActiveModelRef(): Promise<Authorization.GetActiveModelRefResponse> {
+    this.requireOpen();
     return fromProtoMessage("GetActiveModelRefResponse", await this.client.getActiveModelRef(create(EmptySchema)));
   }
 
   async setActiveModel(request: Authorization.SetActiveModelRequest): Promise<Authorization.SetActiveModelResponse> {
+    this.requireOpen();
     return fromProtoMessage("SetActiveModelResponse", await this.client.setActiveModel(toProtoMessage("SetActiveModelRequest", request)));
   }
 
   async listActiveModelResourceTypes(request: Authorization.ListActiveModelResourceTypesRequest): Promise<Authorization.ListActiveModelResourceTypesResponse> {
+    this.requireOpen();
     return fromProtoMessage("ListActiveModelResourceTypesResponse", await this.client.listActiveModelResourceTypes(toProtoMessage("ListActiveModelResourceTypesRequest", request)));
   }
 
@@ -331,7 +346,7 @@ export interface AuthorizationProviderOptions extends ProviderBaseOptions {
   checkAccessMany: (request: Authorization.CheckAccessManyRequest) => MaybePromise<Authorization.CheckAccessManyResponse>;
   listRelationships: (request: Authorization.ListRelationshipsRequest) => MaybePromise<Authorization.ListRelationshipsResponse>;
   addRelationship: (request: Authorization.AddRelationshipRequest) => MaybePromise<Authorization.AddRelationshipResponse>;
-  deleteRelationship: (request: Authorization.DeleteRelationshipRequest) => MaybePromise<Authorization.DeleteRelationshipResponse | void>;
+  deleteRelationship: (request: Authorization.DeleteRelationshipRequest) => MaybePromise<Authorization.DeleteRelationshipResponse>;
   setAuthorizationState: (request: Authorization.SetAuthorizationStateRequest) => MaybePromise<Authorization.SetAuthorizationStateResponse>;
   getActiveModelRef: () => MaybePromise<Authorization.GetActiveModelRefResponse>;
   setActiveModel: (request: Authorization.SetActiveModelRequest) => MaybePromise<Authorization.SetActiveModelResponse>;
@@ -364,7 +379,7 @@ export class AuthorizationProvider extends ProviderBase {
     return Promise.resolve(this.handlers.addRelationship(request));
   }
 
-  deleteRelationship(request: Authorization.DeleteRelationshipRequest): Promise<Authorization.DeleteRelationshipResponse | void> {
+  deleteRelationship(request: Authorization.DeleteRelationshipRequest): Promise<Authorization.DeleteRelationshipResponse> {
     return Promise.resolve(this.handlers.deleteRelationship(request));
   }
 
@@ -421,64 +436,63 @@ export function createAuthorizationProviderService(
       try {
         return toProtoMessage("CheckAccessResponse", await provider.checkAccess(fromProtoMessage("CheckAccessRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("check access", error);
+        throw providerRuntimeError("check access", error);
       }
     },
     async checkAccessMany(request) {
       try {
         return toProtoMessage("CheckAccessManyResponse", await provider.checkAccessMany(fromProtoMessage("CheckAccessManyRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("check access many", error);
+        throw providerRuntimeError("check access many", error);
       }
     },
     async listRelationships(request) {
       try {
         return toProtoMessage("ListRelationshipsResponse", await provider.listRelationships(fromProtoMessage("ListRelationshipsRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("list relationships", error);
+        throw providerRuntimeError("list relationships", error);
       }
     },
     async addRelationship(request) {
       try {
         return toProtoMessage("AddRelationshipResponse", await provider.addRelationship(fromProtoMessage("AddRelationshipRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("add relationship", error);
+        throw providerRuntimeError("add relationship", error);
       }
     },
     async deleteRelationship(request) {
       try {
-        await provider.deleteRelationship(fromProtoMessage("DeleteRelationshipRequest", request));
-        return create(pb.DeleteRelationshipResponseSchema);
+        return toProtoMessage("DeleteRelationshipResponse", await provider.deleteRelationship(fromProtoMessage("DeleteRelationshipRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("delete relationship", error);
+        throw providerRuntimeError("delete relationship", error);
       }
     },
     async setAuthorizationState(request) {
       try {
         return toProtoMessage("SetAuthorizationStateResponse", await provider.setAuthorizationState(fromProtoMessage("SetAuthorizationStateRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("set authorization state", error);
+        throw providerRuntimeError("set authorization state", error);
       }
     },
     async getActiveModelRef(request) {
       try {
         return toProtoMessage("GetActiveModelRefResponse", await provider.getActiveModelRef());
       } catch (error) {
-        throw authorizationRuntimeError("get active model ref", error);
+        throw providerRuntimeError("get active model ref", error);
       }
     },
     async setActiveModel(request) {
       try {
         return toProtoMessage("SetActiveModelResponse", await provider.setActiveModel(fromProtoMessage("SetActiveModelRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("set active model", error);
+        throw providerRuntimeError("set active model", error);
       }
     },
     async listActiveModelResourceTypes(request) {
       try {
         return toProtoMessage("ListActiveModelResourceTypesResponse", await provider.listActiveModelResourceTypes(fromProtoMessage("ListActiveModelResourceTypesRequest", request)));
       } catch (error) {
-        throw authorizationRuntimeError("list active model resource types", error);
+        throw providerRuntimeError("list active model resource types", error);
       }
     },
   };
@@ -797,7 +811,7 @@ function toProtoValue(field: Pick<FieldRule, "kind" | "message">, raw: unknown):
   }
 }
 
-function authorizationRuntimeError(label: string, error: unknown): ConnectError {
+function providerRuntimeError(label: string, error: unknown): ConnectError {
   if (error instanceof ConnectError) {
     return error;
   }

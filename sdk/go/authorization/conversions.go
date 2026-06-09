@@ -1545,11 +1545,3 @@ func protoSliceListActiveModelResourceTypesResponse(in []*ListActiveModelResourc
 	}
 	return out, nil
 }
-
-func modelAllowedTargetsFromProto(in []*proto.ModelAllowedTarget) []ModelAllowedTarget {
-	return sliceModelAllowedTargetFromProto(in)
-}
-
-func protoModelAllowedTargets(in []ModelAllowedTarget) ([]*proto.ModelAllowedTarget, error) {
-	return protoSliceModelAllowedTarget(in)
-}

@@ -1,4 +1,4 @@
-name: Build Authorization SDK Generation
+name: Build Provider SDK Generation
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     paths:
       - 'sdk/sdkgen.yaml'
       - 'sdk/proto/**'
-      - 'sdk/scripts/generate_authorization_sdk.sh'
+      - 'sdk/scripts/generate_provider_sdks.sh'
       - 'sdk/python/scripts/generate_stubs.py'
       - 'sdk/rust/scripts/generate_stubs.sh'
       - 'sdk/typescript/src/authorization.ts'
@@ -21,12 +21,12 @@ on:
       - 'sdk/rust/src/generated/**'
       - 'gestaltd/tools/sdkwrapgen/**'
       - 'gestaltd/rpc/protov1/v1/authorization*.go'
-      - '.github/workflows/build-authorization-sdk-generation.yml'
+      - '.github/workflows/build-provider-sdk-generation.yml'
   pull_request:
     paths:
       - 'sdk/sdkgen.yaml'
       - 'sdk/proto/**'
-      - 'sdk/scripts/generate_authorization_sdk.sh'
+      - 'sdk/scripts/generate_provider_sdks.sh'
       - 'sdk/python/scripts/generate_stubs.py'
       - 'sdk/rust/scripts/generate_stubs.sh'
       - 'sdk/typescript/src/authorization.ts'
@@ -40,7 +40,7 @@ on:
       - 'sdk/rust/src/generated/**'
       - 'gestaltd/tools/sdkwrapgen/**'
       - 'gestaltd/rpc/protov1/v1/authorization*.go'
-      - '.github/workflows/build-authorization-sdk-generation.yml'
+      - '.github/workflows/build-provider-sdk-generation.yml'
 
   workflow_dispatch:
 
@@ -48,8 +48,8 @@ permissions:
   contents: read
 
 jobs:
-  authorization-sdk-generation:
-    name: Authorization SDK Generation
+  provider-sdk-generation:
+    name: Provider SDK Generation
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -76,9 +76,9 @@ jobs:
         working-directory: gestaltd
         run: go test ./tools/sdkwrapgen
 
-      - name: Verify checked-in generated Authorization SDKs
+      - name: Verify checked-in generated provider SDKs
         run: |
-          ./sdk/scripts/generate_authorization_sdk.sh
+          ./sdk/scripts/generate_provider_sdks.sh
           git diff --exit-code -- \
             sdk/typescript/src/authorization.ts \
             sdk/typescript/src/internal/gen/v1/authorization_pb.ts \
