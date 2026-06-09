@@ -40,22 +40,11 @@ type CheckAccessManyResponse struct {
 	Decisions []*CheckAccessResponse
 }
 
-type RelationshipTargetType int32
-
-const (
-	RelationshipTargetTypeUnspecified RelationshipTargetType = 0
-	RelationshipTargetTypeSubject     RelationshipTargetType = 1
-	RelationshipTargetTypeResource    RelationshipTargetType = 2
-	RelationshipTargetTypeSubjectSet  RelationshipTargetType = 3
-)
-
-type SourceLayer int32
-
-const (
-	SourceLayerUnspecified  SourceLayer = 0
-	SourceLayerStaticConfig SourceLayer = 1
-	SourceLayerRuntime      SourceLayer = 2
-)
+type ListRelationshipsRequest struct {
+	Filter    *RelationshipFilter
+	PageSize  int32
+	PageToken string
+}
 
 type RelationshipFilter struct {
 	Target           RelationshipTarget
@@ -65,12 +54,6 @@ type RelationshipFilter struct {
 	TargetEntityType string
 	ResourceType     string
 	SourceLayer      SourceLayer
-}
-
-type ListRelationshipsRequest struct {
-	Filter    *RelationshipFilter
-	PageSize  int32
-	PageToken string
 }
 
 type ListRelationshipsResponse struct {
@@ -90,7 +73,8 @@ type DeleteRelationshipRequest struct {
 	RelationshipTuple *RelationshipTuple
 }
 
-type DeleteRelationshipResponse struct{}
+type DeleteRelationshipResponse struct {
+}
 
 type SetAuthorizationStateRequest struct {
 	Model         *Model
@@ -136,16 +120,16 @@ func (RelationshipTargetResource) isRelationshipTarget()   {}
 func (RelationshipTargetSubjectSet) isRelationshipTarget() {}
 func (RelationshipTargetUnset) isRelationshipTarget()      {}
 
-func SubjectTarget(subject Subject) RelationshipTarget {
-	return RelationshipTargetSubject{Subject: subject}
+func SubjectTarget(value Subject) RelationshipTarget {
+	return RelationshipTargetSubject{Subject: value}
 }
 
-func ResourceTarget(resource Resource) RelationshipTarget {
-	return RelationshipTargetResource{Resource: resource}
+func ResourceTarget(value Resource) RelationshipTarget {
+	return RelationshipTargetResource{Resource: value}
 }
 
-func SubjectSetTarget(subjectSet SubjectSet) RelationshipTarget {
-	return RelationshipTargetSubjectSet{SubjectSet: subjectSet}
+func SubjectSetTarget(value SubjectSet) RelationshipTarget {
+	return RelationshipTargetSubjectSet{SubjectSet: value}
 }
 
 func UnsetRelationshipTarget() RelationshipTarget {
@@ -162,13 +146,6 @@ type Model struct {
 	Version       string
 	ResourceTypes []*ModelResourceType
 }
-
-type DefaultAccessPolicy int32
-
-const (
-	DefaultAccessPolicyDeny  DefaultAccessPolicy = 0
-	DefaultAccessPolicyAllow DefaultAccessPolicy = 1
-)
 
 type ModelResourceType struct {
 	Name                string
@@ -211,16 +188,16 @@ func (ModelAllowedTargetResourceType) isModelAllowedTarget()   {}
 func (ModelAllowedTargetSubjectSetType) isModelAllowedTarget() {}
 func (ModelAllowedTargetUnset) isModelAllowedTarget()          {}
 
-func SubjectTypeTarget(subjectType string) ModelAllowedTarget {
-	return ModelAllowedTargetSubjectType{SubjectType: subjectType}
+func SubjectTypeTarget(value string) ModelAllowedTarget {
+	return ModelAllowedTargetSubjectType{SubjectType: value}
 }
 
-func ResourceTypeTarget(resourceType string) ModelAllowedTarget {
-	return ModelAllowedTargetResourceType{ResourceType: resourceType}
+func ResourceTypeTarget(value string) ModelAllowedTarget {
+	return ModelAllowedTargetResourceType{ResourceType: value}
 }
 
-func SubjectSetTypeTarget(subjectSetType SubjectSetType) ModelAllowedTarget {
-	return ModelAllowedTargetSubjectSetType{SubjectSetType: subjectSetType}
+func SubjectSetTypeTarget(value SubjectSetType) ModelAllowedTarget {
+	return ModelAllowedTargetSubjectSetType{SubjectSetType: value}
 }
 
 func UnsetModelAllowedTarget() ModelAllowedTarget {
@@ -250,15 +227,15 @@ type SetActiveModelResponse struct {
 	Model *ModelRef
 }
 
-type ModelResourceTypeFilter struct {
-	Name        string
-	SourceLayer SourceLayer
-}
-
 type ListActiveModelResourceTypesRequest struct {
 	Filter    *ModelResourceTypeFilter
 	PageSize  int32
 	PageToken string
+}
+
+type ModelResourceTypeFilter struct {
+	Name        string
+	SourceLayer SourceLayer
 }
 
 type ListActiveModelResourceTypesResponse struct {
@@ -266,3 +243,27 @@ type ListActiveModelResourceTypesResponse struct {
 	NextPageToken string
 	ModelID       string
 }
+
+type DefaultAccessPolicy int32
+
+const (
+	DefaultAccessPolicyDeny  DefaultAccessPolicy = 0
+	DefaultAccessPolicyAllow DefaultAccessPolicy = 1
+)
+
+type RelationshipTargetType int32
+
+const (
+	RelationshipTargetTypeUnspecified RelationshipTargetType = 0
+	RelationshipTargetTypeSubject     RelationshipTargetType = 1
+	RelationshipTargetTypeResource    RelationshipTargetType = 2
+	RelationshipTargetTypeSubjectSet  RelationshipTargetType = 3
+)
+
+type SourceLayer int32
+
+const (
+	SourceLayerUnspecified  SourceLayer = 0
+	SourceLayerStaticConfig SourceLayer = 1
+	SourceLayerRuntime      SourceLayer = 2
+)

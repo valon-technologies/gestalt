@@ -17,21 +17,13 @@ services:
     outputs:
       typescript:
         - path: sdk/typescript/src/authorization.ts
-          template: authorization/typescript/authorization.ts
       python:
         - path: sdk/python/gestalt/authorization.py
-          template: authorization/python/authorization.py
       go:
         - path: sdk/go/authorization/doc.go
-          template: authorization/go/doc.go.tmpl
         - path: sdk/go/authorization/types.go
-          template: authorization/go/types.go.tmpl
         - path: sdk/go/authorization/protocol.go
-          template: authorization/go/protocol.go.tmpl
         - path: sdk/go/authorization/conversions.go
-          template: authorization/go/conversions.go.tmpl
         - path: sdk/go/authorization/client.go
-          template: authorization/go/client.go.tmpl
       rust:
         - path: sdk/rust/src/authorization.rs
-          template: authorization/rust/authorization.rs

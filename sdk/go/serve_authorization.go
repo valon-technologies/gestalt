@@ -27,12 +27,12 @@ type authorizationProviderServer struct {
 
 func (s authorizationProviderServer) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	resp, err := s.provider.CheckAccess(ctx, authz.CheckAccessRequestFromProto(req))
-	return authorizationProtoResponse(resp, authz.CheckAccessResponseToProto, "authorization check access", err)
+	return authorizationProtoResponseErr(resp, authz.CheckAccessResponseToProto, "authorization check access", err)
 }
 
 func (s authorizationProviderServer) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
 	resp, err := s.provider.CheckAccessMany(ctx, authz.CheckAccessManyRequestFromProto(req))
-	return authorizationProtoResponse(resp, authz.CheckAccessManyResponseToProto, "authorization check access many", err)
+	return authorizationProtoResponseErr(resp, authz.CheckAccessManyResponseToProto, "authorization check access many", err)
 }
 
 func (s authorizationProviderServer) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
@@ -47,22 +47,22 @@ func (s authorizationProviderServer) AddRelationship(ctx context.Context, req *p
 
 func (s authorizationProviderServer) DeleteRelationship(ctx context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	resp, err := s.provider.DeleteRelationship(ctx, authz.DeleteRelationshipRequestFromProto(req))
-	return authorizationProtoResponse(resp, authz.DeleteRelationshipResponseToProto, "authorization delete relationship", err)
+	return authorizationProtoResponseErr(resp, authz.DeleteRelationshipResponseToProto, "authorization delete relationship", err)
 }
 
 func (s authorizationProviderServer) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
 	resp, err := s.provider.SetAuthorizationState(ctx, authz.SetAuthorizationStateRequestFromProto(req))
-	return authorizationProtoResponse(resp, authz.SetAuthorizationStateResponseToProto, "authorization set authorization state", err)
+	return authorizationProtoResponseErr(resp, authz.SetAuthorizationStateResponseToProto, "authorization set authorization state", err)
 }
 
 func (s authorizationProviderServer) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
 	resp, err := s.provider.GetActiveModelRef(ctx)
-	return authorizationProtoResponse(resp, authz.GetActiveModelRefResponseToProto, "authorization get active model ref", err)
+	return authorizationProtoResponseErr(resp, authz.GetActiveModelRefResponseToProto, "authorization get active model ref", err)
 }
 
 func (s authorizationProviderServer) SetActiveModel(ctx context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
 	resp, err := s.provider.SetActiveModel(ctx, authz.SetActiveModelRequestFromProto(req))
-	return authorizationProtoResponse(resp, authz.SetActiveModelResponseToProto, "authorization set active model", err)
+	return authorizationProtoResponseErr(resp, authz.SetActiveModelResponseToProto, "authorization set active model", err)
 }
 
 func (s authorizationProviderServer) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {

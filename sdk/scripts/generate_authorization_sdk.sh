@@ -34,3 +34,8 @@ go run ./tools/sdkwrapgen \
   -config ../sdk/sdkgen.yaml \
   -image "$image_path" \
   -out-root "$repo_root"
+
+gofmt -w "$repo_root"/sdk/go/authorization/*.go "$repo_root"/sdk/go/serve_authorization.go
+
+cd "$repo_root/sdk/rust"
+cargo fmt

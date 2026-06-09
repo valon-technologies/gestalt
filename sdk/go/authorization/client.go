@@ -179,7 +179,10 @@ func (c *Client) ListActiveModelResourceTypes(ctx context.Context, req ListActiv
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("authorization: client is not initialized")
 	}
-	wire := ListActiveModelResourceTypesRequestToProto(&req)
+	wire, err := ListActiveModelResourceTypesRequestToProto(&req)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.client.ListActiveModelResourceTypes(ctx, wire)
 	if err != nil {
 		return nil, err

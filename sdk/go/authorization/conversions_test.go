@@ -25,7 +25,10 @@ func TestUnsetOneofsRoundTrip(t *testing.T) {
 	if _, ok := allowedTargets[0].(ModelAllowedTargetUnset); !ok {
 		t.Fatalf("model allowed target unset did not convert to ModelAllowedTargetUnset")
 	}
-	allowedWire := protoModelAllowedTarget(ModelAllowedTargetUnset{})
+	allowedWire, err := protoModelAllowedTarget(ModelAllowedTargetUnset{})
+	if err != nil {
+		t.Fatalf("protoModelAllowedTarget: %v", err)
+	}
 	if allowedWire.GetKind() != nil {
 		t.Fatalf("model allowed target kind = %#v, want nil", allowedWire.GetKind())
 	}

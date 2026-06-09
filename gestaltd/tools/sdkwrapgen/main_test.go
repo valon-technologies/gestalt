@@ -125,12 +125,16 @@ func TestRenderGeneratedFilesIsDeterministic(t *testing.T) {
 	if err := validateConfig(cfg); err != nil {
 		t.Fatalf("validateConfig: %v", err)
 	}
+	services, err := validateImage(cfg, fileDescriptorSet(protov1.File_v1_authorization_proto))
+	if err != nil {
+		t.Fatalf("validateImage: %v", err)
+	}
 
-	first, err := renderGeneratedFiles(cfg)
+	first, err := renderGeneratedFiles(cfg, services)
 	if err != nil {
 		t.Fatalf("renderGeneratedFiles first: %v", err)
 	}
-	second, err := renderGeneratedFiles(cfg)
+	second, err := renderGeneratedFiles(cfg, services)
 	if err != nil {
 		t.Fatalf("renderGeneratedFiles second: %v", err)
 	}
@@ -157,8 +161,12 @@ func TestWriteGeneratedFilesWritesExpectedOutputs(t *testing.T) {
 		Version:  1,
 		Services: []serviceConfig{authorizationTestServiceConfig()},
 	}
+	services, err := validateImage(cfg, fileDescriptorSet(protov1.File_v1_authorization_proto))
+	if err != nil {
+		t.Fatalf("validateImage: %v", err)
+	}
 	root := t.TempDir()
-	files, err := writeGeneratedFiles(cfg, root)
+	files, err := writeGeneratedFiles(cfg, services, root)
 	if err != nil {
 		t.Fatalf("writeGeneratedFiles: %v", err)
 	}
@@ -233,23 +241,20 @@ func authorizationTestServiceConfig() serviceConfig {
 		OneofPolicy: "explicit_variants",
 		Outputs: map[string][]outputConfig{
 			"typescript": {{
-				Path:     "sdk/typescript/src/authorization.ts",
-				Template: "authorization/typescript/authorization.ts",
+				Path: "sdk/typescript/src/authorization.ts",
 			}},
 			"python": {{
-				Path:     "sdk/python/gestalt/authorization.py",
-				Template: "authorization/python/authorization.py",
+				Path: "sdk/python/gestalt/authorization.py",
 			}},
 			"go": {
-				{Path: "sdk/go/authorization/doc.go", Template: "authorization/go/doc.go.tmpl"},
-				{Path: "sdk/go/authorization/types.go", Template: "authorization/go/types.go.tmpl"},
-				{Path: "sdk/go/authorization/protocol.go", Template: "authorization/go/protocol.go.tmpl"},
-				{Path: "sdk/go/authorization/conversions.go", Template: "authorization/go/conversions.go.tmpl"},
-				{Path: "sdk/go/authorization/client.go", Template: "authorization/go/client.go.tmpl"},
+				{Path: "sdk/go/authorization/doc.go"},
+				{Path: "sdk/go/authorization/types.go"},
+				{Path: "sdk/go/authorization/protocol.go"},
+				{Path: "sdk/go/authorization/conversions.go"},
+				{Path: "sdk/go/authorization/client.go"},
 			},
 			"rust": {{
-				Path:     "sdk/rust/src/authorization.rs",
-				Template: "authorization/rust/authorization.rs",
+				Path: "sdk/rust/src/authorization.rs",
 			}},
 		},
 	}

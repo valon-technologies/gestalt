@@ -10,69 +10,7 @@ import {
 } from "@connectrpc/connect";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 
-import {
-  ActionSchema,
-  AddRelationshipRequestSchema,
-  AddRelationshipResponseSchema,
-  AuthorizationModelSchema,
-  AuthorizationModelResourceTypeFilterSchema,
-  AuthorizationModelRefSchema,
-  AuthorizationModelResourceTypeSchema,
-  CheckAccessManyRequestSchema,
-  CheckAccessManyResponseSchema,
-  CheckAccessRequestSchema,
-  CheckAccessResponseSchema,
-  DefaultAccessPolicy as ProtoDefaultAccessPolicy,
-  DeleteRelationshipRequestSchema,
-  DeleteRelationshipResponseSchema,
-  GetActiveModelRefResponseSchema,
-  ListActiveModelResourceTypesRequestSchema,
-  ListRelationshipsRequestSchema,
-  ListActiveModelResourceTypesResponseSchema,
-  ListRelationshipsResponseSchema,
-  ModelActionSchema,
-  ModelAllowedTargetSchema,
-  ModelRelationSchema,
-  RelationshipSchema,
-  RelationshipTargetSchema,
-  RelationshipTargetType as ProtoRelationshipTargetType,
-  RelationshipTupleSchema,
-  ResourceSchema,
-  SetActiveModelRequestSchema,
-  SetActiveModelResponseSchema,
-  SetAuthorizationStateRequestSchema,
-  SetAuthorizationStateResponseSchema,
-  SourceLayer as ProtoSourceLayer,
-  SubjectSchema,
-  SubjectSetSchema,
-  SubjectSetTypeSchema,
-  AuthorizationProvider as AuthorizationProviderService,
-  type AddRelationshipRequest as ProtoAddRelationshipRequest,
-  type AddRelationshipResponse as ProtoAddRelationshipResponse,
-  type AuthorizationModel as ProtoAuthorizationModel,
-  type AuthorizationModelResourceType as ProtoAuthorizationModelResourceType,
-  type CheckAccessManyRequest as ProtoCheckAccessManyRequest,
-  type CheckAccessManyResponse as ProtoCheckAccessManyResponse,
-  type CheckAccessRequest as ProtoCheckAccessRequest,
-  type CheckAccessResponse as ProtoCheckAccessResponse,
-  type DeleteRelationshipRequest as ProtoDeleteRelationshipRequest,
-  type DeleteRelationshipResponse as ProtoDeleteRelationshipResponse,
-  type GetActiveModelRefResponse as ProtoGetActiveModelRefResponse,
-  type ListActiveModelResourceTypesRequest as ProtoListActiveModelResourceTypesRequest,
-  type ListActiveModelResourceTypesResponse as ProtoListActiveModelResourceTypesResponse,
-  type ListRelationshipsRequest as ProtoListRelationshipsRequest,
-  type ListRelationshipsResponse as ProtoListRelationshipsResponse,
-  type ModelAllowedTarget as ProtoModelAllowedTarget,
-  type Relationship as ProtoRelationship,
-  type RelationshipFilter as ProtoRelationshipFilter,
-  type RelationshipTarget as ProtoRelationshipTarget,
-  type RelationshipTuple as ProtoRelationshipTuple,
-  type SetActiveModelResponse as ProtoSetActiveModelResponse,
-  type SetActiveModelRequest as ProtoSetActiveModelRequest,
-  type SetAuthorizationStateResponse as ProtoSetAuthorizationStateResponse,
-  type SetAuthorizationStateRequest as ProtoSetAuthorizationStateRequest,
-  type SubjectSet as ProtoSubjectSet,
-} from "./internal/gen/v1/authorization_pb.ts";
+import * as pb from "./internal/gen/v1/authorization_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import {
@@ -90,26 +28,26 @@ import {
   requireHostServiceTarget,
 } from "./host-service.ts";
 
+export const DefaultAccessPolicy = {
+  DENY: pb.DefaultAccessPolicy.DENY,
+  ALLOW: pb.DefaultAccessPolicy.ALLOW,
+} as const;
+export type DefaultAccessPolicy = number;
+
 export const RelationshipTargetType = {
-  UNSPECIFIED: ProtoRelationshipTargetType.UNSPECIFIED,
-  SUBJECT: ProtoRelationshipTargetType.SUBJECT,
-  RESOURCE: ProtoRelationshipTargetType.RESOURCE,
-  SUBJECT_SET: ProtoRelationshipTargetType.SUBJECT_SET,
+  UNSPECIFIED: pb.RelationshipTargetType.UNSPECIFIED,
+  SUBJECT: pb.RelationshipTargetType.SUBJECT,
+  RESOURCE: pb.RelationshipTargetType.RESOURCE,
+  SUBJECT_SET: pb.RelationshipTargetType.SUBJECT_SET,
 } as const;
 export type RelationshipTargetType = number;
 
 export const SourceLayer = {
-  UNSPECIFIED: ProtoSourceLayer.UNSPECIFIED,
-  STATIC_CONFIG: ProtoSourceLayer.STATIC_CONFIG,
-  RUNTIME: ProtoSourceLayer.RUNTIME,
+  UNSPECIFIED: pb.SourceLayer.UNSPECIFIED,
+  STATIC_CONFIG: pb.SourceLayer.STATIC_CONFIG,
+  RUNTIME: pb.SourceLayer.RUNTIME,
 } as const;
 export type SourceLayer = number;
-
-export const DefaultAccessPolicy = {
-  DENY: ProtoDefaultAccessPolicy.DENY,
-  ALLOW: ProtoDefaultAccessPolicy.ALLOW,
-} as const;
-export type DefaultAccessPolicy = number;
 
 export function Authorization(
   options: Authorization.Options = {},
@@ -173,6 +111,12 @@ export namespace Authorization {
     decisions?: readonly CheckAccessResponse[] | undefined;
   }
 
+  export interface ListRelationshipsRequest {
+    filter?: RelationshipFilter | undefined;
+    pageSize?: number | undefined;
+    pageToken?: string | undefined;
+  }
+
   export interface RelationshipFilter {
     target?: RelationshipTarget | undefined;
     relation?: string | undefined;
@@ -181,12 +125,6 @@ export namespace Authorization {
     targetEntityType?: string | undefined;
     resourceType?: string | undefined;
     sourceLayer?: SourceLayer | undefined;
-  }
-
-  export interface ListRelationshipsRequest {
-    filter?: RelationshipFilter | undefined;
-    pageSize?: number | undefined;
-    pageToken?: string | undefined;
   }
 
   export interface ListRelationshipsResponse {
@@ -206,7 +144,8 @@ export namespace Authorization {
     relationshipTuple?: RelationshipTuple | undefined;
   }
 
-  export interface DeleteRelationshipResponse {}
+  export interface DeleteRelationshipResponse {
+  }
 
   export interface SetAuthorizationStateRequest {
     model?: Model | undefined;
@@ -325,15 +264,15 @@ export namespace Authorization {
     model?: ModelRef | undefined;
   }
 
-  export interface ModelResourceTypeFilter {
-    name?: string | undefined;
-    sourceLayer?: SourceLayer | undefined;
-  }
-
   export interface ListActiveModelResourceTypesRequest {
     filter?: ModelResourceTypeFilter | undefined;
     pageSize?: number | undefined;
     pageToken?: string | undefined;
+  }
+
+  export interface ModelResourceTypeFilter {
+    name?: string | undefined;
+    sourceLayer?: SourceLayer | undefined;
   }
 
   export interface ListActiveModelResourceTypesResponse {
@@ -344,35 +283,22 @@ export namespace Authorization {
 
   export interface Client {
     checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse>;
-    checkAccessMany(
-      request: CheckAccessManyRequest,
-    ): Promise<CheckAccessManyResponse>;
-    listRelationships(
-      request: ListRelationshipsRequest,
-    ): Promise<ListRelationshipsResponse>;
-    addRelationship(
-      request: AddRelationshipRequest,
-    ): Promise<AddRelationshipResponse>;
-    deleteRelationship(
-      request: DeleteRelationshipRequest,
-    ): Promise<DeleteRelationshipResponse>;
-    setAuthorizationState(
-      request: SetAuthorizationStateRequest,
-    ): Promise<SetAuthorizationStateResponse>;
+    checkAccessMany(request: CheckAccessManyRequest): Promise<CheckAccessManyResponse>;
+    listRelationships(request: ListRelationshipsRequest): Promise<ListRelationshipsResponse>;
+    addRelationship(request: AddRelationshipRequest): Promise<AddRelationshipResponse>;
+    deleteRelationship(request: DeleteRelationshipRequest): Promise<DeleteRelationshipResponse>;
+    setAuthorizationState(request: SetAuthorizationStateRequest): Promise<SetAuthorizationStateResponse>;
     getActiveModelRef(): Promise<GetActiveModelRefResponse>;
-    setActiveModel(
-      request: SetActiveModelRequest,
-    ): Promise<SetActiveModelResponse>;
-    listActiveModelResourceTypes(
-      request: ListActiveModelResourceTypesRequest,
-    ): Promise<ListActiveModelResourceTypesResponse>;
+    setActiveModel(request: SetActiveModelRequest): Promise<SetActiveModelResponse>;
+    listActiveModelResourceTypes(request: ListActiveModelResourceTypesRequest): Promise<ListActiveModelResourceTypesResponse>;
     close(): void;
   }
 }
 
+
 class AuthorizationImpl implements Authorization.Client {
   private readonly transport: ReturnType<typeof createHostServiceGrpcTransport>;
-  private readonly client: Client<typeof AuthorizationProviderService>;
+  private readonly client: Client<typeof pb.AuthorizationProvider>;
   private closed = false;
 
   constructor(target: string, token: string) {
@@ -380,7 +306,7 @@ class AuthorizationImpl implements Authorization.Client {
       parseHostServiceTarget("authorization", target),
       hostServiceMetadataInterceptors(token, ""),
     );
-    this.client = createClient(AuthorizationProviderService, this.transport);
+    this.client = createClient(pb.AuthorizationProvider, this.transport);
   }
 
   close(): void {
@@ -395,76 +321,41 @@ class AuthorizationImpl implements Authorization.Client {
   }
 
   async checkAccess(request: Authorization.CheckAccessRequest): Promise<Authorization.CheckAccessResponse> {
-    return checkAccessResponseFromProto(
-      await this.client.checkAccess(checkAccessRequestToProto(request)),
-    );
+    return fromProtoMessage("CheckAccessResponse", await this.client.checkAccess(toProtoMessage("CheckAccessRequest", request)));
   }
 
-  async checkAccessMany(
-    request: Authorization.CheckAccessManyRequest,
-  ): Promise<Authorization.CheckAccessManyResponse> {
-    return checkAccessManyResponseFromProto(
-      await this.client.checkAccessMany(checkAccessManyRequestToProto(request)),
-    );
+  async checkAccessMany(request: Authorization.CheckAccessManyRequest): Promise<Authorization.CheckAccessManyResponse> {
+    return fromProtoMessage("CheckAccessManyResponse", await this.client.checkAccessMany(toProtoMessage("CheckAccessManyRequest", request)));
   }
 
-  async listRelationships(
-    request: Authorization.ListRelationshipsRequest,
-  ): Promise<Authorization.ListRelationshipsResponse> {
-    return listRelationshipsResponseFromProto(
-      await this.client.listRelationships(listRelationshipsRequestToProto(request)),
-    );
+  async listRelationships(request: Authorization.ListRelationshipsRequest): Promise<Authorization.ListRelationshipsResponse> {
+    return fromProtoMessage("ListRelationshipsResponse", await this.client.listRelationships(toProtoMessage("ListRelationshipsRequest", request)));
   }
 
-  async addRelationship(
-    request: Authorization.AddRelationshipRequest,
-  ): Promise<Authorization.AddRelationshipResponse> {
-    return addRelationshipResponseFromProto(
-      await this.client.addRelationship(addRelationshipRequestToProto(request)),
-    );
+  async addRelationship(request: Authorization.AddRelationshipRequest): Promise<Authorization.AddRelationshipResponse> {
+    return fromProtoMessage("AddRelationshipResponse", await this.client.addRelationship(toProtoMessage("AddRelationshipRequest", request)));
   }
 
-  async deleteRelationship(
-    request: Authorization.DeleteRelationshipRequest,
-  ): Promise<Authorization.DeleteRelationshipResponse> {
-    return deleteRelationshipResponseFromProto(
-      await this.client.deleteRelationship(deleteRelationshipRequestToProto(request)),
-    );
+  async deleteRelationship(request: Authorization.DeleteRelationshipRequest): Promise<Authorization.DeleteRelationshipResponse> {
+    return fromProtoMessage("DeleteRelationshipResponse", await this.client.deleteRelationship(toProtoMessage("DeleteRelationshipRequest", request)));
   }
 
-  async setAuthorizationState(
-    request: Authorization.SetAuthorizationStateRequest,
-  ): Promise<Authorization.SetAuthorizationStateResponse> {
-    return setAuthorizationStateResponseFromProto(
-      await this.client.setAuthorizationState(
-        setAuthorizationStateRequestToProto(request),
-      ),
-    );
+  async setAuthorizationState(request: Authorization.SetAuthorizationStateRequest): Promise<Authorization.SetAuthorizationStateResponse> {
+    return fromProtoMessage("SetAuthorizationStateResponse", await this.client.setAuthorizationState(toProtoMessage("SetAuthorizationStateRequest", request)));
   }
 
   async getActiveModelRef(): Promise<Authorization.GetActiveModelRefResponse> {
-    return getActiveModelRefResponseFromProto(
-      await this.client.getActiveModelRef(create(EmptySchema)),
-    );
+    return fromProtoMessage("GetActiveModelRefResponse", await this.client.getActiveModelRef(create(EmptySchema)));
   }
 
-  async setActiveModel(
-    request: Authorization.SetActiveModelRequest,
-  ): Promise<Authorization.SetActiveModelResponse> {
-    return setActiveModelResponseFromProto(
-      await this.client.setActiveModel(setActiveModelRequestToProto(request)),
-    );
+  async setActiveModel(request: Authorization.SetActiveModelRequest): Promise<Authorization.SetActiveModelResponse> {
+    return fromProtoMessage("SetActiveModelResponse", await this.client.setActiveModel(toProtoMessage("SetActiveModelRequest", request)));
   }
 
-  async listActiveModelResourceTypes(
-    request: Authorization.ListActiveModelResourceTypesRequest,
-  ): Promise<Authorization.ListActiveModelResourceTypesResponse> {
-    return listActiveModelResourceTypesResponseFromProto(
-      await this.client.listActiveModelResourceTypes(
-        listActiveModelResourceTypesRequestToProto(request),
-      ),
-    );
+  async listActiveModelResourceTypes(request: Authorization.ListActiveModelResourceTypesRequest): Promise<Authorization.ListActiveModelResourceTypesResponse> {
+    return fromProtoMessage("ListActiveModelResourceTypesResponse", await this.client.listActiveModelResourceTypes(toProtoMessage("ListActiveModelResourceTypesRequest", request)));
   }
+
 }
 
 let sharedAuthorization:
@@ -473,28 +364,14 @@ let sharedAuthorization:
 
 export interface AuthorizationProviderOptions extends ProviderBaseOptions {
   checkAccess: (request: Authorization.CheckAccessRequest) => MaybePromise<Authorization.CheckAccessResponse>;
-  checkAccessMany: (
-    request: Authorization.CheckAccessManyRequest,
-  ) => MaybePromise<Authorization.CheckAccessManyResponse>;
-  listRelationships: (
-    request: Authorization.ListRelationshipsRequest,
-  ) => MaybePromise<Authorization.ListRelationshipsResponse>;
-  addRelationship: (
-    request: Authorization.AddRelationshipRequest,
-  ) => MaybePromise<Authorization.AddRelationshipResponse>;
-  deleteRelationship: (
-    request: Authorization.DeleteRelationshipRequest,
-  ) => MaybePromise<Authorization.DeleteRelationshipResponse | void>;
-  setAuthorizationState: (
-    request: Authorization.SetAuthorizationStateRequest,
-  ) => MaybePromise<Authorization.SetAuthorizationStateResponse>;
+  checkAccessMany: (request: Authorization.CheckAccessManyRequest) => MaybePromise<Authorization.CheckAccessManyResponse>;
+  listRelationships: (request: Authorization.ListRelationshipsRequest) => MaybePromise<Authorization.ListRelationshipsResponse>;
+  addRelationship: (request: Authorization.AddRelationshipRequest) => MaybePromise<Authorization.AddRelationshipResponse>;
+  deleteRelationship: (request: Authorization.DeleteRelationshipRequest) => MaybePromise<Authorization.DeleteRelationshipResponse | void>;
+  setAuthorizationState: (request: Authorization.SetAuthorizationStateRequest) => MaybePromise<Authorization.SetAuthorizationStateResponse>;
   getActiveModelRef: () => MaybePromise<Authorization.GetActiveModelRefResponse>;
-  setActiveModel: (
-    request: Authorization.SetActiveModelRequest,
-  ) => MaybePromise<Authorization.SetActiveModelResponse>;
-  listActiveModelResourceTypes: (
-    request: Authorization.ListActiveModelResourceTypesRequest,
-  ) => MaybePromise<Authorization.ListActiveModelResourceTypesResponse>;
+  setActiveModel: (request: Authorization.SetActiveModelRequest) => MaybePromise<Authorization.SetActiveModelResponse>;
+  listActiveModelResourceTypes: (request: Authorization.ListActiveModelResourceTypesRequest) => MaybePromise<Authorization.ListActiveModelResourceTypesResponse>;
 }
 
 export class AuthorizationProvider extends ProviderBase {
@@ -511,33 +388,23 @@ export class AuthorizationProvider extends ProviderBase {
     return Promise.resolve(this.handlers.checkAccess(request));
   }
 
-  checkAccessMany(
-    request: Authorization.CheckAccessManyRequest,
-  ): Promise<Authorization.CheckAccessManyResponse> {
+  checkAccessMany(request: Authorization.CheckAccessManyRequest): Promise<Authorization.CheckAccessManyResponse> {
     return Promise.resolve(this.handlers.checkAccessMany(request));
   }
 
-  listRelationships(
-    request: Authorization.ListRelationshipsRequest,
-  ): Promise<Authorization.ListRelationshipsResponse> {
+  listRelationships(request: Authorization.ListRelationshipsRequest): Promise<Authorization.ListRelationshipsResponse> {
     return Promise.resolve(this.handlers.listRelationships(request));
   }
 
-  addRelationship(
-    request: Authorization.AddRelationshipRequest,
-  ): Promise<Authorization.AddRelationshipResponse> {
+  addRelationship(request: Authorization.AddRelationshipRequest): Promise<Authorization.AddRelationshipResponse> {
     return Promise.resolve(this.handlers.addRelationship(request));
   }
 
-  deleteRelationship(
-    request: Authorization.DeleteRelationshipRequest,
-  ): Promise<Authorization.DeleteRelationshipResponse | void> {
+  deleteRelationship(request: Authorization.DeleteRelationshipRequest): Promise<Authorization.DeleteRelationshipResponse | void> {
     return Promise.resolve(this.handlers.deleteRelationship(request));
   }
 
-  setAuthorizationState(
-    request: Authorization.SetAuthorizationStateRequest,
-  ): Promise<Authorization.SetAuthorizationStateResponse> {
+  setAuthorizationState(request: Authorization.SetAuthorizationStateRequest): Promise<Authorization.SetAuthorizationStateResponse> {
     return Promise.resolve(this.handlers.setAuthorizationState(request));
   }
 
@@ -545,17 +412,14 @@ export class AuthorizationProvider extends ProviderBase {
     return Promise.resolve(this.handlers.getActiveModelRef());
   }
 
-  setActiveModel(
-    request: Authorization.SetActiveModelRequest,
-  ): Promise<Authorization.SetActiveModelResponse> {
+  setActiveModel(request: Authorization.SetActiveModelRequest): Promise<Authorization.SetActiveModelResponse> {
     return Promise.resolve(this.handlers.setActiveModel(request));
   }
 
-  listActiveModelResourceTypes(
-    request: Authorization.ListActiveModelResourceTypesRequest,
-  ): Promise<Authorization.ListActiveModelResourceTypesResponse> {
+  listActiveModelResourceTypes(request: Authorization.ListActiveModelResourceTypesRequest): Promise<Authorization.ListActiveModelResourceTypesResponse> {
     return Promise.resolve(this.handlers.listActiveModelResourceTypes(request));
   }
+
 }
 
 export function defineAuthorizationProvider(
@@ -587,86 +451,68 @@ export function isAuthorizationProvider(
 
 export function createAuthorizationProviderService(
   provider: AuthorizationProvider,
-): Partial<ServiceImpl<typeof AuthorizationProviderService>> {
+): Partial<ServiceImpl<typeof pb.AuthorizationProvider>> {
   return {
     async checkAccess(request) {
       try {
-        return checkAccessResponseToProto(
-          await provider.checkAccess(checkAccessRequestFromProto(request)),
-        );
+        return toProtoMessage("CheckAccessResponse", await provider.checkAccess(fromProtoMessage("CheckAccessRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("check access", error);
       }
     },
     async checkAccessMany(request) {
       try {
-        return checkAccessManyResponseToProto(
-          await provider.checkAccessMany(checkAccessManyRequestFromProto(request)),
-        );
+        return toProtoMessage("CheckAccessManyResponse", await provider.checkAccessMany(fromProtoMessage("CheckAccessManyRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("check access many", error);
       }
     },
     async listRelationships(request) {
       try {
-        return listRelationshipsResponseToProto(
-          await provider.listRelationships(listRelationshipsRequestFromProto(request)),
-        );
+        return toProtoMessage("ListRelationshipsResponse", await provider.listRelationships(fromProtoMessage("ListRelationshipsRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("list relationships", error);
       }
     },
     async addRelationship(request) {
       try {
-        return addRelationshipResponseToProto(
-          await provider.addRelationship(addRelationshipRequestFromProto(request)),
-        );
+        return toProtoMessage("AddRelationshipResponse", await provider.addRelationship(fromProtoMessage("AddRelationshipRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("add relationship", error);
       }
     },
     async deleteRelationship(request) {
       try {
-        await provider.deleteRelationship(deleteRelationshipRequestFromProto(request));
-        return create(DeleteRelationshipResponseSchema);
+        await provider.deleteRelationship(fromProtoMessage("DeleteRelationshipRequest", request));
+        return create(pb.DeleteRelationshipResponseSchema);
       } catch (error) {
         throw authorizationRuntimeError("delete relationship", error);
       }
     },
     async setAuthorizationState(request) {
       try {
-        return setAuthorizationStateResponseToProto(
-          await provider.setAuthorizationState(
-            setAuthorizationStateRequestFromProto(request),
-          ),
-        );
+        return toProtoMessage("SetAuthorizationStateResponse", await provider.setAuthorizationState(fromProtoMessage("SetAuthorizationStateRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("set authorization state", error);
       }
     },
-    async getActiveModelRef() {
+    async getActiveModelRef(request) {
       try {
-        return getActiveModelRefResponseToProto(await provider.getActiveModelRef());
+        return toProtoMessage("GetActiveModelRefResponse", await provider.getActiveModelRef());
       } catch (error) {
         throw authorizationRuntimeError("get active model ref", error);
       }
     },
     async setActiveModel(request) {
       try {
-        return setActiveModelResponseToProto(
-          await provider.setActiveModel(setActiveModelRequestFromProto(request)),
-        );
+        return toProtoMessage("SetActiveModelResponse", await provider.setActiveModel(fromProtoMessage("SetActiveModelRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("set active model", error);
       }
     },
     async listActiveModelResourceTypes(request) {
       try {
-        return listActiveModelResourceTypesResponseToProto(
-          await provider.listActiveModelResourceTypes(
-            listActiveModelResourceTypesRequestFromProto(request),
-          ),
-        );
+        return toProtoMessage("ListActiveModelResourceTypesResponse", await provider.listActiveModelResourceTypes(fromProtoMessage("ListActiveModelResourceTypesRequest", request)));
       } catch (error) {
         throw authorizationRuntimeError("list active model resource types", error);
       }
@@ -674,700 +520,322 @@ export function createAuthorizationProviderService(
   };
 }
 
-function checkAccessRequestFromProto(
-  value: ProtoCheckAccessRequest,
-): Authorization.CheckAccessRequest {
-  return {
-    subject: subjectFromProto(value.subject),
-    action: value.action
-      ? {
-          name: value.action.name,
-          ...(value.action.properties === undefined
-            ? {}
-            : { properties: jsonObjectFromStruct(value.action.properties) }),
-        }
-      : undefined,
-    resource: resourceFromProto(value.resource),
-  };
+const messageSchemas: Record<string, unknown> = {
+  Subject: pb.SubjectSchema,
+  Action: pb.ActionSchema,
+  Resource: pb.ResourceSchema,
+  CheckAccessRequest: pb.CheckAccessRequestSchema,
+  CheckAccessResponse: pb.CheckAccessResponseSchema,
+  CheckAccessManyRequest: pb.CheckAccessManyRequestSchema,
+  CheckAccessManyResponse: pb.CheckAccessManyResponseSchema,
+  ListRelationshipsRequest: pb.ListRelationshipsRequestSchema,
+  RelationshipFilter: pb.RelationshipFilterSchema,
+  ListRelationshipsResponse: pb.ListRelationshipsResponseSchema,
+  AddRelationshipRequest: pb.AddRelationshipRequestSchema,
+  AddRelationshipResponse: pb.AddRelationshipResponseSchema,
+  DeleteRelationshipRequest: pb.DeleteRelationshipRequestSchema,
+  DeleteRelationshipResponse: pb.DeleteRelationshipResponseSchema,
+  SetAuthorizationStateRequest: pb.SetAuthorizationStateRequestSchema,
+  SetAuthorizationStateResponse: pb.SetAuthorizationStateResponseSchema,
+  Relationship: pb.RelationshipSchema,
+  RelationshipTuple: pb.RelationshipTupleSchema,
+  RelationshipTarget: pb.RelationshipTargetSchema,
+  SubjectSet: pb.SubjectSetSchema,
+  AuthorizationModel: pb.AuthorizationModelSchema,
+  AuthorizationModelResourceType: pb.AuthorizationModelResourceTypeSchema,
+  ModelRelation: pb.ModelRelationSchema,
+  ModelAction: pb.ModelActionSchema,
+  ModelAllowedTarget: pb.ModelAllowedTargetSchema,
+  SubjectSetType: pb.SubjectSetTypeSchema,
+  AuthorizationModelRef: pb.AuthorizationModelRefSchema,
+  GetActiveModelRefResponse: pb.GetActiveModelRefResponseSchema,
+  SetActiveModelRequest: pb.SetActiveModelRequestSchema,
+  SetActiveModelResponse: pb.SetActiveModelResponseSchema,
+  ListActiveModelResourceTypesRequest: pb.ListActiveModelResourceTypesRequestSchema,
+  AuthorizationModelResourceTypeFilter: pb.AuthorizationModelResourceTypeFilterSchema,
+  ListActiveModelResourceTypesResponse: pb.ListActiveModelResourceTypesResponseSchema,
+};
+
+const messageFields: Record<string, readonly FieldRule[]> = {
+  Subject: [
+    { sdk: "type", proto: "type", kind: "string", defaultValue: "" },
+    { sdk: "id", proto: "id", kind: "string", defaultValue: "" },
+    { sdk: "properties", proto: "properties", kind: "struct" },
+  ],
+  Action: [
+    { sdk: "name", proto: "name", kind: "string", defaultValue: "" },
+    { sdk: "properties", proto: "properties", kind: "struct" },
+  ],
+  Resource: [
+    { sdk: "type", proto: "type", kind: "string", defaultValue: "" },
+    { sdk: "id", proto: "id", kind: "string", defaultValue: "" },
+    { sdk: "properties", proto: "properties", kind: "struct" },
+  ],
+  CheckAccessRequest: [
+    { sdk: "subject", proto: "subject", kind: "message", message: "Subject" },
+    { sdk: "action", proto: "action", kind: "message", message: "Action" },
+    { sdk: "resource", proto: "resource", kind: "message", message: "Resource" },
+  ],
+  CheckAccessResponse: [
+    { sdk: "allowed", proto: "allowed", kind: "bool", defaultValue: false },
+    { sdk: "modelId", proto: "modelId", kind: "string", defaultValue: "" },
+  ],
+  CheckAccessManyRequest: [
+    { sdk: "requests", proto: "requests", kind: "message", repeated: true, message: "CheckAccessRequest" },
+  ],
+  CheckAccessManyResponse: [
+    { sdk: "decisions", proto: "decisions", kind: "message", repeated: true, message: "CheckAccessResponse" },
+  ],
+  ListRelationshipsRequest: [
+    { sdk: "filter", proto: "filter", kind: "message", message: "RelationshipFilter" },
+    { sdk: "pageSize", proto: "pageSize", kind: "number", defaultValue: 0 },
+    { sdk: "pageToken", proto: "pageToken", kind: "string", defaultValue: "" },
+  ],
+  RelationshipFilter: [
+    { sdk: "target", proto: "target", kind: "message", message: "RelationshipTarget" },
+    { sdk: "relation", proto: "relation", kind: "string", defaultValue: "" },
+    { sdk: "resource", proto: "resource", kind: "message", message: "Resource" },
+    { sdk: "targetType", proto: "targetType", kind: "enum", defaultValue: RelationshipTargetType.UNSPECIFIED },
+    { sdk: "targetEntityType", proto: "targetEntityType", kind: "string", defaultValue: "" },
+    { sdk: "resourceType", proto: "resourceType", kind: "string", defaultValue: "" },
+    { sdk: "sourceLayer", proto: "sourceLayer", kind: "enum", defaultValue: SourceLayer.UNSPECIFIED },
+  ],
+  ListRelationshipsResponse: [
+    { sdk: "relationships", proto: "relationships", kind: "message", repeated: true, message: "Relationship" },
+    { sdk: "nextPageToken", proto: "nextPageToken", kind: "string", defaultValue: "" },
+  ],
+  AddRelationshipRequest: [
+    { sdk: "relationship", proto: "relationship", kind: "message", message: "Relationship" },
+  ],
+  AddRelationshipResponse: [
+    { sdk: "relationship", proto: "relationship", kind: "message", message: "Relationship" },
+  ],
+  DeleteRelationshipRequest: [
+    { sdk: "relationshipTuple", proto: "relationshipTuple", kind: "message", message: "RelationshipTuple" },
+  ],
+  DeleteRelationshipResponse: [
+  ],
+  SetAuthorizationStateRequest: [
+    { sdk: "model", proto: "model", kind: "message", message: "AuthorizationModel" },
+    { sdk: "relationships", proto: "relationships", kind: "message", repeated: true, message: "Relationship" },
+  ],
+  SetAuthorizationStateResponse: [
+    { sdk: "activeModel", proto: "activeModel", kind: "message", message: "AuthorizationModelRef" },
+  ],
+  Relationship: [
+    { sdk: "tuple", proto: "tuple", kind: "message", message: "RelationshipTuple" },
+    { sdk: "properties", proto: "properties", kind: "struct" },
+    { sdk: "sourceLayer", proto: "sourceLayer", kind: "enum", defaultValue: SourceLayer.UNSPECIFIED },
+  ],
+  RelationshipTuple: [
+    { sdk: "target", proto: "target", kind: "message", message: "RelationshipTarget" },
+    { sdk: "relation", proto: "relation", kind: "string", defaultValue: "" },
+    { sdk: "resource", proto: "resource", kind: "message", message: "Resource" },
+  ],
+  SubjectSet: [
+    { sdk: "resource", proto: "resource", kind: "message", message: "Resource" },
+    { sdk: "relation", proto: "relation", kind: "string", defaultValue: "" },
+  ],
+  AuthorizationModel: [
+    { sdk: "id", proto: "id", kind: "string", defaultValue: "" },
+    { sdk: "version", proto: "version", kind: "string", defaultValue: "" },
+    { sdk: "resourceTypes", proto: "resourceTypes", kind: "message", repeated: true, message: "AuthorizationModelResourceType" },
+  ],
+  AuthorizationModelResourceType: [
+    { sdk: "name", proto: "name", kind: "string", defaultValue: "" },
+    { sdk: "relations", proto: "relations", kind: "message", repeated: true, message: "ModelRelation" },
+    { sdk: "actions", proto: "actions", kind: "message", repeated: true, message: "ModelAction" },
+    { sdk: "sourceLayer", proto: "sourceLayer", kind: "enum", defaultValue: SourceLayer.UNSPECIFIED },
+    { sdk: "defaultAccessPolicy", proto: "defaultAccessPolicy", kind: "enum", defaultValue: DefaultAccessPolicy.DENY },
+  ],
+  ModelRelation: [
+    { sdk: "name", proto: "name", kind: "string", defaultValue: "" },
+    { sdk: "allowedTargets", proto: "allowedTargets", kind: "message", repeated: true, message: "ModelAllowedTarget" },
+  ],
+  ModelAction: [
+    { sdk: "name", proto: "name", kind: "string", defaultValue: "" },
+    { sdk: "relations", proto: "relations", kind: "string", repeated: true },
+  ],
+  SubjectSetType: [
+    { sdk: "resourceType", proto: "resourceType", kind: "string", defaultValue: "" },
+    { sdk: "relation", proto: "relation", kind: "string", defaultValue: "" },
+  ],
+  AuthorizationModelRef: [
+    { sdk: "id", proto: "id", kind: "string", defaultValue: "" },
+    { sdk: "version", proto: "version", kind: "string", defaultValue: "" },
+    { sdk: "createdAt", proto: "createdAt", kind: "timestamp" },
+  ],
+  GetActiveModelRefResponse: [
+    { sdk: "model", proto: "model", kind: "message", message: "AuthorizationModelRef" },
+  ],
+  SetActiveModelRequest: [
+    { sdk: "model", proto: "model", kind: "message", message: "AuthorizationModel" },
+  ],
+  SetActiveModelResponse: [
+    { sdk: "model", proto: "model", kind: "message", message: "AuthorizationModelRef" },
+  ],
+  ListActiveModelResourceTypesRequest: [
+    { sdk: "filter", proto: "filter", kind: "message", message: "AuthorizationModelResourceTypeFilter" },
+    { sdk: "pageSize", proto: "pageSize", kind: "number", defaultValue: 0 },
+    { sdk: "pageToken", proto: "pageToken", kind: "string", defaultValue: "" },
+  ],
+  AuthorizationModelResourceTypeFilter: [
+    { sdk: "name", proto: "name", kind: "string", defaultValue: "" },
+    { sdk: "sourceLayer", proto: "sourceLayer", kind: "enum", defaultValue: SourceLayer.UNSPECIFIED },
+  ],
+  ListActiveModelResourceTypesResponse: [
+    { sdk: "resourceTypes", proto: "resourceTypes", kind: "message", repeated: true, message: "AuthorizationModelResourceType" },
+    { sdk: "nextPageToken", proto: "nextPageToken", kind: "string", defaultValue: "" },
+    { sdk: "modelId", proto: "modelId", kind: "string", defaultValue: "" },
+  ],
+};
+
+const oneofRules: Record<string, OneofRule> = {
+  RelationshipTarget: {
+    proto: "kind",
+    variants: [
+      { kind: "subject", sdk: "subject", protoCase: "subject", kindType: "message", message: "Subject" },
+      { kind: "resource", sdk: "resource", protoCase: "resource", kindType: "message", message: "Resource" },
+      { kind: "subjectSet", sdk: "subjectSet", protoCase: "subjectSet", kindType: "message", message: "SubjectSet" },
+    ],
+  },
+  ModelAllowedTarget: {
+    proto: "kind",
+    variants: [
+      { kind: "subjectType", sdk: "subjectType", protoCase: "subjectType", kindType: "string" },
+      { kind: "resourceType", sdk: "resourceType", protoCase: "resourceType", kindType: "string" },
+      { kind: "subjectSetType", sdk: "subjectSetType", protoCase: "subjectSetType", kindType: "message", message: "SubjectSetType" },
+    ],
+  },
+};
+
+interface FieldRule {
+  sdk: string;
+  proto: string;
+  kind: "string" | "bool" | "number" | "enum" | "message" | "struct" | "timestamp";
+  repeated?: boolean;
+  message?: string;
+  defaultValue?: unknown;
 }
 
-function checkAccessRequestToProto(value: Authorization.CheckAccessRequest) {
-  return create(CheckAccessRequestSchema, {
-    subject: subjectToProto(value.subject),
-    action: value.action
-      ? create(ActionSchema, {
-          name: value.action.name ?? "",
-          properties: value.action.properties === undefined
-            ? undefined
-            : structFromObject(value.action.properties),
-        })
-      : undefined,
-    resource: resourceToProto(value.resource),
-  });
+interface OneofVariant {
+  kind: string;
+  sdk: string;
+  protoCase: string;
+  kindType: FieldRule["kind"];
+  message?: string;
 }
 
-function checkAccessResponseFromProto(
-  value: ProtoCheckAccessResponse,
-): Authorization.CheckAccessResponse {
-  return {
-    allowed: value.allowed,
-    modelId: value.modelId,
-  };
+interface OneofRule {
+  proto: string;
+  variants: readonly OneofVariant[];
 }
 
-function checkAccessResponseToProto(value: Authorization.CheckAccessResponse | undefined) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(CheckAccessResponseSchema, {
-    allowed: value.allowed ?? false,
-    modelId: value.modelId ?? "",
-  });
-}
-
-function checkAccessManyRequestFromProto(
-  value: ProtoCheckAccessManyRequest,
-): Authorization.CheckAccessManyRequest {
-  return {
-    requests: value.requests.map(checkAccessRequestFromProto),
-  };
-}
-
-function checkAccessManyRequestToProto(value: Authorization.CheckAccessManyRequest) {
-  return create(CheckAccessManyRequestSchema, {
-    requests: (value.requests ?? []).map(checkAccessRequestToProto),
-  });
-}
-
-function checkAccessManyResponseFromProto(
-  value: ProtoCheckAccessManyResponse,
-): Authorization.CheckAccessManyResponse {
-  return {
-    decisions: value.decisions.map(checkAccessResponseFromProto),
-  };
-}
-
-function checkAccessManyResponseToProto(
-  value: Authorization.CheckAccessManyResponse | undefined,
-) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(CheckAccessManyResponseSchema, {
-    decisions: (value.decisions ?? []).map(checkAccessResponseToProto),
-  });
-}
-
-function listRelationshipsRequestFromProto(
-  value: ProtoListRelationshipsRequest,
-): Authorization.ListRelationshipsRequest {
-  return {
-    filter: relationshipFilterFromProto(value.filter),
-    pageSize: value.pageSize,
-    pageToken: value.pageToken,
-  };
-}
-
-function listRelationshipsRequestToProto(
-  value: Authorization.ListRelationshipsRequest,
-) {
-  return create(ListRelationshipsRequestSchema, {
-    filter: relationshipFilterToProto(value.filter),
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  });
-}
-
-function listRelationshipsResponseFromProto(
-  value: ProtoListRelationshipsResponse,
-): Authorization.ListRelationshipsResponse {
-  return {
-    relationships: value.relationships.map(relationshipFromProtoRequired),
-    nextPageToken: value.nextPageToken,
-  };
-}
-
-function listRelationshipsResponseToProto(
-  value: Authorization.ListRelationshipsResponse | undefined,
-) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(ListRelationshipsResponseSchema, {
-    relationships: (value.relationships ?? []).map(relationshipToProtoRequired),
-    nextPageToken: value.nextPageToken ?? "",
-  });
-}
-
-function addRelationshipRequestFromProto(
-  value: ProtoAddRelationshipRequest,
-): Authorization.AddRelationshipRequest {
-  return {
-    relationship: relationshipFromProto(value.relationship),
-  };
-}
-
-function addRelationshipRequestToProto(value: Authorization.AddRelationshipRequest) {
-  return create(AddRelationshipRequestSchema, {
-    relationship: relationshipToProto(value.relationship),
-  });
-}
-
-function addRelationshipResponseFromProto(
-  value: ProtoAddRelationshipResponse,
-): Authorization.AddRelationshipResponse {
-  return {
-    relationship: relationshipFromProto(value.relationship),
-  };
-}
-
-function addRelationshipResponseToProto(
-  value: Authorization.AddRelationshipResponse | undefined,
-) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(AddRelationshipResponseSchema, {
-    relationship: value.relationship
-      ? relationshipToProto(value.relationship)
-      : undefined,
-  });
-}
-
-function deleteRelationshipRequestFromProto(
-  value: ProtoDeleteRelationshipRequest,
-): Authorization.DeleteRelationshipRequest {
-  return {
-    relationshipTuple: relationshipTupleFromProto(value.relationshipTuple),
-  };
-}
-
-function deleteRelationshipRequestToProto(value: Authorization.DeleteRelationshipRequest) {
-  return create(DeleteRelationshipRequestSchema, {
-    relationshipTuple: relationshipTupleToProto(value.relationshipTuple),
-  });
-}
-
-function deleteRelationshipResponseFromProto(
-  _value: ProtoDeleteRelationshipResponse,
-): Authorization.DeleteRelationshipResponse {
-  return {};
-}
-
-function setAuthorizationStateRequestFromProto(
-  value: ProtoSetAuthorizationStateRequest,
-): Authorization.SetAuthorizationStateRequest {
-  return {
-    model: authorizationModelFromProto(value.model),
-    relationships: value.relationships.map(relationshipFromProtoRequired),
-  };
-}
-
-function setAuthorizationStateRequestToProto(
-  value: Authorization.SetAuthorizationStateRequest,
-) {
-  return create(SetAuthorizationStateRequestSchema, {
-    model: authorizationModelToProto(value.model),
-    relationships: (value.relationships ?? []).map(relationshipToProtoRequired),
-  });
-}
-
-function setAuthorizationStateResponseFromProto(
-  value: ProtoSetAuthorizationStateResponse,
-): Authorization.SetAuthorizationStateResponse {
-  return {
-    activeModel: authorizationModelRefFromProto(value.activeModel),
-  };
-}
-
-function setAuthorizationStateResponseToProto(
-  value: Authorization.SetAuthorizationStateResponse | undefined,
-) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(SetAuthorizationStateResponseSchema, {
-    activeModel: value.activeModel
-      ? authorizationModelRefToProto(value.activeModel)
-      : undefined,
-  });
-}
-
-function getActiveModelRefResponseFromProto(
-  value: ProtoGetActiveModelRefResponse,
-): Authorization.GetActiveModelRefResponse {
-  return {
-    model: authorizationModelRefFromProto(value.model),
-  };
-}
-
-function getActiveModelRefResponseToProto(
-  value: Authorization.GetActiveModelRefResponse | undefined,
-) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(GetActiveModelRefResponseSchema, {
-    model: value.model ? authorizationModelRefToProto(value.model) : undefined,
-  });
-}
-
-function setActiveModelRequestFromProto(
-  value: ProtoSetActiveModelRequest,
-): Authorization.SetActiveModelRequest {
-  return {
-    model: authorizationModelFromProto(value.model),
-  };
-}
-
-function setActiveModelRequestToProto(value: Authorization.SetActiveModelRequest) {
-  return create(SetActiveModelRequestSchema, {
-    model: authorizationModelToProto(value.model),
-  });
-}
-
-function setActiveModelResponseFromProto(
-  value: ProtoSetActiveModelResponse,
-): Authorization.SetActiveModelResponse {
-  return {
-    model: authorizationModelRefFromProto(value.model),
-  };
-}
-
-function setActiveModelResponseToProto(value: Authorization.SetActiveModelResponse | undefined) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(SetActiveModelResponseSchema, {
-    model: value.model ? authorizationModelRefToProto(value.model) : undefined,
-  });
-}
-
-function listActiveModelResourceTypesRequestFromProto(
-  value: ProtoListActiveModelResourceTypesRequest,
-): Authorization.ListActiveModelResourceTypesRequest {
-  return {
-    filter: value.filter
-      ? {
-          name: value.filter.name,
-          sourceLayer: value.filter.sourceLayer,
-        }
-      : undefined,
-    pageSize: value.pageSize,
-    pageToken: value.pageToken,
-  };
-}
-
-function listActiveModelResourceTypesRequestToProto(
-  value: Authorization.ListActiveModelResourceTypesRequest,
-) {
-  return create(ListActiveModelResourceTypesRequestSchema, {
-    filter: value.filter
-      ? create(AuthorizationModelResourceTypeFilterSchema, {
-          name: value.filter.name ?? "",
-          sourceLayer: value.filter.sourceLayer ?? SourceLayer.UNSPECIFIED,
-        })
-      : undefined,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  });
-}
-
-function listActiveModelResourceTypesResponseFromProto(
-  value: ProtoListActiveModelResourceTypesResponse,
-): Authorization.ListActiveModelResourceTypesResponse {
-  return {
-    resourceTypes: value.resourceTypes.map(authorizationModelResourceTypeFromProto),
-    nextPageToken: value.nextPageToken,
-    modelId: value.modelId,
-  };
-}
-
-function listActiveModelResourceTypesResponseToProto(
-  value: Authorization.ListActiveModelResourceTypesResponse | undefined,
-) {
-  if (!value) {
-    throw new ConnectError(
-      "authorization provider returned nil response",
-      Code.Internal,
-    );
-  }
-  return create(ListActiveModelResourceTypesResponseSchema, {
-    resourceTypes: (value.resourceTypes ?? []).map(
-      authorizationModelResourceTypeToProto,
-    ),
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  });
-}
-
-function subjectFromProto(
-  value: ProtoCheckAccessRequest["subject"],
-): Authorization.SubjectInput | undefined {
-  if (!value) {
+function fromProtoMessage(message: string, value: unknown): any {
+  if (value === undefined || value === null) {
     return undefined;
   }
-  return {
-    type: value.type,
-    id: value.id,
-    ...(value.properties === undefined
-      ? {}
-      : { properties: jsonObjectFromStruct(value.properties) }),
-  };
+  const oneof = oneofRules[message];
+  if (oneof) {
+    const selected = (value as any)[oneof.proto];
+    const variant = oneof.variants.find((item) => item.protoCase === selected?.case);
+    if (!variant) {
+      return { kind: "unset" };
+    }
+    return {
+      kind: variant.kind,
+      [variant.sdk]: fromProtoValue(fieldRuleForVariant(variant), selected.value),
+    };
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const field of messageFields[message] ?? []) {
+    const raw = (value as any)[field.proto];
+    if (field.repeated) {
+      out[field.sdk] = Array.isArray(raw)
+        ? raw.map((item) => fromProtoValue(field, item))
+        : [];
+      continue;
+    }
+    const converted = fromProtoValue(field, raw);
+    if (converted !== undefined || field.kind !== "message") {
+      out[field.sdk] = converted;
+    }
+  }
+  return out;
 }
 
-function subjectToProto(value: Authorization.SubjectInput | undefined) {
-  if (!value) {
+function toProtoMessage(message: string, value: unknown): any {
+  if (value === undefined || value === null) {
     return undefined;
   }
-  return create(SubjectSchema, {
-    type: value.type ?? "",
-    id: value.id ?? "",
-    properties: value.properties === undefined
-      ? undefined
-      : structFromObject(value.properties),
-  });
-}
-
-function resourceFromProto(
-  value: ProtoRelationshipFilter["resource"],
-): Authorization.ResourceInput | undefined {
-  if (!value) {
-    return undefined;
+  const schema = messageSchemas[message];
+  const oneof = oneofRules[message];
+  if (oneof) {
+    const selected = (value as any).kind;
+    const variant = oneof.variants.find((item) => item.kind === selected);
+    if (!variant) {
+      return create(schema as never);
+    }
+    return create(schema as never, {
+      [oneof.proto]: {
+        case: variant.protoCase,
+        value: toProtoValue(fieldRuleForVariant(variant), (value as any)[variant.sdk]),
+      },
+    } as never);
   }
-  return {
-    type: value.type,
-    id: value.id,
-    ...(value.properties === undefined
-      ? {}
-      : { properties: jsonObjectFromStruct(value.properties) }),
-  };
-}
 
-function resourceToProto(value: Authorization.ResourceInput | undefined) {
-  if (!value) {
-    return undefined;
+  const out: Record<string, unknown> = {};
+  for (const field of messageFields[message] ?? []) {
+    const raw = (value as any)[field.sdk];
+    if (field.repeated) {
+      out[field.proto] = (raw ?? []).map((item: unknown) => toProtoValue(field, item));
+      continue;
+    }
+    out[field.proto] = raw === undefined
+      ? field.defaultValue
+      : toProtoValue(field, raw);
   }
-  return create(ResourceSchema, {
-    type: value.type ?? "",
-    id: value.id ?? "",
-    properties: value.properties === undefined
-      ? undefined
-      : structFromObject(value.properties),
-  });
+  return create(schema as never, out as never);
 }
 
-function relationshipFilterFromProto(
-  value: ProtoRelationshipFilter | undefined,
-): Authorization.RelationshipFilter | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    target: relationshipTargetFromProto(value.target),
-    relation: value.relation,
-    resource: resourceFromProto(value.resource),
-    targetType: value.targetType,
-    targetEntityType: value.targetEntityType,
-    resourceType: value.resourceType,
-    sourceLayer: value.sourceLayer,
-  };
+function fieldRuleForVariant(
+  variant: OneofVariant,
+): Pick<FieldRule, "kind" | "message"> {
+  return variant.message === undefined
+    ? { kind: variant.kindType }
+    : { kind: variant.kindType, message: variant.message };
 }
 
-function relationshipFilterToProto(value: Authorization.RelationshipFilter | undefined) {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    target: relationshipTargetToProto(value.target),
-    relation: value.relation ?? "",
-    resource: resourceToProto(value.resource),
-    targetType: value.targetType ?? RelationshipTargetType.UNSPECIFIED,
-    targetEntityType: value.targetEntityType ?? "",
-    resourceType: value.resourceType ?? "",
-    sourceLayer: value.sourceLayer ?? SourceLayer.UNSPECIFIED,
-  };
-}
-
-function relationshipFromProto(
-  value: ProtoRelationship | undefined,
-): Authorization.Relationship | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    tuple: relationshipTupleFromProto(value.tuple),
-    ...(value.properties === undefined
-      ? {}
-      : { properties: jsonObjectFromStruct(value.properties) }),
-    sourceLayer: value.sourceLayer,
-  };
-}
-
-function relationshipFromProtoRequired(value: ProtoRelationship): Authorization.Relationship {
-  return relationshipFromProto(value)!;
-}
-
-function relationshipToProto(value: Authorization.Relationship | undefined) {
-  if (!value) {
-    return undefined;
-  }
-  return create(RelationshipSchema, {
-    tuple: relationshipTupleToProto(value.tuple),
-    properties: value.properties === undefined
-      ? undefined
-      : structFromObject(value.properties),
-    sourceLayer: value.sourceLayer ?? SourceLayer.UNSPECIFIED,
-  });
-}
-
-function relationshipToProtoRequired(value: Authorization.Relationship) {
-  return relationshipToProto(value)!;
-}
-
-function relationshipTupleFromProto(
-  value: ProtoRelationshipTuple | undefined,
-): Authorization.RelationshipTuple | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    target: relationshipTargetFromProto(value.target),
-    relation: value.relation,
-    resource: resourceFromProto(value.resource),
-  };
-}
-
-function relationshipTupleToProto(value: Authorization.RelationshipTuple | undefined) {
-  if (!value) {
-    return undefined;
-  }
-  return create(RelationshipTupleSchema, {
-    target: relationshipTargetToProto(value.target),
-    relation: value.relation ?? "",
-    resource: resourceToProto(value.resource),
-  });
-}
-
-function relationshipTargetFromProto(
-  value: ProtoRelationshipTarget | undefined,
-): Authorization.RelationshipTarget | undefined {
-  if (!value) {
-    return undefined;
-  }
-  switch (value.kind.case) {
-    case "subject":
-      return Authorization.RelationshipTarget.subject(
-        subjectFromProto(value.kind.value) ?? {},
-      );
-    case "resource":
-      return Authorization.RelationshipTarget.resource(
-        resourceFromProto(value.kind.value) ?? {},
-      );
-    case "subjectSet":
-      return Authorization.RelationshipTarget.subjectSet(
-        subjectSetFromProto(value.kind.value) ?? {},
-      );
+function fromProtoValue(field: Pick<FieldRule, "kind" | "message">, raw: unknown): unknown {
+  switch (field.kind) {
+    case "message":
+      return fromProtoMessage(field.message ?? "", raw);
+    case "struct":
+      return raw === undefined ? undefined : jsonObjectFromStruct(raw as never);
+    case "timestamp":
+      return raw === undefined ? undefined : dateFromTimestamp(raw as never);
     default:
-      return Authorization.RelationshipTarget.unset();
+      return raw;
   }
 }
 
-function relationshipTargetToProto(value: Authorization.RelationshipTarget | undefined) {
-  if (!value) {
-    return undefined;
-  }
-  switch (value.kind) {
-    case "subject":
-      return create(RelationshipTargetSchema, {
-        kind: { case: "subject", value: subjectToProto(value.subject)! },
-      });
-    case "resource":
-      return create(RelationshipTargetSchema, {
-        kind: { case: "resource", value: resourceToProto(value.resource)! },
-      });
-    case "subjectSet":
-      return create(RelationshipTargetSchema, {
-        kind: { case: "subjectSet", value: subjectSetToProto(value.subjectSet) },
-      });
-    case "unset":
-      return create(RelationshipTargetSchema);
-  }
-}
-
-function subjectSetFromProto(value: ProtoSubjectSet | undefined): Authorization.SubjectSet | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    resource: resourceFromProto(value.resource),
-    relation: value.relation,
-  };
-}
-
-function subjectSetToProto(value: Authorization.SubjectSet) {
-  return create(SubjectSetSchema, {
-    resource: resourceToProto(value.resource),
-    relation: value.relation ?? "",
-  });
-}
-
-function authorizationModelFromProto(
-  value: ProtoAuthorizationModel | undefined,
-): Authorization.Model | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    id: value.id,
-    version: value.version,
-    resourceTypes: value.resourceTypes.map(authorizationModelResourceTypeFromProto),
-  };
-}
-
-function authorizationModelToProto(value: Authorization.Model | undefined) {
-  if (!value) {
-    return undefined;
-  }
-  return create(AuthorizationModelSchema, {
-    id: value.id ?? "",
-    version: value.version ?? "",
-    resourceTypes: (value.resourceTypes ?? []).map(
-      authorizationModelResourceTypeToProto,
-    ),
-  });
-}
-
-function authorizationModelResourceTypeFromProto(
-  value: ProtoAuthorizationModelResourceType,
-): Authorization.ModelResourceType {
-  return {
-    name: value.name,
-    relations: value.relations.map((relation) => ({
-      name: relation.name,
-      allowedTargets: relation.allowedTargets.map(modelAllowedTargetFromProto),
-    })),
-    actions: value.actions.map((action) => ({
-      name: action.name,
-      relations: [...action.relations],
-    })),
-    sourceLayer: value.sourceLayer,
-    defaultAccessPolicy: value.defaultAccessPolicy,
-  };
-}
-
-function authorizationModelResourceTypeToProto(
-  value: Authorization.ModelResourceType,
-) {
-  return create(AuthorizationModelResourceTypeSchema, {
-    name: value.name ?? "",
-    relations: (value.relations ?? []).map((relation) =>
-      create(ModelRelationSchema, {
-        name: relation.name ?? "",
-        allowedTargets: (relation.allowedTargets ?? []).map(
-          modelAllowedTargetToProto,
-        ),
-      })
-    ),
-    actions: (value.actions ?? []).map((action) =>
-      create(ModelActionSchema, {
-        name: action.name ?? "",
-        relations: [...(action.relations ?? [])],
-      })
-    ),
-    sourceLayer: value.sourceLayer ?? SourceLayer.UNSPECIFIED,
-    defaultAccessPolicy: value.defaultAccessPolicy ?? DefaultAccessPolicy.DENY,
-  });
-}
-
-function modelAllowedTargetFromProto(
-  value: ProtoModelAllowedTarget,
-): Authorization.ModelAllowedTarget {
-  switch (value.kind.case) {
-    case "subjectType":
-      return Authorization.ModelAllowedTarget.subjectType(value.kind.value);
-    case "resourceType":
-      return Authorization.ModelAllowedTarget.resourceType(value.kind.value);
-    case "subjectSetType":
-      return Authorization.ModelAllowedTarget.subjectSetType({
-          resourceType: value.kind.value.resourceType,
-          relation: value.kind.value.relation,
-        });
+function toProtoValue(field: Pick<FieldRule, "kind" | "message">, raw: unknown): unknown {
+  switch (field.kind) {
+    case "message":
+      return toProtoMessage(field.message ?? "", raw);
+    case "struct":
+      return raw === undefined ? undefined : structFromObject(raw as JsonObjectInput);
+    case "timestamp":
+      return raw === undefined ? undefined : timestampFromDate(raw as Date);
     default:
-      return Authorization.ModelAllowedTarget.unset();
+      return raw;
   }
-}
-
-function modelAllowedTargetToProto(value: Authorization.ModelAllowedTarget) {
-  switch (value.kind) {
-    case "subjectType":
-      return create(ModelAllowedTargetSchema, {
-        kind: { case: "subjectType", value: value.subjectType },
-      });
-    case "resourceType":
-      return create(ModelAllowedTargetSchema, {
-        kind: { case: "resourceType", value: value.resourceType },
-      });
-    case "subjectSetType":
-      return create(ModelAllowedTargetSchema, {
-        kind: {
-          case: "subjectSetType",
-          value: create(SubjectSetTypeSchema, {
-            resourceType: value.subjectSetType.resourceType ?? "",
-            relation: value.subjectSetType.relation ?? "",
-          }),
-        },
-      });
-    case "unset":
-      return create(ModelAllowedTargetSchema);
-  }
-}
-
-function authorizationModelRefFromProto(
-  value: ProtoGetActiveModelRefResponse["model"] | undefined,
-): Authorization.ModelRef | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return {
-    id: value.id,
-    version: value.version,
-    createdAt: value.createdAt ? dateFromTimestamp(value.createdAt) : undefined,
-  };
-}
-
-function authorizationModelRefToProto(value: Authorization.ModelRef) {
-  return create(AuthorizationModelRefSchema, {
-    id: value.id ?? "",
-    version: value.version ?? "",
-    createdAt: value.createdAt ? timestampFromDate(value.createdAt) : undefined,
-  });
 }
 
 function authorizationRuntimeError(label: string, error: unknown): ConnectError {
   if (error instanceof ConnectError) {
     return error;
   }
-  return new ConnectError(`${label}: ${errorMessage(error)}`, Code.Unknown);
+  return new ConnectError(label + ": " + errorMessage(error), Code.Unknown);
 }
