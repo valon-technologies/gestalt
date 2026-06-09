@@ -754,7 +754,7 @@ func externalCredentialHostServiceMissing(err error) bool {
 	if status.Code(err) != codes.Unimplemented {
 		return false
 	}
-	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentialProvider")
+	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentials")
 }
 `
 }

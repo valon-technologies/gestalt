@@ -106,7 +106,7 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 
 	conn := newUnixConn(t, socket)
 	runtimeClient := proto.NewProviderLifecycleClient(conn)
-	authClient := proto.NewAuthenticationProviderClient(conn)
+	authClient := proto.NewAuthenticationClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()

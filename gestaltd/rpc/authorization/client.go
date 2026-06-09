@@ -11,7 +11,7 @@ import (
 var _ core.AuthorizationProvider = (*Client)(nil)
 
 type Client struct {
-	grpc proto.AuthorizationProviderClient
+	grpc proto.AuthorizationClient
 	opts Options
 }
 

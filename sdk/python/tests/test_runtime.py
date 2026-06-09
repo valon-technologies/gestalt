@@ -1213,7 +1213,7 @@ class RuntimeRuntimeTests(unittest.TestCase):
         server = mock.Mock()
         with mock.patch.object(
             runtime_provider_pb2_grpc,
-            "add_RuntimeProviderServicer_to_server",
+            "add_RuntimeServicer_to_server",
         ) as add_runtime:
             adapter.register_services(server, provider)
         add_runtime.assert_called_once()
@@ -1235,7 +1235,7 @@ class RuntimeRuntimeTests(unittest.TestCase):
         server = mock.Mock()
         with mock.patch.object(
             runtime_provider_pb2_grpc,
-            "add_RuntimeProviderServicer_to_server",
+            "add_RuntimeServicer_to_server",
         ) as add_runtime:
             _runtime._register_runtime_provider_services(server, provider)
 
@@ -1303,7 +1303,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         server = mock.Mock()
         with mock.patch.object(
             workflow_pb2_grpc,
-            "add_WorkflowProviderServicer_to_server",
+            "add_WorkflowServicer_to_server",
         ) as add_workflow:
             adapter.register_services(server, provider)
         add_workflow.assert_called_once()

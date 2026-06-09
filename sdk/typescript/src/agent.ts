@@ -10,7 +10,7 @@ import {
 
 import {
   AgentInteractionSchema,
-  AgentProvider as AgentProviderService,
+  Agent as AgentProviderService,
   AgentProviderCapabilitiesSchema,
   AgentSessionSchema,
   AgentToolConfigSchema,

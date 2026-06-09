@@ -4,7 +4,7 @@ import {
 } from "@connectrpc/connect";
 
 import {
-  WorkflowProvider as WorkflowProviderService,
+  Workflow as WorkflowProviderService,
 } from "./internal/gen/v1/workflow_pb.ts";
 import {
   createHostServiceGrpcTransport,

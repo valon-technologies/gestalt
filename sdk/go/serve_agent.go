@@ -11,12 +11,12 @@ import (
 func ServeAgentProvider(ctx context.Context, provider AgentProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAgent, provider))
-		proto.RegisterAgentProviderServer(srv, agentProviderServer{provider: provider})
+		proto.RegisterAgentServer(srv, agentProviderServer{provider: provider})
 	})
 }
 
 type agentProviderServer struct {
-	proto.UnimplementedAgentProviderServer
+	proto.UnimplementedAgentServer
 	provider AgentProvider
 }
 

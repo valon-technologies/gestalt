@@ -19,107 +19,107 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TestProvider_HelloWorld_FullMethodName = "/gestalt.provider.v1.TestProvider/HelloWorld"
+	Test_HelloWorld_FullMethodName = "/gestalt.provider.v1.Test/HelloWorld"
 )
 
-// TestProviderClient is the client API for TestProvider service.
+// TestClient is the client API for Test service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// TestProvider models a minimal provider-kind-specific protocol used to verify
-// new provider kind registration and lifecycle wiring.
-type TestProviderClient interface {
+// Test models a minimal provider-kind-specific protocol used to verify new
+// provider kind registration and lifecycle wiring.
+type TestClient interface {
 	HelloWorld(ctx context.Context, in *HelloWorldRequest, opts ...grpc.CallOption) (*HelloWorldResponse, error)
 }
 
-type testProviderClient struct {
+type testClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewTestProviderClient(cc grpc.ClientConnInterface) TestProviderClient {
-	return &testProviderClient{cc}
+func NewTestClient(cc grpc.ClientConnInterface) TestClient {
+	return &testClient{cc}
 }
 
-func (c *testProviderClient) HelloWorld(ctx context.Context, in *HelloWorldRequest, opts ...grpc.CallOption) (*HelloWorldResponse, error) {
+func (c *testClient) HelloWorld(ctx context.Context, in *HelloWorldRequest, opts ...grpc.CallOption) (*HelloWorldResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HelloWorldResponse)
-	err := c.cc.Invoke(ctx, TestProvider_HelloWorld_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Test_HelloWorld_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// TestProviderServer is the server API for TestProvider service.
-// All implementations must embed UnimplementedTestProviderServer
+// TestServer is the server API for Test service.
+// All implementations must embed UnimplementedTestServer
 // for forward compatibility.
 //
-// TestProvider models a minimal provider-kind-specific protocol used to verify
-// new provider kind registration and lifecycle wiring.
-type TestProviderServer interface {
+// Test models a minimal provider-kind-specific protocol used to verify new
+// provider kind registration and lifecycle wiring.
+type TestServer interface {
 	HelloWorld(context.Context, *HelloWorldRequest) (*HelloWorldResponse, error)
-	mustEmbedUnimplementedTestProviderServer()
+	mustEmbedUnimplementedTestServer()
 }
 
-// UnimplementedTestProviderServer must be embedded to have
+// UnimplementedTestServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedTestProviderServer struct{}
+type UnimplementedTestServer struct{}
 
-func (UnimplementedTestProviderServer) HelloWorld(context.Context, *HelloWorldRequest) (*HelloWorldResponse, error) {
+func (UnimplementedTestServer) HelloWorld(context.Context, *HelloWorldRequest) (*HelloWorldResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HelloWorld not implemented")
 }
-func (UnimplementedTestProviderServer) mustEmbedUnimplementedTestProviderServer() {}
-func (UnimplementedTestProviderServer) testEmbeddedByValue()                      {}
+func (UnimplementedTestServer) mustEmbedUnimplementedTestServer() {}
+func (UnimplementedTestServer) testEmbeddedByValue()              {}
 
-// UnsafeTestProviderServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to TestProviderServer will
+// UnsafeTestServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to TestServer will
 // result in compilation errors.
-type UnsafeTestProviderServer interface {
-	mustEmbedUnimplementedTestProviderServer()
+type UnsafeTestServer interface {
+	mustEmbedUnimplementedTestServer()
 }
 
-func RegisterTestProviderServer(s grpc.ServiceRegistrar, srv TestProviderServer) {
-	// If the following call panics, it indicates UnimplementedTestProviderServer was
+func RegisterTestServer(s grpc.ServiceRegistrar, srv TestServer) {
+	// If the following call panics, it indicates UnimplementedTestServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&TestProvider_ServiceDesc, srv)
+	s.RegisterService(&Test_ServiceDesc, srv)
 }
 
-func _TestProvider_HelloWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Test_HelloWorld_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HelloWorldRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TestProviderServer).HelloWorld(ctx, in)
+		return srv.(TestServer).HelloWorld(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: TestProvider_HelloWorld_FullMethodName,
+		FullMethod: Test_HelloWorld_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TestProviderServer).HelloWorld(ctx, req.(*HelloWorldRequest))
+		return srv.(TestServer).HelloWorld(ctx, req.(*HelloWorldRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// TestProvider_ServiceDesc is the grpc.ServiceDesc for TestProvider service.
+// Test_ServiceDesc is the grpc.ServiceDesc for Test service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var TestProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.provider.v1.TestProvider",
-	HandlerType: (*TestProviderServer)(nil),
+var Test_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.Test",
+	HandlerType: (*TestServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "HelloWorld",
-			Handler:    _TestProvider_HelloWorld_Handler,
+			Handler:    _Test_HelloWorld_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -22,23 +22,23 @@ use crate::env::{
 };
 use crate::error::{Error, Result};
 #[cfg(unix)]
-use crate::generated::v1::agent_provider_server::AgentProviderServer as AgentRpcServer;
+use crate::generated::v1::agent_server::AgentServer as AgentRpcServer;
 #[cfg(unix)]
 use crate::generated::v1::app_provider_server::AppProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::authentication_provider_server::AuthenticationProviderServer;
+use crate::generated::v1::authentication_server::AuthenticationServer as AuthenticationRpcServer;
 #[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
-use crate::generated::v1::runtime_provider_server::RuntimeProviderServer;
+use crate::generated::v1::runtime_server::RuntimeServer as RuntimeProviderRpcServiceServer;
 #[cfg(unix)]
 use crate::generated::v1::s3_server::S3Server;
 #[cfg(unix)]
-use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
+use crate::generated::v1::secrets_server::SecretsServer as SecretsRpcServer;
 #[cfg(unix)]
-use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
+use crate::generated::v1::workflow_server::WorkflowServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
     AgentProvider, AuthenticationProvider, CacheProvider, Provider, Router, RuntimeProvider,
@@ -164,7 +164,7 @@ where
                 .add_service(ProviderLifecycleServer::new(
                     RuntimeServer::for_authentication(Arc::clone(&provider)),
                 ))
-                .add_service(AuthenticationProviderServer::new(auth_server))
+                .add_service(AuthenticationRpcServer::new(auth_server))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },
@@ -216,7 +216,7 @@ where
                 .add_service(ProviderLifecycleServer::new(RuntimeServer::for_secrets(
                     Arc::clone(&provider),
                 )))
-                .add_service(SecretsProviderServer::new(SecretsServer::new(Arc::clone(
+                .add_service(SecretsRpcServer::new(SecretsServer::new(Arc::clone(
                     &provider,
                 ))))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
@@ -260,9 +260,9 @@ where
                 .add_service(ProviderLifecycleServer::new(
                     RuntimeServer::for_runtime_provider(Arc::clone(&provider)),
                 ))
-                .add_service(RuntimeProviderServer::new(RuntimeProviderRpcServer::new(
-                    Arc::clone(&provider),
-                )))
+                .add_service(RuntimeProviderRpcServiceServer::new(
+                    RuntimeProviderRpcServer::new(Arc::clone(&provider)),
+                ))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },

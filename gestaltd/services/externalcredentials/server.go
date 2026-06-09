@@ -13,11 +13,11 @@ import (
 )
 
 type externalCredentialProviderServer struct {
-	proto.UnimplementedExternalCredentialProviderServer
+	proto.UnimplementedExternalCredentialsServer
 	provider core.ExternalCredentialProvider
 }
 
-func NewProviderServer(provider core.ExternalCredentialProvider) proto.ExternalCredentialProviderServer {
+func NewProviderServer(provider core.ExternalCredentialProvider) proto.ExternalCredentialsServer {
 	return &externalCredentialProviderServer{provider: provider}
 }
 

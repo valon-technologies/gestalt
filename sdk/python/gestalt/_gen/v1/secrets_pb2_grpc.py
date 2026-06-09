@@ -25,8 +25,8 @@ if _version_not_supported:
     )
 
 
-class SecretsProviderStub(object):
-    """SecretsProvider models the shared Gestalt secrets-provider protocol.
+class SecretsStub(object):
+    """Secrets models the shared Gestalt secrets protocol.
     """
 
     def __init__(self, channel):
@@ -36,14 +36,14 @@ class SecretsProviderStub(object):
             channel: A grpc.Channel.
         """
         self.GetSecret = channel.unary_unary(
-                '/gestalt.provider.v1.SecretsProvider/GetSecret',
+                '/gestalt.provider.v1.Secrets/GetSecret',
                 request_serializer=v1_dot_secrets__pb2.GetSecretRequest.SerializeToString,
                 response_deserializer=v1_dot_secrets__pb2.GetSecretResponse.FromString,
                 _registered_method=True)
 
 
-class SecretsProviderServicer(object):
-    """SecretsProvider models the shared Gestalt secrets-provider protocol.
+class SecretsServicer(object):
+    """Secrets models the shared Gestalt secrets protocol.
     """
 
     def GetSecret(self, request, context):
@@ -53,7 +53,7 @@ class SecretsProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_SecretsProviderServicer_to_server(servicer, server):
+def add_SecretsServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetSecret': grpc.unary_unary_rpc_method_handler(
                     servicer.GetSecret,
@@ -62,14 +62,14 @@ def add_SecretsProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.SecretsProvider', rpc_method_handlers)
+            'gestalt.provider.v1.Secrets', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.SecretsProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Secrets', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class SecretsProvider(object):
-    """SecretsProvider models the shared Gestalt secrets-provider protocol.
+class Secrets(object):
+    """Secrets models the shared Gestalt secrets protocol.
     """
 
     @staticmethod
@@ -86,7 +86,7 @@ class SecretsProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.SecretsProvider/GetSecret',
+            '/gestalt.provider.v1.Secrets/GetSecret',
             v1_dot_secrets__pb2.GetSecretRequest.SerializeToString,
             v1_dot_secrets__pb2.GetSecretResponse.FromString,
             options,

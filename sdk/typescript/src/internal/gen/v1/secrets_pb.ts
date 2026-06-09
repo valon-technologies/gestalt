@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/secrets.proto.
  */
 export const file_v1_secrets: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIiChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCTJtCg9TZWNyZXRzUHJvdmlkZXISWgoJR2V0U2VjcmV0EiUuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXNwb25zZWIGcHJvdG8z");
+  fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIiChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCTJlCgdTZWNyZXRzEloKCUdldFNlY3JldBIlLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2VjcmV0UmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2VjcmV0UmVzcG9uc2ViBnByb3RvMw");
 
 /**
  * GetSecretRequest looks up one named secret.
@@ -51,13 +51,13 @@ export const GetSecretResponseSchema: GenMessage<GetSecretResponse> = /*@__PURE_
   messageDesc(file_v1_secrets, 1);
 
 /**
- * SecretsProvider models the shared Gestalt secrets-provider protocol.
+ * Secrets models the shared Gestalt secrets protocol.
  *
- * @generated from service gestalt.provider.v1.SecretsProvider
+ * @generated from service gestalt.provider.v1.Secrets
  */
-export const SecretsProvider: GenService<{
+export const Secrets: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.SecretsProvider.GetSecret
+   * @generated from rpc gestalt.provider.v1.Secrets.GetSecret
    */
   getSecret: {
     methodKind: "unary";

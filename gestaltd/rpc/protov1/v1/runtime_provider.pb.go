@@ -1252,8 +1252,8 @@ const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\x1aRUNTIME_LOG_STREAM_RUNTIME\x10\x032}\n" +
 	"\x0eRuntimeLogHost\x12k\n" +
 	"\n" +
-	"AppendLogs\x12-.gestalt.provider.v1.AppendRuntimeLogsRequest\x1a..gestalt.provider.v1.AppendRuntimeLogsResponse2\xa4\x06\n" +
-	"\x0fRuntimeProvider\x12I\n" +
+	"AppendLogs\x12-.gestalt.provider.v1.AppendRuntimeLogsRequest\x1a..gestalt.provider.v1.AppendRuntimeLogsResponse2\x9c\x06\n" +
+	"\aRuntime\x12I\n" +
 	"\n" +
 	"GetSupport\x12\x16.google.protobuf.Empty\x1a#.gestalt.provider.v1.RuntimeSupport\x12d\n" +
 	"\fStartSession\x12/.gestalt.provider.v1.StartRuntimeSessionRequest\x1a#.gestalt.provider.v1.RuntimeSession\x12`\n" +
@@ -1325,23 +1325,23 @@ var file_v1_runtime_provider_proto_depIdxs = []int32{
 	22, // 13: gestalt.provider.v1.RuntimeLogEntry.observed_at:type_name -> google.protobuf.Timestamp
 	16, // 14: gestalt.provider.v1.AppendRuntimeLogsRequest.logs:type_name -> gestalt.provider.v1.RuntimeLogEntry
 	17, // 15: gestalt.provider.v1.RuntimeLogHost.AppendLogs:input_type -> gestalt.provider.v1.AppendRuntimeLogsRequest
-	25, // 16: gestalt.provider.v1.RuntimeProvider.GetSupport:input_type -> google.protobuf.Empty
-	6,  // 17: gestalt.provider.v1.RuntimeProvider.StartSession:input_type -> gestalt.provider.v1.StartRuntimeSessionRequest
-	7,  // 18: gestalt.provider.v1.RuntimeProvider.GetSession:input_type -> gestalt.provider.v1.GetRuntimeSessionRequest
-	8,  // 19: gestalt.provider.v1.RuntimeProvider.ListSessions:input_type -> gestalt.provider.v1.ListRuntimeSessionsRequest
-	10, // 20: gestalt.provider.v1.RuntimeProvider.StopSession:input_type -> gestalt.provider.v1.StopRuntimeSessionRequest
-	11, // 21: gestalt.provider.v1.RuntimeProvider.PrepareWorkspace:input_type -> gestalt.provider.v1.PrepareRuntimeWorkspaceRequest
-	13, // 22: gestalt.provider.v1.RuntimeProvider.RemoveWorkspace:input_type -> gestalt.provider.v1.RemoveRuntimeWorkspaceRequest
-	14, // 23: gestalt.provider.v1.RuntimeProvider.StartApp:input_type -> gestalt.provider.v1.StartHostedAppRequest
+	25, // 16: gestalt.provider.v1.Runtime.GetSupport:input_type -> google.protobuf.Empty
+	6,  // 17: gestalt.provider.v1.Runtime.StartSession:input_type -> gestalt.provider.v1.StartRuntimeSessionRequest
+	7,  // 18: gestalt.provider.v1.Runtime.GetSession:input_type -> gestalt.provider.v1.GetRuntimeSessionRequest
+	8,  // 19: gestalt.provider.v1.Runtime.ListSessions:input_type -> gestalt.provider.v1.ListRuntimeSessionsRequest
+	10, // 20: gestalt.provider.v1.Runtime.StopSession:input_type -> gestalt.provider.v1.StopRuntimeSessionRequest
+	11, // 21: gestalt.provider.v1.Runtime.PrepareWorkspace:input_type -> gestalt.provider.v1.PrepareRuntimeWorkspaceRequest
+	13, // 22: gestalt.provider.v1.Runtime.RemoveWorkspace:input_type -> gestalt.provider.v1.RemoveRuntimeWorkspaceRequest
+	14, // 23: gestalt.provider.v1.Runtime.StartApp:input_type -> gestalt.provider.v1.StartHostedAppRequest
 	18, // 24: gestalt.provider.v1.RuntimeLogHost.AppendLogs:output_type -> gestalt.provider.v1.AppendRuntimeLogsResponse
-	2,  // 25: gestalt.provider.v1.RuntimeProvider.GetSupport:output_type -> gestalt.provider.v1.RuntimeSupport
-	3,  // 26: gestalt.provider.v1.RuntimeProvider.StartSession:output_type -> gestalt.provider.v1.RuntimeSession
-	3,  // 27: gestalt.provider.v1.RuntimeProvider.GetSession:output_type -> gestalt.provider.v1.RuntimeSession
-	9,  // 28: gestalt.provider.v1.RuntimeProvider.ListSessions:output_type -> gestalt.provider.v1.ListRuntimeSessionsResponse
-	25, // 29: gestalt.provider.v1.RuntimeProvider.StopSession:output_type -> google.protobuf.Empty
-	12, // 30: gestalt.provider.v1.RuntimeProvider.PrepareWorkspace:output_type -> gestalt.provider.v1.PrepareRuntimeWorkspaceResponse
-	25, // 31: gestalt.provider.v1.RuntimeProvider.RemoveWorkspace:output_type -> google.protobuf.Empty
-	15, // 32: gestalt.provider.v1.RuntimeProvider.StartApp:output_type -> gestalt.provider.v1.HostedApp
+	2,  // 25: gestalt.provider.v1.Runtime.GetSupport:output_type -> gestalt.provider.v1.RuntimeSupport
+	3,  // 26: gestalt.provider.v1.Runtime.StartSession:output_type -> gestalt.provider.v1.RuntimeSession
+	3,  // 27: gestalt.provider.v1.Runtime.GetSession:output_type -> gestalt.provider.v1.RuntimeSession
+	9,  // 28: gestalt.provider.v1.Runtime.ListSessions:output_type -> gestalt.provider.v1.ListRuntimeSessionsResponse
+	25, // 29: gestalt.provider.v1.Runtime.StopSession:output_type -> google.protobuf.Empty
+	12, // 30: gestalt.provider.v1.Runtime.PrepareWorkspace:output_type -> gestalt.provider.v1.PrepareRuntimeWorkspaceResponse
+	25, // 31: gestalt.provider.v1.Runtime.RemoveWorkspace:output_type -> google.protobuf.Empty
+	15, // 32: gestalt.provider.v1.Runtime.StartApp:output_type -> gestalt.provider.v1.HostedApp
 	24, // [24:33] is the sub-list for method output_type
 	15, // [15:24] is the sub-list for method input_type
 	15, // [15:15] is the sub-list for extension type_name

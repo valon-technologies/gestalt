@@ -35,13 +35,13 @@ type ExecConfig struct {
 var startAgentProviderProcess = runtimehost.StartAppProcess
 
 type remoteAgent struct {
-	client  proto.AgentProviderClient
+	client  proto.AgentClient
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
 }
 
 type RemoteConfig struct {
-	Client  proto.AgentProviderClient
+	Client  proto.AgentClient
 	Runtime proto.ProviderLifecycleClient
 	Closer  io.Closer
 	Config  map[string]any
@@ -66,7 +66,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (coreagent.Provider, err
 	}
 
 	return NewRemote(ctx, RemoteConfig{
-		Client:  proto.NewAgentProviderClient(proc.Conn()),
+		Client:  proto.NewAgentClient(proc.Conn()),
 		Runtime: proc.Lifecycle(),
 		Closer:  proc,
 		Config:  cfg.Config,

@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\")\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value2m\n\x0fSecretsProvider\x12Z\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\")\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value2e\n\x07Secrets\x12Z\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,6 +35,6 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETSECRETREQUEST']._serialized_end=79
   _globals['_GETSECRETRESPONSE']._serialized_start=81
   _globals['_GETSECRETRESPONSE']._serialized_end=122
-  _globals['_SECRETSPROVIDER']._serialized_start=124
-  _globals['_SECRETSPROVIDER']._serialized_end=233
+  _globals['_SECRETS']._serialized_start=124
+  _globals['_SECRETS']._serialized_end=225
 # @@protoc_insertion_point(module_scope)

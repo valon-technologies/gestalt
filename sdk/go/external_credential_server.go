@@ -10,7 +10,7 @@ import (
 )
 
 type externalCredentialServer struct {
-	proto.UnimplementedExternalCredentialProviderServer
+	proto.UnimplementedExternalCredentialsServer
 	provider ExternalCredentialProvider
 }
 

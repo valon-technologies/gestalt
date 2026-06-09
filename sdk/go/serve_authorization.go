@@ -15,12 +15,12 @@ import (
 func ServeAuthorizationProvider(ctx context.Context, provider AuthorizationProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuthorization, provider))
-		proto.RegisterAuthorizationProviderServer(srv, authorizationProviderServer{provider: provider})
+		proto.RegisterAuthorizationServer(srv, authorizationProviderServer{provider: provider})
 	})
 }
 
 type authorizationProviderServer struct {
-	proto.UnimplementedAuthorizationProviderServer
+	proto.UnimplementedAuthorizationServer
 	provider AuthorizationProvider
 }
 

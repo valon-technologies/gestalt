@@ -13,12 +13,12 @@ import (
 func ServeWorkflowProvider(ctx context.Context, provider WorkflowProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindWorkflow, provider))
-		proto.RegisterWorkflowProviderServer(srv, workflowProviderServer{provider: provider})
+		proto.RegisterWorkflowServer(srv, workflowProviderServer{provider: provider})
 	})
 }
 
 type workflowProviderServer struct {
-	proto.UnimplementedWorkflowProviderServer
+	proto.UnimplementedWorkflowServer
 	provider WorkflowProvider
 }
 

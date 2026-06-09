@@ -15,13 +15,13 @@ import {
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
-  AgentProvider as AgentProviderService,
+  Agent as AgentProviderService,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
-  AuthorizationProvider as AuthorizationProviderService,
+  Authorization as AuthorizationProviderService,
 } from "./internal/gen/v1/authorization_pb.ts";
 import {
-  AuthenticationProvider as AuthenticationProviderService,
+  Authentication as AuthenticationProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
   BeginLoginResponseSchema,
@@ -38,7 +38,7 @@ import {
   CacheTouchResponseSchema,
 } from "./internal/gen/v1/cache_pb.ts";
 import {
-  SecretsProvider as SecretsProviderService,
+  Secrets as SecretsProviderService,
   GetSecretResponseSchema,
   type GetSecretRequest,
 } from "./internal/gen/v1/secrets_pb.ts";
@@ -64,7 +64,7 @@ import {
   type StartProviderRequest,
 } from "./internal/gen/v1/app_pb.ts";
 import {
-  RuntimeProvider as RuntimeProviderService,
+  Runtime as RuntimeProviderService,
 } from "./internal/gen/v1/runtime_provider_pb.ts";
 import {
   ConfigureProviderResponseSchema,
@@ -76,7 +76,7 @@ import {
   type ConfigureProviderRequest,
 } from "./internal/gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "./internal/gen/v1/s3_pb.ts";
-import { WorkflowProvider as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
+import { Workflow as WorkflowProviderService } from "./internal/gen/v1/workflow_pb.ts";
 import {
   attachRequestHelpers,
   errorMessage,

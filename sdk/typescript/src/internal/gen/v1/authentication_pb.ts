@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/authentication.proto.
  */
 export const file_v1_authentication: GenFile = /*@__PURE__*/
-  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSLoAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJCCgZjbGFpbXMYBiADKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyLkNsYWltc0VudHJ5Gi0KC0NsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiwwEKEUJlZ2luTG9naW5SZXF1ZXN0EhQKDGNhbGxiYWNrX3VybBgBIAEoCRISCgpob3N0X3N0YXRlGAIgASgJEg4KBnNjb3BlcxgDIAMoCRJECgdvcHRpb25zGAQgAygLMjMuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdC5PcHRpb25zRW50cnkaLgoMT3B0aW9uc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRwoSQmVnaW5Mb2dpblJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMIrcBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJDCgVxdWVyeRgBIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QuUXVlcnlFbnRyeRIWCg5wcm92aWRlcl9zdGF0ZRgCIAEoDBIUCgxjYWxsYmFja191cmwYAyABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KHFZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiMgoTQXV0aFNlc3Npb25TZXR0aW5ncxIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAEgASgDMqcDChZBdXRoZW50aWNhdGlvblByb3ZpZGVyEl0KCkJlZ2luTG9naW4SJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkJlZ2luTG9naW5SZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVzcG9uc2USYgoNQ29tcGxldGVMb2dpbhIpLmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyEnIKFVZhbGlkYXRlRXh0ZXJuYWxUb2tlbhIxLmdlc3RhbHQucHJvdmlkZXIudjEuVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aGVudGljYXRlZFVzZXISVgoSR2V0U2Vzc2lvblNldHRpbmdzEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiguZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoU2Vzc2lvblNldHRpbmdzYgZwcm90bzM", [file_google_protobuf_empty]);
+  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSLoAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJCCgZjbGFpbXMYBiADKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyLkNsYWltc0VudHJ5Gi0KC0NsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiwwEKEUJlZ2luTG9naW5SZXF1ZXN0EhQKDGNhbGxiYWNrX3VybBgBIAEoCRISCgpob3N0X3N0YXRlGAIgASgJEg4KBnNjb3BlcxgDIAMoCRJECgdvcHRpb25zGAQgAygLMjMuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdC5PcHRpb25zRW50cnkaLgoMT3B0aW9uc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRwoSQmVnaW5Mb2dpblJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMIrcBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJDCgVxdWVyeRgBIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QuUXVlcnlFbnRyeRIWCg5wcm92aWRlcl9zdGF0ZRgCIAEoDBIUCgxjYWxsYmFja191cmwYAyABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KHFZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiMgoTQXV0aFNlc3Npb25TZXR0aW5ncxIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAEgASgDMp8DCg5BdXRoZW50aWNhdGlvbhJdCgpCZWdpbkxvZ2luEiYuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuQmVnaW5Mb2dpblJlc3BvbnNlEmIKDUNvbXBsZXRlTG9naW4SKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbXBsZXRlTG9naW5SZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5BdXRoZW50aWNhdGVkVXNlchJyChVWYWxpZGF0ZUV4dGVybmFsVG9rZW4SMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyElYKEkdldFNlc3Npb25TZXR0aW5ncxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRooLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aFNlc3Npb25TZXR0aW5nc2IGcHJvdG8z", [file_google_protobuf_empty]);
 
 /**
  * AuthenticatedUser is the normalized user identity returned by an authentication
@@ -203,14 +203,13 @@ export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__P
   messageDesc(file_v1_authentication, 5);
 
 /**
- * AuthenticationProvider models the shared Gestalt authentication-provider
- * protocol.
+ * Authentication models the shared Gestalt authentication protocol.
  *
- * @generated from service gestalt.provider.v1.AuthenticationProvider
+ * @generated from service gestalt.provider.v1.Authentication
  */
-export const AuthenticationProvider: GenService<{
+export const Authentication: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.BeginLogin
+   * @generated from rpc gestalt.provider.v1.Authentication.BeginLogin
    */
   beginLogin: {
     methodKind: "unary";
@@ -218,7 +217,7 @@ export const AuthenticationProvider: GenService<{
     output: typeof BeginLoginResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.CompleteLogin
+   * @generated from rpc gestalt.provider.v1.Authentication.CompleteLogin
    */
   completeLogin: {
     methodKind: "unary";
@@ -226,7 +225,7 @@ export const AuthenticationProvider: GenService<{
     output: typeof AuthenticatedUserSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.ValidateExternalToken
+   * @generated from rpc gestalt.provider.v1.Authentication.ValidateExternalToken
    */
   validateExternalToken: {
     methodKind: "unary";
@@ -234,7 +233,7 @@ export const AuthenticationProvider: GenService<{
     output: typeof AuthenticatedUserSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.AuthenticationProvider.GetSessionSettings
+   * @generated from rpc gestalt.provider.v1.Authentication.GetSessionSettings
    */
   getSessionSettings: {
     methodKind: "unary";

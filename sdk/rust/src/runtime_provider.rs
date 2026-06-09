@@ -384,7 +384,7 @@ impl<P> RuntimeServer<P> {
 }
 
 #[async_trait]
-impl<P> pb::runtime_provider_server::RuntimeProvider for RuntimeServer<P>
+impl<P> pb::runtime_server::Runtime for RuntimeServer<P>
 where
     P: RuntimeProvider,
 {

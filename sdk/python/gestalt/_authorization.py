@@ -336,7 +336,7 @@ class Authorization:
             else os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         ).strip()
         self._channel = host_service_channel("authorization", target, token=token)
-        self._stub = pb_grpc.AuthorizationProviderStub(self._channel)
+        self._stub = pb_grpc.AuthorizationStub(self._channel)
         self._closed = False
         self._shared = _shared
         self._authorization_initialized = True

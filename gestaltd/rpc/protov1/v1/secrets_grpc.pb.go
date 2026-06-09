@@ -19,105 +19,105 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SecretsProvider_GetSecret_FullMethodName = "/gestalt.provider.v1.SecretsProvider/GetSecret"
+	Secrets_GetSecret_FullMethodName = "/gestalt.provider.v1.Secrets/GetSecret"
 )
 
-// SecretsProviderClient is the client API for SecretsProvider service.
+// SecretsClient is the client API for Secrets service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SecretsProvider models the shared Gestalt secrets-provider protocol.
-type SecretsProviderClient interface {
+// Secrets models the shared Gestalt secrets protocol.
+type SecretsClient interface {
 	GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
 }
 
-type secretsProviderClient struct {
+type secretsClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewSecretsProviderClient(cc grpc.ClientConnInterface) SecretsProviderClient {
-	return &secretsProviderClient{cc}
+func NewSecretsClient(cc grpc.ClientConnInterface) SecretsClient {
+	return &secretsClient{cc}
 }
 
-func (c *secretsProviderClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error) {
+func (c *secretsClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSecretResponse)
-	err := c.cc.Invoke(ctx, SecretsProvider_GetSecret_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Secrets_GetSecret_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// SecretsProviderServer is the server API for SecretsProvider service.
-// All implementations must embed UnimplementedSecretsProviderServer
+// SecretsServer is the server API for Secrets service.
+// All implementations must embed UnimplementedSecretsServer
 // for forward compatibility.
 //
-// SecretsProvider models the shared Gestalt secrets-provider protocol.
-type SecretsProviderServer interface {
+// Secrets models the shared Gestalt secrets protocol.
+type SecretsServer interface {
 	GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
-	mustEmbedUnimplementedSecretsProviderServer()
+	mustEmbedUnimplementedSecretsServer()
 }
 
-// UnimplementedSecretsProviderServer must be embedded to have
+// UnimplementedSecretsServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedSecretsProviderServer struct{}
+type UnimplementedSecretsServer struct{}
 
-func (UnimplementedSecretsProviderServer) GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error) {
+func (UnimplementedSecretsServer) GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSecret not implemented")
 }
-func (UnimplementedSecretsProviderServer) mustEmbedUnimplementedSecretsProviderServer() {}
-func (UnimplementedSecretsProviderServer) testEmbeddedByValue()                         {}
+func (UnimplementedSecretsServer) mustEmbedUnimplementedSecretsServer() {}
+func (UnimplementedSecretsServer) testEmbeddedByValue()                 {}
 
-// UnsafeSecretsProviderServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to SecretsProviderServer will
+// UnsafeSecretsServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SecretsServer will
 // result in compilation errors.
-type UnsafeSecretsProviderServer interface {
-	mustEmbedUnimplementedSecretsProviderServer()
+type UnsafeSecretsServer interface {
+	mustEmbedUnimplementedSecretsServer()
 }
 
-func RegisterSecretsProviderServer(s grpc.ServiceRegistrar, srv SecretsProviderServer) {
-	// If the following call panics, it indicates UnimplementedSecretsProviderServer was
+func RegisterSecretsServer(s grpc.ServiceRegistrar, srv SecretsServer) {
+	// If the following call panics, it indicates UnimplementedSecretsServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&SecretsProvider_ServiceDesc, srv)
+	s.RegisterService(&Secrets_ServiceDesc, srv)
 }
 
-func _SecretsProvider_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Secrets_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSecretRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SecretsProviderServer).GetSecret(ctx, in)
+		return srv.(SecretsServer).GetSecret(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SecretsProvider_GetSecret_FullMethodName,
+		FullMethod: Secrets_GetSecret_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SecretsProviderServer).GetSecret(ctx, req.(*GetSecretRequest))
+		return srv.(SecretsServer).GetSecret(ctx, req.(*GetSecretRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// SecretsProvider_ServiceDesc is the grpc.ServiceDesc for SecretsProvider service.
+// Secrets_ServiceDesc is the grpc.ServiceDesc for Secrets service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var SecretsProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.provider.v1.SecretsProvider",
-	HandlerType: (*SecretsProviderServer)(nil),
+var Secrets_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.Secrets",
+	HandlerType: (*SecretsServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetSecret",
-			Handler:    _SecretsProvider_GetSecret_Handler,
+			Handler:    _Secrets_GetSecret_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

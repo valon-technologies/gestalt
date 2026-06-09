@@ -420,7 +420,7 @@ message GetWorkflowProviderRunOutputResponse {
   google.protobuf.Value output = 1;
 }
 
-service WorkflowProvider {
+service Workflow {
   rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition);
   rpc GetDefinition(GetWorkflowProviderDefinitionRequest) returns (WorkflowDefinition);
   rpc ListDefinitions(ListWorkflowProviderDefinitionsRequest) returns (ListWorkflowProviderDefinitionsResponse);

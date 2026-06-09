@@ -962,7 +962,7 @@ func fakeHostedWorkflowManagerRoundTrip(reqCtx *proto.RequestContext, env map[st
 	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
 
-	client := proto.NewWorkflowProviderClient(conn)
+	client := proto.NewWorkflowClient(conn)
 	applied, err := client.ApplyDefinition(ctx, &proto.ApplyWorkflowProviderDefinitionRequest{
 		Context:        reqCtx,
 		ProviderName:   "managed",
@@ -1033,7 +1033,7 @@ func fakeHostedAgentManagerRoundTrip(reqCtx *proto.RequestContext, env map[strin
 	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
 
-	client := proto.NewAgentProviderClient(conn)
+	client := proto.NewAgentClient(conn)
 	session, err := client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
 		Context:        reqCtx,
 		ProviderName:   "managed",

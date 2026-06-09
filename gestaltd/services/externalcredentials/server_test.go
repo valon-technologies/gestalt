@@ -54,9 +54,9 @@ func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T)
 	t.Parallel()
 
 	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(&wrappedNotFoundExternalCredentialProvider{}))
+		proto.RegisterExternalCredentialsServer(server, NewProviderServer(&wrappedNotFoundExternalCredentialProvider{}))
 	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
 
 	_, err := remote.GetCredential(context.Background(), "user:test", "github:default", "")
 	if !errors.Is(err, core.ErrNotFound) {
@@ -117,9 +117,9 @@ func TestExternalCredentialAuthConfigRefreshTokenRoundTripsOverTransport(t *test
 
 	provider := &authRoundTripExternalCredentialProvider{}
 	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(provider))
+		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
 	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
 	auth := core.ExternalCredentialAuthConfig{
 		Type:         "oauth2",
 		GrantType:    "refresh_token",
@@ -219,9 +219,9 @@ func TestExternalCredentialProviderRestorePreservesTimestampsOverTransport(t *te
 
 	provider := &restoreTrackingExternalCredentialProvider{}
 	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialProviderServer(server, NewProviderServer(provider))
+		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
 	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialProviderClient(conn)}
+	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
 
 	createdAt := time.Unix(1_700_000_000, 0).UTC()
 	updatedAt := time.Unix(1_700_000_001, 0).UTC()

@@ -298,7 +298,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
         )
 
 
-class _AgentServicer(agent_pb2_grpc.AgentProviderServicer):
+class _AgentServicer(agent_pb2_grpc.AgentServicer):
     def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _record_manager_request(
@@ -562,7 +562,7 @@ def setUpModule() -> None:
     _runtime_server.start()
 
     _host_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    agent_pb2_grpc.add_AgentProviderServicer_to_server(
+    agent_pb2_grpc.add_AgentServicer_to_server(
         _AgentServicer(),
         _host_server,
     )
@@ -776,7 +776,7 @@ class AgentTransportTests(unittest.TestCase):
     def test_agent_runtime_and_server_roundtrip(self) -> None:
         channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
         runtime_client = runtime_pb2_grpc.ProviderLifecycleStub(channel)
-        provider_client = agent_pb2_grpc.AgentProviderStub(channel)
+        provider_client = agent_pb2_grpc.AgentStub(channel)
 
         identity = runtime_client.GetProviderIdentity(empty_pb2.Empty())
         configure_request = runtime_pb2.ConfigureProviderRequest(
@@ -955,7 +955,7 @@ class AgentTransportTests(unittest.TestCase):
 
     def test_agent_provider_native_errors_map_to_grpc_statuses(self) -> None:
         channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
-        provider_client = agent_pb2_grpc.AgentProviderStub(channel)
+        provider_client = agent_pb2_grpc.AgentStub(channel)
 
         with self.assertRaises(grpc.RpcError) as raised:
             provider_client.GetSession(
@@ -977,7 +977,7 @@ class AgentTransportTests(unittest.TestCase):
         server.start()
         try:
             channel = grpc.insecure_channel(f"unix:{socket_path}")
-            provider_client = agent_pb2_grpc.AgentProviderStub(channel)
+            provider_client = agent_pb2_grpc.AgentStub(channel)
 
             with self.assertRaises(grpc.RpcError) as raised:
                 provider_client.GetCapabilities(

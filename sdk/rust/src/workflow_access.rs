@@ -10,7 +10,7 @@ use tower::service_fn;
 
 use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{
-    self as pb, workflow_provider_client::WorkflowProviderClient as ProtoWorkflowProviderClient,
+    self as pb, workflow_client::WorkflowClient as ProtoWorkflowProviderClient,
 };
 use crate::workflow::{
     WorkflowDefinition, WorkflowDefinitionSpec, WorkflowEvent, WorkflowJson, WorkflowRun,

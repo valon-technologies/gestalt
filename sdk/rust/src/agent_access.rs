@@ -8,9 +8,7 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
-use crate::generated::v1::{
-    self as pb, agent_provider_client::AgentProviderClient as ProtoAgentProviderClient,
-};
+use crate::generated::v1::{self as pb, agent_client::AgentClient as ProtoAgentProviderClient};
 use crate::{
     agent::{
         AgentExecutionStatus, AgentInteraction, AgentMessage, AgentOutput, AgentSession,

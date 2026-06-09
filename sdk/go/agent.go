@@ -9,7 +9,7 @@ import (
 )
 
 type agent struct {
-	client  proto.AgentProviderClient
+	client  proto.AgentClient
 	context *proto.RequestContext
 }
 
@@ -29,7 +29,7 @@ type Agent interface {
 	ResolveInteraction(context.Context, AgentResolveInteraction) (*AgentInteraction, error)
 }
 
-var sharedAgentTransport sharedManagerTransport[proto.AgentProviderClient]
+var sharedAgentTransport sharedManagerTransport[proto.AgentClient]
 
 // NewAgent returns an agent capability for the current provider request.
 func NewAgent(req Request) (Agent, error) {
@@ -54,7 +54,7 @@ func newAgent(reqCtx *proto.RequestContext) (Agent, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "agent", target, token, &sharedAgentTransport, proto.NewAgentProviderClient)
+	client, err := managerTransportClient(ctx, "agent", target, token, &sharedAgentTransport, proto.NewAgentClient)
 	if err != nil {
 		return nil, err
 	}

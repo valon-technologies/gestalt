@@ -11,6 +11,6 @@ import (
 func ServeSecretsProvider(ctx context.Context, secrets SecretsProvider) error {
 	return serveProvider(withProviderCloser(ctx, secrets), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindSecrets, secrets))
-		proto.RegisterSecretsProviderServer(srv, newSecretsProviderServer(secrets))
+		proto.RegisterSecretsServer(srv, newSecretsProviderServer(secrets))
 	})
 }

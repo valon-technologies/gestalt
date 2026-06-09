@@ -11,7 +11,7 @@ import {
   ListRuntimeSessionsResponseSchema,
   PrepareRuntimeWorkspaceResponseSchema,
   RuntimeEgressMode as ProtoRuntimeEgressMode,
-  RuntimeProvider as RuntimeProviderService,
+  Runtime as RuntimeProviderService,
   RuntimeSessionSchema,
   RuntimeSupportSchema,
   type GetRuntimeSessionRequest as ProtoGetRuntimeSessionRequest,

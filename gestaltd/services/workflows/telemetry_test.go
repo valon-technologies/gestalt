@@ -30,7 +30,7 @@ import (
 )
 
 type workflowTelemetryProviderServer struct {
-	proto.UnimplementedWorkflowProviderServer
+	proto.UnimplementedWorkflowServer
 	proto.UnimplementedProviderLifecycleServer
 }
 
@@ -270,7 +270,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 	) (any, error) {
 		return handler(metricutil.WithMeterProvider(ctx, metrics.Provider), req)
 	}))
-	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, &managerServerAuthorizationProvider{allowed: true}))
+	proto.RegisterWorkflowServer(srv, NewProviderServer("slack", manager, &managerServerAuthorizationProvider{allowed: true}))
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -288,7 +288,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	client := proto.NewWorkflowProviderClient(conn)
+	client := proto.NewWorkflowClient(conn)
 
 	reqCtx := workflowManagerTelemetryRequestContext()
 	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(reqCtx, "slack:T123:C123:1712161829.000300", "idem-success"))
@@ -333,7 +333,7 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
 	provider := workflowTelemetryProviderServer{}
-	proto.RegisterWorkflowProviderServer(srv, provider)
+	proto.RegisterWorkflowServer(srv, provider)
 	proto.RegisterProviderLifecycleServer(srv, provider)
 	go func() {
 		_ = srv.Serve(lis)
@@ -355,7 +355,7 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 	t.Cleanup(func() { _ = conn.Close() })
 
 	workflow, err := NewRemote(context.Background(), RemoteConfig{
-		Client:  proto.NewWorkflowProviderClient(conn),
+		Client:  proto.NewWorkflowClient(conn),
 		Runtime: proto.NewProviderLifecycleClient(conn),
 		Closer:  noopCloser{},
 		Name:    "workflow-metrics",

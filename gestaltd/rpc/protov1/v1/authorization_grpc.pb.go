@@ -20,21 +20,21 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthorizationProvider_CheckAccess_FullMethodName                  = "/gestalt.provider.v1.AuthorizationProvider/CheckAccess"
-	AuthorizationProvider_CheckAccessMany_FullMethodName              = "/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany"
-	AuthorizationProvider_ListRelationships_FullMethodName            = "/gestalt.provider.v1.AuthorizationProvider/ListRelationships"
-	AuthorizationProvider_AddRelationship_FullMethodName              = "/gestalt.provider.v1.AuthorizationProvider/AddRelationship"
-	AuthorizationProvider_DeleteRelationship_FullMethodName           = "/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship"
-	AuthorizationProvider_SetAuthorizationState_FullMethodName        = "/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState"
-	AuthorizationProvider_GetActiveModelRef_FullMethodName            = "/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef"
-	AuthorizationProvider_SetActiveModel_FullMethodName               = "/gestalt.provider.v1.AuthorizationProvider/SetActiveModel"
-	AuthorizationProvider_ListActiveModelResourceTypes_FullMethodName = "/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes"
+	Authorization_CheckAccess_FullMethodName                  = "/gestalt.provider.v1.Authorization/CheckAccess"
+	Authorization_CheckAccessMany_FullMethodName              = "/gestalt.provider.v1.Authorization/CheckAccessMany"
+	Authorization_ListRelationships_FullMethodName            = "/gestalt.provider.v1.Authorization/ListRelationships"
+	Authorization_AddRelationship_FullMethodName              = "/gestalt.provider.v1.Authorization/AddRelationship"
+	Authorization_DeleteRelationship_FullMethodName           = "/gestalt.provider.v1.Authorization/DeleteRelationship"
+	Authorization_SetAuthorizationState_FullMethodName        = "/gestalt.provider.v1.Authorization/SetAuthorizationState"
+	Authorization_GetActiveModelRef_FullMethodName            = "/gestalt.provider.v1.Authorization/GetActiveModelRef"
+	Authorization_SetActiveModel_FullMethodName               = "/gestalt.provider.v1.Authorization/SetActiveModel"
+	Authorization_ListActiveModelResourceTypes_FullMethodName = "/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes"
 )
 
-// AuthorizationProviderClient is the client API for AuthorizationProvider service.
+// AuthorizationClient is the client API for Authorization service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type AuthorizationProviderClient interface {
+type AuthorizationClient interface {
 	CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error)
 	CheckAccessMany(ctx context.Context, in *CheckAccessManyRequest, opts ...grpc.CallOption) (*CheckAccessManyResponse, error)
 	ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error)
@@ -46,108 +46,108 @@ type AuthorizationProviderClient interface {
 	ListActiveModelResourceTypes(ctx context.Context, in *ListActiveModelResourceTypesRequest, opts ...grpc.CallOption) (*ListActiveModelResourceTypesResponse, error)
 }
 
-type authorizationProviderClient struct {
+type authorizationClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewAuthorizationProviderClient(cc grpc.ClientConnInterface) AuthorizationProviderClient {
-	return &authorizationProviderClient{cc}
+func NewAuthorizationClient(cc grpc.ClientConnInterface) AuthorizationClient {
+	return &authorizationClient{cc}
 }
 
-func (c *authorizationProviderClient) CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error) {
+func (c *authorizationClient) CheckAccess(ctx context.Context, in *CheckAccessRequest, opts ...grpc.CallOption) (*CheckAccessResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckAccessResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_CheckAccess_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_CheckAccess_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) CheckAccessMany(ctx context.Context, in *CheckAccessManyRequest, opts ...grpc.CallOption) (*CheckAccessManyResponse, error) {
+func (c *authorizationClient) CheckAccessMany(ctx context.Context, in *CheckAccessManyRequest, opts ...grpc.CallOption) (*CheckAccessManyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckAccessManyResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_CheckAccessMany_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_CheckAccessMany_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error) {
+func (c *authorizationClient) ListRelationships(ctx context.Context, in *ListRelationshipsRequest, opts ...grpc.CallOption) (*ListRelationshipsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListRelationshipsResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_ListRelationships_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_ListRelationships_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) AddRelationship(ctx context.Context, in *AddRelationshipRequest, opts ...grpc.CallOption) (*AddRelationshipResponse, error) {
+func (c *authorizationClient) AddRelationship(ctx context.Context, in *AddRelationshipRequest, opts ...grpc.CallOption) (*AddRelationshipResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddRelationshipResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_AddRelationship_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_AddRelationship_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) DeleteRelationship(ctx context.Context, in *DeleteRelationshipRequest, opts ...grpc.CallOption) (*DeleteRelationshipResponse, error) {
+func (c *authorizationClient) DeleteRelationship(ctx context.Context, in *DeleteRelationshipRequest, opts ...grpc.CallOption) (*DeleteRelationshipResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteRelationshipResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_DeleteRelationship_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_DeleteRelationship_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) SetAuthorizationState(ctx context.Context, in *SetAuthorizationStateRequest, opts ...grpc.CallOption) (*SetAuthorizationStateResponse, error) {
+func (c *authorizationClient) SetAuthorizationState(ctx context.Context, in *SetAuthorizationStateRequest, opts ...grpc.CallOption) (*SetAuthorizationStateResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetAuthorizationStateResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_SetAuthorizationState_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_SetAuthorizationState_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) GetActiveModelRef(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetActiveModelRefResponse, error) {
+func (c *authorizationClient) GetActiveModelRef(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetActiveModelRefResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetActiveModelRefResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_GetActiveModelRef_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_GetActiveModelRef_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) SetActiveModel(ctx context.Context, in *SetActiveModelRequest, opts ...grpc.CallOption) (*SetActiveModelResponse, error) {
+func (c *authorizationClient) SetActiveModel(ctx context.Context, in *SetActiveModelRequest, opts ...grpc.CallOption) (*SetActiveModelResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetActiveModelResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_SetActiveModel_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_SetActiveModel_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *authorizationProviderClient) ListActiveModelResourceTypes(ctx context.Context, in *ListActiveModelResourceTypesRequest, opts ...grpc.CallOption) (*ListActiveModelResourceTypesResponse, error) {
+func (c *authorizationClient) ListActiveModelResourceTypes(ctx context.Context, in *ListActiveModelResourceTypesRequest, opts ...grpc.CallOption) (*ListActiveModelResourceTypesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListActiveModelResourceTypesResponse)
-	err := c.cc.Invoke(ctx, AuthorizationProvider_ListActiveModelResourceTypes_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Authorization_ListActiveModelResourceTypes_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// AuthorizationProviderServer is the server API for AuthorizationProvider service.
-// All implementations must embed UnimplementedAuthorizationProviderServer
+// AuthorizationServer is the server API for Authorization service.
+// All implementations must embed UnimplementedAuthorizationServer
 // for forward compatibility.
-type AuthorizationProviderServer interface {
+type AuthorizationServer interface {
 	CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error)
 	CheckAccessMany(context.Context, *CheckAccessManyRequest) (*CheckAccessManyResponse, error)
 	ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error)
@@ -157,268 +157,268 @@ type AuthorizationProviderServer interface {
 	GetActiveModelRef(context.Context, *emptypb.Empty) (*GetActiveModelRefResponse, error)
 	SetActiveModel(context.Context, *SetActiveModelRequest) (*SetActiveModelResponse, error)
 	ListActiveModelResourceTypes(context.Context, *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error)
-	mustEmbedUnimplementedAuthorizationProviderServer()
+	mustEmbedUnimplementedAuthorizationServer()
 }
 
-// UnimplementedAuthorizationProviderServer must be embedded to have
+// UnimplementedAuthorizationServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedAuthorizationProviderServer struct{}
+type UnimplementedAuthorizationServer struct{}
 
-func (UnimplementedAuthorizationProviderServer) CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error) {
+func (UnimplementedAuthorizationServer) CheckAccess(context.Context, *CheckAccessRequest) (*CheckAccessResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckAccess not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) CheckAccessMany(context.Context, *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
+func (UnimplementedAuthorizationServer) CheckAccessMany(context.Context, *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckAccessMany not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
+func (UnimplementedAuthorizationServer) ListRelationships(context.Context, *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRelationships not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) AddRelationship(context.Context, *AddRelationshipRequest) (*AddRelationshipResponse, error) {
+func (UnimplementedAuthorizationServer) AddRelationship(context.Context, *AddRelationshipRequest) (*AddRelationshipResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddRelationship not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) DeleteRelationship(context.Context, *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
+func (UnimplementedAuthorizationServer) DeleteRelationship(context.Context, *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteRelationship not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) SetAuthorizationState(context.Context, *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
+func (UnimplementedAuthorizationServer) SetAuthorizationState(context.Context, *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetAuthorizationState not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) GetActiveModelRef(context.Context, *emptypb.Empty) (*GetActiveModelRefResponse, error) {
+func (UnimplementedAuthorizationServer) GetActiveModelRef(context.Context, *emptypb.Empty) (*GetActiveModelRefResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetActiveModelRef not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) SetActiveModel(context.Context, *SetActiveModelRequest) (*SetActiveModelResponse, error) {
+func (UnimplementedAuthorizationServer) SetActiveModel(context.Context, *SetActiveModelRequest) (*SetActiveModelResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetActiveModel not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) ListActiveModelResourceTypes(context.Context, *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
+func (UnimplementedAuthorizationServer) ListActiveModelResourceTypes(context.Context, *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListActiveModelResourceTypes not implemented")
 }
-func (UnimplementedAuthorizationProviderServer) mustEmbedUnimplementedAuthorizationProviderServer() {}
-func (UnimplementedAuthorizationProviderServer) testEmbeddedByValue()                               {}
+func (UnimplementedAuthorizationServer) mustEmbedUnimplementedAuthorizationServer() {}
+func (UnimplementedAuthorizationServer) testEmbeddedByValue()                       {}
 
-// UnsafeAuthorizationProviderServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to AuthorizationProviderServer will
+// UnsafeAuthorizationServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AuthorizationServer will
 // result in compilation errors.
-type UnsafeAuthorizationProviderServer interface {
-	mustEmbedUnimplementedAuthorizationProviderServer()
+type UnsafeAuthorizationServer interface {
+	mustEmbedUnimplementedAuthorizationServer()
 }
 
-func RegisterAuthorizationProviderServer(s grpc.ServiceRegistrar, srv AuthorizationProviderServer) {
-	// If the following call panics, it indicates UnimplementedAuthorizationProviderServer was
+func RegisterAuthorizationServer(s grpc.ServiceRegistrar, srv AuthorizationServer) {
+	// If the following call panics, it indicates UnimplementedAuthorizationServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&AuthorizationProvider_ServiceDesc, srv)
+	s.RegisterService(&Authorization_ServiceDesc, srv)
 }
 
-func _AuthorizationProvider_CheckAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_CheckAccess_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckAccessRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).CheckAccess(ctx, in)
+		return srv.(AuthorizationServer).CheckAccess(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_CheckAccess_FullMethodName,
+		FullMethod: Authorization_CheckAccess_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).CheckAccess(ctx, req.(*CheckAccessRequest))
+		return srv.(AuthorizationServer).CheckAccess(ctx, req.(*CheckAccessRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_CheckAccessMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_CheckAccessMany_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckAccessManyRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).CheckAccessMany(ctx, in)
+		return srv.(AuthorizationServer).CheckAccessMany(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_CheckAccessMany_FullMethodName,
+		FullMethod: Authorization_CheckAccessMany_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).CheckAccessMany(ctx, req.(*CheckAccessManyRequest))
+		return srv.(AuthorizationServer).CheckAccessMany(ctx, req.(*CheckAccessManyRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_ListRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_ListRelationships_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListRelationshipsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).ListRelationships(ctx, in)
+		return srv.(AuthorizationServer).ListRelationships(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_ListRelationships_FullMethodName,
+		FullMethod: Authorization_ListRelationships_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).ListRelationships(ctx, req.(*ListRelationshipsRequest))
+		return srv.(AuthorizationServer).ListRelationships(ctx, req.(*ListRelationshipsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_AddRelationship_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_AddRelationship_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AddRelationshipRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).AddRelationship(ctx, in)
+		return srv.(AuthorizationServer).AddRelationship(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_AddRelationship_FullMethodName,
+		FullMethod: Authorization_AddRelationship_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).AddRelationship(ctx, req.(*AddRelationshipRequest))
+		return srv.(AuthorizationServer).AddRelationship(ctx, req.(*AddRelationshipRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_DeleteRelationship_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_DeleteRelationship_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteRelationshipRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).DeleteRelationship(ctx, in)
+		return srv.(AuthorizationServer).DeleteRelationship(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_DeleteRelationship_FullMethodName,
+		FullMethod: Authorization_DeleteRelationship_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).DeleteRelationship(ctx, req.(*DeleteRelationshipRequest))
+		return srv.(AuthorizationServer).DeleteRelationship(ctx, req.(*DeleteRelationshipRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_SetAuthorizationState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_SetAuthorizationState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetAuthorizationStateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).SetAuthorizationState(ctx, in)
+		return srv.(AuthorizationServer).SetAuthorizationState(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_SetAuthorizationState_FullMethodName,
+		FullMethod: Authorization_SetAuthorizationState_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).SetAuthorizationState(ctx, req.(*SetAuthorizationStateRequest))
+		return srv.(AuthorizationServer).SetAuthorizationState(ctx, req.(*SetAuthorizationStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_GetActiveModelRef_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_GetActiveModelRef_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).GetActiveModelRef(ctx, in)
+		return srv.(AuthorizationServer).GetActiveModelRef(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_GetActiveModelRef_FullMethodName,
+		FullMethod: Authorization_GetActiveModelRef_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).GetActiveModelRef(ctx, req.(*emptypb.Empty))
+		return srv.(AuthorizationServer).GetActiveModelRef(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_SetActiveModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_SetActiveModel_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SetActiveModelRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).SetActiveModel(ctx, in)
+		return srv.(AuthorizationServer).SetActiveModel(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_SetActiveModel_FullMethodName,
+		FullMethod: Authorization_SetActiveModel_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).SetActiveModel(ctx, req.(*SetActiveModelRequest))
+		return srv.(AuthorizationServer).SetActiveModel(ctx, req.(*SetActiveModelRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AuthorizationProvider_ListActiveModelResourceTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Authorization_ListActiveModelResourceTypes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListActiveModelResourceTypesRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(AuthorizationProviderServer).ListActiveModelResourceTypes(ctx, in)
+		return srv.(AuthorizationServer).ListActiveModelResourceTypes(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: AuthorizationProvider_ListActiveModelResourceTypes_FullMethodName,
+		FullMethod: Authorization_ListActiveModelResourceTypes_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AuthorizationProviderServer).ListActiveModelResourceTypes(ctx, req.(*ListActiveModelResourceTypesRequest))
+		return srv.(AuthorizationServer).ListActiveModelResourceTypes(ctx, req.(*ListActiveModelResourceTypesRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// AuthorizationProvider_ServiceDesc is the grpc.ServiceDesc for AuthorizationProvider service.
+// Authorization_ServiceDesc is the grpc.ServiceDesc for Authorization service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var AuthorizationProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.provider.v1.AuthorizationProvider",
-	HandlerType: (*AuthorizationProviderServer)(nil),
+var Authorization_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.Authorization",
+	HandlerType: (*AuthorizationServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "CheckAccess",
-			Handler:    _AuthorizationProvider_CheckAccess_Handler,
+			Handler:    _Authorization_CheckAccess_Handler,
 		},
 		{
 			MethodName: "CheckAccessMany",
-			Handler:    _AuthorizationProvider_CheckAccessMany_Handler,
+			Handler:    _Authorization_CheckAccessMany_Handler,
 		},
 		{
 			MethodName: "ListRelationships",
-			Handler:    _AuthorizationProvider_ListRelationships_Handler,
+			Handler:    _Authorization_ListRelationships_Handler,
 		},
 		{
 			MethodName: "AddRelationship",
-			Handler:    _AuthorizationProvider_AddRelationship_Handler,
+			Handler:    _Authorization_AddRelationship_Handler,
 		},
 		{
 			MethodName: "DeleteRelationship",
-			Handler:    _AuthorizationProvider_DeleteRelationship_Handler,
+			Handler:    _Authorization_DeleteRelationship_Handler,
 		},
 		{
 			MethodName: "SetAuthorizationState",
-			Handler:    _AuthorizationProvider_SetAuthorizationState_Handler,
+			Handler:    _Authorization_SetAuthorizationState_Handler,
 		},
 		{
 			MethodName: "GetActiveModelRef",
-			Handler:    _AuthorizationProvider_GetActiveModelRef_Handler,
+			Handler:    _Authorization_GetActiveModelRef_Handler,
 		},
 		{
 			MethodName: "SetActiveModel",
-			Handler:    _AuthorizationProvider_SetActiveModel_Handler,
+			Handler:    _Authorization_SetActiveModel_Handler,
 		},
 		{
 			MethodName: "ListActiveModelResourceTypes",
-			Handler:    _AuthorizationProvider_ListActiveModelResourceTypes_Handler,
+			Handler:    _Authorization_ListActiveModelResourceTypes_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -16,7 +16,7 @@ import (
 )
 
 type agentTransportHarness struct {
-	proto.UnimplementedAgentProviderServer
+	proto.UnimplementedAgentServer
 
 	mu                 sync.Mutex
 	sessionRequests    []*proto.CreateAgentProviderSessionRequest
@@ -111,7 +111,7 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentProviderServer(srv, harness)
+	proto.RegisterAgentServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -215,7 +215,7 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 
 	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentProviderServer(srv, harness)
+	proto.RegisterAgentServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -286,7 +286,7 @@ func TestTransport_AgentCreateSessionTypedNilTools(t *testing.T) {
 
 	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentProviderServer(srv, harness)
+	proto.RegisterAgentServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -329,7 +329,7 @@ func TestTransport_AgentRequestBuilderCallerAndWorkflowContext(t *testing.T) {
 
 	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentProviderServer(srv, harness)
+	proto.RegisterAgentServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -393,7 +393,7 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 
 	harness := &agentTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentProviderServer(srv, harness)
+	proto.RegisterAgentServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

@@ -134,7 +134,7 @@ service RuntimeLogHost {
   rpc AppendLogs(AppendRuntimeLogsRequest) returns (AppendRuntimeLogsResponse);
 }
 
-service RuntimeProvider {
+service Runtime {
   rpc GetSupport(google.protobuf.Empty) returns (RuntimeSupport);
   rpc StartSession(StartRuntimeSessionRequest) returns (RuntimeSession);
   rpc GetSession(GetRuntimeSessionRequest) returns (RuntimeSession);

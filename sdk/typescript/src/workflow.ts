@@ -50,7 +50,7 @@ import {
   WorkflowManualTriggerSchema,
   WorkflowObjectSchema,
   WorkflowPathSourceSchema,
-  WorkflowProvider as WorkflowProviderService,
+  Workflow as WorkflowProviderService,
   WorkflowRunEventSchema,
   WorkflowRunSchema,
   WorkflowRunStatus as ProtoWorkflowRunStatus,

@@ -737,7 +737,7 @@ func (v *relayTestSessionVerifier) setActive(sessionID string, active bool) {
 }
 
 type relayTestWorkflowProviderServer struct {
-	proto.UnimplementedWorkflowProviderServer
+	proto.UnimplementedWorkflowServer
 	calls *atomic.Int64
 }
 
@@ -752,7 +752,7 @@ func (s relayTestWorkflowProviderServer) GetDefinition(_ context.Context, req *p
 }
 
 type relayTestAgentProviderServer struct {
-	proto.UnimplementedAgentProviderServer
+	proto.UnimplementedAgentServer
 	calls *atomic.Int64
 }
 
@@ -1186,13 +1186,13 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "workflow provider",
 			service:      "workflow_provider",
-			methodPrefix: "/" + proto.WorkflowProvider_ServiceDesc.ServiceName + "/",
+			methodPrefix: "/" + proto.Workflow_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
-				proto.RegisterWorkflowProviderServer(srv, relayTestWorkflowProviderServer{calls: calls})
+				proto.RegisterWorkflowServer(srv, relayTestWorkflowProviderServer{calls: calls})
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewWorkflowProviderClient(conn).GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
+				resp, err := proto.NewWorkflowClient(conn).GetDefinition(ctx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
 				if err != nil {
 					t.Fatalf("WorkflowProvider.GetDefinition via relay: %v", err)
 				}
@@ -1204,13 +1204,13 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "agent provider",
 			service:      "agent_provider",
-			methodPrefix: "/" + proto.AgentProvider_ServiceDesc.ServiceName + "/",
+			methodPrefix: "/" + proto.Agent_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
-				proto.RegisterAgentProviderServer(srv, relayTestAgentProviderServer{calls: calls})
+				proto.RegisterAgentServer(srv, relayTestAgentProviderServer{calls: calls})
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewAgentProviderClient(conn).GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
+				resp, err := proto.NewAgentClient(conn).GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 				if err != nil {
 					t.Fatalf("AgentProvider.GetSession via relay: %v", err)
 				}
@@ -1303,9 +1303,9 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 			switch tc.service {
 			case "workflow_provider":
-				_, err = proto.NewWorkflowProviderClient(conn).GetDefinition(staleCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
+				_, err = proto.NewWorkflowClient(conn).GetDefinition(staleCtx, &proto.GetWorkflowProviderDefinitionRequest{DefinitionId: "definition-1"})
 			case "agent_provider":
-				_, err = proto.NewAgentProviderClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
+				_, err = proto.NewAgentClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 			case "runtime_log_host":
 				_, err = proto.NewRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendRuntimeLogsRequest{
 					SessionId: "runtime-session-1",

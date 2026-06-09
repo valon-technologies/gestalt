@@ -6,9 +6,7 @@ mod support_protocol;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::workflow_provider_server::{
-    WorkflowProvider as ProtoWorkflowProvider, WorkflowProviderServer,
-};
+use gestalt::proto::v1::workflow_server::{Workflow as ProtoWorkflowProvider, WorkflowServer};
 use gestalt::proto::v1::{
     ApplyWorkflowProviderDefinitionRequest, BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
     DeleteWorkflowProviderDefinitionRequest, DeliverWorkflowProviderEventRequest,
@@ -771,7 +769,7 @@ async fn serve_workflow(socket: &Path, server: TestWorkflowServer) -> tokio::tas
     let listener = UnixListener::bind(socket).expect("bind unix listener");
     tokio::spawn(async move {
         Server::builder()
-            .add_service(WorkflowProviderServer::new(server))
+            .add_service(WorkflowServer::new(server))
             .serve_with_incoming(UnixListenerStream::new(listener))
             .await
             .expect("serve workflow");

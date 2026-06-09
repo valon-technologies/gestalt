@@ -4019,8 +4019,8 @@ const file_v1_workflow_proto_rawDesc = "" +
 	"\x1cWORKFLOW_STEP_STATUS_SKIPPED\x10\x03\x12\"\n" +
 	"\x1eWORKFLOW_STEP_STATUS_SUCCEEDED\x10\x04\x12\x1f\n" +
 	"\x1bWORKFLOW_STEP_STATUS_FAILED\x10\x05\x12 \n" +
-	"\x1cWORKFLOW_STEP_STATUS_UNKNOWN\x10\x062\x8f\x0e\n" +
-	"\x10WorkflowProvider\x12w\n" +
+	"\x1cWORKFLOW_STEP_STATUS_UNKNOWN\x10\x062\x87\x0e\n" +
+	"\bWorkflow\x12w\n" +
 	"\x0fApplyDefinition\x12;.gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest\x1a'.gestalt.provider.v1.WorkflowDefinition\x12s\n" +
 	"\rGetDefinition\x129.gestalt.provider.v1.GetWorkflowProviderDefinitionRequest\x1a'.gestalt.provider.v1.WorkflowDefinition\x12\x8c\x01\n" +
 	"\x0fListDefinitions\x12;.gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest\x1a<.gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse\x12\x7f\n" +
@@ -4222,36 +4222,36 @@ var file_v1_workflow_proto_depIdxs = []int32{
 	9,   // 102: gestalt.provider.v1.WorkflowStep.InputsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
 	9,   // 103: gestalt.provider.v1.WorkflowObject.FieldsEntry.value:type_name -> gestalt.provider.v1.WorkflowValue
 	57,  // 104: gestalt.provider.v1.WorkflowEvent.ExtensionsEntry.value:type_name -> google.protobuf.Value
-	30,  // 105: gestalt.provider.v1.WorkflowProvider.ApplyDefinition:input_type -> gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest
-	31,  // 106: gestalt.provider.v1.WorkflowProvider.GetDefinition:input_type -> gestalt.provider.v1.GetWorkflowProviderDefinitionRequest
-	32,  // 107: gestalt.provider.v1.WorkflowProvider.ListDefinitions:input_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest
-	34,  // 108: gestalt.provider.v1.WorkflowProvider.SetDefinitionPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest
-	35,  // 109: gestalt.provider.v1.WorkflowProvider.SetActivationPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest
-	36,  // 110: gestalt.provider.v1.WorkflowProvider.DeleteDefinition:input_type -> gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest
-	37,  // 111: gestalt.provider.v1.WorkflowProvider.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
-	39,  // 112: gestalt.provider.v1.WorkflowProvider.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
-	38,  // 113: gestalt.provider.v1.WorkflowProvider.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
-	47,  // 114: gestalt.provider.v1.WorkflowProvider.GetRunEvents:input_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
-	49,  // 115: gestalt.provider.v1.WorkflowProvider.GetRunOutput:input_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
-	41,  // 116: gestalt.provider.v1.WorkflowProvider.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
-	42,  // 117: gestalt.provider.v1.WorkflowProvider.SignalRun:input_type -> gestalt.provider.v1.SignalWorkflowProviderRunRequest
-	43,  // 118: gestalt.provider.v1.WorkflowProvider.SignalOrStartRun:input_type -> gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
-	45,  // 119: gestalt.provider.v1.WorkflowProvider.DeliverEvent:input_type -> gestalt.provider.v1.DeliverWorkflowProviderEventRequest
-	21,  // 120: gestalt.provider.v1.WorkflowProvider.ApplyDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
-	21,  // 121: gestalt.provider.v1.WorkflowProvider.GetDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
-	33,  // 122: gestalt.provider.v1.WorkflowProvider.ListDefinitions:output_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse
-	21,  // 123: gestalt.provider.v1.WorkflowProvider.SetDefinitionPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
-	21,  // 124: gestalt.provider.v1.WorkflowProvider.SetActivationPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
-	61,  // 125: gestalt.provider.v1.WorkflowProvider.DeleteDefinition:output_type -> google.protobuf.Empty
-	28,  // 126: gestalt.provider.v1.WorkflowProvider.StartRun:output_type -> gestalt.provider.v1.WorkflowRun
-	40,  // 127: gestalt.provider.v1.WorkflowProvider.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
-	28,  // 128: gestalt.provider.v1.WorkflowProvider.GetRun:output_type -> gestalt.provider.v1.WorkflowRun
-	48,  // 129: gestalt.provider.v1.WorkflowProvider.GetRunEvents:output_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
-	50,  // 130: gestalt.provider.v1.WorkflowProvider.GetRunOutput:output_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
-	28,  // 131: gestalt.provider.v1.WorkflowProvider.CancelRun:output_type -> gestalt.provider.v1.WorkflowRun
-	44,  // 132: gestalt.provider.v1.WorkflowProvider.SignalRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
-	44,  // 133: gestalt.provider.v1.WorkflowProvider.SignalOrStartRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
-	15,  // 134: gestalt.provider.v1.WorkflowProvider.DeliverEvent:output_type -> gestalt.provider.v1.WorkflowEvent
+	30,  // 105: gestalt.provider.v1.Workflow.ApplyDefinition:input_type -> gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest
+	31,  // 106: gestalt.provider.v1.Workflow.GetDefinition:input_type -> gestalt.provider.v1.GetWorkflowProviderDefinitionRequest
+	32,  // 107: gestalt.provider.v1.Workflow.ListDefinitions:input_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest
+	34,  // 108: gestalt.provider.v1.Workflow.SetDefinitionPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest
+	35,  // 109: gestalt.provider.v1.Workflow.SetActivationPaused:input_type -> gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest
+	36,  // 110: gestalt.provider.v1.Workflow.DeleteDefinition:input_type -> gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest
+	37,  // 111: gestalt.provider.v1.Workflow.StartRun:input_type -> gestalt.provider.v1.StartWorkflowProviderRunRequest
+	39,  // 112: gestalt.provider.v1.Workflow.ListRuns:input_type -> gestalt.provider.v1.ListWorkflowProviderRunsRequest
+	38,  // 113: gestalt.provider.v1.Workflow.GetRun:input_type -> gestalt.provider.v1.GetWorkflowProviderRunRequest
+	47,  // 114: gestalt.provider.v1.Workflow.GetRunEvents:input_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsRequest
+	49,  // 115: gestalt.provider.v1.Workflow.GetRunOutput:input_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputRequest
+	41,  // 116: gestalt.provider.v1.Workflow.CancelRun:input_type -> gestalt.provider.v1.CancelWorkflowProviderRunRequest
+	42,  // 117: gestalt.provider.v1.Workflow.SignalRun:input_type -> gestalt.provider.v1.SignalWorkflowProviderRunRequest
+	43,  // 118: gestalt.provider.v1.Workflow.SignalOrStartRun:input_type -> gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest
+	45,  // 119: gestalt.provider.v1.Workflow.DeliverEvent:input_type -> gestalt.provider.v1.DeliverWorkflowProviderEventRequest
+	21,  // 120: gestalt.provider.v1.Workflow.ApplyDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
+	21,  // 121: gestalt.provider.v1.Workflow.GetDefinition:output_type -> gestalt.provider.v1.WorkflowDefinition
+	33,  // 122: gestalt.provider.v1.Workflow.ListDefinitions:output_type -> gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse
+	21,  // 123: gestalt.provider.v1.Workflow.SetDefinitionPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
+	21,  // 124: gestalt.provider.v1.Workflow.SetActivationPaused:output_type -> gestalt.provider.v1.WorkflowDefinition
+	61,  // 125: gestalt.provider.v1.Workflow.DeleteDefinition:output_type -> google.protobuf.Empty
+	28,  // 126: gestalt.provider.v1.Workflow.StartRun:output_type -> gestalt.provider.v1.WorkflowRun
+	40,  // 127: gestalt.provider.v1.Workflow.ListRuns:output_type -> gestalt.provider.v1.ListWorkflowProviderRunsResponse
+	28,  // 128: gestalt.provider.v1.Workflow.GetRun:output_type -> gestalt.provider.v1.WorkflowRun
+	48,  // 129: gestalt.provider.v1.Workflow.GetRunEvents:output_type -> gestalt.provider.v1.GetWorkflowProviderRunEventsResponse
+	50,  // 130: gestalt.provider.v1.Workflow.GetRunOutput:output_type -> gestalt.provider.v1.GetWorkflowProviderRunOutputResponse
+	28,  // 131: gestalt.provider.v1.Workflow.CancelRun:output_type -> gestalt.provider.v1.WorkflowRun
+	44,  // 132: gestalt.provider.v1.Workflow.SignalRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
+	44,  // 133: gestalt.provider.v1.Workflow.SignalOrStartRun:output_type -> gestalt.provider.v1.SignalWorkflowRunResponse
+	15,  // 134: gestalt.provider.v1.Workflow.DeliverEvent:output_type -> gestalt.provider.v1.WorkflowEvent
 	120, // [120:135] is the sub-list for method output_type
 	105, // [105:120] is the sub-list for method input_type
 	105, // [105:105] is the sub-list for extension type_name

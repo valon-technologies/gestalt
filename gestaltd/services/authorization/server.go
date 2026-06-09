@@ -11,11 +11,11 @@ import (
 )
 
 type providerServer struct {
-	proto.UnimplementedAuthorizationProviderServer
+	proto.UnimplementedAuthorizationServer
 	provider core.AuthorizationProvider
 }
 
-func NewProviderServer(provider core.AuthorizationProvider) proto.AuthorizationProviderServer {
+func NewProviderServer(provider core.AuthorizationProvider) proto.AuthorizationServer {
 	return &providerServer{provider: provider}
 }
 

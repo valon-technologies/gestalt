@@ -129,7 +129,7 @@ func TestRuntimeProviderWorkspaceTransport(t *testing.T) {
 		errCh <- gestalt.ServeRuntimeProvider(ctx, provider)
 	}()
 	conn := newUnixConn(t, socket)
-	client := proto.NewRuntimeProviderClient(conn)
+	client := proto.NewRuntimeClient(conn)
 
 	support, err := client.GetSupport(context.Background(), &emptypb.Empty{})
 	if err != nil {
@@ -213,7 +213,7 @@ func TestRuntimeProviderWorkspaceTransportUnimplemented(t *testing.T) {
 		errCh <- gestalt.ServeRuntimeProvider(ctx, provider)
 	}()
 	conn := newUnixConn(t, socket)
-	client := proto.NewRuntimeProviderClient(conn)
+	client := proto.NewRuntimeClient(conn)
 
 	_, err := client.PrepareWorkspace(context.Background(), &proto.PrepareRuntimeWorkspaceRequest{
 		SessionId:      "runtime-session-1",

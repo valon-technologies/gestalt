@@ -25,8 +25,8 @@ if _version_not_supported:
     )
 
 
-class AgentProviderStub(object):
-    """AgentProvider is the authoritative agent data boundary. Read RPCs for
+class AgentStub(object):
+    """Agent is the authoritative agent data boundary. Read RPCs for
     sessions, turns, turn events, and interactions should use provider-owned
     control-plane state and should not require a live execution sandbox,
     pod-level transport, or cached tunnel.
@@ -39,74 +39,74 @@ class AgentProviderStub(object):
             channel: A grpc.Channel.
         """
         self.CreateSession = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/CreateSession',
+                '/gestalt.provider.v1.Agent/CreateSession',
                 request_serializer=v1_dot_agent__pb2.CreateAgentProviderSessionRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentSession.FromString,
                 _registered_method=True)
         self.GetSession = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/GetSession',
+                '/gestalt.provider.v1.Agent/GetSession',
                 request_serializer=v1_dot_agent__pb2.GetAgentProviderSessionRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentSession.FromString,
                 _registered_method=True)
         self.ListSessions = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/ListSessions',
+                '/gestalt.provider.v1.Agent/ListSessions',
                 request_serializer=v1_dot_agent__pb2.ListAgentProviderSessionsRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.ListAgentProviderSessionsResponse.FromString,
                 _registered_method=True)
         self.UpdateSession = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/UpdateSession',
+                '/gestalt.provider.v1.Agent/UpdateSession',
                 request_serializer=v1_dot_agent__pb2.UpdateAgentProviderSessionRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentSession.FromString,
                 _registered_method=True)
         self.CreateTurn = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/CreateTurn',
+                '/gestalt.provider.v1.Agent/CreateTurn',
                 request_serializer=v1_dot_agent__pb2.CreateAgentProviderTurnRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentTurn.FromString,
                 _registered_method=True)
         self.GetTurn = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/GetTurn',
+                '/gestalt.provider.v1.Agent/GetTurn',
                 request_serializer=v1_dot_agent__pb2.GetAgentProviderTurnRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentTurn.FromString,
                 _registered_method=True)
         self.ListTurns = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/ListTurns',
+                '/gestalt.provider.v1.Agent/ListTurns',
                 request_serializer=v1_dot_agent__pb2.ListAgentProviderTurnsRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.ListAgentProviderTurnsResponse.FromString,
                 _registered_method=True)
         self.CancelTurn = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/CancelTurn',
+                '/gestalt.provider.v1.Agent/CancelTurn',
                 request_serializer=v1_dot_agent__pb2.CancelAgentProviderTurnRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentTurn.FromString,
                 _registered_method=True)
         self.ListTurnEvents = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/ListTurnEvents',
+                '/gestalt.provider.v1.Agent/ListTurnEvents',
                 request_serializer=v1_dot_agent__pb2.ListAgentProviderTurnEventsRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.ListAgentProviderTurnEventsResponse.FromString,
                 _registered_method=True)
         self.GetInteraction = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/GetInteraction',
+                '/gestalt.provider.v1.Agent/GetInteraction',
                 request_serializer=v1_dot_agent__pb2.GetAgentProviderInteractionRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentInteraction.FromString,
                 _registered_method=True)
         self.ListInteractions = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/ListInteractions',
+                '/gestalt.provider.v1.Agent/ListInteractions',
                 request_serializer=v1_dot_agent__pb2.ListAgentProviderInteractionsRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.ListAgentProviderInteractionsResponse.FromString,
                 _registered_method=True)
         self.ResolveInteraction = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/ResolveInteraction',
+                '/gestalt.provider.v1.Agent/ResolveInteraction',
                 request_serializer=v1_dot_agent__pb2.ResolveAgentProviderInteractionRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentInteraction.FromString,
                 _registered_method=True)
         self.GetCapabilities = channel.unary_unary(
-                '/gestalt.provider.v1.AgentProvider/GetCapabilities',
+                '/gestalt.provider.v1.Agent/GetCapabilities',
                 request_serializer=v1_dot_agent__pb2.GetAgentProviderCapabilitiesRequest.SerializeToString,
                 response_deserializer=v1_dot_agent__pb2.AgentProviderCapabilities.FromString,
                 _registered_method=True)
 
 
-class AgentProviderServicer(object):
-    """AgentProvider is the authoritative agent data boundary. Read RPCs for
+class AgentServicer(object):
+    """Agent is the authoritative agent data boundary. Read RPCs for
     sessions, turns, turn events, and interactions should use provider-owned
     control-plane state and should not require a live execution sandbox,
     pod-level transport, or cached tunnel.
@@ -191,7 +191,7 @@ class AgentProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AgentProviderServicer_to_server(servicer, server):
+def add_AgentServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateSession': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateSession,
@@ -260,14 +260,14 @@ def add_AgentProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.AgentProvider', rpc_method_handlers)
+            'gestalt.provider.v1.Agent', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.AgentProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Agent', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AgentProvider(object):
-    """AgentProvider is the authoritative agent data boundary. Read RPCs for
+class Agent(object):
+    """Agent is the authoritative agent data boundary. Read RPCs for
     sessions, turns, turn events, and interactions should use provider-owned
     control-plane state and should not require a live execution sandbox,
     pod-level transport, or cached tunnel.
@@ -287,7 +287,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/CreateSession',
+            '/gestalt.provider.v1.Agent/CreateSession',
             v1_dot_agent__pb2.CreateAgentProviderSessionRequest.SerializeToString,
             v1_dot_agent__pb2.AgentSession.FromString,
             options,
@@ -314,7 +314,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/GetSession',
+            '/gestalt.provider.v1.Agent/GetSession',
             v1_dot_agent__pb2.GetAgentProviderSessionRequest.SerializeToString,
             v1_dot_agent__pb2.AgentSession.FromString,
             options,
@@ -341,7 +341,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/ListSessions',
+            '/gestalt.provider.v1.Agent/ListSessions',
             v1_dot_agent__pb2.ListAgentProviderSessionsRequest.SerializeToString,
             v1_dot_agent__pb2.ListAgentProviderSessionsResponse.FromString,
             options,
@@ -368,7 +368,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/UpdateSession',
+            '/gestalt.provider.v1.Agent/UpdateSession',
             v1_dot_agent__pb2.UpdateAgentProviderSessionRequest.SerializeToString,
             v1_dot_agent__pb2.AgentSession.FromString,
             options,
@@ -395,7 +395,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/CreateTurn',
+            '/gestalt.provider.v1.Agent/CreateTurn',
             v1_dot_agent__pb2.CreateAgentProviderTurnRequest.SerializeToString,
             v1_dot_agent__pb2.AgentTurn.FromString,
             options,
@@ -422,7 +422,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/GetTurn',
+            '/gestalt.provider.v1.Agent/GetTurn',
             v1_dot_agent__pb2.GetAgentProviderTurnRequest.SerializeToString,
             v1_dot_agent__pb2.AgentTurn.FromString,
             options,
@@ -449,7 +449,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/ListTurns',
+            '/gestalt.provider.v1.Agent/ListTurns',
             v1_dot_agent__pb2.ListAgentProviderTurnsRequest.SerializeToString,
             v1_dot_agent__pb2.ListAgentProviderTurnsResponse.FromString,
             options,
@@ -476,7 +476,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/CancelTurn',
+            '/gestalt.provider.v1.Agent/CancelTurn',
             v1_dot_agent__pb2.CancelAgentProviderTurnRequest.SerializeToString,
             v1_dot_agent__pb2.AgentTurn.FromString,
             options,
@@ -503,7 +503,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/ListTurnEvents',
+            '/gestalt.provider.v1.Agent/ListTurnEvents',
             v1_dot_agent__pb2.ListAgentProviderTurnEventsRequest.SerializeToString,
             v1_dot_agent__pb2.ListAgentProviderTurnEventsResponse.FromString,
             options,
@@ -530,7 +530,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/GetInteraction',
+            '/gestalt.provider.v1.Agent/GetInteraction',
             v1_dot_agent__pb2.GetAgentProviderInteractionRequest.SerializeToString,
             v1_dot_agent__pb2.AgentInteraction.FromString,
             options,
@@ -557,7 +557,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/ListInteractions',
+            '/gestalt.provider.v1.Agent/ListInteractions',
             v1_dot_agent__pb2.ListAgentProviderInteractionsRequest.SerializeToString,
             v1_dot_agent__pb2.ListAgentProviderInteractionsResponse.FromString,
             options,
@@ -584,7 +584,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/ResolveInteraction',
+            '/gestalt.provider.v1.Agent/ResolveInteraction',
             v1_dot_agent__pb2.ResolveAgentProviderInteractionRequest.SerializeToString,
             v1_dot_agent__pb2.AgentInteraction.FromString,
             options,
@@ -611,7 +611,7 @@ class AgentProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AgentProvider/GetCapabilities',
+            '/gestalt.provider.v1.Agent/GetCapabilities',
             v1_dot_agent__pb2.GetAgentProviderCapabilitiesRequest.SerializeToString,
             v1_dot_agent__pb2.AgentProviderCapabilities.FromString,
             options,

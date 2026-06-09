@@ -9,7 +9,7 @@ import (
 )
 
 type workflow struct {
-	client         proto.WorkflowProviderClient
+	client         proto.WorkflowClient
 	context        *proto.RequestContext
 	idempotencyKey string
 }
@@ -33,7 +33,7 @@ type Workflow interface {
 	DeliverEvent(context.Context, WorkflowDeliverEvent) (*WorkflowEvent, error)
 }
 
-var sharedWorkflowTransport sharedManagerTransport[proto.WorkflowProviderClient]
+var sharedWorkflowTransport sharedManagerTransport[proto.WorkflowClient]
 
 // NewWorkflow returns a workflow capability for the current provider request.
 func NewWorkflow(req Request) (Workflow, error) {
@@ -59,7 +59,7 @@ func newWorkflow(reqCtx *proto.RequestContext) (*workflow, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "workflow", target, token, &sharedWorkflowTransport, proto.NewWorkflowProviderClient)
+	client, err := managerTransportClient(ctx, "workflow", target, token, &sharedWorkflowTransport, proto.NewWorkflowClient)
 	if err != nil {
 		return nil, err
 	}

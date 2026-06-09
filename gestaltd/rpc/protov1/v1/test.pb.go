@@ -111,8 +111,8 @@ const file_v1_test_proto_rawDesc = "" +
 	"\rv1/test.proto\x12\x13gestalt.provider.v1\"\x13\n" +
 	"\x11HelloWorldRequest\".\n" +
 	"\x12HelloWorldResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2m\n" +
-	"\fTestProvider\x12]\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2e\n" +
+	"\x04Test\x12]\n" +
 	"\n" +
 	"HelloWorld\x12&.gestalt.provider.v1.HelloWorldRequest\x1a'.gestalt.provider.v1.HelloWorldResponseB\xd5\x01\n" +
 	"\x17com.gestalt.provider.v1B\tTestProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
@@ -135,8 +135,8 @@ var file_v1_test_proto_goTypes = []any{
 	(*HelloWorldResponse)(nil), // 1: gestalt.provider.v1.HelloWorldResponse
 }
 var file_v1_test_proto_depIdxs = []int32{
-	0, // 0: gestalt.provider.v1.TestProvider.HelloWorld:input_type -> gestalt.provider.v1.HelloWorldRequest
-	1, // 1: gestalt.provider.v1.TestProvider.HelloWorld:output_type -> gestalt.provider.v1.HelloWorldResponse
+	0, // 0: gestalt.provider.v1.Test.HelloWorld:input_type -> gestalt.provider.v1.HelloWorldRequest
+	1, // 1: gestalt.provider.v1.Test.HelloWorld:output_type -> gestalt.provider.v1.HelloWorldResponse
 	1, // [1:2] is the sub-list for method output_type
 	0, // [0:1] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

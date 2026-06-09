@@ -71,7 +71,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthenticationProv
 	}
 
 	runtimeClient := proc.Lifecycle()
-	client := proto.NewAuthenticationProviderClient(proc.Conn())
+	client := proto.NewAuthenticationClient(proc.Conn())
 	provider, err := newRemoteAuthenticationProvider(ctx, runtimeClient, client, cfg)
 	if err != nil {
 		_ = proc.Close()

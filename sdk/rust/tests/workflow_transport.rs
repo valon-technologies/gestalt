@@ -4,7 +4,7 @@ mod helpers;
 use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
+use gestalt::proto::v1::workflow_client::WorkflowClient;
 use gestalt::proto::v1::{
     ApplyWorkflowProviderDefinitionRequest, BoundWorkflowTarget, ConfigureProviderRequest,
     DeliverWorkflowProviderEventRequest, GetWorkflowProviderRunEventsRequest,
@@ -246,7 +246,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         .await
         .expect("configure provider");
 
-    let mut client = WorkflowProviderClient::new(channel);
+    let mut client = WorkflowClient::new(channel);
     let applied = client
         .apply_definition(ApplyWorkflowProviderDefinitionRequest {
             provider_name: "workflow-runtime".to_string(),

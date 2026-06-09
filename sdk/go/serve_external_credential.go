@@ -12,6 +12,6 @@ import (
 func ServeExternalCredentialProvider(ctx context.Context, provider ExternalCredentialProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindExternalCredential, provider))
-		proto.RegisterExternalCredentialProviderServer(srv, newExternalCredentialProviderServer(provider))
+		proto.RegisterExternalCredentialsServer(srv, newExternalCredentialProviderServer(provider))
 	})
 }

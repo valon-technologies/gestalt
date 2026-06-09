@@ -26,7 +26,7 @@ if _version_not_supported:
     )
 
 
-class AuthorizationProviderStub(object):
+class AuthorizationStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,53 +36,53 @@ class AuthorizationProviderStub(object):
             channel: A grpc.Channel.
         """
         self.CheckAccess = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/CheckAccess',
+                '/gestalt.provider.v1.Authorization/CheckAccess',
                 request_serializer=v1_dot_authorization__pb2.CheckAccessRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.CheckAccessResponse.FromString,
                 _registered_method=True)
         self.CheckAccessMany = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany',
+                '/gestalt.provider.v1.Authorization/CheckAccessMany',
                 request_serializer=v1_dot_authorization__pb2.CheckAccessManyRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.CheckAccessManyResponse.FromString,
                 _registered_method=True)
         self.ListRelationships = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/ListRelationships',
+                '/gestalt.provider.v1.Authorization/ListRelationships',
                 request_serializer=v1_dot_authorization__pb2.ListRelationshipsRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.ListRelationshipsResponse.FromString,
                 _registered_method=True)
         self.AddRelationship = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/AddRelationship',
+                '/gestalt.provider.v1.Authorization/AddRelationship',
                 request_serializer=v1_dot_authorization__pb2.AddRelationshipRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.AddRelationshipResponse.FromString,
                 _registered_method=True)
         self.DeleteRelationship = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship',
+                '/gestalt.provider.v1.Authorization/DeleteRelationship',
                 request_serializer=v1_dot_authorization__pb2.DeleteRelationshipRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.DeleteRelationshipResponse.FromString,
                 _registered_method=True)
         self.SetAuthorizationState = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState',
+                '/gestalt.provider.v1.Authorization/SetAuthorizationState',
                 request_serializer=v1_dot_authorization__pb2.SetAuthorizationStateRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.SetAuthorizationStateResponse.FromString,
                 _registered_method=True)
         self.GetActiveModelRef = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef',
+                '/gestalt.provider.v1.Authorization/GetActiveModelRef',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.GetActiveModelRefResponse.FromString,
                 _registered_method=True)
         self.SetActiveModel = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/SetActiveModel',
+                '/gestalt.provider.v1.Authorization/SetActiveModel',
                 request_serializer=v1_dot_authorization__pb2.SetActiveModelRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.SetActiveModelResponse.FromString,
                 _registered_method=True)
         self.ListActiveModelResourceTypes = channel.unary_unary(
-                '/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes',
+                '/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes',
                 request_serializer=v1_dot_authorization__pb2.ListActiveModelResourceTypesRequest.SerializeToString,
                 response_deserializer=v1_dot_authorization__pb2.ListActiveModelResourceTypesResponse.FromString,
                 _registered_method=True)
 
 
-class AuthorizationProviderServicer(object):
+class AuthorizationServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def CheckAccess(self, request, context):
@@ -140,7 +140,7 @@ class AuthorizationProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AuthorizationProviderServicer_to_server(servicer, server):
+def add_AuthorizationServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CheckAccess': grpc.unary_unary_rpc_method_handler(
                     servicer.CheckAccess,
@@ -189,13 +189,13 @@ def add_AuthorizationProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.AuthorizationProvider', rpc_method_handlers)
+            'gestalt.provider.v1.Authorization', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.AuthorizationProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Authorization', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AuthorizationProvider(object):
+class Authorization(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -212,7 +212,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/CheckAccess',
+            '/gestalt.provider.v1.Authorization/CheckAccess',
             v1_dot_authorization__pb2.CheckAccessRequest.SerializeToString,
             v1_dot_authorization__pb2.CheckAccessResponse.FromString,
             options,
@@ -239,7 +239,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/CheckAccessMany',
+            '/gestalt.provider.v1.Authorization/CheckAccessMany',
             v1_dot_authorization__pb2.CheckAccessManyRequest.SerializeToString,
             v1_dot_authorization__pb2.CheckAccessManyResponse.FromString,
             options,
@@ -266,7 +266,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/ListRelationships',
+            '/gestalt.provider.v1.Authorization/ListRelationships',
             v1_dot_authorization__pb2.ListRelationshipsRequest.SerializeToString,
             v1_dot_authorization__pb2.ListRelationshipsResponse.FromString,
             options,
@@ -293,7 +293,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/AddRelationship',
+            '/gestalt.provider.v1.Authorization/AddRelationship',
             v1_dot_authorization__pb2.AddRelationshipRequest.SerializeToString,
             v1_dot_authorization__pb2.AddRelationshipResponse.FromString,
             options,
@@ -320,7 +320,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/DeleteRelationship',
+            '/gestalt.provider.v1.Authorization/DeleteRelationship',
             v1_dot_authorization__pb2.DeleteRelationshipRequest.SerializeToString,
             v1_dot_authorization__pb2.DeleteRelationshipResponse.FromString,
             options,
@@ -347,7 +347,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/SetAuthorizationState',
+            '/gestalt.provider.v1.Authorization/SetAuthorizationState',
             v1_dot_authorization__pb2.SetAuthorizationStateRequest.SerializeToString,
             v1_dot_authorization__pb2.SetAuthorizationStateResponse.FromString,
             options,
@@ -374,7 +374,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/GetActiveModelRef',
+            '/gestalt.provider.v1.Authorization/GetActiveModelRef',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_authorization__pb2.GetActiveModelRefResponse.FromString,
             options,
@@ -401,7 +401,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/SetActiveModel',
+            '/gestalt.provider.v1.Authorization/SetActiveModel',
             v1_dot_authorization__pb2.SetActiveModelRequest.SerializeToString,
             v1_dot_authorization__pb2.SetActiveModelResponse.FromString,
             options,
@@ -428,7 +428,7 @@ class AuthorizationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.AuthorizationProvider/ListActiveModelResourceTypes',
+            '/gestalt.provider.v1.Authorization/ListActiveModelResourceTypes',
             v1_dot_authorization__pb2.ListActiveModelResourceTypesRequest.SerializeToString,
             v1_dot_authorization__pb2.ListActiveModelResourceTypesResponse.FromString,
             options,

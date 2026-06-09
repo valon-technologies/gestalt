@@ -2356,7 +2356,7 @@ class Workflow:
         relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
         self._channel = host_service_channel("workflow", target, token=relay_token)
-        self._stub = pb_grpc.WorkflowProviderStub(self._channel)
+        self._stub = pb_grpc.WorkflowStub(self._channel)
         self._context = request.context
         if not idempotency_key.strip():
             idempotency_key = request.idempotency_key

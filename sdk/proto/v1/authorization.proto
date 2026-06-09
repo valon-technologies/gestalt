@@ -201,7 +201,7 @@ enum SourceLayer {
   SOURCE_LAYER_RUNTIME = 2;
 }
 
-service AuthorizationProvider {
+service Authorization {
   rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse);
   rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse);
 

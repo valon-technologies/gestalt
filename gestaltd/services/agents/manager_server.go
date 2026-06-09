@@ -31,7 +31,7 @@ type ManagerService interface {
 }
 
 type ProviderServer struct {
-	proto.UnimplementedAgentProviderServer
+	proto.UnimplementedAgentServer
 
 	pluginName string
 	manager    ManagerService
@@ -394,4 +394,4 @@ func agentManagerStatusError(err error) error {
 	}
 }
 
-var _ proto.AgentProviderServer = (*ProviderServer)(nil)
+var _ proto.AgentServer = (*ProviderServer)(nil)

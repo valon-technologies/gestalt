@@ -25,9 +25,9 @@ if _version_not_supported:
     )
 
 
-class TestProviderStub(object):
-    """TestProvider models a minimal provider-kind-specific protocol used to verify
-    new provider kind registration and lifecycle wiring.
+class TestStub(object):
+    """Test models a minimal provider-kind-specific protocol used to verify new
+    provider kind registration and lifecycle wiring.
     """
 
     def __init__(self, channel):
@@ -37,15 +37,15 @@ class TestProviderStub(object):
             channel: A grpc.Channel.
         """
         self.HelloWorld = channel.unary_unary(
-                '/gestalt.provider.v1.TestProvider/HelloWorld',
+                '/gestalt.provider.v1.Test/HelloWorld',
                 request_serializer=v1_dot_test__pb2.HelloWorldRequest.SerializeToString,
                 response_deserializer=v1_dot_test__pb2.HelloWorldResponse.FromString,
                 _registered_method=True)
 
 
-class TestProviderServicer(object):
-    """TestProvider models a minimal provider-kind-specific protocol used to verify
-    new provider kind registration and lifecycle wiring.
+class TestServicer(object):
+    """Test models a minimal provider-kind-specific protocol used to verify new
+    provider kind registration and lifecycle wiring.
     """
 
     def HelloWorld(self, request, context):
@@ -55,7 +55,7 @@ class TestProviderServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_TestProviderServicer_to_server(servicer, server):
+def add_TestServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'HelloWorld': grpc.unary_unary_rpc_method_handler(
                     servicer.HelloWorld,
@@ -64,15 +64,15 @@ def add_TestProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.TestProvider', rpc_method_handlers)
+            'gestalt.provider.v1.Test', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.TestProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.Test', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class TestProvider(object):
-    """TestProvider models a minimal provider-kind-specific protocol used to verify
-    new provider kind registration and lifecycle wiring.
+class Test(object):
+    """Test models a minimal provider-kind-specific protocol used to verify new
+    provider kind registration and lifecycle wiring.
     """
 
     @staticmethod
@@ -89,7 +89,7 @@ class TestProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.TestProvider/HelloWorld',
+            '/gestalt.provider.v1.Test/HelloWorld',
             v1_dot_test__pb2.HelloWorldRequest.SerializeToString,
             v1_dot_test__pb2.HelloWorldResponse.FromString,
             options,
