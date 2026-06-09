@@ -358,6 +358,7 @@
 }
 
 .providerCard {
+  position: relative;
   display: grid;
   min-height: 72px;
   align-items: center;
@@ -370,18 +371,39 @@
   color: inherit;
   padding: 12px;
   text-align: left;
+  /* hover-out timing; :hover snaps in instantly */
   transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
+    background-color 200ms var(--valon-ease-out-quart),
+    border-color 200ms var(--valon-ease-out-quart),
+    transform 200ms var(--valon-ease-out-quart);
+}
+
+/*
+ * Hover shadow lives on a pre-rendered pseudo-element faded via opacity:
+ * transitioning box-shadow itself repaints every frame and stutters, while
+ * opacity runs on the compositor.
+ */
+.providerCard::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--registry-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms var(--valon-ease-out-quart);
 }
 
 .providerCard:hover {
   border-color: var(--valon-line-strong);
   background: var(--registry-surface-hover);
-  box-shadow: 0 8px 24px var(--registry-shadow);
   transform: translateY(-1px);
+  transition: none;
+}
+
+.providerCard:hover::after {
+  opacity: 1;
+  transition: none;
 }
 
 .selectedCard {
@@ -393,9 +415,6 @@
 .selectedCard:hover {
   border-color: rgba(var(--valon-ink), 0.34);
   background: var(--registry-selected-hover);
-  box-shadow:
-    inset 3px 0 0 var(--valon-gold),
-    0 8px 24px var(--registry-shadow);
 }
 
 .providerText {
@@ -485,7 +504,8 @@
   align-items: center;
   justify-content: center;
   border: 1px solid var(--valon-line);
-  border-radius: 12px;
+  /* half the providerCard radius; also clips full-bleed tile icons */
+  border-radius: 6px;
   background: var(--registry-icon-surface);
   object-fit: contain;
 }
