@@ -1,0 +1,16 @@
+version: 1
+services:
+  - proto: gestalt.provider.v1.AuthorizationProvider
+    sdk_name: Authorization
+    package:
+      typescript: Authorization
+      python: authorization
+      go: authorization
+      rust: authorization
+    well_known_types:
+      google.protobuf.Struct:
+        semantic: json_object
+      google.protobuf.Timestamp:
+        semantic: timestamp_with_presence
+    enum_policy: preserve_unknown_numeric
+    oneof_policy: explicit_variants

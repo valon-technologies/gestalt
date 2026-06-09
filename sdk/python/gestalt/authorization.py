@@ -45,30 +45,30 @@ DEFAULT_ACCESS_POLICY_ALLOW = _pb.DEFAULT_ACCESS_POLICY_ALLOW
 
 
 @dataclass(slots=True)
-class AuthorizationSubject:
+class Subject:
     type: str = ""
     id: str = ""
-    properties: Mapping[str, Any] = field(default_factory=dict)
+    properties: Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
-class AuthorizationAction:
+class Action:
     name: str = ""
-    properties: Mapping[str, Any] = field(default_factory=dict)
+    properties: Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
-class AuthorizationResource:
+class Resource:
     type: str = ""
     id: str = ""
-    properties: Mapping[str, Any] = field(default_factory=dict)
+    properties: Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
 class CheckAccessRequest:
-    subject: AuthorizationSubject | None = None
-    action: AuthorizationAction | None = None
-    resource: AuthorizationResource | None = None
+    subject: Subject | None = None
+    action: Action | None = None
+    resource: Resource | None = None
 
 
 @dataclass(slots=True)
@@ -91,7 +91,7 @@ class CheckAccessManyResponse:
 class RelationshipFilter:
     target: "RelationshipTarget | None" = None
     relation: str = ""
-    resource: AuthorizationResource | None = None
+    resource: Resource | None = None
     target_type: int = RELATIONSHIP_TARGET_TYPE_UNSPECIFIED
     target_entity_type: str = ""
     resource_type: str = ""
@@ -133,19 +133,19 @@ class DeleteRelationshipResponse:
 
 @dataclass(slots=True)
 class SetAuthorizationStateRequest:
-    model: "AuthorizationModel | None" = None
+    model: "Model | None" = None
     relationships: list["Relationship"] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class SetAuthorizationStateResponse:
-    active_model: "AuthorizationModelRef | None" = None
+    active_model: "ModelRef | None" = None
 
 
 @dataclass(slots=True)
 class Relationship:
     tuple: "RelationshipTuple | None" = None
-    properties: Mapping[str, Any] = field(default_factory=dict)
+    properties: Mapping[str, Any] | None = None
     source_layer: int = SOURCE_LAYER_UNSPECIFIED
 
 
@@ -153,33 +153,53 @@ class Relationship:
 class RelationshipTuple:
     target: "RelationshipTarget | None" = None
     relation: str = ""
-    resource: AuthorizationResource | None = None
+    resource: Resource | None = None
 
 
 @dataclass(slots=True)
 class RelationshipTarget:
-    subject: AuthorizationSubject | None = None
-    resource: AuthorizationResource | None = None
+    subject: Subject | None = None
+    resource: Resource | None = None
     subject_set: "SubjectSet | None" = None
+
+    def __post_init__(self) -> None:
+        selected = sum(
+            value is not None
+            for value in (self.subject, self.resource, self.subject_set)
+        )
+        if selected > 1:
+            raise ValueError("RelationshipTarget accepts exactly one variant")
+
+    @classmethod
+    def from_subject(cls, subject: Subject) -> "RelationshipTarget":
+        return cls(subject=subject)
+
+    @classmethod
+    def from_resource(cls, resource: Resource) -> "RelationshipTarget":
+        return cls(resource=resource)
+
+    @classmethod
+    def from_subject_set(cls, subject_set: "SubjectSet") -> "RelationshipTarget":
+        return cls(subject_set=subject_set)
 
 
 @dataclass(slots=True)
 class SubjectSet:
-    resource: AuthorizationResource | None = None
+    resource: Resource | None = None
     relation: str = ""
 
 
 @dataclass(slots=True)
-class AuthorizationModel:
+class Model:
     id: str = ""
     version: str = ""
-    resource_types: list["AuthorizationModelResourceType"] = field(
+    resource_types: list["ModelResourceType"] = field(
         default_factory=list
     )
 
 
 @dataclass(slots=True)
-class AuthorizationModelResourceType:
+class ModelResourceType:
     name: str = ""
     relations: list["ModelRelation"] = field(default_factory=list)
     actions: list["ModelAction"] = field(default_factory=list)
@@ -205,6 +225,28 @@ class ModelAllowedTarget:
     resource_type: str | None = None
     subject_set_type: "SubjectSetType | None" = None
 
+    def __post_init__(self) -> None:
+        selected = sum(
+            value is not None
+            for value in (self.subject_type, self.resource_type, self.subject_set_type)
+        )
+        if selected > 1:
+            raise ValueError("ModelAllowedTarget accepts exactly one variant")
+
+    @classmethod
+    def from_subject_type(cls, subject_type: str) -> "ModelAllowedTarget":
+        return cls(subject_type=subject_type)
+
+    @classmethod
+    def from_resource_type(cls, resource_type: str) -> "ModelAllowedTarget":
+        return cls(resource_type=resource_type)
+
+    @classmethod
+    def from_subject_set_type(
+        cls, subject_set_type: "SubjectSetType"
+    ) -> "ModelAllowedTarget":
+        return cls(subject_set_type=subject_set_type)
+
 
 @dataclass(slots=True)
 class SubjectSetType:
@@ -213,7 +255,7 @@ class SubjectSetType:
 
 
 @dataclass(slots=True)
-class AuthorizationModelRef:
+class ModelRef:
     id: str = ""
     version: str = ""
     created_at: dt.datetime | None = None
@@ -221,43 +263,43 @@ class AuthorizationModelRef:
 
 @dataclass(slots=True)
 class GetActiveModelRefResponse:
-    model: AuthorizationModelRef | None = None
+    model: ModelRef | None = None
 
 
 @dataclass(slots=True)
 class SetActiveModelRequest:
-    model: AuthorizationModel | None = None
+    model: Model | None = None
 
 
 @dataclass(slots=True)
 class SetActiveModelResponse:
-    model: AuthorizationModelRef | None = None
+    model: ModelRef | None = None
 
 
 @dataclass(slots=True)
-class AuthorizationModelResourceTypeFilter:
+class ModelResourceTypeFilter:
     name: str = ""
     source_layer: int = SOURCE_LAYER_UNSPECIFIED
 
 
 @dataclass(slots=True)
 class ListActiveModelResourceTypesRequest:
-    filter: AuthorizationModelResourceTypeFilter | None = None
+    filter: ModelResourceTypeFilter | None = None
     page_size: int = 0
     page_token: str = ""
 
 
 @dataclass(slots=True)
 class ListActiveModelResourceTypesResponse:
-    resource_types: list[AuthorizationModelResourceType] = field(default_factory=list)
+    resource_types: list[ModelResourceType] = field(default_factory=list)
     next_page_token: str = ""
     model_id: str = ""
 
 
-class AuthorizationProtocol(Protocol):
+class ClientProtocol(Protocol):
     """Fakeable contract for host authorization calls."""
 
-    def __enter__(self) -> "AuthorizationProtocol":
+    def __enter__(self) -> "ClientProtocol":
         """Return the client for ``with`` statements."""
 
     def __exit__(self, *args: Any) -> None:
@@ -306,33 +348,33 @@ class AuthorizationProtocol(Protocol):
         """List resource types in the active authorization model."""
 
 
-class Authorization:
+class Client:
     """Transport-backed implementation for host authorization calls."""
 
     def __new__(
         cls,
         socket_target: str | None = None,
-        relay_token: str | None = None,
         *,
+        _token: str | None = None,
         _shared: bool = False,
-    ) -> "Authorization":
-        if not _shared and socket_target is None and relay_token is None:
+    ) -> "Client":
+        if not _shared and socket_target is None and _token is None:
             return _shared_authorization_client()
         return super().__new__(cls)
 
     def __init__(
         self,
         socket_target: str | None = None,
-        relay_token: str | None = None,
         *,
+        _token: str | None = None,
         _shared: bool = False,
     ) -> None:
         if getattr(self, "_authorization_initialized", False):
             return
         target = _resolve_authorization_socket_target(socket_target)
         token = (
-            relay_token
-            if relay_token is not None
+            _token
+            if _token is not None
             else os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         ).strip()
         self._channel = host_service_channel("authorization", target, token=token)
@@ -433,14 +475,14 @@ class Authorization:
             )
         )
 
-    def __enter__(self) -> "Authorization":
+    def __enter__(self) -> "Client":
         return self
 
     def __exit__(self, *args: Any) -> None:
         self.close()
 
 
-def _shared_authorization_client() -> Authorization:
+def _shared_authorization_client() -> Client:
     target = _resolve_authorization_socket_target()
     token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
     with _shared_authorization_lock:
@@ -452,7 +494,7 @@ def _shared_authorization_client() -> Authorization:
         ):
             return client
 
-        client = Authorization(target, token, _shared=True)
+        client = Client(target, _token=token, _shared=True)
         stale = _shared_authorization_transport.get("client")
         _shared_authorization_transport["target"] = target
         _shared_authorization_transport["token"] = token
@@ -819,7 +861,7 @@ def list_active_model_resource_types_request_from_proto(
 ) -> ListActiveModelResourceTypesRequest:
     return ListActiveModelResourceTypesRequest(
         filter=(
-            AuthorizationModelResourceTypeFilter(
+            ModelResourceTypeFilter(
                 name=value.filter.name,
                 source_layer=value.filter.source_layer,
             )
@@ -908,7 +950,7 @@ def relationship_from_proto(value: Any) -> Relationship:
         else None,
         properties=_struct_to_dict(value.properties)
         if _has_field(value, "properties")
-        else {},
+        else None,
         source_layer=value.source_layer,
     )
 
@@ -923,7 +965,11 @@ def relationship_to_proto(value: Any) -> Any:
             if relationship.tuple is not None
             else None
         ),
-        properties=_struct_from_dict(relationship.properties),
+        properties=(
+            _struct_from_dict(relationship.properties)
+            if relationship.properties is not None
+            else None
+        ),
         source_layer=relationship.source_layer,
     )
 
@@ -1010,7 +1056,7 @@ def subject_set_to_proto(value: Any) -> Any:
 def authorization_model_to_proto(value: Any) -> Any:
     if isinstance(value, pb.AuthorizationModel):
         return _copy(value)
-    model = _coerce(value, AuthorizationModel, "AuthorizationModel")
+    model = _coerce(value, Model, "Model")
     return pb.AuthorizationModel(
         id=model.id,
         version=model.version,
@@ -1021,8 +1067,8 @@ def authorization_model_to_proto(value: Any) -> Any:
     )
 
 
-def authorization_model_from_proto(value: Any) -> AuthorizationModel:
-    return AuthorizationModel(
+def authorization_model_from_proto(value: Any) -> Model:
+    return Model(
         id=value.id,
         version=value.version,
         resource_types=[
@@ -1034,8 +1080,8 @@ def authorization_model_from_proto(value: Any) -> AuthorizationModel:
 
 def authorization_model_resource_type_from_proto(
     value: Any,
-) -> AuthorizationModelResourceType:
-    return AuthorizationModelResourceType(
+) -> ModelResourceType:
+    return ModelResourceType(
         name=value.name,
         relations=[
             ModelRelation(
@@ -1060,7 +1106,7 @@ def authorization_model_resource_type_to_proto(value: Any) -> Any:
     if isinstance(value, pb.AuthorizationModelResourceType):
         return _copy(value)
     resource_type = _coerce(
-        value, AuthorizationModelResourceType, "AuthorizationModelResourceType"
+        value, ModelResourceType, "ModelResourceType"
     )
     return pb.AuthorizationModelResourceType(
         name=resource_type.name,
@@ -1086,7 +1132,7 @@ def authorization_model_resource_type_to_proto(value: Any) -> Any:
 def authorization_model_ref_to_proto(value: Any) -> Any:
     if isinstance(value, pb.AuthorizationModelRef):
         return _copy(value)
-    model = _coerce(value, AuthorizationModelRef, "AuthorizationModelRef")
+    model = _coerce(value, ModelRef, "ModelRef")
     return pb.AuthorizationModelRef(
         id=model.id,
         version=model.version,
@@ -1129,69 +1175,81 @@ def model_allowed_target_to_proto(value: Any) -> Any:
     return message
 
 
-def _subject_from_proto(value: Any) -> AuthorizationSubject:
-    return AuthorizationSubject(
+def _subject_from_proto(value: Any) -> Subject:
+    return Subject(
         type=value.type,
         id=value.id,
         properties=_struct_to_dict(value.properties)
         if _has_field(value, "properties")
-        else {},
+        else None,
     )
 
 
 def _subject_to_proto(value: Any) -> Any:
     if isinstance(value, pb.Subject):
         return _copy(value)
-    subject = _coerce(value, AuthorizationSubject, "AuthorizationSubject")
+    subject = _coerce(value, Subject, "Subject")
     return pb.Subject(
         type=subject.type,
         id=subject.id,
-        properties=_struct_from_dict(subject.properties),
+        properties=(
+            _struct_from_dict(subject.properties)
+            if subject.properties is not None
+            else None
+        ),
     )
 
 
-def _action_from_proto(value: Any) -> AuthorizationAction:
-    return AuthorizationAction(
+def _action_from_proto(value: Any) -> Action:
+    return Action(
         name=value.name,
         properties=_struct_to_dict(value.properties)
         if _has_field(value, "properties")
-        else {},
+        else None,
     )
 
 
 def _action_to_proto(value: Any) -> Any:
     if isinstance(value, pb.Action):
         return _copy(value)
-    action = _coerce(value, AuthorizationAction, "AuthorizationAction")
+    action = _coerce(value, Action, "Action")
     return pb.Action(
         name=action.name,
-        properties=_struct_from_dict(action.properties),
+        properties=(
+            _struct_from_dict(action.properties)
+            if action.properties is not None
+            else None
+        ),
     )
 
 
-def _resource_from_proto(value: Any) -> AuthorizationResource:
-    return AuthorizationResource(
+def _resource_from_proto(value: Any) -> Resource:
+    return Resource(
         type=value.type,
         id=value.id,
         properties=_struct_to_dict(value.properties)
         if _has_field(value, "properties")
-        else {},
+        else None,
     )
 
 
 def _resource_to_proto(value: Any) -> Any:
     if isinstance(value, pb.Resource):
         return _copy(value)
-    resource = _coerce(value, AuthorizationResource, "AuthorizationResource")
+    resource = _coerce(value, Resource, "Resource")
     return pb.Resource(
         type=resource.type,
         id=resource.id,
-        properties=_struct_from_dict(resource.properties),
+        properties=(
+            _struct_from_dict(resource.properties)
+            if resource.properties is not None
+            else None
+        ),
     )
 
 
-def _authorization_model_ref_from_proto(value: Any) -> AuthorizationModelRef:
-    return AuthorizationModelRef(
+def _authorization_model_ref_from_proto(value: Any) -> ModelRef:
+    return ModelRef(
         id=value.id,
         version=value.version,
         created_at=_datetime_from_timestamp(value.created_at)

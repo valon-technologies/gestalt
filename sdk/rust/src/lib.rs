@@ -8,12 +8,15 @@ mod app_access;
 mod app_decode;
 mod auth;
 mod auth_server;
+/// Authorization client and native Authorization data types.
+pub mod authorization;
 mod cache;
 mod cache_server;
 mod catalog;
 mod env;
 mod error;
 mod generated;
+mod host_service;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod protocol;

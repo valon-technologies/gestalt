@@ -1,4 +1,5 @@
 import {
+  Authorization,
   RuntimeEgressMode,
   RuntimeLogHost,
   WorkflowRunStatus,
@@ -9,6 +10,16 @@ import {
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
 
+// @ts-expect-error Root package must not expose legacy authorization client alias.
+import type { AuthorizationClient } from "@valon-technologies/gestalt";
+// @ts-expect-error Root package must not expose legacy authorization subject type.
+import type { AuthorizationSubject } from "@valon-technologies/gestalt";
+// @ts-expect-error Root package must not expose legacy authorization action type.
+import type { AuthorizationAction } from "@valon-technologies/gestalt";
+// @ts-expect-error Root package must not expose legacy authorization resource type.
+import type { AuthorizationResource } from "@valon-technologies/gestalt";
+// @ts-expect-error Root package must not expose root authorization request types.
+import type { CheckAccessRequest as RootCheckAccessRequest } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protocol helper schemas.
 import { StructSchema as RootStructSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protocol helper types.
@@ -41,6 +52,16 @@ const workspace: AgentWorkspace = {
 const jsonObject: JsonObject = { ok: true };
 const jsonValue: JsonValue = { nested: ["value"] };
 const egressMode: RuntimeEgressMode = RuntimeEgressMode.NONE;
+const authorizationSubject: Authorization.SubjectInput = {
+  type: "user",
+  id: "user-1",
+};
+const authorizationOptions: Authorization.Options = {
+  target: "tcp://127.0.0.1:8080",
+};
+const authorizationFactory: (
+  options?: Authorization.Options,
+) => Authorization.Client = Authorization;
 
 void RuntimeLogHost;
 void WorkflowRunStatus;
@@ -50,8 +71,16 @@ void workspace;
 void jsonObject;
 void jsonValue;
 void egressMode;
+void authorizationSubject;
+void authorizationOptions;
+void authorizationFactory;
 void (undefined as unknown as ProtocolStruct);
 void (undefined as unknown as ProtocolRequest);
 void (undefined as unknown as typeof agentContractSchemas);
+void (undefined as unknown as AuthorizationClient);
+void (undefined as unknown as AuthorizationSubject);
+void (undefined as unknown as AuthorizationAction);
+void (undefined as unknown as AuthorizationResource);
+void (undefined as unknown as RootCheckAccessRequest);
 void connectionModeToProtoValue;
 void connectionParamToProto;

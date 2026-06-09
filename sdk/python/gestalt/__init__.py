@@ -162,53 +162,6 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
     "CompleteLoginRequest",
 )
 
-_AUTHORIZATION_AUTHORED_EXPORTS = (
-    "AddRelationshipRequest",
-    "AddRelationshipResponse",
-    "Authorization",
-    "AuthorizationAction",
-    "AuthorizationModel",
-    "AuthorizationModelRef",
-    "AuthorizationModelResourceType",
-    "AuthorizationModelResourceTypeFilter",
-    "AuthorizationProtocol",
-    "AuthorizationResource",
-    "AuthorizationSubject",
-    "CheckAccessManyRequest",
-    "CheckAccessManyResponse",
-    "CheckAccessRequest",
-    "CheckAccessResponse",
-    "DEFAULT_ACCESS_POLICY_ALLOW",
-    "DEFAULT_ACCESS_POLICY_DENY",
-    "DeleteRelationshipRequest",
-    "DeleteRelationshipResponse",
-    "GetActiveModelRefResponse",
-    "ListActiveModelResourceTypesRequest",
-    "ListActiveModelResourceTypesResponse",
-    "ListRelationshipsRequest",
-    "ListRelationshipsResponse",
-    "ModelAction",
-    "ModelAllowedTarget",
-    "ModelRelation",
-    "RELATIONSHIP_TARGET_TYPE_RESOURCE",
-    "RELATIONSHIP_TARGET_TYPE_SUBJECT",
-    "RELATIONSHIP_TARGET_TYPE_SUBJECT_SET",
-    "RELATIONSHIP_TARGET_TYPE_UNSPECIFIED",
-    "Relationship",
-    "RelationshipFilter",
-    "RelationshipTarget",
-    "RelationshipTuple",
-    "SOURCE_LAYER_RUNTIME",
-    "SOURCE_LAYER_STATIC_CONFIG",
-    "SOURCE_LAYER_UNSPECIFIED",
-    "SetActiveModelRequest",
-    "SetActiveModelResponse",
-    "SetAuthorizationStateRequest",
-    "SetAuthorizationStateResponse",
-    "SubjectSet",
-    "SubjectSetType",
-)
-
 _PROTOCOL_TYPE_EXPORTS = (
     "JsonObject",
     "JsonValue",
@@ -500,9 +453,6 @@ _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS}
 _LAZY_EXPORTS.update(
     {name: ("._authentication", name) for name in _AUTHENTICATION_AUTHORED_EXPORTS}
 )
-_LAZY_EXPORTS.update(
-    {name: ("._authorization", name) for name in _AUTHORIZATION_AUTHORED_EXPORTS}
-)
 _LAZY_EXPORTS.update({name: ("._protocol", name) for name in _PROTOCOL_TYPE_EXPORTS})
 _LAZY_EXPORTS.update(
     {name: ("._runtime_provider", name) for name in _RUNTIME_PROVIDER_AUTHORED_EXPORTS}
@@ -515,6 +465,7 @@ _LAZY_EXPORTS.update(
 )
 
 _LAZY_MODULES = {
+    "authorization": ".authorization",
     "telemetry": ".telemetry",
 }
 
@@ -540,7 +491,6 @@ __all__ = [
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
-    *_AUTHORIZATION_AUTHORED_EXPORTS,
     *_PROTOCOL_TYPE_EXPORTS,
     *_RUNTIME_PROVIDER_AUTHORED_EXPORTS,
     *_WORKFLOW_AUTHORED_EXPORTS,
@@ -550,6 +500,7 @@ __all__ = [
     "AlreadyExistsError",
     "AuthorizationProvider",
     "AuthenticationProvider",
+    "authorization",
     "Cache",
     "CacheEntry",
     "CacheProtocol",

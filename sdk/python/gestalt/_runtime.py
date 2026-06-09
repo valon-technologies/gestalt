@@ -17,11 +17,11 @@ from typing import Any, Final, cast
 
 from . import _agent as _agent_native
 from . import _authentication as _auth_native
-from . import _authorization as _authorization_native
 from . import _runtime_provider as _runtime_provider_native
 from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
+from . import authorization as _authorization_native
 from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPermission
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config

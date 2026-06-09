@@ -109,6 +109,10 @@ export function createHostServiceGrpcTransport(
   });
 }
 
+export function hostServiceRelayToken(): string {
+  return process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
+}
+
 export function requireHostServiceTarget(
   serviceName: string,
 ): { target: string; token: string } {
@@ -118,6 +122,6 @@ export function requireHostServiceTarget(
   }
   return {
     target,
-    token: process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "",
+    token: hostServiceRelayToken(),
   };
 }

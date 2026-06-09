@@ -82,6 +82,7 @@ import {
 } from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
+  hostServiceRelayToken,
   hostServiceMetadataInterceptors,
   parseHostServiceTarget,
   requireHostServiceTarget,
@@ -93,277 +94,337 @@ export const RelationshipTargetType = {
   RESOURCE: ProtoRelationshipTargetType.RESOURCE,
   SUBJECT_SET: ProtoRelationshipTargetType.SUBJECT_SET,
 } as const;
-export type RelationshipTargetType =
-  (typeof RelationshipTargetType)[keyof typeof RelationshipTargetType];
+export type RelationshipTargetType = number;
 
 export const SourceLayer = {
   UNSPECIFIED: ProtoSourceLayer.UNSPECIFIED,
   STATIC_CONFIG: ProtoSourceLayer.STATIC_CONFIG,
   RUNTIME: ProtoSourceLayer.RUNTIME,
 } as const;
-export type SourceLayer = (typeof SourceLayer)[keyof typeof SourceLayer];
+export type SourceLayer = number;
 
 export const DefaultAccessPolicy = {
   DENY: ProtoDefaultAccessPolicy.DENY,
   ALLOW: ProtoDefaultAccessPolicy.ALLOW,
 } as const;
-export type DefaultAccessPolicy =
-  (typeof DefaultAccessPolicy)[keyof typeof DefaultAccessPolicy];
+export type DefaultAccessPolicy = number;
 
-export interface AuthorizationSubject {
-  type?: string | undefined;
-  id?: string | undefined;
-  properties?: JsonObjectInput | undefined;
-}
-
-export interface AuthorizationAction {
-  name?: string | undefined;
-  properties?: JsonObjectInput | undefined;
-}
-
-export interface AuthorizationResource {
-  type?: string | undefined;
-  id?: string | undefined;
-  properties?: JsonObjectInput | undefined;
-}
-
-export interface CheckAccessRequest {
-  subject?: AuthorizationSubject | undefined;
-  action?: AuthorizationAction | undefined;
-  resource?: AuthorizationResource | undefined;
-}
-
-export interface CheckAccessResponse {
-  allowed?: boolean | undefined;
-  modelId?: string | undefined;
-}
-
-export interface CheckAccessManyRequest {
-  requests?: readonly CheckAccessRequest[] | undefined;
-}
-
-export interface CheckAccessManyResponse {
-  decisions?: readonly CheckAccessResponse[] | undefined;
-}
-
-export interface RelationshipFilter {
-  target?: RelationshipTarget | undefined;
-  relation?: string | undefined;
-  resource?: AuthorizationResource | undefined;
-  targetType?: RelationshipTargetType | undefined;
-  targetEntityType?: string | undefined;
-  resourceType?: string | undefined;
-  sourceLayer?: SourceLayer | undefined;
-}
-
-export interface ListRelationshipsRequest {
-  filter?: RelationshipFilter | undefined;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-}
-
-export interface ListRelationshipsResponse {
-  relationships?: readonly Relationship[] | undefined;
-  nextPageToken?: string | undefined;
-}
-
-export interface AddRelationshipRequest {
-  relationship?: Relationship | undefined;
-}
-
-export interface AddRelationshipResponse {
-  relationship?: Relationship | undefined;
-}
-
-export interface DeleteRelationshipRequest {
-  relationshipTuple?: RelationshipTuple | undefined;
-}
-
-export interface DeleteRelationshipResponse {}
-
-export interface SetAuthorizationStateRequest {
-  model?: AuthorizationModel | undefined;
-  relationships?: readonly Relationship[] | undefined;
-}
-
-export interface SetAuthorizationStateResponse {
-  activeModel?: AuthorizationModelRef | undefined;
-}
-
-export interface Relationship {
-  tuple?: RelationshipTuple | undefined;
-  properties?: JsonObjectInput | undefined;
-  sourceLayer?: SourceLayer | undefined;
-}
-
-export interface RelationshipTuple {
-  target?: RelationshipTarget | undefined;
-  relation?: string | undefined;
-  resource?: AuthorizationResource | undefined;
-}
-
-export interface RelationshipTarget {
-  subject?: AuthorizationSubject | undefined;
-  resource?: AuthorizationResource | undefined;
-  subjectSet?: SubjectSet | undefined;
-}
-
-export interface SubjectSet {
-  resource?: AuthorizationResource | undefined;
-  relation?: string | undefined;
-}
-
-export interface AuthorizationModel {
-  id?: string | undefined;
-  version?: string | undefined;
-  resourceTypes?: readonly AuthorizationModelResourceType[] | undefined;
-}
-
-export interface AuthorizationModelResourceType {
-  name?: string | undefined;
-  relations?: readonly ModelRelation[] | undefined;
-  actions?: readonly ModelAction[] | undefined;
-  sourceLayer?: SourceLayer | undefined;
-  defaultAccessPolicy?: DefaultAccessPolicy | undefined;
-}
-
-export interface ModelRelation {
-  name?: string | undefined;
-  allowedTargets?: readonly ModelAllowedTarget[] | undefined;
-}
-
-export interface ModelAction {
-  name?: string | undefined;
-  relations?: readonly string[] | undefined;
-}
-
-export interface ModelAllowedTarget {
-  subjectType?: string | undefined;
-  resourceType?: string | undefined;
-  subjectSetType?: SubjectSetType | undefined;
-}
-
-export interface SubjectSetType {
-  resourceType?: string | undefined;
-  relation?: string | undefined;
-}
-
-export interface AuthorizationModelRef {
-  id?: string | undefined;
-  version?: string | undefined;
-  createdAt?: Date | undefined;
-}
-
-export interface GetActiveModelRefResponse {
-  model?: AuthorizationModelRef | undefined;
-}
-
-export interface SetActiveModelRequest {
-  model?: AuthorizationModel | undefined;
-}
-
-export interface SetActiveModelResponse {
-  model?: AuthorizationModelRef | undefined;
-}
-
-export interface AuthorizationModelResourceTypeFilter {
-  name?: string | undefined;
-  sourceLayer?: SourceLayer | undefined;
-}
-
-export interface ListActiveModelResourceTypesRequest {
-  filter?: AuthorizationModelResourceTypeFilter | undefined;
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-}
-
-export interface ListActiveModelResourceTypesResponse {
-  resourceTypes?: readonly AuthorizationModelResourceType[] | undefined;
-  nextPageToken?: string | undefined;
-  modelId?: string | undefined;
-}
-
-export interface Authorization {
-  checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse>;
-  checkAccessMany(
-    request: CheckAccessManyRequest,
-  ): Promise<CheckAccessManyResponse>;
-  listRelationships(
-    request: ListRelationshipsRequest,
-  ): Promise<ListRelationshipsResponse>;
-  addRelationship(
-    request: AddRelationshipRequest,
-  ): Promise<AddRelationshipResponse>;
-  deleteRelationship(
-    request: DeleteRelationshipRequest,
-  ): Promise<DeleteRelationshipResponse>;
-  setAuthorizationState(
-    request: SetAuthorizationStateRequest,
-  ): Promise<SetAuthorizationStateResponse>;
-  getActiveModelRef(): Promise<GetActiveModelRefResponse>;
-  setActiveModel(
-    request: SetActiveModelRequest,
-  ): Promise<SetActiveModelResponse>;
-  listActiveModelResourceTypes(
-    request: ListActiveModelResourceTypesRequest,
-  ): Promise<ListActiveModelResourceTypesResponse>;
-}
-
-class AuthorizationImpl implements Authorization {
-  private readonly client: Client<typeof AuthorizationProviderService>;
-
-  constructor(target?: string, relayToken?: string) {
-    const host = target
-      ? { target, token: relayToken?.trim() ?? "" }
-      : requireHostServiceTarget("authorization");
-    const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("authorization", host.target),
-      hostServiceMetadataInterceptors(host.token, ""),
-    );
-    this.client = createClient(AuthorizationProviderService, transport);
+export function Authorization(
+  options: Authorization.Options = {},
+): Authorization.Client {
+  const host = options.target === undefined
+    ? requireHostServiceTarget("authorization")
+    : { target: options.target, token: hostServiceRelayToken() };
+  const { target, token } = host;
+  if (
+    sharedAuthorization &&
+    sharedAuthorization.target === target &&
+    sharedAuthorization.token === token
+  ) {
+    return sharedAuthorization.client;
   }
 
-  async checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse> {
+  sharedAuthorization?.client.close();
+  const client = new AuthorizationImpl(target, token);
+  sharedAuthorization = { target, token, client };
+  return client;
+}
+
+export namespace Authorization {
+  export interface Options {
+    target?: string | undefined;
+  }
+
+  export interface SubjectInput {
+    type?: string | undefined;
+    id?: string | undefined;
+    properties?: JsonObjectInput | undefined;
+  }
+
+  export interface ActionInput {
+    name?: string | undefined;
+    properties?: JsonObjectInput | undefined;
+  }
+
+  export interface ResourceInput {
+    type?: string | undefined;
+    id?: string | undefined;
+    properties?: JsonObjectInput | undefined;
+  }
+
+  export interface CheckAccessRequest {
+    subject?: SubjectInput | undefined;
+    action?: ActionInput | undefined;
+    resource?: ResourceInput | undefined;
+  }
+
+  export interface CheckAccessResponse {
+    allowed?: boolean | undefined;
+    modelId?: string | undefined;
+  }
+
+  export interface CheckAccessManyRequest {
+    requests?: readonly CheckAccessRequest[] | undefined;
+  }
+
+  export interface CheckAccessManyResponse {
+    decisions?: readonly CheckAccessResponse[] | undefined;
+  }
+
+  export interface RelationshipFilter {
+    target?: RelationshipTarget | undefined;
+    relation?: string | undefined;
+    resource?: ResourceInput | undefined;
+    targetType?: RelationshipTargetType | undefined;
+    targetEntityType?: string | undefined;
+    resourceType?: string | undefined;
+    sourceLayer?: SourceLayer | undefined;
+  }
+
+  export interface ListRelationshipsRequest {
+    filter?: RelationshipFilter | undefined;
+    pageSize?: number | undefined;
+    pageToken?: string | undefined;
+  }
+
+  export interface ListRelationshipsResponse {
+    relationships?: readonly Relationship[] | undefined;
+    nextPageToken?: string | undefined;
+  }
+
+  export interface AddRelationshipRequest {
+    relationship?: Relationship | undefined;
+  }
+
+  export interface AddRelationshipResponse {
+    relationship?: Relationship | undefined;
+  }
+
+  export interface DeleteRelationshipRequest {
+    relationshipTuple?: RelationshipTuple | undefined;
+  }
+
+  export interface DeleteRelationshipResponse {}
+
+  export interface SetAuthorizationStateRequest {
+    model?: Model | undefined;
+    relationships?: readonly Relationship[] | undefined;
+  }
+
+  export interface SetAuthorizationStateResponse {
+    activeModel?: ModelRef | undefined;
+  }
+
+  export interface Relationship {
+    tuple?: RelationshipTuple | undefined;
+    properties?: JsonObjectInput | undefined;
+    sourceLayer?: SourceLayer | undefined;
+  }
+
+  export interface RelationshipTuple {
+    target?: RelationshipTarget | undefined;
+    relation?: string | undefined;
+    resource?: ResourceInput | undefined;
+  }
+
+  export type RelationshipTarget =
+    | { kind: "subject"; subject: SubjectInput }
+    | { kind: "resource"; resource: ResourceInput }
+    | { kind: "subjectSet"; subjectSet: SubjectSet }
+    | { kind: "unset" };
+
+  export const RelationshipTarget = {
+    unset: (): RelationshipTarget => ({ kind: "unset" }),
+    subject: (subject: SubjectInput): RelationshipTarget => ({
+      kind: "subject",
+      subject,
+    }),
+    resource: (resource: ResourceInput): RelationshipTarget => ({
+      kind: "resource",
+      resource,
+    }),
+    subjectSet: (subjectSet: SubjectSet): RelationshipTarget => ({
+      kind: "subjectSet",
+      subjectSet,
+    }),
+  } as const;
+
+  export interface SubjectSet {
+    resource?: ResourceInput | undefined;
+    relation?: string | undefined;
+  }
+
+  export interface Model {
+    id?: string | undefined;
+    version?: string | undefined;
+    resourceTypes?: readonly ModelResourceType[] | undefined;
+  }
+
+  export interface ModelResourceType {
+    name?: string | undefined;
+    relations?: readonly ModelRelation[] | undefined;
+    actions?: readonly ModelAction[] | undefined;
+    sourceLayer?: SourceLayer | undefined;
+    defaultAccessPolicy?: DefaultAccessPolicy | undefined;
+  }
+
+  export interface ModelRelation {
+    name?: string | undefined;
+    allowedTargets?: readonly ModelAllowedTarget[] | undefined;
+  }
+
+  export interface ModelAction {
+    name?: string | undefined;
+    relations?: readonly string[] | undefined;
+  }
+
+  export type ModelAllowedTarget =
+    | { kind: "subjectType"; subjectType: string }
+    | { kind: "resourceType"; resourceType: string }
+    | { kind: "subjectSetType"; subjectSetType: SubjectSetType }
+    | { kind: "unset" };
+
+  export const ModelAllowedTarget = {
+    unset: (): ModelAllowedTarget => ({ kind: "unset" }),
+    subjectType: (subjectType: string): ModelAllowedTarget => ({
+      kind: "subjectType",
+      subjectType,
+    }),
+    resourceType: (resourceType: string): ModelAllowedTarget => ({
+      kind: "resourceType",
+      resourceType,
+    }),
+    subjectSetType: (subjectSetType: SubjectSetType): ModelAllowedTarget => ({
+      kind: "subjectSetType",
+      subjectSetType,
+    }),
+  } as const;
+
+  export interface SubjectSetType {
+    resourceType?: string | undefined;
+    relation?: string | undefined;
+  }
+
+  export interface ModelRef {
+    id?: string | undefined;
+    version?: string | undefined;
+    createdAt?: Date | undefined;
+  }
+
+  export interface GetActiveModelRefResponse {
+    model?: ModelRef | undefined;
+  }
+
+  export interface SetActiveModelRequest {
+    model?: Model | undefined;
+  }
+
+  export interface SetActiveModelResponse {
+    model?: ModelRef | undefined;
+  }
+
+  export interface ModelResourceTypeFilter {
+    name?: string | undefined;
+    sourceLayer?: SourceLayer | undefined;
+  }
+
+  export interface ListActiveModelResourceTypesRequest {
+    filter?: ModelResourceTypeFilter | undefined;
+    pageSize?: number | undefined;
+    pageToken?: string | undefined;
+  }
+
+  export interface ListActiveModelResourceTypesResponse {
+    resourceTypes?: readonly ModelResourceType[] | undefined;
+    nextPageToken?: string | undefined;
+    modelId?: string | undefined;
+  }
+
+  export interface Client {
+    checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse>;
+    checkAccessMany(
+      request: CheckAccessManyRequest,
+    ): Promise<CheckAccessManyResponse>;
+    listRelationships(
+      request: ListRelationshipsRequest,
+    ): Promise<ListRelationshipsResponse>;
+    addRelationship(
+      request: AddRelationshipRequest,
+    ): Promise<AddRelationshipResponse>;
+    deleteRelationship(
+      request: DeleteRelationshipRequest,
+    ): Promise<DeleteRelationshipResponse>;
+    setAuthorizationState(
+      request: SetAuthorizationStateRequest,
+    ): Promise<SetAuthorizationStateResponse>;
+    getActiveModelRef(): Promise<GetActiveModelRefResponse>;
+    setActiveModel(
+      request: SetActiveModelRequest,
+    ): Promise<SetActiveModelResponse>;
+    listActiveModelResourceTypes(
+      request: ListActiveModelResourceTypesRequest,
+    ): Promise<ListActiveModelResourceTypesResponse>;
+    close(): void;
+  }
+}
+
+class AuthorizationImpl implements Authorization.Client {
+  private readonly transport: ReturnType<typeof createHostServiceGrpcTransport>;
+  private readonly client: Client<typeof AuthorizationProviderService>;
+
+  constructor(target: string, token: string) {
+    this.transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("authorization", target),
+      hostServiceMetadataInterceptors(token, ""),
+    );
+    this.client = createClient(AuthorizationProviderService, this.transport);
+  }
+
+  close(): void {
+    this.transport.close();
+  }
+
+  async checkAccess(request: Authorization.CheckAccessRequest): Promise<Authorization.CheckAccessResponse> {
     return checkAccessResponseFromProto(
       await this.client.checkAccess(checkAccessRequestToProto(request)),
     );
   }
 
   async checkAccessMany(
-    request: CheckAccessManyRequest,
-  ): Promise<CheckAccessManyResponse> {
+    request: Authorization.CheckAccessManyRequest,
+  ): Promise<Authorization.CheckAccessManyResponse> {
     return checkAccessManyResponseFromProto(
       await this.client.checkAccessMany(checkAccessManyRequestToProto(request)),
     );
   }
 
   async listRelationships(
-    request: ListRelationshipsRequest,
-  ): Promise<ListRelationshipsResponse> {
+    request: Authorization.ListRelationshipsRequest,
+  ): Promise<Authorization.ListRelationshipsResponse> {
     return listRelationshipsResponseFromProto(
       await this.client.listRelationships(listRelationshipsRequestToProto(request)),
     );
   }
 
   async addRelationship(
-    request: AddRelationshipRequest,
-  ): Promise<AddRelationshipResponse> {
+    request: Authorization.AddRelationshipRequest,
+  ): Promise<Authorization.AddRelationshipResponse> {
     return addRelationshipResponseFromProto(
       await this.client.addRelationship(addRelationshipRequestToProto(request)),
     );
   }
 
   async deleteRelationship(
-    request: DeleteRelationshipRequest,
-  ): Promise<DeleteRelationshipResponse> {
+    request: Authorization.DeleteRelationshipRequest,
+  ): Promise<Authorization.DeleteRelationshipResponse> {
     return deleteRelationshipResponseFromProto(
       await this.client.deleteRelationship(deleteRelationshipRequestToProto(request)),
     );
   }
 
   async setAuthorizationState(
-    request: SetAuthorizationStateRequest,
-  ): Promise<SetAuthorizationStateResponse> {
+    request: Authorization.SetAuthorizationStateRequest,
+  ): Promise<Authorization.SetAuthorizationStateResponse> {
     return setAuthorizationStateResponseFromProto(
       await this.client.setAuthorizationState(
         setAuthorizationStateRequestToProto(request),
@@ -371,23 +432,23 @@ class AuthorizationImpl implements Authorization {
     );
   }
 
-  async getActiveModelRef(): Promise<GetActiveModelRefResponse> {
+  async getActiveModelRef(): Promise<Authorization.GetActiveModelRefResponse> {
     return getActiveModelRefResponseFromProto(
       await this.client.getActiveModelRef(create(EmptySchema)),
     );
   }
 
   async setActiveModel(
-    request: SetActiveModelRequest,
-  ): Promise<SetActiveModelResponse> {
+    request: Authorization.SetActiveModelRequest,
+  ): Promise<Authorization.SetActiveModelResponse> {
     return setActiveModelResponseFromProto(
       await this.client.setActiveModel(setActiveModelRequestToProto(request)),
     );
   }
 
   async listActiveModelResourceTypes(
-    request: ListActiveModelResourceTypesRequest,
-  ): Promise<ListActiveModelResourceTypesResponse> {
+    request: Authorization.ListActiveModelResourceTypesRequest,
+  ): Promise<Authorization.ListActiveModelResourceTypesResponse> {
     return listActiveModelResourceTypesResponseFromProto(
       await this.client.listActiveModelResourceTypes(
         listActiveModelResourceTypesRequestToProto(request),
@@ -397,48 +458,33 @@ class AuthorizationImpl implements Authorization {
 }
 
 let sharedAuthorization:
-  | { target: string; token: string; client: Authorization }
+  | { target: string; token: string; client: Authorization.Client }
   | undefined;
 
-export function Authorization(): Authorization {
-  const { target, token } = requireHostServiceTarget("authorization");
-  if (
-    sharedAuthorization &&
-    sharedAuthorization.target === target &&
-    sharedAuthorization.token === token
-  ) {
-    return sharedAuthorization.client;
-  }
-
-  const client = new AuthorizationImpl(target, token);
-  sharedAuthorization = { target, token, client };
-  return client;
-}
-
 export interface AuthorizationProviderOptions extends ProviderBaseOptions {
-  checkAccess: (request: CheckAccessRequest) => MaybePromise<CheckAccessResponse>;
+  checkAccess: (request: Authorization.CheckAccessRequest) => MaybePromise<Authorization.CheckAccessResponse>;
   checkAccessMany: (
-    request: CheckAccessManyRequest,
-  ) => MaybePromise<CheckAccessManyResponse>;
+    request: Authorization.CheckAccessManyRequest,
+  ) => MaybePromise<Authorization.CheckAccessManyResponse>;
   listRelationships: (
-    request: ListRelationshipsRequest,
-  ) => MaybePromise<ListRelationshipsResponse>;
+    request: Authorization.ListRelationshipsRequest,
+  ) => MaybePromise<Authorization.ListRelationshipsResponse>;
   addRelationship: (
-    request: AddRelationshipRequest,
-  ) => MaybePromise<AddRelationshipResponse>;
+    request: Authorization.AddRelationshipRequest,
+  ) => MaybePromise<Authorization.AddRelationshipResponse>;
   deleteRelationship: (
-    request: DeleteRelationshipRequest,
-  ) => MaybePromise<DeleteRelationshipResponse | void>;
+    request: Authorization.DeleteRelationshipRequest,
+  ) => MaybePromise<Authorization.DeleteRelationshipResponse | void>;
   setAuthorizationState: (
-    request: SetAuthorizationStateRequest,
-  ) => MaybePromise<SetAuthorizationStateResponse>;
-  getActiveModelRef: () => MaybePromise<GetActiveModelRefResponse>;
+    request: Authorization.SetAuthorizationStateRequest,
+  ) => MaybePromise<Authorization.SetAuthorizationStateResponse>;
+  getActiveModelRef: () => MaybePromise<Authorization.GetActiveModelRefResponse>;
   setActiveModel: (
-    request: SetActiveModelRequest,
-  ) => MaybePromise<SetActiveModelResponse>;
+    request: Authorization.SetActiveModelRequest,
+  ) => MaybePromise<Authorization.SetActiveModelResponse>;
   listActiveModelResourceTypes: (
-    request: ListActiveModelResourceTypesRequest,
-  ) => MaybePromise<ListActiveModelResourceTypesResponse>;
+    request: Authorization.ListActiveModelResourceTypesRequest,
+  ) => MaybePromise<Authorization.ListActiveModelResourceTypesResponse>;
 }
 
 export class AuthorizationProvider extends ProviderBase {
@@ -451,53 +497,53 @@ export class AuthorizationProvider extends ProviderBase {
     this.handlers = options;
   }
 
-  checkAccess(request: CheckAccessRequest): Promise<CheckAccessResponse> {
+  checkAccess(request: Authorization.CheckAccessRequest): Promise<Authorization.CheckAccessResponse> {
     return Promise.resolve(this.handlers.checkAccess(request));
   }
 
   checkAccessMany(
-    request: CheckAccessManyRequest,
-  ): Promise<CheckAccessManyResponse> {
+    request: Authorization.CheckAccessManyRequest,
+  ): Promise<Authorization.CheckAccessManyResponse> {
     return Promise.resolve(this.handlers.checkAccessMany(request));
   }
 
   listRelationships(
-    request: ListRelationshipsRequest,
-  ): Promise<ListRelationshipsResponse> {
+    request: Authorization.ListRelationshipsRequest,
+  ): Promise<Authorization.ListRelationshipsResponse> {
     return Promise.resolve(this.handlers.listRelationships(request));
   }
 
   addRelationship(
-    request: AddRelationshipRequest,
-  ): Promise<AddRelationshipResponse> {
+    request: Authorization.AddRelationshipRequest,
+  ): Promise<Authorization.AddRelationshipResponse> {
     return Promise.resolve(this.handlers.addRelationship(request));
   }
 
   deleteRelationship(
-    request: DeleteRelationshipRequest,
-  ): Promise<DeleteRelationshipResponse | void> {
+    request: Authorization.DeleteRelationshipRequest,
+  ): Promise<Authorization.DeleteRelationshipResponse | void> {
     return Promise.resolve(this.handlers.deleteRelationship(request));
   }
 
   setAuthorizationState(
-    request: SetAuthorizationStateRequest,
-  ): Promise<SetAuthorizationStateResponse> {
+    request: Authorization.SetAuthorizationStateRequest,
+  ): Promise<Authorization.SetAuthorizationStateResponse> {
     return Promise.resolve(this.handlers.setAuthorizationState(request));
   }
 
-  getActiveModelRef(): Promise<GetActiveModelRefResponse> {
+  getActiveModelRef(): Promise<Authorization.GetActiveModelRefResponse> {
     return Promise.resolve(this.handlers.getActiveModelRef());
   }
 
   setActiveModel(
-    request: SetActiveModelRequest,
-  ): Promise<SetActiveModelResponse> {
+    request: Authorization.SetActiveModelRequest,
+  ): Promise<Authorization.SetActiveModelResponse> {
     return Promise.resolve(this.handlers.setActiveModel(request));
   }
 
   listActiveModelResourceTypes(
-    request: ListActiveModelResourceTypesRequest,
-  ): Promise<ListActiveModelResourceTypesResponse> {
+    request: Authorization.ListActiveModelResourceTypesRequest,
+  ): Promise<Authorization.ListActiveModelResourceTypesResponse> {
     return Promise.resolve(this.handlers.listActiveModelResourceTypes(request));
   }
 }
@@ -620,20 +666,22 @@ export function createAuthorizationProviderService(
 
 function checkAccessRequestFromProto(
   value: ProtoCheckAccessRequest,
-): CheckAccessRequest {
+): Authorization.CheckAccessRequest {
   return {
     subject: subjectFromProto(value.subject),
     action: value.action
       ? {
           name: value.action.name,
-          properties: jsonObjectFromStruct(value.action.properties),
+          ...(value.action.properties === undefined
+            ? {}
+            : { properties: jsonObjectFromStruct(value.action.properties) }),
         }
       : undefined,
     resource: resourceFromProto(value.resource),
   };
 }
 
-function checkAccessRequestToProto(value: CheckAccessRequest) {
+function checkAccessRequestToProto(value: Authorization.CheckAccessRequest) {
   return create(CheckAccessRequestSchema, {
     subject: subjectToProto(value.subject),
     action: value.action
@@ -650,14 +698,14 @@ function checkAccessRequestToProto(value: CheckAccessRequest) {
 
 function checkAccessResponseFromProto(
   value: ProtoCheckAccessResponse,
-): CheckAccessResponse {
+): Authorization.CheckAccessResponse {
   return {
     allowed: value.allowed,
     modelId: value.modelId,
   };
 }
 
-function checkAccessResponseToProto(value: CheckAccessResponse | undefined) {
+function checkAccessResponseToProto(value: Authorization.CheckAccessResponse | undefined) {
   if (!value) {
     throw new ConnectError(
       "authorization provider returned nil response",
@@ -672,13 +720,13 @@ function checkAccessResponseToProto(value: CheckAccessResponse | undefined) {
 
 function checkAccessManyRequestFromProto(
   value: ProtoCheckAccessManyRequest,
-): CheckAccessManyRequest {
+): Authorization.CheckAccessManyRequest {
   return {
     requests: value.requests.map(checkAccessRequestFromProto),
   };
 }
 
-function checkAccessManyRequestToProto(value: CheckAccessManyRequest) {
+function checkAccessManyRequestToProto(value: Authorization.CheckAccessManyRequest) {
   return create(CheckAccessManyRequestSchema, {
     requests: (value.requests ?? []).map(checkAccessRequestToProto),
   });
@@ -686,14 +734,14 @@ function checkAccessManyRequestToProto(value: CheckAccessManyRequest) {
 
 function checkAccessManyResponseFromProto(
   value: ProtoCheckAccessManyResponse,
-): CheckAccessManyResponse {
+): Authorization.CheckAccessManyResponse {
   return {
     decisions: value.decisions.map(checkAccessResponseFromProto),
   };
 }
 
 function checkAccessManyResponseToProto(
-  value: CheckAccessManyResponse | undefined,
+  value: Authorization.CheckAccessManyResponse | undefined,
 ) {
   if (!value) {
     throw new ConnectError(
@@ -708,7 +756,7 @@ function checkAccessManyResponseToProto(
 
 function listRelationshipsRequestFromProto(
   value: ProtoListRelationshipsRequest,
-): ListRelationshipsRequest {
+): Authorization.ListRelationshipsRequest {
   return {
     filter: relationshipFilterFromProto(value.filter),
     pageSize: value.pageSize,
@@ -717,7 +765,7 @@ function listRelationshipsRequestFromProto(
 }
 
 function listRelationshipsRequestToProto(
-  value: ListRelationshipsRequest,
+  value: Authorization.ListRelationshipsRequest,
 ) {
   return create(ListRelationshipsRequestSchema, {
     filter: relationshipFilterToProto(value.filter),
@@ -728,7 +776,7 @@ function listRelationshipsRequestToProto(
 
 function listRelationshipsResponseFromProto(
   value: ProtoListRelationshipsResponse,
-): ListRelationshipsResponse {
+): Authorization.ListRelationshipsResponse {
   return {
     relationships: value.relationships.map(relationshipFromProtoRequired),
     nextPageToken: value.nextPageToken,
@@ -736,7 +784,7 @@ function listRelationshipsResponseFromProto(
 }
 
 function listRelationshipsResponseToProto(
-  value: ListRelationshipsResponse | undefined,
+  value: Authorization.ListRelationshipsResponse | undefined,
 ) {
   if (!value) {
     throw new ConnectError(
@@ -752,13 +800,13 @@ function listRelationshipsResponseToProto(
 
 function addRelationshipRequestFromProto(
   value: ProtoAddRelationshipRequest,
-): AddRelationshipRequest {
+): Authorization.AddRelationshipRequest {
   return {
     relationship: relationshipFromProto(value.relationship),
   };
 }
 
-function addRelationshipRequestToProto(value: AddRelationshipRequest) {
+function addRelationshipRequestToProto(value: Authorization.AddRelationshipRequest) {
   return create(AddRelationshipRequestSchema, {
     relationship: relationshipToProto(value.relationship),
   });
@@ -766,14 +814,14 @@ function addRelationshipRequestToProto(value: AddRelationshipRequest) {
 
 function addRelationshipResponseFromProto(
   value: ProtoAddRelationshipResponse,
-): AddRelationshipResponse {
+): Authorization.AddRelationshipResponse {
   return {
     relationship: relationshipFromProto(value.relationship),
   };
 }
 
 function addRelationshipResponseToProto(
-  value: AddRelationshipResponse | undefined,
+  value: Authorization.AddRelationshipResponse | undefined,
 ) {
   if (!value) {
     throw new ConnectError(
@@ -790,13 +838,13 @@ function addRelationshipResponseToProto(
 
 function deleteRelationshipRequestFromProto(
   value: ProtoDeleteRelationshipRequest,
-): DeleteRelationshipRequest {
+): Authorization.DeleteRelationshipRequest {
   return {
     relationshipTuple: relationshipTupleFromProto(value.relationshipTuple),
   };
 }
 
-function deleteRelationshipRequestToProto(value: DeleteRelationshipRequest) {
+function deleteRelationshipRequestToProto(value: Authorization.DeleteRelationshipRequest) {
   return create(DeleteRelationshipRequestSchema, {
     relationshipTuple: relationshipTupleToProto(value.relationshipTuple),
   });
@@ -804,13 +852,13 @@ function deleteRelationshipRequestToProto(value: DeleteRelationshipRequest) {
 
 function deleteRelationshipResponseFromProto(
   _value: ProtoDeleteRelationshipResponse,
-): DeleteRelationshipResponse {
+): Authorization.DeleteRelationshipResponse {
   return {};
 }
 
 function setAuthorizationStateRequestFromProto(
   value: ProtoSetAuthorizationStateRequest,
-): SetAuthorizationStateRequest {
+): Authorization.SetAuthorizationStateRequest {
   return {
     model: authorizationModelFromProto(value.model),
     relationships: value.relationships.map(relationshipFromProtoRequired),
@@ -818,7 +866,7 @@ function setAuthorizationStateRequestFromProto(
 }
 
 function setAuthorizationStateRequestToProto(
-  value: SetAuthorizationStateRequest,
+  value: Authorization.SetAuthorizationStateRequest,
 ) {
   return create(SetAuthorizationStateRequestSchema, {
     model: authorizationModelToProto(value.model),
@@ -828,14 +876,14 @@ function setAuthorizationStateRequestToProto(
 
 function setAuthorizationStateResponseFromProto(
   value: ProtoSetAuthorizationStateResponse,
-): SetAuthorizationStateResponse {
+): Authorization.SetAuthorizationStateResponse {
   return {
     activeModel: authorizationModelRefFromProto(value.activeModel),
   };
 }
 
 function setAuthorizationStateResponseToProto(
-  value: SetAuthorizationStateResponse | undefined,
+  value: Authorization.SetAuthorizationStateResponse | undefined,
 ) {
   if (!value) {
     throw new ConnectError(
@@ -852,14 +900,14 @@ function setAuthorizationStateResponseToProto(
 
 function getActiveModelRefResponseFromProto(
   value: ProtoGetActiveModelRefResponse,
-): GetActiveModelRefResponse {
+): Authorization.GetActiveModelRefResponse {
   return {
     model: authorizationModelRefFromProto(value.model),
   };
 }
 
 function getActiveModelRefResponseToProto(
-  value: GetActiveModelRefResponse | undefined,
+  value: Authorization.GetActiveModelRefResponse | undefined,
 ) {
   if (!value) {
     throw new ConnectError(
@@ -874,13 +922,13 @@ function getActiveModelRefResponseToProto(
 
 function setActiveModelRequestFromProto(
   value: ProtoSetActiveModelRequest,
-): SetActiveModelRequest {
+): Authorization.SetActiveModelRequest {
   return {
     model: authorizationModelFromProto(value.model),
   };
 }
 
-function setActiveModelRequestToProto(value: SetActiveModelRequest) {
+function setActiveModelRequestToProto(value: Authorization.SetActiveModelRequest) {
   return create(SetActiveModelRequestSchema, {
     model: authorizationModelToProto(value.model),
   });
@@ -888,13 +936,13 @@ function setActiveModelRequestToProto(value: SetActiveModelRequest) {
 
 function setActiveModelResponseFromProto(
   value: ProtoSetActiveModelResponse,
-): SetActiveModelResponse {
+): Authorization.SetActiveModelResponse {
   return {
     model: authorizationModelRefFromProto(value.model),
   };
 }
 
-function setActiveModelResponseToProto(value: SetActiveModelResponse | undefined) {
+function setActiveModelResponseToProto(value: Authorization.SetActiveModelResponse | undefined) {
   if (!value) {
     throw new ConnectError(
       "authorization provider returned nil response",
@@ -908,7 +956,7 @@ function setActiveModelResponseToProto(value: SetActiveModelResponse | undefined
 
 function listActiveModelResourceTypesRequestFromProto(
   value: ProtoListActiveModelResourceTypesRequest,
-): ListActiveModelResourceTypesRequest {
+): Authorization.ListActiveModelResourceTypesRequest {
   return {
     filter: value.filter
       ? {
@@ -922,7 +970,7 @@ function listActiveModelResourceTypesRequestFromProto(
 }
 
 function listActiveModelResourceTypesRequestToProto(
-  value: ListActiveModelResourceTypesRequest,
+  value: Authorization.ListActiveModelResourceTypesRequest,
 ) {
   return create(ListActiveModelResourceTypesRequestSchema, {
     filter: value.filter
@@ -938,7 +986,7 @@ function listActiveModelResourceTypesRequestToProto(
 
 function listActiveModelResourceTypesResponseFromProto(
   value: ProtoListActiveModelResourceTypesResponse,
-): ListActiveModelResourceTypesResponse {
+): Authorization.ListActiveModelResourceTypesResponse {
   return {
     resourceTypes: value.resourceTypes.map(authorizationModelResourceTypeFromProto),
     nextPageToken: value.nextPageToken,
@@ -947,7 +995,7 @@ function listActiveModelResourceTypesResponseFromProto(
 }
 
 function listActiveModelResourceTypesResponseToProto(
-  value: ListActiveModelResourceTypesResponse | undefined,
+  value: Authorization.ListActiveModelResourceTypesResponse | undefined,
 ) {
   if (!value) {
     throw new ConnectError(
@@ -964,18 +1012,22 @@ function listActiveModelResourceTypesResponseToProto(
   });
 }
 
-function subjectFromProto(value: ProtoCheckAccessRequest["subject"]): AuthorizationSubject | undefined {
+function subjectFromProto(
+  value: ProtoCheckAccessRequest["subject"],
+): Authorization.SubjectInput | undefined {
   if (!value) {
     return undefined;
   }
   return {
     type: value.type,
     id: value.id,
-    properties: jsonObjectFromStruct(value.properties),
+    ...(value.properties === undefined
+      ? {}
+      : { properties: jsonObjectFromStruct(value.properties) }),
   };
 }
 
-function subjectToProto(value: AuthorizationSubject | undefined) {
+function subjectToProto(value: Authorization.SubjectInput | undefined) {
   if (!value) {
     return undefined;
   }
@@ -988,18 +1040,22 @@ function subjectToProto(value: AuthorizationSubject | undefined) {
   });
 }
 
-function resourceFromProto(value: ProtoRelationshipFilter["resource"]): AuthorizationResource | undefined {
+function resourceFromProto(
+  value: ProtoRelationshipFilter["resource"],
+): Authorization.ResourceInput | undefined {
   if (!value) {
     return undefined;
   }
   return {
     type: value.type,
     id: value.id,
-    properties: jsonObjectFromStruct(value.properties),
+    ...(value.properties === undefined
+      ? {}
+      : { properties: jsonObjectFromStruct(value.properties) }),
   };
 }
 
-function resourceToProto(value: AuthorizationResource | undefined) {
+function resourceToProto(value: Authorization.ResourceInput | undefined) {
   if (!value) {
     return undefined;
   }
@@ -1014,7 +1070,7 @@ function resourceToProto(value: AuthorizationResource | undefined) {
 
 function relationshipFilterFromProto(
   value: ProtoRelationshipFilter | undefined,
-): RelationshipFilter | undefined {
+): Authorization.RelationshipFilter | undefined {
   if (!value) {
     return undefined;
   }
@@ -1029,7 +1085,7 @@ function relationshipFilterFromProto(
   };
 }
 
-function relationshipFilterToProto(value: RelationshipFilter | undefined) {
+function relationshipFilterToProto(value: Authorization.RelationshipFilter | undefined) {
   if (!value) {
     return undefined;
   }
@@ -1046,22 +1102,24 @@ function relationshipFilterToProto(value: RelationshipFilter | undefined) {
 
 function relationshipFromProto(
   value: ProtoRelationship | undefined,
-): Relationship | undefined {
+): Authorization.Relationship | undefined {
   if (!value) {
     return undefined;
   }
   return {
     tuple: relationshipTupleFromProto(value.tuple),
-    properties: jsonObjectFromStruct(value.properties),
+    ...(value.properties === undefined
+      ? {}
+      : { properties: jsonObjectFromStruct(value.properties) }),
     sourceLayer: value.sourceLayer,
   };
 }
 
-function relationshipFromProtoRequired(value: ProtoRelationship): Relationship {
+function relationshipFromProtoRequired(value: ProtoRelationship): Authorization.Relationship {
   return relationshipFromProto(value)!;
 }
 
-function relationshipToProto(value: Relationship | undefined) {
+function relationshipToProto(value: Authorization.Relationship | undefined) {
   if (!value) {
     return undefined;
   }
@@ -1074,13 +1132,13 @@ function relationshipToProto(value: Relationship | undefined) {
   });
 }
 
-function relationshipToProtoRequired(value: Relationship) {
+function relationshipToProtoRequired(value: Authorization.Relationship) {
   return relationshipToProto(value)!;
 }
 
 function relationshipTupleFromProto(
   value: ProtoRelationshipTuple | undefined,
-): RelationshipTuple | undefined {
+): Authorization.RelationshipTuple | undefined {
   if (!value) {
     return undefined;
   }
@@ -1091,7 +1149,7 @@ function relationshipTupleFromProto(
   };
 }
 
-function relationshipTupleToProto(value: RelationshipTuple | undefined) {
+function relationshipTupleToProto(value: Authorization.RelationshipTuple | undefined) {
   if (!value) {
     return undefined;
   }
@@ -1104,45 +1162,51 @@ function relationshipTupleToProto(value: RelationshipTuple | undefined) {
 
 function relationshipTargetFromProto(
   value: ProtoRelationshipTarget | undefined,
-): RelationshipTarget | undefined {
+): Authorization.RelationshipTarget | undefined {
   if (!value) {
     return undefined;
   }
   switch (value.kind.case) {
     case "subject":
-      return { subject: subjectFromProto(value.kind.value) };
+      return Authorization.RelationshipTarget.subject(
+        subjectFromProto(value.kind.value) ?? {},
+      );
     case "resource":
-      return { resource: resourceFromProto(value.kind.value) };
+      return Authorization.RelationshipTarget.resource(
+        resourceFromProto(value.kind.value) ?? {},
+      );
     case "subjectSet":
-      return { subjectSet: subjectSetFromProto(value.kind.value) };
+      return Authorization.RelationshipTarget.subjectSet(
+        subjectSetFromProto(value.kind.value) ?? {},
+      );
     default:
-      return {};
+      return Authorization.RelationshipTarget.unset();
   }
 }
 
-function relationshipTargetToProto(value: RelationshipTarget | undefined) {
+function relationshipTargetToProto(value: Authorization.RelationshipTarget | undefined) {
   if (!value) {
     return undefined;
   }
-  if (value.subject) {
-    return create(RelationshipTargetSchema, {
-      kind: { case: "subject", value: subjectToProto(value.subject)! },
-    });
+  switch (value.kind) {
+    case "subject":
+      return create(RelationshipTargetSchema, {
+        kind: { case: "subject", value: subjectToProto(value.subject)! },
+      });
+    case "resource":
+      return create(RelationshipTargetSchema, {
+        kind: { case: "resource", value: resourceToProto(value.resource)! },
+      });
+    case "subjectSet":
+      return create(RelationshipTargetSchema, {
+        kind: { case: "subjectSet", value: subjectSetToProto(value.subjectSet) },
+      });
+    case "unset":
+      return create(RelationshipTargetSchema);
   }
-  if (value.resource) {
-    return create(RelationshipTargetSchema, {
-      kind: { case: "resource", value: resourceToProto(value.resource)! },
-    });
-  }
-  if (value.subjectSet) {
-    return create(RelationshipTargetSchema, {
-      kind: { case: "subjectSet", value: subjectSetToProto(value.subjectSet) },
-    });
-  }
-  return create(RelationshipTargetSchema);
 }
 
-function subjectSetFromProto(value: ProtoSubjectSet | undefined): SubjectSet | undefined {
+function subjectSetFromProto(value: ProtoSubjectSet | undefined): Authorization.SubjectSet | undefined {
   if (!value) {
     return undefined;
   }
@@ -1152,7 +1216,7 @@ function subjectSetFromProto(value: ProtoSubjectSet | undefined): SubjectSet | u
   };
 }
 
-function subjectSetToProto(value: SubjectSet) {
+function subjectSetToProto(value: Authorization.SubjectSet) {
   return create(SubjectSetSchema, {
     resource: resourceToProto(value.resource),
     relation: value.relation ?? "",
@@ -1161,7 +1225,7 @@ function subjectSetToProto(value: SubjectSet) {
 
 function authorizationModelFromProto(
   value: ProtoAuthorizationModel | undefined,
-): AuthorizationModel | undefined {
+): Authorization.Model | undefined {
   if (!value) {
     return undefined;
   }
@@ -1172,7 +1236,7 @@ function authorizationModelFromProto(
   };
 }
 
-function authorizationModelToProto(value: AuthorizationModel | undefined) {
+function authorizationModelToProto(value: Authorization.Model | undefined) {
   if (!value) {
     return undefined;
   }
@@ -1187,7 +1251,7 @@ function authorizationModelToProto(value: AuthorizationModel | undefined) {
 
 function authorizationModelResourceTypeFromProto(
   value: ProtoAuthorizationModelResourceType,
-): AuthorizationModelResourceType {
+): Authorization.ModelResourceType {
   return {
     name: value.name,
     relations: value.relations.map((relation) => ({
@@ -1204,7 +1268,7 @@ function authorizationModelResourceTypeFromProto(
 }
 
 function authorizationModelResourceTypeToProto(
-  value: AuthorizationModelResourceType,
+  value: Authorization.ModelResourceType,
 ) {
   return create(AuthorizationModelResourceTypeSchema, {
     name: value.name ?? "",
@@ -1229,52 +1293,50 @@ function authorizationModelResourceTypeToProto(
 
 function modelAllowedTargetFromProto(
   value: ProtoModelAllowedTarget,
-): ModelAllowedTarget {
+): Authorization.ModelAllowedTarget {
   switch (value.kind.case) {
     case "subjectType":
-      return { subjectType: value.kind.value };
+      return Authorization.ModelAllowedTarget.subjectType(value.kind.value);
     case "resourceType":
-      return { resourceType: value.kind.value };
+      return Authorization.ModelAllowedTarget.resourceType(value.kind.value);
     case "subjectSetType":
-      return {
-        subjectSetType: {
+      return Authorization.ModelAllowedTarget.subjectSetType({
           resourceType: value.kind.value.resourceType,
           relation: value.kind.value.relation,
-        },
-      };
+        });
     default:
-      return {};
+      return Authorization.ModelAllowedTarget.unset();
   }
 }
 
-function modelAllowedTargetToProto(value: ModelAllowedTarget) {
-  if (value.subjectType !== undefined) {
-    return create(ModelAllowedTargetSchema, {
-      kind: { case: "subjectType", value: value.subjectType },
-    });
+function modelAllowedTargetToProto(value: Authorization.ModelAllowedTarget) {
+  switch (value.kind) {
+    case "subjectType":
+      return create(ModelAllowedTargetSchema, {
+        kind: { case: "subjectType", value: value.subjectType },
+      });
+    case "resourceType":
+      return create(ModelAllowedTargetSchema, {
+        kind: { case: "resourceType", value: value.resourceType },
+      });
+    case "subjectSetType":
+      return create(ModelAllowedTargetSchema, {
+        kind: {
+          case: "subjectSetType",
+          value: create(SubjectSetTypeSchema, {
+            resourceType: value.subjectSetType.resourceType ?? "",
+            relation: value.subjectSetType.relation ?? "",
+          }),
+        },
+      });
+    case "unset":
+      return create(ModelAllowedTargetSchema);
   }
-  if (value.resourceType !== undefined) {
-    return create(ModelAllowedTargetSchema, {
-      kind: { case: "resourceType", value: value.resourceType },
-    });
-  }
-  if (value.subjectSetType !== undefined) {
-    return create(ModelAllowedTargetSchema, {
-      kind: {
-        case: "subjectSetType",
-        value: create(SubjectSetTypeSchema, {
-          resourceType: value.subjectSetType.resourceType ?? "",
-          relation: value.subjectSetType.relation ?? "",
-        }),
-      },
-    });
-  }
-  return create(ModelAllowedTargetSchema);
 }
 
 function authorizationModelRefFromProto(
   value: ProtoGetActiveModelRefResponse["model"] | undefined,
-): AuthorizationModelRef | undefined {
+): Authorization.ModelRef | undefined {
   if (!value) {
     return undefined;
   }
@@ -1285,7 +1347,7 @@ function authorizationModelRefFromProto(
   };
 }
 
-function authorizationModelRefToProto(value: AuthorizationModelRef) {
+function authorizationModelRefToProto(value: Authorization.ModelRef) {
   return create(AuthorizationModelRefSchema, {
     id: value.id ?? "",
     version: value.version ?? "",

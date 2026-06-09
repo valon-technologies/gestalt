@@ -31,8 +31,8 @@ else:
 if TYPE_CHECKING:
     from ._agent import Agent, AgentToolRef
     from ._app_access import AppProtocol
-    from ._authorization import AuthorizationProtocol
     from ._workflow import Workflow, WorkflowRunContext
+    from .authorization import ClientProtocol
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
@@ -141,8 +141,8 @@ class Request:
 
         return Workflow(self)
 
-    def authorization(self) -> AuthorizationProtocol:
-        from ._authorization import _shared_authorization_client
+    def authorization(self) -> ClientProtocol:
+        from .authorization import _shared_authorization_client
 
         return _shared_authorization_client()
 

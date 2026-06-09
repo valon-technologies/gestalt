@@ -50,25 +50,6 @@ if TYPE_CHECKING:
         BeginLoginResponse,
         CompleteLoginRequest,
     )
-    from ._authorization import (
-        AddRelationshipRequest,
-        AddRelationshipResponse,
-        CheckAccessManyRequest,
-        CheckAccessManyResponse,
-        CheckAccessRequest,
-        CheckAccessResponse,
-        DeleteRelationshipRequest,
-        DeleteRelationshipResponse,
-        GetActiveModelRefResponse,
-        ListActiveModelResourceTypesRequest,
-        ListActiveModelResourceTypesResponse,
-        ListRelationshipsRequest,
-        ListRelationshipsResponse,
-        SetActiveModelRequest,
-        SetActiveModelResponse,
-        SetAuthorizationStateRequest,
-        SetAuthorizationStateResponse,
-    )
     from ._cache import CacheEntry
     from ._runtime_provider import (
         GetRuntimeSessionRequest,
@@ -121,6 +102,25 @@ if TYPE_CHECKING:
         WorkflowDefinition,
         WorkflowEvent,
         WorkflowRun,
+    )
+    from .authorization import (
+        AddRelationshipRequest,
+        AddRelationshipResponse,
+        CheckAccessManyRequest,
+        CheckAccessManyResponse,
+        CheckAccessRequest,
+        CheckAccessResponse,
+        DeleteRelationshipRequest,
+        DeleteRelationshipResponse,
+        GetActiveModelRefResponse,
+        ListActiveModelResourceTypesRequest,
+        ListActiveModelResourceTypesResponse,
+        ListRelationshipsRequest,
+        ListRelationshipsResponse,
+        SetActiveModelRequest,
+        SetActiveModelResponse,
+        SetAuthorizationStateRequest,
+        SetAuthorizationStateResponse,
     )
 
 else:
