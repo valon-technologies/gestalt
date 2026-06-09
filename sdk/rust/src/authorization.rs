@@ -638,7 +638,7 @@ fn check_access_many_request_to_proto(value: CheckAccessManyRequest) -> pb::Chec
         requests: value
             .requests
             .into_iter()
-            .map(|value| check_access_request_to_proto(value))
+            .map(check_access_request_to_proto)
             .collect(),
     }
 }
@@ -662,7 +662,7 @@ fn check_access_many_response_to_proto(
         decisions: value
             .decisions
             .into_iter()
-            .map(|value| check_access_response_to_proto(value))
+            .map(check_access_response_to_proto)
             .collect(),
     }
 }
@@ -738,7 +738,7 @@ fn list_relationships_response_to_proto(
         relationships: value
             .relationships
             .into_iter()
-            .map(|value| relationship_to_proto(value))
+            .map(relationship_to_proto)
             .collect(),
         next_page_token: value.next_page_token,
     }
@@ -832,7 +832,7 @@ fn set_authorization_state_request_to_proto(
         relationships: value
             .relationships
             .into_iter()
-            .map(|value| relationship_to_proto(value))
+            .map(relationship_to_proto)
             .collect(),
     }
 }
@@ -965,7 +965,7 @@ fn model_to_proto(value: Model) -> pb::AuthorizationModel {
         resource_types: value
             .resource_types
             .into_iter()
-            .map(|value| model_resource_type_to_proto(value))
+            .map(model_resource_type_to_proto)
             .collect(),
     }
 }
@@ -988,12 +988,12 @@ fn model_resource_type_to_proto(value: ModelResourceType) -> pb::AuthorizationMo
         relations: value
             .relations
             .into_iter()
-            .map(|value| model_relation_to_proto(value))
+            .map(model_relation_to_proto)
             .collect(),
         actions: value
             .actions
             .into_iter()
-            .map(|value| model_action_to_proto(value))
+            .map(model_action_to_proto)
             .collect(),
         source_layer: source_layer_to_proto(value.source_layer),
         default_access_policy: default_access_policy_to_proto(value.default_access_policy),
@@ -1026,7 +1026,7 @@ fn model_relation_to_proto(value: ModelRelation) -> pb::ModelRelation {
         allowed_targets: value
             .allowed_targets
             .into_iter()
-            .map(|value| model_allowed_target_to_proto(value))
+            .map(model_allowed_target_to_proto)
             .collect(),
     }
 }
@@ -1221,7 +1221,7 @@ fn list_active_model_resource_types_response_to_proto(
         resource_types: value
             .resource_types
             .into_iter()
-            .map(|value| model_resource_type_to_proto(value))
+            .map(model_resource_type_to_proto)
             .collect(),
         next_page_token: value.next_page_token,
         model_id: value.model_id,

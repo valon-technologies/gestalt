@@ -283,8 +283,10 @@ func rustToProtoExpr(ir authorizationIR, field irField, expr string) string {
 		itemField := field
 		itemField.Repeated = false
 		switch field.Kind {
-		case irKindMessage, irKindEnum:
-			return fmt.Sprintf("%s.into_iter().map(|value| %s).collect()", expr, rustToProtoBareExpr(ir, itemField, "value"))
+		case irKindMessage:
+			return fmt.Sprintf("%s.into_iter().map(%s_to_proto).collect()", expr, snakeName(ir.MessagesByName[itemField.MessageName].PublicName))
+		case irKindEnum:
+			return fmt.Sprintf("%s.into_iter().map(%s_to_proto).collect()", expr, snakeName(field.EnumName))
 		default:
 			return expr
 		}
