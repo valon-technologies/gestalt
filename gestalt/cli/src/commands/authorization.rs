@@ -41,6 +41,14 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 print_value(&resp, format);
                 Ok(())
             }
+            AuthorizationRelationshipCommands::Add(args) => {
+                let body = Value::Object(params::load_input_file(&args.input_file)?);
+                let resp = client
+                    .post(RELATIONSHIPS_PATH, &body)
+                    .context("failed to add authorization relationship")?;
+                print_value(&resp, format);
+                Ok(())
+            }
         },
     }
 }
