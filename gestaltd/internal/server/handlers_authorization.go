@@ -44,6 +44,22 @@ func (s *Server) listAuthorizationRelationships(w http.ResponseWriter, r *http.R
 	writeProtoJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) addAuthorizationRelationship(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuthorizationProvider(w) {
+		return
+	}
+	var req proto.AddRelationshipRequest
+	if !decodeProtoJSONBody(w, r, &req) {
+		return
+	}
+	resp, err := s.authorization.AddRelationship(r.Context(), &req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeProtoJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {
 	if s.authorization == nil {
 		writeError(w, http.StatusPreconditionFailed, "authorization provider is not configured")

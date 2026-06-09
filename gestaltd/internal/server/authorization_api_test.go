@@ -74,6 +74,34 @@ func TestAuthorizationAPIListRelationships(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIAddRelationship(t *testing.T) {
+	authz := &authorizationAPITestProvider{}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Authorization = authz
+	})
+	defer ts.Close()
+	t.Parallel()
+
+	resp := doAuthorizationJSONRequest(t, http.MethodPost, ts.URL+"/api/v1/authorization/relationships", `{
+		"relationship": {
+			"tuple": {
+				"target": {"subject": {"type": "subject", "id": "user:alice"}},
+				"relation": "member",
+				"resource": {"type": "group", "id": "engineering"}
+			},
+			"sourceLayer": "SOURCE_LAYER_RUNTIME"
+		}
+	}`)
+	defer closeResponseBody(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if got := authz.addRelationshipRequest.GetRelationship().GetTuple().GetRelation(); got != "member" {
+		t.Fatalf("relation = %q, want member", got)
+	}
+}
+
 func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Response {
 	t.Helper()
 	var reader io.Reader
@@ -106,6 +134,7 @@ type authorizationAPITestProvider struct {
 
 	checkAccessRequest       *proto.CheckAccessRequest
 	listRelationshipsRequest *proto.ListRelationshipsRequest
+	addRelationshipRequest   *proto.AddRelationshipRequest
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -130,4 +159,9 @@ func (p *authorizationAPITestProvider) ListRelationships(_ context.Context, req 
 			},
 		},
 	}, nil
+}
+
+func (p *authorizationAPITestProvider) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	p.addRelationshipRequest = req
+	return &proto.AddRelationshipResponse{Relationship: req.GetRelationship()}, nil
 }
