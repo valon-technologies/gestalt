@@ -2,13 +2,17 @@ use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
 use crate::api::ApiClient;
-use crate::cli::{AuthorizationCommands, AuthorizationRelationshipCommands};
+use crate::cli::{
+    AuthorizationActiveModelCommands, AuthorizationCommands, AuthorizationModelCommands,
+    AuthorizationRelationshipCommands,
+};
 use crate::output::{self, Format};
 use crate::params;
 use crate::query;
 
 const CHECK_ACCESS_PATH: &str = "/api/v1/authorization/check-access";
 const RELATIONSHIPS_PATH: &str = "/api/v1/authorization/relationships";
+const ACTIVE_MODEL_PATH: &str = "/api/v1/authorization/models/active";
 
 pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Format) -> Result<()> {
     match command {
@@ -71,6 +75,17 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 print_value(&resp, format);
                 Ok(())
             }
+        },
+        AuthorizationCommands::Models { command } => match command {
+            AuthorizationModelCommands::Active { command } => match command {
+                AuthorizationActiveModelCommands::Get => {
+                    let resp = client
+                        .get(ACTIVE_MODEL_PATH)
+                        .context("failed to get active authorization model")?;
+                    print_value(&resp, format);
+                    Ok(())
+                }
+            },
         },
     }
 }
@@ -150,6 +165,9 @@ fn print_value(value: &Value, format: Format) {
 fn table_value(value: &Value) -> Value {
     if let Some(items) = value.get("relationships").and_then(Value::as_array) {
         return Value::Array(items.clone());
+    }
+    if let Some(model) = value.get("model").and_then(Value::as_object) {
+        return Value::Object(model.clone());
     }
     value.clone()
 }

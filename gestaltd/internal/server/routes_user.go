@@ -59,6 +59,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 		r.Get("/authorization/relationships", s.listAuthorizationRelationships)
 		r.Post("/authorization/relationships", s.addAuthorizationRelationship)
 		r.Delete("/authorization/relationships", s.deleteAuthorizationRelationship)
+		r.Get("/authorization/models/active", s.getAuthorizationActiveModelRef)
 	})
 
 	r.With(s.pluginRouteAuthMiddleware("name")).Get("/apps/{name}/operations", s.listOperations)
