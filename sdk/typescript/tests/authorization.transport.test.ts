@@ -135,6 +135,79 @@ test("Authorization custom target uses relay token env", async () => {
   }
 });
 
+test("Authorization close evicts the shared cached client", async () => {
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
+  const calls: string[] = [];
+  const address = await reserveTCPAddress();
+
+  const handler = connectNodeAdapter({
+    grpc: true,
+    grpcWeb: false,
+    connect: false,
+    routes(router) {
+      router.service(AuthorizationProviderService, {
+        async checkAccess(input) {
+          calls.push(input.subject?.id ?? "");
+          return create(CheckAccessResponseSchema, {
+            allowed: true,
+            modelId: `model-${calls.length}`,
+          });
+        },
+      } satisfies Partial<ServiceImpl<typeof AuthorizationProviderService>>);
+    },
+  });
+  const server = createServer((req, res) => {
+    handler(req, res);
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(Number(address.split(":").at(-1)), "127.0.0.1", () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+
+    delete process.env[ENV_HOST_SERVICE_SOCKET];
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript-authz-close";
+
+    const first = Authorization({ target: `tcp://${address}` });
+    expect(await first.checkAccess({ subject: { id: "first" } })).toEqual({
+      allowed: true,
+      modelId: "model-1",
+    });
+
+    first.close();
+
+    const second = Authorization({ target: `tcp://${address}` });
+    expect(second).not.toBe(first);
+    expect(await second.checkAccess({ subject: { id: "second" } })).toEqual({
+      allowed: true,
+      modelId: "model-2",
+    });
+    expect(calls).toEqual(["first", "second"]);
+    second.close();
+  } finally {
+    if (previousSocket === undefined) {
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
+    } else {
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
+    }
+    if (previousToken === undefined) {
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
+    } else {
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
+    }
+    if (server.listening) {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  }
+});
+
 test("Authorization provider service preserves absent properties and unset relationship targets", async () => {
   const seen: Array<{
     subjectProperties: Authorization.SubjectInput["properties"];

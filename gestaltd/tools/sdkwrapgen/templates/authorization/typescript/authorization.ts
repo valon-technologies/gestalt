@@ -371,6 +371,7 @@ export namespace Authorization {
 class AuthorizationImpl implements Authorization.Client {
   private readonly transport: ReturnType<typeof createHostServiceGrpcTransport>;
   private readonly client: Client<typeof AuthorizationProviderService>;
+  private closed = false;
 
   constructor(target: string, token: string) {
     this.transport = createHostServiceGrpcTransport(
@@ -381,7 +382,14 @@ class AuthorizationImpl implements Authorization.Client {
   }
 
   close(): void {
+    if (this.closed) {
+      return;
+    }
+    this.closed = true;
     this.transport.close();
+    if (sharedAuthorization?.client === this) {
+      sharedAuthorization = undefined;
+    }
   }
 
   async checkAccess(request: Authorization.CheckAccessRequest): Promise<Authorization.CheckAccessResponse> {
