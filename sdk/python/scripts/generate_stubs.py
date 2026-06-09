@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 import sys
@@ -87,8 +88,10 @@ def main() -> int:
     proto_dir = repo_root / "sdk/proto"
     template_path = proto_dir / "buf.python.gen.yaml"
     target_dir = repo_root / "sdk/python/gestalt/_gen/v1"
+    buf_bin = os.environ.get("BUF_BIN", "buf")
+    module_names = selected_proto_modules()
 
-    if shutil.which("buf") is None:
+    if shutil.which(buf_bin) is None:
         print("buf is required to regenerate Python protobuf stubs", file=sys.stderr)
         return 1
 
@@ -96,7 +99,7 @@ def main() -> int:
         work_path = Path(work_dir)
         subprocess.run(
             [
-                "buf",
+                buf_bin,
                 "generate",
                 "--template",
                 str(template_path),
@@ -109,7 +112,7 @@ def main() -> int:
 
         generated_dir = work_path / "gen/v1"
         target_dir.mkdir(parents=True, exist_ok=True)
-        for module_name in PROTO_MODULES:
+        for module_name in module_names:
             pb2_path = generated_dir / f"{module_name}_pb2.py"
             pyi_path = generated_dir / f"{module_name}_pb2.pyi"
             pb2_grpc_path = generated_dir / f"{module_name}_pb2_grpc.py"
@@ -177,6 +180,21 @@ def main() -> int:
             )
 
     return 0
+
+
+def selected_proto_modules() -> tuple[str, ...]:
+    selected = os.environ.get("GESTALT_PROTO_MODULES", "").strip()
+    if not selected:
+        return PROTO_MODULES
+    modules = tuple(
+        module.strip()
+        for module in selected.split(",")
+        if module.strip()
+    )
+    unknown = sorted(set(modules) - set(PROTO_MODULES))
+    if unknown:
+        raise RuntimeError(f"unknown proto modules: {', '.join(unknown)}")
+    return modules
 
 
 if __name__ == "__main__":

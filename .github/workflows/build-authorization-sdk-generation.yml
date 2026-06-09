@@ -1,0 +1,115 @@
+name: Build Authorization SDK Generation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'sdk/sdkgen.yaml'
+      - 'sdk/proto/**'
+      - 'sdk/scripts/generate_authorization_sdk.sh'
+      - 'sdk/python/scripts/generate_stubs.py'
+      - 'sdk/rust/scripts/generate_stubs.sh'
+      - 'sdk/typescript/src/authorization.ts'
+      - 'sdk/typescript/src/internal/gen/v1/authorization_pb.ts'
+      - 'sdk/python/gestalt/authorization.py'
+      - 'sdk/python/gestalt/_gen/v1/authorization_pb2.py'
+      - 'sdk/python/gestalt/_gen/v1/authorization_pb2.pyi'
+      - 'sdk/python/gestalt/_gen/v1/authorization_pb2_grpc.py'
+      - 'sdk/go/authorization/**'
+      - 'sdk/rust/src/authorization.rs'
+      - 'sdk/rust/src/generated/**'
+      - 'gestaltd/tools/sdkwrapgen/**'
+      - 'gestaltd/rpc/protov1/v1/authorization*.go'
+      - '.github/workflows/build-authorization-sdk-generation.yml'
+  pull_request:
+    paths:
+      - 'sdk/sdkgen.yaml'
+      - 'sdk/proto/**'
+      - 'sdk/scripts/generate_authorization_sdk.sh'
+      - 'sdk/python/scripts/generate_stubs.py'
+      - 'sdk/rust/scripts/generate_stubs.sh'
+      - 'sdk/typescript/src/authorization.ts'
+      - 'sdk/typescript/src/internal/gen/v1/authorization_pb.ts'
+      - 'sdk/python/gestalt/authorization.py'
+      - 'sdk/python/gestalt/_gen/v1/authorization_pb2.py'
+      - 'sdk/python/gestalt/_gen/v1/authorization_pb2.pyi'
+      - 'sdk/python/gestalt/_gen/v1/authorization_pb2_grpc.py'
+      - 'sdk/go/authorization/**'
+      - 'sdk/rust/src/authorization.rs'
+      - 'sdk/rust/src/generated/**'
+      - 'gestaltd/tools/sdkwrapgen/**'
+      - 'gestaltd/rpc/protov1/v1/authorization*.go'
+      - '.github/workflows/build-authorization-sdk-generation.yml'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authorization-sdk-generation:
+    name: Authorization SDK Generation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: gestaltd/go.mod
+          cache-dependency-path: gestaltd/go.sum
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.11
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+
+      - name: Install TypeScript SDK dependencies
+        working-directory: sdk/typescript
+        run: bun install --frozen-lockfile
+
+      - name: Install Python SDK dependencies
+        working-directory: sdk/python
+        env:
+          UV_PYTHON: "3.10"
+        run: |
+          uv python install 3.10
+          uv sync --frozen --group dev
+
+      - name: Test SDK wrapper generator
+        working-directory: gestaltd
+        run: go test ./tools/sdkwrapgen
+
+      - name: Verify checked-in generated Authorization SDKs
+        run: |
+          ./sdk/scripts/generate_authorization_sdk.sh
+          git diff --exit-code -- \
+            sdk/typescript/src/authorization.ts \
+            sdk/typescript/src/internal/gen/v1/authorization_pb.ts \
+            sdk/python/gestalt/authorization.py \
+            sdk/python/gestalt/_gen/v1/authorization_pb2.py \
+            sdk/python/gestalt/_gen/v1/authorization_pb2.pyi \
+            sdk/python/gestalt/_gen/v1/authorization_pb2_grpc.py \
+            sdk/go/authorization/doc.go \
+            sdk/go/authorization/types.go \
+            sdk/go/authorization/protocol.go \
+            sdk/go/authorization/conversions.go \
+            sdk/go/authorization/client.go \
+            sdk/rust/src/authorization.rs \
+            sdk/rust/src/generated \
+            gestaltd/rpc/protov1/v1/authorization.pb.go \
+            gestaltd/rpc/protov1/v1/authorization_grpc.pb.go

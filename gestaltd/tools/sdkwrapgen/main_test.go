@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
 	protov1 "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoreflect"
+	goproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -14,23 +17,8 @@ func TestValidateAuthorizationDescriptorContract(t *testing.T) {
 	t.Parallel()
 
 	cfg := config{
-		Version: 1,
-		Services: []serviceConfig{{
-			Proto:   "gestalt.provider.v1.AuthorizationProvider",
-			SDKName: "Authorization",
-			Package: map[string]string{
-				"typescript": "Authorization",
-				"python":     "authorization",
-				"go":         "authorization",
-				"rust":       "authorization",
-			},
-			WellKnownTypes: map[string]wellKnownTypeRule{
-				"google.protobuf.Struct":    {Semantic: "json_object"},
-				"google.protobuf.Timestamp": {Semantic: "timestamp_with_presence"},
-			},
-			EnumPolicy:  "preserve_unknown_numeric",
-			OneofPolicy: "explicit_variants",
-		}},
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
 	}
 	if err := validateConfig(cfg); err != nil {
 		t.Fatalf("validateConfig: %v", err)
@@ -46,46 +34,16 @@ func TestValidateAuthorizationDescriptorContract(t *testing.T) {
 	}
 }
 
-func fileDescriptorSet(file protoreflect.FileDescriptor) *descriptorpb.FileDescriptorSet {
-	files := []*descriptorpb.FileDescriptorProto{}
-	seen := map[string]bool{}
-	var visit func(protoreflect.FileDescriptor)
-	visit = func(current protoreflect.FileDescriptor) {
-		if seen[current.Path()] {
-			return
-		}
-		seen[current.Path()] = true
-		imports := current.Imports()
-		for i := 0; i < imports.Len(); i++ {
-			visit(imports.Get(i).FileDescriptor)
-		}
-		files = append(files, protodesc.ToFileDescriptorProto(current))
-	}
-	visit(file)
-	return &descriptorpb.FileDescriptorSet{File: files}
-}
-
 func TestValidateAuthorizationDescriptorContractRequiresTimestampRule(t *testing.T) {
 	t.Parallel()
 
 	cfg := config{
 		Version: 1,
-		Services: []serviceConfig{{
-			Proto:   "gestalt.provider.v1.AuthorizationProvider",
-			SDKName: "Authorization",
-			Package: map[string]string{
-				"typescript": "Authorization",
-				"python":     "authorization",
-				"go":         "authorization",
-				"rust":       "authorization",
-			},
-			WellKnownTypes: map[string]wellKnownTypeRule{
-				"google.protobuf.Struct":    {Semantic: "json_object"},
-				"google.protobuf.Timestamp": {Semantic: "json_object"},
-			},
-			EnumPolicy:  "preserve_unknown_numeric",
-			OneofPolicy: "explicit_variants",
-		}},
+		Services: []serviceConfig{func() serviceConfig {
+			cfg := authorizationTestServiceConfig()
+			cfg.WellKnownTypes["google.protobuf.Timestamp"] = wellKnownTypeRule{Semantic: "json_object"}
+			return cfg
+		}()},
 	}
 	if err := validateConfig(cfg); err == nil {
 		t.Fatal("validateConfig succeeded, want timestamp semantic error")
@@ -96,23 +54,8 @@ func TestValidateImageReportsDescriptorParseErrors(t *testing.T) {
 	t.Parallel()
 
 	cfg := config{
-		Version: 1,
-		Services: []serviceConfig{{
-			Proto:   "gestalt.provider.v1.AuthorizationProvider",
-			SDKName: "Authorization",
-			Package: map[string]string{
-				"typescript": "Authorization",
-				"python":     "authorization",
-				"go":         "authorization",
-				"rust":       "authorization",
-			},
-			WellKnownTypes: map[string]wellKnownTypeRule{
-				"google.protobuf.Struct":    {Semantic: "json_object"},
-				"google.protobuf.Timestamp": {Semantic: "timestamp_with_presence"},
-			},
-			EnumPolicy:  "preserve_unknown_numeric",
-			OneofPolicy: "explicit_variants",
-		}},
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
 	}
 	missing := "missing.proto"
 	broken := "broken.proto"
@@ -127,5 +70,187 @@ func TestValidateImageReportsDescriptorParseErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "parse descriptor image") {
 		t.Fatalf("error = %q, want parse descriptor image", err)
+	}
+}
+
+func TestValidateAuthorizationDescriptorContractRejectsFieldNumberDrift(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
+	}
+	image := cloneFileDescriptorSet(fileDescriptorSet(protov1.File_v1_authorization_proto))
+	field := authorizationField(t, image, "Subject", "type")
+	changedNumber := int32(99)
+	field.Number = &changedNumber
+
+	_, err := validateImage(cfg, image)
+	if err == nil {
+		t.Fatal("validateImage succeeded, want field number contract error")
+	}
+	if !strings.Contains(err.Error(), "Subject contract mismatch") {
+		t.Fatalf("error = %q, want Subject contract mismatch", err)
+	}
+}
+
+func TestValidateAuthorizationDescriptorContractRejectsFieldTypeDrift(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
+	}
+	image := cloneFileDescriptorSet(fileDescriptorSet(protov1.File_v1_authorization_proto))
+	field := authorizationField(t, image, "CheckAccessRequest", "subject")
+	changedType := ".gestalt.provider.v1.Action"
+	field.TypeName = &changedType
+
+	_, err := validateImage(cfg, image)
+	if err == nil {
+		t.Fatal("validateImage succeeded, want field type contract error")
+	}
+	if !strings.Contains(err.Error(), "CheckAccessRequest contract mismatch") {
+		t.Fatalf("error = %q, want CheckAccessRequest contract mismatch", err)
+	}
+}
+
+func TestRenderGeneratedFilesIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
+	}
+	if err := validateConfig(cfg); err != nil {
+		t.Fatalf("validateConfig: %v", err)
+	}
+
+	first, err := renderGeneratedFiles(cfg)
+	if err != nil {
+		t.Fatalf("renderGeneratedFiles first: %v", err)
+	}
+	second, err := renderGeneratedFiles(cfg)
+	if err != nil {
+		t.Fatalf("renderGeneratedFiles second: %v", err)
+	}
+	if len(first) != len(second) {
+		t.Fatalf("generated files len = %d, want %d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i].Path != second[i].Path {
+			t.Fatalf("file[%d] path = %q, want %q", i, first[i].Path, second[i].Path)
+		}
+		if !bytes.Equal(first[i].Data, second[i].Data) {
+			t.Fatalf("file[%d] %s was not deterministic", i, first[i].Path)
+		}
+		if !bytes.Contains(first[i].Data, []byte("Code generated by gestaltd/tools/sdkwrapgen. DO NOT EDIT.")) {
+			t.Fatalf("file[%d] %s missing generated header", i, first[i].Path)
+		}
+	}
+}
+
+func TestWriteGeneratedFilesWritesExpectedOutputs(t *testing.T) {
+	t.Parallel()
+
+	cfg := config{
+		Version:  1,
+		Services: []serviceConfig{authorizationTestServiceConfig()},
+	}
+	root := t.TempDir()
+	files, err := writeGeneratedFiles(cfg, root)
+	if err != nil {
+		t.Fatalf("writeGeneratedFiles: %v", err)
+	}
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.Path)
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file.Path)))
+		if err != nil {
+			t.Fatalf("read generated %s: %v", file.Path, err)
+		}
+		if !bytes.Equal(data, file.Data) {
+			t.Fatalf("generated %s did not match rendered bytes", file.Path)
+		}
+	}
+	sort.Strings(paths)
+	want := []string{
+		"sdk/go/authorization/client.go",
+		"sdk/go/authorization/conversions.go",
+		"sdk/go/authorization/doc.go",
+		"sdk/go/authorization/protocol.go",
+		"sdk/go/authorization/types.go",
+		"sdk/python/gestalt/authorization.py",
+		"sdk/rust/src/authorization.rs",
+		"sdk/typescript/src/authorization.ts",
+	}
+	if strings.Join(paths, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("generated paths:\n%s\nwant:\n%s", strings.Join(paths, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func cloneFileDescriptorSet(image *descriptorpb.FileDescriptorSet) *descriptorpb.FileDescriptorSet {
+	return goproto.Clone(image).(*descriptorpb.FileDescriptorSet)
+}
+
+func authorizationField(t *testing.T, image *descriptorpb.FileDescriptorSet, messageName, fieldName string) *descriptorpb.FieldDescriptorProto {
+	t.Helper()
+
+	for _, file := range image.GetFile() {
+		if file.GetName() != "v1/authorization.proto" {
+			continue
+		}
+		for _, message := range file.GetMessageType() {
+			if message.GetName() != messageName {
+				continue
+			}
+			for _, field := range message.GetField() {
+				if field.GetName() == fieldName {
+					return field
+				}
+			}
+		}
+	}
+	t.Fatalf("field %s.%s not found", messageName, fieldName)
+	return nil
+}
+
+func authorizationTestServiceConfig() serviceConfig {
+	return serviceConfig{
+		Proto:   "gestalt.provider.v1.AuthorizationProvider",
+		SDKName: "Authorization",
+		Package: map[string]string{
+			"typescript": "Authorization",
+			"python":     "authorization",
+			"go":         "authorization",
+			"rust":       "authorization",
+		},
+		WellKnownTypes: map[string]wellKnownTypeRule{
+			"google.protobuf.Struct":    {Semantic: "json_object"},
+			"google.protobuf.Timestamp": {Semantic: "timestamp_with_presence"},
+		},
+		EnumPolicy:  "preserve_unknown_numeric",
+		OneofPolicy: "explicit_variants",
+		Outputs: map[string][]outputConfig{
+			"typescript": {{
+				Path:     "sdk/typescript/src/authorization.ts",
+				Template: "authorization/typescript/authorization.ts",
+			}},
+			"python": {{
+				Path:     "sdk/python/gestalt/authorization.py",
+				Template: "authorization/python/authorization.py",
+			}},
+			"go": {
+				{Path: "sdk/go/authorization/doc.go", Template: "authorization/go/doc.go.tmpl"},
+				{Path: "sdk/go/authorization/types.go", Template: "authorization/go/types.go.tmpl"},
+				{Path: "sdk/go/authorization/protocol.go", Template: "authorization/go/protocol.go.tmpl"},
+				{Path: "sdk/go/authorization/conversions.go", Template: "authorization/go/conversions.go.tmpl"},
+				{Path: "sdk/go/authorization/client.go", Template: "authorization/go/client.go.tmpl"},
+			},
+			"rust": {{
+				Path:     "sdk/rust/src/authorization.rs",
+				Template: "authorization/rust/authorization.rs",
+			}},
+		},
 	}
 }

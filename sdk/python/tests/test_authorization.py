@@ -79,6 +79,21 @@ class AuthorizationConversionTest(unittest.TestCase):
         self.assertIsNone(unset_allowed.resource_type)
         self.assertIsNone(unset_allowed.subject_set_type)
 
+    def test_oneof_conversion_rejects_mutated_multi_variant_values(self) -> None:
+        target = authorization.RelationshipTarget.from_subject(
+            authorization.Subject(type="user", id="u1")
+        )
+        target.resource = authorization.Resource(type="document", id="d1")
+
+        with self.assertRaisesRegex(ValueError, "RelationshipTarget accepts exactly one variant"):
+            authorization.relationship_target_to_proto(target)
+
+        allowed = authorization.ModelAllowedTarget.from_subject_type("user")
+        allowed.resource_type = "document"
+
+        with self.assertRaisesRegex(ValueError, "ModelAllowedTarget accepts exactly one variant"):
+            authorization.model_allowed_target_to_proto(allowed)
+
 
 if __name__ == "__main__":
     unittest.main()
