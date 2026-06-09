@@ -27,14 +27,12 @@ type irMessage struct {
 	Oneof         *irOneof
 	Empty         bool
 	ProtoGoName   string
-	ProtoPyName   string
 	ProtoRustName string
 }
 
 type irField struct {
 	ProtoName       string
 	JSONName        string
-	PublicName      string
 	GoName          string
 	ProtoGoName     string
 	PyName          string
@@ -156,7 +154,6 @@ func buildIRMessage(message protoreflect.MessageDescriptor) irMessage {
 		PublicName:    publicMessageName(string(message.Name())),
 		Empty:         isEmptyDescriptor(message),
 		ProtoGoName:   string(message.Name()),
-		ProtoPyName:   string(message.Name()),
 		ProtoRustName: rustTypeName(string(message.Name())),
 	}
 	fields := message.Fields()
@@ -182,7 +179,6 @@ func buildIRField(field protoreflect.FieldDescriptor) irField {
 	out := irField{
 		ProtoName:   string(field.Name()),
 		JSONName:    field.JSONName(),
-		PublicName:  field.JSONName(),
 		GoName:      goFieldName(string(field.Name())),
 		ProtoGoName: protoGoFieldName(string(field.Name())),
 		PyName:      string(field.Name()),

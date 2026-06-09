@@ -24,7 +24,7 @@ cd "$repo_root/sdk/proto"
 "$buf_bin" generate --template buf.typescript.gen.yaml --path v1/authorization.proto .
 
 cd "$repo_root/sdk/python"
-BUF_BIN="$buf_bin" GESTALT_PROTO_MODULES=authorization uv run python scripts/generate_stubs.py
+BUF_BIN="$buf_bin" GESTALT_PROTO_MODULES=authorization python3 scripts/generate_stubs.py
 
 cd "$repo_root/sdk/rust"
 BUF_BIN="$buf_bin" ./scripts/generate_stubs.sh

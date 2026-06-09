@@ -14,7 +14,7 @@ func renderTypeScriptAuthorization(ir authorizationIR, outputs []outputConfig) (
 
 	var b strings.Builder
 	b.Write(generatedHeader(path))
-	b.WriteString(`import { create } from "@bufbuild/protobuf";
+	b.WriteString(`import { create, type DescMessage, type MessageInitShape } from "@bufbuild/protobuf";
 import {
   Code,
   ConnectError,
@@ -41,6 +41,11 @@ import {
   parseHostServiceTarget,
   requireHostServiceTarget,
 } from "./host-service.ts";
+
+type NativeMessage<
+  Schema extends DescMessage,
+  Overrides extends object = Record<never, never>,
+> = Omit<MessageInitShape<Schema>, keyof Overrides> & Overrides;
 
 `)
 	for _, enum := range ir.Enums {
@@ -125,11 +130,36 @@ func renderTSNamespaceMessage(b *strings.Builder, message irMessage) {
 		return
 	}
 
-	b.WriteString(fmt.Sprintf("  export interface %s {\n", public))
-	for _, field := range message.Fields {
+	b.WriteString(fmt.Sprintf("  export type %s = NativeMessage<typeof pb.%sSchema", public, message.ProtoName))
+	overrides := tsOverrideFields(message)
+	if len(overrides) == 0 {
+		b.WriteString(">;\n\n")
+		return
+	}
+	b.WriteString(", {\n")
+	for _, field := range overrides {
 		b.WriteString(fmt.Sprintf("    %s?: %s | undefined;\n", field.JSONName, tsFieldType(field, true)))
 	}
-	b.WriteString("  }\n\n")
+	b.WriteString("  }>;\n\n")
+}
+
+func tsOverrideFields(message irMessage) []irField {
+	fields := make([]irField, 0, len(message.Fields))
+	for _, field := range message.Fields {
+		if tsNeedsOverrideField(field) {
+			fields = append(fields, field)
+		}
+	}
+	return fields
+}
+
+func tsNeedsOverrideField(field irField) bool {
+	switch field.Kind {
+	case irKindJSON, irKindTimestamp, irKindMessage:
+		return true
+	default:
+		return false
+	}
 }
 
 //nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.

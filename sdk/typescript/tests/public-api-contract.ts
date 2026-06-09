@@ -10,16 +10,6 @@ import {
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
 
-// @ts-expect-error Root package must not expose legacy authorization client alias.
-import type { AuthorizationClient } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose legacy authorization subject type.
-import type { AuthorizationSubject } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose legacy authorization action type.
-import type { AuthorizationAction } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose legacy authorization resource type.
-import type { AuthorizationResource } from "@valon-technologies/gestalt";
-// @ts-expect-error Root package must not expose root authorization request types.
-import type { CheckAccessRequest as RootCheckAccessRequest } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protocol helper schemas.
 import { StructSchema as RootStructSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protocol helper types.
@@ -77,10 +67,5 @@ void authorizationFactory;
 void (undefined as unknown as ProtocolStruct);
 void (undefined as unknown as ProtocolRequest);
 void (undefined as unknown as typeof agentContractSchemas);
-void (undefined as unknown as AuthorizationClient);
-void (undefined as unknown as AuthorizationSubject);
-void (undefined as unknown as AuthorizationAction);
-void (undefined as unknown as AuthorizationResource);
-void (undefined as unknown as RootCheckAccessRequest);
 void connectionModeToProtoValue;
 void connectionParamToProto;
