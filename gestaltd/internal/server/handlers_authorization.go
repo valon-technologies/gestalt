@@ -60,6 +60,22 @@ func (s *Server) addAuthorizationRelationship(w http.ResponseWriter, r *http.Req
 	writeProtoJSON(w, http.StatusOK, resp)
 }
 
+func (s *Server) deleteAuthorizationRelationship(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAuthorizationProvider(w) {
+		return
+	}
+	var req proto.DeleteRelationshipRequest
+	if !decodeProtoJSONBody(w, r, &req) {
+		return
+	}
+	resp, err := s.authorization.DeleteRelationship(r.Context(), &req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeProtoJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {
 	if s.authorization == nil {
 		writeError(w, http.StatusPreconditionFailed, "authorization provider is not configured")

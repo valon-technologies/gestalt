@@ -99,6 +99,30 @@ func TestAuthorizationAPIAddRelationship(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIDeleteRelationship(t *testing.T) {
+	authz := &authorizationAPITestProvider{}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Authorization = authz
+	})
+	defer ts.Close()
+
+	resp := doAuthorizationJSONRequest(t, http.MethodDelete, ts.URL+"/api/v1/authorization/relationships", `{
+		"relationshipTuple": {
+			"target": {"subject": {"type": "subject", "id": "user:alice"}},
+			"relation": "member",
+			"resource": {"type": "group", "id": "engineering"}
+		}
+	}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if got := authz.deleteRelationshipRequest.GetRelationshipTuple().GetResource().GetId(); got != "engineering" {
+		t.Fatalf("resource id = %q, want engineering", got)
+	}
+}
+
 func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Response {
 	t.Helper()
 	var reader io.Reader
@@ -122,9 +146,10 @@ func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Re
 type authorizationAPITestProvider struct {
 	core.AuthorizationProvider
 
-	checkAccessRequest       *proto.CheckAccessRequest
-	listRelationshipsRequest *proto.ListRelationshipsRequest
-	addRelationshipRequest   *proto.AddRelationshipRequest
+	checkAccessRequest        *proto.CheckAccessRequest
+	listRelationshipsRequest  *proto.ListRelationshipsRequest
+	addRelationshipRequest    *proto.AddRelationshipRequest
+	deleteRelationshipRequest *proto.DeleteRelationshipRequest
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -154,4 +179,9 @@ func (p *authorizationAPITestProvider) ListRelationships(_ context.Context, req 
 func (p *authorizationAPITestProvider) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	p.addRelationshipRequest = req
 	return &proto.AddRelationshipResponse{Relationship: req.GetRelationship()}, nil
+}
+
+func (p *authorizationAPITestProvider) DeleteRelationship(_ context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	p.deleteRelationshipRequest = req
+	return &proto.DeleteRelationshipResponse{}, nil
 }
