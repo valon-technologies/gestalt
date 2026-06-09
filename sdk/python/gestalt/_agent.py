@@ -8,7 +8,7 @@ from typing import Any, Protocol, TypeAlias
 
 import grpc
 
-from ._api import Request, Response, Subject, SubjectPermission
+from ._api import Request, Subject, SubjectPermission
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import app_pb2 as _app_pb
@@ -1466,44 +1466,6 @@ def listed_agent_tool_to_proto(value: Any) -> Any:
     if data.get("ref") is not None:
         out.ref.CopyFrom(_agent_tool_ref_value(data["ref"]))
     return out
-
-
-def _execute_agent_tool_request(value: Mapping[str, Any]) -> Any:
-    data = _data(value, {})
-    out = pb.ExecuteAgentToolRequest(
-        session_id=data.get("session_id", ""),
-        turn_id=data.get("turn_id", ""),
-        tool_call_id=data.get("tool_call_id", ""),
-        tool_id=data.get("tool_id", ""),
-        idempotency_key=data.get("idempotency_key", ""),
-    )
-    _copy_struct(out, "arguments", data.get("arguments"))
-    _copy_message(out, "context", data.get("context"))
-    return out
-
-
-def _execute_agent_tool(
-    context: Any,
-    request: Mapping[str, Any],
-    *,
-    timeout_seconds: float | None = None,
-) -> Response[str]:
-    target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
-    if not target:
-        raise RuntimeError(f"agent tool execution: {ENV_HOST_SERVICE_SOCKET} is not set")
-    channel = host_service_channel("agent-tool", target, token=os.environ.get(ENV_HOST_SERVICE_TOKEN, ""))
-    try:
-        req = _execute_agent_tool_request(request)
-        if context is not None:
-            req.context.CopyFrom(context)
-        response = _grpc_call(
-            pb_grpc.AgentProviderStub(channel).ExecuteTool,
-            req,
-            timeout_seconds=timeout_seconds,
-        )
-        return Response[str](status=_int_field(response.status), body=response.body)
-    finally:
-        channel.close()
 
 
 def agent_tool_config_from_proto(value: Any) -> AgentToolConfig | None:

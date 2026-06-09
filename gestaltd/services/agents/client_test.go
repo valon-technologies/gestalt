@@ -95,10 +95,6 @@ func (c *fakeAgentProviderClient) ResolveInteraction(context.Context, *proto.Res
 	return nil, errors.New("unexpected ResolveInteraction call")
 }
 
-func (c *fakeAgentProviderClient) ExecuteTool(context.Context, *proto.ExecuteAgentToolRequest, ...grpc.CallOption) (*proto.ExecuteAgentToolResponse, error) {
-	return nil, errors.New("unexpected ExecuteTool call")
-}
-
 func (c *fakeAgentProviderClient) GetCapabilities(ctx context.Context, req *proto.GetAgentProviderCapabilitiesRequest, opts ...grpc.CallOption) (*proto.AgentProviderCapabilities, error) {
 	if c.getCapabilities != nil {
 		return c.getCapabilities(ctx, req, opts...)

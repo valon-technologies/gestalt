@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -106,7 +105,6 @@ type Service interface {
 	ResolveTool(ctx context.Context, p *principal.Principal, ref coreagent.ToolRef) (coreagent.Tool, error)
 	ResolveTools(ctx context.Context, p *principal.Principal, req coreagent.ResolveToolsRequest) ([]coreagent.Tool, error)
 	ListTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (*coreagent.ListToolsResponse, error)
-	ExecuteTool(ctx context.Context, p *principal.Principal, req coreagent.ExecuteToolRequest) (*coreagent.ExecuteToolResponse, error)
 	CreateSession(ctx context.Context, p *principal.Principal, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
 	GetSession(ctx context.Context, p *principal.Principal, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error)
 	ListSessions(ctx context.Context, p *principal.Principal, req *proto.ListAgentProviderSessionsRequest) ([]*coreagent.Session, error)
@@ -1899,93 +1897,6 @@ func (m *Manager) ListTools(ctx context.Context, p *principal.Principal, req cor
 	return m.listTools(ctx, p, req)
 }
 
-func (m *Manager) ExecuteTool(ctx context.Context, p *principal.Principal, req coreagent.ExecuteToolRequest) (resp *coreagent.ExecuteToolResponse, err error) {
-	ctx, finish := startAgentOperation(ctx, "execute_tool")
-	defer func() { finish(err) }()
-
-	req.ProviderName = strings.TrimSpace(req.ProviderName)
-	req.SessionID = strings.TrimSpace(req.SessionID)
-	req.TurnID = strings.TrimSpace(req.TurnID)
-	req.ToolID = strings.TrimSpace(req.ToolID)
-	req.ToolCallID = strings.TrimSpace(req.ToolCallID)
-	req.IdempotencyKey = strings.TrimSpace(req.IdempotencyKey)
-	if req.ProviderName == "" {
-		return nil, ErrAgentProviderRequired
-	}
-	if req.SessionID == "" || req.TurnID == "" || req.ToolID == "" {
-		return nil, fmt.Errorf("%w: session_id, turn_id, and tool_id are required", invocation.ErrInvalidInvocation)
-	}
-	if req.ToolCallID == "" && req.IdempotencyKey == "" {
-		return nil, fmt.Errorf("%w: tool_call_id or idempotency_key is required", invocation.ErrInvalidInvocation)
-	}
-	reqCtx, err := appaccessservice.ProviderRequestContextFromProto(req.Context, "", "")
-	if err != nil {
-		return nil, err
-	}
-	agent := reqCtx.Agent()
-	if strings.TrimSpace(agent.ProviderName) != req.ProviderName ||
-		strings.TrimSpace(agent.SessionID) != req.SessionID ||
-		strings.TrimSpace(agent.TurnID) != req.TurnID {
-		return nil, fmt.Errorf("%w: agent invocation context does not match tool execution request", invocation.ErrAuthorizationDenied)
-	}
-	p = principal.Canonicalized(p)
-	if p == nil {
-		p = reqCtx.Principal()
-	}
-	scope, err := m.authorizeAgentInvocationScope(ctx, agentInvocationScopeRequest{
-		AgentProviderName: req.ProviderName,
-		CallerKind:        reqCtx.CallerKind(),
-		CallerName:        reqCtx.CallerName(),
-		Agent:             agent,
-		Principal:         p,
-		RequestContext:    req.Context,
-	})
-	if err != nil {
-		return nil, err
-	}
-	target, ok := agentScopeToolTargetByID(scope, req.ToolID)
-	if !ok {
-		return nil, fmt.Errorf("%w: agent tool %q is outside the turn tool scope", invocation.ErrAuthorizationDenied, req.ToolID)
-	}
-	if target.Unavailable != nil {
-		return unavailableAgentToolResponse(target)
-	}
-	if strings.TrimSpace(target.System) != "" {
-		return nil, fmt.Errorf("%w: agent system tool execution is not available through this provider callback", invocation.ErrInvalidInvocation)
-	}
-	if m == nil || m.invoker == nil {
-		return nil, fmt.Errorf("%w: agent tool invoker is not configured", invocation.ErrInternal)
-	}
-	invokeCtx := ctx
-	if connection := core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)); connection != "" {
-		invokeCtx = invocation.WithConnection(invokeCtx, connection)
-	}
-	if mode := core.NormalizeOptionalConnectionMode(target.CredentialMode); mode != "" {
-		invokeCtx = invocation.WithCredentialModeOverride(invokeCtx, mode)
-	}
-	idempotencyKey := req.IdempotencyKey
-	if idempotencyKey == "" {
-		idempotencyKey = "agent-tool:" + req.TurnID + ":" + req.ToolCallID
-	}
-	invokeCtx = invocation.WithIdempotencyKey(invokeCtx, idempotencyKey)
-	if scope.ToolRefsSet {
-		invokeCtx = invocation.WithToolRefsContext(invokeCtx, scope.ToolRefs)
-	}
-	invokePrincipal := agentScopePrincipal(scope)
-	invokeCtx, invokePrincipal = invocation.ApplyDelegation(invokeCtx, invokePrincipal, target.RunAs)
-	result, err := m.invoker.Invoke(invokeCtx, invokePrincipal, target.App, strings.TrimSpace(target.Instance), target.Operation, maps.Clone(req.Arguments))
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return &coreagent.ExecuteToolResponse{Status: http.StatusOK}, nil
-	}
-	return &coreagent.ExecuteToolResponse{
-		Status: result.Status,
-		Body:   string(result.Body),
-	}, nil
-}
-
 func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req coreagent.ListToolsRequest) (resp *coreagent.ListToolsResponse, err error) {
 	startedAt := time.Now()
 	toolSource, err := validateToolSource(req.ToolSource)
@@ -2837,62 +2748,6 @@ func unavailableAgentToolCandidate(ref coreagent.ToolRef, err error) agentToolUn
 
 func listedAgentToolUnavailable(tool coreagent.ListedTool) bool {
 	return tool.Target.Unavailable != nil
-}
-
-func agentScopeToolTargetByID(scope agentturnscope.Scope, toolID string) (coreagent.ToolTarget, bool) {
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		return coreagent.ToolTarget{}, false
-	}
-	for i := range scope.Tools {
-		tool := scope.Tools[i]
-		if strings.TrimSpace(tool.ID) == toolID {
-			return tool.Target, true
-		}
-	}
-	for i := range scope.ListedTools {
-		tool := scope.ListedTools[i]
-		if strings.TrimSpace(tool.ToolID) == toolID {
-			return tool.Target, true
-		}
-	}
-	return coreagent.ToolTarget{}, false
-}
-
-func unavailableAgentToolResponse(target coreagent.ToolTarget) (*coreagent.ExecuteToolResponse, error) {
-	reason := coreagent.ToolUnavailableReasonReconnectRequired
-	message := ""
-	if target.Unavailable != nil {
-		if value := strings.TrimSpace(target.Unavailable.Reason); value != "" {
-			reason = value
-		}
-		message = strings.TrimSpace(target.Unavailable.Message)
-	}
-	if message == "" {
-		message = "The requested integration is unavailable for this agent turn."
-	}
-	statusCode := http.StatusFailedDependency
-	switch reason {
-	case coreagent.ToolUnavailableReasonScopeDenied:
-		statusCode = http.StatusForbidden
-	case coreagent.ToolUnavailableReasonInstanceRequired:
-		statusCode = http.StatusPreconditionRequired
-	case coreagent.ToolUnavailableReasonNotAuthenticated, coreagent.ToolUnavailableReasonNoCredential:
-		statusCode = http.StatusUnauthorized
-	}
-	body, err := json.Marshal(map[string]any{
-		"error": map[string]any{
-			"code":       reason,
-			"message":    message,
-			"app":        strings.TrimSpace(target.App),
-			"connection": core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
-			"instance":   strings.TrimSpace(target.Instance),
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: encode unavailable agent tool response: %v", invocation.ErrInternal, err)
-	}
-	return &coreagent.ExecuteToolResponse{Status: statusCode, Body: string(body)}, nil
 }
 
 func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentTool {
