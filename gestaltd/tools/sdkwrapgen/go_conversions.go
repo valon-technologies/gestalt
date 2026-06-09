@@ -1,3 +1,4 @@
+//nolint:gocritic // Emitters assemble target-language source strings where Sprintf keeps fragments readable.
 package main
 
 import (
@@ -32,6 +33,7 @@ import (
 	return b.String()
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
 func renderGoMessageConversions(b *strings.Builder, ir authorizationIR, message irMessage) {
 	b.WriteString(fmt.Sprintf("func %sFromProto(in *proto.%s) *%s {\n", message.PublicName, message.ProtoName, message.PublicName))
 	b.WriteString("\tif in == nil {\n\t\treturn nil\n\t}\n")
@@ -55,6 +57,7 @@ func renderGoMessageConversions(b *strings.Builder, ir authorizationIR, message 
 	b.WriteString("\t}, nil\n}\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
 func renderGoOneofConversions(b *strings.Builder, ir authorizationIR, message irMessage) {
 	lower := lowerFirst(message.PublicName)
 	b.WriteString(fmt.Sprintf("func %sFromProto(in *proto.%s) %s {\n", lower, message.ProtoName, message.PublicName))
@@ -163,6 +166,7 @@ func goToProtoFieldExpr(ir authorizationIR, field irField, expr, label string) s
 	}
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
 func renderGoSliceAndTimeHelpers(b *strings.Builder, ir authorizationIR) {
 	b.WriteString(`func timeFromProto(in *timestamppb.Timestamp) *time.Time {
 	if in == nil {

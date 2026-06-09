@@ -1,3 +1,4 @@
+//nolint:gocritic // Emitters assemble target-language source strings where Sprintf keeps fragments readable.
 package main
 
 import (
@@ -53,6 +54,7 @@ import {
 	return []generatedFile{{Path: path, Data: []byte(b.String())}}, nil
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.
 func renderTSEnum(b *strings.Builder, enum irEnum) {
 	name := enum.ProtoName
 	b.WriteString(fmt.Sprintf("export const %s = {\n", name))
@@ -99,6 +101,7 @@ export namespace Authorization {
 	b.WriteString("}\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.
 func renderTSNamespaceMessage(b *strings.Builder, message irMessage) {
 	public := tsPublicMessageName(message.ProtoName)
 	if oneof := message.Oneof; oneof != nil {
@@ -129,6 +132,7 @@ func renderTSNamespaceMessage(b *strings.Builder, message irMessage) {
 	b.WriteString("  }\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.
 func renderTSClientInterface(b *strings.Builder, ir authorizationIR) {
 	b.WriteString("  export interface Client {\n")
 	for _, method := range ir.Methods {
@@ -145,6 +149,7 @@ func renderTSClientInterface(b *strings.Builder, ir authorizationIR) {
 	b.WriteString("  }\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.
 func renderTSClient(b *strings.Builder, ir authorizationIR) {
 	b.WriteString(`
 class AuthorizationImpl implements Authorization.Client {
@@ -192,6 +197,7 @@ class AuthorizationImpl implements Authorization.Client {
 	b.WriteString("  | undefined;\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.
 func renderTSProvider(b *strings.Builder, ir authorizationIR) {
 	b.WriteString("export interface AuthorizationProviderOptions extends ProviderBaseOptions {\n")
 	for _, method := range ir.Methods {
@@ -288,6 +294,7 @@ export function createAuthorizationProviderService(
 	b.WriteString("  };\n}\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated TypeScript source fragments.
 func renderTSConversionTables(b *strings.Builder, messages []irMessage) {
 	b.WriteString("const messageSchemas: Record<string, unknown> = {\n")
 	for _, message := range messages {

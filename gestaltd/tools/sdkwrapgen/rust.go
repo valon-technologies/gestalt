@@ -1,3 +1,4 @@
+//nolint:gocritic // Emitters assemble target-language source strings where Sprintf keeps fragments readable.
 package main
 
 import (
@@ -71,6 +72,7 @@ pub fn json_object<T: Serialize>(value: T) -> Result<JsonObject, AuthorizationEr
 	return []generatedFile{{Path: path, Data: []byte(b.String())}}, nil
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Rust source fragments.
 func renderRustTypes(b *strings.Builder, ir authorizationIR) {
 	for _, message := range ir.Messages {
 		if message.Empty {
@@ -105,6 +107,7 @@ func renderRustTypes(b *strings.Builder, ir authorizationIR) {
 	}
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Rust source fragments.
 func renderRustClient(b *strings.Builder, ir authorizationIR) {
 	b.WriteString("#[async_trait]\npub trait AuthorizationContract: Send {\n")
 	for _, method := range ir.Methods {
@@ -169,6 +172,7 @@ impl Client {
 	b.WriteString("}\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Rust source fragments.
 func renderRustConversions(b *strings.Builder, ir authorizationIR) {
 	for _, message := range ir.Messages {
 		if message.Empty {
@@ -201,6 +205,7 @@ func renderRustConversions(b *strings.Builder, ir authorizationIR) {
 	renderRustEnumConversions(b, ir)
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Rust source fragments.
 func renderRustOneofConversions(b *strings.Builder, ir authorizationIR, message irMessage) {
 	b.WriteString(fmt.Sprintf("fn %s_to_proto(value: %s) -> pb::%s {\n", snakeName(message.PublicName), message.PublicName, message.ProtoRustName))
 	b.WriteString("    let kind = match value {\n")
@@ -219,6 +224,7 @@ func renderRustOneofConversions(b *strings.Builder, ir authorizationIR, message 
 	b.WriteString("    }\n}\n\n")
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Rust source fragments.
 func renderRustEnumConversions(b *strings.Builder, ir authorizationIR) {
 	for _, enum := range ir.Enums {
 		lower := snakeName(enum.ProtoName)

@@ -1,3 +1,4 @@
+//nolint:gocritic // Emitters assemble target-language source strings where Sprintf keeps fragments readable.
 package main
 
 import (
@@ -43,12 +44,11 @@ pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
 _shared_authorization_transport: dict[str, Any] = {}
-_shared_authorization_lock = threading.Lock()
-
-`)
+_shared_authorization_lock = threading.Lock()`)
+	b.WriteString("\n\n")
 	for _, enum := range ir.Enums {
 		for _, value := range enum.Values {
-			b.WriteString(fmt.Sprintf("%s = _pb.%s\n", value.ProtoName, value.ProtoName))
+			fmt.Fprintf(&b, "%s = _pb.%s\n", value.ProtoName, value.ProtoName)
 		}
 		b.WriteString("\n")
 	}
@@ -65,24 +65,24 @@ func renderPythonDataclass(b *strings.Builder, message irMessage) {
 		return
 	}
 	b.WriteString("@dataclass(slots=True)\n")
-	b.WriteString(fmt.Sprintf("class %s:\n", message.PublicName))
+	fmt.Fprintf(b, "class %s:\n", message.PublicName)
 	if message.Oneof != nil {
 		for _, field := range message.Oneof.Variants {
-			b.WriteString(fmt.Sprintf("    %s: %s | None = None\n", field.PyName, pyType(field)))
+			fmt.Fprintf(b, "    %s: %s | None = None\n", field.PyName, pyType(field))
 		}
 		b.WriteString("\n")
 		b.WriteString("    def __post_init__(self) -> None:\n")
 		b.WriteString("        selected = sum(value is not None for value in (\n")
 		for _, field := range message.Oneof.Variants {
-			b.WriteString(fmt.Sprintf("            self.%s,\n", field.PyName))
+			fmt.Fprintf(b, "            self.%s,\n", field.PyName)
 		}
 		b.WriteString("        ))\n")
 		b.WriteString("        if selected > 1:\n")
-		b.WriteString(fmt.Sprintf("            raise ValueError(%q)\n\n", message.PublicName+" accepts exactly one variant"))
+		fmt.Fprintf(b, "            raise ValueError(%q)\n\n", message.PublicName+" accepts exactly one variant")
 		for _, field := range message.Oneof.Variants {
 			b.WriteString("    @classmethod\n")
-			b.WriteString(fmt.Sprintf("    def from_%s(cls, %s: %s) -> %q:\n", field.PyName, field.PyName, pyType(field), message.PublicName))
-			b.WriteString(fmt.Sprintf("        return cls(%s=%s)\n\n", field.PyName, field.PyName))
+			fmt.Fprintf(b, "    def from_%s(cls, %s: %s) -> %q:\n", field.PyName, field.PyName, pyType(field), message.PublicName)
+			fmt.Fprintf(b, "        return cls(%s=%s)\n\n", field.PyName, field.PyName)
 		}
 		return
 	}
@@ -91,7 +91,7 @@ func renderPythonDataclass(b *strings.Builder, message irMessage) {
 		return
 	}
 	for _, field := range message.Fields {
-		b.WriteString(fmt.Sprintf("    %s: %s = %s\n", field.PyName, pyFieldType(field), pyDefaultValue(field)))
+		fmt.Fprintf(b, "    %s: %s = %s\n", field.PyName, pyFieldType(field), pyDefaultValue(field))
 	}
 	b.WriteString("\n\n")
 }
@@ -103,9 +103,9 @@ func renderPythonClient(b *strings.Builder, ir authorizationIR) {
 	b.WriteString("    def close(self) -> None: ...\n")
 	for _, method := range ir.Methods {
 		if method.EmptyInput {
-			b.WriteString(fmt.Sprintf("    def %s(self) -> %s: ...\n", method.SnakeName, ir.MessagesByName[method.OutputName].PublicName))
+			fmt.Fprintf(b, "    def %s(self) -> %s: ...\n", method.SnakeName, ir.MessagesByName[method.OutputName].PublicName)
 		} else {
-			b.WriteString(fmt.Sprintf("    def %s(self, request: %s) -> %s: ...\n", method.SnakeName, ir.MessagesByName[method.InputName].PublicName, ir.MessagesByName[method.OutputName].PublicName))
+			fmt.Fprintf(b, "    def %s(self, request: %s) -> %s: ...\n", method.SnakeName, ir.MessagesByName[method.InputName].PublicName, ir.MessagesByName[method.OutputName].PublicName)
 		}
 	}
 	b.WriteString("\n\n")
@@ -153,13 +153,13 @@ func renderPythonClient(b *strings.Builder, ir authorizationIR) {
 	for _, method := range ir.Methods {
 		output := ir.MessagesByName[method.OutputName]
 		if method.EmptyInput {
-			b.WriteString(fmt.Sprintf("    def %s(self) -> %s:\n", method.SnakeName, output.PublicName))
-			b.WriteString(fmt.Sprintf("        return %s_from_proto(self._stub.%s(getattr(_empty_pb2, \"Empty\")()))\n\n", pyFunctionPrefix(output), method.ProtoName))
+			fmt.Fprintf(b, "    def %s(self) -> %s:\n", method.SnakeName, output.PublicName)
+			fmt.Fprintf(b, "        return %s_from_proto(self._stub.%s(getattr(_empty_pb2, \"Empty\")()))\n\n", pyFunctionPrefix(output), method.ProtoName)
 			continue
 		}
 		input := ir.MessagesByName[method.InputName]
-		b.WriteString(fmt.Sprintf("    def %s(self, request: %s) -> %s:\n", method.SnakeName, input.PublicName, output.PublicName))
-		b.WriteString(fmt.Sprintf("        return %s_from_proto(self._stub.%s(%s_to_proto(request)))\n\n", pyFunctionPrefix(output), method.ProtoName, pyFunctionPrefix(input)))
+		fmt.Fprintf(b, "    def %s(self, request: %s) -> %s:\n", method.SnakeName, input.PublicName, output.PublicName)
+		fmt.Fprintf(b, "        return %s_from_proto(self._stub.%s(%s_to_proto(request)))\n\n", pyFunctionPrefix(output), method.ProtoName, pyFunctionPrefix(input))
 	}
 	b.WriteString(`    def __enter__(self) -> "Client":
         return self
@@ -202,53 +202,53 @@ func renderPythonConversions(b *strings.Builder, ir authorizationIR) {
 			continue
 		}
 		prefix := pyFunctionPrefix(message)
-		b.WriteString(fmt.Sprintf("def %s_to_proto(value: Any) -> Any:\n", prefix))
-		b.WriteString(fmt.Sprintf("    if isinstance(value, pb.%s):\n        return _copy(value)\n", message.ProtoName))
+		fmt.Fprintf(b, "def %s_to_proto(value: Any) -> Any:\n", prefix)
+		fmt.Fprintf(b, "    if isinstance(value, pb.%s):\n        return _copy(value)\n", message.ProtoName)
 		if message.Oneof == nil && len(message.Fields) == 0 {
-			b.WriteString(fmt.Sprintf("    _coerce(value, %s, %q)\n", message.PublicName, message.PublicName))
-			b.WriteString(fmt.Sprintf("    return pb.%s()\n\n", message.ProtoName))
-			b.WriteString(fmt.Sprintf("def %s_from_proto(value: Any) -> %s:\n", prefix, message.PublicName))
-			b.WriteString(fmt.Sprintf("    return %s()\n\n", message.PublicName))
+			fmt.Fprintf(b, "    _coerce(value, %s, %q)\n", message.PublicName, message.PublicName)
+			fmt.Fprintf(b, "    return pb.%s()\n\n", message.ProtoName)
+			fmt.Fprintf(b, "def %s_from_proto(value: Any) -> %s:\n", prefix, message.PublicName)
+			fmt.Fprintf(b, "    return %s()\n\n", message.PublicName)
 			continue
 		}
-		b.WriteString(fmt.Sprintf("    model = _coerce(value, %s, %q)\n", message.PublicName, message.PublicName))
+		fmt.Fprintf(b, "    model = _coerce(value, %s, %q)\n", message.PublicName, message.PublicName)
 		if message.Oneof != nil {
-			b.WriteString(fmt.Sprintf("    selected = sum(value is not None for value in (%s))\n", strings.Join(pySelfFields("model", message.Oneof.Variants), ", ")))
+			fmt.Fprintf(b, "    selected = sum(value is not None for value in (%s))\n", strings.Join(pySelfFields("model", message.Oneof.Variants), ", "))
 			b.WriteString("    if selected > 1:\n")
-			b.WriteString(fmt.Sprintf("        raise ValueError(%q)\n", message.PublicName+" accepts exactly one variant"))
-			b.WriteString(fmt.Sprintf("    out = pb.%s()\n", message.ProtoName))
+			fmt.Fprintf(b, "        raise ValueError(%q)\n", message.PublicName+" accepts exactly one variant")
+			fmt.Fprintf(b, "    out = pb.%s()\n", message.ProtoName)
 			for _, field := range message.Oneof.Variants {
-				b.WriteString(fmt.Sprintf("    if model.%s is not None:\n", field.PyName))
+				fmt.Fprintf(b, "    if model.%s is not None:\n", field.PyName)
 				if field.Kind == irKindMessage {
-					b.WriteString(fmt.Sprintf("        out.%s.CopyFrom(%s)\n", field.PyName, pyToProtoExpr(field, "model."+field.PyName)))
+					fmt.Fprintf(b, "        out.%s.CopyFrom(%s)\n", field.PyName, pyToProtoExpr(field, "model."+field.PyName))
 				} else {
-					b.WriteString(fmt.Sprintf("        out.%s = %s\n", field.PyName, pyToProtoExpr(field, "model."+field.PyName)))
+					fmt.Fprintf(b, "        out.%s = %s\n", field.PyName, pyToProtoExpr(field, "model."+field.PyName))
 				}
 				b.WriteString("        return out\n")
 			}
 			b.WriteString("    return out\n\n")
-			b.WriteString(fmt.Sprintf("def %s_from_proto(value: Any) -> %s:\n", prefix, message.PublicName))
+			fmt.Fprintf(b, "def %s_from_proto(value: Any) -> %s:\n", prefix, message.PublicName)
 			b.WriteString("    selected = _which_oneof(value, \"kind\")\n")
 			for i, field := range message.Oneof.Variants {
 				keyword := "if"
 				if i > 0 {
 					keyword = "elif"
 				}
-				b.WriteString(fmt.Sprintf("    %s selected == %q:\n", keyword, field.PyName))
-				b.WriteString(fmt.Sprintf("        return %s(%s=%s)\n", message.PublicName, field.PyName, pyFromProtoExpr(field, "getattr(value, "+fmt.Sprintf("%q", field.PyName)+")")))
+				fmt.Fprintf(b, "    %s selected == %q:\n", keyword, field.PyName)
+				fmt.Fprintf(b, "        return %s(%s=%s)\n", message.PublicName, field.PyName, pyFromProtoExpr(field, "getattr(value, "+fmt.Sprintf("%q", field.PyName)+")"))
 			}
-			b.WriteString(fmt.Sprintf("    return %s()\n\n", message.PublicName))
+			fmt.Fprintf(b, "    return %s()\n\n", message.PublicName)
 			continue
 		}
-		b.WriteString(fmt.Sprintf("    return pb.%s(\n", message.ProtoName))
+		fmt.Fprintf(b, "    return pb.%s(\n", message.ProtoName)
 		for _, field := range message.Fields {
-			b.WriteString(fmt.Sprintf("        %s=%s,\n", field.PyName, pyToProtoExpr(field, "model."+field.PyName)))
+			fmt.Fprintf(b, "        %s=%s,\n", field.PyName, pyToProtoExpr(field, "model."+field.PyName))
 		}
 		b.WriteString("    )\n\n")
-		b.WriteString(fmt.Sprintf("def %s_from_proto(value: Any) -> %s:\n", prefix, message.PublicName))
-		b.WriteString(fmt.Sprintf("    return %s(\n", message.PublicName))
+		fmt.Fprintf(b, "def %s_from_proto(value: Any) -> %s:\n", prefix, message.PublicName)
+		fmt.Fprintf(b, "    return %s(\n", message.PublicName)
 		for _, field := range message.Fields {
-			b.WriteString(fmt.Sprintf("        %s=%s,\n", field.PyName, pyFromProtoExpr(field, "value."+field.PyName)))
+			fmt.Fprintf(b, "        %s=%s,\n", field.PyName, pyFromProtoExpr(field, "value."+field.PyName))
 		}
 		b.WriteString("    )\n\n")
 	}

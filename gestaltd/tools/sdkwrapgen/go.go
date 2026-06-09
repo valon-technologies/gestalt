@@ -1,3 +1,4 @@
+//nolint:gocritic // Emitters assemble target-language source strings where Sprintf keeps fragments readable.
 package main
 
 import (
@@ -47,7 +48,8 @@ func renderGoTypes(ir authorizationIR) string {
 	var b strings.Builder
 	b.WriteString("package authorization\n\n")
 	b.WriteString("import \"time\"\n\n")
-	for _, message := range ir.Messages {
+	for i := range ir.Messages {
+		message := ir.Messages[i]
 		if message.Empty {
 			continue
 		}
@@ -55,22 +57,20 @@ func renderGoTypes(ir authorizationIR) string {
 			renderGoOneofType(&b, message)
 			continue
 		}
-		b.WriteString(fmt.Sprintf("type %s struct {\n", message.PublicName))
-		for _, field := range message.Fields {
-			b.WriteString(fmt.Sprintf("\t%s %s\n", field.GoName, goType(ir, field)))
+		fmt.Fprintf(&b, "type %s struct {\n", message.PublicName)
+		for j := range message.Fields {
+			field := message.Fields[j]
+			fmt.Fprintf(&b, "\t%s %s\n", field.GoName, goType(ir, field))
 		}
 		b.WriteString("}\n\n")
-		for _, field := range message.Fields {
-			if field.Kind == irKindEnum {
-				_ = field
-			}
-		}
 	}
-	for _, enum := range ir.Enums {
-		b.WriteString(fmt.Sprintf("type %s int32\n\n", enum.ProtoName))
+	for i := range ir.Enums {
+		enum := ir.Enums[i]
+		fmt.Fprintf(&b, "type %s int32\n\n", enum.ProtoName)
 		b.WriteString("const (\n")
-		for _, value := range enum.Values {
-			b.WriteString(fmt.Sprintf("\t%s %s = %d\n", value.GoName, enum.ProtoName, value.Number))
+		for j := range enum.Values {
+			value := enum.Values[j]
+			fmt.Fprintf(&b, "\t%s %s = %d\n", value.GoName, enum.ProtoName, value.Number)
 		}
 		b.WriteString(")\n\n")
 	}
@@ -78,23 +78,26 @@ func renderGoTypes(ir authorizationIR) string {
 }
 
 func renderGoOneofType(b *strings.Builder, message irMessage) {
-	b.WriteString(fmt.Sprintf("type %s interface {\n\tis%s()\n}\n\n", message.PublicName, message.PublicName))
-	for _, field := range message.Oneof.Variants {
+	fmt.Fprintf(b, "type %s interface {\n\tis%s()\n}\n\n", message.PublicName, message.PublicName)
+	for i := range message.Oneof.Variants {
+		field := message.Oneof.Variants[i]
 		variant := message.PublicName + goFieldName(field.ProtoName)
-		b.WriteString(fmt.Sprintf("type %s struct {\n\t%s %s\n}\n\n", variant, goFieldName(field.ProtoName), goOneofVariantType(field)))
+		fmt.Fprintf(b, "type %s struct {\n\t%s %s\n}\n\n", variant, goFieldName(field.ProtoName), goOneofVariantType(field))
 	}
-	b.WriteString(fmt.Sprintf("type %sUnset struct{}\n\n", message.PublicName))
-	for _, field := range message.Oneof.Variants {
+	fmt.Fprintf(b, "type %sUnset struct{}\n\n", message.PublicName)
+	for i := range message.Oneof.Variants {
+		field := message.Oneof.Variants[i]
 		variant := message.PublicName + goFieldName(field.ProtoName)
-		b.WriteString(fmt.Sprintf("func (%s) is%s() {}\n", variant, message.PublicName))
+		fmt.Fprintf(b, "func (%s) is%s() {}\n", variant, message.PublicName)
 	}
-	b.WriteString(fmt.Sprintf("func (%sUnset) is%s() {}\n\n", message.PublicName, message.PublicName))
-	for _, field := range message.Oneof.Variants {
+	fmt.Fprintf(b, "func (%sUnset) is%s() {}\n\n", message.PublicName, message.PublicName)
+	for i := range message.Oneof.Variants {
+		field := message.Oneof.Variants[i]
 		variant := message.PublicName + goFieldName(field.ProtoName)
 		name := goConstructorName(message, field)
-		b.WriteString(fmt.Sprintf("func %s(value %s) %s {\n\treturn %s{%s: value}\n}\n\n", name, goOneofVariantType(field), message.PublicName, variant, goFieldName(field.ProtoName)))
+		fmt.Fprintf(b, "func %s(value %s) %s {\n\treturn %s{%s: value}\n}\n\n", name, goOneofVariantType(field), message.PublicName, variant, goFieldName(field.ProtoName))
 	}
-	b.WriteString(fmt.Sprintf("func Unset%s() %s {\n\treturn %sUnset{}\n}\n\n", message.PublicName, message.PublicName, message.PublicName))
+	fmt.Fprintf(b, "func Unset%s() %s {\n\treturn %sUnset{}\n}\n\n", message.PublicName, message.PublicName, message.PublicName)
 }
 
 func renderGoProtocol() string {
@@ -204,6 +207,7 @@ func normalizeJSON(value any, path string) (any, error) {
 `
 }
 
+//nolint:staticcheck // This emitter intentionally assembles generated Go source fragments.
 func renderGoClient(ir authorizationIR) string {
 	var b strings.Builder
 	b.WriteString(`package authorization

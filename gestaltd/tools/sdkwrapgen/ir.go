@@ -181,8 +181,8 @@ func buildIRMessage(message protoreflect.MessageDescriptor) irMessage {
 func buildIRField(field protoreflect.FieldDescriptor) irField {
 	out := irField{
 		ProtoName:   string(field.Name()),
-		JSONName:    string(field.JSONName()),
-		PublicName:  string(field.JSONName()),
+		JSONName:    field.JSONName(),
+		PublicName:  field.JSONName(),
 		GoName:      goFieldName(string(field.Name())),
 		ProtoGoName: protoGoFieldName(string(field.Name())),
 		PyName:      string(field.Name()),
