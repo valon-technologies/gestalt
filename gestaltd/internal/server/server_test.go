@@ -33,7 +33,6 @@ import (
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
-	mcpserver "github.com/mark3labs/mcp-go/server"
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -11181,43 +11180,55 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	}
 
 	invoker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
-	mcpSrv := gestaltmcp.NewServer(gestaltmcp.Config{
+	mcpHandler := gestaltmcp.NewStatelessHTTPHandler(gestaltmcp.Config{
 		Invoker:   invoker,
 		Providers: providers,
 	})
-	tool := mcpSrv.GetTool("echo_search")
-	if tool == nil {
-		t.Fatal("expected echo_search tool")
-		return
-	}
 
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		Identity: &core.UserIdentity{Email: "dev@example.com"},
 		UserID:   "u1",
 		Source:   principal.SourceSession,
 	})
-	req := mcpgo.CallToolRequest{}
-	req.Params.Name = "echo_search"
-	req.Params.Arguments = map[string]any{"q": "hello"}
-
-	mcpResult, err := tool.Handler(ctx, req)
-	if err != nil {
-		t.Fatalf("MCP tool call: %v", err)
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "echo_search",
+			"arguments": map[string]any{"q": "hello"},
+		},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(payload)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	mcpHandler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("MCP status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
-	if mcpResult.IsError {
-		t.Fatalf("unexpected MCP error result: %v", mcpResult.Content)
+	var mcpResp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &mcpResp); err != nil {
+		t.Fatalf("decode MCP response: %v", err)
 	}
-	if len(mcpResult.Content) != 1 {
-		t.Fatalf("expected one MCP content item, got %d", len(mcpResult.Content))
-	}
-	text, ok := mcpgo.AsTextContent(mcpResult.Content[0])
+	result, ok := mcpResp["result"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected MCP text content, got %T", mcpResult.Content[0])
+		t.Fatalf("expected MCP result, got %v", mcpResp)
+	}
+	if result["isError"] == true {
+		t.Fatalf("unexpected MCP error result: %v", result)
+	}
+	content, ok := result["content"].([]any)
+	if !ok || len(content) != 1 {
+		t.Fatalf("expected one MCP content item, got %v", result["content"])
+	}
+	text, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected MCP text content, got %T", content[0])
 	}
 
 	httpJSON, _ := json.Marshal(httpBody)
-	if text.Text != string(httpJSON) {
-		t.Fatalf("expected MCP body %s to match HTTP body %s", text.Text, string(httpJSON))
+	if text["text"] != string(httpJSON) {
+		t.Fatalf("expected MCP body %s to match HTTP body %s", text["text"], string(httpJSON))
 	}
 }
 
@@ -11818,12 +11829,12 @@ func mcpJSONRPC(t *testing.T, ts *httptest.Server, headers map[string]string, bo
 func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider], svc *coredata.Services, auditSink core.AuditSink, _ any) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
-	return mcpserver.NewStreamableHTTPServer(gestaltmcp.NewServer(gestaltmcp.Config{
+	return gestaltmcp.NewStatelessHTTPHandler(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
 		AuditSink:     auditSink,
 		Providers:     providers,
-	}), mcpserver.WithStateLess(true))
+	})
 }
 
 func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
@@ -11846,7 +11857,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	})
 	defer ts.Close()
 
-	status, resp := mcpJSONRPC(t, ts, nil, map[string]any{
+	status, resp, header := mcpJSONRPCWithHeaders(t, ts, nil, map[string]any{
 		"jsonrpc": "2.0",
 		"id":      1,
 		"method":  "initialize",
@@ -11865,6 +11876,20 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	}
 	if result["serverInfo"] == nil {
 		t.Fatal("initialize: missing serverInfo")
+	}
+	if got := header.Get("Mcp-Session-Id"); got != "" {
+		t.Fatalf("initialize returned MCP session id %q, want none", got)
+	}
+	capabilities, ok := result["capabilities"].(map[string]any)
+	if !ok {
+		t.Fatalf("initialize: expected capabilities object, got %v", result["capabilities"])
+	}
+	toolsCapability, ok := capabilities["tools"].(map[string]any)
+	if !ok {
+		t.Fatalf("initialize: expected tools capability, got %v", capabilities["tools"])
+	}
+	if got := toolsCapability["listChanged"]; got != nil && got != false {
+		t.Fatalf("tools.listChanged = %v, want false or omitted", got)
 	}
 
 	status, resp = mcpJSONRPC(t, ts, nil, map[string]any{
@@ -11886,6 +11911,325 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	firstTool := tools[0].(map[string]any)
 	if firstTool["name"] != "linear_search_issues" {
 		t.Fatalf("expected tool linear_search_issues, got %v", firstTool["name"])
+	}
+}
+
+func TestMCPEndpoint_EmptyAllowedProvidersExposesNoTools(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "linear"},
+		ops: []core.Operation{
+			{Name: "search_issues", Description: "Search issues", Method: http.MethodGet},
+		},
+	}
+	svc := testutil.NewStubServices(t)
+	providers := testutil.NewProviderRegistry(t, stub)
+	broker := invocation.NewBroker(providers, svc.Users, svc.ExternalCredentials)
+	mcpHandler := gestaltmcp.NewStatelessHTTPHandler(gestaltmcp.Config{
+		Invoker:          broker,
+		TokenResolver:    broker,
+		Providers:        providers,
+		AllowedProviders: []string{},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	status, resp := mcpJSONRPC(t, ts, nil, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list status = %d, want 200", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result object, got %v", resp)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("expected tools list, got %v", result["tools"])
+	}
+	if len(tools) != 0 {
+		t.Fatalf("tools = %v, want empty list", tools)
+	}
+
+	status, resp = mcpJSONRPC(t, ts, nil, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "linear_search_issues",
+			"arguments": map[string]any{},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want 200", status)
+	}
+	if _, ok := resp["error"].(map[string]any); !ok {
+		t.Fatalf("expected JSON-RPC error for disallowed tool call, got %v", resp)
+	}
+}
+
+func TestMCPEndpoint_ListUsesStrictCatalogResolution(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample", ConnMode: core.ConnectionModeSubject},
+		},
+		catalog: &catalog.Catalog{Name: "sample", Operations: []catalog.CatalogOperation{{
+			ID:          "static_fallback",
+			Description: "Static fallback",
+			Method:      http.MethodGet,
+			Transport:   catalog.TransportREST,
+		}}},
+	}
+
+	svc := testutil.NewStubServices(t)
+	seedUser(t, svc, "user@example.com")
+	providers := testutil.NewProviderRegistry(t, stub)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	status, resp := mcpJSONRPC(t, ts, map[string]string{
+		"Authorization": "Bearer session-token",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list status = %d, want 200", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result object, got %v", resp)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("expected tools list, got %v", result["tools"])
+	}
+	if len(tools) != 0 {
+		t.Fatalf("tools = %v, want empty list when strict catalog resolution fails", tools)
+	}
+
+	status, resp = mcpJSONRPC(t, ts, map[string]string{
+		"Authorization": "Bearer session-token",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "sample_static_fallback",
+			"arguments": map[string]any{},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want 200", status)
+	}
+	result, ok = resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected tool result object, got %v", resp)
+	}
+	if result["isError"] != true {
+		t.Fatalf("tools/call result = %v, want MCP tool error", result)
+	}
+	if _, ok := resp["error"]; ok {
+		t.Fatalf("tools/call response = %v, want tool error instead of JSON-RPC error", resp)
+	}
+}
+
+func TestMCPEndpoint_MethodsReturn405BeforeAuth(t *testing.T) {
+	t.Parallel()
+
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	svc := testutil.NewStubServices(t)
+	seedUser(t, svc, "user@example.com")
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "valid-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.PublicBaseURL = "https://valon.tools"
+		cfg.Services = svc
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	for _, method := range []string{http.MethodGet, http.MethodHead, http.MethodDelete, http.MethodOptions, http.MethodPatch} {
+		req, _ := http.NewRequest(method, ts.URL+"/mcp", nil)
+		req.Header.Set("Origin", "https://evil.example")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s /mcp: %v", method, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Fatalf("%s /mcp status = %d, want 405", method, resp.StatusCode)
+		}
+		if got := resp.Header.Get("WWW-Authenticate"); got != "" {
+			t.Fatalf("%s /mcp WWW-Authenticate = %q, want none", method, got)
+		}
+	}
+}
+
+func TestMCPEndpoint_ValidOriginAndForwardedHostAllowed(t *testing.T) {
+	t.Parallel()
+
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	svc := testutil.NewStubServices(t)
+	seedUser(t, svc, "user@example.com")
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "valid-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.PublicBaseURL = "https://valon.tools"
+		cfg.Services = svc
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer valid-token")
+	req.Header.Set("Origin", "https://VALON.tools:443")
+	req.Header.Set("X-Forwarded-Host", "VALON.tools:443")
+	req.Header.Set("X-Original-Host", "VALON.tools:443")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+func TestMCPEndpoint_InvalidOriginRejectedBeforeAuth(t *testing.T) {
+	t.Parallel()
+
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	svc := testutil.NewStubServices(t)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.PublicBaseURL = "https://valon.tools"
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://evil.example")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+	if got := resp.Header.Get("WWW-Authenticate"); got != "" {
+		t.Fatalf("WWW-Authenticate = %q, want none", got)
+	}
+}
+
+func TestMCPEndpoint_ForwardedHostMismatchRejectedBeforeAuth(t *testing.T) {
+	t.Parallel()
+
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+	svc := testutil.NewStubServices(t)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.PublicBaseURL = "https://valon.tools"
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	payload, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://valon.tools")
+	req.Header.Set("X-Forwarded-Host", "evil.example")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /mcp: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", resp.StatusCode)
+	}
+	if got := resp.Header.Get("WWW-Authenticate"); got != "" {
+		t.Fatalf("WWW-Authenticate = %q, want none", got)
 	}
 }
 
@@ -11929,6 +12273,249 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 	wantAuth := `Bearer resource_metadata="` + ts.URL + `/.well-known/oauth-protected-resource/mcp"`
 	if got := resp.Header.Get("WWW-Authenticate"); got != wantAuth {
 		t.Fatalf("WWW-Authenticate = %q, want %q", got, wantAuth)
+	}
+}
+
+func TestMCPEndpoint_IgnoresSessionIDForDynamicCatalogIsolation(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample", ConnMode: core.ConnectionModeSubject},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "access-a":
+				return &catalog.Catalog{Name: "sample", Operations: []catalog.CatalogOperation{{
+					ID:          "only_a",
+					Description: "Only A",
+					Method:      http.MethodPost,
+					Transport:   catalog.TransportREST,
+				}}}, nil
+			case "access-b":
+				return &catalog.Catalog{Name: "sample", Operations: []catalog.CatalogOperation{{
+					ID:          "only_b",
+					Description: "Only B",
+					Method:      http.MethodPost,
+					Transport:   catalog.TransportREST,
+				}}}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	svc := testutil.NewStubServices(t)
+	userA := seedUser(t, svc, "a@example.com")
+	userB := seedUser(t, svc, "b@example.com")
+	seedToken(t, svc, &core.ExternalCredential{
+		ID: "tok-a", SubjectID: principal.UserSubjectID(userA.ID), Integration: "sample",
+		Connection: "", Instance: "default", AccessToken: "access-a",
+	})
+	seedToken(t, svc, &core.ExternalCredential{
+		ID: "tok-b", SubjectID: principal.UserSubjectID(userB.ID), Integration: "sample",
+		Connection: "", Instance: "default", AccessToken: "access-b",
+	})
+
+	providers := testutil.NewProviderRegistry(t, stub)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "auth-a":
+					return &core.UserIdentity{Email: "a@example.com"}, nil
+				case "auth-b":
+					return &core.UserIdentity{Email: "b@example.com"}, nil
+				default:
+					return nil, core.ErrNotFound
+				}
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	listToolNames := func(authToken string) []string {
+		t.Helper()
+		status, resp := mcpJSONRPC(t, ts, map[string]string{
+			"Authorization":  "Bearer " + authToken,
+			"Mcp-Session-Id": "shared-session-id",
+		}, map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/list",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("tools/list status = %d, want 200", status)
+		}
+		result, ok := resp["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected result object, got %v", resp)
+		}
+		tools, ok := result["tools"].([]any)
+		if !ok {
+			t.Fatalf("expected tools list, got %v", result["tools"])
+		}
+		names := make([]string, 0, len(tools))
+		for _, rawTool := range tools {
+			tool, ok := rawTool.(map[string]any)
+			if !ok {
+				t.Fatalf("tool = %v, want object", rawTool)
+			}
+			names = append(names, fmt.Sprint(tool["name"]))
+		}
+		return names
+	}
+
+	if got := listToolNames("auth-a"); !reflect.DeepEqual(got, []string{"sample_only_a"}) {
+		t.Fatalf("auth-a tools = %v, want [sample_only_a]", got)
+	}
+	if got := listToolNames("auth-b"); !reflect.DeepEqual(got, []string{"sample_only_b"}) {
+		t.Fatalf("auth-b tools = %v, want [sample_only_b]", got)
+	}
+}
+
+func TestMCPEndpoint_CallResolvesDynamicCatalogPerRequest(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample",
+				ConnMode: core.ConnectionModeSubject,
+				ExecuteFn: func(_ context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+					body, _ := json.Marshal(map[string]any{
+						"op":    op,
+						"mode":  params["mode"],
+						"token": token,
+					})
+					return &core.OperationResult{Status: http.StatusOK, Body: body}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			var mode string
+			switch token {
+			case "access-a":
+				mode = "a"
+			case "access-b":
+				mode = "b"
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{Name: "sample", Operations: []catalog.CatalogOperation{{
+				ID:          "whoami",
+				Description: "Who am I",
+				Method:      http.MethodPost,
+				Transport:   catalog.TransportREST,
+				InputSchema: json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{"mode":{"type":"string","enum":[%q]}}}`, mode)),
+			}}}, nil
+		},
+	}
+
+	svc := testutil.NewStubServices(t)
+	userA := seedUser(t, svc, "a@example.com")
+	userB := seedUser(t, svc, "b@example.com")
+	seedToken(t, svc, &core.ExternalCredential{
+		ID: "call-tok-a", SubjectID: principal.UserSubjectID(userA.ID), Integration: "sample",
+		Connection: "", Instance: "default", AccessToken: "access-a",
+	})
+	seedToken(t, svc, &core.ExternalCredential{
+		ID: "call-tok-b", SubjectID: principal.UserSubjectID(userB.ID), Integration: "sample",
+		Connection: "", Instance: "default", AccessToken: "access-b",
+	})
+
+	providers := testutil.NewProviderRegistry(t, stub)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "auth-a":
+					return &core.UserIdentity{Email: "a@example.com"}, nil
+				case "auth-b":
+					return &core.UserIdentity{Email: "b@example.com"}, nil
+				default:
+					return nil, core.ErrNotFound
+				}
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	call := func(authToken, mode, wantAccessToken string) {
+		t.Helper()
+		status, resp := mcpJSONRPC(t, ts, map[string]string{
+			"Authorization":  "Bearer " + authToken,
+			"Mcp-Session-Id": "shared-session-id",
+		}, map[string]any{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "tools/call",
+			"params": map[string]any{
+				"name":      "sample_whoami",
+				"arguments": map[string]any{"mode": mode},
+			},
+		})
+		if status != http.StatusOK {
+			t.Fatalf("tools/call status = %d, want 200", status)
+		}
+		result, ok := resp["result"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected result object, got %v", resp)
+		}
+		if result["isError"] == true {
+			t.Fatalf("tools/call returned MCP error: %v", result)
+		}
+		content, ok := result["content"].([]any)
+		if !ok || len(content) == 0 {
+			t.Fatalf("expected content in result, got %v", result)
+		}
+		textBlock, ok := content[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected text block, got %v", content[0])
+		}
+		var body map[string]any
+		if err := json.Unmarshal([]byte(fmt.Sprint(textBlock["text"])), &body); err != nil {
+			t.Fatalf("decode tool body: %v", err)
+		}
+		if body["mode"] != mode || body["token"] != wantAccessToken {
+			t.Fatalf("tool body = %v, want mode %q and token %q", body, mode, wantAccessToken)
+		}
+	}
+
+	call("auth-a", "a", "access-a")
+	call("auth-b", "b", "access-b")
+
+	status, resp := mcpJSONRPC(t, ts, map[string]string{
+		"Authorization":  "Bearer auth-b",
+		"Mcp-Session-Id": "shared-session-id",
+	}, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "sample_whoami",
+			"arguments": map[string]any{"mode": "a"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want 200", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected result object, got %v", resp)
+	}
+	if result["isError"] != true {
+		t.Fatalf("cross-context enum call result = %v, want MCP error", result)
 	}
 }
 
