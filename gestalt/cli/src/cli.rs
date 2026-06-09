@@ -38,6 +38,12 @@ pub enum Commands {
         command: AuthCommands,
     },
 
+    /// Inspect and manage authorization state
+    Authorization {
+        #[command(subcommand)]
+        command: AuthorizationCommands,
+    },
+
     /// Manage persistent configuration
     Config {
         #[command(subcommand)]
@@ -199,6 +205,31 @@ pub enum TokenCommands {
         /// Token ID to revoke
         id: String,
     },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationCommands {
+    /// Check whether a subject can perform an action on a resource
+    CheckAccess(AuthorizationCheckAccessArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationCheckAccessArgs {
+    /// Subject identifier within the subject type
+    #[arg(long = "subject-id")]
+    pub subject_id: String,
+    /// Subject type/namespace, usually subject
+    #[arg(long = "subject-type")]
+    pub subject_type: String,
+    /// Action name to check
+    #[arg(long)]
+    pub action: String,
+    /// Resource identifier within the resource type
+    #[arg(long = "resource-id")]
+    pub resource_id: String,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: String,
 }
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
