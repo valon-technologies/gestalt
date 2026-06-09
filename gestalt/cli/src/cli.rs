@@ -38,6 +38,12 @@ pub enum Commands {
         command: AuthCommands,
     },
 
+    /// Inspect and manage authorization state
+    Authorization {
+        #[command(subcommand)]
+        command: AuthorizationCommands,
+    },
+
     /// Manage persistent configuration
     Config {
         #[command(subcommand)]
@@ -199,6 +205,150 @@ pub enum TokenCommands {
         /// Token ID to revoke
         id: String,
     },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationCommands {
+    /// Check whether a subject can perform an action on a resource
+    CheckAccess(AuthorizationCheckAccessArgs),
+    /// Inspect and manage authorization relationships
+    Relationships {
+        #[command(subcommand)]
+        command: AuthorizationRelationshipCommands,
+    },
+    /// Inspect authorization models
+    Models {
+        #[command(subcommand)]
+        command: AuthorizationModelCommands,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationCheckAccessArgs {
+    /// Subject identifier within the subject type
+    #[arg(long = "subject-id")]
+    pub subject_id: String,
+    /// Subject type/namespace, usually subject
+    #[arg(long = "subject-type")]
+    pub subject_type: String,
+    /// Action name to check
+    #[arg(long)]
+    pub action: String,
+    /// Resource identifier within the resource type
+    #[arg(long = "resource-id")]
+    pub resource_id: String,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationRelationshipCommands {
+    /// List relationships
+    List(AuthorizationRelationshipListArgs),
+    /// Add a relationship from a JSON request file
+    Add(AuthorizationRelationshipAddArgs),
+    /// Delete a subject relationship
+    Delete(AuthorizationRelationshipDeleteArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationRelationshipListArgs {
+    /// Filter by target subject id
+    #[arg(long = "subject-id")]
+    pub subject_id: Option<String>,
+    /// Filter by target subject type
+    #[arg(long = "subject-type")]
+    pub subject_type: Option<String>,
+    /// Filter to relationships with this relation name
+    #[arg(long)]
+    pub relation: Option<String>,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: Option<String>,
+    /// Filter to relationships whose resource has this id
+    #[arg(long = "resource-id")]
+    pub resource_id: Option<String>,
+    /// Filter by source layer, such as static_config or runtime
+    #[arg(long = "source-layer")]
+    pub source_layer: Option<String>,
+    /// Maximum number of relationships to return
+    #[arg(long = "page-size")]
+    pub page_size: Option<u32>,
+    /// Pagination cursor returned by a previous list response
+    #[arg(long = "page-token")]
+    pub page_token: Option<String>,
+    /// Optional path to a full ListRelationshipsRequest JSON file; use - to read from stdin
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AuthorizationRelationshipAddArgs {
+    /// Required path to a full AddRelationshipRequest JSON file; use - to read from stdin
+    #[arg(long = "input-file")]
+    pub input_file: String,
+}
+
+#[derive(Args)]
+pub struct AuthorizationRelationshipDeleteArgs {
+    /// Target subject id
+    #[arg(long = "target-subject-id")]
+    pub target_subject_id: String,
+    /// Target subject type/namespace, usually subject
+    #[arg(long = "target-subject-type")]
+    pub target_subject_type: String,
+    /// Relation to delete from the resource
+    #[arg(long)]
+    pub relation: String,
+    /// Resource type on the relationship tuple
+    #[arg(long = "resource-type")]
+    pub resource_type: String,
+    /// Resource id on the relationship tuple
+    #[arg(long = "resource-id")]
+    pub resource_id: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationModelCommands {
+    /// Inspect the active authorization model
+    Active {
+        #[command(subcommand)]
+        command: AuthorizationActiveModelCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationActiveModelCommands {
+    /// Get the active model reference
+    Get,
+    /// List resource types in the active model
+    ResourceTypes {
+        #[command(subcommand)]
+        command: AuthorizationActiveModelResourceTypeCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationActiveModelResourceTypeCommands {
+    /// List active model resource types
+    List(AuthorizationActiveModelResourceTypeListArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationActiveModelResourceTypeListArgs {
+    /// Filter to one resource type name
+    #[arg(long)]
+    pub name: Option<String>,
+    /// Filter by source layer, such as static_config or runtime
+    #[arg(long = "source-layer")]
+    pub source_layer: Option<String>,
+    /// Maximum number of resource types to return
+    #[arg(long = "page-size")]
+    pub page_size: Option<u32>,
+    /// Pagination cursor returned by a previous list response
+    #[arg(long = "page-token")]
+    pub page_token: Option<String>,
 }
 #[derive(Subcommand)]
 pub enum WorkflowCommands {
