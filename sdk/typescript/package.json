@@ -29,8 +29,10 @@
     "access": "public"
   },
   "scripts": {
-    "build:proto": "buf generate --template ../proto/buf.typescript.gen.yaml ../proto",
-    "docs:lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"docs/entrypoints/**/*.ts\"",
+    "build:proto": "bun run build:proto:buf && bun run build:proto:authorization",
+    "build:proto:buf": "buf generate --template ../proto/buf.typescript.gen.yaml ../proto",
+    "build:proto:authorization": "rm -rf src/internal/ts-proto && mkdir -p src/internal/ts-proto && grpc_tools_node_protoc -I ../proto --plugin=protoc-gen-ts_proto=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=src/internal/ts-proto --ts_proto_opt=outputServices=grpc-js,esModuleInterop=true,useDate=true,useOptionals=all,forceLong=bigint,importSuffix=.js,lowerCaseServiceMethods=true,outputJsonMethods=false,outputPartialMethods=false ../proto/v1/authorization.proto",
+    "docs:lint": "eslint --max-warnings=0 \"src/**/*.ts\" \"docs/entrypoints/**/*.ts\" --ignore-pattern \"src/internal/ts-proto/**/*.ts\"",
     "docs:build": "typedoc --options typedoc.json --out \"${TYPEDOC_OUT_DIR:-docs/_build/html}\"",
     "docs:build:deploy": "TYPEDOC_OUT_DIR=../../docs/public/api/typescript bun run docs:build",
     "docs:check": "bun run docs:lint && bun run docs:build",
@@ -43,14 +45,17 @@
     "@bufbuild/protobuf": "2.11.0",
     "@connectrpc/connect": "2.1.0",
     "@connectrpc/connect-node": "2.1.0",
+    "@grpc/grpc-js": "1.14.4",
     "@opentelemetry/api": "1.9.0",
     "yaml": "2.8.1"
   },
   "devDependencies": {
-    "@typescript-eslint/parser": "8.46.1",
     "@types/bun": "1.3.2",
+    "@typescript-eslint/parser": "8.46.1",
     "eslint": "9.38.0",
     "eslint-plugin-tsdoc": "0.4.0",
+    "grpc-tools": "1.13.1",
+    "ts-proto": "2.11.8",
     "typedoc": "0.28.14",
     "typescript": "5.9.3"
   },
