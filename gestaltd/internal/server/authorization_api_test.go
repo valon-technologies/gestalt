@@ -43,6 +43,35 @@ func TestAuthorizationAPICheckAccess(t *testing.T) {
 	}
 }
 
+func TestAuthorizationAPIListRelationships(t *testing.T) {
+	authz := &authorizationAPITestProvider{}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Authorization = authz
+	})
+	defer ts.Close()
+
+	resp := doAuthorizationJSONRequest(t, http.MethodGet, ts.URL+"/api/v1/authorization/relationships?subjectType=subject&subjectId=user%3Aalice&relation=member&resourceType=group&resourceId=engineering&sourceLayer=runtime&pageSize=25&pageToken=next", "")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	req := authz.listRelationshipsRequest
+	if req.GetPageSize() != 25 || req.GetPageToken() != "next" {
+		t.Fatalf("pagination = (%d, %q), want (25, next)", req.GetPageSize(), req.GetPageToken())
+	}
+	filter := req.GetFilter()
+	if filter.GetTarget().GetSubject().GetType() != "subject" || filter.GetTarget().GetSubject().GetId() != "user:alice" {
+		t.Fatalf("target subject = %#v", filter.GetTarget().GetSubject())
+	}
+	if filter.GetRelation() != "member" || filter.GetResource().GetType() != "group" || filter.GetResource().GetId() != "engineering" {
+		t.Fatalf("filter = %#v", filter)
+	}
+	if filter.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
+		t.Fatalf("source layer = %v, want runtime", filter.GetSourceLayer())
+	}
+}
+
 func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Response {
 	t.Helper()
 	var reader io.Reader
@@ -66,10 +95,30 @@ func doAuthorizationJSONRequest(t *testing.T, method, url, body string) *http.Re
 type authorizationAPITestProvider struct {
 	core.AuthorizationProvider
 
-	checkAccessRequest *proto.CheckAccessRequest
+	checkAccessRequest       *proto.CheckAccessRequest
+	listRelationshipsRequest *proto.ListRelationshipsRequest
 }
 
 func (p *authorizationAPITestProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.checkAccessRequest = req
 	return &proto.CheckAccessResponse{Allowed: true, ModelId: "model-1"}, nil
+}
+
+func (p *authorizationAPITestProvider) ListRelationships(_ context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	p.listRelationshipsRequest = req
+	return &proto.ListRelationshipsResponse{
+		Relationships: []*proto.Relationship{
+			{
+				Tuple: &proto.RelationshipTuple{
+					Target: &proto.RelationshipTarget{
+						Kind: &proto.RelationshipTarget_Subject{
+							Subject: &proto.Subject{Type: "subject", Id: "user:alice"},
+						},
+					},
+					Relation: "member",
+					Resource: &proto.Resource{Type: "group", Id: "engineering"},
+				},
+			},
+		},
+	}, nil
 }
