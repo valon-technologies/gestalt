@@ -4,8 +4,15 @@ import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
+
 import * as wire from "./internal/gen/v1/s3_pb.ts";
-import { callUnary, fromWireTimestamp, mapRecv, mapSend, toWireTimestamp } from "./rpc_support.ts";
+import { callUnary, chunkFrames, framedSend, fromWireTimestamp, mapRecv, mapSend, readHeaderFrame, toWireTimestamp } from "./rpc_support.ts";
 
 export const PresignMethod = {
   PRESIGN_METHOD_UNSPECIFIED: 0,
@@ -523,16 +530,41 @@ export class S3Client {
     this.client = createClient(wire.S3, transport);
   }
 
+  static connect(name?: string): S3Client {
+    const { target, token } = requireHostServiceTarget("s3");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("s3", target),
+      hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
+    );
+    return new S3Client(transport);
+  }
+
   async headObject(request: HeadObjectRequest): Promise<HeadObjectResponse> {
     const response = await callUnary(() => this.client.headObject(toWireHeadObjectRequest(request)));
     return fromWireHeadObjectResponse(response);
   }
 
-  readObject(request: ReadObjectRequest): AsyncIterable<ReadObjectChunk> {
+  async readObject(request: ReadObjectRequest): Promise<{ meta: S3ObjectMeta; data: AsyncIterable<Uint8Array> }> {
+    const frames = mapRecv(this.client.readObject(toWireReadObjectRequest(request)), fromWireReadObjectChunk)[Symbol.asyncIterator]();
+    const meta = await readHeaderFrame(frames, (frame) => (frame.result.case === "meta" ? frame.result.value : undefined));
+    return { meta, data: chunkFrames(frames, (frame) => (frame.result.case === "data" ? frame.result.value : undefined)) };
+  }
+
+  readObjectRaw(request: ReadObjectRequest): AsyncIterable<ReadObjectChunk> {
     return mapRecv(this.client.readObject(toWireReadObjectRequest(request)), fromWireReadObjectChunk);
   }
 
-  async writeObject(requests: AsyncIterable<WriteObjectRequest>): Promise<WriteObjectResponse> {
+  async writeObject(open: WriteObjectOpen, data: AsyncIterable<Uint8Array>): Promise<WriteObjectResponse> {
+    const requests = framedSend(
+      toWireWriteObjectRequest({ msg: { case: "open", value: open } }),
+      data,
+      (chunk) => toWireWriteObjectRequest({ msg: { case: "data", value: chunk } }),
+    );
+    const response = await callUnary(() => this.client.writeObject(requests));
+    return fromWireWriteObjectResponse(response);
+  }
+
+  async writeObjectRaw(requests: AsyncIterable<WriteObjectRequest>): Promise<WriteObjectResponse> {
     const response = await callUnary(() => this.client.writeObject(mapSend(requests, toWireWriteObjectRequest)));
     return fromWireWriteObjectResponse(response);
   }

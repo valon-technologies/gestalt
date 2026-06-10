@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/diag"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
@@ -27,12 +28,14 @@ const (
 	wellKnownPrefix = "google.protobuf."
 )
 
-// Build constructs the normalized model for the given services. PathPrefix is
-// prepended to descriptor file paths in diagnostics (descriptor paths are
-// relative to the proto module root).
-func Build(services []protoreflect.ServiceDescriptor, pathPrefix string) (*model.Schema, *diag.List) {
+// Build constructs the normalized model for the given services. The file
+// registry resolves SDK annotation extensions, which are defined in the
+// schema itself. PathPrefix is prepended to descriptor file paths in
+// diagnostics (descriptor paths are relative to the proto module root).
+func Build(files *protoregistry.Files, services []protoreflect.ServiceDescriptor, pathPrefix string) (*model.Schema, *diag.List) {
 	b := &builder{
 		pathPrefix: pathPrefix,
+		ann:        newAnnotations(files),
 		diags:      &diag.List{},
 		messages:   map[protoreflect.FullName]*model.Message{},
 		enums:      map[protoreflect.FullName]*model.Enum{},
@@ -55,6 +58,7 @@ func Build(services []protoreflect.ServiceDescriptor, pathPrefix string) (*model
 
 type builder struct {
 	pathPrefix string
+	ann        *annotations
 	diags      *diag.List
 	messages   map[protoreflect.FullName]*model.Message
 	enums      map[protoreflect.FullName]*model.Enum
@@ -72,6 +76,7 @@ func (b *builder) service(sd protoreflect.ServiceDescriptor) *model.Service {
 	for i := 0; i < methods.Len(); i++ {
 		svc.Methods = append(svc.Methods, b.method(methods.Get(i)))
 	}
+	b.serviceAnnotations(sd, svc)
 	return svc
 }
 
@@ -97,6 +102,7 @@ func (b *builder) method(md protoreflect.MethodDescriptor) *model.Method {
 	} else {
 		m.Output = b.message(md.Output())
 	}
+	b.methodAnnotations(md, m)
 	return m
 }
 
@@ -151,6 +157,7 @@ func (b *builder) message(md protoreflect.MessageDescriptor) *model.Message {
 		}
 		m.Fields = append(m.Fields, f)
 	}
+	b.messageAnnotations(md, m)
 	return m
 }
 

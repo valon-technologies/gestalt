@@ -111,6 +111,52 @@ export async function* mapSend<N, W>(
   }
 }
 
+export async function readHeaderFrame<F, H>(
+  frames: AsyncIterator<F>,
+  extract: (frame: F) => H | undefined,
+): Promise<H> {
+  try {
+    const first = await frames.next();
+    if (!first.done) {
+      const header = extract(first.value);
+      if (header !== undefined) {
+        return header;
+      }
+    }
+    throw new GestaltError(GestaltErrorCode.Internal, "stream did not begin with the expected header frame");
+  } catch (error) {
+    throw toGestaltError(error);
+  }
+}
+
+export async function* chunkFrames<F, C>(
+  frames: AsyncIterator<F>,
+  extract: (frame: F) => C | undefined,
+): AsyncIterable<C> {
+  try {
+    for (let next = await frames.next(); !next.done; next = await frames.next()) {
+      const chunk = extract(next.value);
+      if (chunk === undefined) {
+        throw new GestaltError(GestaltErrorCode.Internal, "unexpected frame in payload stream");
+      }
+      yield chunk;
+    }
+  } catch (error) {
+    throw toGestaltError(error);
+  }
+}
+
+export async function* framedSend<F, C>(
+  header: F,
+  chunks: AsyncIterable<C>,
+  wrap: (chunk: C) => F,
+): AsyncIterable<F> {
+  yield header;
+  for await (const chunk of chunks) {
+    yield wrap(chunk);
+  }
+}
+
 export function toWireDuration(value: DurationMs): Duration {
   const seconds = Math.trunc(value / 1000);
   return create(DurationSchema, {

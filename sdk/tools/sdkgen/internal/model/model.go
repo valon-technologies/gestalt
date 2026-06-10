@@ -92,6 +92,10 @@ type Service struct {
 	Name      string
 	ProtoFile string
 	Methods   []*Method
+
+	// HostBinding is the host-service binding name from the host_binding
+	// annotation; empty when unannotated.
+	HostBinding string
 }
 
 type Method struct {
@@ -101,6 +105,21 @@ type Method struct {
 	InputIsEmpty  bool     // google.protobuf.Empty request: no public request argument
 	Output        *Message // nil when OutputIsEmpty
 	OutputIsEmpty bool
+
+	// Signature lists request fields promoted to parameters, from the
+	// signature annotation. Presence fields come last.
+	Signature []string
+	// Framing declares the header-then-payload protocol for this method's
+	// streaming side, from the framing annotation.
+	Framing *Framing
+}
+
+// Framing identifies the frame oneof and its header and chunk variants by
+// proto field name.
+type Framing struct {
+	Oneof       string
+	HeaderField string
+	ChunkField  string
 }
 
 type Message struct {
@@ -109,6 +128,29 @@ type Message struct {
 	ProtoFile string
 	Fields    []*Field // declaration order
 	Oneofs    []*Oneof // real oneofs only; synthetic optional-scalar oneofs are presence
+
+	// OptionalResult, Keyed, and Unwrap collapse this message at API
+	// boundaries, from the matching annotations. At most one is set.
+	OptionalResult *OptionalResult
+	Keyed          *Keyed
+	Unwrap         string
+}
+
+// OptionalResult declares that Value is meaningful only when the bool Guard
+// field is true; the message collapses to an optional value.
+type OptionalResult struct {
+	Guard string
+	Value string
+}
+
+// Keyed declares that the repeated Entries field is a collection keyed by
+// Key; entries whose Present field is false are omitted, and the message
+// collapses to a native map from Key to Value.
+type Keyed struct {
+	Entries string
+	Key     string
+	Present string
+	Value   string
 }
 
 type Field struct {

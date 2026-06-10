@@ -6,6 +6,13 @@ import { EmptySchema, NullValue } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
+
 import * as wire from "./internal/gen/v1/datastore_pb.ts";
 import { callUnary, fromWireStatus, fromWireTimestamp, fromWireValue, mapRecv, mapSend, toWireStatus, toWireTimestamp, toWireValue, type RpcStatus, type Unit } from "./rpc_support.ts";
 
@@ -1119,6 +1126,15 @@ export class IndexedDBClient {
 
   constructor(transport: Transport) {
     this.client = createClient(wire.IndexedDB, transport);
+  }
+
+  static connect(name?: string): IndexedDBClient {
+    const { target, token } = requireHostServiceTarget("IndexedDB");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("IndexedDB", target),
+      hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
+    );
+    return new IndexedDBClient(transport);
   }
 
   async createObjectStore(request: CreateObjectStoreRequest): Promise<void> {

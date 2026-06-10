@@ -17,6 +17,7 @@ type features struct {
 	nullValue     bool
 	emptySchema   bool
 	client        bool
+	hostService   bool
 	supportValues map[string]bool
 	supportTypes  map[string]bool
 	cross         map[string]map[string]bool // generated file base -> imported names
@@ -364,14 +365,235 @@ func (r *renderer) renderClient(svc *model.Service) {
 	fmt.Fprintf(&r.body, "    this.client = createClient(wire.%s, transport);\n", name)
 	r.body.WriteString("  }\n\n")
 
+	if svc.HostBinding != "" {
+		r.features.hostService = true
+		fmt.Fprintf(&r.body, "  static connect(name?: string): %sClient {\n", name)
+		fmt.Fprintf(&r.body, "    const { target, token } = requireHostServiceTarget(%q);\n", svc.HostBinding)
+		r.body.WriteString("    const transport = createHostServiceGrpcTransport(\n")
+		fmt.Fprintf(&r.body, "      parseHostServiceTarget(%q, target),\n", svc.HostBinding)
+		r.body.WriteString("      hostServiceMetadataInterceptors(token, name?.trim() ?? \"\"),\n    );\n")
+		fmt.Fprintf(&r.body, "    return new %sClient(transport);\n  }\n\n", name)
+	}
+
 	for _, method := range svc.Methods {
 		r.renderMethod(method)
 	}
 	r.body.WriteString("}\n\n")
 }
 
+func findField(m *model.Message, protoName string) *model.Field {
+	for _, f := range m.Fields {
+		if f.Name == protoName {
+			return f
+		}
+	}
+	return nil
+}
+
+// collapsed describes how an annotated response collapses at the API
+// boundary: the ergonomic return type and the statements that derive the
+// return value from the converted response.
+type collapsed struct {
+	returnType string
+	lines      []string
+}
+
+// collapseOutput returns the response collapse for a method, or nil when the
+// faithful response type is returned.
+func (r *renderer) collapseOutput(m *model.Method) *collapsed {
+	if m.Output == nil {
+		return nil
+	}
+	if or := m.Output.OptionalResult; or != nil {
+		guard := findField(m.Output, or.Guard)
+		value := findField(m.Output, or.Value)
+		return &collapsed{
+			returnType: r.fieldType(value) + " | undefined",
+			lines: []string{
+				fmt.Sprintf("    return response.%s ? response.%s : undefined;", guard.JSONName, value.JSONName),
+			},
+		}
+	}
+	if k := m.Output.Keyed; k != nil {
+		entries := findField(m.Output, k.Entries)
+		entry := r.idx.messages[entries.Elem.Message]
+		key := findField(entry, k.Key)
+		present := findField(entry, k.Present)
+		value := findField(entry, k.Value)
+		mapType := "{ [key: " + scalarType(key.Scalar) + "]: " + r.fieldType(value) + " }"
+		return &collapsed{
+			returnType: mapType,
+			lines: []string{
+				// A null-prototype record: cache keys like "__proto__" must
+				// become own properties, not prototype mutations.
+				"    const out: " + mapType + " = Object.create(null) as " + mapType + ";",
+				fmt.Sprintf("    for (const entry of response.%s) {", entries.JSONName),
+				fmt.Sprintf("      if (entry.%s) {", present.JSONName),
+				fmt.Sprintf("        out[entry.%s] = entry.%s;", key.JSONName, value.JSONName),
+				"      }",
+				"    }",
+				"    return out;",
+			},
+		}
+	}
+	if m.Output.Unwrap != "" {
+		field := findField(m.Output, m.Output.Unwrap)
+		return &collapsed{
+			returnType: r.fieldType(field),
+			lines:      []string{fmt.Sprintf("    return response.%s;", field.JSONName)},
+		}
+	}
+	return nil
+}
+
 func (r *renderer) renderMethod(m *model.Method) {
+	switch {
+	case m.Framing != nil && m.Stream == model.ServerStream:
+		r.renderFramedRead(m)
+		r.renderFaithfulMethod(m, true)
+	case m.Framing != nil && m.Stream == model.ClientStream:
+		r.renderFramedWrite(m)
+		r.renderFaithfulMethod(m, true)
+	case m.Stream == model.Unary && (len(m.Signature) > 0 || r.collapseOutput(m) != nil):
+		r.renderErgonomicUnary(m)
+		r.renderFaithfulMethod(m, true)
+	default:
+		r.renderFaithfulMethod(m, false)
+	}
+}
+
+// renderErgonomicUnary renders the annotated surface of a unary method:
+// flattened parameters from the signature annotation and a collapsed return
+// from the response annotations.
+func (r *renderer) renderErgonomicUnary(m *model.Method) {
 	methodName := lowerFirst(m.Name)
+	params := "request: " + r.messageType(m.Input.FullName)
+	var requestLines []string
+	if len(m.Signature) > 0 {
+		var decls, props []string
+		var spreads []string
+		for _, name := range m.Signature {
+			f := findField(m.Input, name)
+			optional := ""
+			if f.Presence == model.ExplicitPresence {
+				optional = "?"
+				spreads = append(spreads, fmt.Sprintf("...(%s !== undefined ? { %s } : {})", f.JSONName, f.JSONName))
+			} else {
+				props = append(props, f.JSONName)
+			}
+			decls = append(decls, fmt.Sprintf("%s%s: %s", f.JSONName, optional, r.fieldType(f)))
+		}
+		params = strings.Join(decls, ", ")
+		requestLines = append(requestLines, fmt.Sprintf("    const request: %s = { %s };",
+			r.messageType(m.Input.FullName), strings.Join(append(props, spreads...), ", ")))
+	}
+	requestArg := r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
+
+	r.use("callUnary", false)
+	collapse := r.collapseOutput(m)
+	switch {
+	case m.OutputIsEmpty:
+		fmt.Fprintf(&r.body, "  async %s(%s): Promise<void> {\n", methodName, params)
+		for _, line := range requestLines {
+			r.body.WriteString(line + "\n")
+		}
+		fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(%s));\n", methodName, requestArg)
+		r.body.WriteString("  }\n\n")
+	case collapse != nil:
+		fmt.Fprintf(&r.body, "  async %s(%s): Promise<%s> {\n", methodName, params, collapse.returnType)
+		for _, line := range requestLines {
+			r.body.WriteString(line + "\n")
+		}
+		fmt.Fprintf(&r.body, "    const response = %s(await callUnary(() => this.client.%s(%s)));\n",
+			r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)), methodName, requestArg)
+		for _, line := range collapse.lines {
+			r.body.WriteString(line + "\n")
+		}
+		r.body.WriteString("  }\n\n")
+	default:
+		responseType := r.messageType(m.Output.FullName)
+		fmt.Fprintf(&r.body, "  async %s(%s): Promise<%s> {\n", methodName, params, responseType)
+		for _, line := range requestLines {
+			r.body.WriteString(line + "\n")
+		}
+		fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", methodName, requestArg)
+		fmt.Fprintf(&r.body, "    return %s(response);\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		r.body.WriteString("  }\n\n")
+	}
+}
+
+// renderFramedRead renders a server-streaming method with the framing
+// annotation: the header frame and a native payload stream replace raw frames.
+func (r *renderer) renderFramedRead(m *model.Method) {
+	methodName := lowerFirst(m.Name)
+	frames := m.Output
+	oneof := frames.Oneofs[findField(frames, m.Framing.HeaderField).OneofIndex]
+	prop := oneofProp(oneof)
+	header := findField(frames, m.Framing.HeaderField)
+	chunk := findField(frames, m.Framing.ChunkField)
+
+	requestParam := ""
+	requestArg := "{}"
+	if !m.InputIsEmpty {
+		requestParam = "request: " + r.messageType(m.Input.FullName)
+		requestArg = r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
+	}
+	r.use("mapRecv", false)
+	r.use("readHeaderFrame", false)
+	r.use("chunkFrames", false)
+
+	fmt.Fprintf(&r.body, "  async %s(%s): Promise<{ %s: %s; %s: AsyncIterable<%s> }> {\n",
+		methodName, requestParam, header.JSONName, r.fieldType(header), chunk.JSONName, r.fieldType(chunk))
+	fmt.Fprintf(&r.body, "    const frames = mapRecv(this.client.%s(%s), %s)[Symbol.asyncIterator]();\n",
+		methodName, requestArg, r.crossRef(frames.ProtoFile, fromWireFunc(frames.FullName)))
+	fmt.Fprintf(&r.body, "    const %s = await readHeaderFrame(frames, (frame) => (frame.%s.case === %q ? frame.%s.value : undefined));\n",
+		header.JSONName, prop, header.JSONName, prop)
+	fmt.Fprintf(&r.body, "    return { %s, %s: chunkFrames(frames, (frame) => (frame.%s.case === %q ? frame.%s.value : undefined)) };\n",
+		header.JSONName, chunk.JSONName, prop, chunk.JSONName, prop)
+	r.body.WriteString("  }\n\n")
+}
+
+// renderFramedWrite renders a client-streaming method with the framing
+// annotation: the header and a native payload stream replace raw frames.
+func (r *renderer) renderFramedWrite(m *model.Method) {
+	methodName := lowerFirst(m.Name)
+	frames := m.Input
+	prop := oneofProp(frames.Oneofs[findField(frames, m.Framing.HeaderField).OneofIndex])
+	header := findField(frames, m.Framing.HeaderField)
+	chunk := findField(frames, m.Framing.ChunkField)
+	toWire := r.crossRef(frames.ProtoFile, toWireFunc(frames.FullName))
+
+	r.use("callUnary", false)
+	r.use("framedSend", false)
+
+	returnType := "void"
+	if !m.OutputIsEmpty {
+		returnType = r.messageType(m.Output.FullName)
+	}
+	fmt.Fprintf(&r.body, "  async %s(%s: %s, %s: AsyncIterable<%s>): Promise<%s> {\n",
+		methodName, header.JSONName, r.fieldType(header), chunk.JSONName, r.fieldType(chunk), returnType)
+	r.body.WriteString("    const requests = framedSend(\n")
+	fmt.Fprintf(&r.body, "      %s({ %s: { case: %q, value: %s } }),\n", toWire, prop, header.JSONName, header.JSONName)
+	fmt.Fprintf(&r.body, "      %s,\n", chunk.JSONName)
+	fmt.Fprintf(&r.body, "      (chunk) => %s({ %s: { case: %q, value: chunk } }),\n", toWire, prop, chunk.JSONName)
+	r.body.WriteString("    );\n")
+	if m.OutputIsEmpty {
+		fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(requests));\n", methodName)
+	} else {
+		fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(requests));\n", methodName)
+		fmt.Fprintf(&r.body, "    return %s(response);\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+	}
+	r.body.WriteString("  }\n\n")
+}
+
+// renderFaithfulMethod renders the descriptor-faithful method. When an
+// annotated surface owns the natural name, the faithful variant keeps a Raw
+// suffix so both remain available.
+func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
+	methodName := lowerFirst(m.Name)
+	if rawSuffix {
+		methodName += "Raw"
+	}
 	requestParam := ""
 	requestArg := "{}"
 	if !m.InputIsEmpty {
@@ -392,18 +614,18 @@ func (r *renderer) renderMethod(m *model.Method) {
 		responseType := r.messageType(m.Output.FullName)
 		r.use("mapRecv", false)
 		fmt.Fprintf(&r.body, "  %s(%s): AsyncIterable<%s> {\n", methodName, requestParam, responseType)
-		fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", methodName, requestArg, r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", lowerFirst(m.Name), requestArg, r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 		r.body.WriteString("  }\n\n")
 	default:
 		r.use("callUnary", false)
 		if m.OutputIsEmpty {
 			fmt.Fprintf(&r.body, "  async %s(%s): Promise<void> {\n", methodName, requestParam)
-			fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(%s));\n", methodName, requestArg)
+			fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(%s));\n", lowerFirst(m.Name), requestArg)
 			r.body.WriteString("  }\n\n")
 		} else {
 			responseType := r.messageType(m.Output.FullName)
 			fmt.Fprintf(&r.body, "  async %s(%s): Promise<%s> {\n", methodName, requestParam, responseType)
-			fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", methodName, requestArg)
+			fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", lowerFirst(m.Name), requestArg)
 			fmt.Fprintf(&r.body, "    return %s(response);\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 			r.body.WriteString("  }\n\n")
 		}
@@ -439,6 +661,10 @@ func (r *renderer) assemble() string {
 	if r.features.client {
 		b.WriteString("import { createClient } from \"@connectrpc/connect\";\n")
 		b.WriteString("import type { Client, Transport } from \"@connectrpc/connect\";\n")
+	}
+	if r.features.hostService {
+		b.WriteString("\nimport {\n  createHostServiceGrpcTransport,\n  hostServiceMetadataInterceptors,\n  parseHostServiceTarget,\n  requireHostServiceTarget,\n} from \"./host-service.ts\";")
+		b.WriteString("\n")
 	}
 
 	fmt.Fprintf(&b, "\nimport * as wire from \"./internal/gen/v1/%s_pb.ts\";\n", r.base)

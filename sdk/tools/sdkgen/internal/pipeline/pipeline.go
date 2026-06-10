@@ -101,7 +101,7 @@ func buildSchema(bufTool *toolchain.Tool, repoRoot, scratch string, stderr io.Wr
 		return nil, err
 	}
 	services := discover.Services(files)
-	schema, diags := validate.Build(services, ProtoRel+"/")
+	schema, diags := validate.Build(files, services, ProtoRel+"/")
 	if !diags.Empty() {
 		for _, d := range diags.All() {
 			_, _ = fmt.Fprintln(stderr, d)

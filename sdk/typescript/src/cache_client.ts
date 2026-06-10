@@ -4,6 +4,13 @@ import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
+
 import * as wire from "./internal/gen/v1/cache_pb.ts";
 import { callUnary, fromWireDuration, toWireDuration, type DurationMs } from "./rpc_support.ts";
 
@@ -262,35 +269,90 @@ export class CacheClient {
     this.client = createClient(wire.Cache, transport);
   }
 
-  async get(request: CacheGetRequest): Promise<CacheGetResponse> {
+  static connect(name?: string): CacheClient {
+    const { target, token } = requireHostServiceTarget("cache");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("cache", target),
+      hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
+    );
+    return new CacheClient(transport);
+  }
+
+  async get(key: string): Promise<Uint8Array | undefined> {
+    const request: CacheGetRequest = { key };
+    const response = fromWireCacheGetResponse(await callUnary(() => this.client.get(toWireCacheGetRequest(request))));
+    return response.found ? response.value : undefined;
+  }
+
+  async getRaw(request: CacheGetRequest): Promise<CacheGetResponse> {
     const response = await callUnary(() => this.client.get(toWireCacheGetRequest(request)));
     return fromWireCacheGetResponse(response);
   }
 
-  async getMany(request: CacheGetManyRequest): Promise<CacheGetManyResponse> {
+  async getMany(keys: string[]): Promise<{ [key: string]: Uint8Array }> {
+    const request: CacheGetManyRequest = { keys };
+    const response = fromWireCacheGetManyResponse(await callUnary(() => this.client.getMany(toWireCacheGetManyRequest(request))));
+    const out: { [key: string]: Uint8Array } = Object.create(null) as { [key: string]: Uint8Array };
+    for (const entry of response.entries) {
+      if (entry.found) {
+        out[entry.key] = entry.value;
+      }
+    }
+    return out;
+  }
+
+  async getManyRaw(request: CacheGetManyRequest): Promise<CacheGetManyResponse> {
     const response = await callUnary(() => this.client.getMany(toWireCacheGetManyRequest(request)));
     return fromWireCacheGetManyResponse(response);
   }
 
-  async set(request: CacheSetRequest): Promise<void> {
+  async set(key: string, value: Uint8Array, ttl?: DurationMs): Promise<void> {
+    const request: CacheSetRequest = { key, value, ...(ttl !== undefined ? { ttl } : {}) };
     await callUnary(() => this.client.set(toWireCacheSetRequest(request)));
   }
 
-  async setMany(request: CacheSetManyRequest): Promise<void> {
+  async setRaw(request: CacheSetRequest): Promise<void> {
+    await callUnary(() => this.client.set(toWireCacheSetRequest(request)));
+  }
+
+  async setMany(entries: CacheSetEntry[], ttl?: DurationMs): Promise<void> {
+    const request: CacheSetManyRequest = { entries, ...(ttl !== undefined ? { ttl } : {}) };
     await callUnary(() => this.client.setMany(toWireCacheSetManyRequest(request)));
   }
 
-  async delete(request: CacheDeleteRequest): Promise<CacheDeleteResponse> {
+  async setManyRaw(request: CacheSetManyRequest): Promise<void> {
+    await callUnary(() => this.client.setMany(toWireCacheSetManyRequest(request)));
+  }
+
+  async delete(key: string): Promise<boolean> {
+    const request: CacheDeleteRequest = { key };
+    const response = fromWireCacheDeleteResponse(await callUnary(() => this.client.delete(toWireCacheDeleteRequest(request))));
+    return response.deleted;
+  }
+
+  async deleteRaw(request: CacheDeleteRequest): Promise<CacheDeleteResponse> {
     const response = await callUnary(() => this.client.delete(toWireCacheDeleteRequest(request)));
     return fromWireCacheDeleteResponse(response);
   }
 
-  async deleteMany(request: CacheDeleteManyRequest): Promise<CacheDeleteManyResponse> {
+  async deleteMany(keys: string[]): Promise<bigint> {
+    const request: CacheDeleteManyRequest = { keys };
+    const response = fromWireCacheDeleteManyResponse(await callUnary(() => this.client.deleteMany(toWireCacheDeleteManyRequest(request))));
+    return response.deleted;
+  }
+
+  async deleteManyRaw(request: CacheDeleteManyRequest): Promise<CacheDeleteManyResponse> {
     const response = await callUnary(() => this.client.deleteMany(toWireCacheDeleteManyRequest(request)));
     return fromWireCacheDeleteManyResponse(response);
   }
 
-  async touch(request: CacheTouchRequest): Promise<CacheTouchResponse> {
+  async touch(key: string, ttl?: DurationMs): Promise<boolean> {
+    const request: CacheTouchRequest = { key, ...(ttl !== undefined ? { ttl } : {}) };
+    const response = fromWireCacheTouchResponse(await callUnary(() => this.client.touch(toWireCacheTouchRequest(request))));
+    return response.touched;
+  }
+
+  async touchRaw(request: CacheTouchRequest): Promise<CacheTouchResponse> {
     const response = await callUnary(() => this.client.touch(toWireCacheTouchRequest(request)));
     return fromWireCacheTouchResponse(response);
   }
