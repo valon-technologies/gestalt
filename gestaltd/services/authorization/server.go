@@ -13,78 +13,96 @@ import (
 
 type providerServer struct {
 	proto.UnimplementedAuthorizationServer
-	provider core.AuthorizationProvider
+	provider      core.AuthorizationProvider
+	gatewaySource providergateway.GatewaySource
 }
 
-func NewProviderServer(provider core.AuthorizationProvider) proto.AuthorizationServer {
-	return &providerServer{provider: provider}
+type ProviderServerOption func(*providerServer)
+
+func WithGatewaySource(source providergateway.GatewaySource) ProviderServerOption {
+	return func(s *providerServer) {
+		s.gatewaySource = source
+	}
+}
+
+func NewProviderServer(provider core.AuthorizationProvider, opts ...ProviderServerOption) proto.AuthorizationServer {
+	s := &providerServer{provider: provider}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
+	}
+	return s
 }
 
 func (s *providerServer) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.CheckAccess(providerGatewayGRPCContext(ctx), req)
+	return s.provider.CheckAccess(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) CheckAccessMany(ctx context.Context, req *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.CheckAccessMany(providerGatewayGRPCContext(ctx), req)
+	return s.provider.CheckAccessMany(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) ListRelationships(ctx context.Context, req *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.ListRelationships(providerGatewayGRPCContext(ctx), req)
+	return s.provider.ListRelationships(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) AddRelationship(ctx context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.AddRelationship(providerGatewayGRPCContext(ctx), req)
+	return s.provider.AddRelationship(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) DeleteRelationship(ctx context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.DeleteRelationship(providerGatewayGRPCContext(ctx), req)
+	return s.provider.DeleteRelationship(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) SetAuthorizationState(ctx context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.SetAuthorizationState(providerGatewayGRPCContext(ctx), req)
+	return s.provider.SetAuthorizationState(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) GetActiveModelRef(ctx context.Context, _ *emptypb.Empty) (*proto.GetActiveModelRefResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.GetActiveModelRef(providerGatewayGRPCContext(ctx))
+	return s.provider.GetActiveModelRef(s.providerGatewayContext(ctx))
 }
 
 func (s *providerServer) SetActiveModel(ctx context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.SetActiveModel(providerGatewayGRPCContext(ctx), req)
+	return s.provider.SetActiveModel(s.providerGatewayContext(ctx), req)
 }
 
 func (s *providerServer) ListActiveModelResourceTypes(ctx context.Context, req *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
 	if err := s.requireProvider(); err != nil {
 		return nil, err
 	}
-	return s.provider.ListActiveModelResourceTypes(providerGatewayGRPCContext(ctx), req)
+	return s.provider.ListActiveModelResourceTypes(s.providerGatewayContext(ctx), req)
 }
 
-func providerGatewayGRPCContext(ctx context.Context) context.Context {
-	return providergateway.WithSource(ctx, providergateway.GatewaySourceSDKGRPC)
+func (s *providerServer) providerGatewayContext(ctx context.Context) context.Context {
+	if s == nil || s.gatewaySource == "" {
+		return ctx
+	}
+	return providergateway.WithSource(ctx, s.gatewaySource)
 }
 
 func (s *providerServer) requireProvider() error {
