@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package sdkgen.test.v1;
+
+import "google/protobuf/any.proto";
+
+message AnyRequest {
+  google.protobuf.Any payload = 1;
+}
+
+service AnyService {
+  rpc Send(AnyRequest) returns (AnyRequest);
+}

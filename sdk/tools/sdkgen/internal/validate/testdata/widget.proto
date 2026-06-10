@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package sdkgen.test.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+
+message Gadget {
+  string label = 1;
+}
+
+enum WidgetColor {
+  WIDGET_COLOR_UNSPECIFIED = 0;
+  WIDGET_COLOR_RED = 1;
+}
+
+message Widget {
+  int64 count = 1;
+  optional string nickname = 2;
+  bytes payload = 3;
+  Gadget gadget = 4;
+  repeated string tags = 5;
+  repeated Gadget gadgets = 6;
+  map<string, string> labels = 7;
+  map<string, Gadget> parts = 8;
+  WidgetColor color = 9;
+  google.protobuf.Struct config = 10;
+  google.protobuf.Value extra = 11;
+  google.protobuf.Timestamp built_at = 12;
+  Widget child = 13;
+  oneof contents {
+    string text = 14;
+    Gadget item = 15;
+    google.protobuf.NullValue nothing = 16;
+    google.protobuf.Empty unit = 17;
+  }
+  google.protobuf.Duration ttl = 18;
+  google.rpc.Status last_error = 19;
+}
+
+message WidgetRequest {
+  Widget widget = 1;
+}
+
+message WidgetResponse {
+  Widget widget = 1;
+}
+
+message ChunkRequest {
+  string id = 1;
+}
+
+message Chunk {
+  bytes data = 1;
+}
+
+service WidgetService {
+  rpc GetWidget(WidgetRequest) returns (WidgetResponse);
+  rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc ReadChunks(ChunkRequest) returns (stream Chunk);
+  rpc WriteChunks(stream Chunk) returns (WidgetResponse);
+  rpc Exchange(stream Chunk) returns (stream Chunk);
+}

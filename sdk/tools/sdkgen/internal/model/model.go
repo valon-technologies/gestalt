@@ -1,0 +1,154 @@
+// Package model is the normalized provider SDK model: pure data shared by
+// every language emitter. No protoreflect types cross this boundary, which is
+// what keeps descriptor classification in one place.
+package model
+
+// StreamKind classifies an RPC's streaming shape.
+type StreamKind int
+
+const (
+	Unary StreamKind = iota
+	ServerStream
+	ClientStream
+	Bidi
+)
+
+func (k StreamKind) String() string {
+	switch k {
+	case Unary:
+		return "unary"
+	case ServerStream:
+		return "server-stream"
+	case ClientStream:
+		return "client-stream"
+	case Bidi:
+		return "bidi"
+	default:
+		return "unknown"
+	}
+}
+
+// Presence reports whether an unset field is distinguishable from one set to
+// its default value.
+type Presence int
+
+const (
+	NoPresence Presence = iota
+	ExplicitPresence
+)
+
+// SemanticKind is the shared-semantics classification of a field or type
+// reference. Every emitter maps these kinds to native types; nothing outside
+// this set survives validation.
+type SemanticKind int
+
+const (
+	KindInvalid SemanticKind = iota
+	KindScalar
+	KindBytes
+	KindEnum
+	KindMessage
+	KindRepeated
+	KindMap
+	KindJSONStruct // google.protobuf.Struct
+	KindJSONValue  // google.protobuf.Value
+	KindJSONNull   // google.protobuf.NullValue
+	KindTimestamp  // google.protobuf.Timestamp
+	KindDuration   // google.protobuf.Duration
+	KindUnit       // google.protobuf.Empty as a field: a unit variant
+	KindRPCStatus  // google.rpc.Status: the canonical SDK error
+)
+
+// ScalarType identifies a proto scalar for KindScalar fields and refs.
+type ScalarType int
+
+const (
+	ScalarInvalid ScalarType = iota
+	ScalarBool
+	ScalarInt32
+	ScalarSint32
+	ScalarUint32
+	ScalarInt64
+	ScalarSint64
+	ScalarUint64
+	ScalarSfixed32
+	ScalarFixed32
+	ScalarSfixed64
+	ScalarFixed64
+	ScalarFloat
+	ScalarDouble
+	ScalarString
+)
+
+// Schema is the root of the normalized model.
+type Schema struct {
+	Services []*Service
+	Messages []*Message // transitive closure of method I/O, sorted by full name
+	Enums    []*Enum    // sorted by full name
+}
+
+type Service struct {
+	FullName  string
+	Name      string
+	ProtoFile string
+	Methods   []*Method
+}
+
+type Method struct {
+	Name          string
+	Stream        StreamKind
+	Input         *Message // nil when InputIsEmpty
+	InputIsEmpty  bool     // google.protobuf.Empty request: no public request argument
+	Output        *Message // nil when OutputIsEmpty
+	OutputIsEmpty bool
+}
+
+type Message struct {
+	FullName  string
+	Name      string
+	ProtoFile string
+	Fields    []*Field // declaration order
+	Oneofs    []*Oneof // real oneofs only; synthetic optional-scalar oneofs are presence
+}
+
+type Field struct {
+	Name     string
+	JSONName string
+	Number   int32
+	Kind     SemanticKind
+	Presence Presence
+
+	Scalar     ScalarType // KindScalar
+	Elem       *TypeRef   // KindRepeated
+	MapKey     ScalarType // KindMap
+	MapValue   *TypeRef   // KindMap
+	Message    string     // KindMessage: full name
+	Enum       string     // KindEnum: full name
+	OneofIndex int        // index into Message.Oneofs, -1 when not a oneof member
+}
+
+// TypeRef classifies a repeated element or map value.
+type TypeRef struct {
+	Kind    SemanticKind
+	Scalar  ScalarType
+	Message string
+	Enum    string
+}
+
+type Oneof struct {
+	Name         string
+	FieldNumbers []int32
+}
+
+// Enum is an open proto3 enum; unknown numeric values are preserved by SDKs.
+type Enum struct {
+	FullName  string
+	Name      string
+	ProtoFile string
+	Values    []EnumValue
+}
+
+type EnumValue struct {
+	Name   string
+	Number int32
+}
