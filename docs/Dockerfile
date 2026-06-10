@@ -43,6 +43,12 @@ server {
 }
 
 server {
+    listen 8080;
+    server_name www.gestaltd.ai;
+    return 301 https://gestaltd.ai$request_uri;
+}
+
+server {
     listen 8080 default_server;
     server_name gestaltd.ai _;
     absolute_redirect off;

@@ -21,6 +21,8 @@ provider "google" {
 
 locals {
   docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
+  docs_www_cert_name        = "${var.resource_prefix}-cert-www-${replace(var.domain, ".", "-")}"
+  www_domain                = "www.${var.domain}"
   github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
   sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
   sdk_api_docs_backend_name = "${var.resource_prefix}-sdk-api-docs-backend"
@@ -115,8 +117,24 @@ resource "google_compute_url_map" "docs" {
   default_service = google_compute_backend_service.docs.id
 
   host_rule {
+    hosts        = [local.www_domain]
+    path_matcher = "www_redirect"
+  }
+
+  host_rule {
     hosts        = ["*"]
     path_matcher = "docs"
+  }
+
+  path_matcher {
+    name = "www_redirect"
+
+    default_url_redirect {
+      host_redirect          = var.domain
+      https_redirect         = false
+      strip_query            = false
+      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    }
   }
 
   path_matcher {
@@ -151,10 +169,25 @@ resource "google_compute_managed_ssl_certificate" "docs" {
   }
 }
 
+resource "google_compute_managed_ssl_certificate" "docs_www" {
+  name = local.docs_www_cert_name
+
+  managed {
+    domains = [local.www_domain]
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
 resource "google_compute_target_https_proxy" "docs" {
-  name             = "${var.resource_prefix}-https-proxy"
-  url_map          = google_compute_url_map.docs.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.docs.id]
+  name    = "${var.resource_prefix}-https-proxy"
+  url_map = google_compute_url_map.docs.id
+  ssl_certificates = [
+    google_compute_managed_ssl_certificate.docs.id,
+    google_compute_managed_ssl_certificate.docs_www.id,
+  ]
 }
 
 resource "google_compute_global_address" "docs" {
@@ -174,10 +207,35 @@ resource "google_compute_global_forwarding_rule" "docs" {
 resource "google_compute_url_map" "docs_http_redirect" {
   name = "${var.resource_prefix}-http-redirect"
 
-  default_url_redirect {
-    https_redirect         = true
-    strip_query            = false
-    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+  host_rule {
+    hosts        = [local.www_domain]
+    path_matcher = "www_to_apex_https"
+  }
+
+  host_rule {
+    hosts        = ["*"]
+    path_matcher = "https_redirect"
+  }
+
+  path_matcher {
+    name = "www_to_apex_https"
+
+    default_url_redirect {
+      host_redirect          = var.domain
+      https_redirect         = true
+      strip_query            = false
+      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    }
+  }
+
+  path_matcher {
+    name = "https_redirect"
+
+    default_url_redirect {
+      https_redirect         = true
+      strip_query            = false
+      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    }
   }
 }
 
@@ -216,6 +274,15 @@ resource "google_dns_record_set" "registry" {
   provider     = google.dns
   managed_zone = google_dns_managed_zone.docs.name
   name         = "${var.registry_domain}."
+  type         = "A"
+  ttl          = 300
+  rrdatas      = [google_compute_global_address.docs.address]
+}
+
+resource "google_dns_record_set" "www" {
+  provider     = google.dns
+  managed_zone = google_dns_managed_zone.docs.name
+  name         = "${local.www_domain}."
   type         = "A"
   ttl          = 300
   rrdatas      = [google_compute_global_address.docs.address]
