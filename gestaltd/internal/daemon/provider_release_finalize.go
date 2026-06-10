@@ -249,6 +249,7 @@ func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version
 	metadata := &providerrelease.Metadata{
 		Schema:        providerrelease.SchemaName,
 		SchemaVersion: providerrelease.SchemaVersion,
+		ProtocolEpoch: providerrelease.ProtocolEpoch,
 		Package:       manifest.Source,
 		Kind:          manifest.Kind,
 		Version:       version,

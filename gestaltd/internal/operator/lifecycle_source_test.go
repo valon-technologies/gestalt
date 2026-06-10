@@ -6281,3 +6281,87 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 		t.Fatal("secrets provider command is empty after load")
 	}
 }
+
+func TestLifecycleGitSourceSnapshotRejectsUnsupportedProtocolEpoch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		ref           = "cccccccccccccccccccccccccccccccccccccccc"
+		packageSource = "github.com/acme/providers/apps/alpha"
+		version       = "0.0.0-snapshot.gcccccccccccccccccccccccccccccccccccccccc"
+	)
+	archivePath := buildV2Archive(t, dir, packageSource, version, "snapshot-binary")
+	archiveSHA, err := providerpkg.ArchiveDigest(archivePath)
+	if err != nil {
+		t.Fatalf("archive digest: %v", err)
+	}
+	epoch := providerrelease.ProtocolEpoch
+	var epochMu sync.Mutex
+	metadataPath := "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/provider-release.yaml"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		epochMu.Lock()
+		fixtureEpoch := epoch
+		epochMu.Unlock()
+		metadata := providerReleaseMetadataFixture{
+			Package:       packageSource,
+			Kind:          providermanifestv1.KindApp,
+			Version:       version,
+			ProtocolEpoch: fixtureEpoch,
+			ArchivePath:   archivePath,
+			Artifacts: map[string]providerrelease.Artifact{
+				providerpkg.CurrentPlatformString(): {
+					Path:   "alpha.tar.gz",
+					SHA256: archiveSHA,
+				},
+			},
+		}
+		if !serveProviderReleaseFixture(t, w, r.URL.Path, metadataPath, metadata) {
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v6
+providerSnapshotRepositories:
+  valon:
+    url: %s/snapshots
+%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+apps:
+  alpha:
+    source:
+      git:
+        repo: https://github.com/acme/providers.git
+        ref: %s
+        path: apps/alpha/manifest.yaml
+        artifactRepository: valon
+        materialization: snapshot
+`, srv.URL, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "snapshot-epoch.db")), filepath.ToSlash(artifactsDir), ref)
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lock, err := NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths with current epoch: %v", err)
+	}
+	if got := lock.Providers.App["alpha"].ProtocolEpoch; got != providerrelease.ProtocolEpoch {
+		t.Fatalf("lock entry protocolEpoch = %d, want %d", got, providerrelease.ProtocolEpoch)
+	}
+
+	epochMu.Lock()
+	epoch = providerrelease.ProtocolEpoch + 1
+	epochMu.Unlock()
+	_, err = NewLifecycle().WithHTTPClient(srv.Client()).LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err == nil || !strings.Contains(err.Error(), "protocol epoch") {
+		t.Fatalf("LockAtPathsWithStatePaths error = %v, want unsupported protocol epoch", err)
+	}
+}

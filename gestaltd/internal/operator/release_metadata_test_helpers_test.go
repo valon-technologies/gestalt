@@ -18,15 +18,16 @@ import (
 )
 
 type providerReleaseMetadataFixture struct {
-	Package      string
-	Kind         string
-	Version      string
-	Artifacts    map[string]providerrelease.Artifact
-	ArchivePath  string
-	Manifest     *providermanifestv1.Manifest
-	Catalog      *catalog.Catalog
-	NoCatalog    bool
-	AllowInvalid bool
+	Package       string
+	Kind          string
+	Version       string
+	ProtocolEpoch int
+	Artifacts     map[string]providerrelease.Artifact
+	ArchivePath   string
+	Manifest      *providermanifestv1.Manifest
+	Catalog       *catalog.Catalog
+	NoCatalog     bool
+	AllowInvalid  bool
 }
 
 type providerReleaseFixtureFiles struct {
@@ -61,6 +62,7 @@ func newProviderReleaseFixtureFiles(t *testing.T, fixture providerReleaseMetadat
 	metadata := &providerrelease.Metadata{
 		Schema:        providerrelease.SchemaName,
 		SchemaVersion: providerrelease.SchemaVersion,
+		ProtocolEpoch: fixture.ProtocolEpoch,
 		Package:       fixture.Package,
 		Kind:          fixture.Kind,
 		Version:       fixture.Version,

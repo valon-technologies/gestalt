@@ -74,6 +74,7 @@ type LockSourceRef struct {
 
 type LockEntry struct {
 	InputDigest        string                       `json:"inputDigest,omitempty"`
+	ProtocolEpoch      int                          `json:"protocolEpoch,omitempty"`
 	Package            string                       `json:"package,omitempty"`
 	Kind               string                       `json:"kind,omitempty"`
 	Runtime            string                       `json:"runtime,omitempty"`
@@ -3060,6 +3061,9 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
 	}
 	metadata := bundle.Metadata
+	if err := providerrelease.ValidateProtocolEpoch(metadata.ProtocolEpoch); err != nil {
+		return nil, LockEntry{}, fmt.Errorf("%s: %w", subject, err)
+	}
 	expectedManifestKind := archivePolicyKind(expectedKind)
 	if metadata.Kind != expectedManifestKind {
 		return nil, LockEntry{}, fmt.Errorf("%s metadata kind %q does not match expected kind %q", subject, metadata.Kind, expectedManifestKind)
@@ -3069,12 +3073,13 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		return nil, LockEntry{}, fmt.Errorf("%s resolve archive metadata %q: %w", subject, sourceLocation, err)
 	}
 	entry := LockEntry{
-		Package:  metadata.Package,
-		Kind:     metadata.Kind,
-		Runtime:  providerrelease.RuntimeForManifest(metadata.Kind, bundle.Manifest),
-		Source:   providerSourceLockLocation(app, configDir),
-		Version:  metadata.Version,
-		Archives: archives,
+		Package:       metadata.Package,
+		Kind:          metadata.Kind,
+		Runtime:       providerrelease.RuntimeForManifest(metadata.Kind, bundle.Manifest),
+		Source:        providerSourceLockLocation(app, configDir),
+		Version:       metadata.Version,
+		Archives:      archives,
+		ProtocolEpoch: metadata.ProtocolEpoch,
 	}
 	staticManifest, err := portableStaticValidationManifest(bundle.Manifest, "", true)
 	if err != nil {

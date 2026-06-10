@@ -25,9 +25,35 @@ const (
 	MaxBytes           = 16 << 20 // One file carries descriptor, validation manifest, and optional catalog.
 )
 
+// ProtocolEpoch identifies the host-provider protocol generation this gestaltd
+// builds and serves. Bump it in the same change as any breaking host-provider
+// protocol change (renamed proto services, removed compatibility fallbacks) so
+// stale provider snapshots fail `gestaltd lock` and `gestaltd lock --check` at
+// build time instead of crash-looping at bootstrap.
+const ProtocolEpoch = 1
+
+// MinSupportedProtocolEpoch is the oldest provider protocol generation this
+// gestaltd still serves. Raise it when compatibility for older generations is
+// removed.
+const MinSupportedProtocolEpoch = 1
+
+// ValidateProtocolEpoch rejects provider releases built against a protocol
+// generation this gestaltd cannot serve. Releases published before epochs were
+// stamped carry zero and are allowed.
+func ValidateProtocolEpoch(epoch int) error {
+	if epoch == 0 {
+		return nil
+	}
+	if epoch < MinSupportedProtocolEpoch || epoch > ProtocolEpoch {
+		return fmt.Errorf("provider release protocol epoch %d is outside this gestaltd's supported range [%d, %d]; republish the snapshot with a matching gestalt toolchain", epoch, MinSupportedProtocolEpoch, ProtocolEpoch)
+	}
+	return nil
+}
+
 type Metadata struct {
 	Schema           string            `yaml:"schema"`
 	SchemaVersion    int               `yaml:"schemaVersion"`
+	ProtocolEpoch    int               `yaml:"protocolEpoch,omitempty"`
 	Package          string            `yaml:"package"`
 	Kind             string            `yaml:"kind"`
 	Version          string            `yaml:"version"`
