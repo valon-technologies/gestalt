@@ -503,18 +503,7 @@ func (p *agentProviderWithTracking) CreateSession(ctx context.Context, req *prot
 	if p == nil || p.delegate == nil {
 		return nil, fmt.Errorf("agent provider is not configured")
 	}
-	session, err := p.delegate.CreateSession(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	requestedID := strings.TrimSpace(req.GetSessionId())
-	if requestedID != "" && session != nil {
-		actualID := strings.TrimSpace(session.ID)
-		if actualID != "" && actualID != requestedID && strings.TrimSpace(req.GetIdempotencyKey()) == "" {
-			return nil, fmt.Errorf("%w: agent provider %q returned session id %q for requested session id %q", invocation.ErrInternal, p.providerName, actualID, requestedID)
-		}
-	}
-	return session, nil
+	return p.delegate.CreateSession(ctx, req)
 }
 
 func (p *agentProviderWithTracking) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*coreagent.Session, error) {

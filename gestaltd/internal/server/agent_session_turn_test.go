@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -251,7 +252,7 @@ func (p *memoryAgentProvider) CreateSession(_ context.Context, req *proto.Create
 
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
-		ID:                 req.GetSessionId(),
+		ID:                 fmt.Sprintf("managed-session-%d", len(p.sessions)+1),
 		ProviderName:       "managed",
 		Model:              req.GetModel(),
 		ClientRef:          req.GetClientRef(),

@@ -255,9 +255,19 @@ export interface AgentPreparedWorkspace {
   cwd?: string | undefined;
 }
 
+/**
+ * Request passed to {@link AgentProviderOptions.createSession}.
+ *
+ * The provider mints a non-empty, stable session id and returns it on the
+ * created {@link AgentSession}; the host treats it as opaque. Creation must be
+ * idempotent on `idempotencyKey` scoped per subject (`createdBySubjectId`):
+ * replaying a key the provider has already honored for the same subject
+ * returns the existing session, including its persisted metadata, instead of
+ * creating a new one. Keys from different subjects never collide, and an
+ * empty key always creates a new session.
+ */
 export interface CreateAgentProviderSessionRequest {
   providerName?: string | undefined;
-  sessionId: string;
   idempotencyKey: string;
   model: string;
   clientRef: string;
@@ -488,6 +498,13 @@ export interface ListedAgentTool {
 
 /** Handlers and runtime metadata for an agent provider. */
 export interface AgentProviderOptions extends ProviderBaseOptions {
+  /**
+   * Creates a session. The provider mints a non-empty, stable session id and
+   * returns it on the {@link AgentSession}. Creation must be idempotent on
+   * `idempotencyKey` scoped per subject (`createdBySubjectId`): a replayed
+   * key returns the existing session with its persisted metadata, while an
+   * empty key always creates a new session.
+   */
   createSession?: (
     request: CreateAgentProviderSessionRequest,
   ) => MaybePromise<AgentSession>;
@@ -705,7 +722,6 @@ function createAgentProviderSessionRequestFromProto(
 ): CreateAgentProviderSessionRequest {
   return {
     providerName: request.providerName,
-    sessionId: request.sessionId,
     idempotencyKey: request.idempotencyKey,
     model: request.model,
     clientRef: request.clientRef,

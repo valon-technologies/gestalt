@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -141,8 +142,16 @@ func (p *listSessionsAgentProvider) ListSessions(context.Context, *proto.ListAge
 
 type routingAgentProvider struct {
 	coreagent.UnimplementedProvider
-	createTurn func(context.Context, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error)
-	getTurn    func(context.Context, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error)
+	createSession func(context.Context, *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error)
+	createTurn    func(context.Context, *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error)
+	getTurn       func(context.Context, *proto.GetAgentProviderTurnRequest) (*coreagent.Turn, error)
+}
+
+func (p *routingAgentProvider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+	if p.createSession == nil {
+		return nil, core.ErrNotFound
+	}
+	return p.createSession(ctx, req)
 }
 
 func (p *routingAgentProvider) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*coreagent.Turn, error) {
@@ -163,10 +172,10 @@ type workspaceAgentProvider struct {
 	coreagent.UnimplementedProvider
 	supportPreparedWorkspace bool
 	createErr                error
-	createSessionID          string
 	createReqs               []*proto.CreateAgentProviderSessionRequest
 	updateReqs               []*proto.UpdateAgentProviderSessionRequest
 	sessions                 map[string]*coreagent.Session
+	sessionsByKey            map[string]*coreagent.Session
 }
 
 func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
@@ -174,12 +183,16 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 	if p.createErr != nil {
 		return nil, p.createErr
 	}
-	sessionID := strings.TrimSpace(p.createSessionID)
-	if sessionID == "" {
-		sessionID = req.GetSessionId()
+	key := ""
+	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
+		key = strings.TrimSpace(req.GetCreatedBySubjectId()) + "\x1f" + idempotencyKey
+		if existing := p.sessionsByKey[key]; existing != nil {
+			cloned := *existing
+			return &cloned, nil
+		}
 	}
 	session := &coreagent.Session{
-		ID:                 sessionID,
+		ID:                 fmt.Sprintf("minted-session-%d", len(p.sessions)+1),
 		ProviderName:       "simple",
 		Model:              req.GetModel(),
 		State:              coreagent.SessionStateActive,
@@ -189,6 +202,12 @@ func (p *workspaceAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 		p.sessions = map[string]*coreagent.Session{}
 	}
 	p.sessions[session.ID] = session
+	if key != "" {
+		if p.sessionsByKey == nil {
+			p.sessionsByKey = map[string]*coreagent.Session{}
+		}
+		p.sessionsByKey[key] = session
+	}
 	cloned := *session
 	return &cloned, nil
 }
@@ -228,6 +247,7 @@ type workspaceRuntimeProvider struct {
 	*runtimeprovider.LocalProvider
 	supportPrepareWorkspace bool
 	prepareWorkspace        func(context.Context, *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error)
+	prepareReqs             []*proto.PrepareRuntimeWorkspaceRequest
 	removeWorkspaceReqs     []*proto.RemoveRuntimeWorkspaceRequest
 }
 
@@ -241,6 +261,7 @@ func (p *workspaceRuntimeProvider) Support(ctx context.Context) (*proto.RuntimeS
 }
 
 func (p *workspaceRuntimeProvider) PrepareWorkspace(ctx context.Context, req *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
+	p.prepareReqs = append(p.prepareReqs, req)
 	if p.prepareWorkspace != nil {
 		return p.prepareWorkspace(ctx, req)
 	}
@@ -264,7 +285,6 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 
 	session, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "agent-session-1",
 		Model:              "gpt-test",
 		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
@@ -278,7 +298,7 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if session == nil || session.ID != "agent-session-1" {
+	if session == nil || session.ID == "" {
 		t.Fatalf("session = %#v", session)
 	}
 	if len(agentProvider.createReqs) != 1 {
@@ -301,7 +321,7 @@ func TestHostedAgentPoolPreparesWorkspaceBeforeProviderCreate(t *testing.T) {
 	if strings.TrimSpace(string(data)) != "workspace fixture" {
 		t.Fatalf("README = %q", data)
 	}
-	if got := pool.sessionBackend("agent-session-1"); got == nil || got.runtimeSessionID != runtimeSession.GetId() {
+	if got := pool.sessionBackend(session.ID); got == nil || got.runtimeSessionID != runtimeSession.GetId() {
 		t.Fatalf("session backend = %#v, want runtime session %q", got, runtimeSession.GetId())
 	}
 }
@@ -318,7 +338,6 @@ func TestHostedAgentPoolRejectsWorkspaceWithoutProviderCapability(t *testing.T) 
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -350,7 +369,6 @@ func TestHostedAgentPoolCleansNonIdempotentPreparedWorkspaceAfterCreateFailure(t
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -370,9 +388,6 @@ func TestHostedAgentPoolCleansNonIdempotentPreparedWorkspaceAfterCreateFailure(t
 	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
 	}
-	if got := pool.sessionBackend("agent-session-1"); got != nil {
-		t.Fatalf("session backend after cleanup = %#v, want nil", got)
-	}
 }
 
 func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepare(t *testing.T) {
@@ -386,17 +401,17 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
 	t.Cleanup(func() { _ = pool.Close() })
 
+	workspace := testAgentWorkspaceToProto(&coreagent.Workspace{
+		CWD: "app",
+		Checkouts: []coreagent.WorkspaceGitCheckout{{
+			URL:  "file://" + filepath.ToSlash(repo),
+			Path: "app",
+		}},
+	})
 	first, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "agent-session-1",
 		IdempotencyKey:     "workspace-create-1",
 		CreatedBySubjectId: "user:user-1",
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
-			CWD: "app",
-			Checkouts: []coreagent.WorkspaceGitCheckout{{
-				URL:  "file://" + filepath.ToSlash(repo),
-				Path: "app",
-			}},
-		}),
+		Workspace:          workspace,
 	})
 	if err != nil {
 		t.Fatalf("CreateSession first: %v", err)
@@ -406,20 +421,10 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 		t.Fatal("provider did not receive prepared workspace")
 		return
 	}
-	runtimeProvider.prepareWorkspace = func(context.Context, *proto.PrepareRuntimeWorkspaceRequest) (*proto.PrepareRuntimeWorkspaceResponse, error) {
-		return nil, errors.New("prepare should not run for idempotent replay")
-	}
 	second, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "agent-session-1",
 		IdempotencyKey:     "workspace-create-1",
 		CreatedBySubjectId: "user:user-1",
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
-			CWD: "other",
-			Checkouts: []coreagent.WorkspaceGitCheckout{{
-				URL:  "file://" + filepath.ToSlash(repo),
-				Path: "other",
-			}},
-		}),
+		Workspace:          workspace,
 	})
 	if err != nil {
 		t.Fatalf("CreateSession replay: %v", err)
@@ -427,68 +432,20 @@ func TestHostedAgentPoolReturnsExistingIdempotentWorkspaceSessionWithoutReprepar
 	if second.ID != first.ID {
 		t.Fatalf("replayed session ID = %q, want %q", second.ID, first.ID)
 	}
-	if len(agentProvider.createReqs) != 1 {
-		t.Fatalf("provider create requests len = %d, want 1", len(agentProvider.createReqs))
+	if len(agentProvider.createReqs) != 2 {
+		t.Fatalf("provider create requests len = %d, want 2", len(agentProvider.createReqs))
+	}
+	if len(runtimeProvider.prepareReqs) != 2 {
+		t.Fatalf("PrepareWorkspace calls = %d, want 2", len(runtimeProvider.prepareReqs))
+	}
+	if a, b := runtimeProvider.prepareReqs[0].GetAgentSessionId(), runtimeProvider.prepareReqs[1].GetAgentSessionId(); a == "" || a != b {
+		t.Fatalf("workspace refs across replay = %q, %q, want identical non-empty", a, b)
 	}
 	if len(runtimeProvider.removeWorkspaceReqs) != 0 {
 		t.Fatalf("RemoveWorkspace calls = %d, want 0", len(runtimeProvider.removeWorkspaceReqs))
 	}
 	if _, err := os.Stat(prepared.Root); err != nil {
 		t.Fatalf("workspace root after replay stat: %v", err)
-	}
-}
-
-func TestHostedAgentPoolCleansPreparedWorkspaceWhenProviderReturnsWrongSessionID(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	repo := createAgentRuntimeWorkspaceRepo(t)
-	runtimeProvider, runtimeSession := startWorkspaceRuntimeSession(t, ctx, true)
-	agentProvider := &workspaceAgentProvider{
-		supportPreparedWorkspace: true,
-		createSessionID:          "existing-session",
-	}
-	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
-	t.Cleanup(func() { _ = pool.Close() })
-
-	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "agent-session-1",
-		IdempotencyKey:     "workspace-create-1",
-		CreatedBySubjectId: "user:user-1",
-		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
-			CWD: "app",
-			Checkouts: []coreagent.WorkspaceGitCheckout{{
-				URL:  "file://" + filepath.ToSlash(repo),
-				Path: "app",
-			}},
-		}),
-	})
-	if err == nil || !strings.Contains(err.Error(), "agent provider returned session id") {
-		t.Fatalf("CreateSession error = %v, want session id mismatch", err)
-	}
-	prepared := agentProvider.createReqs[0].PreparedWorkspace
-	if prepared == nil {
-		t.Fatal("provider did not receive prepared workspace before mismatch")
-		return
-	}
-	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
-		t.Fatalf("workspace root stat error = %v, want not exist", statErr)
-	}
-	if got := pool.sessionBackend("agent-session-1"); got != nil {
-		t.Fatalf("session backend after mismatch = %#v, want nil", got)
-	}
-	if got := pool.sessionBackend("existing-session"); got != nil {
-		t.Fatalf("provider returned session backend = %#v, want nil", got)
-	}
-	if got := len(agentProvider.updateReqs); got != 1 {
-		t.Fatalf("provider update requests len = %d, want 1", got)
-	}
-	if got := agentProvider.updateReqs[0].GetSessionId(); got != "existing-session" {
-		t.Fatalf("provider cleanup session id = %q, want existing-session", got)
-	}
-	if _, ok := agentProvider.sessions["existing-session"]; ok {
-		t.Fatal("provider session still exists after mismatch cleanup")
 	}
 }
 
@@ -507,7 +464,6 @@ func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing
 	t.Cleanup(func() { _ = pool.Close() })
 
 	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
 			Checkouts: []coreagent.WorkspaceGitCheckout{{
@@ -522,9 +478,6 @@ func TestHostedAgentPoolCleansPreparedWorkspaceAfterValidationFailure(t *testing
 	if len(runtimeProvider.removeWorkspaceReqs) != 1 {
 		t.Fatalf("RemoveWorkspace calls = %d, want 1", len(runtimeProvider.removeWorkspaceReqs))
 	}
-	if got := pool.sessionBackend("agent-session-1"); got != nil {
-		t.Fatalf("session backend after prepare failure = %#v, want nil", got)
-	}
 }
 
 func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T) {
@@ -538,8 +491,7 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 	pool := hostedWorkspacePoolForTest(t, agentProvider, runtimeProvider, runtimeSession, "file://"+filepath.ToSlash(repo))
 	t.Cleanup(func() { _ = pool.Close() })
 
-	_, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "agent-session-1",
+	session, err := pool.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
 		CreatedBySubjectId: "user:user-1",
 		Workspace: testAgentWorkspaceToProto(&coreagent.Workspace{
 			CWD: "app",
@@ -561,16 +513,19 @@ func TestHostedAgentPoolCleansPreparedWorkspaceWhenSessionArchived(t *testing.T)
 		t.Fatalf("workspace root before archive stat: %v", err)
 	}
 	_, err = pool.UpdateSession(ctx, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
+		SessionId: session.ID,
 		State:     proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
 	})
 	if err != nil {
 		t.Fatalf("UpdateSession archive: %v", err)
 	}
+	if len(runtimeProvider.removeWorkspaceReqs) != 1 || runtimeProvider.removeWorkspaceReqs[0].GetAgentSessionId() != runtimeProvider.prepareReqs[0].GetAgentSessionId() {
+		t.Fatalf("RemoveWorkspace requests = %#v, want one removal of the prepared workspace ref %q", runtimeProvider.removeWorkspaceReqs, runtimeProvider.prepareReqs[0].GetAgentSessionId())
+	}
 	if _, statErr := os.Stat(prepared.Root); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("workspace root after archive stat error = %v, want not exist", statErr)
 	}
-	if got := pool.sessionBackend("agent-session-1"); got != nil {
+	if got := pool.sessionBackend(session.ID); got != nil {
 		t.Fatalf("session backend after archive = %#v, want nil", got)
 	}
 }
@@ -598,6 +553,8 @@ func hostedWorkspacePoolForTest(t *testing.T, agentProvider coreagent.Provider, 
 		sessionBackends:     map[string]*hostedAgentPoolBackend{},
 		turnBackends:        map[string]*hostedAgentPoolBackend{},
 		interactionBackends: map[string]*hostedAgentPoolBackend{},
+		createKeyBackends:   map[string]*hostedAgentPoolBackend{},
+		sessionWorkspaces:   map[string]string{},
 	}
 }
 
@@ -904,27 +861,31 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("start session requests = %d, want 2", len(requests))
 	}
-	for i, sessionID := range []string{"session-1", "session-2"} {
+	var sessionIDs []string
+	for i := 0; i < 2; i++ {
 		session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-			SessionId: sessionID,
-			Model:     "gpt-test",
+			Model: "gpt-test",
 		})
 		if err != nil {
 			t.Fatalf("CreateSession(%d): %v", i, err)
 		}
-		if session == nil || session.ID != sessionID {
-			t.Fatalf("CreateSession(%d) = %#v, want %q", i, session, sessionID)
+		if session == nil || session.ID == "" {
+			t.Fatalf("CreateSession(%d) = %#v, want minted session id", i, session)
 		}
+		sessionIDs = append(sessionIDs, session.ID)
+	}
+	if sessionIDs[0] == sessionIDs[1] {
+		t.Fatalf("minted session ids collide: %q", sessionIDs[0])
 	}
 	pool := hostedAgentProviderPoolForTest(t, agents[0])
-	sessionBackend := pool.sessionBackend("session-1")
+	sessionBackend := pool.sessionBackend(sessionIDs[0])
 	if sessionBackend == nil {
-		t.Fatal("session-1 backend was not recorded")
+		t.Fatalf("%s backend was not recorded", sessionIDs[0])
 	}
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		TurnId:         "turn-1",
-		SessionId:      "session-1",
+		SessionId:      sessionIDs[0],
 		Model:          "gpt-test",
 		Output:         agentRuntimeTextOutput(),
 		Metadata: mustTestProtoStruct(t, map[string]any{
@@ -934,8 +895,8 @@ func TestAgentRuntimeConfigStartsHostedAgentWarmPool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn == nil || turn.ID != "turn-1" || turn.SessionID != "session-1" {
-		t.Fatalf("CreateTurn = %#v, want turn-1 on session-1", turn)
+	if turn == nil || turn.ID != "turn-1" || turn.SessionID != sessionIDs[0] {
+		t.Fatalf("CreateTurn = %#v, want turn-1 on %s", turn, sessionIDs[0])
 	}
 	if turn.Status != coreagent.ExecutionStatusWaitingForInput {
 		t.Fatalf("turn status = %q, want %q", turn.Status, coreagent.ExecutionStatusWaitingForInput)
@@ -1049,16 +1010,15 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	defer releaseFirst()
 
 	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "scale-out-session",
-		Model:     "gpt-test",
+		Model: "gpt-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession(scale out): %v", err)
 	}
-	if session == nil || session.ID != "scale-out-session" {
-		t.Fatalf("CreateSession(scale out) = %#v, want scale-out-session", session)
+	if session == nil || session.ID == "" {
+		t.Fatalf("CreateSession(scale out) = %#v, want minted session id", session)
 	}
-	sessionBackend := pool.sessionBackend("scale-out-session")
+	sessionBackend := pool.sessionBackend(session.ID)
 	if sessionBackend != first {
 		t.Fatalf("scale-out triggering request backend = %#v, want existing ready backend", sessionBackend)
 	}
@@ -1086,8 +1046,7 @@ func TestAgentRuntimeConfigScalesOutHostedAgentWarmPool(t *testing.T) {
 	}
 	defer releaseSecond()
 	if _, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "max-capped-session",
-		Model:     "gpt-test",
+		Model: "gpt-test",
 	}); err != nil {
 		t.Fatalf("CreateSession(max capped): %v", err)
 	}
@@ -1169,14 +1128,13 @@ func TestAgentRuntimeConfigRestartsUnhealthyHostedAgent(t *testing.T) {
 		t.Fatalf("ready backends after unhealthy replacement = %d, want 1", got)
 	}
 	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "session-after-restart",
-		Model:     "gpt-test",
+		Model: "gpt-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession(after restart): %v", err)
 	}
-	if session == nil || session.ID != "session-after-restart" {
-		t.Fatalf("CreateSession(after restart) = %#v, want session-after-restart", session)
+	if session == nil || session.ID == "" {
+		t.Fatalf("CreateSession(after restart) = %#v, want minted session id", session)
 	}
 }
 
@@ -1288,14 +1246,13 @@ func TestAgentRuntimeConfigReplacesHostedAgentBeforeRuntimeDrainDeadline(t *test
 		t.Fatal("first runtime backend was not marked draining or closed")
 	}
 	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "session-after-runtime-drain",
-		Model:     "gpt-test",
+		Model: "gpt-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession(after runtime drain): %v", err)
 	}
-	if session == nil || session.ID != "session-after-runtime-drain" {
-		t.Fatalf("CreateSession(after runtime drain) = %#v, want session-after-runtime-drain", session)
+	if session == nil || session.ID == "" {
+		t.Fatalf("CreateSession(after runtime drain) = %#v, want minted session id", session)
 	}
 }
 
@@ -1392,16 +1349,15 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		t.Fatalf("first backend acceptsNewWork=%v draining=%v, want serving after failed proactive replacement", acceptsNewWork, firstDraining)
 	}
 	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "session-after-failed-proactive-replacement",
-		Model:     "gpt-test",
+		Model: "gpt-test",
 	})
 	if err != nil {
 		t.Fatalf("CreateSession(after failed proactive replacement): %v", err)
 	}
-	if session == nil || session.ID != "session-after-failed-proactive-replacement" {
+	if session == nil || session.ID == "" {
 		t.Fatalf("CreateSession(after failed proactive replacement) = %#v, want session", session)
 	}
-	if backend := pool.sessionBackend("session-after-failed-proactive-replacement"); backend != first {
+	if backend := pool.sessionBackend(session.ID); backend != first {
 		t.Fatalf("session backend = %#v, want first backend after failed proactive replacement", backend)
 	}
 }
@@ -1826,6 +1782,79 @@ func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
 	}
 }
 
+func TestHostedAgentProviderPoolRoutesIdempotentCreateToOwningBackend(t *testing.T) {
+	t.Parallel()
+
+	newBackend := func(id int, name string, calls *int, store map[string]*coreagent.Session) *hostedAgentPoolBackend {
+		return &hostedAgentPoolBackend{
+			id: id,
+			provider: &routingAgentProvider{
+				createSession: func(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+					*calls++
+					key := strings.TrimSpace(req.GetCreatedBySubjectId()) + "\x1f" + strings.TrimSpace(req.GetIdempotencyKey())
+					if existing, ok := store[key]; ok {
+						return existing, nil
+					}
+					session := &coreagent.Session{ID: fmt.Sprintf("%s-session-%d", name, len(store)+1), State: coreagent.SessionStateActive}
+					store[key] = session
+					return session, nil
+				},
+			},
+			liveTurns: map[string]struct{}{},
+		}
+	}
+	firstCalls, secondCalls := 0, 0
+	first := newBackend(1, "first", &firstCalls, map[string]*coreagent.Session{})
+	second := newBackend(2, "second", &secondCalls, map[string]*coreagent.Session{})
+	pool := &hostedAgentProviderPool{
+		name:              "simple",
+		ctx:               context.Background(),
+		sessionBackends:   map[string]*hostedAgentPoolBackend{},
+		turnBackends:      map[string]*hostedAgentPoolBackend{},
+		createKeyBackends: map[string]*hostedAgentPoolBackend{},
+		sessionWorkspaces: map[string]string{},
+		backends:          []*hostedAgentPoolBackend{first, second},
+	}
+
+	created, err := pool.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		IdempotencyKey:     "create-1",
+		CreatedBySubjectId: "user:user-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	owner := first
+	otherCalls := &secondCalls
+	if firstCalls == 0 {
+		owner = second
+		otherCalls = &firstCalls
+	}
+	// Force round-robin away from the owner so only key affinity can route
+	// the retry back.
+	pool.mu.Lock()
+	pool.nextPick = 0
+	if pool.backends[0] == owner {
+		pool.nextPick = 1
+	}
+	pool.mu.Unlock()
+	replayed, err := pool.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		IdempotencyKey:     "create-1",
+		CreatedBySubjectId: "user:user-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession replay: %v", err)
+	}
+	if replayed.ID != created.ID {
+		t.Fatalf("replayed session ID = %q, want %q", replayed.ID, created.ID)
+	}
+	if *otherCalls != 0 {
+		t.Fatalf("non-owning backend create calls = %d, want 0", *otherCalls)
+	}
+	if got := pool.createKeyBackend("user:user-1\x1fcreate-1"); got != owner {
+		t.Fatalf("create key backend = %#v, want the owning backend", got)
+	}
+}
+
 func TestHostedAgentProviderPoolGetTurnRetriesAfterPreferredTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -2038,7 +2067,6 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	}
 
 	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId:      "session-1",
 		IdempotencyKey: "session-req-1",
 		Model:          "gpt-test",
 		ClientRef:      "cli-session-1",
@@ -2050,12 +2078,26 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if session == nil || session.ID != "session-1" || session.ProviderName != "simple" || session.State != coreagent.SessionStateActive {
-		t.Fatalf("CreateSession = %#v, want active simple session-1", session)
+	if session == nil || session.ID == "" || session.ProviderName != "simple" || session.State != coreagent.SessionStateActive {
+		t.Fatalf("CreateSession = %#v, want active simple session with minted id", session)
+	}
+	sessionID := session.ID
+
+	replayed, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		IdempotencyKey:     "session-req-1",
+		Model:              "gpt-test",
+		ClientRef:          "cli-session-1",
+		CreatedBySubjectId: "user:user-123",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession(replay): %v", err)
+	}
+	if replayed == nil || replayed.ID != sessionID {
+		t.Fatalf("CreateSession(replay) = %#v, want existing session %q", replayed, sessionID)
 	}
 
 	updatedSession, err := agents[0].UpdateSession(context.Background(), &proto.UpdateAgentProviderSessionRequest{
-		SessionId: "session-1",
+		SessionId: sessionID,
 		ClientRef: "cli-session-2",
 		State:     proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
 		Metadata: mustTestProtoStruct(t, map[string]any{
@@ -2073,11 +2115,11 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(sessions) != 1 || sessions[0].ID != "session-1" {
-		t.Fatalf("ListSessions = %#v, want session-1", sessions)
+	if len(sessions) != 1 || sessions[0].ID != sessionID {
+		t.Fatalf("ListSessions = %#v, want %q", sessions, sessionID)
 	}
 
-	fetchedSession, err := agents[0].GetSession(context.Background(), &proto.GetAgentProviderSessionRequest{SessionId: "session-1"})
+	fetchedSession, err := agents[0].GetSession(context.Background(), &proto.GetAgentProviderSessionRequest{SessionId: sessionID})
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
@@ -2088,7 +2130,7 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		TurnId:         "turn-1",
-		SessionId:      "session-1",
+		SessionId:      sessionID,
 		Model:          "gpt-test",
 		Messages: []*proto.AgentMessage{{
 			Role: "user",
@@ -2105,11 +2147,11 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn == nil || turn.ID != "turn-1" || turn.SessionID != "session-1" || turn.ProviderName != "simple" {
-		t.Fatalf("CreateTurn = %#v, want simple turn-1 on session-1", turn)
+	if turn == nil || turn.ID != "turn-1" || turn.SessionID != sessionID || turn.ProviderName != "simple" {
+		t.Fatalf("CreateTurn = %#v, want simple turn-1 on %q", turn, sessionID)
 	}
 
-	turns, err := agents[0].ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{SessionId: "session-1"})
+	turns, err := agents[0].ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{SessionId: sessionID})
 	if err != nil {
 		t.Fatalf("ListTurns: %v", err)
 	}
@@ -2149,11 +2191,11 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 		t.Fatalf("turn.completed display = %#v, want provider-authored completed status", display)
 	}
 	completedOutput, ok := turnEvents[2].Display.Output.(map[string]any)
-	if !ok || completedOutput["session_id"] != "session-1" {
-		t.Fatalf("turn.completed display output = %#v, want session_id=session-1", turnEvents[2].Display.Output)
+	if !ok || completedOutput["session_id"] != sessionID {
+		t.Fatalf("turn.completed display output = %#v, want session_id=%q", turnEvents[2].Display.Output, sessionID)
 	}
 
-	postTurnSession, err := agents[0].GetSession(context.Background(), &proto.GetAgentProviderSessionRequest{SessionId: "session-1"})
+	postTurnSession, err := agents[0].GetSession(context.Background(), &proto.GetAgentProviderSessionRequest{SessionId: sessionID})
 	if err != nil {
 		t.Fatalf("GetSession(after CreateTurn): %v", err)
 	}
@@ -2175,7 +2217,7 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		TurnId:             "turn-2",
-		SessionId:          "session-1",
+		SessionId:          sessionID,
 		Model:              "gpt-test",
 		CreatedBySubjectId: "user:user-123",
 		Output:             agentRuntimeTextOutput(),
@@ -2233,7 +2275,7 @@ func TestAgentRuntimeConfigUsesHostedAgentProvider(t *testing.T) {
 		t.Fatalf("interaction.requested display = %#v, want provider-authored interaction ref %q", display, interactions[0].ID)
 	}
 	requestedInput, ok := pausedEvents[1].Display.Input.(map[string]any)
-	if !ok || requestedInput["interaction_id"] != interactions[0].ID || requestedInput["session_id"] != "session-1" {
+	if !ok || requestedInput["interaction_id"] != interactions[0].ID || requestedInput["session_id"] != sessionID {
 		t.Fatalf("interaction.requested display input = %#v, want interaction/session ids", pausedEvents[1].Display.Input)
 	}
 	resolvedInteraction, err := agents[0].ResolveInteraction(context.Background(), &proto.ResolveAgentProviderInteractionRequest{
@@ -2484,17 +2526,17 @@ func TestAgentRuntimeConfigUsesPublicHostServiceRelayBinding(t *testing.T) {
 		}
 	}()
 
-	if _, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "session-1",
-		Model:     "gpt-test",
-	}); err != nil {
+	session, err := agents[0].CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+		Model: "gpt-test",
+	})
+	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
 	turn, err := agents[0].CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		TimeoutSeconds: 1,
 		TurnId:         "turn-1",
-		SessionId:      "session-1",
+		SessionId:      session.ID,
 		Model:          "gpt-test",
 		Output:         agentRuntimeTextOutput(),
 	})

@@ -129,7 +129,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             }
         )
         return AgentSession(
-            id=request.session_id,
+            id="session-1",
             provider_name="py-agent",
             model=request.model,
             client_ref=request.client_ref,
@@ -787,7 +787,6 @@ class AgentTransportTests(unittest.TestCase):
         configured = runtime_client.ConfigureProvider(configure_request)
 
         create_session_request = agent_pb2.CreateAgentProviderSessionRequest(
-            session_id="session-1",
             idempotency_key="session-req-1",
             model="gpt-5.1",
             client_ref="cli-session-1",

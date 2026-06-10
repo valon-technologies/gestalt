@@ -559,7 +559,6 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 	}
 	return &CreateAgentProviderSessionRequest{
 		ProviderName:       req.GetProviderName(),
-		SessionID:          req.GetSessionId(),
 		IdempotencyKey:     req.GetIdempotencyKey(),
 		Model:              req.GetModel(),
 		ClientRef:          req.GetClientRef(),

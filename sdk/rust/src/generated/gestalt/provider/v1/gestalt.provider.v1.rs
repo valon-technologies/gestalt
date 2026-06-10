@@ -615,8 +615,13 @@ pub struct AgentSession {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderSessionRequest {
-    #[prost(string, tag = "1")]
-    pub session_id: ::prost::alloc::string::String,
+    /// The provider mints the session id and returns it on the created
+    /// AgentSession; the host treats it as opaque. When a create arrives with an
+    /// idempotency_key the provider has already honored for the same subject
+    /// (created_by_subject_id), the provider must return the existing session,
+    /// including its persisted metadata, instead of creating a new one. Keys
+    /// from different subjects never collide, and an empty key always creates a
+    /// new session. Idempotency is scoped to the provider's session store.
     #[prost(string, tag = "2")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
@@ -2512,6 +2517,9 @@ pub struct StopRuntimeSessionRequest {
 pub struct PrepareRuntimeWorkspaceRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
+    /// Opaque, path-safe workspace key minted by the host. Despite the name it
+    /// is not required to match any agent session id; it only identifies the
+    /// prepared workspace directory for later removal.
     #[prost(string, tag = "2")]
     pub agent_session_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
@@ -2526,6 +2534,8 @@ pub struct PrepareRuntimeWorkspaceResponse {
 pub struct RemoveRuntimeWorkspaceRequest {
     #[prost(string, tag = "1")]
     pub session_id: ::prost::alloc::string::String,
+    /// The workspace key the workspace was prepared under; see
+    /// PrepareRuntimeWorkspaceRequest.agent_session_id.
     #[prost(string, tag = "2")]
     pub agent_session_id: ::prost::alloc::string::String,
 }

@@ -335,7 +335,17 @@ class AgentPreparedWorkspace:
 
 @dataclass(slots=True)
 class CreateAgentProviderSessionRequest:
-    session_id: str = ""
+    """Request passed to ``AgentProvider.create_session``.
+
+    The provider mints a non-empty, stable session id and returns it on the
+    created ``AgentSession``; the host treats it as opaque. Creation must be
+    idempotent on ``idempotency_key`` scoped per subject
+    (``created_by_subject_id``): replaying a key the provider has already
+    honored for the same subject returns the existing session, including its
+    persisted metadata, instead of creating a new one. Keys from different
+    subjects never collide, and an empty key always creates a new session.
+    """
+
     idempotency_key: str = ""
     model: str = ""
     client_ref: str = ""
@@ -607,7 +617,6 @@ def create_agent_provider_session_request_from_proto(
     request: Any,
 ) -> CreateAgentProviderSessionRequest:
     return CreateAgentProviderSessionRequest(
-        session_id=request.session_id,
         idempotency_key=request.idempotency_key,
         model=request.model,
         client_ref=request.client_ref,

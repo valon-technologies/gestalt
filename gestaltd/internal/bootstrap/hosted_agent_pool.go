@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -89,6 +90,8 @@ type hostedAgentProviderPool struct {
 	sessionBackends     map[string]*hostedAgentPoolBackend
 	turnBackends        map[string]*hostedAgentPoolBackend
 	interactionBackends map[string]*hostedAgentPoolBackend
+	createKeyBackends   map[string]*hostedAgentPoolBackend
+	sessionWorkspaces   map[string]string
 }
 
 type hostedAgentPoolBackend struct {
@@ -129,6 +132,8 @@ func newHostedAgentProviderPool(ctx context.Context, launch *hostedAgentProvider
 		sessionBackends:     map[string]*hostedAgentPoolBackend{},
 		turnBackends:        map[string]*hostedAgentPoolBackend{},
 		interactionBackends: map[string]*hostedAgentPoolBackend{},
+		createKeyBackends:   map[string]*hostedAgentPoolBackend{},
+		sessionWorkspaces:   map[string]string{},
 	}
 	pool.stateChanged = sync.NewCond(&pool.mu)
 	for i := 0; i < policy.MinReadyInstances; i++ {
@@ -184,33 +189,27 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 	if req == nil {
 		req = &proto.CreateAgentProviderSessionRequest{}
 	}
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if req.GetWorkspace() != nil && strings.TrimSpace(req.GetIdempotencyKey()) != "" {
-		session, err := p.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-			SessionId: sessionID,
-			Subject:   req.GetSubject(),
-		})
-		if err == nil {
-			return session, nil
-		}
-		if !errors.Is(err, core.ErrNotFound) {
-			return nil, err
-		}
-	}
-	preferred := p.sessionBackend(sessionID)
+	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
+	createKey := hostedAgentCreateKey(req.GetCreatedBySubjectId(), idempotencyKey)
+	preferred := p.createKeyBackend(createKey)
 	backend, release, err := p.acquireBackendForNewWork(ctx, preferred, preferred != nil)
 	if err != nil {
 		return nil, err
 	}
+	// Recorded before the provider call: an ambiguous failure may still have
+	// created the session, and a retry with the same key must land on the
+	// backend whose provider can dedup it.
+	p.recordCreateKeyBackend(createKey, backend)
 	providerReq := protobuf.Clone(req).(*proto.CreateAgentProviderSessionRequest)
+	workspaceRef := ""
 	if req.GetWorkspace() != nil {
-		p.recordSessionBackend(sessionID, backend)
-		prepared, err := p.prepareAgentWorkspace(ctx, backend, req)
+		workspaceRef = hostedAgentWorkspaceRef(p.name, req.GetCreatedBySubjectId(), idempotencyKey)
+		prepared, err := p.prepareAgentWorkspace(ctx, backend, req, workspaceRef)
 		if err != nil {
-			if cleanupErr := p.removeAgentWorkspace(ctx, backend, sessionID); cleanupErr != nil {
-				slog.Warn("failed to clean up prepared hosted agent workspace after prepare error", "provider", p.name, "session", sessionID, "error", cleanupErr)
+			if cleanupErr := p.removeAgentWorkspace(ctx, backend, workspaceRef); cleanupErr != nil {
+				slog.Warn("failed to clean up prepared hosted agent workspace after prepare error", "provider", p.name, "workspace", workspaceRef, "error", cleanupErr)
 			}
-			p.deleteSessionBackend(sessionID)
+			p.deleteCreateKeyBackend(createKey)
 			release()
 			return nil, err
 		}
@@ -218,54 +217,56 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 		providerReq.PreparedWorkspace = prepared
 	}
 	session, err := backend.provider.CreateSession(ctx, providerReq)
-	if err == nil && providerReq.GetPreparedWorkspace() != nil {
-		sessionID := strings.TrimSpace(sessionIDForSession(session))
-		if sessionID == "" {
-			err = fmt.Errorf("agent provider returned session without id")
-		} else if sessionID != strings.TrimSpace(req.GetSessionId()) {
-			if cleanupErr := archivePreparedWorkspaceProviderSession(ctx, backend, req, sessionID); cleanupErr != nil {
-				slog.Warn("failed to archive hosted agent provider session after workspace create validation error", "provider", p.name, "session", sessionID, "error", cleanupErr)
-			}
-			err = fmt.Errorf("agent provider returned session id %q, want %q", sessionID, req.GetSessionId())
-		}
+	if err == nil && providerReq.GetPreparedWorkspace() != nil && strings.TrimSpace(sessionIDForSession(session)) == "" {
+		err = fmt.Errorf("agent provider returned session without id")
 	}
-	if err != nil && providerReq.GetPreparedWorkspace() != nil {
-		if cleanupErr := p.removeAgentWorkspace(ctx, backend, sessionID); cleanupErr != nil {
-			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "session", sessionID, "error", cleanupErr)
+	if err != nil && providerReq.GetPreparedWorkspace() != nil && idempotencyKey == "" {
+		// Un-keyed creates can never dedup, so the prepared workspace is
+		// unreachable after a failure. Keyed creates keep theirs: the
+		// deterministic ref may be the live workspace of a session a retry
+		// will dedup to.
+		if cleanupErr := p.removeAgentWorkspace(ctx, backend, workspaceRef); cleanupErr != nil {
+			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "workspace", workspaceRef, "error", cleanupErr)
 		}
-		p.deleteSessionBackend(sessionID)
 	}
 	release()
 	p.maybeProbeAfterCallError(backend, err)
 	if err != nil {
 		return nil, err
 	}
-	if session != nil {
-		p.recordSession(session, backend)
-	} else {
-		p.recordSessionBackend(sessionID, backend)
+	p.recordSession(session, backend)
+	if workspaceRef != "" {
+		p.recordSessionWorkspace(sessionIDForSession(session), workspaceRef)
 	}
 	return session, nil
 }
 
-func archivePreparedWorkspaceProviderSession(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.CreateAgentProviderSessionRequest, sessionID string) error {
-	sessionID = strings.TrimSpace(sessionID)
-	if backend == nil || backend.provider == nil || sessionID == "" {
-		return nil
+// hostedAgentCreateKey scopes idempotent-create routing per subject; an empty
+// idempotency key yields no routing key because such creates never dedup.
+func hostedAgentCreateKey(subjectID, idempotencyKey string) string {
+	if strings.TrimSpace(idempotencyKey) == "" {
+		return ""
 	}
-	_, err := backend.provider.UpdateSession(ctx, &proto.UpdateAgentProviderSessionRequest{
-		SessionId: sessionID,
-		State:     proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED,
-		Subject:   req.GetSubject(),
-	})
-	return err
+	return strings.TrimSpace(subjectID) + "\x1f" + strings.TrimSpace(idempotencyKey)
+}
+
+// hostedAgentWorkspaceRef names the prepared workspace directory. Keyed
+// creates get a deterministic ref so a retry re-prepares the same directory
+// (idempotent in the runtime provider) and a deduped session keeps pointing at
+// its live workspace; un-keyed creates get a fresh ref.
+func hostedAgentWorkspaceRef(poolName, subjectID, idempotencyKey string) string {
+	if strings.TrimSpace(idempotencyKey) == "" {
+		return uuid.NewString()
+	}
+	scope := "gestalt:agent-workspace:" + strings.TrimSpace(poolName) + ":" + strings.TrimSpace(subjectID) + ":" + strings.TrimSpace(idempotencyKey)
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String()
 }
 
 func (p *hostedAgentProviderPool) SupportsWorkspaceRequests() bool {
 	return true
 }
 
-func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.CreateAgentProviderSessionRequest) (*proto.PreparedAgentWorkspace, error) {
+func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, req *proto.CreateAgentProviderSessionRequest, workspaceRef string) (*proto.PreparedAgentWorkspace, error) {
 	if p == nil || p.launch == nil || p.launch.runtimeConfig.Workspace == nil {
 		return nil, fmt.Errorf("%w: provider %q has no workspace policy", agentmanager.ErrAgentWorkspaceUnsupported, p.name)
 	}
@@ -300,7 +301,7 @@ func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, bac
 	defer cancel()
 	prepared, err := workspaceProvider.PrepareWorkspace(prepareCtx, &proto.PrepareRuntimeWorkspaceRequest{
 		SessionId:      backend.runtimeSessionID,
-		AgentSessionId: req.GetSessionId(),
+		AgentSessionId: workspaceRef,
 		Workspace:      req.GetWorkspace(),
 	})
 	if err != nil {
@@ -309,14 +310,14 @@ func (p *hostedAgentProviderPool) prepareAgentWorkspace(ctx context.Context, bac
 	return validatePreparedAgentWorkspace(prepared.GetWorkspace())
 }
 
-func (p *hostedAgentProviderPool) removeAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, agentSessionID string) error {
+func (p *hostedAgentProviderPool) removeAgentWorkspace(ctx context.Context, backend *hostedAgentPoolBackend, workspaceRef string) error {
 	workspaceProvider, ok := backend.runtimeProvider.(runtimeprovider.WorkspaceProvider)
 	if !ok {
 		return nil
 	}
 	return workspaceProvider.RemoveWorkspace(ctx, &proto.RemoveRuntimeWorkspaceRequest{
 		SessionId:      backend.runtimeSessionID,
-		AgentSessionId: agentSessionID,
+		AgentSessionId: workspaceRef,
 	})
 }
 
@@ -532,8 +533,10 @@ func (p *hostedAgentProviderPool) UpdateSession(ctx context.Context, req *proto.
 			if fromSession := sessionIDForSession(session); fromSession != "" {
 				cleanupID = fromSession
 			}
-			if cleanupErr := p.removeAgentWorkspace(ctx, acquired, cleanupID); cleanupErr != nil {
-				slog.Warn("failed to clean up prepared hosted agent workspace after archive", "provider", p.name, "session", cleanupID, "error", cleanupErr)
+			if workspaceRef := p.takeSessionWorkspace(cleanupID); workspaceRef != "" {
+				if cleanupErr := p.removeAgentWorkspace(ctx, acquired, workspaceRef); cleanupErr != nil {
+					slog.Warn("failed to clean up prepared hosted agent workspace after archive", "provider", p.name, "session", cleanupID, "workspace", workspaceRef, "error", cleanupErr)
+				}
 			}
 			p.deleteSessionBackend(cleanupID)
 		} else {
@@ -982,6 +985,8 @@ func (p *hostedAgentProviderPool) Close() error {
 	p.sessionBackends = map[string]*hostedAgentPoolBackend{}
 	p.turnBackends = map[string]*hostedAgentPoolBackend{}
 	p.interactionBackends = map[string]*hostedAgentPoolBackend{}
+	p.createKeyBackends = map[string]*hostedAgentPoolBackend{}
+	p.sessionWorkspaces = map[string]string{}
 	p.mu.Unlock()
 	if p.launch != nil {
 		p.launch.close()
@@ -1413,6 +1418,60 @@ func (p *hostedAgentProviderPool) deleteSessionBackend(sessionID string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.sessionBackends, sessionID)
+}
+
+func (p *hostedAgentProviderPool) createKeyBackend(createKey string) *hostedAgentPoolBackend {
+	if createKey == "" {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.createKeyBackends[createKey]
+}
+
+func (p *hostedAgentProviderPool) recordCreateKeyBackend(createKey string, backend *hostedAgentPoolBackend) {
+	if createKey == "" || backend == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.backendAvailableLocked(backend, true) {
+		p.createKeyBackends[createKey] = backend
+	}
+}
+
+func (p *hostedAgentProviderPool) deleteCreateKeyBackend(createKey string) {
+	if createKey == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.createKeyBackends, createKey)
+}
+
+func (p *hostedAgentProviderPool) recordSessionWorkspace(sessionID, workspaceRef string) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || workspaceRef == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.sessionWorkspaces[sessionID] = workspaceRef
+}
+
+// takeSessionWorkspace returns and forgets the workspace ref a session was
+// prepared under, or "" when unknown (for example after a restart, where the
+// runtime directories did not survive either).
+func (p *hostedAgentProviderPool) takeSessionWorkspace(sessionID string) string {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return ""
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	workspaceRef := p.sessionWorkspaces[sessionID]
+	delete(p.sessionWorkspaces, sessionID)
+	return workspaceRef
 }
 
 func (p *hostedAgentProviderPool) recordTurnBackend(turnID string, backend *hostedAgentPoolBackend) {
@@ -2006,6 +2065,7 @@ func (p *hostedAgentProviderPool) removeBackendLocked(backend *hostedAgentPoolBa
 	for key, candidate := range p.sessionBackends {
 		if candidate == backend {
 			delete(p.sessionBackends, key)
+			delete(p.sessionWorkspaces, key)
 		}
 	}
 	for key, candidate := range p.turnBackends {
@@ -2016,6 +2076,11 @@ func (p *hostedAgentProviderPool) removeBackendLocked(backend *hostedAgentPoolBa
 	for key, candidate := range p.interactionBackends {
 		if candidate == backend {
 			delete(p.interactionBackends, key)
+		}
+	}
+	for key, candidate := range p.createKeyBackends {
+		if candidate == backend {
+			delete(p.createKeyBackends, key)
 		}
 	}
 	p.broadcastStateLocked()

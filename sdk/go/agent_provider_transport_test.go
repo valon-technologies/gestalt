@@ -37,7 +37,7 @@ func (p *fullAgentProvider) Metadata() gestalt.ProviderMetadata {
 func (p *fullAgentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.receivedSessionRequest = req
 	return &gestalt.AgentSession{
-		ID:                 req.SessionID,
+		ID:                 "session-1",
 		ProviderName:       p.configuredName,
 		Model:              req.Model,
 		ClientRef:          req.ClientRef,
@@ -288,7 +288,6 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	}
 
 	session, err := agentClient.CreateSession(rpcCtx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "session-1",
 		IdempotencyKey:     "session-req-1",
 		Model:              "gpt-5.1",
 		ClientRef:          "client-session-1",

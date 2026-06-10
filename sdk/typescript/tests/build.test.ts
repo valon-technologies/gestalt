@@ -970,7 +970,6 @@ test("buildProviderBinary compiles a runnable agent provider executable", async 
 
     const session = await agent.createSession(
       create(CreateAgentProviderSessionRequestSchema, {
-        sessionId: "session-1",
         model: "gpt-test",
         clientRef: "build-test",
       }),

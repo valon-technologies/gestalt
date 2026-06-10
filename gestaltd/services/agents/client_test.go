@@ -133,13 +133,12 @@ func TestRemoteAgentCreateSessionForwardsSessionStart(t *testing.T) {
 				if hook.GetId() != "setup" || hook.GetCommand()[0] != "bash" || !hook.GetOutput().GetAdditionalContext() || hook.GetEnv()["FOO"] != "bar" {
 					t.Fatalf("session start hook = %#v", hook)
 				}
-				return &proto.AgentSession{Id: req.GetSessionId(), ProviderName: "claude"}, nil
+				return &proto.AgentSession{Id: "session-1", ProviderName: "claude"}, nil
 			},
 		},
 	}
 
 	_, err := agent.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		SessionId: "session-1",
 		SessionStart: &proto.AgentSessionStartConfig{Hooks: []*proto.AgentSessionStartHook{{
 			Id:      "setup",
 			Type:    "command",
@@ -168,14 +167,14 @@ func TestRemoteAgentCreateSessionPreservesWorkflowDeadline(t *testing.T) {
 					t.Fatal("CreateSession context has no deadline")
 				}
 				createSessionRemaining = time.Until(deadline)
-				return &proto.AgentSession{Id: req.GetSessionId(), ProviderName: "claude"}, nil
+				return &proto.AgentSession{Id: "session-1", ProviderName: "claude"}, nil
 			},
 		},
 	}
 	ctx, cancel := context.WithDeadline(context.Background(), parentDeadline)
 	defer cancel()
 
-	_, err := agent.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{SessionId: "session-1"})
+	_, err := agent.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}

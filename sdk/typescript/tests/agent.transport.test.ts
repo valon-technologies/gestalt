@@ -126,7 +126,7 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
         listedToolMcpName: request.tools?.catalog?.tools?.[0]?.mcpName,
       });
       return {
-        id: request.sessionId,
+        id: "session-1",
         model: request.model,
       };
     },
@@ -144,7 +144,6 @@ test("AgentProvider forwards request context subjects to handlers", async () => 
 
   await (service.createSession as any)(
     create(CreateAgentProviderSessionRequestSchema, {
-      sessionId: "session-1",
       model: "gpt-test",
       context: create(RequestContextSchema, {
         subject: create(SubjectContextSchema, {

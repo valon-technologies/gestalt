@@ -1662,7 +1662,6 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
 
   const session = await (agent.createSession as any)(
     create(CreateAgentProviderSessionRequestSchema, {
-      sessionId: "session-canonical-1",
       idempotencyKey: "session-req-1",
       model: "gpt-test",
       clientRef: "cli-session-1",
@@ -1672,7 +1671,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
       createdBySubjectId: "user:user-123",
     }),
   );
-  expect(session.id).toBe("session-canonical-1");
+  expect(session.id).toBe("session-1");
   expect(session.state).toBe(AgentSessionState.ACTIVE);
   expect(session.clientRef).toBe("cli-session-1");
 
@@ -1693,7 +1692,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
     create(ListAgentProviderSessionsRequestSchema, {}),
   );
   expect(listedSessions.sessions.map((entry: any) => entry.id)).toEqual([
-    "session-canonical-1",
+    session.id,
   ]);
 
   const fetchedSession = await (agent.getSession as any)(

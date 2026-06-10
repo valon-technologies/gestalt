@@ -254,6 +254,10 @@ export type PrepareRuntimeWorkspaceRequest = Message<"gestalt.provider.v1.Prepar
   sessionId: string;
 
   /**
+   * Opaque, path-safe workspace key minted by the host. Despite the name it
+   * is not required to match any agent session id; it only identifies the
+   * prepared workspace directory for later removal.
+   *
    * @generated from field: string agent_session_id = 2;
    */
   agentSessionId: string;
@@ -298,6 +302,9 @@ export type RemoveRuntimeWorkspaceRequest = Message<"gestalt.provider.v1.RemoveR
   sessionId: string;
 
   /**
+   * The workspace key the workspace was prepared under; see
+   * PrepareRuntimeWorkspaceRequest.agent_session_id.
+   *
    * @generated from field: string agent_session_id = 2;
    */
   agentSessionId: string;
