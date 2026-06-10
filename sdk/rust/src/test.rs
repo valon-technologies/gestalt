@@ -41,11 +41,11 @@ pub fn from_wire_hello_world_response(value: v1::HelloWorldResponse) -> HelloWor
 }
 
 /// Client for the `gestalt.provider.v1.Test` service.
-pub struct TestClient {
+pub struct Test {
     inner: v1::test_client::TestClient<tonic::transport::Channel>,
 }
 
-impl TestClient {
+impl Test {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {

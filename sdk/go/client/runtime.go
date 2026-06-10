@@ -181,18 +181,18 @@ func fromWireStartRuntimeProviderResponse(value *proto.StartRuntimeProviderRespo
 	return out
 }
 
-// ProviderLifecycleClient is the generated client for gestalt.provider.v1.ProviderLifecycle.
+// ProviderLifecycle is the generated client for gestalt.provider.v1.ProviderLifecycle.
 // Every transport error is converted to *GestaltError.
-type ProviderLifecycleClient struct {
+type ProviderLifecycle struct {
 	client proto.ProviderLifecycleClient
 }
 
-// NewProviderLifecycleClient creates a ProviderLifecycleClient over an injected gRPC connection.
-func NewProviderLifecycleClient(conn grpc.ClientConnInterface) *ProviderLifecycleClient {
-	return &ProviderLifecycleClient{client: proto.NewProviderLifecycleClient(conn)}
+// NewProviderLifecycle creates a ProviderLifecycle client over an injected gRPC connection.
+func NewProviderLifecycle(conn grpc.ClientConnInterface) *ProviderLifecycle {
+	return &ProviderLifecycle{client: proto.NewProviderLifecycleClient(conn)}
 }
 
-func (c *ProviderLifecycleClient) GetProviderIdentity(ctx context.Context) (*ProviderIdentity, error) {
+func (c *ProviderLifecycle) GetProviderIdentity(ctx context.Context) (*ProviderIdentity, error) {
 	response, err := c.client.GetProviderIdentity(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -200,7 +200,7 @@ func (c *ProviderLifecycleClient) GetProviderIdentity(ctx context.Context) (*Pro
 	return fromWireProviderIdentity(response), nil
 }
 
-func (c *ProviderLifecycleClient) ConfigureProvider(ctx context.Context, request *ConfigureProviderRequest) (*ConfigureProviderResponse, error) {
+func (c *ProviderLifecycle) ConfigureProvider(ctx context.Context, request *ConfigureProviderRequest) (*ConfigureProviderResponse, error) {
 	response, err := c.client.ConfigureProvider(ctx, toWireConfigureProviderRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -208,7 +208,7 @@ func (c *ProviderLifecycleClient) ConfigureProvider(ctx context.Context, request
 	return fromWireConfigureProviderResponse(response), nil
 }
 
-func (c *ProviderLifecycleClient) HealthCheck(ctx context.Context) (*HealthCheckResponse, error) {
+func (c *ProviderLifecycle) HealthCheck(ctx context.Context) (*HealthCheckResponse, error) {
 	response, err := c.client.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -216,7 +216,7 @@ func (c *ProviderLifecycleClient) HealthCheck(ctx context.Context) (*HealthCheck
 	return fromWireHealthCheckResponse(response), nil
 }
 
-func (c *ProviderLifecycleClient) StartProvider(ctx context.Context) (*StartRuntimeProviderResponse, error) {
+func (c *ProviderLifecycle) StartProvider(ctx context.Context) (*StartRuntimeProviderResponse, error) {
 	response, err := c.client.StartProvider(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)

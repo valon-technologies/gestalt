@@ -36,7 +36,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 	for _, f := range set.Files() {
 		files[f.Path] = string(f.Content)
 	}
-	for _, want := range []string{"rpc_support.ts", "cache_client.ts", "s3_client.ts", "datastore_client.ts"} {
+	for _, want := range []string{"rpc_support.ts", "cache.ts", "s3.ts", "datastore.ts"} {
 		if _, ok := files[want]; !ok {
 			t.Fatalf("missing generated file %s (have %v)", want, keys(files))
 		}
@@ -50,10 +50,10 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"export type DurationMs = number;",
 		"export interface RpcStatus",
 	)
-	assertContains(t, files, "cache_client.ts",
-		"export class CacheClient {",
+	assertContains(t, files, "cache.ts",
+		"export class Cache {",
 		"constructor(transport: Transport)",
-		"static connect(name?: string): CacheClient",
+		"static connect(name?: string): Cache",
 		"ttl?: DurationMs;",
 		"deleted: bigint;",
 		"async get(key: string): Promise<Uint8Array | undefined>",
@@ -63,14 +63,14 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"async deleteMany(keys: string[]): Promise<bigint>",
 		"async touch(key: string, ttl?: DurationMs): Promise<boolean>",
 	)
-	assertContains(t, files, "s3_client.ts",
+	assertContains(t, files, "s3.ts",
 		"async readObject(request: ReadObjectRequest): Promise<{ meta: S3ObjectMeta; data: AsyncIterable<Uint8Array> }>",
 		"readObjectRaw(request: ReadObjectRequest): AsyncIterable<ReadObjectChunk>",
 		"async writeObject(open: WriteObjectOpen, data: AsyncIterable<Uint8Array>): Promise<WriteObjectResponse>",
 		"async writeObjectRaw(requests: AsyncIterable<WriteObjectRequest>): Promise<WriteObjectResponse>",
 		"lastModified?: Date;",
 	)
-	assertContains(t, files, "datastore_client.ts",
+	assertContains(t, files, "datastore.ts",
 		"export type TypedValueKind =",
 		`| { case: "nullValue"; value: null }`,
 		`| { case: "jsonValue"; value: JsonValue }`,

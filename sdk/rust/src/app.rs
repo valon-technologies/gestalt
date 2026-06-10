@@ -1188,11 +1188,11 @@ pub fn from_wire_subject_permission_context(
 }
 
 /// Client for the `gestalt.provider.v1.App` service.
-pub struct AppClient {
+pub struct App {
     inner: v1::app_client::AppClient<tonic::transport::Channel>,
 }
 
-impl AppClient {
+impl App {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {
@@ -1226,11 +1226,11 @@ impl AppClient {
 }
 
 /// Client for the `gestalt.provider.v1.AppProvider` service.
-pub struct AppProviderClient {
+pub struct AppProvider {
     inner: v1::app_provider_client::AppProviderClient<tonic::transport::Channel>,
 }
 
-impl AppProviderClient {
+impl AppProvider {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {

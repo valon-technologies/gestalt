@@ -514,12 +514,12 @@ func (r *renderer) renderClient(svc *model.Service) {
 	r.features.grpc = true
 	r.features.proto = true
 
-	fmt.Fprintf(&r.body, "// %sClient is the generated client for %s.\n", name, svc.FullName)
+	fmt.Fprintf(&r.body, "// %s is the generated client for %s.\n", name, svc.FullName)
 	r.body.WriteString("// Every transport error is converted to *GestaltError.\n")
-	fmt.Fprintf(&r.body, "type %sClient struct {\n\tclient proto.%sClient\n}\n\n", name, name)
-	fmt.Fprintf(&r.body, "// New%sClient creates a %sClient over an injected gRPC connection.\n", name, name)
-	fmt.Fprintf(&r.body, "func New%sClient(conn grpc.ClientConnInterface) *%sClient {\n", name, name)
-	fmt.Fprintf(&r.body, "\treturn &%sClient{client: proto.New%sClient(conn)}\n}\n\n", name, name)
+	fmt.Fprintf(&r.body, "type %s struct {\n\tclient proto.%sClient\n}\n\n", name, name)
+	fmt.Fprintf(&r.body, "// New%s creates a %s client over an injected gRPC connection.\n", name, name)
+	fmt.Fprintf(&r.body, "func New%s(conn grpc.ClientConnInterface) *%s {\n", name, name)
+	fmt.Fprintf(&r.body, "\treturn &%s{client: proto.New%sClient(conn)}\n}\n\n", name, name)
 
 	for _, method := range svc.Methods {
 		r.renderMethod(name, method)
@@ -543,7 +543,7 @@ func (r *renderer) methodRequest(m *model.Method) (param, arg string) {
 }
 
 func (r *renderer) renderMethod(svcName string, m *model.Method) {
-	recv := fmt.Sprintf("func (c *%sClient) %s", svcName, m.Name)
+	recv := fmt.Sprintf("func (c *%s) %s", svcName, m.Name)
 	streamType := svcName + m.Name + "Stream"
 	switch m.Stream {
 	case model.ServerStream:
@@ -592,13 +592,13 @@ func (r *renderer) renderStreamWrapper(svcName string, m *model.Method) {
 	switch m.Stream {
 	case model.ServerStream:
 		fmt.Fprintf(&r.body, "// %s is the server stream of %s frames\n", streamType, responseType)
-		fmt.Fprintf(&r.body, "// returned by %sClient.%s.\n", svcName, m.Name)
+		fmt.Fprintf(&r.body, "// returned by %s.%s.\n", svcName, m.Name)
 	case model.ClientStream:
 		fmt.Fprintf(&r.body, "// %s is the client stream of %s frames\n", streamType, requestType)
-		fmt.Fprintf(&r.body, "// accepted by %sClient.%s.\n", svcName, m.Name)
+		fmt.Fprintf(&r.body, "// accepted by %s.%s.\n", svcName, m.Name)
 	default:
 		fmt.Fprintf(&r.body, "// %s is the bidirectional stream opened by\n", streamType)
-		fmt.Fprintf(&r.body, "// %sClient.%s.\n", svcName, m.Name)
+		fmt.Fprintf(&r.body, "// %s.%s.\n", svcName, m.Name)
 	}
 	fmt.Fprintf(&r.body, "type %s struct {\n\tstream %s\n}\n\n", streamType, wireStream)
 

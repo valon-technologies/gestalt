@@ -583,18 +583,18 @@ func fromWireValidateExternalCredentialConfigRequest(value *proto.ValidateExtern
 	return out
 }
 
-// ExternalCredentialsClient is the generated client for gestalt.provider.v1.ExternalCredentials.
+// ExternalCredentials is the generated client for gestalt.provider.v1.ExternalCredentials.
 // Every transport error is converted to *GestaltError.
-type ExternalCredentialsClient struct {
+type ExternalCredentials struct {
 	client proto.ExternalCredentialsClient
 }
 
-// NewExternalCredentialsClient creates a ExternalCredentialsClient over an injected gRPC connection.
-func NewExternalCredentialsClient(conn grpc.ClientConnInterface) *ExternalCredentialsClient {
-	return &ExternalCredentialsClient{client: proto.NewExternalCredentialsClient(conn)}
+// NewExternalCredentials creates a ExternalCredentials client over an injected gRPC connection.
+func NewExternalCredentials(conn grpc.ClientConnInterface) *ExternalCredentials {
+	return &ExternalCredentials{client: proto.NewExternalCredentialsClient(conn)}
 }
 
-func (c *ExternalCredentialsClient) UpsertCredential(ctx context.Context, request *UpsertExternalCredentialRequest) (*ExternalCredential, error) {
+func (c *ExternalCredentials) UpsertCredential(ctx context.Context, request *UpsertExternalCredentialRequest) (*ExternalCredential, error) {
 	response, err := c.client.UpsertCredential(ctx, toWireUpsertExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -602,7 +602,7 @@ func (c *ExternalCredentialsClient) UpsertCredential(ctx context.Context, reques
 	return fromWireExternalCredential(response), nil
 }
 
-func (c *ExternalCredentialsClient) GetCredential(ctx context.Context, request *GetExternalCredentialRequest) (*ExternalCredential, error) {
+func (c *ExternalCredentials) GetCredential(ctx context.Context, request *GetExternalCredentialRequest) (*ExternalCredential, error) {
 	response, err := c.client.GetCredential(ctx, toWireGetExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -610,7 +610,7 @@ func (c *ExternalCredentialsClient) GetCredential(ctx context.Context, request *
 	return fromWireExternalCredential(response), nil
 }
 
-func (c *ExternalCredentialsClient) ListCredentials(ctx context.Context, request *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error) {
+func (c *ExternalCredentials) ListCredentials(ctx context.Context, request *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error) {
 	response, err := c.client.ListCredentials(ctx, toWireListExternalCredentialsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -618,21 +618,21 @@ func (c *ExternalCredentialsClient) ListCredentials(ctx context.Context, request
 	return fromWireListExternalCredentialsResponse(response), nil
 }
 
-func (c *ExternalCredentialsClient) DeleteCredential(ctx context.Context, request *DeleteExternalCredentialRequest) error {
+func (c *ExternalCredentials) DeleteCredential(ctx context.Context, request *DeleteExternalCredentialRequest) error {
 	if _, err := c.client.DeleteCredential(ctx, toWireDeleteExternalCredentialRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *ExternalCredentialsClient) ValidateCredentialConfig(ctx context.Context, request *ValidateExternalCredentialConfigRequest) error {
+func (c *ExternalCredentials) ValidateCredentialConfig(ctx context.Context, request *ValidateExternalCredentialConfigRequest) error {
 	if _, err := c.client.ValidateCredentialConfig(ctx, toWireValidateExternalCredentialConfigRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *ExternalCredentialsClient) ResolveCredential(ctx context.Context, request *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
+func (c *ExternalCredentials) ResolveCredential(ctx context.Context, request *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
 	response, err := c.client.ResolveCredential(ctx, toWireResolveExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -640,7 +640,7 @@ func (c *ExternalCredentialsClient) ResolveCredential(ctx context.Context, reque
 	return fromWireResolveExternalCredentialResponse(response), nil
 }
 
-func (c *ExternalCredentialsClient) ExchangeCredential(ctx context.Context, request *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
+func (c *ExternalCredentials) ExchangeCredential(ctx context.Context, request *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
 	response, err := c.client.ExchangeCredential(ctx, toWireExchangeExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

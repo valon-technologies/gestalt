@@ -176,11 +176,11 @@ pub fn from_wire_validate_external_token_request(
 }
 
 /// Client for the `gestalt.provider.v1.Authentication` service.
-pub struct AuthenticationClient {
+pub struct Authentication {
     inner: v1::authentication_client::AuthenticationClient<tonic::transport::Channel>,
 }
 
-impl AuthenticationClient {
+impl Authentication {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {

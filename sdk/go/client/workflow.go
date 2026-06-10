@@ -1897,18 +1897,18 @@ func fromWireWorkflowValue(value *proto.WorkflowValue) *WorkflowValue {
 	return out
 }
 
-// WorkflowClient is the generated client for gestalt.provider.v1.Workflow.
+// Workflow is the generated client for gestalt.provider.v1.Workflow.
 // Every transport error is converted to *GestaltError.
-type WorkflowClient struct {
+type Workflow struct {
 	client proto.WorkflowClient
 }
 
-// NewWorkflowClient creates a WorkflowClient over an injected gRPC connection.
-func NewWorkflowClient(conn grpc.ClientConnInterface) *WorkflowClient {
-	return &WorkflowClient{client: proto.NewWorkflowClient(conn)}
+// NewWorkflow creates a Workflow client over an injected gRPC connection.
+func NewWorkflow(conn grpc.ClientConnInterface) *Workflow {
+	return &Workflow{client: proto.NewWorkflowClient(conn)}
 }
 
-func (c *WorkflowClient) ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
+func (c *Workflow) ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
 	response, err := c.client.ApplyDefinition(ctx, toWireApplyWorkflowProviderDefinitionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1916,7 +1916,7 @@ func (c *WorkflowClient) ApplyDefinition(ctx context.Context, request *ApplyWork
 	return fromWireWorkflowDefinition(response), nil
 }
 
-func (c *WorkflowClient) GetDefinition(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
+func (c *Workflow) GetDefinition(ctx context.Context, request *GetWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
 	response, err := c.client.GetDefinition(ctx, toWireGetWorkflowProviderDefinitionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1924,7 +1924,7 @@ func (c *WorkflowClient) GetDefinition(ctx context.Context, request *GetWorkflow
 	return fromWireWorkflowDefinition(response), nil
 }
 
-func (c *WorkflowClient) ListDefinitions(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*ListWorkflowProviderDefinitionsResponse, error) {
+func (c *Workflow) ListDefinitions(ctx context.Context, request *ListWorkflowProviderDefinitionsRequest) (*ListWorkflowProviderDefinitionsResponse, error) {
 	response, err := c.client.ListDefinitions(ctx, toWireListWorkflowProviderDefinitionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1932,7 +1932,7 @@ func (c *WorkflowClient) ListDefinitions(ctx context.Context, request *ListWorkf
 	return fromWireListWorkflowProviderDefinitionsResponse(response), nil
 }
 
-func (c *WorkflowClient) SetDefinitionPaused(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*WorkflowDefinition, error) {
+func (c *Workflow) SetDefinitionPaused(ctx context.Context, request *SetWorkflowProviderDefinitionPausedRequest) (*WorkflowDefinition, error) {
 	response, err := c.client.SetDefinitionPaused(ctx, toWireSetWorkflowProviderDefinitionPausedRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1940,7 +1940,7 @@ func (c *WorkflowClient) SetDefinitionPaused(ctx context.Context, request *SetWo
 	return fromWireWorkflowDefinition(response), nil
 }
 
-func (c *WorkflowClient) SetActivationPaused(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*WorkflowDefinition, error) {
+func (c *Workflow) SetActivationPaused(ctx context.Context, request *SetWorkflowProviderActivationPausedRequest) (*WorkflowDefinition, error) {
 	response, err := c.client.SetActivationPaused(ctx, toWireSetWorkflowProviderActivationPausedRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1948,14 +1948,14 @@ func (c *WorkflowClient) SetActivationPaused(ctx context.Context, request *SetWo
 	return fromWireWorkflowDefinition(response), nil
 }
 
-func (c *WorkflowClient) DeleteDefinition(ctx context.Context, request *DeleteWorkflowProviderDefinitionRequest) error {
+func (c *Workflow) DeleteDefinition(ctx context.Context, request *DeleteWorkflowProviderDefinitionRequest) error {
 	if _, err := c.client.DeleteDefinition(ctx, toWireDeleteWorkflowProviderDefinitionRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *WorkflowClient) StartRun(ctx context.Context, request *StartWorkflowProviderRunRequest) (*WorkflowRun, error) {
+func (c *Workflow) StartRun(ctx context.Context, request *StartWorkflowProviderRunRequest) (*WorkflowRun, error) {
 	response, err := c.client.StartRun(ctx, toWireStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1963,7 +1963,7 @@ func (c *WorkflowClient) StartRun(ctx context.Context, request *StartWorkflowPro
 	return fromWireWorkflowRun(response), nil
 }
 
-func (c *WorkflowClient) ListRuns(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error) {
+func (c *Workflow) ListRuns(ctx context.Context, request *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error) {
 	response, err := c.client.ListRuns(ctx, toWireListWorkflowProviderRunsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1971,7 +1971,7 @@ func (c *WorkflowClient) ListRuns(ctx context.Context, request *ListWorkflowProv
 	return fromWireListWorkflowProviderRunsResponse(response), nil
 }
 
-func (c *WorkflowClient) GetRun(ctx context.Context, request *GetWorkflowProviderRunRequest) (*WorkflowRun, error) {
+func (c *Workflow) GetRun(ctx context.Context, request *GetWorkflowProviderRunRequest) (*WorkflowRun, error) {
 	response, err := c.client.GetRun(ctx, toWireGetWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1979,7 +1979,7 @@ func (c *WorkflowClient) GetRun(ctx context.Context, request *GetWorkflowProvide
 	return fromWireWorkflowRun(response), nil
 }
 
-func (c *WorkflowClient) GetRunEvents(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*GetWorkflowProviderRunEventsResponse, error) {
+func (c *Workflow) GetRunEvents(ctx context.Context, request *GetWorkflowProviderRunEventsRequest) (*GetWorkflowProviderRunEventsResponse, error) {
 	response, err := c.client.GetRunEvents(ctx, toWireGetWorkflowProviderRunEventsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1987,7 +1987,7 @@ func (c *WorkflowClient) GetRunEvents(ctx context.Context, request *GetWorkflowP
 	return fromWireGetWorkflowProviderRunEventsResponse(response), nil
 }
 
-func (c *WorkflowClient) GetRunOutput(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*GetWorkflowProviderRunOutputResponse, error) {
+func (c *Workflow) GetRunOutput(ctx context.Context, request *GetWorkflowProviderRunOutputRequest) (*GetWorkflowProviderRunOutputResponse, error) {
 	response, err := c.client.GetRunOutput(ctx, toWireGetWorkflowProviderRunOutputRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1995,7 +1995,7 @@ func (c *WorkflowClient) GetRunOutput(ctx context.Context, request *GetWorkflowP
 	return fromWireGetWorkflowProviderRunOutputResponse(response), nil
 }
 
-func (c *WorkflowClient) CancelRun(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*WorkflowRun, error) {
+func (c *Workflow) CancelRun(ctx context.Context, request *CancelWorkflowProviderRunRequest) (*WorkflowRun, error) {
 	response, err := c.client.CancelRun(ctx, toWireCancelWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -2003,7 +2003,7 @@ func (c *WorkflowClient) CancelRun(ctx context.Context, request *CancelWorkflowP
 	return fromWireWorkflowRun(response), nil
 }
 
-func (c *WorkflowClient) SignalRun(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+func (c *Workflow) SignalRun(ctx context.Context, request *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
 	response, err := c.client.SignalRun(ctx, toWireSignalWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -2011,7 +2011,7 @@ func (c *WorkflowClient) SignalRun(ctx context.Context, request *SignalWorkflowP
 	return fromWireSignalWorkflowRunResponse(response), nil
 }
 
-func (c *WorkflowClient) SignalOrStartRun(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+func (c *Workflow) SignalOrStartRun(ctx context.Context, request *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
 	response, err := c.client.SignalOrStartRun(ctx, toWireSignalOrStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -2019,7 +2019,7 @@ func (c *WorkflowClient) SignalOrStartRun(ctx context.Context, request *SignalOr
 	return fromWireSignalWorkflowRunResponse(response), nil
 }
 
-func (c *WorkflowClient) DeliverEvent(ctx context.Context, request *DeliverWorkflowProviderEventRequest) (*WorkflowEvent, error) {
+func (c *Workflow) DeliverEvent(ctx context.Context, request *DeliverWorkflowProviderEventRequest) (*WorkflowEvent, error) {
 	response, err := c.client.DeliverEvent(ctx, toWireDeliverWorkflowProviderEventRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

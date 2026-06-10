@@ -669,11 +669,11 @@ pub fn from_wire_validate_external_credential_config_request(
 }
 
 /// Client for the `gestalt.provider.v1.ExternalCredentials` service.
-pub struct ExternalCredentialsClient {
+pub struct ExternalCredentials {
     inner: v1::external_credentials_client::ExternalCredentialsClient<tonic::transport::Channel>,
 }
 
-impl ExternalCredentialsClient {
+impl ExternalCredentials {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {

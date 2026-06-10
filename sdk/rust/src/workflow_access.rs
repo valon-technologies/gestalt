@@ -12,7 +12,7 @@ use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{
     self as pb, workflow_client::WorkflowClient as ProtoWorkflowProviderClient,
 };
-use crate::workflow::{
+use crate::workflow_provider::{
     WorkflowDefinition, WorkflowDefinitionSpec, WorkflowEvent, WorkflowJson, WorkflowRun,
     WorkflowRunStatus, WorkflowSignal, workflow_event_from_proto, workflow_run_from_proto,
     workflow_run_signal_from_proto, workflow_subject_to_proto,

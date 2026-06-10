@@ -359,7 +359,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 	name := localName(svc.FullName)
 	r.features.client = true
 
-	fmt.Fprintf(&r.body, "export class %sClient {\n", name)
+	fmt.Fprintf(&r.body, "export class %s {\n", name)
 	fmt.Fprintf(&r.body, "  private readonly client: Client<typeof wire.%s>;\n\n", name)
 	r.body.WriteString("  constructor(transport: Transport) {\n")
 	fmt.Fprintf(&r.body, "    this.client = createClient(wire.%s, transport);\n", name)
@@ -367,12 +367,12 @@ func (r *renderer) renderClient(svc *model.Service) {
 
 	if svc.HostBinding != "" {
 		r.features.hostService = true
-		fmt.Fprintf(&r.body, "  static connect(name?: string): %sClient {\n", name)
+		fmt.Fprintf(&r.body, "  static connect(name?: string): %s {\n", name)
 		fmt.Fprintf(&r.body, "    const { target, token } = requireHostServiceTarget(%q);\n", svc.HostBinding)
 		r.body.WriteString("    const transport = createHostServiceGrpcTransport(\n")
 		fmt.Fprintf(&r.body, "      parseHostServiceTarget(%q, target),\n", svc.HostBinding)
 		r.body.WriteString("      hostServiceMetadataInterceptors(token, name?.trim() ?? \"\"),\n    );\n")
-		fmt.Fprintf(&r.body, "    return new %sClient(transport);\n  }\n\n", name)
+		fmt.Fprintf(&r.body, "    return new %s(transport);\n  }\n\n", name)
 	}
 
 	for _, method := range svc.Methods {
@@ -683,7 +683,7 @@ func (r *renderer) assemble() string {
 				names = append(names, name)
 			}
 		}
-		fmt.Fprintf(&b, "import { %s } from \"./%s_client.ts\";\n", strings.Join(names, ", "), base)
+		fmt.Fprintf(&b, "import { %s } from \"./%s.ts\";\n", strings.Join(names, ", "), base)
 	}
 
 	supportNames := append([]string{}, sortedKeys(r.features.supportValues)...)

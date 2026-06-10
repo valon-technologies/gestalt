@@ -1121,20 +1121,20 @@ function fromWireTypedValueKind(value: wire.TypedValue["kind"]): TypedValueKind 
   }
 }
 
-export class IndexedDBClient {
+export class IndexedDB {
   private readonly client: Client<typeof wire.IndexedDB>;
 
   constructor(transport: Transport) {
     this.client = createClient(wire.IndexedDB, transport);
   }
 
-  static connect(name?: string): IndexedDBClient {
+  static connect(name?: string): IndexedDB {
     const { target, token } = requireHostServiceTarget("IndexedDB");
     const transport = createHostServiceGrpcTransport(
       parseHostServiceTarget("IndexedDB", target),
       hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
     );
-    return new IndexedDBClient(transport);
+    return new IndexedDB(transport);
   }
 
   async createObjectStore(request: CreateObjectStoreRequest): Promise<void> {

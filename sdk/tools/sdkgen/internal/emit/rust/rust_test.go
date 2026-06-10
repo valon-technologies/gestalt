@@ -38,19 +38,19 @@ func TestEmitSpikeSurface(t *testing.T) {
 	}
 	for _, want := range []string{
 		"rpc_support.rs",
-		"agent_client.rs",
-		"app_client.rs",
-		"authentication_client.rs",
-		"authorization_client.rs",
-		"cache_client.rs",
-		"datastore_client.rs",
-		"external_credential_client.rs",
-		"runtime_client.rs",
-		"runtime_provider_client.rs",
-		"s3_client.rs",
-		"secrets_client.rs",
-		"test_client.rs",
-		"workflow_client.rs",
+		"agent.rs",
+		"app.rs",
+		"authentication.rs",
+		"authorization.rs",
+		"cache.rs",
+		"datastore.rs",
+		"external_credential.rs",
+		"runtime.rs",
+		"runtime_provider.rs",
+		"s3.rs",
+		"secrets.rs",
+		"test.rs",
+		"workflow.rs",
 	} {
 		if _, ok := files[want]; !ok {
 			t.Fatalf("missing generated file %s (have %v)", want, keys(files))
@@ -68,30 +68,30 @@ func TestEmitSpikeSurface(t *testing.T) {
 	)
 	// Wire references must use prost's heck idents even when the proto name
 	// diverges; native types keep the raw proto local name.
-	assertContains(t, files, "app_client.rs",
+	assertContains(t, files, "app.rs",
 		"pub fn to_wire_http_subject_request(value: HTTPSubjectRequest) -> v1::HttpSubjectRequest {",
 		"pub fn from_wire_app_invoke_graph_ql_request(value: v1::AppInvokeGraphQlRequest) -> AppInvokeGraphQLRequest {",
 		"self.inner.invoke_graph_ql(",
 	)
-	assertContains(t, files, "s3_client.rs",
+	assertContains(t, files, "s3.rs",
 		"inner: v1::s3_object_access_client::S3ObjectAccessClient<tonic::transport::Channel>,",
 	)
-	assertContains(t, files, "cache_client.rs",
-		"pub struct CacheClient {",
+	assertContains(t, files, "cache.rs",
+		"pub struct Cache {",
 		"pub fn new(channel: tonic::transport::Channel) -> Self",
 		"pub ttl: Option<std::time::Duration>,",
 		"pub deleted: i64,",
 		"pub async fn get(&mut self, request: CacheGetRequest) -> Result<CacheGetResponse, GestaltError>",
 		"pub async fn set(&mut self, request: CacheSetRequest) -> Result<(), GestaltError>",
 	)
-	assertContains(t, files, "s3_client.rs",
+	assertContains(t, files, "s3.rs",
 		"pub async fn read_object(&mut self, request: ReadObjectRequest) -> Result<S3ReadObjectStream, GestaltError>",
 		"pub async fn recv(&mut self) -> Result<Option<ReadObjectChunk>, GestaltError>",
 		"requests: impl tokio_stream::Stream<Item = WriteObjectRequest> + Send + 'static,",
 		") -> Result<WriteObjectResponse, GestaltError>",
 		"pub last_modified: Option<std::time::SystemTime>,",
 	)
-	assertContains(t, files, "datastore_client.rs",
+	assertContains(t, files, "datastore.rs",
 		"pub enum TypedValueKind {",
 		"    NullValue,",
 		"    JsonValue(serde_json::Value),",

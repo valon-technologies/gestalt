@@ -7,4 +7,4 @@
  *
  * @module
  */
-export * from "../../../src/runtime.ts";
+export * from "../../../src/providers/runtime.ts";

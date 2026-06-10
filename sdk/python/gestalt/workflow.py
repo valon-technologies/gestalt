@@ -1537,7 +1537,7 @@ def _from_wire_workflow_value_kind(value: Any) -> WorkflowValueKind:
     return None
 
 
-class WorkflowClient:
+class Workflow:
     """Client for the gestalt.provider.v1.Workflow service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

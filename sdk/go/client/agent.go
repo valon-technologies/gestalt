@@ -1750,18 +1750,18 @@ func fromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderS
 	return out
 }
 
-// AgentClient is the generated client for gestalt.provider.v1.Agent.
+// Agent is the generated client for gestalt.provider.v1.Agent.
 // Every transport error is converted to *GestaltError.
-type AgentClient struct {
+type Agent struct {
 	client proto.AgentClient
 }
 
-// NewAgentClient creates a AgentClient over an injected gRPC connection.
-func NewAgentClient(conn grpc.ClientConnInterface) *AgentClient {
-	return &AgentClient{client: proto.NewAgentClient(conn)}
+// NewAgent creates a Agent client over an injected gRPC connection.
+func NewAgent(conn grpc.ClientConnInterface) *Agent {
+	return &Agent{client: proto.NewAgentClient(conn)}
 }
 
-func (c *AgentClient) CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*AgentSession, error) {
+func (c *Agent) CreateSession(ctx context.Context, request *CreateAgentProviderSessionRequest) (*AgentSession, error) {
 	response, err := c.client.CreateSession(ctx, toWireCreateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1769,7 +1769,7 @@ func (c *AgentClient) CreateSession(ctx context.Context, request *CreateAgentPro
 	return fromWireAgentSession(response), nil
 }
 
-func (c *AgentClient) GetSession(ctx context.Context, request *GetAgentProviderSessionRequest) (*AgentSession, error) {
+func (c *Agent) GetSession(ctx context.Context, request *GetAgentProviderSessionRequest) (*AgentSession, error) {
 	response, err := c.client.GetSession(ctx, toWireGetAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1777,7 +1777,7 @@ func (c *AgentClient) GetSession(ctx context.Context, request *GetAgentProviderS
 	return fromWireAgentSession(response), nil
 }
 
-func (c *AgentClient) ListSessions(ctx context.Context, request *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error) {
+func (c *Agent) ListSessions(ctx context.Context, request *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error) {
 	response, err := c.client.ListSessions(ctx, toWireListAgentProviderSessionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1785,7 +1785,7 @@ func (c *AgentClient) ListSessions(ctx context.Context, request *ListAgentProvid
 	return fromWireListAgentProviderSessionsResponse(response), nil
 }
 
-func (c *AgentClient) UpdateSession(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*AgentSession, error) {
+func (c *Agent) UpdateSession(ctx context.Context, request *UpdateAgentProviderSessionRequest) (*AgentSession, error) {
 	response, err := c.client.UpdateSession(ctx, toWireUpdateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1793,7 +1793,7 @@ func (c *AgentClient) UpdateSession(ctx context.Context, request *UpdateAgentPro
 	return fromWireAgentSession(response), nil
 }
 
-func (c *AgentClient) CreateTurn(ctx context.Context, request *CreateAgentProviderTurnRequest) (*AgentTurn, error) {
+func (c *Agent) CreateTurn(ctx context.Context, request *CreateAgentProviderTurnRequest) (*AgentTurn, error) {
 	response, err := c.client.CreateTurn(ctx, toWireCreateAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1801,7 +1801,7 @@ func (c *AgentClient) CreateTurn(ctx context.Context, request *CreateAgentProvid
 	return fromWireAgentTurn(response), nil
 }
 
-func (c *AgentClient) GetTurn(ctx context.Context, request *GetAgentProviderTurnRequest) (*AgentTurn, error) {
+func (c *Agent) GetTurn(ctx context.Context, request *GetAgentProviderTurnRequest) (*AgentTurn, error) {
 	response, err := c.client.GetTurn(ctx, toWireGetAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1809,7 +1809,7 @@ func (c *AgentClient) GetTurn(ctx context.Context, request *GetAgentProviderTurn
 	return fromWireAgentTurn(response), nil
 }
 
-func (c *AgentClient) ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error) {
+func (c *Agent) ListTurns(ctx context.Context, request *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error) {
 	response, err := c.client.ListTurns(ctx, toWireListAgentProviderTurnsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1817,7 +1817,7 @@ func (c *AgentClient) ListTurns(ctx context.Context, request *ListAgentProviderT
 	return fromWireListAgentProviderTurnsResponse(response), nil
 }
 
-func (c *AgentClient) CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*AgentTurn, error) {
+func (c *Agent) CancelTurn(ctx context.Context, request *CancelAgentProviderTurnRequest) (*AgentTurn, error) {
 	response, err := c.client.CancelTurn(ctx, toWireCancelAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1825,7 +1825,7 @@ func (c *AgentClient) CancelTurn(ctx context.Context, request *CancelAgentProvid
 	return fromWireAgentTurn(response), nil
 }
 
-func (c *AgentClient) ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error) {
+func (c *Agent) ListTurnEvents(ctx context.Context, request *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error) {
 	response, err := c.client.ListTurnEvents(ctx, toWireListAgentProviderTurnEventsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1833,7 +1833,7 @@ func (c *AgentClient) ListTurnEvents(ctx context.Context, request *ListAgentProv
 	return fromWireListAgentProviderTurnEventsResponse(response), nil
 }
 
-func (c *AgentClient) GetInteraction(ctx context.Context, request *GetAgentProviderInteractionRequest) (*AgentInteraction, error) {
+func (c *Agent) GetInteraction(ctx context.Context, request *GetAgentProviderInteractionRequest) (*AgentInteraction, error) {
 	response, err := c.client.GetInteraction(ctx, toWireGetAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1841,7 +1841,7 @@ func (c *AgentClient) GetInteraction(ctx context.Context, request *GetAgentProvi
 	return fromWireAgentInteraction(response), nil
 }
 
-func (c *AgentClient) ListInteractions(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
+func (c *Agent) ListInteractions(ctx context.Context, request *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
 	response, err := c.client.ListInteractions(ctx, toWireListAgentProviderInteractionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1849,7 +1849,7 @@ func (c *AgentClient) ListInteractions(ctx context.Context, request *ListAgentPr
 	return fromWireListAgentProviderInteractionsResponse(response), nil
 }
 
-func (c *AgentClient) ResolveInteraction(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
+func (c *Agent) ResolveInteraction(ctx context.Context, request *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
 	response, err := c.client.ResolveInteraction(ctx, toWireResolveAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1857,7 +1857,7 @@ func (c *AgentClient) ResolveInteraction(ctx context.Context, request *ResolveAg
 	return fromWireAgentInteraction(response), nil
 }
 
-func (c *AgentClient) GetCapabilities(ctx context.Context, request *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
+func (c *Agent) GetCapabilities(ctx context.Context, request *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
 	response, err := c.client.GetCapabilities(ctx, toWireGetAgentProviderCapabilitiesRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

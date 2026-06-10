@@ -31,7 +31,7 @@ import {
   type AgentToolConfig,
   type AgentTurn,
   type AgentTurnEvent,
-} from "./agent.ts";
+} from "./providers/agent.ts";
 import {
   dateFromTimestamp,
   type JsonObjectInput,

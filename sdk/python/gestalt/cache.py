@@ -280,7 +280,7 @@ def from_wire_cache_touch_response(value: Any) -> CacheTouchResponse:
     )
 
 
-class CacheClient:
+class Cache:
     """Client for the gestalt.provider.v1.Cache service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

@@ -51,7 +51,7 @@ def from_wire_get_secret_response(value: Any) -> GetSecretResponse:
     )
 
 
-class SecretsClient:
+class Secrets:
     """Client for the gestalt.provider.v1.Secrets service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

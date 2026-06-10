@@ -74,7 +74,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		for _, svc := range g.services {
 			r.renderClient(svc)
 		}
-		if err := set.Add(g.base+"_client.ts", []byte(r.assemble())); err != nil {
+		if err := set.Add(g.base+".ts", []byte(r.assemble())); err != nil {
 			return nil, err
 		}
 	}

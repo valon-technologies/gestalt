@@ -1120,18 +1120,18 @@ func fromWireSubjectPermissionContext(value *proto.SubjectPermissionContext) *Su
 	return out
 }
 
-// AppClient is the generated client for gestalt.provider.v1.App.
+// App is the generated client for gestalt.provider.v1.App.
 // Every transport error is converted to *GestaltError.
-type AppClient struct {
+type App struct {
 	client proto.AppClient
 }
 
-// NewAppClient creates a AppClient over an injected gRPC connection.
-func NewAppClient(conn grpc.ClientConnInterface) *AppClient {
-	return &AppClient{client: proto.NewAppClient(conn)}
+// NewApp creates a App client over an injected gRPC connection.
+func NewApp(conn grpc.ClientConnInterface) *App {
+	return &App{client: proto.NewAppClient(conn)}
 }
 
-func (c *AppClient) Invoke(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error) {
+func (c *App) Invoke(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error) {
 	response, err := c.client.Invoke(ctx, toWireAppInvokeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1139,7 +1139,7 @@ func (c *AppClient) Invoke(ctx context.Context, request *AppInvokeRequest) (*Ope
 	return fromWireOperationResult(response), nil
 }
 
-func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
+func (c *App) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQLRequest) (*OperationResult, error) {
 	response, err := c.client.InvokeGraphQL(ctx, toWireAppInvokeGraphQLRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1147,18 +1147,18 @@ func (c *AppClient) InvokeGraphQL(ctx context.Context, request *AppInvokeGraphQL
 	return fromWireOperationResult(response), nil
 }
 
-// AppProviderClient is the generated client for gestalt.provider.v1.AppProvider.
+// AppProvider is the generated client for gestalt.provider.v1.AppProvider.
 // Every transport error is converted to *GestaltError.
-type AppProviderClient struct {
+type AppProvider struct {
 	client proto.AppProviderClient
 }
 
-// NewAppProviderClient creates a AppProviderClient over an injected gRPC connection.
-func NewAppProviderClient(conn grpc.ClientConnInterface) *AppProviderClient {
-	return &AppProviderClient{client: proto.NewAppProviderClient(conn)}
+// NewAppProvider creates a AppProvider client over an injected gRPC connection.
+func NewAppProvider(conn grpc.ClientConnInterface) *AppProvider {
+	return &AppProvider{client: proto.NewAppProviderClient(conn)}
 }
 
-func (c *AppProviderClient) GetMetadata(ctx context.Context) (*ProviderMetadata, error) {
+func (c *AppProvider) GetMetadata(ctx context.Context) (*ProviderMetadata, error) {
 	response, err := c.client.GetMetadata(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1166,7 +1166,7 @@ func (c *AppProviderClient) GetMetadata(ctx context.Context) (*ProviderMetadata,
 	return fromWireProviderMetadata(response), nil
 }
 
-func (c *AppProviderClient) StartProvider(ctx context.Context, request *StartProviderRequest) (*StartProviderResponse, error) {
+func (c *AppProvider) StartProvider(ctx context.Context, request *StartProviderRequest) (*StartProviderResponse, error) {
 	response, err := c.client.StartProvider(ctx, toWireStartProviderRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1174,7 +1174,7 @@ func (c *AppProviderClient) StartProvider(ctx context.Context, request *StartPro
 	return fromWireStartProviderResponse(response), nil
 }
 
-func (c *AppProviderClient) Execute(ctx context.Context, request *ExecuteRequest) (*OperationResult, error) {
+func (c *AppProvider) Execute(ctx context.Context, request *ExecuteRequest) (*OperationResult, error) {
 	response, err := c.client.Execute(ctx, toWireExecuteRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1182,7 +1182,7 @@ func (c *AppProviderClient) Execute(ctx context.Context, request *ExecuteRequest
 	return fromWireOperationResult(response), nil
 }
 
-func (c *AppProviderClient) ResolveHTTPSubject(ctx context.Context, request *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
+func (c *AppProvider) ResolveHTTPSubject(ctx context.Context, request *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
 	response, err := c.client.ResolveHTTPSubject(ctx, toWireResolveHTTPSubjectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1190,7 +1190,7 @@ func (c *AppProviderClient) ResolveHTTPSubject(ctx context.Context, request *Res
 	return fromWireResolveHTTPSubjectResponse(response), nil
 }
 
-func (c *AppProviderClient) GetSessionCatalog(ctx context.Context, request *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
+func (c *AppProvider) GetSessionCatalog(ctx context.Context, request *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
 	response, err := c.client.GetSessionCatalog(ctx, toWireGetSessionCatalogRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

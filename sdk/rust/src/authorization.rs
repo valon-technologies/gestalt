@@ -1121,11 +1121,11 @@ pub fn from_wire_subject_set_type(value: v1::SubjectSetType) -> SubjectSetType {
 }
 
 /// Client for the `gestalt.provider.v1.Authorization` service.
-pub struct AuthorizationClient {
+pub struct Authorization {
     inner: v1::authorization_client::AuthorizationClient<tonic::transport::Channel>,
 }
 
-impl AuthorizationClient {
+impl Authorization {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {

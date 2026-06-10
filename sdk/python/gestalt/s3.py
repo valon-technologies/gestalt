@@ -570,7 +570,7 @@ def from_wire_write_object_response(value: Any) -> WriteObjectResponse:
     )
 
 
-class S3Client:
+class S3:
     """Client for the gestalt.provider.v1.S3 service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
@@ -603,7 +603,7 @@ class S3Client:
         return from_wire_presign_object_response(response)
 
 
-class S3ObjectAccessClient:
+class S3ObjectAccess:
     """Client for the gestalt.provider.v1.S3ObjectAccess service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

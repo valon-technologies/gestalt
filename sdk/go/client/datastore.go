@@ -1653,32 +1653,32 @@ func fromWireTypedValue(value *proto.TypedValue) *TypedValue {
 	return out
 }
 
-// IndexedDBClient is the generated client for gestalt.provider.v1.IndexedDB.
+// IndexedDB is the generated client for gestalt.provider.v1.IndexedDB.
 // Every transport error is converted to *GestaltError.
-type IndexedDBClient struct {
+type IndexedDB struct {
 	client proto.IndexedDBClient
 }
 
-// NewIndexedDBClient creates a IndexedDBClient over an injected gRPC connection.
-func NewIndexedDBClient(conn grpc.ClientConnInterface) *IndexedDBClient {
-	return &IndexedDBClient{client: proto.NewIndexedDBClient(conn)}
+// NewIndexedDB creates a IndexedDB client over an injected gRPC connection.
+func NewIndexedDB(conn grpc.ClientConnInterface) *IndexedDB {
+	return &IndexedDB{client: proto.NewIndexedDBClient(conn)}
 }
 
-func (c *IndexedDBClient) CreateObjectStore(ctx context.Context, request *CreateObjectStoreRequest) error {
+func (c *IndexedDB) CreateObjectStore(ctx context.Context, request *CreateObjectStoreRequest) error {
 	if _, err := c.client.CreateObjectStore(ctx, toWireCreateObjectStoreRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *IndexedDBClient) DeleteObjectStore(ctx context.Context, request *DeleteObjectStoreRequest) error {
+func (c *IndexedDB) DeleteObjectStore(ctx context.Context, request *DeleteObjectStoreRequest) error {
 	if _, err := c.client.DeleteObjectStore(ctx, toWireDeleteObjectStoreRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *IndexedDBClient) Get(ctx context.Context, request *ObjectStoreRequest) (*RecordResponse, error) {
+func (c *IndexedDB) Get(ctx context.Context, request *ObjectStoreRequest) (*RecordResponse, error) {
 	response, err := c.client.Get(ctx, toWireObjectStoreRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1686,7 +1686,7 @@ func (c *IndexedDBClient) Get(ctx context.Context, request *ObjectStoreRequest) 
 	return fromWireRecordResponse(response), nil
 }
 
-func (c *IndexedDBClient) GetKey(ctx context.Context, request *ObjectStoreRequest) (*KeyResponse, error) {
+func (c *IndexedDB) GetKey(ctx context.Context, request *ObjectStoreRequest) (*KeyResponse, error) {
 	response, err := c.client.GetKey(ctx, toWireObjectStoreRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1694,35 +1694,35 @@ func (c *IndexedDBClient) GetKey(ctx context.Context, request *ObjectStoreReques
 	return fromWireKeyResponse(response), nil
 }
 
-func (c *IndexedDBClient) Add(ctx context.Context, request *RecordRequest) error {
+func (c *IndexedDB) Add(ctx context.Context, request *RecordRequest) error {
 	if _, err := c.client.Add(ctx, toWireRecordRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *IndexedDBClient) Put(ctx context.Context, request *RecordRequest) error {
+func (c *IndexedDB) Put(ctx context.Context, request *RecordRequest) error {
 	if _, err := c.client.Put(ctx, toWireRecordRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *IndexedDBClient) Delete(ctx context.Context, request *ObjectStoreRequest) error {
+func (c *IndexedDB) Delete(ctx context.Context, request *ObjectStoreRequest) error {
 	if _, err := c.client.Delete(ctx, toWireObjectStoreRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *IndexedDBClient) Clear(ctx context.Context, request *ObjectStoreNameRequest) error {
+func (c *IndexedDB) Clear(ctx context.Context, request *ObjectStoreNameRequest) error {
 	if _, err := c.client.Clear(ctx, toWireObjectStoreNameRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *IndexedDBClient) GetAll(ctx context.Context, request *ObjectStoreRangeRequest) (*RecordsResponse, error) {
+func (c *IndexedDB) GetAll(ctx context.Context, request *ObjectStoreRangeRequest) (*RecordsResponse, error) {
 	response, err := c.client.GetAll(ctx, toWireObjectStoreRangeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1730,7 +1730,7 @@ func (c *IndexedDBClient) GetAll(ctx context.Context, request *ObjectStoreRangeR
 	return fromWireRecordsResponse(response), nil
 }
 
-func (c *IndexedDBClient) GetAllKeys(ctx context.Context, request *ObjectStoreRangeRequest) (*KeysResponse, error) {
+func (c *IndexedDB) GetAllKeys(ctx context.Context, request *ObjectStoreRangeRequest) (*KeysResponse, error) {
 	response, err := c.client.GetAllKeys(ctx, toWireObjectStoreRangeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1738,7 +1738,7 @@ func (c *IndexedDBClient) GetAllKeys(ctx context.Context, request *ObjectStoreRa
 	return fromWireKeysResponse(response), nil
 }
 
-func (c *IndexedDBClient) Count(ctx context.Context, request *ObjectStoreRangeRequest) (*CountResponse, error) {
+func (c *IndexedDB) Count(ctx context.Context, request *ObjectStoreRangeRequest) (*CountResponse, error) {
 	response, err := c.client.Count(ctx, toWireObjectStoreRangeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1746,7 +1746,7 @@ func (c *IndexedDBClient) Count(ctx context.Context, request *ObjectStoreRangeRe
 	return fromWireCountResponse(response), nil
 }
 
-func (c *IndexedDBClient) DeleteRange(ctx context.Context, request *ObjectStoreRangeRequest) (*DeleteResponse, error) {
+func (c *IndexedDB) DeleteRange(ctx context.Context, request *ObjectStoreRangeRequest) (*DeleteResponse, error) {
 	response, err := c.client.DeleteRange(ctx, toWireObjectStoreRangeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1754,7 +1754,7 @@ func (c *IndexedDBClient) DeleteRange(ctx context.Context, request *ObjectStoreR
 	return fromWireDeleteResponse(response), nil
 }
 
-func (c *IndexedDBClient) IndexGet(ctx context.Context, request *IndexQueryRequest) (*RecordResponse, error) {
+func (c *IndexedDB) IndexGet(ctx context.Context, request *IndexQueryRequest) (*RecordResponse, error) {
 	response, err := c.client.IndexGet(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1762,7 +1762,7 @@ func (c *IndexedDBClient) IndexGet(ctx context.Context, request *IndexQueryReque
 	return fromWireRecordResponse(response), nil
 }
 
-func (c *IndexedDBClient) IndexGetKey(ctx context.Context, request *IndexQueryRequest) (*KeyResponse, error) {
+func (c *IndexedDB) IndexGetKey(ctx context.Context, request *IndexQueryRequest) (*KeyResponse, error) {
 	response, err := c.client.IndexGetKey(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1770,7 +1770,7 @@ func (c *IndexedDBClient) IndexGetKey(ctx context.Context, request *IndexQueryRe
 	return fromWireKeyResponse(response), nil
 }
 
-func (c *IndexedDBClient) IndexGetAll(ctx context.Context, request *IndexQueryRequest) (*RecordsResponse, error) {
+func (c *IndexedDB) IndexGetAll(ctx context.Context, request *IndexQueryRequest) (*RecordsResponse, error) {
 	response, err := c.client.IndexGetAll(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1778,7 +1778,7 @@ func (c *IndexedDBClient) IndexGetAll(ctx context.Context, request *IndexQueryRe
 	return fromWireRecordsResponse(response), nil
 }
 
-func (c *IndexedDBClient) IndexGetAllKeys(ctx context.Context, request *IndexQueryRequest) (*KeysResponse, error) {
+func (c *IndexedDB) IndexGetAllKeys(ctx context.Context, request *IndexQueryRequest) (*KeysResponse, error) {
 	response, err := c.client.IndexGetAllKeys(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1786,7 +1786,7 @@ func (c *IndexedDBClient) IndexGetAllKeys(ctx context.Context, request *IndexQue
 	return fromWireKeysResponse(response), nil
 }
 
-func (c *IndexedDBClient) IndexCount(ctx context.Context, request *IndexQueryRequest) (*CountResponse, error) {
+func (c *IndexedDB) IndexCount(ctx context.Context, request *IndexQueryRequest) (*CountResponse, error) {
 	response, err := c.client.IndexCount(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1794,7 +1794,7 @@ func (c *IndexedDBClient) IndexCount(ctx context.Context, request *IndexQueryReq
 	return fromWireCountResponse(response), nil
 }
 
-func (c *IndexedDBClient) IndexDelete(ctx context.Context, request *IndexQueryRequest) (*DeleteResponse, error) {
+func (c *IndexedDB) IndexDelete(ctx context.Context, request *IndexQueryRequest) (*DeleteResponse, error) {
 	response, err := c.client.IndexDelete(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1802,7 +1802,7 @@ func (c *IndexedDBClient) IndexDelete(ctx context.Context, request *IndexQueryRe
 	return fromWireDeleteResponse(response), nil
 }
 
-func (c *IndexedDBClient) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream, error) {
+func (c *IndexedDB) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream, error) {
 	stream, err := c.client.OpenCursor(ctx)
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1810,7 +1810,7 @@ func (c *IndexedDBClient) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorS
 	return &IndexedDBOpenCursorStream{stream: stream}, nil
 }
 
-func (c *IndexedDBClient) Transaction(ctx context.Context) (*IndexedDBTransactionStream, error) {
+func (c *IndexedDB) Transaction(ctx context.Context) (*IndexedDBTransactionStream, error) {
 	stream, err := c.client.Transaction(ctx)
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1819,7 +1819,7 @@ func (c *IndexedDBClient) Transaction(ctx context.Context) (*IndexedDBTransactio
 }
 
 // IndexedDBOpenCursorStream is the bidirectional stream opened by
-// IndexedDBClient.OpenCursor.
+// IndexedDB.OpenCursor.
 type IndexedDBOpenCursorStream struct {
 	stream proto.IndexedDB_OpenCursorClient
 }
@@ -1846,7 +1846,7 @@ func (s *IndexedDBOpenCursorStream) CloseSend() error {
 }
 
 // IndexedDBTransactionStream is the bidirectional stream opened by
-// IndexedDBClient.Transaction.
+// IndexedDB.Transaction.
 type IndexedDBTransactionStream struct {
 	stream proto.IndexedDB_TransactionClient
 }

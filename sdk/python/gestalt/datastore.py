@@ -1414,7 +1414,7 @@ def _from_wire_typed_value_kind(value: Any) -> TypedValueKind:
     return None
 
 
-class IndexedDBClient:
+class IndexedDB:
     """Client for the gestalt.provider.v1.IndexedDB service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

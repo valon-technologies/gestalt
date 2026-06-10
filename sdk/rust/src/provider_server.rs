@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::agent::{AgentToolRef, agent_tool_ref_from_proto};
+use crate::agent_provider::{AgentToolRef, agent_tool_ref_from_proto};
 use crate::api::{
     Access, Credential, HTTPSubjectRequest, Request, Response, Subject, scope_request_context,
 };

@@ -36,7 +36,7 @@ export function fromWireHelloWorldResponse(value: wire.HelloWorldResponse): Hell
   };
 }
 
-export class TestClient {
+export class Test {
   private readonly client: Client<typeof wire.Test>;
 
   constructor(transport: Transport) {

@@ -48,13 +48,13 @@ import {
   bunTarget,
   parseBuildArgs,
 } from "../src/build.ts";
-import { Cache } from "../src/cache.ts";
+import { Cache } from "../src/providers/cache.ts";
 import { ENV_HOST_SERVICE_SOCKET } from "../src/host-service.ts";
-import { boundWorkflowTargetToProto } from "../src/workflow.ts";
+import { boundWorkflowTargetToProto } from "../src/providers/workflow.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   ENV_PROVIDER_SOCKET,
-} from "../src/runtime.ts";
+} from "../src/providers/runtime.ts";
 import {
   captureChildStderr,
   createUnixGrpcClient,

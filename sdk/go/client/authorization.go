@@ -1054,18 +1054,18 @@ func fromWireSubjectSetType(value *proto.SubjectSetType) *SubjectSetType {
 	return out
 }
 
-// AuthorizationClient is the generated client for gestalt.provider.v1.Authorization.
+// Authorization is the generated client for gestalt.provider.v1.Authorization.
 // Every transport error is converted to *GestaltError.
-type AuthorizationClient struct {
+type Authorization struct {
 	client proto.AuthorizationClient
 }
 
-// NewAuthorizationClient creates a AuthorizationClient over an injected gRPC connection.
-func NewAuthorizationClient(conn grpc.ClientConnInterface) *AuthorizationClient {
-	return &AuthorizationClient{client: proto.NewAuthorizationClient(conn)}
+// NewAuthorization creates a Authorization client over an injected gRPC connection.
+func NewAuthorization(conn grpc.ClientConnInterface) *Authorization {
+	return &Authorization{client: proto.NewAuthorizationClient(conn)}
 }
 
-func (c *AuthorizationClient) CheckAccess(ctx context.Context, request *CheckAccessRequest) (*CheckAccessResponse, error) {
+func (c *Authorization) CheckAccess(ctx context.Context, request *CheckAccessRequest) (*CheckAccessResponse, error) {
 	response, err := c.client.CheckAccess(ctx, toWireCheckAccessRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1073,7 +1073,7 @@ func (c *AuthorizationClient) CheckAccess(ctx context.Context, request *CheckAcc
 	return fromWireCheckAccessResponse(response), nil
 }
 
-func (c *AuthorizationClient) CheckAccessMany(ctx context.Context, request *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
+func (c *Authorization) CheckAccessMany(ctx context.Context, request *CheckAccessManyRequest) (*CheckAccessManyResponse, error) {
 	response, err := c.client.CheckAccessMany(ctx, toWireCheckAccessManyRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1081,7 +1081,7 @@ func (c *AuthorizationClient) CheckAccessMany(ctx context.Context, request *Chec
 	return fromWireCheckAccessManyResponse(response), nil
 }
 
-func (c *AuthorizationClient) ListRelationships(ctx context.Context, request *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
+func (c *Authorization) ListRelationships(ctx context.Context, request *ListRelationshipsRequest) (*ListRelationshipsResponse, error) {
 	response, err := c.client.ListRelationships(ctx, toWireListRelationshipsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1089,7 +1089,7 @@ func (c *AuthorizationClient) ListRelationships(ctx context.Context, request *Li
 	return fromWireListRelationshipsResponse(response), nil
 }
 
-func (c *AuthorizationClient) AddRelationship(ctx context.Context, request *AddRelationshipRequest) (*AddRelationshipResponse, error) {
+func (c *Authorization) AddRelationship(ctx context.Context, request *AddRelationshipRequest) (*AddRelationshipResponse, error) {
 	response, err := c.client.AddRelationship(ctx, toWireAddRelationshipRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1097,7 +1097,7 @@ func (c *AuthorizationClient) AddRelationship(ctx context.Context, request *AddR
 	return fromWireAddRelationshipResponse(response), nil
 }
 
-func (c *AuthorizationClient) DeleteRelationship(ctx context.Context, request *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
+func (c *Authorization) DeleteRelationship(ctx context.Context, request *DeleteRelationshipRequest) (*DeleteRelationshipResponse, error) {
 	response, err := c.client.DeleteRelationship(ctx, toWireDeleteRelationshipRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1105,7 +1105,7 @@ func (c *AuthorizationClient) DeleteRelationship(ctx context.Context, request *D
 	return fromWireDeleteRelationshipResponse(response), nil
 }
 
-func (c *AuthorizationClient) SetAuthorizationState(ctx context.Context, request *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
+func (c *Authorization) SetAuthorizationState(ctx context.Context, request *SetAuthorizationStateRequest) (*SetAuthorizationStateResponse, error) {
 	response, err := c.client.SetAuthorizationState(ctx, toWireSetAuthorizationStateRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1113,7 +1113,7 @@ func (c *AuthorizationClient) SetAuthorizationState(ctx context.Context, request
 	return fromWireSetAuthorizationStateResponse(response), nil
 }
 
-func (c *AuthorizationClient) GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error) {
+func (c *Authorization) GetActiveModelRef(ctx context.Context) (*GetActiveModelRefResponse, error) {
 	response, err := c.client.GetActiveModelRef(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1121,7 +1121,7 @@ func (c *AuthorizationClient) GetActiveModelRef(ctx context.Context) (*GetActive
 	return fromWireGetActiveModelRefResponse(response), nil
 }
 
-func (c *AuthorizationClient) SetActiveModel(ctx context.Context, request *SetActiveModelRequest) (*SetActiveModelResponse, error) {
+func (c *Authorization) SetActiveModel(ctx context.Context, request *SetActiveModelRequest) (*SetActiveModelResponse, error) {
 	response, err := c.client.SetActiveModel(ctx, toWireSetActiveModelRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -1129,7 +1129,7 @@ func (c *AuthorizationClient) SetActiveModel(ctx context.Context, request *SetAc
 	return fromWireSetActiveModelResponse(response), nil
 }
 
-func (c *AuthorizationClient) ListActiveModelResourceTypes(ctx context.Context, request *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
+func (c *Authorization) ListActiveModelResourceTypes(ctx context.Context, request *ListActiveModelResourceTypesRequest) (*ListActiveModelResourceTypesResponse, error) {
 	response, err := c.client.ListActiveModelResourceTypes(ctx, toWireListActiveModelResourceTypesRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

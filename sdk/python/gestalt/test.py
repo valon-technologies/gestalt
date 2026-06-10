@@ -47,7 +47,7 @@ def from_wire_hello_world_response(value: Any) -> HelloWorldResponse:
     )
 
 
-class TestClient:
+class Test:
     """Client for the gestalt.provider.v1.Test service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

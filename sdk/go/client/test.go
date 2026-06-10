@@ -51,18 +51,18 @@ func fromWireHelloWorldResponse(value *proto.HelloWorldResponse) *HelloWorldResp
 	return out
 }
 
-// TestClient is the generated client for gestalt.provider.v1.Test.
+// Test is the generated client for gestalt.provider.v1.Test.
 // Every transport error is converted to *GestaltError.
-type TestClient struct {
+type Test struct {
 	client proto.TestClient
 }
 
-// NewTestClient creates a TestClient over an injected gRPC connection.
-func NewTestClient(conn grpc.ClientConnInterface) *TestClient {
-	return &TestClient{client: proto.NewTestClient(conn)}
+// NewTest creates a Test client over an injected gRPC connection.
+func NewTest(conn grpc.ClientConnInterface) *Test {
+	return &Test{client: proto.NewTestClient(conn)}
 }
 
-func (c *TestClient) HelloWorld(ctx context.Context, request *HelloWorldRequest) (*HelloWorldResponse, error) {
+func (c *Test) HelloWorld(ctx context.Context, request *HelloWorldRequest) (*HelloWorldResponse, error) {
 	response, err := c.client.HelloWorld(ctx, toWireHelloWorldRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

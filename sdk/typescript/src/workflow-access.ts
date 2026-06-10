@@ -34,7 +34,7 @@ import {
   type WorkflowRunEvent,
   type WorkflowRunStatus,
   type WorkflowSignal,
-} from "./workflow.ts";
+} from "./providers/workflow.ts";
 
 /** Shape accepted when applying a workflow definition. */
 export interface WorkflowApplyDefinition {

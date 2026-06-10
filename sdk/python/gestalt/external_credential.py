@@ -480,7 +480,7 @@ def from_wire_validate_external_credential_config_request(value: Any) -> Validat
     )
 
 
-class ExternalCredentialsClient:
+class ExternalCredentials:
     """Client for the gestalt.provider.v1.ExternalCredentials service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

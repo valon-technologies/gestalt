@@ -57,18 +57,18 @@ func fromWireGetSecretResponse(value *proto.GetSecretResponse) *GetSecretRespons
 	return out
 }
 
-// SecretsClient is the generated client for gestalt.provider.v1.Secrets.
+// Secrets is the generated client for gestalt.provider.v1.Secrets.
 // Every transport error is converted to *GestaltError.
-type SecretsClient struct {
+type Secrets struct {
 	client proto.SecretsClient
 }
 
-// NewSecretsClient creates a SecretsClient over an injected gRPC connection.
-func NewSecretsClient(conn grpc.ClientConnInterface) *SecretsClient {
-	return &SecretsClient{client: proto.NewSecretsClient(conn)}
+// NewSecrets creates a Secrets client over an injected gRPC connection.
+func NewSecrets(conn grpc.ClientConnInterface) *Secrets {
+	return &Secrets{client: proto.NewSecretsClient(conn)}
 }
 
-func (c *SecretsClient) GetSecret(ctx context.Context, request *GetSecretRequest) (*GetSecretResponse, error) {
+func (c *Secrets) GetSecret(ctx context.Context, request *GetSecretRequest) (*GetSecretResponse, error) {
 	response, err := c.client.GetSecret(ctx, toWireGetSecretRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

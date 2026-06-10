@@ -442,7 +442,7 @@ def from_wire_stop_runtime_session_request(value: Any) -> StopRuntimeSessionRequ
     )
 
 
-class RuntimeClient:
+class Runtime:
     """Client for the gestalt.provider.v1.Runtime service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
@@ -479,7 +479,7 @@ class RuntimeClient:
         return from_wire_hosted_app(response)
 
 
-class RuntimeLogHostClient:
+class RuntimeLogHost:
     """Client for the gestalt.provider.v1.RuntimeLogHost service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

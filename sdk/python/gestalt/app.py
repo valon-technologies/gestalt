@@ -879,7 +879,7 @@ def from_wire_subject_permission_context(value: Any) -> SubjectPermissionContext
     )
 
 
-class AppClient:
+class App:
     """Client for the gestalt.provider.v1.App service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
@@ -894,7 +894,7 @@ class AppClient:
         return from_wire_operation_result(response)
 
 
-class AppProviderClient:
+class AppProvider:
     """Client for the gestalt.provider.v1.AppProvider service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

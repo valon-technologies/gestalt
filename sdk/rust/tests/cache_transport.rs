@@ -298,7 +298,7 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
     let provider = Arc::new(TestCacheProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_cache_provider(serve_provider)
+        gestalt::runtime_impl::serve_cache_provider(serve_provider)
             .await
             .expect("serve cache provider");
     });

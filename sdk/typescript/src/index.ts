@@ -153,7 +153,7 @@ export {
   type SetAuthorizationStateResponse,
   type SubjectSet,
   type SubjectSetType,
-} from "./authorization.ts";
+} from "./providers/authorization.ts";
 export {
   AuthenticationProvider,
   defineAuthenticationProvider,
@@ -173,7 +173,7 @@ export {
   type CacheEntry,
   type CacheProviderOptions,
   type CacheSetOptions,
-} from "./cache.ts";
+} from "./providers/cache.ts";
 export {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
@@ -184,7 +184,7 @@ export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
-} from "./secrets.ts";
+} from "./providers/secrets.ts";
 export {
   AppProvider,
   defineApp,
@@ -197,7 +197,7 @@ export {
   type AppDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,
-} from "./app.ts";
+} from "./providers/app.ts";
 export {
   ProviderBase,
   isProviderBase,
@@ -264,7 +264,7 @@ export {
   runBundledProvider,
   runLoadedProvider,
   serve,
-} from "./runtime.ts";
+} from "./providers/runtime.ts";
 export {
   defaultProviderName,
   formatModuleTarget,
@@ -335,7 +335,7 @@ export {
   type S3BodySource,
   type S3ProviderOptions,
   type WriteOptions,
-} from "./s3.ts";
+} from "./providers/s3.ts";
 export {
   AgentExecutionStatus,
   AgentInteractionState,
@@ -389,8 +389,8 @@ export {
   type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
-} from "./agent.ts";
-export * from "./workflow.ts";
+} from "./providers/agent.ts";
+export * from "./providers/workflow.ts";
 export {
   GENAI_OPERATION_CHAT,
   GENAI_OPERATION_EXECUTE_TOOL,

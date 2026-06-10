@@ -454,7 +454,7 @@ export function fromWireValidateExternalCredentialConfigRequest(value: wire.Vali
   };
 }
 
-export class ExternalCredentialsClient {
+export class ExternalCredentials {
   private readonly client: Client<typeof wire.ExternalCredentials>;
 
   constructor(transport: Transport) {

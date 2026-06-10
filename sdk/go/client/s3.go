@@ -679,18 +679,18 @@ func fromWireWriteObjectResponse(value *proto.WriteObjectResponse) *WriteObjectR
 	return out
 }
 
-// S3Client is the generated client for gestalt.provider.v1.S3.
+// S3 is the generated client for gestalt.provider.v1.S3.
 // Every transport error is converted to *GestaltError.
-type S3Client struct {
+type S3 struct {
 	client proto.S3Client
 }
 
-// NewS3Client creates a S3Client over an injected gRPC connection.
-func NewS3Client(conn grpc.ClientConnInterface) *S3Client {
-	return &S3Client{client: proto.NewS3Client(conn)}
+// NewS3 creates a S3 client over an injected gRPC connection.
+func NewS3(conn grpc.ClientConnInterface) *S3 {
+	return &S3{client: proto.NewS3Client(conn)}
 }
 
-func (c *S3Client) HeadObject(ctx context.Context, request *HeadObjectRequest) (*HeadObjectResponse, error) {
+func (c *S3) HeadObject(ctx context.Context, request *HeadObjectRequest) (*HeadObjectResponse, error) {
 	response, err := c.client.HeadObject(ctx, toWireHeadObjectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -698,7 +698,7 @@ func (c *S3Client) HeadObject(ctx context.Context, request *HeadObjectRequest) (
 	return fromWireHeadObjectResponse(response), nil
 }
 
-func (c *S3Client) ReadObject(ctx context.Context, request *ReadObjectRequest) (*S3ReadObjectStream, error) {
+func (c *S3) ReadObject(ctx context.Context, request *ReadObjectRequest) (*S3ReadObjectStream, error) {
 	stream, err := c.client.ReadObject(ctx, toWireReadObjectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -706,7 +706,7 @@ func (c *S3Client) ReadObject(ctx context.Context, request *ReadObjectRequest) (
 	return &S3ReadObjectStream{stream: stream}, nil
 }
 
-func (c *S3Client) WriteObject(ctx context.Context) (*S3WriteObjectStream, error) {
+func (c *S3) WriteObject(ctx context.Context) (*S3WriteObjectStream, error) {
 	stream, err := c.client.WriteObject(ctx)
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -714,14 +714,14 @@ func (c *S3Client) WriteObject(ctx context.Context) (*S3WriteObjectStream, error
 	return &S3WriteObjectStream{stream: stream}, nil
 }
 
-func (c *S3Client) DeleteObject(ctx context.Context, request *DeleteObjectRequest) error {
+func (c *S3) DeleteObject(ctx context.Context, request *DeleteObjectRequest) error {
 	if _, err := c.client.DeleteObject(ctx, toWireDeleteObjectRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *S3Client) ListObjects(ctx context.Context, request *ListObjectsRequest) (*ListObjectsResponse, error) {
+func (c *S3) ListObjects(ctx context.Context, request *ListObjectsRequest) (*ListObjectsResponse, error) {
 	response, err := c.client.ListObjects(ctx, toWireListObjectsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -729,7 +729,7 @@ func (c *S3Client) ListObjects(ctx context.Context, request *ListObjectsRequest)
 	return fromWireListObjectsResponse(response), nil
 }
 
-func (c *S3Client) CopyObject(ctx context.Context, request *CopyObjectRequest) (*CopyObjectResponse, error) {
+func (c *S3) CopyObject(ctx context.Context, request *CopyObjectRequest) (*CopyObjectResponse, error) {
 	response, err := c.client.CopyObject(ctx, toWireCopyObjectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -737,7 +737,7 @@ func (c *S3Client) CopyObject(ctx context.Context, request *CopyObjectRequest) (
 	return fromWireCopyObjectResponse(response), nil
 }
 
-func (c *S3Client) PresignObject(ctx context.Context, request *PresignObjectRequest) (*PresignObjectResponse, error) {
+func (c *S3) PresignObject(ctx context.Context, request *PresignObjectRequest) (*PresignObjectResponse, error) {
 	response, err := c.client.PresignObject(ctx, toWirePresignObjectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -746,7 +746,7 @@ func (c *S3Client) PresignObject(ctx context.Context, request *PresignObjectRequ
 }
 
 // S3ReadObjectStream is the server stream of ReadObjectChunk frames
-// returned by S3Client.ReadObject.
+// returned by S3.ReadObject.
 type S3ReadObjectStream struct {
 	stream proto.S3_ReadObjectClient
 }
@@ -762,7 +762,7 @@ func (s *S3ReadObjectStream) Recv() (*ReadObjectChunk, error) {
 }
 
 // S3WriteObjectStream is the client stream of WriteObjectRequest frames
-// accepted by S3Client.WriteObject.
+// accepted by S3.WriteObject.
 type S3WriteObjectStream struct {
 	stream proto.S3_WriteObjectClient
 }
@@ -782,18 +782,18 @@ func (s *S3WriteObjectStream) CloseAndRecv() (*WriteObjectResponse, error) {
 	return fromWireWriteObjectResponse(response), nil
 }
 
-// S3ObjectAccessClient is the generated client for gestalt.provider.v1.S3ObjectAccess.
+// S3ObjectAccess is the generated client for gestalt.provider.v1.S3ObjectAccess.
 // Every transport error is converted to *GestaltError.
-type S3ObjectAccessClient struct {
+type S3ObjectAccess struct {
 	client proto.S3ObjectAccessClient
 }
 
-// NewS3ObjectAccessClient creates a S3ObjectAccessClient over an injected gRPC connection.
-func NewS3ObjectAccessClient(conn grpc.ClientConnInterface) *S3ObjectAccessClient {
-	return &S3ObjectAccessClient{client: proto.NewS3ObjectAccessClient(conn)}
+// NewS3ObjectAccess creates a S3ObjectAccess client over an injected gRPC connection.
+func NewS3ObjectAccess(conn grpc.ClientConnInterface) *S3ObjectAccess {
+	return &S3ObjectAccess{client: proto.NewS3ObjectAccessClient(conn)}
 }
 
-func (c *S3ObjectAccessClient) CreateObjectAccessURL(ctx context.Context, request *CreateObjectAccessURLRequest) (*CreateObjectAccessURLResponse, error) {
+func (c *S3ObjectAccess) CreateObjectAccessURL(ctx context.Context, request *CreateObjectAccessURLRequest) (*CreateObjectAccessURLResponse, error) {
 	response, err := c.client.CreateObjectAccessURL(ctx, toWireCreateObjectAccessURLRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

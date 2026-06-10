@@ -154,7 +154,7 @@ def from_wire_validate_external_token_request(value: Any) -> ValidateExternalTok
     )
 
 
-class AuthenticationClient:
+class Authentication:
     """Client for the gestalt.provider.v1.Authentication service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

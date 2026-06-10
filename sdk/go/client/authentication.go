@@ -187,18 +187,18 @@ func fromWireValidateExternalTokenRequest(value *proto.ValidateExternalTokenRequ
 	return out
 }
 
-// AuthenticationClient is the generated client for gestalt.provider.v1.Authentication.
+// Authentication is the generated client for gestalt.provider.v1.Authentication.
 // Every transport error is converted to *GestaltError.
-type AuthenticationClient struct {
+type Authentication struct {
 	client proto.AuthenticationClient
 }
 
-// NewAuthenticationClient creates a AuthenticationClient over an injected gRPC connection.
-func NewAuthenticationClient(conn grpc.ClientConnInterface) *AuthenticationClient {
-	return &AuthenticationClient{client: proto.NewAuthenticationClient(conn)}
+// NewAuthentication creates a Authentication client over an injected gRPC connection.
+func NewAuthentication(conn grpc.ClientConnInterface) *Authentication {
+	return &Authentication{client: proto.NewAuthenticationClient(conn)}
 }
 
-func (c *AuthenticationClient) BeginLogin(ctx context.Context, request *BeginLoginRequest) (*BeginLoginResponse, error) {
+func (c *Authentication) BeginLogin(ctx context.Context, request *BeginLoginRequest) (*BeginLoginResponse, error) {
 	response, err := c.client.BeginLogin(ctx, toWireBeginLoginRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -206,7 +206,7 @@ func (c *AuthenticationClient) BeginLogin(ctx context.Context, request *BeginLog
 	return fromWireBeginLoginResponse(response), nil
 }
 
-func (c *AuthenticationClient) CompleteLogin(ctx context.Context, request *CompleteLoginRequest) (*AuthenticatedUser, error) {
+func (c *Authentication) CompleteLogin(ctx context.Context, request *CompleteLoginRequest) (*AuthenticatedUser, error) {
 	response, err := c.client.CompleteLogin(ctx, toWireCompleteLoginRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -214,7 +214,7 @@ func (c *AuthenticationClient) CompleteLogin(ctx context.Context, request *Compl
 	return fromWireAuthenticatedUser(response), nil
 }
 
-func (c *AuthenticationClient) ValidateExternalToken(ctx context.Context, request *ValidateExternalTokenRequest) (*AuthenticatedUser, error) {
+func (c *Authentication) ValidateExternalToken(ctx context.Context, request *ValidateExternalTokenRequest) (*AuthenticatedUser, error) {
 	response, err := c.client.ValidateExternalToken(ctx, toWireValidateExternalTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -222,7 +222,7 @@ func (c *AuthenticationClient) ValidateExternalToken(ctx context.Context, reques
 	return fromWireAuthenticatedUser(response), nil
 }
 
-func (c *AuthenticationClient) GetSessionSettings(ctx context.Context) (*AuthSessionSettings, error) {
+func (c *Authentication) GetSessionSettings(ctx context.Context) (*AuthSessionSettings, error) {
 	response, err := c.client.GetSessionSettings(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)

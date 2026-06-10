@@ -5,7 +5,7 @@ import { createClient } from "@connectrpc/connect";
 import type { Client, Transport } from "@connectrpc/connect";
 
 import * as wire from "./internal/gen/v1/runtime_provider_pb.ts";
-import { type AgentWorkspace, type PreparedAgentWorkspace, fromWireAgentWorkspace, fromWirePreparedAgentWorkspace, toWireAgentWorkspace, toWirePreparedAgentWorkspace } from "./agent_client.ts";
+import { type AgentWorkspace, type PreparedAgentWorkspace, fromWireAgentWorkspace, fromWirePreparedAgentWorkspace, toWireAgentWorkspace, toWirePreparedAgentWorkspace } from "./agent.ts";
 import { callUnary, fromWireTimestamp, toWireTimestamp } from "./rpc_support.ts";
 
 export const RuntimeEgressMode = {
@@ -397,7 +397,7 @@ export function fromWireStopRuntimeSessionRequest(value: wire.StopRuntimeSession
   };
 }
 
-export class RuntimeClient {
+export class Runtime {
   private readonly client: Client<typeof wire.Runtime>;
 
   constructor(transport: Transport) {
@@ -444,7 +444,7 @@ export class RuntimeClient {
 
 }
 
-export class RuntimeLogHostClient {
+export class RuntimeLogHost {
   private readonly client: Client<typeof wire.RuntimeLogHost>;
 
   constructor(transport: Transport) {

@@ -825,7 +825,7 @@ def from_wire_subject_set_type(value: Any) -> SubjectSetType:
     )
 
 
-class AuthorizationClient:
+class Authorization:
     """Client for the gestalt.provider.v1.Authorization service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

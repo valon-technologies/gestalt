@@ -194,7 +194,7 @@ fn workflow_steps_round_trip_current_step_shapes() -> gestalt::Result<()> {
             .and_then(|when| when.value.as_ref())
             .and_then(|value| value.kind.as_ref())
             .and_then(|kind| match kind {
-                gestalt::workflow::workflow_value::Kind::StepOutput(source) => {
+                gestalt::workflow_provider::workflow_value::Kind::StepOutput(source) => {
                     Some(source.path.as_str())
                 }
                 _ => None,

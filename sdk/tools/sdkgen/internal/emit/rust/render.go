@@ -375,11 +375,11 @@ func (r *renderer) renderClient(svc *model.Service) {
 	wireType := wireClientType(svc)
 
 	fmt.Fprintf(&r.body, "/// Client for the `%s` service.\n", svc.FullName)
-	fmt.Fprintf(&r.body, "pub struct %sClient {\n", name)
+	fmt.Fprintf(&r.body, "pub struct %s {\n", name)
 	fmt.Fprintf(&r.body, "    inner: v1::%s::%s<tonic::transport::Channel>,\n", module, wireType)
 	r.body.WriteString("}\n\n")
 
-	fmt.Fprintf(&r.body, "impl %sClient {\n", name)
+	fmt.Fprintf(&r.body, "impl %s {\n", name)
 	r.body.WriteString("    /// Creates a client over an established channel.\n")
 	r.body.WriteString("    pub fn new(channel: tonic::transport::Channel) -> Self {\n")
 	r.body.WriteString("        Self {\n")
@@ -486,7 +486,7 @@ func (r *renderer) assemble() string {
 	sort.Strings(crossBases)
 	for _, base := range crossBases {
 		names := sortedKeys(r.features.cross[base])
-		uses = append(uses, fmt.Sprintf("use crate::%s_client::{%s};", base, strings.Join(names, ", ")))
+		uses = append(uses, fmt.Sprintf("use crate::%s::{%s};", base, strings.Join(names, ", ")))
 	}
 	if len(r.features.support) > 0 {
 		uses = append(uses, fmt.Sprintf("use crate::rpc_support::{%s};", strings.Join(sortedKeys(r.features.support), ", ")))

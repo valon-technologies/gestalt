@@ -7,7 +7,7 @@ import {
   decodeGraphQLResult,
   operationResult,
 } from "./app-decode.ts";
-import type { ConnectionMode } from "./app.ts";
+import type { ConnectionMode } from "./providers/app.ts";
 import {
   stringListsFromProto,
   structFromObject,

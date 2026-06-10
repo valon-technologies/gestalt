@@ -1467,7 +1467,7 @@ def from_wire_update_agent_provider_session_request(value: Any) -> UpdateAgentPr
     )
 
 
-class AgentClient:
+class Agent:
     """Client for the gestalt.provider.v1.Agent service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

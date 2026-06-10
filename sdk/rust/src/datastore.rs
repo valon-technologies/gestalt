@@ -1526,11 +1526,11 @@ fn from_wire_typed_value_kind(value: v1::typed_value::Kind) -> TypedValueKind {
 }
 
 /// Client for the `gestalt.provider.v1.IndexedDB` service.
-pub struct IndexedDBClient {
+pub struct IndexedDB {
     inner: v1::indexed_db_client::IndexedDbClient<tonic::transport::Channel>,
 }
 
-impl IndexedDBClient {
+impl IndexedDB {
     /// Creates a client over an established channel.
     pub fn new(channel: tonic::transport::Channel) -> Self {
         Self {

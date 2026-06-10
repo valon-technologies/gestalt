@@ -136,7 +136,7 @@ export function fromWireValidateExternalTokenRequest(value: wire.ValidateExterna
   };
 }
 
-export class AuthenticationClient {
+export class Authentication {
   private readonly client: Client<typeof wire.Authentication>;
 
   constructor(transport: Transport) {

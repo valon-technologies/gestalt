@@ -44,7 +44,7 @@ import type {
   AgentToolRef,
   AgentTurnOutput,
   AgentTurnDisplay,
-} from "./agent.ts";
+} from "./providers/agent.ts";
 import type { Subject, SubjectInput, SubjectPermission } from "./api.ts";
 
 export function agentTurnDisplayFromProto(

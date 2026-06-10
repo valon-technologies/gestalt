@@ -376,18 +376,18 @@ func fromWireCacheTouchResponse(value *proto.CacheTouchResponse) *CacheTouchResp
 	return out
 }
 
-// CacheClient is the generated client for gestalt.provider.v1.Cache.
+// Cache is the generated client for gestalt.provider.v1.Cache.
 // Every transport error is converted to *GestaltError.
-type CacheClient struct {
+type Cache struct {
 	client proto.CacheClient
 }
 
-// NewCacheClient creates a CacheClient over an injected gRPC connection.
-func NewCacheClient(conn grpc.ClientConnInterface) *CacheClient {
-	return &CacheClient{client: proto.NewCacheClient(conn)}
+// NewCache creates a Cache client over an injected gRPC connection.
+func NewCache(conn grpc.ClientConnInterface) *Cache {
+	return &Cache{client: proto.NewCacheClient(conn)}
 }
 
-func (c *CacheClient) Get(ctx context.Context, request *CacheGetRequest) (*CacheGetResponse, error) {
+func (c *Cache) Get(ctx context.Context, request *CacheGetRequest) (*CacheGetResponse, error) {
 	response, err := c.client.Get(ctx, toWireCacheGetRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -395,7 +395,7 @@ func (c *CacheClient) Get(ctx context.Context, request *CacheGetRequest) (*Cache
 	return fromWireCacheGetResponse(response), nil
 }
 
-func (c *CacheClient) GetMany(ctx context.Context, request *CacheGetManyRequest) (*CacheGetManyResponse, error) {
+func (c *Cache) GetMany(ctx context.Context, request *CacheGetManyRequest) (*CacheGetManyResponse, error) {
 	response, err := c.client.GetMany(ctx, toWireCacheGetManyRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -403,21 +403,21 @@ func (c *CacheClient) GetMany(ctx context.Context, request *CacheGetManyRequest)
 	return fromWireCacheGetManyResponse(response), nil
 }
 
-func (c *CacheClient) Set(ctx context.Context, request *CacheSetRequest) error {
+func (c *Cache) Set(ctx context.Context, request *CacheSetRequest) error {
 	if _, err := c.client.Set(ctx, toWireCacheSetRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *CacheClient) SetMany(ctx context.Context, request *CacheSetManyRequest) error {
+func (c *Cache) SetMany(ctx context.Context, request *CacheSetManyRequest) error {
 	if _, err := c.client.SetMany(ctx, toWireCacheSetManyRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *CacheClient) Delete(ctx context.Context, request *CacheDeleteRequest) (*CacheDeleteResponse, error) {
+func (c *Cache) Delete(ctx context.Context, request *CacheDeleteRequest) (*CacheDeleteResponse, error) {
 	response, err := c.client.Delete(ctx, toWireCacheDeleteRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -425,7 +425,7 @@ func (c *CacheClient) Delete(ctx context.Context, request *CacheDeleteRequest) (
 	return fromWireCacheDeleteResponse(response), nil
 }
 
-func (c *CacheClient) DeleteMany(ctx context.Context, request *CacheDeleteManyRequest) (*CacheDeleteManyResponse, error) {
+func (c *Cache) DeleteMany(ctx context.Context, request *CacheDeleteManyRequest) (*CacheDeleteManyResponse, error) {
 	response, err := c.client.DeleteMany(ctx, toWireCacheDeleteManyRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -433,7 +433,7 @@ func (c *CacheClient) DeleteMany(ctx context.Context, request *CacheDeleteManyRe
 	return fromWireCacheDeleteManyResponse(response), nil
 }
 
-func (c *CacheClient) Touch(ctx context.Context, request *CacheTouchRequest) (*CacheTouchResponse, error) {
+func (c *Cache) Touch(ctx context.Context, request *CacheTouchRequest) (*CacheTouchResponse, error) {
 	response, err := c.client.Touch(ctx, toWireCacheTouchRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

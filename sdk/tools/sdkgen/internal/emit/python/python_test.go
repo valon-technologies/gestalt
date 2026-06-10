@@ -69,7 +69,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 		`JsonValue = bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None`,
 	)
 	assertContains(t, files, "cache.py",
-		"class CacheClient:",
+		"class Cache:",
 		"def __init__(self, channel: grpc.Channel) -> None:",
 		"ttl: datetime.timedelta | None = None",
 		"deleted: int = 0",

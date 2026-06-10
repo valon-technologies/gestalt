@@ -111,12 +111,12 @@ export {
   type CacheEntry,
   type CacheProviderOptions,
   type CacheSetOptions,
-} from "../../../../src/cache.ts";
+} from "../../../../src/providers/cache.ts";
 export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
-} from "../../../../src/secrets.ts";
+} from "../../../../src/providers/secrets.ts";
 export {
   defineApp,
   isAppProvider,
@@ -129,7 +129,7 @@ export {
   type AppDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,
-} from "../../../../src/app.ts";
+} from "../../../../src/providers/app.ts";
 export {
   isProviderBase,
   ProviderBase,
@@ -215,7 +215,7 @@ export {
   type S3Object,
   type S3ProviderOptions,
   type WriteOptions,
-} from "../../../../src/s3.ts";
+} from "../../../../src/providers/s3.ts";
 export {
   AgentExecutionStatus,
   AgentInteractionState,
@@ -263,5 +263,5 @@ export {
   type ResolveAgentProviderInteractionRequest,
   type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
-} from "../../../../src/agent.ts";
-export * from "../../../../src/workflow.ts";
+} from "../../../../src/providers/agent.ts";
+export * from "../../../../src/providers/workflow.ts";

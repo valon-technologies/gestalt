@@ -378,7 +378,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 	r.features.wireGrpc = true
 	r.features.anyType = true
 
-	fmt.Fprintf(&r.body, "class %sClient:\n", name)
+	fmt.Fprintf(&r.body, "class %s:\n", name)
 	fmt.Fprintf(&r.body, "    \"\"\"Client for the %s service.\"\"\"\n\n", svc.FullName)
 	r.body.WriteString("    def __init__(self, channel: grpc.Channel) -> None:\n")
 	fmt.Fprintf(&r.body, "        self._stub = _wire_grpc.%sStub(channel)\n\n", name)

@@ -157,7 +157,7 @@ def from_wire_start_runtime_provider_response(value: Any) -> StartRuntimeProvide
     )
 
 
-class ProviderLifecycleClient:
+class ProviderLifecycle:
     """Client for the gestalt.provider.v1.ProviderLifecycle service."""
 
     def __init__(self, channel: grpc.Channel) -> None:

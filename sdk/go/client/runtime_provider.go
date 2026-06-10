@@ -548,18 +548,18 @@ func fromWireStopRuntimeSessionRequest(value *proto.StopRuntimeSessionRequest) *
 	return out
 }
 
-// RuntimeClient is the generated client for gestalt.provider.v1.Runtime.
+// Runtime is the generated client for gestalt.provider.v1.Runtime.
 // Every transport error is converted to *GestaltError.
-type RuntimeClient struct {
+type Runtime struct {
 	client proto.RuntimeClient
 }
 
-// NewRuntimeClient creates a RuntimeClient over an injected gRPC connection.
-func NewRuntimeClient(conn grpc.ClientConnInterface) *RuntimeClient {
-	return &RuntimeClient{client: proto.NewRuntimeClient(conn)}
+// NewRuntime creates a Runtime client over an injected gRPC connection.
+func NewRuntime(conn grpc.ClientConnInterface) *Runtime {
+	return &Runtime{client: proto.NewRuntimeClient(conn)}
 }
 
-func (c *RuntimeClient) GetSupport(ctx context.Context) (*RuntimeSupport, error) {
+func (c *Runtime) GetSupport(ctx context.Context) (*RuntimeSupport, error) {
 	response, err := c.client.GetSupport(ctx, &emptypb.Empty{})
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -567,7 +567,7 @@ func (c *RuntimeClient) GetSupport(ctx context.Context) (*RuntimeSupport, error)
 	return fromWireRuntimeSupport(response), nil
 }
 
-func (c *RuntimeClient) StartSession(ctx context.Context, request *StartRuntimeSessionRequest) (*RuntimeSession, error) {
+func (c *Runtime) StartSession(ctx context.Context, request *StartRuntimeSessionRequest) (*RuntimeSession, error) {
 	response, err := c.client.StartSession(ctx, toWireStartRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -575,7 +575,7 @@ func (c *RuntimeClient) StartSession(ctx context.Context, request *StartRuntimeS
 	return fromWireRuntimeSession(response), nil
 }
 
-func (c *RuntimeClient) GetSession(ctx context.Context, request *GetRuntimeSessionRequest) (*RuntimeSession, error) {
+func (c *Runtime) GetSession(ctx context.Context, request *GetRuntimeSessionRequest) (*RuntimeSession, error) {
 	response, err := c.client.GetSession(ctx, toWireGetRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -583,7 +583,7 @@ func (c *RuntimeClient) GetSession(ctx context.Context, request *GetRuntimeSessi
 	return fromWireRuntimeSession(response), nil
 }
 
-func (c *RuntimeClient) ListSessions(ctx context.Context, request *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
+func (c *Runtime) ListSessions(ctx context.Context, request *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
 	response, err := c.client.ListSessions(ctx, toWireListRuntimeSessionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -591,14 +591,14 @@ func (c *RuntimeClient) ListSessions(ctx context.Context, request *ListRuntimeSe
 	return fromWireListRuntimeSessionsResponse(response), nil
 }
 
-func (c *RuntimeClient) StopSession(ctx context.Context, request *StopRuntimeSessionRequest) error {
+func (c *Runtime) StopSession(ctx context.Context, request *StopRuntimeSessionRequest) error {
 	if _, err := c.client.StopSession(ctx, toWireStopRuntimeSessionRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *RuntimeClient) PrepareWorkspace(ctx context.Context, request *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error) {
+func (c *Runtime) PrepareWorkspace(ctx context.Context, request *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error) {
 	response, err := c.client.PrepareWorkspace(ctx, toWirePrepareRuntimeWorkspaceRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -606,14 +606,14 @@ func (c *RuntimeClient) PrepareWorkspace(ctx context.Context, request *PrepareRu
 	return fromWirePrepareRuntimeWorkspaceResponse(response), nil
 }
 
-func (c *RuntimeClient) RemoveWorkspace(ctx context.Context, request *RemoveRuntimeWorkspaceRequest) error {
+func (c *Runtime) RemoveWorkspace(ctx context.Context, request *RemoveRuntimeWorkspaceRequest) error {
 	if _, err := c.client.RemoveWorkspace(ctx, toWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
 }
 
-func (c *RuntimeClient) StartApp(ctx context.Context, request *StartHostedAppRequest) (*HostedApp, error) {
+func (c *Runtime) StartApp(ctx context.Context, request *StartHostedAppRequest) (*HostedApp, error) {
 	response, err := c.client.StartApp(ctx, toWireStartHostedAppRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -621,18 +621,18 @@ func (c *RuntimeClient) StartApp(ctx context.Context, request *StartHostedAppReq
 	return fromWireHostedApp(response), nil
 }
 
-// RuntimeLogHostClient is the generated client for gestalt.provider.v1.RuntimeLogHost.
+// RuntimeLogHost is the generated client for gestalt.provider.v1.RuntimeLogHost.
 // Every transport error is converted to *GestaltError.
-type RuntimeLogHostClient struct {
+type RuntimeLogHost struct {
 	client proto.RuntimeLogHostClient
 }
 
-// NewRuntimeLogHostClient creates a RuntimeLogHostClient over an injected gRPC connection.
-func NewRuntimeLogHostClient(conn grpc.ClientConnInterface) *RuntimeLogHostClient {
-	return &RuntimeLogHostClient{client: proto.NewRuntimeLogHostClient(conn)}
+// NewRuntimeLogHost creates a RuntimeLogHost client over an injected gRPC connection.
+func NewRuntimeLogHost(conn grpc.ClientConnInterface) *RuntimeLogHost {
+	return &RuntimeLogHost{client: proto.NewRuntimeLogHostClient(conn)}
 }
 
-func (c *RuntimeLogHostClient) AppendLogs(ctx context.Context, request *AppendRuntimeLogsRequest) (*AppendRuntimeLogsResponse, error) {
+func (c *RuntimeLogHost) AppendLogs(ctx context.Context, request *AppendRuntimeLogsRequest) (*AppendRuntimeLogsResponse, error) {
 	response, err := c.client.AppendLogs(ctx, toWireAppendRuntimeLogsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
