@@ -22,7 +22,8 @@ provider "google" {
 locals {
   www_domain                = "www.${var.domain}"
   docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
-  docs_cert_with_www_name   = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(local.www_domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
+  # GCP SSL certificate names must be <=63 chars and match [a-z]([-a-z0-9]*[a-z0-9])?
+  docs_cert_with_www_name = "${var.resource_prefix}-cert-with-www"
   github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
   sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
   sdk_api_docs_backend_name = "${var.resource_prefix}-sdk-api-docs-backend"
