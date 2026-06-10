@@ -276,11 +276,6 @@ func agentWorkflowOperationAllowed(scope agentturnscope.Scope, operation string)
 			return true
 		}
 	}
-	for i := range scope.Tools {
-		if workflowToolTargetMatches(scope.Tools[i].Target, operation) {
-			return true
-		}
-	}
 	return false
 }
 
@@ -345,11 +340,6 @@ func agentWorkflowAppStepAllowed(scope agentturnscope.Scope, target coreworkflow
 			return true
 		}
 	}
-	for i := range scope.Tools {
-		if scope.Tools[i].Target.Unavailable == nil && agentWorkflowToolTargetMatchesAppCall(scope.Tools[i].Target, target) {
-			return true
-		}
-	}
 	return false
 }
 
@@ -361,11 +351,6 @@ func agentWorkflowAppRefAllowed(scope agentturnscope.Scope, target coreagent.Too
 	}
 	for i := range scope.ListedTools {
 		if scope.ListedTools[i].Target.Unavailable == nil && agentWorkflowToolTargetMatchesToolRef(scope.ListedTools[i].Target, target) {
-			return true
-		}
-	}
-	for i := range scope.Tools {
-		if scope.Tools[i].Target.Unavailable == nil && agentWorkflowToolTargetMatchesToolRef(scope.Tools[i].Target, target) {
 			return true
 		}
 	}

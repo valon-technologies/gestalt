@@ -3893,11 +3893,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {
 		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnMetadata)
 	}
-	if len(turnReq.Tools) != 1 {
-		t.Fatalf("CreateTurn tools = %#v, want one resolved catalog tool", turnReq.Tools)
-	}
-	if ref := turnReq.Tools[0].GetRef(); ref.GetApp() != "roadmap" || ref.GetOperation() != "sync" {
-		t.Fatalf("CreateTurn tool ref = %#v, want roadmap.sync", ref)
+	if len(turnReq.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want none for catalog sessions", turnReq.Tools)
 	}
 }
 

@@ -816,9 +816,11 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if callerKind != "" && callerName != "" {
 		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
 	}
+	if len(req.GetTools()) > 0 {
+		return nil, fmt.Errorf("%w: turn-level resolved tools are not supported; configure session tools instead", invocation.ErrInvalidInvocation)
+	}
 	toolSource := coreagent.ToolSourceModeNone
 	var toolRefs []coreagent.ToolRef
-	var tools []coreagent.Tool
 	var listedTools []coreagent.ListedTool
 	toolRefsSet := true
 	if sessionScope, ok, err := m.sessionScopeForSession(ctx, p, ownedSession.providerName, ownedSession.session); err != nil {
@@ -826,7 +828,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	} else if ok {
 		toolSource = normalizeAgentToolSource(sessionScope.ToolSource)
 		toolRefs = append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...)
-		tools = append([]coreagent.Tool(nil), sessionScope.Tools...)
 		listedTools = append([]coreagent.ListedTool(nil), sessionScope.ListedTools...)
 	}
 	requestedOutput := agentOutputFromProto(req.GetOutput())
@@ -857,25 +858,12 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	default:
 		return nil, fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
 	}
-	switch toolSource {
-	case coreagent.ToolSourceModeCatalog:
-		if len(tools) == 0 {
-			tools, err = resolvedAgentToolsFromListedTools(listedTools)
-			if err != nil {
-				return nil, err
-			}
-		}
-	case coreagent.ToolSourceModeNone:
-		tools = nil
+	if toolSource == coreagent.ToolSourceModeNone {
 		listedTools = nil
-	}
-	providerTools, err := resolvedAgentToolsToProto(tools)
-	if err != nil {
-		return nil, err
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	if err := m.storeTurnScope(ctx, req.GetContext(), p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, tools, listedTools, toolSource); err != nil {
+	if err := m.storeTurnScope(ctx, req.GetContext(), p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, listedTools, toolSource); err != nil {
 		return nil, err
 	}
 	scopeCommitted := false
@@ -890,7 +878,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	providerReq.ProviderName = ownedSession.providerName
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.Model = strings.TrimSpace(req.GetModel())
-	providerReq.Tools = providerTools
 	providerReq.CreatedBySubjectId = agentSubjectIDFromPrincipal(p)
 	providerReq.ExecutionRef = turnID
 	providerReq.Subject = agentSubjectToProto(agentSubjectFromPrincipal(p))
@@ -1600,7 +1587,7 @@ func agentProviderReturnedNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func (m *Manager) storeTurnScope(ctx context.Context, reqContext *proto.RequestContext, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, listedTools []coreagent.ListedTool, toolSource coreagent.ToolSourceMode) error {
+func (m *Manager) storeTurnScope(ctx context.Context, reqContext *proto.RequestContext, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, listedTools []coreagent.ListedTool, toolSource coreagent.ToolSourceMode) error {
 	if m == nil || m.turnScopes == nil {
 		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
 	}
@@ -1628,7 +1615,6 @@ func (m *Manager) storeTurnScope(ctx context.Context, reqContext *proto.RequestC
 		Permissions:         permissions,
 		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
 		ToolRefsSet:         toolRefsSet,
-		Tools:               append([]coreagent.Tool(nil), tools...),
 		ListedTools:         append([]coreagent.ListedTool(nil), listedTools...),
 		ToolSource:          toolSource,
 		Connections:         connections,
@@ -2759,77 +2745,6 @@ func listedAgentToolsToProto(tools []coreagent.ListedTool) []*proto.ListedAgentT
 		out = append(out, listedAgentToolToProto(tools[i]))
 	}
 	return out
-}
-
-func resolvedAgentToolsFromListedTools(tools []coreagent.ListedTool) ([]coreagent.Tool, error) {
-	if len(tools) == 0 {
-		return nil, nil
-	}
-	out := make([]coreagent.Tool, 0, len(tools))
-	for i := range tools {
-		tool := tools[i]
-		if tool.Target.Unavailable != nil {
-			continue
-		}
-		parametersSchema := agentToolPermissiveInputSchemaMap()
-		if raw := strings.TrimSpace(tool.InputSchemaJSON); raw != "" {
-			var decoded map[string]any
-			if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
-				return nil, fmt.Errorf("decode listed agent tool input schema: %w", err)
-			}
-			if len(decoded) > 0 {
-				parametersSchema = decoded
-			}
-		}
-		name := strings.TrimSpace(tool.MCPName)
-		if name == "" {
-			name = strings.TrimSpace(tool.Title)
-		}
-		if name == "" {
-			name = strings.TrimSpace(tool.ToolID)
-		}
-		out = append(out, coreagent.Tool{
-			ID:               strings.TrimSpace(tool.ToolID),
-			Name:             name,
-			Description:      strings.TrimSpace(tool.Description),
-			ParametersSchema: parametersSchema,
-			Target:           tool.Target,
-			Hidden:           tool.Hidden,
-		})
-	}
-	return out, nil
-}
-
-func resolvedAgentToolsToProto(tools []coreagent.Tool) ([]*proto.ResolvedAgentTool, error) {
-	if len(tools) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.ResolvedAgentTool, 0, len(tools))
-	for i := range tools {
-		if tools[i].Target.Unavailable != nil {
-			continue
-		}
-		tool, err := resolvedAgentToolToProto(tools[i])
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, tool)
-	}
-	return out, nil
-}
-
-func resolvedAgentToolToProto(tool coreagent.Tool) (*proto.ResolvedAgentTool, error) {
-	parametersSchema, err := protoutil.StructFromMap(tool.ParametersSchema)
-	if err != nil {
-		return nil, fmt.Errorf("agent tool parameters schema: %w", err)
-	}
-	return &proto.ResolvedAgentTool{
-		Id:               strings.TrimSpace(tool.ID),
-		Name:             strings.TrimSpace(tool.Name),
-		Description:      strings.TrimSpace(tool.Description),
-		ParametersSchema: parametersSchema,
-		Ref:              agentwire.ToolRefToProto(agentToolRefFromTarget(tool.Target)),
-	}, nil
 }
 
 func listedAgentToolToProto(tool coreagent.ListedTool) *proto.ListedAgentTool {
