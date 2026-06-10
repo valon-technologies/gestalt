@@ -20,10 +20,9 @@ provider "google" {
 }
 
 locals {
-  www_domain                = "www.${var.domain}"
-  docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
+  www_domain = "www.${var.domain}"
   # GCP SSL certificate names must be <=63 chars and match [a-z]([-a-z0-9]*[a-z0-9])?
-  docs_cert_with_www_name = "${var.resource_prefix}-cert-with-www"
+  docs_cert_with_www_name   = "${var.resource_prefix}-cert-with-www"
   github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
   sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
   sdk_api_docs_backend_name = "${var.resource_prefix}-sdk-api-docs-backend"
@@ -154,18 +153,6 @@ resource "google_compute_url_map" "docs" {
   }
 }
 
-resource "google_compute_managed_ssl_certificate" "docs" {
-  name = local.docs_cert_name
-
-  managed {
-    domains = [var.domain, var.registry_domain]
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
 resource "google_compute_managed_ssl_certificate" "docs_with_www" {
   name = local.docs_cert_with_www_name
 
@@ -181,10 +168,7 @@ resource "google_compute_managed_ssl_certificate" "docs_with_www" {
 resource "google_compute_target_https_proxy" "docs" {
   name    = "${var.resource_prefix}-https-proxy"
   url_map = google_compute_url_map.docs.id
-  ssl_certificates = [
-    google_compute_managed_ssl_certificate.docs.id,
-    google_compute_managed_ssl_certificate.docs_with_www.id,
-  ]
+  ssl_certificates = [google_compute_managed_ssl_certificate.docs_with_www.id]
 }
 
 resource "google_compute_global_address" "docs" {
