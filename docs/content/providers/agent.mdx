@@ -174,7 +174,7 @@ You can set the budget on these surfaces:
 
 - **HTTP/JSON:** `timeoutSeconds` on `POST /api/v1/agent/sessions/{sessionID}/turns`
 - **SDK:** `TimeoutSeconds` (Go), `timeout_seconds` (Python), `timeout_seconds`
-  (Rust), or `timeoutSeconds` (TypeScript) on `AgentCreateTurn`
+  (Rust), or `timeoutSeconds` (TypeScript) on the create-turn request
 - **CLI:** `--timeout-seconds` on `gestalt agent`, `gestalt agent resume`, and
   `gestalt agent turns create` for server-backed sessions (`--cloud`). Local
   `gestalt agent` does not accept `--timeout-seconds`; use `--cloud` when you need
@@ -253,26 +253,25 @@ Provider code can invoke agents through the SDK `Agent` capability:
     import (
         "context"
 
-        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        "github.com/valon-technologies/gestalt/sdk/go/client"
     )
 
-    func summarize(ctx context.Context, req gestalt.Request) (string, error) {
-        agents, err := req.Agent()
+    func summarize(ctx context.Context) (string, error) {
+        agents, err := client.ConnectAgent(ctx, "")
         if err != nil {
             return "", err
         }
-        defer agents.Close()
 
-        session, err := agents.CreateSession(ctx, gestalt.AgentCreateSession{
+        session, err := agents.CreateSessionRaw(ctx, &client.CreateAgentProviderSessionRequest{
             ClientRef: "roadmap-risk",
         })
         if err != nil {
             return "", err
         }
 
-        turn, err := agents.CreateTurn(ctx, gestalt.AgentCreateTurn{
-            SessionID: session.GetId(),
-            Messages: []gestalt.AgentMessage{{
+        turn, err := agents.CreateTurnRaw(ctx, &client.CreateAgentProviderTurnRequest{
+            SessionId: session.Id,
+            Messages: []*client.AgentMessage{{
                 Role: "user",
                 Text: "Summarize the latest roadmap risk.",
             }},
@@ -280,57 +279,57 @@ Provider code can invoke agents through the SDK `Agent` capability:
         if err != nil {
             return "", err
         }
-        return turn.GetId(), nil
+        return turn.Id, nil
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import AgentCreateSession, AgentCreateTurn
     from gestalt import AgentMessage, Request
 
     def summarize(request: Request) -> str:
-        with request.agent() as agents:
-            session = agents.create_session(
-                AgentCreateSession(client_ref="roadmap-risk")
-            )
-            turn = agents.create_turn(
-                AgentCreateTurn(
-                    session_id=session.id,
-                    messages=[
-                        AgentMessage(
-                            role="user",
-                            text="Summarize the latest roadmap risk.",
-                        )
-                    ],
+        agents = request.agent()
+        session = agents.create_session(client_ref="roadmap-risk")
+        turn = agents.create_turn(
+            session_id=session.id,
+            messages=[
+                AgentMessage(
+                    role="user",
+                    text="Summarize the latest roadmap risk.",
                 )
-            )
-            return turn.id
+            ],
+        )
+        return turn.id
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt::{
-        AgentCreateSession, AgentCreateTurn,
-        AgentMessage, Request,
+    use gestalt::Agent;
+    use gestalt::agent::{
+        AgentMessage, CreateAgentProviderSessionRequest,
+        CreateAgentProviderTurnRequest,
     };
 
-    async fn summarize(req: &Request) -> Result<String, Box<dyn std::error::Error>> {
-        let mut agents = req.agent().await?;
-        let session = agents.create_session(AgentCreateSession {
-            client_ref: "roadmap-risk".into(),
-            ..Default::default()
-        }).await?;
-
-        let turn = agents.create_turn(AgentCreateTurn {
-            session_id: session.id,
-            messages: vec![AgentMessage {
-                role: "user".into(),
-                text: "Summarize the latest roadmap risk.".into(),
+    async fn summarize() -> Result<String, Box<dyn std::error::Error>> {
+        let mut agents = Agent::connect().await?;
+        let session = agents
+            .create_session_raw(CreateAgentProviderSessionRequest {
+                client_ref: "roadmap-risk".into(),
                 ..Default::default()
-            }],
-            ..Default::default()
-        }).await?;
+            })
+            .await?;
+
+        let turn = agents
+            .create_turn_raw(CreateAgentProviderTurnRequest {
+                session_id: session.id,
+                messages: vec![AgentMessage {
+                    role: "user".into(),
+                    text: "Summarize the latest roadmap risk.".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+            .await?;
 
         Ok(turn.id)
     }
@@ -338,21 +337,36 @@ Provider code can invoke agents through the SDK `Agent` capability:
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { Agent, type Request } from "@valon-technologies/gestalt";
+    import { Agent } from "@valon-technologies/gestalt";
 
-    export async function summarize(request: Request) {
-      const agents = new Agent(request);
-      const session = await agents.createSession({
+    export async function summarize() {
+      const agents = Agent.connect();
+      const session = await agents.createSessionRaw({
+        idempotencyKey: "",
+        model: "",
         clientRef: "roadmap-risk",
+        metadata: {},
+        createdBySubjectId: "",
+        providerName: "",
       });
-      const turn = await agents.createTurn({
+      const turn = await agents.createTurnRaw({
+        turnId: "",
         sessionId: session.id,
+        idempotencyKey: "",
+        model: "",
         messages: [
           {
             role: "user",
             text: "Summarize the latest roadmap risk.",
+            parts: [],
+            metadata: {},
           },
         ],
+        metadata: {},
+        createdBySubjectId: "",
+        executionRef: "",
+        timeoutSeconds: 0,
+        providerName: "",
       });
       return turn.id;
     }

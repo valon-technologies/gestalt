@@ -16,16 +16,16 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _agent as _agent_native
-from . import _authentication as _auth_native
-from . import _authorization as _authorization_native
 from . import _runtime_provider as _runtime_provider_native
-from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
 from ._api import Access, Credential, Error, Host, Request, Subject, SubjectPermission
 from ._app import App, _module_app
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
+from ._codec import authentication as _authentication_codec
+from ._codec import authorization as _authorization_codec
+from ._codec import s3 as _s3_codec
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE, JSON_CONTENT_TYPE
@@ -44,6 +44,9 @@ from ._providers import (
     ProviderKind,
     ProviderMetadata,
     RuntimeProvider,
+    S3InvalidRangeError,
+    S3NotFoundError,
+    S3PreconditionFailedError,
     S3Provider,
     SecretsProvider,
     SessionTTLProvider,
@@ -52,6 +55,7 @@ from ._providers import (
     WorkflowProvider,
 )
 from ._serialization import json_body
+from .s3 import ReadObjectChunk, ReadObjectChunkData, ReadObjectChunkMeta
 
 json_format: Any = cast(Any, None)
 
@@ -547,27 +551,26 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
 
         @_s3_grpc_handler("s3 head object")
         def HeadObject(self, request: Any, context: Any) -> Any:
-            meta = s3_provider.head_object(
-                _s3_native._object_ref_from_proto(request.ref)
+            result = s3_provider.head_object(
+                _s3_codec.from_wire_head_object_request(request)
             )
-            return _s3_native.pb.HeadObjectResponse(
-                meta=_s3_native._object_meta_to_proto(meta)
-            )
+            return _s3_codec.to_wire_head_object_response(result)
 
         def ReadObject(self, request: Any, context: Any) -> Any:
             body: Any = None
             try:
                 result = s3_provider.read_object(
-                    _s3_native._object_ref_from_proto(request.ref),
-                    _s3_native._read_options_from_proto(request),
+                    _s3_codec.from_wire_read_object_request(request)
                 )
                 body = result.body
-                yield _s3_native.pb.ReadObjectChunk(
-                    meta=_s3_native._object_meta_to_proto(result.meta)
+                yield _s3_codec.to_wire_read_object_chunk(
+                    ReadObjectChunk(result=ReadObjectChunkMeta(value=result.meta))
                 )
-                for chunk in _s3_native._body_chunks(body):
+                for chunk in _s3_body_chunks(body):
                     if chunk:
-                        yield _s3_native.pb.ReadObjectChunk(data=chunk)
+                        yield _s3_codec.to_wire_read_object_chunk(
+                            ReadObjectChunk(result=ReadObjectChunkData(value=chunk))
+                        )
             except Exception as error:
                 _abort_s3_error(context, "s3 read object", error)
             finally:
@@ -589,48 +592,39 @@ def _s3_servicer(*, provider: AppProvider) -> Any:
                     "first message must be WriteObjectOpen",
                 )
 
-            open_request = first.open
+            open_request = _s3_codec.from_wire_write_object_open(first.open)
             body = _S3WriteBodyChunks(request_iterator)
-            meta = s3_provider.write_object(
-                _s3_native._object_ref_from_proto(open_request.ref),
-                body,
-                _s3_native._write_options_from_proto(open_request),
-            )
+            result = s3_provider.write_object(open_request, body)
             body.drain()
-            return _s3_native.pb.WriteObjectResponse(
-                meta=_s3_native._object_meta_to_proto(meta)
-            )
+            return _s3_codec.to_wire_write_object_response(result)
 
         @_s3_grpc_handler("s3 delete object")
         def DeleteObject(self, request: Any, context: Any) -> Any:
-            s3_provider.delete_object(_s3_native._object_ref_from_proto(request.ref))
+            s3_provider.delete_object(
+                _s3_codec.from_wire_delete_object_request(request)
+            )
             return empty_pb2.Empty()
 
         @_s3_grpc_handler("s3 list objects")
         def ListObjects(self, request: Any, context: Any) -> Any:
             page = s3_provider.list_objects(
-                _s3_native._list_options_from_proto(request)
+                _s3_codec.from_wire_list_objects_request(request)
             )
-            return _s3_native._list_page_to_proto(page)
+            return _s3_codec.to_wire_list_objects_response(page)
 
         @_s3_grpc_handler("s3 copy object")
         def CopyObject(self, request: Any, context: Any) -> Any:
-            meta = s3_provider.copy_object(
-                _s3_native._object_ref_from_proto(request.source),
-                _s3_native._object_ref_from_proto(request.destination),
-                _s3_native._copy_options_from_proto(request),
+            result = s3_provider.copy_object(
+                _s3_codec.from_wire_copy_object_request(request)
             )
-            return _s3_native.pb.CopyObjectResponse(
-                meta=_s3_native._object_meta_to_proto(meta)
-            )
+            return _s3_codec.to_wire_copy_object_response(result)
 
         @_s3_grpc_handler("s3 presign object")
         def PresignObject(self, request: Any, context: Any) -> Any:
             result = s3_provider.presign_object(
-                _s3_native._object_ref_from_proto(request.ref),
-                _s3_native._presign_options_from_proto(request),
+                _s3_codec.from_wire_presign_object_request(request)
             )
-            return _s3_native._presign_result_to_proto(result)
+            return _s3_codec.to_wire_presign_object_response(result)
 
     return S3Servicer()
 
@@ -654,14 +648,14 @@ def _abort_s3_error(context: Any, label: str, error: Exception) -> None:
         raise error
     if isinstance(error, Error):
         return context.abort(_grpc_status_from_http_status(error.status), error.message)
-    if isinstance(error, _s3_native.S3NotFoundError):
+    if isinstance(error, S3NotFoundError):
         return context.abort(grpc.StatusCode.NOT_FOUND, str(error) or "s3: not found")
-    if isinstance(error, _s3_native.S3PreconditionFailedError):
+    if isinstance(error, S3PreconditionFailedError):
         return context.abort(
             grpc.StatusCode.FAILED_PRECONDITION,
             str(error) or "s3: precondition failed",
         )
-    if isinstance(error, _s3_native.S3InvalidRangeError):
+    if isinstance(error, S3InvalidRangeError):
         return context.abort(
             grpc.StatusCode.OUT_OF_RANGE,
             str(error) or "s3: invalid range",
@@ -701,6 +695,40 @@ def _close_s3_body(body: Any) -> None:
             close()
         except Exception:
             pass
+
+
+_S3_READ_CHUNK_SIZE = 64 * 1024
+
+
+def _s3_body_chunks(body: Any) -> Any:
+    if body is None:
+        return
+    if isinstance(body, (bytes, bytearray, memoryview)):
+        data = bytes(body)
+        for start in range(0, len(data), _S3_READ_CHUNK_SIZE):
+            yield data[start : start + _S3_READ_CHUNK_SIZE]
+        return
+    reader = getattr(body, "read", None)
+    if callable(reader):
+        while True:
+            chunk = reader(_S3_READ_CHUNK_SIZE)
+            if chunk in (b"", None):
+                return
+            yield _s3_ensure_bytes(chunk)
+    for chunk in body:
+        piece = _s3_ensure_bytes(chunk)
+        if piece:
+            yield piece
+
+
+def _s3_ensure_bytes(value: Any) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    raise TypeError("s3: body chunks must be bytes")
 
 
 def _agent_runtime_app(provider: AgentProvider) -> AppProviderAdapter:
@@ -1521,26 +1549,26 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
             response = auth_provider.begin_login(
-                _auth_native.begin_login_request_from_proto(request)
+                _authentication_codec.from_wire_begin_login_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _auth_native.begin_login_response_to_proto(response)
+            return _authentication_codec.to_wire_begin_login_response(response)
 
         @_grpc_handler("complete login")
         def CompleteLogin(self, request: Any, context: Any) -> Any:
             user = auth_provider.complete_login(
-                _auth_native.complete_login_request_from_proto(request)
+                _authentication_codec.from_wire_complete_login_request(request)
             )
             if user is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil user",
                 )
-            return _auth_native.authenticated_user_to_proto(user)
+            return _authentication_codec.to_wire_authenticated_user(user)
 
         def ValidateExternalToken(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, ExternalTokenValidator):
@@ -1561,7 +1589,7 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.NOT_FOUND,
                     "token not recognized",
                 )
-            return _auth_native.authenticated_user_to_proto(user)
+            return _authentication_codec.to_wire_authenticated_user(user)
 
         def GetSessionSettings(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, SessionTTLProvider):
@@ -1586,62 +1614,66 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
         @_grpc_handler("authorization check access")
         def CheckAccess(self, request: Any, context: Any) -> Any:
             response = authorization_provider.check_access(
-                _authorization_native.check_access_request_from_proto(request)
+                _authorization_codec.from_wire_check_access_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.check_access_response_to_proto(response)
+            return _authorization_codec.to_wire_check_access_response(response)
 
         @_grpc_handler("authorization check access many")
         def CheckAccessMany(self, request: Any, context: Any) -> Any:
             response = authorization_provider.check_access_many(
-                _authorization_native.check_access_many_request_from_proto(request)
+                _authorization_codec.from_wire_check_access_many_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.check_access_many_response_to_proto(response)
+            return _authorization_codec.to_wire_check_access_many_response(response)
 
         @_grpc_handler("authorization list relationships")
         def ListRelationships(self, request: Any, context: Any) -> Any:
             response = authorization_provider.list_relationships(
-                _authorization_native.list_relationships_request_from_proto(request)
+                _authorization_codec.from_wire_list_relationships_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.list_relationships_response_to_proto(response)
+            return _authorization_codec.to_wire_list_relationships_response(response)
 
         @_grpc_handler("authorization add relationship")
         def AddRelationship(self, request: Any, context: Any) -> Any:
             response = authorization_provider.add_relationship(
-                _authorization_native.add_relationship_request_from_proto(request)
+                _authorization_codec.from_wire_add_relationship_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.add_relationship_response_to_proto(response)
+            return _authorization_codec.to_wire_add_relationship_response(response)
 
         @_grpc_handler("authorization delete relationship")
         def DeleteRelationship(self, request: Any, _context: Any) -> Any:
             response = authorization_provider.delete_relationship(
-                _authorization_native.delete_relationship_request_from_proto(request)
+                _authorization_codec.from_wire_delete_relationship_request(request)
             )
-            return _authorization_native.delete_relationship_response_to_proto(response)
+            if response is None:
+                from .authorization import DeleteRelationshipResponse
+
+                response = DeleteRelationshipResponse()
+            return _authorization_codec.to_wire_delete_relationship_response(response)
 
         @_grpc_handler("authorization set authorization state")
         def SetAuthorizationState(self, request: Any, context: Any) -> Any:
             response = authorization_provider.set_authorization_state(
-                _authorization_native.set_authorization_state_request_from_proto(
+                _authorization_codec.from_wire_set_authorization_state_request(
                     request
                 )
             )
@@ -1650,7 +1682,7 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.set_authorization_state_response_to_proto(
+            return _authorization_codec.to_wire_set_authorization_state_response(
                 response
             )
 
@@ -1662,26 +1694,26 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.get_active_model_ref_response_to_proto(
+            return _authorization_codec.to_wire_get_active_model_ref_response(
                 response
             )
 
         @_grpc_handler("authorization set active model")
         def SetActiveModel(self, request: Any, context: Any) -> Any:
             response = authorization_provider.set_active_model(
-                _authorization_native.set_active_model_request_from_proto(request)
+                _authorization_codec.from_wire_set_active_model_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.set_active_model_response_to_proto(response)
+            return _authorization_codec.to_wire_set_active_model_response(response)
 
         @_grpc_handler("authorization list active model resource types")
         def ListActiveModelResourceTypes(self, request: Any, context: Any) -> Any:
             response = authorization_provider.list_active_model_resource_types(
-                _authorization_native.list_active_model_resource_types_request_from_proto(
+                _authorization_codec.from_wire_list_active_model_resource_types_request(
                     request
                 )
             )
@@ -1690,7 +1722,7 @@ def _authorization_servicer(*, provider: AppProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "authorization provider returned nil response",
                 )
-            return _authorization_native.list_active_model_resource_types_response_to_proto(
+            return _authorization_codec.to_wire_list_active_model_resource_types_response(
                 response
             )
 
@@ -1722,7 +1754,7 @@ def _secrets_servicer(*, provider: AppProvider) -> Any:
 
 def _cache_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
-    from ._cache import CacheEntry
+    from .cache import CacheSetEntry
 
     cache_provider = cast(CacheProvider, provider)
 
@@ -1763,7 +1795,7 @@ def _cache_servicer(*, provider: AppProvider) -> Any:
         def SetMany(self, request: Any, _context: Any) -> Any:
             cache_provider.set_many(
                 [
-                    CacheEntry(key=entry.key, value=bytes(entry.value))
+                    CacheSetEntry(key=entry.key, value=bytes(entry.value))
                     for entry in request.entries
                 ],
                 _duration_to_timedelta(request.ttl),

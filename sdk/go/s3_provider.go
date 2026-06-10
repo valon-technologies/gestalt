@@ -2,6 +2,25 @@ package gestalt
 
 import (
 	"context"
+
+	"github.com/valon-technologies/gestalt/sdk/go/s3"
+)
+
+// Native S3 types shared by the S3 provider surface. The canonical
+// definitions live in the sdk/go/s3 subpackage.
+type (
+	ObjectRef      = s3.ObjectRef
+	ObjectMeta     = s3.ObjectMeta
+	ByteRange      = s3.ByteRange
+	ReadRequest    = s3.ReadRequest
+	ReadResult     = s3.ReadResult
+	WriteRequest   = s3.WriteRequest
+	ListRequest    = s3.ListRequest
+	ListPage       = s3.ListPage
+	CopyRequest    = s3.CopyRequest
+	PresignMethod  = s3.PresignMethod
+	PresignRequest = s3.PresignRequest
+	PresignResult  = s3.PresignResult
 )
 
 // S3Provider is implemented by providers that serve an S3-compatible

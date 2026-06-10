@@ -73,22 +73,6 @@ func TestDecodeAppResultErrors(t *testing.T) {
 	}
 }
 
-func TestDecodeGraphQLResultErrors(t *testing.T) {
-	for _, name := range []string{"graphql_errors.json", "graphql_success_envelope_errors.json"} {
-		t.Run(name, func(t *testing.T) {
-			body, err := os.ReadFile(filepath.Join("..", "testdata", "app_invoke", name))
-			if err != nil {
-				t.Fatalf("read fixture: %v", err)
-			}
-			_, err = decodeAppGraphQLResult("linear", &OperationResult{Status: 200, Body: body})
-			var invokeErr *InvokeError
-			if !errors.As(err, &invokeErr) || invokeErr.Code != "graphql_errors" {
-				t.Fatalf("GraphQL error = %+v err=%v", invokeErr, err)
-			}
-		})
-	}
-}
-
 func deepEqualJSON(left, right any) bool {
 	leftBytes, _ := json.Marshal(left)
 	rightBytes, _ := json.Marshal(right)

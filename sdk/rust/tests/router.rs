@@ -301,7 +301,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     let router = error_test_router().expect("router");
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_provider(serve_provider, router)
+        gestalt::runtime_impl::serve_provider(serve_provider, router)
             .await
             .expect("serve provider");
     });
@@ -465,7 +465,7 @@ async fn lifecycle_rpcs_sanitize_hidden_internal_errors() {
     let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_provider(
+        gestalt::runtime_impl::serve_provider(
             Arc::new(HiddenLifecycleProvider),
             gestalt::Router::<HiddenLifecycleProvider>::new(),
         )

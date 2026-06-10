@@ -12,17 +12,31 @@ import { expect, test } from "bun:test";
 import {
   App as AppService,
   OperationResultSchema,
-  RequestContextSchema,
-  SubjectContextSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
   App,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
   request,
+  type RequestContext,
+  type SubjectContext,
 } from "../src/index.ts";
-import { structFromObject } from "../src/protocol.ts";
 import { removeTempDir } from "./helpers.ts";
+
+function subjectContext(id: string): SubjectContext {
+  return {
+    id,
+    credentialSubjectId: "",
+    email: "",
+    displayName: "",
+    scopes: [],
+    permissions: [],
+  };
+}
+
+function text(result: { body: Uint8Array }): string {
+  return new TextDecoder().decode(result.body);
+}
 
 function bytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
@@ -112,55 +126,52 @@ test("App forwards request context to operation and GraphQL calls", async () => 
     });
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
-    const context = create(RequestContextSchema, {
-      subject: create(SubjectContextSchema, {
-        id: "user:user-123",
-      }),
-      workflow: structFromObject({
+    const context: RequestContext = {
+      subject: subjectContext("user:user-123"),
+      workflow: {
         provider: "local",
         runId: "run-123",
-      }),
-    });
-    const app = new App(
-      request("", {}, {}, {}, {}, {}, "request-key", {}, {}, [], false, context),
-    );
+      },
+      toolRefs: [],
+      toolRefsSet: false,
+    };
+    const app = App.connect(undefined, { context });
 
-    const first = await app.invokeRaw(
+    const first = await app.invoke(
       "github",
       "get_issue",
+      "work",
+      "secondary",
+      "issue-42-create",
+      "",
       { issue_number: 42 },
-      {
-        connection: "work",
-        instance: "secondary",
-        idempotencyKey: " issue-42-create ",
-      },
     );
     expect(first.status).toBe(207);
     expect(first.headers).toEqual({
-      Location: ["https://example.test/created"],
+      Location: { values: ["https://example.test/created"] },
     });
-    expect(first.text()).toBe(JSON.stringify({
+    expect(text(first)).toBe(JSON.stringify({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",
       idempotencyKey: "issue-42-create",
     }));
-    expect(first.json<Record<string, unknown>>()).toEqual({
+    expect(JSON.parse(text(first))).toEqual({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",
       idempotencyKey: "issue-42-create",
     });
 
-    const graphql = await app.invokeGraphQLRaw(
+    const graphql = await app.invokeGraphQL(
       "linear",
       "query Viewer { viewer { id } }",
-      {
-        idempotencyKey: " graphql-call-42 ",
-      },
+      "",
+      "",
+      "graphql-call-42",
     );
     expect(graphql.status).toBe(208);
-    expect(graphql.json<Record<string, unknown>>()).toEqual({
+    expect(JSON.parse(text(graphql))).toEqual({
       app: "linear",
       document: "query Viewer { viewer { id } }",
       subjectId: "user:user-123",
@@ -204,7 +215,7 @@ test("App still requires host service socket configuration", () => {
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new App(request())).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
+    expect(() => App.connect()).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];
@@ -282,15 +293,17 @@ test("App honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const app = new App(request("", {}, {}, {}, {}, {}, "", {}, {}, [], false, create(RequestContextSchema, {
-      subject: create(SubjectContextSchema, {
-        id: "user:user-123",
-      }),
-    })));
-    const response = await app.invokeRaw("github", "get_issue");
+    const app = App.connect(undefined, {
+      context: {
+        subject: subjectContext("user:user-123"),
+        toolRefs: [],
+        toolRefsSet: false,
+      },
+    });
+    const response = await app.invoke("github", "get_issue", "", "", "", "");
 
     expect(response.status).toBe(204);
-    expect(response.json<Record<string, unknown>>()).toEqual({
+    expect(JSON.parse(text(response))).toEqual({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",

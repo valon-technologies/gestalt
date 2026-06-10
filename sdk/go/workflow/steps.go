@@ -12,36 +12,6 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
-type appClientInvoker struct {
-	newApp func(gestalt.Request) (gestalt.App, error)
-}
-
-func (i appClientInvoker) InvokeWorkflowApp(ctx context.Context, call AppInvocation) (*AppResult, error) {
-	client, err := i.newApp(call.Request)
-	if err != nil {
-		return nil, err
-	}
-	if closer, ok := client.(interface{ Close() error }); ok {
-		defer func() { _ = closer.Close() }()
-	}
-	result, err := client.InvokeRaw(ctx, call.App, call.Operation, call.Params, &gestalt.InvokeOptions{
-		Connection:      call.Connection,
-		Instance:        call.Instance,
-		CredentialMode:  call.CredentialMode,
-		IdempotencyKey:  call.IdempotencyKey,
-		WorkflowContext: call.WorkflowContext,
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := &AppResult{}
-	if result != nil {
-		out.Status = result.Status
-		out.Body = string(result.Body)
-	}
-	return out, nil
-}
-
 func (e *Executor) invokeAppStep(ctx context.Context, req Request, stepIndex int, app *gestalt.WorkflowStepAppCall, inputs map[string]any, outputs map[string]any, stepInputs map[string]any, invocationScope, stepID string) (any, error) {
 	appName := strings.TrimSpace(app.Name)
 	operation := strings.TrimSpace(app.Operation)

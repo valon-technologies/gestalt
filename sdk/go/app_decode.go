@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,79 +14,6 @@ func decodeAppOperationResult(app, operation string, result *OperationResult) (a
 		return map[string]any{}, nil
 	}
 	return decodeAppBody(app, operation, result.Status, result.Body)
-}
-
-func decodeAppGraphQLResult(app string, result *OperationResult) (any, error) {
-	decoded, err := decodeAppOperationResult(app, "graphql", result)
-	if err != nil {
-		return nil, err
-	}
-	if result == nil {
-		return decoded, nil
-	}
-	parsed, parseErr := parseOperationResultJSON(result.Body)
-	if parseErr == nil {
-		if err := graphQLErrors(app, result.Body, parsed); err != nil {
-			return nil, err
-		}
-	}
-	if err := graphQLErrors(app, result.Body, decoded); err != nil {
-		return nil, err
-	}
-	return decoded, nil
-}
-
-func graphQLErrors(app string, rawBody []byte, value any) error {
-	object, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-	errorsValue, ok := object["errors"]
-	if !ok {
-		return nil
-	}
-	errors, ok := errorsValue.([]any)
-	if !ok || len(errors) == 0 {
-		return nil
-	}
-	return &InvokeError{
-		App:       app,
-		Operation: "graphql",
-		Code:      "graphql_errors",
-		Message:   graphqlErrorMessage(errors),
-		Body:      object,
-		RawBody:   rawBody,
-	}
-}
-
-// InvokeAs invokes an app operation and decodes the response into T.
-func InvokeAs[T any](ctx context.Context, client App, app string, operation string, params any, opts *InvokeOptions) (T, error) {
-	var out T
-	result, err := client.InvokeRaw(ctx, app, operation, params, opts)
-	if err != nil {
-		return out, err
-	}
-	if err := DecodeAppResultAs(result, app, operation, &out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
-
-// InvokeGraphQLAs invokes a GraphQL surface and decodes the response into T.
-func InvokeGraphQLAs[T any](ctx context.Context, client App, app string, document string, variables any, opts *InvokeGraphQLOptions) (T, error) {
-	var out T
-	result, err := client.InvokeGraphQLRaw(ctx, app, document, variables, opts)
-	if err != nil {
-		return out, err
-	}
-	decoded, err := decodeAppGraphQLResult(app, result)
-	if err != nil {
-		return out, err
-	}
-	if err := decodeValueAs(decoded, &out); err != nil {
-		return out, err
-	}
-	return out, nil
 }
 
 // DecodeAppResultAs decodes a raw app invocation result into T.
@@ -195,16 +121,4 @@ func applyInvokeErrorMessage(err *InvokeError, parsed any) {
 			err.Code = code
 		}
 	}
-}
-
-func graphqlErrorMessage(errors []any) string {
-	if len(errors) == 0 {
-		return "GraphQL returned errors"
-	}
-	if object, ok := errors[0].(map[string]any); ok {
-		if message, ok := object["message"].(string); ok && strings.TrimSpace(message) != "" {
-			return message
-		}
-	}
-	return "GraphQL returned errors"
 }

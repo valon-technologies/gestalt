@@ -8,6 +8,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -68,6 +69,16 @@ func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *pr
 	}, nil
 }
 
+func workflowTransportRequestContext() *client.RequestContext {
+	return &client.RequestContext{
+		Subject: &client.SubjectContext{
+			Id:                  "user:transport",
+			CredentialSubjectId: "user:transport",
+			Email:               "transport@example.test",
+		},
+	}
+}
+
 func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
@@ -87,37 +98,32 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewWorkflowFromRequest(workflowTransportRequest())
+	workflow, err := client.ConnectWorkflow(context.Background(), "", client.WithRequestContext(workflowTransportRequestContext()))
 	if err != nil {
 		t.Fatalf("Workflow: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	applied, err := client.ApplyDefinition(context.Background(), gestalt.WorkflowApplyDefinition{
-		ProviderName:   "managed",
-		IdempotencyKey: "workflow-definition-key-go",
-		Spec: &gestalt.WorkflowDefinitionSpec{
-			ID: "definition-1",
-			Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
-				ID: "review",
-				App: &gestalt.WorkflowStepAppCall{
-					Name:      "github",
-					Operation: "pullRequests.review",
-				},
-			}}},
-			Activations: []gestalt.WorkflowActivation{{
-				ID: "github_pr",
-				Event: &gestalt.WorkflowEventActivation{Match: &gestalt.WorkflowEventMatch{
-					Type:   "github.pull_request",
-					Source: "github",
-				}},
+	applied, err := workflow.ApplyDefinition(context.Background(), "managed", "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
+		Id: "definition-1",
+		Target: &client.BoundWorkflowTarget{Steps: []*client.WorkflowStep{{
+			Id: "review",
+			Action: &client.WorkflowStepActionApp{Value: &client.WorkflowStepAppCall{
+				Name:      "github",
+				Operation: "pullRequests.review",
 			}},
-		},
+		}}},
+		Activations: []*client.WorkflowActivation{{
+			Id: "github_pr",
+			Trigger: &client.WorkflowActivationTriggerEvent{Value: &client.WorkflowEventActivation{Match: &client.WorkflowEventMatch{
+				Type:   "github.pull_request",
+				Source: "github",
+			}}},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("ApplyDefinition: %v", err)
 	}
-	if applied.ProviderName != "managed" || applied.ID != "definition-1" || applied.Generation != 3 {
+	if applied.ProviderName != "managed" || applied.Id != "definition-1" || applied.Generation != 3 {
 		t.Fatalf("definition = %#v", applied)
 	}
 
@@ -159,31 +165,30 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewWorkflowFromRequest(workflowTransportRequest())
+	workflow, err := client.ConnectWorkflow(context.Background(), "", client.WithRequestContext(workflowTransportRequestContext()))
 	if err != nil {
 		t.Fatalf("Workflow: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
-	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowSignalOrStartRun{
+	resp, err := workflow.SignalOrStartRunRaw(context.Background(), &client.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:                 "local",
 		WorkflowKey:                  "slack:T123:C123:1700000000.000001",
-		DefinitionID:                 "definition-1",
+		DefinitionId:                 "definition-1",
 		ExpectedDefinitionGeneration: 9,
 		Input:                        map[string]any{"thread_ts": "1700000000.000001"},
 		IdempotencyKey:               "slack-event-123",
-		Signal: &gestalt.WorkflowSignal{
+		Signal: &client.WorkflowSignal{
 			Name:           "slack.message",
 			IdempotencyKey: "slack-event-123",
 			Payload:        map[string]any{"ok": true},
-			CreatedAt:      createdAtValue,
+			CreatedAt:      &createdAtValue,
 		},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if resp.Run == nil || resp.Run.ProviderName != "local" || resp.Run.ID != "run-1" || !resp.StartedRun {
+	if resp.Run == nil || resp.Run.ProviderName != "local" || resp.Run.Id != "run-1" || !resp.StartedRun {
 		t.Fatalf("response = %#v", resp)
 	}
 
@@ -223,15 +228,5 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 	}
 	if err := (&timestamppb.Timestamp{Nanos: -1}).CheckValid(); err == nil {
 		t.Fatal("invalid timestamp CheckValid() = nil, want error")
-	}
-}
-
-func workflowTransportRequest() gestalt.Request {
-	return gestalt.Request{
-		Subject: gestalt.Subject{
-			ID:                  "user:transport",
-			CredentialSubjectID: "user:transport",
-			Email:               "transport@example.test",
-		},
 	}
 }

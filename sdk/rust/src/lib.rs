@@ -1,45 +1,72 @@
 #![warn(rustdoc::broken_intra_doc_links)]
 #![doc = include_str!("../README.md")]
 
-mod agent;
-mod agent_access;
+/// Generated Agent client and native types.
+pub mod agent;
+mod agent_provider;
 mod api;
-mod app_access;
+/// Generated App and AppProvider client and native types.
+pub mod app;
 mod app_decode;
 mod auth;
 mod auth_server;
-mod cache;
+/// Generated Authentication client and native types.
+pub mod authentication;
+/// Generated Authorization client and native types.
+pub mod authorization;
+/// Generated Cache client and native types.
+pub mod cache;
+mod cache_provider;
 mod cache_server;
 mod catalog;
+mod codec;
 mod env;
 mod error;
+/// Generated ExternalCredentials client and native types.
+pub mod external_credential;
 mod generated;
-/// IndexedDB client and provider helpers.
+/// Generated IndexedDB client and native types.
 pub mod indexeddb;
+mod indexeddb_provider;
 mod protocol;
 mod provider_server;
 mod router;
 mod rpc_status;
-/// Runtime entrypoints for serving Gestalt provider surfaces over Unix sockets.
+/// Generated shared runtime for the sdkgen clients.
+pub mod rpc_support;
+/// Generated ProviderLifecycle client and native types.
 pub mod runtime;
+/// Runtime entrypoints for serving Gestalt provider surfaces over Unix sockets.
+pub mod runtime_impl;
 mod runtime_log_host;
-mod runtime_provider;
+/// Generated Runtime and RuntimeLogHost client and native types.
+pub mod runtime_provider;
+mod runtime_provider_impl;
 mod runtime_server;
-/// S3-compatible client and provider helpers.
+/// Generated S3 client and native types.
 pub mod s3;
-mod secrets;
+/// S3-compatible provider contract and native provider types.
+pub mod s3_provider;
+/// Generated Secrets client and native types.
+pub mod secrets;
+mod secrets_provider;
 mod secrets_server;
 /// OpenTelemetry helpers for provider-authored GenAI instrumentation.
 pub mod telemetry;
+/// Generated Test client and native types.
+pub mod test;
+/// Generated Workflow client and native types.
 pub mod workflow;
-mod workflow_access;
+/// Workflow provider contract and native workflow types.
+pub mod workflow_provider;
 
 #[doc(hidden)]
 pub mod proto {
     pub use crate::generated::v1;
 }
 
-pub use agent::{
+pub use agent::Agent;
+pub use agent_provider::{
     AgentCatalogToolConfig, AgentExecutionStatus, AgentInteraction, AgentInteractionState,
     AgentInteractionType, AgentJson, AgentMessage, AgentMessagePart, AgentMessagePartImageRef,
     AgentMessagePartToolCall, AgentMessagePartToolResult, AgentMessagePartType, AgentOutput,
@@ -60,35 +87,30 @@ pub use agent::{
     new_agent_message, new_agent_message_part, new_agent_tool_call, new_agent_tool_ref,
     new_agent_tool_result,
 };
-pub use agent_access::{
-    Agent, AgentCancelTurn, AgentContract, AgentCreateSession, AgentCreateTurn, AgentError,
-    AgentGetSession, AgentGetTurn, AgentListInteractions, AgentListInteractionsResponse,
-    AgentListSessions, AgentListSessionsResponse, AgentListTurnEvents, AgentListTurnEventsResponse,
-    AgentListTurns, AgentListTurnsResponse, AgentResolveInteraction, AgentUpdateSession,
-};
 pub use api::parse_subject_id;
 pub use api::{
     Access, Credential, HTTPSubjectRequest, Host, Provider, Request, Response, RuntimeMetadata,
-    Subject, current_request_context, ok, with_request_context,
+    Subject, current_native_request_context, current_request_context, ok, with_request_context,
 };
-pub use app_access::{App, AppContract, AppError, InvokeGraphQLOptions, InvokeOptions};
+pub use app::App;
 pub use app_decode::InvokeError;
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,
 };
-pub use cache::{Cache, CacheApi, CacheEntry, CacheError, CacheProvider, CacheSetOptions};
+pub use cache::Cache;
+pub use cache_provider::{CacheEntry, CacheProvider, CacheSetOptions};
 pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};
 pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, ENV_PROVIDER_SOCKET,
 };
 pub use error::{Error, Result};
-pub use indexeddb::{
-    Cursor, CursorApi, CursorDirection, Index, IndexApi, IndexedDB, IndexedDBApi,
+pub use indexeddb_provider::{
+    Cursor, CursorApi, CursorDirection, Index, IndexApi, IndexSchema, IndexedDB, IndexedDBApi,
     IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry, IndexedDBError,
-    IndexedDBOpenCursorRequest, ObjectStore, ObjectStoreApi, Transaction, TransactionApi,
-    TransactionDurabilityHint, TransactionIndex, TransactionIndexApi, TransactionMode,
-    TransactionObjectStore, TransactionObjectStoreApi, TransactionOptions,
+    IndexedDBOpenCursorRequest, KeyRange, ObjectStore, ObjectStoreApi, ObjectStoreSchema, Record,
+    Transaction, TransactionApi, TransactionDurabilityHint, TransactionIndex, TransactionIndexApi,
+    TransactionMode, TransactionObjectStore, TransactionObjectStoreApi, TransactionOptions,
     compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
 };
 #[doc(hidden)]
@@ -98,18 +120,21 @@ pub use runtime_log_host::{
     AppendRuntimeLogsRequest, AppendRuntimeLogsResponse, ENV_RUNTIME_SESSION_ID, RuntimeLogEntry,
     RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream, runtime_session_id,
 };
-pub use runtime_provider::{
+pub use runtime_provider_impl::{
     GetRuntimeSessionRequest, HostedApp, ListRuntimeSessionsRequest, ListRuntimeSessionsResponse,
     PrepareRuntimeWorkspaceRequest, PrepareRuntimeWorkspaceResponse, RemoveRuntimeWorkspaceRequest,
     RuntimeEgressMode, RuntimeImagePullAuth, RuntimeProvider, RuntimeSession,
     RuntimeSessionLifecycle, RuntimeSupport, StartHostedAppRequest, StartRuntimeSessionRequest,
     StopRuntimeSessionRequest,
 };
-pub use s3::{S3, S3Api, S3Error, S3Object, S3ObjectApi, S3Provider};
-pub use s3::{S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteObjectStream};
-pub use secrets::SecretsProvider;
+pub use s3::S3;
+pub use s3_provider::{
+    S3Provider, S3ReadObjectFrame, S3ReadObjectStream, S3WriteObjectFrame, S3WriteObjectStream,
+};
+pub use secrets_provider::SecretsProvider;
 pub use tonic::codegen::async_trait;
-pub use workflow::{
+pub use workflow::Workflow;
+pub use workflow_provider::{
     ApplyWorkflowProviderDefinitionRequest, BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
     DeleteWorkflowProviderDefinitionRequest, DeliverWorkflowProviderEventRequest,
     GetWorkflowProviderDefinitionRequest, GetWorkflowProviderRunEventsRequest,
@@ -144,13 +169,6 @@ pub use workflow::{
     workflow_value_object, workflow_value_signal, workflow_value_step_input,
     workflow_value_step_output, workflow_value_template,
 };
-pub use workflow_access::{
-    Workflow, WorkflowApplyDefinition, WorkflowCancelRun, WorkflowContract,
-    WorkflowDeleteDefinition, WorkflowDeliverEvent, WorkflowError, WorkflowGetDefinition,
-    WorkflowGetRun, WorkflowGetRunEvents, WorkflowGetRunOutput, WorkflowListRuns,
-    WorkflowSetActivationPaused, WorkflowSetDefinitionPaused, WorkflowSignalOrStartRun,
-    WorkflowSignalRun, WorkflowStartRun,
-};
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {
     fn into_router_result(self) -> Result<Router<P>>;
@@ -184,12 +202,12 @@ macro_rules! export_provider {
         pub fn __gestalt_serve(name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             let router = $crate::into_router_result($router())?.with_name(name);
-            $crate::runtime::run_provider(provider, router)
+            $crate::runtime_impl::run_provider(provider, router)
         }
 
         pub fn __gestalt_write_catalog(name: &str, path: &str) -> $crate::Result<()> {
             let router = $crate::into_router_result($router())?.with_name(name);
-            $crate::runtime::write_catalog_path(&router, path)
+            $crate::runtime_impl::write_catalog_path(&router, path)
         }
     };
 }
@@ -200,7 +218,7 @@ macro_rules! export_authentication_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_authentication(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_authentication_provider(provider)
+            $crate::runtime_impl::run_authentication_provider(provider)
         }
     };
 }
@@ -211,7 +229,7 @@ macro_rules! export_cache_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_cache(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_cache_provider(provider)
+            $crate::runtime_impl::run_cache_provider(provider)
         }
     };
 }
@@ -222,7 +240,7 @@ macro_rules! export_secrets_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_secrets(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_secrets_provider(provider)
+            $crate::runtime_impl::run_secrets_provider(provider)
         }
     };
 }
@@ -233,7 +251,7 @@ macro_rules! export_s3_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_s3(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_s3_provider(provider)
+            $crate::runtime_impl::run_s3_provider(provider)
         }
     };
 }
@@ -244,7 +262,7 @@ macro_rules! export_runtime_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_runtime(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_runtime_provider(provider)
+            $crate::runtime_impl::run_runtime_provider(provider)
         }
     };
 }
@@ -255,7 +273,7 @@ macro_rules! export_workflow_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_workflow(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_workflow_provider(provider)
+            $crate::runtime_impl::run_workflow_provider(provider)
         }
     };
 }
@@ -266,7 +284,7 @@ macro_rules! export_agent_provider {
     (constructor = $constructor:path $(,)?) => {
         pub fn __gestalt_serve_agent(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_agent_provider(provider)
+            $crate::runtime_impl::run_agent_provider(provider)
         }
     };
 }

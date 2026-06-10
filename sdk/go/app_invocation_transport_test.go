@@ -2,45 +2,17 @@ package gestalt_test
 
 import (
 	"context"
-	"math"
 	"net"
 	"sync"
 	"testing"
-	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/structpb"
 )
-
-type invokeIssueParams struct {
-	IssueNumber int `json:"issue_number"`
-}
-
-type invokeOmitEmptyParams struct {
-	IssueNumber int               `json:"issue_number"`
-	Tags        []string          `json:"tags,omitempty"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-}
-
-type pointerMarshaler struct {
-	Hidden string
-}
-
-func (*pointerMarshaler) MarshalJSON() ([]byte, error) {
-	return []byte(`{"redacted":true}`), nil
-}
-
-type EmbeddedIssueParams struct {
-	IssueNumber int `json:"issue_number"`
-}
-
-type embeddedIssueParams struct {
-	EmbeddedIssueParams
-}
 
 type pluginAppTransportHarness struct {
 	proto.UnimplementedAppServer
@@ -86,11 +58,14 @@ func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *prot
 	}, nil
 }
 
-func cloneStruct(src *structpb.Struct) *structpb.Struct {
-	if src == nil {
-		return nil
+func appTransportRequestContext() *client.RequestContext {
+	return &client.RequestContext{
+		Subject: &client.SubjectContext{
+			Id:                  "user:transport",
+			CredentialSubjectId: "user:transport",
+			Email:               "transport@example.test",
+		},
 	}
-	return gproto.Clone(src).(*structpb.Struct)
 }
 
 func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
@@ -116,18 +91,22 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
 
-	client, err := gestalt.NewAppFromRequest(appTransportRequest())
+	app, err := client.ConnectApp(context.Background(), "", client.WithRequestContext(appTransportRequestContext()))
 	if err != nil {
 		t.Fatalf("App: %v", err)
 	}
 
-	result, err := client.InvokeRaw(context.Background(), "github", "get_issue", invokeIssueParams{
-		IssueNumber: 42,
-	}, &gestalt.InvokeOptions{
-		IdempotencyKey: " issue-42-create ",
-		WorkflowContext: map[string]any{
-			"runId": "run-42",
-			"step":  map[string]any{"id": "notify"},
+	result, err := app.InvokeRaw(context.Background(), &client.AppInvokeRequest{
+		App:            "github",
+		Operation:      "get_issue",
+		Params:         map[string]any{"issue_number": 42},
+		IdempotencyKey: "issue-42-create",
+		Context: &client.RequestContext{
+			Subject: appTransportRequestContext().Subject,
+			Workflow: map[string]any{
+				"runId": "run-42",
+				"step":  map[string]any{"id": "notify"},
+			},
 		},
 	})
 	if err != nil {
@@ -136,51 +115,29 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if result.Status != 207 || string(result.Body) != "relay-ok" {
 		t.Fatalf("Invoke result = %+v, want status=207 body=relay-ok", result)
 	}
-	if got := result.Headers.Get("Location"); got != "https://example.test/created" {
-		t.Fatalf("Invoke Location header = %q, want https://example.test/created", got)
+	location := result.Headers["Location"]
+	if location == nil || len(location.Values) != 1 || location.Values[0] != "https://example.test/created" {
+		t.Fatalf("Invoke Location header = %#v, want https://example.test/created", location)
 	}
-	result, err = client.InvokeRaw(context.Background(), "github", "get_issue", invokeOmitEmptyParams{
-		IssueNumber: 43,
-		Tags:        []string{},
-		Metadata:    map[string]string{},
-	}, nil)
+
+	result, err = app.Invoke(context.Background(), "github", "get_issue", "", "", "", "", map[string]any{
+		"issue_number": 43,
+	})
 	if err != nil {
-		t.Fatalf("Invoke omitempty params: %v", err)
+		t.Fatalf("Invoke flattened params: %v", err)
 	}
 	if result.Status != 207 || string(result.Body) != "relay-ok" {
-		t.Fatalf("Invoke omitempty result = %+v, want status=207 body=relay-ok", result)
+		t.Fatalf("Invoke flattened result = %+v, want status=207 body=relay-ok", result)
 	}
-	graphQLResult, err := client.InvokeGraphQLRaw(context.Background(), "linear", " query { viewer { id } } ", map[string]any{
+
+	graphQLResult, err := app.InvokeGraphQL(context.Background(), "linear", "query { viewer { id } }", "", "", "graphql-call-42", map[string]any{
 		"team": "eng",
-	}, &gestalt.InvokeGraphQLOptions{
-		IdempotencyKey: " graphql-call-42 ",
 	})
 	if err != nil {
 		t.Fatalf("InvokeGraphQL: %v", err)
 	}
 	if graphQLResult.Status != 208 || string(graphQLResult.Body) != "graphql-ok" {
 		t.Fatalf("InvokeGraphQL result = %+v, want status=208 body=graphql-ok", graphQLResult)
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", time.Now(), nil); err == nil {
-		t.Fatal("Invoke(time.Time) error = nil, want error")
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", map[int]any{1: "bad"}, nil); err == nil {
-		t.Fatal("Invoke(non-string map key) error = nil, want error")
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", map[string]any{"score": math.NaN()}, nil); err == nil {
-		t.Fatal("Invoke(NaN) error = nil, want error")
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", pointerMarshaler{Hidden: "secret"}, nil); err == nil {
-		t.Fatal("Invoke(pointer json.Marshaler) error = nil, want error")
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", map[string]any{"bad": pointerMarshaler{Hidden: "secret"}}, nil); err == nil {
-		t.Fatal("Invoke(map pointer json.Marshaler) error = nil, want error")
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", embeddedIssueParams{EmbeddedIssueParams: EmbeddedIssueParams{IssueNumber: 42}}, nil); err == nil {
-		t.Fatal("Invoke(anonymous embedded field) error = nil, want error")
-	}
-	if _, err := client.Invoke(context.Background(), "github", "bad", "not-object", nil); err == nil {
-		t.Fatal("Invoke(non-object) error = nil, want error")
 	}
 
 	harness.mu.Lock()
@@ -206,8 +163,11 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if got := harness.requests[0].GetContext().GetWorkflow().AsMap(); got["runId"] != "run-42" {
 		t.Fatalf("invoke workflow context = %#v, want runId=run-42", got)
 	}
+	if got := harness.requests[1].GetContext().GetSubject().GetId(); got != "user:transport" {
+		t.Fatalf("flattened invoke subject = %q, want injected ambient context", got)
+	}
 	if got := harness.requests[1].GetParams().AsMap(); len(got) != 1 || got["issue_number"] != float64(43) {
-		t.Fatalf("omitempty invoke params = %#v, want only issue_number=43", got)
+		t.Fatalf("flattened invoke params = %#v, want only issue_number=43", got)
 	}
 	if len(harness.graphQL) != 1 {
 		t.Fatalf("graphql requests len = %d, want 1", len(harness.graphQL))
@@ -216,14 +176,14 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("graphql subject = %q, want user:transport", got)
 	}
 	if harness.graphQL[0].GetApp() != "linear" || harness.graphQL[0].GetDocument() != "query { viewer { id } }" {
-		t.Fatalf("graphql request = %s %q, want linear trimmed document", harness.graphQL[0].GetApp(), harness.graphQL[0].GetDocument())
+		t.Fatalf("graphql request = %s %q, want linear document", harness.graphQL[0].GetApp(), harness.graphQL[0].GetDocument())
 	}
 	if harness.graphQL[0].GetIdempotencyKey() != "graphql-call-42" {
 		t.Fatalf("graphql idempotency key = %q, want graphql-call-42", harness.graphQL[0].GetIdempotencyKey())
 	}
 }
 
-func TestTransport_AppRequestBuilderCallerAndWorkflowContext(t *testing.T) {
+func TestTransport_AppCallerAndWorkflowContext(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -242,23 +202,26 @@ func TestTransport_AppRequestBuilderCallerAndWorkflowContext(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	req, err := gestalt.NewRequest(gestalt.RequestInput{
-		Subject: gestalt.Subject{ID: "service_account:workflow-runner", CredentialSubjectID: "service_account:workflow-runner"},
-		Caller:  gestalt.RequestCaller{Kind: gestalt.RequestCallerKindWorkflow, Name: "temporal"},
-		WorkflowContext: map[string]any{
+	app, err := client.ConnectApp(context.Background(), "", client.WithRequestContext(&client.RequestContext{
+		Subject: &client.SubjectContext{
+			Id:                  "service_account:workflow-runner",
+			CredentialSubjectId: "service_account:workflow-runner",
+		},
+		Caller: &client.ProviderContext{Kind: "workflow", Name: "temporal"},
+		Workflow: map[string]any{
 			"providerName":  "temporal",
 			"runId":         "run-1",
 			"currentStepId": "react",
 		},
-	})
-	if err != nil {
-		t.Fatalf("NewRequest: %v", err)
-	}
-	client, err := gestalt.NewAppFromRequest(req)
+	}))
 	if err != nil {
 		t.Fatalf("App: %v", err)
 	}
-	if _, err := client.InvokeRaw(context.Background(), "slack", "events.addReaction", map[string]any{}, nil); err != nil {
+	if _, err := app.InvokeRaw(context.Background(), &client.AppInvokeRequest{
+		App:       "slack",
+		Operation: "events.addReaction",
+		Params:    map[string]any{},
+	}); err != nil {
 		t.Fatalf("InvokeRaw: %v", err)
 	}
 
@@ -276,15 +239,5 @@ func TestTransport_AppRequestBuilderCallerAndWorkflowContext(t *testing.T) {
 	}
 	if got.GetWorkflow().AsMap()["currentStepId"] != "react" {
 		t.Fatalf("workflow context = %#v, want currentStepId=react", got.GetWorkflow().AsMap())
-	}
-}
-
-func appTransportRequest() gestalt.Request {
-	return gestalt.Request{
-		Subject: gestalt.Subject{
-			ID:                  "user:transport",
-			CredentialSubjectID: "user:transport",
-			Email:               "transport@example.test",
-		},
 	}
 }

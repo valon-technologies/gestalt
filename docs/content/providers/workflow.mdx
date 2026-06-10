@@ -113,14 +113,22 @@ dependent step with a missing-dependency reason.
 Apps deliver events through the workflow service.
 
 ```ts
-await request.workflow().deliverEvent({
-  providerName: "temporal",
+import { Workflow } from "@valon-technologies/gestalt";
+
+const workflows = Workflow.connect();
+await workflows.deliverEventRaw({
   appName: "github",
+  providerName: "temporal",
+  deliveredBySubjectId: "",
   event: {
-    type: "github.pull_request",
+    id: "",
     source: "github",
+    specVersion: "",
+    type: "github.pull_request",
     subject: "repo:valon-technologies/toolshed",
+    datacontenttype: "application/json",
     data: { github, raw },
+    extensions: {},
   },
 });
 ```

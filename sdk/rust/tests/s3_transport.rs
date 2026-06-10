@@ -5,12 +5,17 @@ use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
-use std::time::Duration;
 
 use gestalt::ENV_HOST_SERVICE_SOCKET;
+use gestalt::rpc_support::{GestaltError, gestalt_error_code};
 use gestalt::s3::{
-    ByteRange, ListOptions, PresignMethod, PresignOptions, ReadOptions, S3, S3Error, WriteOptions,
+    CreateObjectAccessURLRequest, PresignObjectRequest, ReadObjectRequest, S3, S3ObjectAccess,
+    S3ObjectMeta, S3ObjectRef, WriteObjectOpen, presign_method,
 };
+use hyper_util::rt::tokio::TokioIo;
+use tokio::net::UnixStream;
+use tonic::transport::Endpoint;
+use tower::service_fn;
 
 struct Harness {
     child: std::process::Child,
@@ -130,35 +135,101 @@ async fn start_tcp_harness(expect_token: Option<&str>, env_name: &str) -> Harnes
     }
 }
 
+fn object_ref(key: &str) -> Option<S3ObjectRef> {
+    Some(S3ObjectRef {
+        key: key.to_string(),
+        version_id: String::new(),
+    })
+}
+
+fn open_frame(key: &str) -> WriteObjectOpen {
+    WriteObjectOpen {
+        r#ref: object_ref(key),
+        ..WriteObjectOpen::default()
+    }
+}
+
+async fn write_bytes(
+    s3: &mut S3,
+    open: WriteObjectOpen,
+    body: Vec<u8>,
+) -> Result<S3ObjectMeta, GestaltError> {
+    let chunks = body
+        .chunks(64 * 1024)
+        .map(<[u8]>::to_vec)
+        .collect::<Vec<_>>();
+    write_chunks(s3, open, chunks).await
+}
+
+async fn write_chunks(
+    s3: &mut S3,
+    open: WriteObjectOpen,
+    chunks: Vec<Vec<u8>>,
+) -> Result<S3ObjectMeta, GestaltError> {
+    let response = s3.write_object(open, tokio_stream::iter(chunks)).await?;
+    Ok(response.meta.expect("write object response metadata"))
+}
+
+async fn read_bytes(
+    s3: &mut S3,
+    request: ReadObjectRequest,
+) -> Result<(S3ObjectMeta, Vec<u8>), GestaltError> {
+    let (meta, mut data) = s3.read_object(request).await?;
+    let mut body = Vec::new();
+    while let Some(chunk) = data.recv().await? {
+        body.extend_from_slice(&chunk);
+    }
+    Ok((meta, body))
+}
+
+async fn stat(s3: &mut S3, key: &str) -> Result<S3ObjectMeta, GestaltError> {
+    let response = s3.head_object(object_ref(key)).await?;
+    Ok(response.meta.expect("head object response metadata"))
+}
+
 #[tokio::test]
 async fn write_read_and_stat_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("s3-round-trip.sock", ENV_HOST_SERVICE_SOCKET).await;
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/hello.txt");
-    let meta = object
-        .write_bytes(
-            b"hello",
-            Some(WriteOptions {
-                content_type: "text/plain".to_string(),
-                metadata: BTreeMap::from([("owner".to_string(), "sdk".to_string())]),
-                ..WriteOptions::default()
-            }),
-        )
-        .await
-        .expect("write");
+    let mut s3 = S3::connect().await.expect("connect");
+    let meta = write_bytes(
+        &mut s3,
+        WriteObjectOpen {
+            r#ref: object_ref("docs/hello.txt"),
+            content_type: "text/plain".to_string(),
+            metadata: BTreeMap::from([("owner".to_string(), "sdk".to_string())]),
+            ..WriteObjectOpen::default()
+        },
+        b"hello".to_vec(),
+    )
+    .await
+    .expect("write");
 
-    assert_eq!(meta.reference.key, "docs/hello.txt");
+    assert_eq!(
+        meta.r#ref.as_ref().expect("write ref").key,
+        "docs/hello.txt"
+    );
     assert_eq!(meta.size, 5);
     assert_eq!(meta.content_type, "text/plain");
     assert_eq!(meta.metadata.get("owner"), Some(&"sdk".to_string()));
     assert!(meta.last_modified.is_some());
 
-    let stat = object.stat().await.expect("stat");
-    assert_eq!(stat.etag, meta.etag);
-    assert_eq!(object.bytes(None).await.expect("bytes"), b"hello");
-    assert_eq!(object.text(None).await.expect("text"), "hello");
+    let fetched = stat(&mut s3, "docs/hello.txt").await.expect("stat");
+    assert_eq!(fetched.etag, meta.etag);
+
+    let (read_meta, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/hello.txt"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read");
+    assert_eq!(read_meta.size, 5);
+    assert_eq!(body, b"hello");
+    assert_eq!(String::from_utf8(body).expect("utf-8 body"), "hello");
 }
 
 #[tokio::test]
@@ -166,20 +237,27 @@ async fn large_in_memory_write_bytes_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("s3-large-write.sock", ENV_HOST_SERVICE_SOCKET).await;
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/large.bin");
+    let mut s3 = S3::connect().await.expect("connect");
     let payload = vec![b'x'; 5 * 1024 * 1024];
-    let meta = object
-        .write_bytes(payload.as_slice(), None)
+    let meta = write_bytes(&mut s3, open_frame("docs/large.bin"), payload.clone())
         .await
         .expect("write large bytes");
 
     assert_eq!(meta.size, payload.len() as i64);
     assert_eq!(
-        object.stat().await.expect("stat").size,
+        stat(&mut s3, "docs/large.bin").await.expect("stat").size,
         payload.len() as i64
     );
-    assert_eq!(object.bytes(None).await.expect("bytes"), payload);
+    let (_, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/large.bin"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read large bytes");
+    assert_eq!(body, payload);
 }
 
 #[tokio::test]
@@ -188,39 +266,45 @@ async fn named_socket_json_and_preconditions() {
     let env_name = ENV_HOST_SERVICE_SOCKET;
     let _harness = start_harness("s3-named.sock", env_name).await;
 
-    let s3 = S3::connect_named("reports").await.expect("connect");
-    let mut object = s3.object("reports/summary.json");
-    let meta = object
-        .write_json(
-            &serde_json::json!({ "ok": true, "count": 2 }),
-            Some(WriteOptions {
-                if_none_match: "*".to_string(),
-                ..WriteOptions::default()
-            }),
-        )
-        .await
-        .expect("write json");
+    let mut s3 = S3::connect_named("reports").await.expect("connect");
+    let meta = write_bytes(
+        &mut s3,
+        WriteObjectOpen {
+            r#ref: object_ref("reports/summary.json"),
+            content_type: "application/json".to_string(),
+            if_none_match: "*".to_string(),
+            ..WriteObjectOpen::default()
+        },
+        serde_json::to_vec(&serde_json::json!({ "ok": true, "count": 2 })).expect("encode json"),
+    )
+    .await
+    .expect("write json");
     assert_eq!(meta.content_type, "application/json");
 
-    let value = object
-        .json::<serde_json::Value>(None)
-        .await
-        .expect("json decode");
+    let (_, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("reports/summary.json"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read json");
+    let value = serde_json::from_slice::<serde_json::Value>(&body).expect("json decode");
     assert_eq!(value, serde_json::json!({ "ok": true, "count": 2 }));
 
-    match object
-        .write_bytes(
-            b"again",
-            Some(WriteOptions {
-                if_none_match: "*".to_string(),
-                ..WriteOptions::default()
-            }),
-        )
-        .await
-    {
-        Err(S3Error::PreconditionFailed) => {}
-        other => panic!("expected PreconditionFailed, got: {other:?}"),
-    }
+    let error = write_bytes(
+        &mut s3,
+        WriteObjectOpen {
+            r#ref: object_ref("reports/summary.json"),
+            if_none_match: "*".to_string(),
+            ..WriteObjectOpen::default()
+        },
+        b"again".to_vec(),
+    )
+    .await
+    .expect_err("conditional rewrite should fail");
+    assert_eq!(error.code, gestalt_error_code::FAILED_PRECONDITION);
 }
 
 #[tokio::test]
@@ -228,14 +312,21 @@ async fn tcp_target_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_tcp_harness(None, ENV_HOST_SERVICE_SOCKET).await;
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/tcp.txt");
-    object
-        .write_string("tcp", None)
+    let mut s3 = S3::connect().await.expect("connect");
+    write_bytes(&mut s3, open_frame("docs/tcp.txt"), b"tcp".to_vec())
         .await
         .expect("write tcp target");
 
-    assert_eq!(object.text(None).await.expect("read tcp target"), "tcp");
+    let (_, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/tcp.txt"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read tcp target");
+    assert_eq!(body, b"tcp");
 }
 
 #[tokio::test]
@@ -244,17 +335,25 @@ async fn tcp_target_with_token_round_trip() {
     let _harness = start_tcp_harness(Some("relay-token-rust"), ENV_HOST_SERVICE_SOCKET).await;
     let _token_env = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/tcp-token.txt");
-    object
-        .write_string("tcp-token", None)
-        .await
-        .expect("write tcp token target");
+    let mut s3 = S3::connect().await.expect("connect");
+    write_bytes(
+        &mut s3,
+        open_frame("docs/tcp-token.txt"),
+        b"tcp-token".to_vec(),
+    )
+    .await
+    .expect("write tcp token target");
 
-    assert_eq!(
-        object.text(None).await.expect("read tcp token target"),
-        "tcp-token"
-    );
+    let (_, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/tcp-token.txt"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read tcp token target");
+    assert_eq!(body, b"tcp-token");
 }
 
 #[tokio::test]
@@ -265,17 +364,25 @@ async fn named_tcp_target_uses_named_token_env() {
     let _token_env =
         helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "named-relay-token-rust");
 
-    let s3 = S3::connect_named("reports").await.expect("connect");
-    let mut object = s3.object("reports/named-tcp.txt");
-    object
-        .write_string("named-tcp", None)
-        .await
-        .expect("write named tcp target");
+    let mut s3 = S3::connect_named("reports").await.expect("connect");
+    write_bytes(
+        &mut s3,
+        open_frame("reports/named-tcp.txt"),
+        b"named-tcp".to_vec(),
+    )
+    .await
+    .expect("write named tcp target");
 
-    assert_eq!(
-        object.text(None).await.expect("read named tcp target"),
-        "named-tcp"
-    );
+    let (_, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("reports/named-tcp.txt"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read named tcp target");
+    assert_eq!(body, b"named-tcp");
 }
 
 #[tokio::test]
@@ -283,52 +390,54 @@ async fn chunked_write_range_read_and_error_mapping() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("s3-range.sock", ENV_HOST_SERVICE_SOCKET).await;
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/chunked.txt");
-    object
-        .write_chunks(
-            vec![b"he".to_vec(), b"llo".to_vec()],
-            Some(WriteOptions {
-                content_type: "text/plain".to_string(),
-                ..WriteOptions::default()
-            }),
-        )
-        .await
-        .expect("write chunks");
+    let mut s3 = S3::connect().await.expect("connect");
+    write_chunks(
+        &mut s3,
+        WriteObjectOpen {
+            r#ref: object_ref("docs/chunked.txt"),
+            content_type: "text/plain".to_string(),
+            ..WriteObjectOpen::default()
+        },
+        vec![b"he".to_vec(), b"llo".to_vec()],
+    )
+    .await
+    .expect("write chunks");
 
-    let reader = object
-        .stream(Some(ReadOptions {
-            range: Some(ByteRange {
+    let (meta, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/chunked.txt"),
+            range: Some(gestalt::s3::ByteRange {
                 start: Some(1),
                 end: Some(3),
             }),
-            ..ReadOptions::default()
-        }))
-        .await
-        .expect("stream");
-    assert_eq!(reader.meta().size, 5);
-    assert_eq!(reader.text().await.expect("range text"), "ell");
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("range read");
+    assert_eq!(meta.size, 5);
+    assert_eq!(String::from_utf8(body).expect("utf-8 body"), "ell");
 
-    match object
-        .stream(Some(ReadOptions {
-            range: Some(ByteRange {
+    let error = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/chunked.txt"),
+            range: Some(gestalt::s3::ByteRange {
                 start: Some(10),
                 end: None,
             }),
-            ..ReadOptions::default()
-        }))
-        .await
-    {
-        Err(S3Error::InvalidRange) => {}
-        Ok(_) => panic!("expected InvalidRange, got success"),
-        Err(error) => panic!("expected InvalidRange, got {error}"),
-    }
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect_err("out-of-range read should fail");
+    assert_eq!(error.code, gestalt_error_code::OUT_OF_RANGE);
 
-    let mut missing = s3.object("missing.txt");
-    match missing.stat().await {
-        Err(S3Error::NotFound) => {}
-        other => panic!("expected NotFound, got: {other:?}"),
-    }
+    let error = stat(&mut s3, "missing.txt")
+        .await
+        .expect_err("missing object should fail");
+    assert_eq!(error.code, gestalt_error_code::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -336,19 +445,23 @@ async fn zero_byte_objects_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("s3-empty.sock", ENV_HOST_SERVICE_SOCKET).await;
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/empty.bin");
-    let meta = object
-        .write_bytes(Vec::<u8>::new(), None)
+    let mut s3 = S3::connect().await.expect("connect");
+    let meta = write_chunks(&mut s3, open_frame("docs/empty.bin"), Vec::new())
         .await
         .expect("write empty");
 
     assert_eq!(meta.size, 0);
-    assert_eq!(
-        object.bytes(None).await.expect("empty bytes"),
-        Vec::<u8>::new()
-    );
-    assert_eq!(object.text(None).await.expect("empty text"), "");
+    let (read_meta, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("docs/empty.bin"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("read empty");
+    assert_eq!(read_meta.size, 0);
+    assert_eq!(body, Vec::<u8>::new());
 }
 
 #[tokio::test]
@@ -363,32 +476,37 @@ async fn list_copy_delete_and_exists() {
         ("docs/folder/c.txt", "C"),
         ("docs/folder/d.txt", "D"),
     ] {
-        let mut object = s3.object(key);
-        object.write_string(body, None).await.expect("write");
+        write_bytes(&mut s3, open_frame(key), body.as_bytes().to_vec())
+            .await
+            .expect("write");
     }
 
     let listed = s3
-        .list_objects(ListOptions {
-            prefix: "docs/".to_string(),
-            delimiter: "/".to_string(),
-            ..ListOptions::default()
-        })
+        .list_objects(
+            "docs/".to_string(),
+            "/".to_string(),
+            String::new(),
+            String::new(),
+            0,
+        )
         .await
         .expect("list with delimiter");
     let listed_keys: Vec<_> = listed
         .objects
         .iter()
-        .map(|meta| meta.reference.key.clone())
+        .map(|meta| meta.r#ref.as_ref().expect("listed ref").key.clone())
         .collect();
     assert_eq!(listed_keys, vec!["docs/a.txt", "docs/b.txt"]);
     assert_eq!(listed.common_prefixes, vec!["docs/folder/"]);
 
     let page_one = s3
-        .list_objects(ListOptions {
-            prefix: "docs/".to_string(),
-            max_keys: 2,
-            ..ListOptions::default()
-        })
+        .list_objects(
+            "docs/".to_string(),
+            String::new(),
+            String::new(),
+            String::new(),
+            2,
+        )
         .await
         .expect("list page one");
     assert!(page_one.has_more);
@@ -396,50 +514,67 @@ async fn list_copy_delete_and_exists() {
         page_one
             .objects
             .iter()
-            .map(|meta| meta.reference.key.clone())
+            .map(|meta| meta.r#ref.as_ref().expect("page one ref").key.clone())
             .collect::<Vec<_>>(),
         vec!["docs/a.txt", "docs/b.txt"]
     );
 
     let page_two = s3
-        .list_objects(ListOptions {
-            prefix: "docs/".to_string(),
-            continuation_token: page_one.next_continuation_token,
-            max_keys: 2,
-            ..ListOptions::default()
-        })
+        .list_objects(
+            "docs/".to_string(),
+            String::new(),
+            page_one.next_continuation_token,
+            String::new(),
+            2,
+        )
         .await
         .expect("list page two");
     assert_eq!(
         page_two
             .objects
             .iter()
-            .map(|meta| meta.reference.key.clone())
+            .map(|meta| meta.r#ref.as_ref().expect("page two ref").key.clone())
             .collect::<Vec<_>>(),
         vec!["docs/folder/c.txt", "docs/folder/d.txt"]
     );
 
     let copied = s3
         .copy_object(
-            gestalt::s3::ObjectRef {
-                key: "docs/a.txt".to_string(),
-                version_id: String::new(),
-            },
-            gestalt::s3::ObjectRef {
-                key: "archive/a.txt".to_string(),
-                version_id: String::new(),
-            },
-            None,
+            String::new(),
+            String::new(),
+            object_ref("docs/a.txt"),
+            object_ref("archive/a.txt"),
         )
         .await
-        .expect("copy");
-    assert_eq!(copied.reference.key, "archive/a.txt");
+        .expect("copy")
+        .meta
+        .expect("copy metadata");
+    assert_eq!(
+        copied.r#ref.as_ref().expect("copied ref").key,
+        "archive/a.txt"
+    );
 
-    let mut archived = s3.object("archive/a.txt");
-    assert!(archived.exists().await.expect("exists after copy"));
-    assert_eq!(archived.text(None).await.expect("archived text"), "A");
-    archived.delete().await.expect("delete");
-    assert!(!archived.exists().await.expect("exists after delete"));
+    stat(&mut s3, "archive/a.txt")
+        .await
+        .expect("exists after copy");
+    let (_, body) = read_bytes(
+        &mut s3,
+        ReadObjectRequest {
+            r#ref: object_ref("archive/a.txt"),
+            ..ReadObjectRequest::default()
+        },
+    )
+    .await
+    .expect("archived read");
+    assert_eq!(body, b"A");
+
+    s3.delete_object(object_ref("archive/a.txt"))
+        .await
+        .expect("delete");
+    let error = stat(&mut s3, "archive/a.txt")
+        .await
+        .expect_err("deleted object should be missing");
+    assert_eq!(error.code, gestalt_error_code::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -447,41 +582,51 @@ async fn presign_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("s3-presign.sock", ENV_HOST_SERVICE_SOCKET).await;
 
-    let s3 = S3::connect().await.expect("connect");
-    let mut object = s3.object("docs/presign.txt");
-    object
-        .write_string("presign", None)
+    let mut s3 = S3::connect().await.expect("connect");
+    write_bytes(&mut s3, open_frame("docs/presign.txt"), b"presign".to_vec())
         .await
         .expect("seed object");
 
-    let presigned = object
-        .presign(Some(PresignOptions {
-            method: PresignMethod::Put,
-            expires: Duration::from_secs(300),
+    let presigned = s3
+        .presign_object_raw(PresignObjectRequest {
+            r#ref: object_ref("docs/presign.txt"),
+            method: presign_method::PRESIGN_METHOD_PUT,
+            expires_seconds: 300,
             content_type: "text/plain".to_string(),
             headers: BTreeMap::from([("x-test".to_string(), "1".to_string())]),
-            ..PresignOptions::default()
-        }))
+            ..PresignObjectRequest::default()
+        })
         .await
         .expect("presign");
 
-    assert_eq!(presigned.method, PresignMethod::Put);
+    assert_eq!(presigned.method, presign_method::PRESIGN_METHOD_PUT);
     assert!(presigned.url.contains("docs%2Fpresign.txt"));
     assert!(presigned.url.contains("method=PUT"));
     assert_eq!(presigned.headers.get("x-test"), Some(&"1".to_string()));
     assert!(presigned.expires_at.is_some());
 
-    let access_url = object
-        .create_access_url(Some(PresignOptions {
-            method: PresignMethod::Put,
-            expires: Duration::from_secs(300),
-            headers: BTreeMap::from([("Content-Length".to_string(), "5".to_string())]),
-            ..PresignOptions::default()
+    let socket = std::env::var(ENV_HOST_SERVICE_SOCKET).expect("host service socket env");
+    let channel = Endpoint::try_from("http://[::]:50051")
+        .expect("endpoint")
+        .connect_with_connector(service_fn(move |_| {
+            let socket = socket.clone();
+            async move { UnixStream::connect(socket).await.map(TokioIo::new) }
         }))
+        .await
+        .expect("connect object access channel");
+    let mut object_access = S3ObjectAccess::new(channel);
+    let access_url = object_access
+        .create_object_access_url_raw(CreateObjectAccessURLRequest {
+            r#ref: object_ref("docs/presign.txt"),
+            method: presign_method::PRESIGN_METHOD_PUT,
+            expires_seconds: 300,
+            headers: BTreeMap::from([("Content-Length".to_string(), "5".to_string())]),
+            ..CreateObjectAccessURLRequest::default()
+        })
         .await
         .expect("create access URL");
 
-    assert_eq!(access_url.method, PresignMethod::Put);
+    assert_eq!(access_url.method, presign_method::PRESIGN_METHOD_PUT);
     assert!(
         access_url
             .url

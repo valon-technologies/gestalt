@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import dataclasses
 import json
+import threading
 from dataclasses import MISSING
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, cast
@@ -29,10 +30,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from ._agent import Agent, AgentToolRef
-    from ._app_access import AppProtocol
-    from ._authorization import AuthorizationProtocol
+    from ._agent import AgentToolRef
     from ._workflow import Workflow, WorkflowRunContext
+    from .agent import Agent
+    from .app import App, RequestContext
+    from .authorization import Authorization
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
@@ -126,25 +128,39 @@ class Request:
 
         return self.connection_params.get(name)
 
-    def app(self) -> "AppProtocol":
-        from ._app_access import _AppClient
+    def app(self) -> "App":
+        """Return a generated :class:`gestalt.app.App` client bound to this
+        request's ambient context."""
 
-        return _AppClient(self)
+        from .app import App
+
+        return App.connect(context=self._native_context())
 
     def agent(self) -> "Agent":
-        from ._agent import Agent
+        """Return a generated :class:`gestalt.agent.Agent` client bound to this
+        request's ambient context."""
 
-        return Agent(self)
+        from .agent import Agent
+
+        return Agent.connect(context=self._native_context())
 
     def workflows(self) -> "Workflow":
         from ._workflow import Workflow
 
         return Workflow(self)
 
-    def authorization(self) -> AuthorizationProtocol:
-        from ._authorization import _shared_authorization_client
+    def authorization(self) -> "Authorization":
+        """Return the shared generated :class:`gestalt.authorization.Authorization`
+        client for this provider process."""
 
         return _shared_authorization_client()
+
+    def _native_context(self) -> "RequestContext | None":
+        if self.context is None:
+            return None
+        from ._codec.app import from_wire_request_context
+
+        return from_wire_request_context(self.context)
 
     def workflow_run_context(self) -> "WorkflowRunContext":
         from ._workflow import parse_workflow_run_context
@@ -262,6 +278,38 @@ def field(
     if default_factory is not MISSING:
         kwargs["default_factory"] = default_factory
     return dataclasses.field(**kwargs)
+
+
+_shared_authorization_state: dict[str, Any] = {}
+_shared_authorization_lock = threading.Lock()
+
+
+def _shared_authorization_client() -> "Authorization":
+    """Return a process-wide authorization client, rebuilt when the host
+    service transport environment changes."""
+
+    import os
+
+    from ._grpc_transport import ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN
+    from .authorization import Authorization
+
+    target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "").strip()
+    if not target:
+        raise RuntimeError(f"authorization: {ENV_HOST_SERVICE_SOCKET} is not set")
+    token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
+    with _shared_authorization_lock:
+        client = _shared_authorization_state.get("client")
+        if (
+            client is not None
+            and _shared_authorization_state.get("target") == target
+            and _shared_authorization_state.get("token") == token
+        ):
+            return client
+        client = Authorization.connect()
+        _shared_authorization_state["target"] = target
+        _shared_authorization_state["token"] = token
+        _shared_authorization_state["client"] = client
+        return client
 
 
 @dataclass_transform(field_specifiers=(field,))

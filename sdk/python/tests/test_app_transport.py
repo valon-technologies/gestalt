@@ -7,8 +7,6 @@ import os
 import tempfile
 import unittest
 from concurrent import futures
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any
 
 import grpc
@@ -19,19 +17,18 @@ from gestalt import (
     ENV_HOST_SERVICE_TOKEN,
     Request,
 )
-from gestalt._app_access import _AppClient
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
+from gestalt.app import (
+    App,
+    OperationResult,
+    RequestContext,
+    StringList,
+    SubjectContext,
+)
 
 app_pb2: Any = _app_pb2
 app_pb2_grpc: Any = _app_pb2_grpc
-
-
-@dataclass
-class IssueParams:
-    repo: str
-    issue_number: int
-
 
 _server: grpc.Server | None = None
 _socket_path: str = ""
@@ -169,6 +166,10 @@ def tearDownModule() -> None:
         os.remove(_socket_path)
 
 
+def _decode_json(result: OperationResult) -> Any:
+    return json.loads(result.body)
+
+
 class AppTransportTests(unittest.TestCase):
     def setUp(self) -> None:
         _graphql_requests.clear()
@@ -190,25 +191,26 @@ class AppTransportTests(unittest.TestCase):
         )
         request = Request(context=context)
 
-        with request.app() as client:
-            response = client.invoke_raw(
-                "github",
-                "get_issue",
-                IssueParams(repo="valon-technologies/gestalt", issue_number=1026),
-                connection="work",
-                instance="prod",
-                idempotency_key=" issue-1026-create ",
-                credential_mode="subject",
-                timeout_seconds=5,
-            )
+        response = request.app().invoke(
+            app="github",
+            operation="get_issue",
+            params={
+                "repo": "valon-technologies/gestalt",
+                "issue_number": 1026,
+            },
+            connection="work",
+            instance="prod",
+            idempotency_key="issue-1026-create",
+            credential_mode="subject",
+        )
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
             response.headers,
-            {"Location": ["https://example.test/created"]},
+            {"Location": StringList(values=["https://example.test/created"])},
         )
         self.assertEqual(
-            response.decode_json(),
+            _decode_json(response),
             {
                 "app": "github",
                 "operation": "get_issue",
@@ -234,40 +236,21 @@ class AppTransportTests(unittest.TestCase):
             },
         )
 
-    def test_invoke_rejects_non_json_dataclass_values(self) -> None:
-        @dataclass
-        class BadParams:
-            created_at: datetime
-
-        with _AppClient(Request()) as client:
-            with self.assertRaisesRegex(TypeError, "timestamp helpers"):
-                client.invoke(
-                    "github",
-                    "bad",
-                    BadParams(created_at=datetime(2026, 5, 8, tzinfo=timezone.utc)),
-                )
-
-    def test_invoke_rejects_dataclass_types(self) -> None:
-        with _AppClient(Request()) as client:
-            with self.assertRaisesRegex(TypeError, "dataclass instance"):
-                client.invoke("github", "bad", IssueParams)
-
     def test_invoke_graphql_roundtrip(self) -> None:
-        context = app_pb2.RequestContext(
-            subject=app_pb2.SubjectContext(id="user:graphql")
+        client = App.connect(
+            context=RequestContext(subject=SubjectContext(id="user:graphql"))
         )
-        with _AppClient(Request(context=context)) as client:
-            response = client.invoke_graphql_raw(
-                "linear",
-                "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
-                {"team": "eng"},
-                connection="workspace",
-                idempotency_key=" graphql-call-123 ",
-            )
+        response = client.invoke_graphql(
+            app="linear",
+            document="query Viewer($team: String!) { viewer(team: $team) { id } }",
+            variables={"team": "eng"},
+            connection="workspace",
+            idempotency_key="graphql-call-123",
+        )
 
         self.assertEqual(response.status, 208)
         self.assertEqual(
-            response.decode_json(),
+            _decode_json(response),
             {
                 "app": "linear",
                 "document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
@@ -304,26 +287,19 @@ class AppTransportTests(unittest.TestCase):
         )
 
     def test_direct_client_roundtrip(self) -> None:
-        with _AppClient(Request()) as client:
-            response = client.invoke_raw("slack", "plain_text")
+        client = App.connect()
+        response = client.invoke(app="slack", operation="plain_text")
 
         self.assertEqual(response.status, 200)
-        self.assertEqual(response.text(), "plain response")
-
-    def test_invoke_graphql_requires_nonempty_document(self) -> None:
-        with _AppClient(Request()) as client:
-            with self.assertRaisesRegex(
-                RuntimeError, "app: graphql document is required"
-            ):
-                client.invoke_graphql("linear", "   ")
+        self.assertEqual(response.body, b"plain response")
 
     def test_empty_dict_params_are_preserved_as_present(self) -> None:
-        with _AppClient(Request()) as client:
-            response = client.invoke_raw("github", "get_issue", {})
+        client = App.connect()
+        response = client.invoke(app="github", operation="get_issue", params={})
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
-            response.decode_json(),
+            _decode_json(response),
             {
                 "app": "github",
                 "operation": "get_issue",
@@ -343,8 +319,9 @@ class AppTransportTests(unittest.TestCase):
             )
         )
 
-        with request.app() as client:
-            response = client.invoke_raw("github", "get_issue", {})
+        response = request.app().invoke(
+            app="github", operation="get_issue", params={}
+        )
 
         self.assertEqual(response.status, 200)
         self.assertEqual(
@@ -369,11 +346,11 @@ class AppTransportTests(unittest.TestCase):
         os.environ[ENV_HOST_SERVICE_SOCKET] = f"tcp://127.0.0.1:{port}"
         os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-python"
         try:
-            with _AppClient(Request()) as client:
-                response = client.invoke_raw("github", "plain_text")
+            client = App.connect()
+            response = client.invoke(app="github", operation="plain_text")
 
             self.assertEqual(response.status, 200)
-            self.assertEqual(response.text(), "plain response")
+            self.assertEqual(response.body, b"plain response")
             self.assertEqual(_relay_tokens, ["relay-token-python"])
         finally:
             if previous_socket is None:
@@ -403,11 +380,11 @@ class AppTransportTests(unittest.TestCase):
         os.environ["http_proxy"] = "http://127.0.0.1:1"
         os.environ["https_proxy"] = "http://127.0.0.1:1"
         try:
-            with _AppClient(Request()) as client:
-                response = client.invoke_raw("github", "plain_text")
+            client = App.connect()
+            response = client.invoke(app="github", operation="plain_text")
 
             self.assertEqual(response.status, 200)
-            self.assertEqual(response.text(), "plain response")
+            self.assertEqual(response.body, b"plain response")
             self.assertEqual(_relay_tokens, ["relay-token-python"])
         finally:
             if previous_socket is None:
@@ -427,3 +404,7 @@ class AppTransportTests(unittest.TestCase):
             else:
                 os.environ["https_proxy"] = previous_https_proxy
             tcp_server.stop(grace=0).wait()
+
+
+if __name__ == "__main__":
+    unittest.main()

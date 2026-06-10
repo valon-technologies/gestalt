@@ -90,7 +90,6 @@ type AgentClient interface {
 
 type Config struct {
 	AppInvoker        AppInvoker
-	NewApp            func(gestalt.Request) (gestalt.App, error)
 	NewAgent          func(gestalt.Request) (AgentClient, error)
 	AgentPollInterval time.Duration
 }
@@ -104,15 +103,11 @@ type Executor struct {
 func New(cfg Config) *Executor {
 	appInvoker := cfg.AppInvoker
 	if appInvoker == nil {
-		newApp := cfg.NewApp
-		if newApp == nil {
-			newApp = gestalt.NewAppFromRequest
-		}
-		appInvoker = appClientInvoker{newApp: newApp}
+		appInvoker = generatedAppInvoker{}
 	}
 	newAgent := cfg.NewAgent
 	if newAgent == nil {
-		newAgent = func(req gestalt.Request) (AgentClient, error) { return gestalt.NewAgentFromRequest(req) }
+		newAgent = newGeneratedAgentClient
 	}
 	poll := cfg.AgentPollInterval
 	if poll <= 0 {
