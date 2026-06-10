@@ -396,7 +396,7 @@ var File_v1_authentication_proto protoreflect.FileDescriptor
 
 const file_v1_authentication_proto_rawDesc = "" +
 	"\n" +
-	"\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\"\xb3\x02\n" +
+	"\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x14v1/annotations.proto\"\xb3\x02\n" +
 	"\x11AuthenticatedUser\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\x12%\n" +
@@ -431,12 +431,13 @@ const file_v1_authentication_proto_rawDesc = "" +
 	"\x1cValidateExternalTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"E\n" +
 	"\x13AuthSessionSettings\x12.\n" +
-	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\x9f\x03\n" +
-	"\x0eAuthentication\x12]\n" +
+	"\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\x83\x04\n" +
+	"\x0eAuthentication\x12\x87\x01\n" +
 	"\n" +
-	"BeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a'.gestalt.provider.v1.BeginLoginResponse\x12b\n" +
-	"\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12r\n" +
-	"\x15ValidateExternalToken\x121.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\x12V\n" +
+	"BeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a'.gestalt.provider.v1.BeginLoginResponse\"(\x8a\xb5\x18\fcallback_url\x8a\xb5\x18\n" +
+	"host_state\x8a\xb5\x18\x06scopes\x12\x8f\x01\n" +
+	"\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\"+\x8a\xb5\x18\x0eprovider_state\x8a\xb5\x18\fcallback_url\x8a\xb5\x18\x05query\x12}\n" +
+	"\x15ValidateExternalToken\x121.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\"\t\x8a\xb5\x18\x05token\x12V\n" +
 	"\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsB\xdf\x01\n" +
 	"\x17com.gestalt.provider.v1B\x13AuthenticationProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
@@ -489,6 +490,7 @@ func file_v1_authentication_proto_init() {
 	if File_v1_authentication_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

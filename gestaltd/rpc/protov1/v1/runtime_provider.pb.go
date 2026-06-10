@@ -1152,7 +1152,7 @@ var File_v1_runtime_provider_proto protoreflect.FileDescriptor
 
 const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\n" +
-	"\x19v1/runtime_provider.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\"\xe8\x01\n" +
+	"\x19v1/runtime_provider.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\x1a\x14v1/annotations.proto\"\xe8\x01\n" +
 	"\x0eRuntimeSupport\x12\"\n" +
 	"\rcan_host_apps\x18\x01 \x01(\bR\vcanHostApps\x12G\n" +
 	"\vegress_mode\x18\x03 \x01(\x0e2&.gestalt.provider.v1.RuntimeEgressModeR\n" +
@@ -1202,9 +1202,9 @@ const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12(\n" +
 	"\x10agent_session_id\x18\x02 \x01(\tR\x0eagentSessionId\x12A\n" +
-	"\tworkspace\x18\x03 \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspace\"l\n" +
+	"\tworkspace\x18\x03 \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspace\"{\n" +
 	"\x1fPrepareRuntimeWorkspaceResponse\x12I\n" +
-	"\tworkspace\x18\x01 \x01(\v2+.gestalt.provider.v1.PreparedAgentWorkspaceR\tworkspace\"h\n" +
+	"\tworkspace\x18\x01 \x01(\v2+.gestalt.provider.v1.PreparedAgentWorkspaceR\tworkspace:\r\x9a\xb5\x18\tworkspace\"h\n" +
 	"\x1dRemoveRuntimeWorkspaceRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12(\n" +
@@ -1242,9 +1242,9 @@ const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\x18AppendRuntimeLogsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x128\n" +
-	"\x04logs\x18\x02 \x03(\v2$.gestalt.provider.v1.RuntimeLogEntryR\x04logs\"6\n" +
+	"\x04logs\x18\x02 \x03(\v2$.gestalt.provider.v1.RuntimeLogEntryR\x04logs\"D\n" +
 	"\x19AppendRuntimeLogsResponse\x12\x19\n" +
-	"\blast_seq\x18\x01 \x01(\x03R\alastSeq*\x96\x01\n" +
+	"\blast_seq\x18\x01 \x01(\x03R\alastSeq:\f\x9a\xb5\x18\blast_seq*\x96\x01\n" +
 	"\x11RuntimeEgressMode\x12#\n" +
 	"\x1fRUNTIME_EGRESS_MODE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18RUNTIME_EGRESS_MODE_NONE\x10\x01\x12\x1c\n" +
@@ -1254,21 +1254,27 @@ const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\x1eRUNTIME_LOG_STREAM_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19RUNTIME_LOG_STREAM_STDOUT\x10\x01\x12\x1d\n" +
 	"\x19RUNTIME_LOG_STREAM_STDERR\x10\x02\x12\x1e\n" +
-	"\x1aRUNTIME_LOG_STREAM_RUNTIME\x10\x032}\n" +
-	"\x0eRuntimeLogHost\x12k\n" +
+	"\x1aRUNTIME_LOG_STREAM_RUNTIME\x10\x032\xac\x01\n" +
+	"\x0eRuntimeLogHost\x12\x83\x01\n" +
 	"\n" +
-	"AppendLogs\x12-.gestalt.provider.v1.AppendRuntimeLogsRequest\x1a..gestalt.provider.v1.AppendRuntimeLogsResponse2\x9c\x06\n" +
+	"AppendLogs\x12-.gestalt.provider.v1.AppendRuntimeLogsRequest\x1a..gestalt.provider.v1.AppendRuntimeLogsResponse\"\x16\x8a\xb5\x18\n" +
+	"session_id\x8a\xb5\x18\x04logs\x1a\x14\x8a\xb5\x18\x10runtime log host2\xb7\b\n" +
 	"\aRuntime\x12I\n" +
 	"\n" +
-	"GetSupport\x12\x16.google.protobuf.Empty\x1a#.gestalt.provider.v1.RuntimeSupport\x12d\n" +
-	"\fStartSession\x12/.gestalt.provider.v1.StartRuntimeSessionRequest\x1a#.gestalt.provider.v1.RuntimeSession\x12`\n" +
+	"GetSupport\x12\x16.google.protobuf.Empty\x1a#.gestalt.provider.v1.RuntimeSupport\x12\x9a\x01\n" +
+	"\fStartSession\x12/.gestalt.provider.v1.StartRuntimeSessionRequest\x1a#.gestalt.provider.v1.RuntimeSession\"4\x8a\xb5\x18\bapp_name\x8a\xb5\x18\btemplate\x8a\xb5\x18\x05image\x8a\xb5\x18\x0fimage_pull_auth\x12p\n" +
 	"\n" +
-	"GetSession\x12-.gestalt.provider.v1.GetRuntimeSessionRequest\x1a#.gestalt.provider.v1.RuntimeSession\x12q\n" +
-	"\fListSessions\x12/.gestalt.provider.v1.ListRuntimeSessionsRequest\x1a0.gestalt.provider.v1.ListRuntimeSessionsResponse\x12U\n" +
-	"\vStopSession\x12..gestalt.provider.v1.StopRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\x12}\n" +
-	"\x10PrepareWorkspace\x123.gestalt.provider.v1.PrepareRuntimeWorkspaceRequest\x1a4.gestalt.provider.v1.PrepareRuntimeWorkspaceResponse\x12]\n" +
-	"\x0fRemoveWorkspace\x122.gestalt.provider.v1.RemoveRuntimeWorkspaceRequest\x1a\x16.google.protobuf.Empty\x12V\n" +
-	"\bStartApp\x12*.gestalt.provider.v1.StartHostedAppRequest\x1a\x1e.gestalt.provider.v1.HostedAppB\xe0\x01\n" +
+	"GetSession\x12-.gestalt.provider.v1.GetRuntimeSessionRequest\x1a#.gestalt.provider.v1.RuntimeSession\"\x0e\x8a\xb5\x18\n" +
+	"session_id\x12q\n" +
+	"\fListSessions\x12/.gestalt.provider.v1.ListRuntimeSessionsRequest\x1a0.gestalt.provider.v1.ListRuntimeSessionsResponse\x12e\n" +
+	"\vStopSession\x12..gestalt.provider.v1.StopRuntimeSessionRequest\x1a\x16.google.protobuf.Empty\"\x0e\x8a\xb5\x18\n" +
+	"session_id\x12\xae\x01\n" +
+	"\x10PrepareWorkspace\x123.gestalt.provider.v1.PrepareRuntimeWorkspaceRequest\x1a4.gestalt.provider.v1.PrepareRuntimeWorkspaceResponse\"/\x8a\xb5\x18\n" +
+	"session_id\x8a\xb5\x18\x10agent_session_id\x8a\xb5\x18\tworkspace\x12\x81\x01\n" +
+	"\x0fRemoveWorkspace\x122.gestalt.provider.v1.RemoveRuntimeWorkspaceRequest\x1a\x16.google.protobuf.Empty\"\"\x8a\xb5\x18\n" +
+	"session_id\x8a\xb5\x18\x10agent_session_id\x12\xc2\x01\n" +
+	"\bStartApp\x12*.gestalt.provider.v1.StartHostedAppRequest\x1a\x1e.gestalt.provider.v1.HostedApp\"j\x8a\xb5\x18\n" +
+	"session_id\x8a\xb5\x18\bapp_name\x8a\xb5\x18\acommand\x8a\xb5\x18\x04args\x8a\xb5\x18\rallowed_hosts\x8a\xb5\x18\x0edefault_action\x8a\xb5\x18\vhost_binary\x8a\xb5\x18\aworkdirB\xe0\x01\n" +
 	"\x17com.gestalt.provider.v1B\x14RuntimeProviderProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -1360,6 +1366,7 @@ func file_v1_runtime_provider_proto_init() {
 		return
 	}
 	file_v1_agent_proto_init()
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
