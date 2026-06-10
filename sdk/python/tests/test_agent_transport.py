@@ -26,24 +26,15 @@ from gestalt import (
     AGENT_SESSION_STATE_ARCHIVED,
     ENV_HOST_SERVICE_SOCKET,
     ENV_HOST_SERVICE_TOKEN,
-    Agent,
-    AgentCatalogToolConfig,
-    AgentCreateSession,
-    AgentCreateTurn,
     AgentInteraction,
     AgentMessage,
     AgentMessagePart,
     AgentMessagePartImageRef,
     AgentMessagePartToolCall,
     AgentMessagePartToolResult,
-    AgentOutput,
     AgentProvider,
     AgentProviderCapabilities,
-    AgentResolveInteraction,
     AgentSession,
-    AgentStructuredOutput,
-    AgentTextOutput,
-    AgentToolRef,
     AgentTurn,
     AgentTurnEvent,
     AgentTurnOutput,
@@ -62,6 +53,7 @@ from gestalt import (
     agent_message_part_from_dict,
     agent_message_to_dict,
 )
+from gestalt import agent as genagent
 from gestalt._gen.v1 import agent_pb2 as _agent_pb2
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import app_pb2 as _app_pb2
@@ -992,100 +984,116 @@ class AgentTransportTests(unittest.TestCase):
                 os.remove(socket_path)
 
     def test_agent_roundtrip(self) -> None:
-        context = app_pb2.RequestContext(
-            subject=app_pb2.SubjectContext(id="user:agent-manager")
+        manager = genagent.Agent.connect(
+            context=genagent.RequestContext(
+                subject=genagent.SubjectContext(id="user:agent-manager")
+            )
         )
-        with Agent(Request(context=context)) as manager:
-            created_session = manager.create_session(
-                agent_pb2.CreateAgentProviderSessionRequest(
-                    provider_name="openai",
-                    model="gpt-5.1",
-                    client_ref="cli-session-1",
+        created_session = manager.create_session(
+            provider_name="openai",
+            model="gpt-5.1",
+            client_ref="cli-session-1",
+            tools=genagent.AgentToolConfig(
+                source=genagent.AgentToolConfigCatalog(
+                    value=genagent.AgentCatalogToolConfig(
+                        refs=[
+                            genagent.AgentToolRef(
+                                app="slack",
+                                operation="chat.postMessage",
+                            )
+                        ],
+                        tools=[
+                            genagent.ListedAgentTool(
+                                id="tool-slack",
+                                mcp_name="slack__chat_post_message",
+                                title="Send Slack message",
+                                description="Post a Slack message",
+                                input_schema='{"type":"object"}',
+                                ref=genagent.AgentToolRef(
+                                    app="slack",
+                                    operation="chat.postMessage",
+                                ),
+                            )
+                        ],
+                    )
                 )
-            )
-            fetched_session = manager.get_session(
-                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
-            )
-            listed_sessions = manager.list_sessions(
-                agent_pb2.ListAgentProviderSessionsRequest(provider_name="openai")
-            )
-            updated_session = manager.update_session(
-                agent_pb2.UpdateAgentProviderSessionRequest(
-                    session_id="session-managed-1",
-                    client_ref="cli-session-2",
-                    state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
-                )
-            )
-            created_turn = manager.create_turn(
-                agent_pb2.CreateAgentProviderTurnRequest(
-                    session_id="session-managed-1",
-                    model="gpt-5.1",
-                    timeout_seconds=120,
-                    messages=[
-                        agent_pb2.AgentMessage(
-                            role="user",
+            ),
+        )
+        fetched_session = manager.get_session(session_id="session-managed-1")
+        listed_sessions = manager.list_sessions(provider_name="openai")
+        updated_session = manager.update_session(
+            session_id="session-managed-1",
+            client_ref="cli-session-2",
+            state=AGENT_SESSION_STATE_ARCHIVED,
+        )
+        created_turn = manager.create_turn(
+            session_id="session-managed-1",
+            model="gpt-5.1",
+            timeout_seconds=120,
+            messages=[
+                genagent.AgentMessage(
+                    role="user",
+                    text="Summarize this",
+                    parts=[
+                        genagent.AgentMessagePart(
+                            type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
                             text="Summarize this",
-                            parts=[
-                                agent_pb2.AgentMessagePart(
-                                    type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
-                                    text="Summarize this",
-                                )
-                            ],
                         )
                     ],
-                    output=agent_pb2.AgentOutput(
-                        structured={"schema": {"type": "object"}},
-                    ),
                 )
-            )
-            fetched_turn = manager.get_turn(
-                agent_pb2.GetAgentProviderTurnRequest(turn_id="turn-managed-1")
-            )
-            listed_turns = manager.list_turns(
-                agent_pb2.ListAgentProviderTurnsRequest(session_id="session-managed-1")
-            )
-            canceled_turn = manager.cancel_turn(
-                agent_pb2.CancelAgentProviderTurnRequest(
-                    turn_id="turn-managed-1",
-                    reason="user canceled",
+            ],
+            output=genagent.AgentOutput(
+                kind=genagent.AgentOutputStructured(
+                    value=genagent.AgentStructuredOutput(
+                        schema={"type": "object"},
+                    )
                 )
-            )
-            turn_events = manager.list_turn_events(
-                agent_pb2.ListAgentProviderTurnEventsRequest(
-                    turn_id="turn-managed-1",
-                    after_seq=0,
-                    limit=10,
-                )
-            )
-            interactions = manager.list_interactions(
-                agent_pb2.ListAgentProviderInteractionsRequest(turn_id="turn-managed-1")
-            )
-            resolve_request = agent_pb2.ResolveAgentProviderInteractionRequest(
-                turn_id="turn-managed-1",
-                interaction_id="interaction-1",
-            )
-            resolution = struct_pb2.Struct()
-            resolution.update({"approved": True})
-            resolve_request.resolution.CopyFrom(resolution)
-            resolved = manager.resolve_interaction(resolve_request)
+            ),
+        )
+        fetched_turn = manager.get_turn(turn_id="turn-managed-1")
+        listed_turns = manager.list_turns(session_id="session-managed-1")
+        canceled_turn = manager.cancel_turn(
+            turn_id="turn-managed-1",
+            reason="user canceled",
+        )
+        turn_events = manager.list_turn_events(
+            turn_id="turn-managed-1",
+            after_seq=0,
+            limit=10,
+        )
+        interactions = manager.list_interactions(turn_id="turn-managed-1")
+        resolved = manager.resolve_interaction(
+            turn_id="turn-managed-1",
+            interaction_id="interaction-1",
+            resolution={"approved": True},
+        )
 
         self.assertEqual(created_session.id, "session-managed-1")
         self.assertEqual(fetched_session.id, "session-managed-1")
-        self.assertEqual(len(listed_sessions.sessions), 1)
+        self.assertEqual(len(listed_sessions), 1)
         self.assertEqual(updated_session.client_ref, "cli-session-2")
         self.assertEqual(created_turn.id, "turn-managed-1")
         self.assertEqual(len(created_turn.messages[0].parts), 1)
         self.assertEqual(fetched_turn.id, "turn-managed-1")
-        self.assertEqual(len(listed_turns.turns), 1)
+        self.assertEqual(len(listed_turns), 1)
         self.assertEqual(canceled_turn.status_message, "user canceled")
-        self.assertEqual(len(turn_events.events), 1)
-        self.assertEqual(len(interactions.interactions), 1)
+        self.assertEqual(len(turn_events), 1)
+        self.assertEqual(len(interactions), 1)
         self.assertEqual(resolved.id, "interaction-1")
         self.assertEqual(resolved.state, agent_pb2.AGENT_INTERACTION_STATE_RESOLVED)
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"] * 11)
         self.assertEqual(
             _manager_contexts,
             [{"subject": {"id": "user:agent-manager"}}] * 11,
+        )
+        self.assertEqual(
+            _manager_session_tools,
+            [
+                {
+                    "tool_ref_operation": "chat.postMessage",
+                    "listed_tool_mcp_name": "slack__chat_post_message",
+                }
+            ],
         )
         self.assertEqual(
             _manager_requests,
@@ -1184,47 +1192,6 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
-    def test_agent_create_session_accepts_direct_catalog_tools_dict(self) -> None:
-        context = app_pb2.RequestContext(
-            subject=app_pb2.SubjectContext(id="user:agent-manager")
-        )
-        with Agent(Request(context=context)) as manager:
-            manager.create_session(
-                AgentCreateSession(
-                    provider_name="openai",
-                    model="gpt-5.1",
-                    tools={
-                        "refs": [
-                            {
-                                "app": "slack",
-                                "operation": "chat.postMessage",
-                            },
-                        ],
-                        "tools": [
-                            {
-                                "id": "tool-slack",
-                                "mcp_name": "slack__chat_post_message",
-                                "title": "Send Slack message",
-                                "description": "Post a Slack message",
-                                "input_schema": '{"type":"object"}',
-                                "ref": {
-                                    "app": "slack",
-                                    "operation": "chat.postMessage",
-                                },
-                            },
-                        ],
-                    },
-                )
-            )
-
-        self.assertEqual(
-            _manager_session_tools[-1],
-            {
-                "tool_ref_operation": "chat.postMessage",
-                "listed_tool_mcp_name": "slack__chat_post_message",
-            },
-        )
-
     def test_request_agent_roundtrip(self) -> None:
         request = Request(
             context=app_pb2.RequestContext(
@@ -1232,10 +1199,8 @@ class AgentTransportTests(unittest.TestCase):
             )
         )
 
-        with request.agent() as manager:
-            fetched = manager.get_session(
-                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
-            )
+        manager = request.agent()
+        fetched = manager.get_session(session_id="session-managed-1")
 
         self.assertEqual(fetched.id, "session-managed-1")
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
@@ -1271,10 +1236,8 @@ class AgentTransportTests(unittest.TestCase):
             context=context,
         )
 
-        with request.agent() as manager:
-            fetched = manager.get_session(
-                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
-            )
+        manager = request.agent()
+        fetched = manager.get_session(session_id="session-managed-1")
 
         self.assertEqual(fetched.id, "session-managed-1")
         self.assertEqual(
@@ -1312,113 +1275,49 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
-    def test_agent_accepts_native_inputs(self) -> None:
-        with Agent(Request()) as manager:
-            created_session = manager.create_session(
-                AgentCreateSession(
-                    provider_name="openai",
-                    model="gpt-5.1",
-                    client_ref="cli-session-1",
-                    tools=AgentCatalogToolConfig(
-                        refs=[
-                            AgentToolRef(
-                                app="github",
-                                operation="issues.get",
-                                connection="default",
-                            )
-                        ]
-                    ),
+    def test_agent_accepts_native_message_metadata(self) -> None:
+        manager = genagent.Agent.connect()
+        created_turn = manager.create_turn(
+            session_id="session-managed-1",
+            model="gpt-5.1",
+            messages=[
+                genagent.AgentMessage(
+                    role="user",
+                    text="Summarize this",
+                    parts=[genagent.AgentMessagePart(text="Summarize this")],
+                    metadata={"source": "native"},
                 )
-            )
-            created_turn = manager.create_turn(
-                AgentCreateTurn(
-                    session_id=created_session.id,
-                    model="gpt-5.1",
-                    messages=[
-                        AgentMessage(
-                            role="user",
-                            text="Summarize this",
-                            parts=[AgentMessagePart(text="Summarize this")],
-                            metadata={"source": "native"},
-                        )
-                    ],
-                    output=AgentOutput(
-                        structured=AgentStructuredOutput(
-                            schema={"type": "object"},
-                        ),
-                    ),
-                    metadata={"request": "native"},
-                    model_options={"temperature": 0},
-                    timeout_seconds=120,
+            ],
+            output=genagent.AgentOutput(
+                kind=genagent.AgentOutputStructured(
+                    value=genagent.AgentStructuredOutput(
+                        schema={"type": "object"},
+                    )
                 )
-            )
-            resolved = manager.resolve_interaction(
-                AgentResolveInteraction(
-                    turn_id="turn-managed-1",
-                    interaction_id="interaction-1",
-                    resolution={"approved": True},
-                )
-            )
+            ),
+            metadata={"request": "native"},
+            model_options={"temperature": 0},
+            timeout_seconds=120,
+        )
+        resolved = manager.resolve_interaction(
+            turn_id="turn-managed-1",
+            interaction_id="interaction-1",
+            resolution={"approved": True},
+        )
 
         self.assertEqual(created_turn.id, "turn-managed-1")
         self.assertEqual(created_turn.messages[0].role, "user")
+        assert created_turn.messages[0].metadata is not None
         self.assertEqual(created_turn.messages[0].metadata["source"], "native")
-        self.assertEqual(
-            created_turn.messages[0].parts[0].type,
-            agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
-        )
         self.assertEqual(resolved.id, "interaction-1")
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py", "relay-token-py"])
+        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py"])
         self.assertEqual(
             [item["method"] for item in _manager_requests],
-            ["create_session", "create_turn", "resolve_interaction"],
+            ["create_turn", "resolve_interaction"],
         )
-        self.assertEqual(_manager_session_tools[0]["tool_ref_operation"], "issues.get")
-        self.assertEqual(_manager_requests[1]["timeout_seconds"], 120)
-        self.assertEqual(_manager_requests[1]["output_kind"], "structured")
-        self.assertTrue(_manager_requests[1]["has_structured_schema"])
-
-    def test_agent_create_turn_requires_unambiguous_output(self) -> None:
-        with Agent(Request()) as manager:
-            with self.assertRaisesRegex(ValueError, "agent output is required"):
-                manager.create_turn(
-                    AgentCreateTurn(
-                        timeout_seconds=120,
-                        session_id="session-managed-1",
-                        messages=[AgentMessage(role="user", text="Summarize this")],
-                    )
-                )
-            with self.assertRaisesRegex(
-                ValueError,
-                "exactly one of output.text or output.structured is required",
-            ):
-                manager.create_turn(
-                    AgentCreateTurn(
-                        timeout_seconds=120,
-                        session_id="session-managed-1",
-                        messages=[AgentMessage(role="user", text="Summarize this")],
-                        output=AgentOutput(
-                            text=AgentTextOutput(),
-                            structured=AgentStructuredOutput(
-                                schema={"type": "object"}
-                            ),
-                        ),
-                    )
-                )
-            with self.assertRaisesRegex(
-                ValueError,
-                "output.structured.schema is required",
-            ):
-                manager.create_turn(
-                    AgentCreateTurn(
-                        timeout_seconds=120,
-                        session_id="session-managed-1",
-                        messages=[AgentMessage(role="user", text="Summarize this")],
-                        output=AgentOutput(
-                            structured={"schema": None},
-                        ),
-                    )
-                )
+        self.assertEqual(_manager_requests[0]["timeout_seconds"], 120)
+        self.assertEqual(_manager_requests[0]["output_kind"], "structured")
+        self.assertTrue(_manager_requests[0]["has_structured_schema"])
 
 
 if __name__ == "__main__":

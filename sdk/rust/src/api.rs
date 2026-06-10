@@ -4,7 +4,7 @@ use std::future::Future;
 
 use tonic::codegen::async_trait;
 
-use crate::agent::AgentToolRef;
+use crate::agent_provider::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 use crate::proto::v1;
@@ -101,26 +101,76 @@ impl Request {
     pub fn connection_param(&self, name: &str) -> Option<&str> {
         self.connection_params.get(name).map(String::as_str)
     }
-
-    /// Creates an app client using this request's scoped request context.
-    pub async fn app(&self) -> std::result::Result<crate::App, crate::AppError> {
-        crate::App::connect(self).await
-    }
-
-    /// Creates a workflow using this request's scoped request context.
-    pub async fn workflow(&self) -> std::result::Result<crate::Workflow, crate::WorkflowError> {
-        crate::Workflow::connect(self).await
-    }
-
-    /// Creates an agent using this request's scoped request context.
-    pub async fn agent(&self) -> std::result::Result<crate::Agent, crate::AgentError> {
-        crate::Agent::connect(self).await
-    }
 }
 
 /// Returns the host-supplied request context for the currently executing provider handler.
 pub fn current_request_context() -> Option<v1::RequestContext> {
     REQUEST_CONTEXT.try_with(Clone::clone).ok().flatten()
+}
+
+/// Returns the current ambient request context in the generated clients'
+/// native form, for `with_context` on contextful clients such as
+/// [`App`](crate::App), [`Agent`](crate::Agent), and [`Workflow`](crate::Workflow).
+pub fn current_native_request_context() -> Option<crate::app::RequestContext> {
+    current_request_context().map(native_request_context)
+}
+
+fn native_request_context(value: v1::RequestContext) -> crate::app::RequestContext {
+    use crate::codec::app::{from_wire_agent_tool_ref, from_wire_subject_context};
+    use crate::codec::support::from_wire_struct;
+
+    crate::app::RequestContext {
+        subject: value.subject.map(from_wire_subject_context),
+        credential: value
+            .credential
+            .map(|credential| crate::app::CredentialContext {
+                mode: credential.mode,
+                subject_id: credential.subject_id,
+                connection: credential.connection,
+                instance: credential.instance,
+            }),
+        access: value.access.map(|access| crate::app::AccessContext {
+            policy: access.policy,
+            role: access.role,
+        }),
+        workflow: value.workflow.map(from_wire_struct),
+        host: value.host.map(|host| crate::app::HostContext {
+            public_base_url: host.public_base_url,
+        }),
+        agent_subject: value.agent_subject.map(from_wire_subject_context),
+        caller: value.caller.map(|caller| crate::app::ProviderContext {
+            kind: caller.kind,
+            name: caller.name,
+        }),
+        invocation: value
+            .invocation
+            .map(|invocation| crate::app::InvocationContext {
+                request_id: invocation.request_id,
+                depth: invocation.depth,
+                call_chain: invocation.call_chain,
+                surface: invocation.surface,
+                internal_connection_access: invocation.internal_connection_access,
+                connection: invocation.connection,
+            }),
+        tool_refs: value
+            .tool_refs
+            .into_iter()
+            .map(from_wire_agent_tool_ref)
+            .collect(),
+        tool_refs_set: value.tool_refs_set,
+        request_meta: value
+            .request_meta
+            .map(|meta| crate::app::RequestMetaContext {
+                client_ip: meta.client_ip,
+                remote_addr: meta.remote_addr,
+                user_agent: meta.user_agent,
+            }),
+        agent: value.agent.map(|agent| crate::app::AgentInvocationContext {
+            provider_name: agent.provider_name,
+            session_id: agent.session_id,
+            turn_id: agent.turn_id,
+        }),
+    }
 }
 
 /// Runs an async operation with the supplied request context available to Gestalt clients.
@@ -296,5 +346,188 @@ pub trait Provider: Send + Sync + 'static {
 impl From<Infallible> for Error {
     fn from(_value: Infallible) -> Self {
         Error::internal("unreachable infallible error")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol;
+
+    #[tokio::test]
+    async fn converts_fully_populated_request_context() {
+        let wire = v1::RequestContext {
+            subject: Some(v1::SubjectContext {
+                id: "user:ada".to_string(),
+                credential_subject_id: "user:cred".to_string(),
+                email: "ada@example.test".to_string(),
+                display_name: "Ada".to_string(),
+                scopes: vec!["repo:read".to_string()],
+                permissions: vec![v1::SubjectPermissionContext {
+                    app: "github".to_string(),
+                    operations: vec!["issues.get".to_string()],
+                    all_operations: false,
+                }],
+            }),
+            credential: Some(v1::CredentialContext {
+                mode: "user".to_string(),
+                subject_id: "user:cred".to_string(),
+                connection: "work".to_string(),
+                instance: "primary".to_string(),
+            }),
+            access: Some(v1::AccessContext {
+                policy: "default".to_string(),
+                role: "admin".to_string(),
+            }),
+            workflow: Some(
+                protocol::struct_from_json(serde_json::json!({
+                    "runId": "run-1",
+                    "trigger": { "activationId": "act-1" },
+                }))
+                .expect("workflow struct"),
+            ),
+            host: Some(v1::HostContext {
+                public_base_url: "https://gestalt.example.test".to_string(),
+            }),
+            agent_subject: Some(v1::SubjectContext {
+                id: "agent:caller".to_string(),
+                ..Default::default()
+            }),
+            caller: Some(v1::ProviderContext {
+                kind: "app".to_string(),
+                name: "hermes".to_string(),
+            }),
+            invocation: Some(v1::InvocationContext {
+                request_id: "req-1".to_string(),
+                depth: 2,
+                call_chain: vec!["hermes".to_string(), "github".to_string()],
+                surface: "mcp".to_string(),
+                internal_connection_access: true,
+                connection: "work".to_string(),
+            }),
+            tool_refs: vec![v1::AgentToolRef {
+                app: "slack".to_string(),
+                operation: "chat.postMessage".to_string(),
+                connection: "workspace".to_string(),
+                instance: "primary".to_string(),
+                title: "Send Slack message".to_string(),
+                description: "Post a Slack message".to_string(),
+                credential_mode: "user".to_string(),
+                system: "slack".to_string(),
+                run_as: Some(v1::SubjectContext {
+                    id: "user:run-as".to_string(),
+                    ..Default::default()
+                }),
+            }],
+            tool_refs_set: true,
+            request_meta: Some(v1::RequestMetaContext {
+                client_ip: "203.0.113.7".to_string(),
+                remote_addr: "203.0.113.7:443".to_string(),
+                user_agent: "gestalt-test".to_string(),
+            }),
+            agent: Some(v1::AgentInvocationContext {
+                provider_name: "openai".to_string(),
+                session_id: "session-1".to_string(),
+                turn_id: "turn-1".to_string(),
+            }),
+        };
+
+        let native = with_request_context(Some(wire), async { current_native_request_context() })
+            .await
+            .expect("native context");
+
+        assert_eq!(
+            native,
+            crate::app::RequestContext {
+                subject: Some(crate::app::SubjectContext {
+                    id: "user:ada".to_string(),
+                    credential_subject_id: "user:cred".to_string(),
+                    email: "ada@example.test".to_string(),
+                    display_name: "Ada".to_string(),
+                    scopes: vec!["repo:read".to_string()],
+                    permissions: vec![crate::app::SubjectPermissionContext {
+                        app: "github".to_string(),
+                        operations: vec!["issues.get".to_string()],
+                        all_operations: false,
+                    }],
+                }),
+                credential: Some(crate::app::CredentialContext {
+                    mode: "user".to_string(),
+                    subject_id: "user:cred".to_string(),
+                    connection: "work".to_string(),
+                    instance: "primary".to_string(),
+                }),
+                access: Some(crate::app::AccessContext {
+                    policy: "default".to_string(),
+                    role: "admin".to_string(),
+                }),
+                workflow: serde_json::json!({
+                    "runId": "run-1",
+                    "trigger": { "activationId": "act-1" },
+                })
+                .as_object()
+                .cloned(),
+                host: Some(crate::app::HostContext {
+                    public_base_url: "https://gestalt.example.test".to_string(),
+                }),
+                agent_subject: Some(crate::app::SubjectContext {
+                    id: "agent:caller".to_string(),
+                    ..Default::default()
+                }),
+                caller: Some(crate::app::ProviderContext {
+                    kind: "app".to_string(),
+                    name: "hermes".to_string(),
+                }),
+                invocation: Some(crate::app::InvocationContext {
+                    request_id: "req-1".to_string(),
+                    depth: 2,
+                    call_chain: vec!["hermes".to_string(), "github".to_string()],
+                    surface: "mcp".to_string(),
+                    internal_connection_access: true,
+                    connection: "work".to_string(),
+                }),
+                tool_refs: vec![crate::app::AgentToolRef {
+                    app: "slack".to_string(),
+                    operation: "chat.postMessage".to_string(),
+                    connection: "workspace".to_string(),
+                    instance: "primary".to_string(),
+                    title: "Send Slack message".to_string(),
+                    description: "Post a Slack message".to_string(),
+                    credential_mode: "user".to_string(),
+                    system: "slack".to_string(),
+                    run_as: Some(crate::app::SubjectContext {
+                        id: "user:run-as".to_string(),
+                        ..Default::default()
+                    }),
+                }],
+                tool_refs_set: true,
+                request_meta: Some(crate::app::RequestMetaContext {
+                    client_ip: "203.0.113.7".to_string(),
+                    remote_addr: "203.0.113.7:443".to_string(),
+                    user_agent: "gestalt-test".to_string(),
+                }),
+                agent: Some(crate::app::AgentInvocationContext {
+                    provider_name: "openai".to_string(),
+                    session_id: "session-1".to_string(),
+                    turn_id: "turn-1".to_string(),
+                }),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn converts_sparse_request_context() {
+        let native = with_request_context(Some(v1::RequestContext::default()), async {
+            current_native_request_context()
+        })
+        .await
+        .expect("native context");
+
+        assert_eq!(native, crate::app::RequestContext::default());
+    }
+
+    #[test]
+    fn returns_none_outside_request_scope() {
+        assert!(current_native_request_context().is_none());
     }
 }

@@ -28,7 +28,9 @@ The API reference is organized by the provider-authoring workflow:
 * :ref:`Provider telemetry <python-provider-telemetry>` for provider-authored
   GenAI spans and metrics.
 * :ref:`Storage and host-service clients <python-storage-and-host-service-clients>` for
-  cache, IndexedDB, S3, manager, invocation, and runtime-log clients.
+  the IndexedDB driver, S3 provider helpers, and runtime-log clients, plus the
+  generated provider clients for cache, S3, app invocation, and agent
+  management.
 
 .. toctree::
    :maxdepth: 2

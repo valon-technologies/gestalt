@@ -92,35 +92,42 @@ a host-service backend.
 The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `Workflow`, `Agent`, and `App`.
 
-## App invocation migration
+## Calling sibling host services
 
-`App::invoke::<_, T>()` and `App::invoke_graphql::<_, T>()` now decode JSON
-responses into the requested `T` and unwrap only Gestalt success envelopes
-shaped as `{ "status": "success", "data": ... }`.
+Each host-service client connects from the environment with
+`connect()`/`connect_named(name)` and exposes one method per RPC with
+flattened parameters, plus a `_raw` sibling that takes the full request
+message. Optional parameters ride in a per-method options struct (for
+example `AppInvokeOptions`) whose default value leaves every option unset.
+Contextful clients (`App`, `Agent`, `Workflow`) accept a default request
+context through `with_context(...)`; outgoing requests that leave the context
+unset get the default injected. Every client accepts a per-call deadline
+through `with_timeout(...)`; unary calls that run past it fail with
+`DEADLINE_EXCEEDED`.
 
 ```rust,no_run
-# async fn example(mut app: gestalt::App, params: serde_json::Value) -> Result<(), gestalt::AppError> {
+# async fn example(
+#     params: serde_json::Map<String, serde_json::Value>,
+# ) -> Result<(), Box<dyn std::error::Error>> {
 #[derive(serde::Deserialize)]
 struct Issue {
     id: u64,
 }
 
-// before
-let raw = app.invoke_raw("github", "get_issue", params.clone(), None).await?;
-let issue: Issue = serde_json::from_value(raw.json()?)?;
-
-// after
-let issue: Issue = app.invoke("github", "get_issue", params, None).await?;
-
-// escape hatch
-let raw = app.invoke_raw("github", "get_issue", serde_json::json!({}), None).await?;
+let mut app = gestalt::App::connect().await?;
+let data = app
+    .invoke(
+        "github".to_string(),
+        "get_issue".to_string(),
+        Some(params),
+        gestalt::app::AppInvokeOptions::default(),
+    )
+    .await?;
+let issue: Issue = serde_json::from_value(data)?;
+# let _ = issue.id;
 # Ok(())
 # }
 ```
-
-Typed GraphQL invocation returns `InvokeError` when the decoded top-level
-payload has a non-empty `errors` array. Use `invoke_graphql_raw()` for callers
-that need to classify GraphQL errors themselves.
 
 `AgentProvider` implementations receive and return native structs such as
 `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
