@@ -18,6 +18,9 @@ type Tool struct {
 	Name        string
 	Version     string
 	VersionArgs []string
+	// FormatArgs are prepended to file paths when the tool runs as a
+	// formatter over emitted files.
+	FormatArgs  []string
 	InstallHint string
 
 	resolved string

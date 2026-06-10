@@ -3,12 +3,12 @@ import { join } from "node:path";
 
 import { expect, test } from "bun:test";
 
+import { operationResult } from "../src/app-decode.ts";
 import {
   decodeAppResult,
   decodeGraphQLResult,
-  operationResult,
-} from "../src/app-decode.ts";
-import { InvokeError } from "../src/invoke-error.ts";
+  InvokeError,
+} from "../src/invoke_support.ts";
 
 const fixtureRoot = join(import.meta.dir, "..", "..", "testdata", "app_invoke");
 
@@ -25,8 +25,10 @@ function expectJsonEqual(actual: unknown, expected: unknown): void {
 }
 
 test("app decode fixture behavior", () => {
-  const result = (name: string, status = 200) =>
-    operationResult({ status, headers: {}, body: bytes(fixture(name)) });
+  const result = (name: string, status = 200) => ({
+    status,
+    body: bytes(fixture(name)),
+  });
 
   expectJsonEqual(decodeAppResult("github", "get_issue", result("success_envelope.json")), { id: 1 });
   expectJsonEqual(decodeAppResult("github", "get_issue", result("plain_ok.json")), {
@@ -63,6 +65,53 @@ test("app decode fixture behavior", () => {
   expect(() => decodeGraphQLResult("linear", result("graphql_success_envelope_errors.json"))).toThrow(
     InvokeError,
   );
+});
+
+test("decode errors carry the envelope fields", () => {
+  const decode = (name: string, status = 200) =>
+    decodeAppResult("github", "get_issue", { status, body: bytes(fixture(name)) });
+
+  try {
+    decode("error_envelope.json");
+    throw new Error("expected InvokeError");
+  } catch (error) {
+    expect(error).toBeInstanceOf(InvokeError);
+    const invokeError = error as InvokeError;
+    expect(invokeError.app).toBe("github");
+    expect(invokeError.operation).toBe("get_issue");
+    expect(invokeError.status).toBeUndefined();
+    expect(invokeError.code).toBe("missing_credential");
+    expect(invokeError.message).toBe("missing credential");
+    expect(invokeError.rawText()).toBe(fixture("error_envelope.json"));
+  }
+
+  try {
+    decode("http_401.json", 401);
+    throw new Error("expected InvokeError");
+  } catch (error) {
+    expect(error).toBeInstanceOf(InvokeError);
+    const invokeError = error as InvokeError;
+    expect(invokeError.status).toBe(401);
+    expect(invokeError.code).toBe("unauthorized");
+    expect(invokeError.message).toBe("unauthorized");
+  }
+
+  try {
+    decode("invalid_json.txt");
+    throw new Error("expected InvokeError");
+  } catch (error) {
+    expect(error).toBeInstanceOf(InvokeError);
+    expect((error as InvokeError).message).toBe("app invoke response is not valid JSON");
+  }
+});
+
+test("decodeAppResult accepts generated OperationResult values", () => {
+  const result = {
+    status: 200,
+    body: bytes(fixture("success_envelope.json")),
+    headers: {},
+  };
+  expectJsonEqual(decodeAppResult<{ id: number }>("github", "get_issue", result), { id: 1 });
 });
 
 test("OperationResult json helper does not unwrap envelopes", () => {

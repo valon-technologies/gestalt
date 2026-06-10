@@ -1,10 +1,19 @@
+"""Conformance tests for the generated JSON operation-envelope decode,
+driven by the shared fixtures in sdk/testdata/app_invoke. The fixture suite is
+the normative spec of the envelope semantics across all four SDK languages."""
+
 from __future__ import annotations
 
 import pathlib
 import unittest
+from typing import Any
 
 from gestalt import Response
-from gestalt._app_decode import InvokeError, decode_app_result, decode_graphql_result
+from gestalt.invoke_support import (
+    InvokeError,
+    decode_app_result,
+    decode_graphql_result,
+)
 
 FIXTURE_ROOT = pathlib.Path(__file__).resolve().parents[2] / "testdata" / "app_invoke"
 
@@ -14,62 +23,81 @@ def fixture(name: str) -> bytes:
 
 
 class AppDecodeTests(unittest.TestCase):
-    def result(self, name: str, status: int = 200) -> Response[bytes]:
-        return Response(status=status, headers={}, body=fixture(name))
+    def decode(self, name: str, status: int = 200) -> Any:
+        return decode_app_result("github", "get_issue", status, fixture(name))
 
     def test_app_decode_fixtures(self) -> None:
+        self.assertEqual(self.decode("success_envelope.json"), {"id": 1})
         self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("success_envelope.json")),
-            {"id": 1},
-        )
-        self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("plain_ok.json")),
+            self.decode("plain_ok.json"),
             {"pull_request": {"id": 123, "title": "Fix transport"}},
         )
+        self.assertEqual(self.decode("empty_body.json"), {})
         self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("empty_body.json")),
-            {},
-        )
-        self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("success_missing_data.json")),
+            self.decode("success_missing_data.json"),
             {"status": "success", "ok": True},
         )
-        self.assertIsNone(
-            decode_app_result("github", "get_issue", self.result("success_null_data.json"))
-        )
+        self.assertIsNone(self.decode("success_null_data.json"))
         self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("unknown_status.json")),
+            self.decode("unknown_status.json"),
             {"status": "pending", "data": {"id": 2}},
         )
         self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("non_string_status.json")),
+            self.decode("non_string_status.json"),
             {"status": True, "data": {"id": 3}},
         )
-        self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("array_ok.json")),
-            [1, 2, 3],
-        )
-        self.assertEqual(
-            decode_app_result("github", "get_issue", self.result("primitive_ok.json")),
-            "ok",
-        )
+        self.assertEqual(self.decode("array_ok.json"), [1, 2, 3])
+        self.assertEqual(self.decode("primitive_ok.json"), "ok")
 
     def test_app_decode_errors(self) -> None:
         with self.assertRaises(InvokeError) as envelope:
-            decode_app_result("github", "get_issue", self.result("error_envelope.json"))
+            self.decode("error_envelope.json")
+        self.assertEqual(envelope.exception.app, "github")
+        self.assertEqual(envelope.exception.operation, "get_issue")
+        self.assertIsNone(envelope.exception.status)
         self.assertEqual(envelope.exception.code, "missing_credential")
         self.assertEqual(str(envelope.exception), "missing credential")
 
         with self.assertRaises(InvokeError) as http_error:
-            decode_app_result("github", "get_issue", self.result("http_401.json", 401))
+            self.decode("http_401.json", 401)
         self.assertEqual(http_error.exception.status, 401)
+        self.assertEqual(http_error.exception.code, "unauthorized")
+        self.assertEqual(str(http_error.exception), "unauthorized")
         self.assertTrue(http_error.exception.raw_body)
 
-        with self.assertRaises(InvokeError):
-            decode_app_result("github", "get_issue", self.result("invalid_json.txt"))
+        with self.assertRaises(InvokeError) as invalid:
+            self.decode("invalid_json.txt")
+        self.assertEqual(str(invalid.exception), "app invoke response is not valid JSON")
+
+    def test_graphql_errors(self) -> None:
+        self.assertEqual(
+            decode_graphql_result("linear", 200, fixture("graphql_ok.json")),
+            {"data": {"viewer": {"id": "user-1"}}, "errors": []},
+        )
+        self.assertEqual(
+            decode_graphql_result("linear", 200, fixture("graphql_malformed_errors.json")),
+            {"data": {"viewer": None}, "errors": {"message": "not an array"}},
+        )
+        with self.assertRaises(InvokeError) as error:
+            decode_graphql_result("linear", 200, fixture("graphql_errors.json"))
+        self.assertEqual(error.exception.code, "graphql_errors")
+        self.assertEqual(error.exception.operation, "graphql")
+        self.assertEqual(str(error.exception), "permission denied")
+        with self.assertRaises(InvokeError) as envelope_error:
+            decode_graphql_result(
+                "linear", 200, fixture("graphql_success_envelope_errors.json")
+            )
+        self.assertEqual(envelope_error.exception.code, "graphql_errors")
+
+    def test_top_level_reexports(self) -> None:
+        import gestalt
+
+        self.assertIs(gestalt.InvokeError, InvokeError)
+        self.assertIs(gestalt.decode_app_result, decode_app_result)
+        self.assertIs(gestalt.decode_graphql_result, decode_graphql_result)
 
     def test_response_helpers(self) -> None:
-        raw = self.result("success_envelope.json")
+        raw = Response(status=200, headers={}, body=fixture("success_envelope.json"))
         self.assertTrue(raw.ok)
         self.assertEqual(raw.bytes(), fixture("success_envelope.json"))
         self.assertEqual(raw.text(), fixture("success_envelope.json").decode("utf-8"))
@@ -80,22 +108,6 @@ class AppDecodeTests(unittest.TestCase):
         self.assertFalse(failed.ok)
         with self.assertRaises(InvokeError):
             failed.raise_for_status()
-
-    def test_graphql_errors(self) -> None:
-        self.assertEqual(
-            decode_graphql_result("linear", self.result("graphql_ok.json")),
-            {"data": {"viewer": {"id": "user-1"}}, "errors": []},
-        )
-        self.assertEqual(
-            decode_graphql_result("linear", self.result("graphql_malformed_errors.json")),
-            {"data": {"viewer": None}, "errors": {"message": "not an array"}},
-        )
-        with self.assertRaises(InvokeError) as error:
-            decode_graphql_result("linear", self.result("graphql_errors.json"))
-        self.assertEqual(error.exception.code, "graphql_errors")
-        with self.assertRaises(InvokeError) as envelope_error:
-            decode_graphql_result("linear", self.result("graphql_success_envelope_errors.json"))
-        self.assertEqual(envelope_error.exception.code, "graphql_errors")
 
 
 if __name__ == "__main__":

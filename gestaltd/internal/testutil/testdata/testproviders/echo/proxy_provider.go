@@ -14,7 +14,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 )
 
 type executableProvider interface {
@@ -231,16 +231,19 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		connection := strings.TrimSpace(input.Connection)
 		instance := strings.TrimSpace(input.Instance)
-		var opts *gestalt.InvokeOptions
-		if connection != "" || instance != "" {
-			opts = &gestalt.InvokeOptions{
-				Connection: connection,
-				Instance:   instance,
-			}
+		invokeParams := input.Params
+		if invokeParams == nil {
+			invokeParams = map[string]any{}
 		}
-		result, err := invoker.InvokeRaw(ctx, input.App, input.Operation, input.Params, opts)
+		result, err := invoker.InvokeRaw(ctx, &client.AppInvokeRequest{
+			App:        input.App,
+			Operation:  input.Operation,
+			Connection: connection,
+			Instance:   instance,
+			Params:     invokeParams,
+		})
 		if err != nil {
-			envelope["error"] = err.Error()
+			envelope["error"] = transportErrorString(err)
 			return jsonResult(http.StatusOK, envelope), nil
 		}
 		envelope["ok"] = true
@@ -275,16 +278,9 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		connection := strings.TrimSpace(input.Connection)
 		instance := strings.TrimSpace(input.Instance)
-		var opts *gestalt.InvokeGraphQLOptions
-		if connection != "" || instance != "" {
-			opts = &gestalt.InvokeGraphQLOptions{
-				Connection: connection,
-				Instance:   instance,
-			}
-		}
-		result, err := invoker.InvokeGraphQLRaw(ctx, input.App, input.Document, input.Variables, opts)
+		result, err := invoker.InvokeGraphQL(ctx, input.App, input.Document, connection, instance, "", input.Variables)
 		if err != nil {
-			envelope["error"] = err.Error()
+			envelope["error"] = transportErrorString(err)
 			return jsonResult(http.StatusOK, envelope), nil
 		}
 		envelope["ok"] = true
@@ -297,11 +293,10 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx)
+		workflow, err := gestalt.WorkflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		defer func() { _ = client.Close() }()
 		target, err := workflowDefinitionTargetInput(input.Target)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
@@ -310,17 +305,14 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.ApplyDefinition(ctx, gestalt.WorkflowApplyDefinition{
-			ProviderName: input.ProviderName,
-			Spec: &gestalt.WorkflowDefinitionSpec{
-				ID:          input.DefinitionID,
-				Target:      target,
-				Activations: activations,
-				Paused:      input.Paused,
-			},
+		result, err := workflow.ApplyDefinition(ctx, input.ProviderName, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
+			Id:          input.DefinitionID,
+			Target:      target,
+			Activations: activations,
+			Paused:      input.Paused,
 		})
 		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
 
@@ -329,16 +321,13 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx)
+		workflow, err := gestalt.WorkflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		defer func() { _ = client.Close() }()
-		result, err := client.GetDefinition(ctx, gestalt.WorkflowGetDefinition{
-			DefinitionID: input.DefinitionID,
-		})
+		result, err := workflow.GetDefinition(ctx, input.DefinitionID)
 		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
 
@@ -347,17 +336,13 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx)
+		workflow, err := gestalt.WorkflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		defer func() { _ = client.Close() }()
-		result, err := client.SetDefinitionPaused(ctx, gestalt.WorkflowSetDefinitionPaused{
-			DefinitionID: input.DefinitionID,
-			Paused:       input.Paused,
-		})
+		result, err := workflow.SetDefinitionPaused(ctx, input.DefinitionID, input.Paused)
 		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
 
@@ -366,18 +351,13 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx)
+		workflow, err := gestalt.WorkflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		defer func() { _ = client.Close() }()
-		result, err := client.SetActivationPaused(ctx, gestalt.WorkflowSetActivationPaused{
-			DefinitionID: input.DefinitionID,
-			ActivationID: input.ActivationID,
-			Paused:       input.Paused,
-		})
+		result, err := workflow.SetActivationPaused(ctx, input.DefinitionID, input.ActivationID, input.Paused)
 		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, workflowDefinitionBody(result)), nil
 
@@ -386,15 +366,12 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx)
+		workflow, err := gestalt.WorkflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		defer func() { _ = client.Close() }()
-		if err := client.DeleteDefinition(ctx, gestalt.WorkflowDeleteDefinition{
-			DefinitionID: input.DefinitionID,
-		}); err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+		if err := workflow.DeleteDefinition(ctx, input.DefinitionID); err != nil {
+			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, map[string]any{"deleted": true, "definition_id": input.DefinitionID}), nil
 
@@ -403,21 +380,20 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		client, err := workflowFromContext(ctx)
+		workflow, err := gestalt.WorkflowFromContext(ctx)
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
-		defer func() { _ = client.Close() }()
 		event, err := workflowEvent(input)
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.DeliverEvent(ctx, gestalt.WorkflowDeliverEvent{
+		result, err := workflow.DeliverEventRaw(ctx, &client.DeliverWorkflowProviderEventRequest{
 			Event:        event,
 			ProviderName: input.ProviderName,
 		})
 		if err != nil {
-			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
+			return jsonResult(http.StatusOK, map[string]any{"error": transportErrorString(err)}), nil
 		}
 		return jsonResult(http.StatusOK, workflowEventBody(result)), nil
 
@@ -447,17 +423,17 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 	case "make_http_request":
 		targetURL, _ := params["url"].(string)
-		client := &http.Client{}
+		httpClient := &http.Client{}
 		if proxyURL := os.Getenv("HTTP_PROXY"); proxyURL != "" {
 			parsed, err := url.Parse(proxyURL)
 			if err == nil {
-				client.Transport = &http.Transport{
+				httpClient.Transport = &http.Transport{
 					Proxy:           http.ProxyURL(parsed),
 					TLSClientConfig: testTLSConfigFromEnv(),
 				}
 			}
 		}
-		resp, err := client.Get(targetURL)
+		resp, err := httpClient.Get(targetURL)
 		if err != nil {
 			body, _ := json.Marshal(map[string]any{"error": err.Error()})
 			return &gestalt.OperationResult{Status: http.StatusBadGateway, Body: body}, nil
@@ -508,33 +484,55 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		key, _ := params["key"].(string)
 		value, _ := params["value"].(string)
 
-		var (
-			client s3sdk.S3
-			err    error
-		)
-		if binding != "" {
-			client, err = gestalt.S3(ctx, binding)
-		} else {
-			client, err = gestalt.S3(ctx)
-		}
+		s3c, err := client.ConnectS3(ctx, binding)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = client.Close() }()
 
-		obj := s3sdk.Object(client, key)
-		if _, err := obj.WriteString(ctx, value, &gestalt.WriteRequest{ContentType: "text/plain"}); err != nil {
-			return nil, err
-		}
-		text, err := obj.Text(ctx, nil)
+		writeStream, err := s3c.WriteObject(ctx, &client.WriteObjectOpen{
+			Ref:         &client.S3ObjectRef{Key: key},
+			ContentType: "text/plain",
+		})
 		if err != nil {
 			return nil, err
 		}
-		stat, err := obj.Stat(ctx)
+		if len(value) > 0 {
+			if err := writeStream.Send([]byte(value)); err != nil && !errors.Is(err, io.EOF) {
+				if _, recvErr := writeStream.CloseAndRecv(); recvErr != nil {
+					return nil, recvErr
+				}
+				return nil, err
+			}
+		}
+		if _, err := writeStream.CloseAndRecv(); err != nil {
+			return nil, err
+		}
+
+		_, readStream, err := s3c.ReadObject(ctx, &client.ReadObjectRequest{
+			Ref: &client.S3ObjectRef{Key: key},
+		})
 		if err != nil {
 			return nil, err
 		}
-		page, err := client.ListObjects(ctx, gestalt.ListRequest{Prefix: key})
+		var text strings.Builder
+		for {
+			chunk, err := readStream.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			text.Write(chunk)
+		}
+
+		head, err := s3c.HeadObject(ctx, &client.S3ObjectRef{Key: key})
+		if err != nil {
+			return nil, err
+		}
+		stat := head.Meta
+
+		page, err := s3c.ListObjects(ctx, key, "", "", "", 0)
 		if err != nil {
 			return nil, err
 		}
@@ -543,12 +541,12 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			keys = append(keys, page.Objects[i].Ref.Key)
 		}
 		body, _ := json.Marshal(map[string]any{
-			"body":  text,
+			"body":  text.String(),
 			"key":   stat.Ref.Key,
 			"size":  stat.Size,
 			"keys":  keys,
 			"type":  stat.ContentType,
-			"etag":  stat.ETag,
+			"etag":  stat.Etag,
 			"found": len(page.Objects) > 0,
 		})
 		return &gestalt.OperationResult{Status: http.StatusOK, Body: body}, nil
@@ -585,55 +583,51 @@ func decodeJSONParams[T any](params map[string]any) (T, error) {
 	return input, nil
 }
 
-func workflowFromContext(ctx context.Context) (gestalt.Workflow, error) {
-	return gestalt.WorkflowFromContext(ctx)
-}
-
-func workflowDefinitionTargetInput(target workflowDefinitionStepInput) (*gestalt.BoundWorkflowTarget, error) {
-	return &gestalt.BoundWorkflowTarget{
-		Steps: []gestalt.WorkflowStep{{
-			ID: strings.TrimSpace(target.Operation),
-			App: &gestalt.WorkflowStepAppCall{
+func workflowDefinitionTargetInput(target workflowDefinitionStepInput) (*client.BoundWorkflowTarget, error) {
+	return &client.BoundWorkflowTarget{
+		Steps: []*client.WorkflowStep{{
+			Id: strings.TrimSpace(target.Operation),
+			Action: &client.WorkflowStepActionApp{Value: &client.WorkflowStepAppCall{
 				Name:       target.App,
 				Operation:  target.Operation,
 				Connection: target.Connection,
 				Instance:   target.Instance,
 				Input:      workflowValueObject(target.Input),
-			},
+			}},
 		}},
 	}, nil
 }
 
-func workflowEventMatch(match workflowEventMatchInput) *gestalt.WorkflowEventMatch {
-	return &gestalt.WorkflowEventMatch{
+func workflowEventMatch(match workflowEventMatchInput) *client.WorkflowEventMatch {
+	return &client.WorkflowEventMatch{
 		Type:    match.Type,
 		Source:  match.Source,
 		Subject: match.Subject,
 	}
 }
 
-func workflowActivationsInput(values []workflowActivationInput) ([]gestalt.WorkflowActivation, error) {
+func workflowActivationsInput(values []workflowActivationInput) ([]*client.WorkflowActivation, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := make([]gestalt.WorkflowActivation, 0, len(values))
+	out := make([]*client.WorkflowActivation, 0, len(values))
 	for _, value := range values {
-		activation := gestalt.WorkflowActivation{
-			ID:     value.ID,
+		activation := &client.WorkflowActivation{
+			Id:     value.ID,
 			Paused: value.Paused,
 		}
 		switch {
 		case value.Schedule != nil && value.Event != nil:
 			return nil, errors.New("workflow activation must set exactly one of schedule or event")
 		case value.Schedule != nil:
-			activation.Schedule = &gestalt.WorkflowScheduleActivation{
+			activation.Trigger = &client.WorkflowActivationTriggerSchedule{Value: &client.WorkflowScheduleActivation{
 				Cron:     value.Schedule.Cron,
 				Timezone: value.Schedule.Timezone,
-			}
+			}}
 		case value.Event != nil:
-			activation.Event = &gestalt.WorkflowEventActivation{
+			activation.Trigger = &client.WorkflowActivationTriggerEvent{Value: &client.WorkflowEventActivation{
 				Match: workflowEventMatch(value.Event.Match),
-			}
+			}}
 		default:
 			return nil, errors.New("workflow activation must set schedule or event")
 		}
@@ -642,14 +636,14 @@ func workflowActivationsInput(values []workflowActivationInput) ([]gestalt.Workf
 	return out, nil
 }
 
-func workflowEvent(input deliverWorkflowEventInput) (*gestalt.WorkflowEvent, error) {
-	event := &gestalt.WorkflowEvent{
-		ID:              input.ID,
+func workflowEvent(input deliverWorkflowEventInput) (*client.WorkflowEvent, error) {
+	event := &client.WorkflowEvent{
+		Id:              input.ID,
 		Source:          input.Source,
 		SpecVersion:     input.SpecVersion,
 		Type:            input.Type,
 		Subject:         input.Subject,
-		DataContentType: input.DataContentType,
+		Datacontenttype: input.DataContentType,
 		Data:            input.Data,
 		Extensions:      input.Extensions,
 	}
@@ -658,12 +652,12 @@ func workflowEvent(input deliverWorkflowEventInput) (*gestalt.WorkflowEvent, err
 		if err != nil {
 			return nil, err
 		}
-		event.Time = timestamp
+		event.Time = &timestamp
 	}
 	return event, nil
 }
 
-func workflowDefinitionBody(value *gestalt.WorkflowDefinition) map[string]any {
+func workflowDefinitionBody(value *client.WorkflowDefinition) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
@@ -671,7 +665,7 @@ func workflowDefinitionBody(value *gestalt.WorkflowDefinition) map[string]any {
 		"provider_name": value.ProviderName,
 	}
 	definition := map[string]any{
-		"id":          value.ID,
+		"id":          value.Id,
 		"generation":  value.Generation,
 		"paused":      value.Paused,
 		"created_at":  timeBody(value.CreatedAt),
@@ -698,29 +692,36 @@ func workflowDefinitionBody(value *gestalt.WorkflowDefinition) map[string]any {
 	return body
 }
 
-func workflowActivationBodies(values []gestalt.WorkflowActivation) []map[string]any {
+func workflowActivationBodies(values []*client.WorkflowActivation) []map[string]any {
 	if len(values) == 0 {
 		return nil
 	}
 	out := make([]map[string]any, 0, len(values))
 	for _, activation := range values {
+		if activation == nil {
+			continue
+		}
 		body := map[string]any{
-			"id":     activation.ID,
+			"id":     activation.Id,
 			"paused": activation.Paused,
 		}
-		if activation.Schedule != nil {
-			body["schedule"] = map[string]any{
-				"cron":     activation.Schedule.Cron,
-				"timezone": activation.Schedule.Timezone,
+		switch trigger := activation.Trigger.(type) {
+		case *client.WorkflowActivationTriggerSchedule:
+			if trigger.Value != nil {
+				body["schedule"] = map[string]any{
+					"cron":     trigger.Value.Cron,
+					"timezone": trigger.Value.Timezone,
+				}
 			}
-		}
-		if activation.Event != nil && activation.Event.Match != nil {
-			body["event"] = map[string]any{
-				"match": map[string]any{
-					"type":    activation.Event.Match.Type,
-					"source":  activation.Event.Match.Source,
-					"subject": activation.Event.Match.Subject,
-				},
+		case *client.WorkflowActivationTriggerEvent:
+			if trigger.Value != nil && trigger.Value.Match != nil {
+				body["event"] = map[string]any{
+					"match": map[string]any{
+						"type":    trigger.Value.Match.Type,
+						"source":  trigger.Value.Match.Source,
+						"subject": trigger.Value.Match.Subject,
+					},
+				}
 			}
 		}
 		out = append(out, body)
@@ -728,63 +729,79 @@ func workflowActivationBodies(values []gestalt.WorkflowActivation) []map[string]
 	return out
 }
 
-func workflowFirstAppStep(target *gestalt.BoundWorkflowTarget) *gestalt.WorkflowStepAppCall {
-	if target == nil || len(target.Steps) == 0 {
+func workflowFirstAppStep(target *client.BoundWorkflowTarget) *client.WorkflowStepAppCall {
+	if target == nil || len(target.Steps) == 0 || target.Steps[0] == nil {
 		return nil
 	}
-	return target.Steps[0].App
+	if action, ok := target.Steps[0].Action.(*client.WorkflowStepActionApp); ok {
+		return action.Value
+	}
+	return nil
 }
 
-func workflowAppStepInputMap(target *gestalt.WorkflowStepAppCall) map[string]any {
-	if target == nil || target.Input.Object == nil {
+func workflowAppStepInputMap(target *client.WorkflowStepAppCall) map[string]any {
+	if target == nil || target.Input == nil {
 		return map[string]any{}
 	}
-	out := make(map[string]any, len(target.Input.Object))
-	for key, value := range target.Input.Object {
+	object, ok := target.Input.Kind.(*client.WorkflowValueKindObject)
+	if !ok || object.Value == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(object.Value.Fields))
+	for key, value := range object.Value.Fields {
 		out[key] = workflowValueToAny(value)
 	}
 	return out
 }
 
-func workflowValueObject(input map[string]any) gestalt.WorkflowValue {
+func workflowValueObject(input map[string]any) *client.WorkflowValue {
 	if input == nil {
-		return gestalt.WorkflowValue{}
+		return nil
 	}
-	out := make(map[string]gestalt.WorkflowValue, len(input))
+	fields := make(map[string]*client.WorkflowValue, len(input))
 	for key, value := range input {
-		out[key] = workflowValueFromAny(value)
+		fields[key] = workflowValueFromAny(value)
 	}
-	return gestalt.WorkflowValue{Object: out}
+	return &client.WorkflowValue{Kind: &client.WorkflowValueKindObject{Value: &client.WorkflowObject{Fields: fields}}}
 }
 
-func workflowValueFromAny(value any) gestalt.WorkflowValue {
+func workflowValueFromAny(value any) *client.WorkflowValue {
 	switch typed := value.(type) {
 	case map[string]any:
 		return workflowValueObject(typed)
 	case []any:
-		out := make([]gestalt.WorkflowValue, 0, len(typed))
-		for _, value := range typed {
-			out = append(out, workflowValueFromAny(value))
+		values := make([]*client.WorkflowValue, 0, len(typed))
+		for _, item := range typed {
+			values = append(values, workflowValueFromAny(item))
 		}
-		return gestalt.WorkflowValue{Array: out}
+		return &client.WorkflowValue{Kind: &client.WorkflowValueKindArray{Value: &client.WorkflowArray{Values: values}}}
 	default:
-		return gestalt.WorkflowValue{Literal: value, LiteralSet: true}
+		return &client.WorkflowValue{Kind: &client.WorkflowValueKindLiteral{Value: value}}
 	}
 }
 
-func workflowValueToAny(value gestalt.WorkflowValue) any {
-	switch {
-	case value.LiteralSet:
-		return value.Literal
-	case value.Object != nil:
-		out := make(map[string]any, len(value.Object))
-		for key, nested := range value.Object {
+func workflowValueToAny(value *client.WorkflowValue) any {
+	if value == nil {
+		return nil
+	}
+	switch kind := value.Kind.(type) {
+	case *client.WorkflowValueKindLiteral:
+		return kind.Value
+	case *client.WorkflowValueKindObject:
+		if kind.Value == nil {
+			return map[string]any{}
+		}
+		out := make(map[string]any, len(kind.Value.Fields))
+		for key, nested := range kind.Value.Fields {
 			out[key] = workflowValueToAny(nested)
 		}
 		return out
-	case value.Array != nil:
-		out := make([]any, 0, len(value.Array))
-		for _, nested := range value.Array {
+	case *client.WorkflowValueKindArray:
+		if kind.Value == nil {
+			return []any{}
+		}
+		out := make([]any, 0, len(kind.Value.Values))
+		for _, nested := range kind.Value.Values {
 			out = append(out, workflowValueToAny(nested))
 		}
 		return out
@@ -793,18 +810,18 @@ func workflowValueToAny(value gestalt.WorkflowValue) any {
 	}
 }
 
-func workflowEventBody(value *gestalt.WorkflowEvent) map[string]any {
+func workflowEventBody(value *client.WorkflowEvent) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
 	return map[string]any{
-		"id":                value.ID,
+		"id":                value.Id,
 		"source":            value.Source,
 		"spec_version":      value.SpecVersion,
 		"type":              value.Type,
 		"subject":           value.Subject,
 		"time":              timeBody(value.Time),
-		"data_content_type": value.DataContentType,
+		"data_content_type": value.Datacontenttype,
 		"data":              anyMap(value.Data),
 		"extensions": func() map[string]any {
 			if len(value.Extensions) == 0 {
@@ -839,11 +856,26 @@ func anyMap(value any) map[string]any {
 	return out
 }
 
-func timeBody(value time.Time) any {
-	if value.IsZero() {
+func timeBody(value *time.Time) any {
+	if value == nil || value.IsZero() {
 		return nil
 	}
 	return value
+}
+
+// transportErrorString preserves the raw transport error text (including the
+// gRPC "code = ..." prefix) that the pre-generated-client envelopes carried.
+func transportErrorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	var gestaltErr *client.GestaltError
+	if errors.As(err, &gestaltErr) {
+		if cause := gestaltErr.Unwrap(); cause != nil {
+			return cause.Error()
+		}
+	}
+	return err.Error()
 }
 
 func decodeResultBody(body []byte) any {

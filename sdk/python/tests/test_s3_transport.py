@@ -1,8 +1,6 @@
 """Transport-backed S3 SDK tests over a real Unix socket."""
 from __future__ import annotations
 
-import datetime as dt
-import io
 import os
 import socket
 import subprocess
@@ -14,16 +12,18 @@ from gestalt import (
     ENV_HOST_SERVICE_TOKEN,
     S3,
     ByteRange,
-    CopyOptions,
-    ListOptions,
-    ObjectRef,
-    PresignMethod,
-    PresignOptions,
-    ReadOptions,
-    S3InvalidRangeError,
-    S3NotFoundError,
-    S3PreconditionFailedError,
-    WriteOptions,
+    S3ObjectAccess,
+    S3ObjectMeta,
+    S3ObjectRef,
+    WriteObjectOpen,
+)
+from gestalt._grpc_transport import host_service_channel
+from gestalt.rpc_support import GestaltError, GestaltErrorCode
+from gestalt.s3 import (
+    CreateObjectAccessURLRequest,
+    PresignMethodValues,
+    PresignObjectRequest,
+    ReadObjectRequest,
 )
 
 
@@ -105,17 +105,50 @@ def _start_tcp_harness(expect_token: str = "") -> tuple[subprocess.Popen[bytes],
     return proc, f"tcp://{address}"
 
 
-def _client() -> S3:
-    return S3()
+def _write_text(
+    client: S3,
+    key: str,
+    text: str,
+    *,
+    content_type: str = "",
+    metadata: dict[str, str] | None = None,
+    if_none_match: str = "",
+) -> S3ObjectMeta:
+    response = client.write_object(
+        WriteObjectOpen(
+            ref=S3ObjectRef(key=key),
+            content_type=content_type,
+            metadata=metadata if metadata is not None else {},
+            if_none_match=if_none_match,
+        ),
+        [text.encode("utf-8")],
+    )
+    assert response.meta is not None
+    return response.meta
+
+
+def _read_bytes(client: S3, key: str, *, range: ByteRange | None = None) -> bytes:
+    _meta, chunks = client.read_object(
+        ReadObjectRequest(ref=S3ObjectRef(key=key), range=range)
+    )
+    return chunks.read()
+
+
+def _exists(client: S3, key: str) -> bool:
+    try:
+        client.head_object(ref=S3ObjectRef(key=key))
+        return True
+    except GestaltError as error:
+        if error.code == GestaltErrorCode.NOT_FOUND:
+            return False
+        raise
 
 
 class TestNamedSocketEnv(unittest.TestCase):
     def test_named_binding_roundtrip(self) -> None:
-        client = S3("named")
-        obj = client.object("named.txt")
-        obj.write_text("named")
-        self.assertEqual(obj.text(), "named")
-        client.close()
+        client = S3.connect("named")
+        _write_text(client, "named.txt", "named")
+        self.assertEqual(_read_bytes(client, "named.txt"), b"named")
 
 
 class TestTCPTargetEnv(unittest.TestCase):
@@ -135,11 +168,9 @@ class TestTCPTargetEnv(unittest.TestCase):
         os.environ[ENV_HOST_SERVICE_SOCKET] = target
         self.addCleanup(restore_target)
 
-        client = S3("tcp")
-        obj = client.object("tcp.txt")
-        obj.write_text("tcp")
-        self.assertEqual(obj.text(), "tcp")
-        client.close()
+        client = S3.connect("tcp")
+        _write_text(client, "tcp.txt", "tcp")
+        self.assertEqual(_read_bytes(client, "tcp.txt"), b"tcp")
 
     def test_tcp_target_token_roundtrip(self) -> None:
         token = "relay-token-python"
@@ -166,195 +197,198 @@ class TestTCPTargetEnv(unittest.TestCase):
         os.environ[token_env] = token
         self.addCleanup(restore_env)
 
-        client = S3("tcp-token")
-        obj = client.object("tcp-token.txt")
-        obj.write_text("token")
-        self.assertEqual(obj.text(), "token")
-        client.close()
+        client = S3.connect("tcp-token")
+        _write_text(client, "tcp-token.txt", "token")
+        self.assertEqual(_read_bytes(client, "tcp-token.txt"), b"token")
 
 
 class TestWriteReadRoundTrip(unittest.TestCase):
     def test_write_stream_stat_and_read(self) -> None:
-        client = _client()
-        ref = ObjectRef(key="streamed.txt")
-        meta = client.write_object(
-            ref,
-            io.BytesIO(b"hello world"),
-            WriteOptions(content_type="text/plain", metadata={"lang": "en"}),
+        client = S3.connect()
+        ref = S3ObjectRef(key="streamed.txt")
+        response = client.write_object(
+            WriteObjectOpen(
+                ref=ref,
+                content_type="text/plain",
+                metadata={"lang": "en"},
+            ),
+            [b"hello", b" world"],
         )
+        meta = response.meta
+        assert meta is not None
+        assert meta.ref is not None
         self.assertEqual(meta.ref.key, "streamed.txt")
         self.assertEqual(meta.size, 11)
         self.assertEqual(meta.content_type, "text/plain")
         self.assertEqual(meta.metadata, {"lang": "en"})
         self.assertTrue(bool(meta.etag))
 
-        stat = client.object("streamed.txt").stat()
+        stat = client.head_object(ref=ref).meta
+        assert stat is not None
         self.assertEqual(stat.size, 11)
         self.assertEqual(stat.content_type, "text/plain")
         self.assertIsNotNone(stat.last_modified)
 
-        read_meta, stream = client.read_object(ref)
+        read_meta, chunks = client.read_object(ReadObjectRequest(ref=ref))
         self.assertEqual(read_meta.size, 11)
-        with stream:
-            self.assertEqual(stream.read(5), b"hello")
-            self.assertEqual(stream.read(), b" world")
-        client.close()
+        self.assertEqual(chunks.read(), b"hello world")
 
     def test_large_in_memory_write_bytes_round_trips(self) -> None:
-        client = _client()
+        client = S3.connect()
         payload = b"x" * (5 * 1024 * 1024)
-        obj = client.object("large-bytes.bin")
-        meta = obj.write_bytes(payload)
+        chunks = [
+            payload[start : start + 64 * 1024]
+            for start in range(0, len(payload), 64 * 1024)
+        ]
+        ref = S3ObjectRef(key="large-bytes.bin")
+        response = client.write_object(WriteObjectOpen(ref=ref), chunks)
 
-        self.assertEqual(meta.size, len(payload))
-        self.assertEqual(obj.stat().size, len(payload))
-        self.assertEqual(obj.bytes(), payload)
-        client.close()
-
-    def test_close_discards_buffered_bytes(self) -> None:
-        client = _client()
-        ref = ObjectRef(key="close-buffered.txt")
-        client.write_object(ref, io.BytesIO(b"hello world"))
-
-        _, stream = client.read_object(ref)
-        self.assertEqual(stream.read(5), b"hello")
-        stream.close()
-        self.assertEqual(stream.read(), b"")
-        client.close()
-
-
-class TestJSONRoundTrip(unittest.TestCase):
-    def test_write_json_sets_content_type(self) -> None:
-        client = _client()
-        obj = client.object("config.json")
-        obj.write_json({"role": "admin", "tags": ["python", "go"]})
-        stat = obj.stat()
-        self.assertEqual(stat.content_type, "application/json")
-        self.assertEqual(obj.json(), {"role": "admin", "tags": ["python", "go"]})
-        client.close()
+        assert response.meta is not None
+        self.assertEqual(response.meta.size, len(payload))
+        stat = client.head_object(ref=ref).meta
+        assert stat is not None
+        self.assertEqual(stat.size, len(payload))
+        self.assertEqual(_read_bytes(client, "large-bytes.bin"), payload)
 
 
 class TestZeroByteObject(unittest.TestCase):
     def test_zero_byte_object_reads_cleanly(self) -> None:
-        client = _client()
-        obj = client.object("empty.bin")
-        meta = obj.write_bytes(b"")
-        self.assertEqual(meta.size, 0)
+        client = S3.connect()
+        ref = S3ObjectRef(key="empty.bin")
+        response = client.write_object(WriteObjectOpen(ref=ref), [])
+        assert response.meta is not None
+        self.assertEqual(response.meta.size, 0)
 
-        read_meta, stream = obj.stream()
+        read_meta, chunks = client.read_object(ReadObjectRequest(ref=ref))
         self.assertEqual(read_meta.size, 0)
-        with stream:
-            self.assertEqual(stream.read(), b"")
-        client.close()
+        self.assertEqual(chunks.read(), b"")
 
 
 class TestRangesAndErrors(unittest.TestCase):
     def test_range_reads_and_invalid_range(self) -> None:
-        client = _client()
-        obj = client.object("letters.txt")
-        obj.write_bytes(b"abcdef")
+        client = S3.connect()
+        _write_text(client, "letters.txt", "abcdef")
 
-        chunk = obj.bytes(ReadOptions(range=ByteRange(start=1, end=3)))
+        chunk = _read_bytes(client, "letters.txt", range=ByteRange(start=1, end=3))
         self.assertEqual(chunk, b"bcd")
 
-        with self.assertRaises(S3InvalidRangeError):
-            obj.bytes(ReadOptions(range=ByteRange(start=10)))
-        client.close()
+        with self.assertRaises(GestaltError) as raised:
+            _read_bytes(client, "letters.txt", range=ByteRange(start=10))
+        self.assertEqual(raised.exception.code, GestaltErrorCode.OUT_OF_RANGE)
 
     def test_not_found_and_precondition_mapping(self) -> None:
-        client = _client()
-        missing = client.object("missing.txt")
-        self.assertFalse(missing.exists())
-        with self.assertRaises(S3NotFoundError):
-            missing.stat()
+        client = S3.connect()
+        self.assertFalse(_exists(client, "missing.txt"))
+        with self.assertRaises(GestaltError) as raised:
+            client.head_object(ref=S3ObjectRef(key="missing.txt"))
+        self.assertEqual(raised.exception.code, GestaltErrorCode.NOT_FOUND)
 
-        guarded = client.object("guarded.txt")
-        guarded.write_text("first", WriteOptions(if_none_match="*"))
-        with self.assertRaises(S3PreconditionFailedError):
-            guarded.write_text("second", WriteOptions(if_none_match="*"))
-        client.close()
+        _write_text(client, "guarded.txt", "first", if_none_match="*")
+        with self.assertRaises(GestaltError) as guarded:
+            _write_text(client, "guarded.txt", "second", if_none_match="*")
+        self.assertEqual(
+            guarded.exception.code, GestaltErrorCode.FAILED_PRECONDITION
+        )
 
 
 class TestListCopyDeleteAndPresign(unittest.TestCase):
     def test_list_copy_delete_and_presign(self) -> None:
-        client = _client()
-        client.object("docs/a.txt").write_text("a")
-        client.object("docs/b.txt").write_text("b")
-        client.object("docs/nested/c.txt").write_text("c")
+        client = S3.connect()
+        _write_text(client, "docs/a.txt", "a")
+        _write_text(client, "docs/b.txt", "b")
+        _write_text(client, "docs/nested/c.txt", "c")
 
-        page1 = client.list_objects(ListOptions(prefix="docs/", max_keys=2))
-        self.assertEqual([item.ref.key for item in page1.objects], ["docs/a.txt", "docs/b.txt"])
+        page1 = client.list_objects(prefix="docs/", max_keys=2)
+        self.assertEqual(
+            [item.ref.key for item in page1.objects if item.ref is not None],
+            ["docs/a.txt", "docs/b.txt"],
+        )
         self.assertTrue(page1.has_more)
         self.assertEqual(page1.next_continuation_token, "docs/b.txt")
 
         page2 = client.list_objects(
-            ListOptions(
-                prefix="docs/",
-                continuation_token=page1.next_continuation_token,
-                max_keys=2,
-            )
+            prefix="docs/",
+            continuation_token=page1.next_continuation_token,
+            max_keys=2,
         )
-        self.assertEqual([item.ref.key for item in page2.objects], ["docs/nested/c.txt"])
+        self.assertEqual(
+            [item.ref.key for item in page2.objects if item.ref is not None],
+            ["docs/nested/c.txt"],
+        )
         self.assertFalse(page2.has_more)
 
-        grouped = client.list_objects(
-            ListOptions(prefix="docs/", delimiter="/", max_keys=10)
+        grouped = client.list_objects(prefix="docs/", delimiter="/", max_keys=10)
+        self.assertEqual(
+            [item.ref.key for item in grouped.objects if item.ref is not None],
+            ["docs/a.txt", "docs/b.txt"],
         )
-        self.assertEqual([item.ref.key for item in grouped.objects], ["docs/a.txt", "docs/b.txt"])
         self.assertEqual(grouped.common_prefixes, ["docs/nested/"])
 
         copied = client.copy_object(
-            ObjectRef(key="docs/a.txt"),
-            ObjectRef(key="docs/copy.txt"),
+            source=S3ObjectRef(key="docs/a.txt"),
+            destination=S3ObjectRef(key="docs/copy.txt"),
         )
-        self.assertEqual(copied.ref.key, "docs/copy.txt")
-        self.assertEqual(client.object("docs/copy.txt").text(), "a")
+        assert copied.meta is not None
+        assert copied.meta.ref is not None
+        self.assertEqual(copied.meta.ref.key, "docs/copy.txt")
+        self.assertEqual(_read_bytes(client, "docs/copy.txt"), b"a")
 
-        signed = client.object("docs/copy.txt").presign(
-            PresignOptions(
-                method=PresignMethod.PUT,
-                expires=dt.timedelta(minutes=5),
+        signed = client.presign_object(
+            PresignObjectRequest(
+                ref=S3ObjectRef(key="docs/copy.txt"),
+                method=PresignMethodValues.PRESIGN_METHOD_PUT,
+                expires_seconds=300,
                 headers={"x-test": "1"},
             )
         )
-        self.assertEqual(signed.method, PresignMethod.PUT)
-        self.assertTrue(signed.url.startswith("https://example.invalid/docs%2Fcopy.txt?"))
+        self.assertEqual(signed.method, PresignMethodValues.PRESIGN_METHOD_PUT)
+        self.assertTrue(
+            signed.url.startswith("https://example.invalid/docs%2Fcopy.txt?")
+        )
         self.assertIn("method=PUT", signed.url)
         self.assertEqual(signed.headers, {"x-test": "1"})
         self.assertIsNotNone(signed.expires_at)
 
-        access_url = client.object("docs/copy.txt").create_access_url(
-            PresignOptions(
-                method=PresignMethod.PUT,
-                expires=dt.timedelta(minutes=5),
+        object_access = S3ObjectAccess(
+            host_service_channel("s3", _socket_path)
+        )
+        access_url = object_access.create_object_access_url(
+            CreateObjectAccessURLRequest(
+                ref=S3ObjectRef(key="docs/copy.txt"),
+                method=PresignMethodValues.PRESIGN_METHOD_PUT,
+                expires_seconds=300,
                 headers={"Content-Length": "5"},
             )
         )
-        self.assertEqual(access_url.method, PresignMethod.PUT)
+        self.assertEqual(access_url.method, PresignMethodValues.PRESIGN_METHOD_PUT)
+        self.assertEqual(access_url.headers, {"Content-Length": "5"})
         self.assertTrue(
-            access_url.url.startswith("https://gestalt.example.test/api/v1/s3/object-access/")
+            access_url.url.startswith(
+                "https://gestalt.example.test/api/v1/s3/object-access/"
+            )
         )
         self.assertNotIn("docs/copy.txt", access_url.url)
-        self.assertEqual(access_url.headers, {"Content-Length": "5"})
         self.assertIsNotNone(access_url.expires_at)
 
-        with self.assertRaises(S3PreconditionFailedError):
+        with self.assertRaises(GestaltError) as precondition:
             client.copy_object(
-                ObjectRef(key="docs/a.txt"),
-                ObjectRef(key="docs/copy-precondition.txt"),
-                CopyOptions(if_match="wrong-etag"),
+                source=S3ObjectRef(key="docs/a.txt"),
+                destination=S3ObjectRef(key="docs/copy-precondition.txt"),
+                if_match="wrong-etag",
             )
+        self.assertEqual(
+            precondition.exception.code, GestaltErrorCode.FAILED_PRECONDITION
+        )
 
-        with self.assertRaises(S3NotFoundError):
+        with self.assertRaises(GestaltError) as missing:
             client.copy_object(
-                ObjectRef(key="docs/missing.txt"),
-                ObjectRef(key="docs/missing-copy.txt"),
+                source=S3ObjectRef(key="docs/missing.txt"),
+                destination=S3ObjectRef(key="docs/missing-copy.txt"),
             )
+        self.assertEqual(missing.exception.code, GestaltErrorCode.NOT_FOUND)
 
-        copied_obj = client.object("docs/copy.txt")
-        copied_obj.delete()
-        self.assertFalse(copied_obj.exists())
-        client.close()
+        client.delete_object(ref=S3ObjectRef(key="docs/copy.txt"))
+        self.assertFalse(_exists(client, "docs/copy.txt"))
 
 
 if __name__ == "__main__":

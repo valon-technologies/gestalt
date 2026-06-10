@@ -516,24 +516,6 @@ provider-authored GenAI spans and metrics.
 
 .. _python-storage-and-host-service-clients:
 
-.. _python-cache-client:
-
-Cache client
-------------
-
-.. autosummary::
-   :nosignatures:
-
-   CacheEntry
-   Cache
-
-.. autoclass:: CacheEntry
-
-.. autoclass:: Cache
-   :members:
-   :special-members: __enter__, __exit__
-   :exclude-members: __dict__, __module__, __weakref__
-
 .. _python-indexeddb-client:
 
 IndexedDB client
@@ -631,10 +613,14 @@ IndexedDB client
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-.. _python-s3-client:
+.. _python-s3-provider-helpers:
 
-S3 client
----------
+S3 provider helpers
+-------------------
+
+Authored S3 providers receive the generated native request models from
+:mod:`gestalt.s3` and signal canonical S3 failures with these exceptions. The
+runtime maps them onto the matching transport status codes.
 
 .. autosummary::
    :nosignatures:
@@ -642,22 +628,7 @@ S3 client
    S3NotFoundError
    S3PreconditionFailedError
    S3InvalidRangeError
-   ObjectRef
-   ObjectMeta
-   ByteRange
-   ReadOptions
-   WriteOptions
-   ListOptions
-   ListPage
-   CopyOptions
-   PresignMethod
-   PresignOptions
-   PresignResult
-   ObjectAccessURLOptions
-   ObjectAccessURL
-   S3ReadStream
-   S3
-   S3Object
+   ProviderReadResult
 
 .. autoexception:: S3NotFoundError
 
@@ -665,47 +636,7 @@ S3 client
 
 .. autoexception:: S3InvalidRangeError
 
-.. autoclass:: ObjectRef
-
-.. autoclass:: ObjectMeta
-
-.. autoclass:: ByteRange
-
-.. autoclass:: ReadOptions
-
-.. autoclass:: WriteOptions
-
-.. autoclass:: ListOptions
-
-.. autoclass:: ListPage
-
-.. autoclass:: CopyOptions
-
-.. autoclass:: PresignMethod
-
-.. autoclass:: PresignOptions
-
-.. autoclass:: PresignResult
-
-.. autodata:: ObjectAccessURLOptions
-   :annotation:
-
-.. autodata:: ObjectAccessURL
-   :annotation:
-
-.. autoclass:: S3ReadStream
-   :members:
-   :special-members: __enter__, __exit__
-   :exclude-members: __dict__, __module__, __weakref__
-
-.. autoclass:: S3
-   :members:
-   :special-members: __enter__, __exit__
-   :exclude-members: __dict__, __module__, __weakref__
-
-.. autoclass:: S3Object
-   :members:
-   :exclude-members: __dict__, __module__, __weakref__
+.. autoclass:: ProviderReadResult
 
 .. _python-host-service-clients:
 
@@ -713,29 +644,20 @@ Host service clients
 --------------------
 
 These clients connect to host services made available to a provider process by
-``gestaltd``.
+``gestaltd``. Cache, S3, app invocation, agent management, and the other
+provider services are covered by the
+:ref:`generated provider clients <python-generated-provider-clients>`.
 
 .. autosummary::
    :nosignatures:
 
    ENV_RUNTIME_SESSION_ID
-   Agent
-   AppProtocol
    RuntimeLogHost
    RuntimeLogWriter
    RuntimeLogHandler
    Workflow
 
 .. autodata:: ENV_RUNTIME_SESSION_ID
-
-.. autoclass:: Agent
-   :members:
-   :special-members: __enter__, __exit__
-   :exclude-members: __dict__, __module__, __weakref__
-
-.. autoclass:: AppProtocol
-   :members:
-   :exclude-members: __dict__, __module__, __weakref__
 
 .. autoclass:: RuntimeLogHost
    :members:
@@ -754,3 +676,122 @@ These clients connect to host services made available to a provider process by
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
+
+.. _python-generated-provider-clients:
+
+Generated provider clients
+--------------------------
+
+Each provider service ships a typed module under :mod:`gestalt` that pairs
+native dataclasses for request and response payloads with one gRPC client
+class per service. Docstrings come from the service definitions, and
+:mod:`gestalt.rpc_support` carries the shared error model and the native
+``JsonValue`` representation used by structured payload fields.
+
+Shared support: gestalt.rpc_support
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.rpc_support
+   :members:
+   :undoc-members:
+
+gestalt.agent
+~~~~~~~~~~~~~
+
+.. automodule:: gestalt.agent
+   :members:
+   :undoc-members:
+
+gestalt.app
+~~~~~~~~~~~
+
+.. ProviderMetadata is excluded: its protocol-version field names would trip
+   the published-docs leak check that guards transport internals out of this
+   reference.
+
+.. automodule:: gestalt.app
+   :members:
+   :undoc-members:
+   :exclude-members: ProviderMetadata
+
+gestalt.authentication
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.authentication
+   :members:
+   :undoc-members:
+
+gestalt.authorization
+~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.authorization
+   :members:
+   :undoc-members:
+
+gestalt.cache
+~~~~~~~~~~~~~
+
+.. automodule:: gestalt.cache
+   :members:
+   :undoc-members:
+
+gestalt.indexeddb
+~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.indexeddb
+   :members:
+   :undoc-members:
+
+gestalt.external_credential
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.external_credential
+   :members:
+   :undoc-members:
+
+gestalt.runtime
+~~~~~~~~~~~~~~~
+
+.. ProviderIdentity is excluded: its protocol-version field names would trip
+   the published-docs leak check that guards transport internals out of this
+   reference.
+
+.. automodule:: gestalt.runtime
+   :members:
+   :undoc-members:
+   :exclude-members: ProviderIdentity
+
+gestalt.runtime_provider
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.runtime_provider
+   :members:
+   :undoc-members:
+
+gestalt.s3
+~~~~~~~~~~
+
+.. automodule:: gestalt.s3
+   :members:
+   :undoc-members:
+
+gestalt.secrets
+~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.secrets
+   :members:
+   :undoc-members:
+
+gestalt.test
+~~~~~~~~~~~~
+
+.. automodule:: gestalt.test
+   :members:
+   :undoc-members:
+
+gestalt.workflow
+~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.workflow
+   :members:
+   :undoc-members:

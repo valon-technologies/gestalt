@@ -8,6 +8,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -15,16 +16,16 @@ import (
 
 func TestTransportCacheNamedSocketEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "unix://"+testCacheSocket)
-	client, err := gestalt.Cache("test")
+	cache, err := client.ConnectCache(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("connect named cache: %v", err)
 	}
 
 	ctx := context.Background()
-	if err := client.Set(ctx, "named", []byte("ok"), gestalt.CacheSetOptions{}); err != nil {
+	if err := cache.Set(ctx, "named", []byte("ok"), nil); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	value, found, err := client.Get(ctx, "named")
+	value, found, err := cache.Get(ctx, "named")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -45,12 +46,12 @@ func TestTransportCacheNamedBindingMetadata(t *testing.T) {
 	t.Cleanup(srv.Stop)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+lis.Addr().String())
-	client, err := gestalt.Cache("archive")
+	cache, err := client.ConnectCache(context.Background(), "archive")
 	if err != nil {
 		t.Fatalf("connect cache: %v", err)
 	}
 
-	if err := client.Set(context.Background(), "key", []byte("value"), gestalt.CacheSetOptions{}); err != nil {
+	if err := cache.Set(context.Background(), "key", []byte("value"), nil); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	if got := <-harness.binding; got != "archive" {
@@ -77,16 +78,16 @@ func TestTransportCacheTCPTargetEnv(t *testing.T) {
 	})
 
 	t.Setenv(gestalt.EnvHostServiceSocket, target)
-	client, err := gestalt.Cache("tcp")
+	cache, err := client.ConnectCache(context.Background(), "tcp")
 	if err != nil {
 		t.Fatalf("connect tcp cache: %v", err)
 	}
 
 	ctx := context.Background()
-	if err := client.Set(ctx, "tcp", []byte("ok"), gestalt.CacheSetOptions{}); err != nil {
+	if err := cache.Set(ctx, "tcp", []byte("ok"), nil); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	value, found, err := client.Get(ctx, "tcp")
+	value, found, err := cache.Get(ctx, "tcp")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -106,16 +107,16 @@ func TestTransportCacheTCPTargetTokenEnv(t *testing.T) {
 
 	t.Setenv(gestalt.EnvHostServiceSocket, target)
 	t.Setenv(gestalt.EnvHostServiceToken, token)
-	client, err := gestalt.Cache("tcp-token")
+	cache, err := client.ConnectCache(context.Background(), "tcp-token")
 	if err != nil {
 		t.Fatalf("connect tcp cache with token: %v", err)
 	}
 
 	ctx := context.Background()
-	if err := client.Set(ctx, "tcp-token", []byte("relay"), gestalt.CacheSetOptions{}); err != nil {
+	if err := cache.Set(ctx, "tcp-token", []byte("relay"), nil); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	value, found, err := client.Get(ctx, "tcp-token")
+	value, found, err := cache.Get(ctx, "tcp-token")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -126,10 +127,11 @@ func TestTransportCacheTCPTargetTokenEnv(t *testing.T) {
 
 func TestTransportCacheRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	if err := testCacheClient.SetMany(ctx, []gestalt.CacheEntry{
+	ttl := time.Minute
+	if err := testCacheClient.SetMany(ctx, []*client.CacheSetEntry{
 		{Key: "alpha", Value: []byte("one")},
 		{Key: "beta", Value: []byte("two")},
-	}, gestalt.CacheSetOptions{TTL: time.Minute}); err != nil {
+	}, &ttl); err != nil {
 		t.Fatalf("SetMany: %v", err)
 	}
 
@@ -147,7 +149,7 @@ func TestTransportCacheRoundTrip(t *testing.T) {
 		t.Fatal(`GetMany["missing"] should be absent`)
 	}
 
-	touched, err := testCacheClient.Touch(ctx, "alpha", time.Minute)
+	touched, err := testCacheClient.Touch(ctx, "alpha", &ttl)
 	if err != nil {
 		t.Fatalf("Touch: %v", err)
 	}

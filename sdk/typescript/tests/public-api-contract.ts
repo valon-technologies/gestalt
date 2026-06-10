@@ -36,7 +36,7 @@ const appendResponse: RuntimeLogAppendResponse = { lastSeq: 1n };
 const event: WorkflowEvent = { id: "event-1", type: "fixture.event" };
 const workspace: AgentWorkspace = {
   cwd: "/workspace",
-  checkouts: [{ url: "https://example.test/repo.git", ref: "main" }],
+  checkouts: [{ url: "https://example.test/repo.git", ref: "main", path: "" }],
 };
 const jsonObject: JsonObject = { ok: true };
 const jsonValue: JsonValue = { nested: ["value"] };

@@ -6,7 +6,7 @@ import { spawn, type Subprocess } from "bun";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { Cache } from "../src/cache.ts";
+import { Cache } from "../src/index.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
@@ -115,13 +115,13 @@ afterAll(() => {
 
 describe("Cache transport", () => {
   test("unix socket env round-trip", async () => {
-    const cache = new Cache();
+    const cache = Cache.connect();
     await cache.set("unix-key", encoder.encode("unix-value"));
     expect(decoder.decode((await cache.get("unix-key"))!)).toBe("unix-value");
   });
 
   test("named binding round-trip", async () => {
-    const cache = new Cache("named");
+    const cache = Cache.connect("named");
     await cache.set("named-key", encoder.encode("named-value"));
     expect(decoder.decode((await cache.get("named-key"))!)).toBe("named-value");
   });
@@ -131,7 +131,7 @@ describe("Cache transport", () => {
     const previousTarget = process.env[ENV_HOST_SERVICE_SOCKET];
     process.env[ENV_HOST_SERVICE_SOCKET] = target;
     try {
-      const cache = new Cache("tcp");
+      const cache = Cache.connect("tcp");
       await cache.set("tcp-key", encoder.encode("tcp-value"));
       expect(decoder.decode((await cache.get("tcp-key"))!)).toBe("tcp-value");
     } finally {
@@ -152,7 +152,7 @@ describe("Cache transport", () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = target;
     process.env[ENV_HOST_SERVICE_TOKEN] = token;
     try {
-      const cache = new Cache("tcp-token");
+      const cache = Cache.connect("tcp-token");
       await cache.set("tcp-token-key", encoder.encode("tcp-token-value"));
       expect(decoder.decode((await cache.get("tcp-token-key"))!)).toBe(
         "tcp-token-value",

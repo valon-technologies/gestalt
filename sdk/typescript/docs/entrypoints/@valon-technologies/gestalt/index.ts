@@ -63,26 +63,38 @@ export {
 } from "../../../../src/catalog.ts";
 export {
   App,
-  type AppGraphQLInvokeOptions,
-  type AppInvokeOptions,
-} from "../../../../src/app-access.ts";
+  type AccessContext,
+  type AgentInvocationContext,
+  type AppInvokeGraphQLRequest,
+  type AppInvokeRequest,
+  type CredentialContext,
+  type HostContext,
+  type InvocationContext,
+  type ProviderContext,
+  type RequestContext,
+  type RequestMetaContext,
+  type StringList,
+  type SubjectContext,
+  type SubjectPermissionContext,
+} from "../../../../src/app.ts";
+export {
+  InvokeError,
+  decodeAppResult,
+  decodeGraphQLResult,
+} from "../../../../src/invoke_support.ts";
 export {
   Agent,
-  type AgentCancelTurn,
-  type AgentCreateSession,
-  type AgentCreateTurn,
-  type AgentGetSession,
-  type AgentGetTurn,
-  type AgentListInteractions,
-  type AgentListSessions,
-  type AgentListTurnEvents,
-  type AgentListTurns,
-  type AgentResolveInteraction,
-  type AgentUpdateSession,
   type AgentWorkspace,
   type AgentWorkspaceGitCheckout,
-} from "../../../../src/agent-access.ts";
-export * from "../../../../src/workflow-access.ts";
+  type PreparedAgentWorkspace,
+} from "../../../../src/agent.ts";
+export { Workflow } from "../../../../src/workflow.ts";
+export {
+  GestaltError,
+  GestaltErrorCode,
+  type DurationMs,
+  type RpcStatus,
+} from "../../../../src/rpc_support.ts";
 export {
   RuntimeLogHost,
   type RuntimeLogAppendInput,
@@ -105,18 +117,34 @@ export {
 } from "../../../../src/auth.ts";
 export {
   Cache,
+  type CacheDeleteManyRequest,
+  type CacheDeleteManyResponse,
+  type CacheDeleteRequest,
+  type CacheDeleteResponse,
+  type CacheGetManyRequest,
+  type CacheGetManyResponse,
+  type CacheGetRequest,
+  type CacheGetResponse,
+  type CacheResult,
+  type CacheSetEntry,
+  type CacheSetManyRequest,
+  type CacheSetRequest,
+  type CacheTouchRequest,
+  type CacheTouchResponse,
+} from "../../../../src/cache.ts";
+export {
   CacheProvider,
   defineCacheProvider,
   isCacheProvider,
   type CacheEntry,
   type CacheProviderOptions,
   type CacheSetOptions,
-} from "../../../../src/cache.ts";
+} from "../../../../src/providers/cache.ts";
 export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
-} from "../../../../src/secrets.ts";
+} from "../../../../src/providers/secrets.ts";
 export {
   defineApp,
   isAppProvider,
@@ -129,7 +157,7 @@ export {
   type AppDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,
-} from "../../../../src/app.ts";
+} from "../../../../src/providers/app.ts";
 export {
   isProviderBase,
   ProviderBase,
@@ -188,34 +216,53 @@ export {
   type TransactionMode,
   type TransactionObjectStore,
   type TransactionOptions,
-} from "../../../../src/indexeddb.ts";
+} from "../../../../src/providers/indexeddb.ts";
+export {
+  PresignMethod,
+  S3,
+  S3ObjectAccess,
+  type ByteRange,
+  type CopyObjectRequest,
+  type CopyObjectResponse,
+  type CreateObjectAccessURLRequest,
+  type CreateObjectAccessURLResponse,
+  type DeleteObjectRequest,
+  type HeadObjectRequest,
+  type HeadObjectResponse,
+  type ListObjectsRequest,
+  type ListObjectsResponse,
+  type PresignObjectRequest,
+  type PresignObjectResponse,
+  type ReadObjectChunk,
+  type ReadObjectChunkResult,
+  type ReadObjectRequest,
+  type S3ObjectMeta,
+  type S3ObjectRef,
+  type WriteObjectOpen,
+  type WriteObjectRequest,
+  type WriteObjectRequestMsg,
+  type WriteObjectResponse,
+} from "../../../../src/s3.ts";
 export {
   defineS3Provider,
   isS3Provider,
-  PresignMethod,
-  S3,
   S3InvalidRangeError,
   S3NotFoundError,
   S3PreconditionFailedError,
   S3Provider,
-  type ByteRange,
   type CopyOptions,
   type ListOptions,
   type ListPage,
-  type ObjectAccessURL,
-  type ObjectAccessURLOptions,
   type ObjectMeta,
   type ObjectRef,
   type PresignOptions,
   type PresignResult,
   type ProviderReadResult,
   type ReadOptions,
-  type ReadResult,
   type S3BodySource,
-  type S3Object,
   type S3ProviderOptions,
   type WriteOptions,
-} from "../../../../src/s3.ts";
+} from "../../../../src/providers/s3.ts";
 export {
   AgentExecutionStatus,
   AgentInteractionState,
@@ -262,5 +309,5 @@ export {
   type ListedAgentTool,
   type ResolveAgentProviderInteractionRequest,
   type UpdateAgentProviderSessionRequest,
-} from "../../../../src/agent.ts";
-export * from "../../../../src/workflow.ts";
+} from "../../../../src/providers/agent.ts";
+export * from "../../../../src/providers/workflow.ts";

@@ -78,27 +78,38 @@ export {
 } from "./build.ts";
 export {
   App,
-  type AppGraphQLInvokeOptions,
-  type AppInvokeOptions,
-} from "./app-access.ts";
-export { InvokeError } from "./invoke-error.ts";
+  type AccessContext,
+  type AgentInvocationContext,
+  type AppInvokeGraphQLRequest,
+  type AppInvokeRequest,
+  type CredentialContext,
+  type HostContext,
+  type InvocationContext,
+  type ProviderContext,
+  type RequestContext,
+  type RequestMetaContext,
+  type StringList,
+  type SubjectContext,
+  type SubjectPermissionContext,
+} from "./app.ts";
+export {
+  InvokeError,
+  decodeAppResult,
+  decodeGraphQLResult,
+} from "./invoke_support.ts";
 export {
   Agent,
-  type AgentCancelTurn,
-  type AgentCreateSession,
-  type AgentCreateTurn,
-  type AgentGetSession,
-  type AgentGetTurn,
-  type AgentListInteractions,
-  type AgentListSessions,
-  type AgentListTurnEvents,
-  type AgentListTurns,
-  type AgentResolveInteraction,
-  type AgentUpdateSession,
   type AgentWorkspace,
   type AgentWorkspaceGitCheckout,
-} from "./agent-access.ts";
-export * from "./workflow-access.ts";
+  type PreparedAgentWorkspace,
+} from "./agent.ts";
+export { Workflow } from "./workflow.ts";
+export {
+  GestaltError,
+  GestaltErrorCode,
+  type DurationMs,
+  type RpcStatus,
+} from "./rpc_support.ts";
 export {
   ENV_RUNTIME_SESSION_ID,
   RuntimeLogHost,
@@ -109,8 +120,8 @@ export {
   type RuntimeLogStreamName,
   type RuntimeLogWriterOptions,
 } from "./runtime-log-host.ts";
+export { Authorization } from "./authorization.ts";
 export {
-  Authorization,
   AuthorizationProvider,
   DefaultAccessPolicy,
   RelationshipTargetType,
@@ -120,7 +131,6 @@ export {
   isAuthorizationProvider,
   type AddRelationshipRequest,
   type AddRelationshipResponse,
-  type Authorization as AuthorizationClient,
   type AuthorizationAction,
   type AuthorizationModel,
   type AuthorizationModelRef,
@@ -153,7 +163,7 @@ export {
   type SetAuthorizationStateResponse,
   type SubjectSet,
   type SubjectSetType,
-} from "./authorization.ts";
+} from "./providers/authorization.ts";
 export {
   AuthenticationProvider,
   defineAuthenticationProvider,
@@ -167,13 +177,29 @@ export {
 } from "./auth.ts";
 export {
   Cache,
+  type CacheDeleteManyRequest,
+  type CacheDeleteManyResponse,
+  type CacheDeleteRequest,
+  type CacheDeleteResponse,
+  type CacheGetManyRequest,
+  type CacheGetManyResponse,
+  type CacheGetRequest,
+  type CacheGetResponse,
+  type CacheResult,
+  type CacheSetEntry,
+  type CacheSetManyRequest,
+  type CacheSetRequest,
+  type CacheTouchRequest,
+  type CacheTouchResponse,
+} from "./cache.ts";
+export {
   CacheProvider,
   defineCacheProvider,
   isCacheProvider,
   type CacheEntry,
   type CacheProviderOptions,
   type CacheSetOptions,
-} from "./cache.ts";
+} from "./providers/cache.ts";
 export {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
@@ -184,7 +210,7 @@ export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
-} from "./secrets.ts";
+} from "./providers/secrets.ts";
 export {
   AppProvider,
   defineApp,
@@ -197,7 +223,7 @@ export {
   type AppDefinitionOptions,
   type SessionCatalog,
   type SessionCatalogHandler,
-} from "./app.ts";
+} from "./providers/app.ts";
 export {
   ProviderBase,
   isProviderBase,
@@ -264,7 +290,7 @@ export {
   runBundledProvider,
   runLoadedProvider,
   serve,
-} from "./runtime.ts";
+} from "./providers/runtime.ts";
 export {
   defaultProviderName,
   formatModuleTarget,
@@ -307,35 +333,54 @@ export {
   type IndexSchema,
   type ObjectStoreSchema,
   type OpenCursorOptions,
-} from "./indexeddb.ts";
+} from "./providers/indexeddb.ts";
 export {
+  PresignMethod,
   S3,
+  S3ObjectAccess,
+  type ByteRange,
+  type CopyObjectRequest,
+  type CopyObjectResponse,
+  type CreateObjectAccessURLRequest,
+  type CreateObjectAccessURLResponse,
+  type DeleteObjectRequest,
+  type HeadObjectRequest,
+  type HeadObjectResponse,
+  type ListObjectsRequest,
+  type ListObjectsResponse,
+  type PresignObjectRequest,
+  type PresignObjectResponse,
+  type ReadObjectChunk,
+  type ReadObjectChunkResult,
+  type ReadObjectRequest,
+  type S3ObjectMeta,
+  type S3ObjectRef,
+  type WriteObjectOpen,
+  type WriteObjectRequest,
+  type WriteObjectRequestMsg,
+  type WriteObjectResponse,
+} from "./s3.ts";
+export {
   S3Provider,
   S3InvalidRangeError,
   S3NotFoundError,
   S3PreconditionFailedError,
-  PresignMethod,
   createS3Service,
   defineS3Provider,
   isS3Provider,
-  type S3Object,
-  type ByteRange,
   type CopyOptions,
   type ListOptions,
   type ListPage,
-  type ObjectAccessURL,
-  type ObjectAccessURLOptions,
   type ObjectMeta,
   type ObjectRef,
   type PresignOptions,
   type PresignResult,
   type ProviderReadResult,
   type ReadOptions,
-  type ReadResult,
   type S3BodySource,
   type S3ProviderOptions,
   type WriteOptions,
-} from "./s3.ts";
+} from "./providers/s3.ts";
 export {
   AgentExecutionStatus,
   AgentInteractionState,
@@ -388,8 +433,8 @@ export {
   type ListedAgentTool,
   type ResolveAgentProviderInteractionRequest,
   type UpdateAgentProviderSessionRequest,
-} from "./agent.ts";
-export * from "./workflow.ts";
+} from "./providers/agent.ts";
+export * from "./providers/workflow.ts";
 export {
   GENAI_OPERATION_CHAT,
   GENAI_OPERATION_EXECUTE_TOOL,

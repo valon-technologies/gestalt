@@ -13,26 +13,16 @@ use generated::v1::{
     AppInvokeGraphQlRequest, AppInvokeRequest, OperationResult,
     RequestContext as ProviderRequestContext,
 };
-use gestalt::proto::v1::{RequestContext, SubjectContext};
-use gestalt::{App, InvokeGraphQLOptions, InvokeOptions, Request};
+use gestalt::App;
+use gestalt::app::{
+    AppInvokeRequest as NativeAppInvokeRequest, RequestContext, StringList, SubjectContext,
+};
 use prost_types::Struct;
-use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-
-#[derive(Serialize)]
-struct IssueParams {
-    issue: i32,
-    labels: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct BadNumberParams {
-    score: f64,
-}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -173,35 +163,31 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let request = Request::default();
-    let mut app = gestalt::with_request_context(
-        Some(request_context("user:app-access")),
-        App::connect(&request),
-    )
-    .await
-    .expect("connect app");
+    let mut app = App::connect()
+        .await
+        .expect("connect app")
+        .with_context(request_context("user:app-access"));
+    let params = serde_json::json!({ "issue": 42, "labels": ["bug"] });
     let response = app
-        .invoke_raw(
-            "github",
-            "get_issue",
-            IssueParams {
-                issue: 42,
-                labels: vec!["bug".to_string()],
-            },
-            Some(InvokeOptions {
-                connection: "work".to_string(),
-                instance: "secondary".to_string(),
-                idempotency_key: " issue-42-create ".to_string(),
-                credential_mode: "none".to_string(),
-            }),
-        )
+        .invoke_raw(NativeAppInvokeRequest {
+            app: "github".to_string(),
+            operation: "get_issue".to_string(),
+            connection: "work".to_string(),
+            instance: "secondary".to_string(),
+            idempotency_key: "issue-42-create".to_string(),
+            credential_mode: "none".to_string(),
+            params: Some(params.as_object().expect("params object").clone()),
+            ..Default::default()
+        })
         .await
         .expect("invoke nested operation");
 
     assert_eq!(response.status, 207);
     assert_eq!(
         response.headers.get("Location"),
-        Some(&vec!["https://example.test/created".to_string()])
+        Some(&StringList {
+            values: vec!["https://example.test/created".to_string()],
+        })
     );
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&response.body).expect("parse response"),
@@ -215,35 +201,6 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
             "idempotency_key": "issue-42-create",
             "credential_mode": "none",
         })
-    );
-    let err = app
-        .invoke::<_, serde_json::Value>("github", "bad", "not-object", None)
-        .await
-        .expect_err("non-object params should fail");
-    assert!(
-        err.to_string().contains("must serialize to a JSON object"),
-        "unexpected error: {err}"
-    );
-    let err = app
-        .invoke::<_, serde_json::Value>("github", "bad", BadNumberParams { score: f64::NAN }, None)
-        .await
-        .expect_err("non-finite params should fail");
-    assert!(
-        err.to_string().contains("finite"),
-        "unexpected error: {err}"
-    );
-    let err = app
-        .invoke::<_, serde_json::Value>(
-            "github",
-            "bad",
-            BTreeMap::from([(1_i32, "not-a-string-key".to_string())]),
-            None,
-        )
-        .await
-        .expect_err("non-string map keys should fail");
-    assert!(
-        err.to_string().contains("map keys must be strings"),
-        "unexpected error: {err}"
     );
 
     let seen = server
@@ -273,7 +230,7 @@ async fn app_connects_over_unix_socket_and_sends_request_context() {
 }
 
 #[tokio::test]
-async fn request_app_uses_embedded_context() {
+async fn invoke_raw_injects_default_context_when_unset() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-request-app.sock");
     let _socket_guard =
@@ -290,13 +247,16 @@ async fn request_app_uses_embedded_context() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let request = Request::default();
-    let mut app =
-        gestalt::with_request_context(Some(request_context("user:request-app")), request.app())
-            .await
-            .expect("request app");
+    let mut app = App::connect()
+        .await
+        .expect("connect app")
+        .with_context(request_context("user:request-app"));
     let response = app
-        .invoke_raw("linear", "search_issues", serde_json::json!({}), None)
+        .invoke_raw(NativeAppInvokeRequest {
+            app: "linear".to_string(),
+            operation: "search_issues".to_string(),
+            ..NativeAppInvokeRequest::default()
+        })
         .await
         .expect("invoke nested operation");
 
@@ -339,15 +299,17 @@ async fn app_connects_over_tcp_and_forwards_relay_token() {
             .expect("serve app over tcp");
     });
 
-    let request = Request::default();
-    let mut app = gestalt::with_request_context(
-        Some(request_context("user:app-access")),
-        App::connect(&request),
-    )
-    .await
-    .expect("connect app");
+    let mut app = App::connect()
+        .await
+        .expect("connect app")
+        .with_context(request_context("user:app-access"));
     let response = app
-        .invoke_raw("github", "plain_text", serde_json::json!({}), None)
+        .invoke_raw(NativeAppInvokeRequest {
+            app: "github".to_string(),
+            operation: "plain_text".to_string(),
+            params: Some(serde_json::Map::new()),
+            ..Default::default()
+        })
         .await
         .expect("invoke nested operation");
 
@@ -381,23 +343,19 @@ async fn app_invokes_graphql_surface() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let request = Request::default();
-    let mut app = gestalt::with_request_context(
-        Some(request_context("user:graphql-app-access")),
-        App::connect(&request),
-    )
-    .await
-    .expect("connect app");
+    let mut app = App::connect()
+        .await
+        .expect("connect app")
+        .with_context(request_context("user:graphql-app-access"));
+    let variables = serde_json::json!({ "team": "eng" });
     let response = app
-        .invoke_graphql_raw(
-            "linear",
-            "  query Viewer($team: String!) { viewer(team: $team) { id } }  ",
-            Some(serde_json::json!({ "team": "eng" })),
-            Some(InvokeGraphQLOptions {
-                connection: "workspace".to_string(),
-                instance: "secondary".to_string(),
-                idempotency_key: " graphql-call-42 ".to_string(),
-            }),
+        .invoke_graphql(
+            "linear".to_string(),
+            "query Viewer($team: String!) { viewer(team: $team) { id } }".to_string(),
+            "workspace".to_string(),
+            "secondary".to_string(),
+            "graphql-call-42".to_string(),
+            Some(variables.as_object().expect("variables object").clone()),
         )
         .await
         .expect("invoke graphql surface");

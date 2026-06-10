@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 )
 
 type Provider struct {
@@ -154,7 +155,11 @@ func (p *Provider) invokeRequestContext(ctx context.Context, _ InvokeRequestCont
 		return gestalt.Response[RequestContextOutput]{}, err
 	}
 
-	result, err := invoker.InvokeRaw(ctx, "example", "request_context", nil, nil)
+	result, err := invoker.InvokeRaw(ctx, &client.AppInvokeRequest{
+		App:       "example",
+		Operation: "request_context",
+		Params:    map[string]any{},
+	})
 	if err != nil {
 		return gestalt.Response[RequestContextOutput]{}, err
 	}

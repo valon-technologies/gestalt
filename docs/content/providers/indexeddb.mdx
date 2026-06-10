@@ -57,7 +57,7 @@ Then inside the plugin:
 
     ctx := context.Background()
 
-    db, err := gestalt.IndexedDB()
+    db, err := gestalt.IndexedDB(ctx)
     if err != nil {
         log.Fatal(err)
     }
