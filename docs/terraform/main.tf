@@ -20,6 +20,7 @@ provider "google" {
 }
 
 locals {
+  www_domain                = "www.${var.domain}"
   docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
   github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
   sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
@@ -115,8 +116,24 @@ resource "google_compute_url_map" "docs" {
   default_service = google_compute_backend_service.docs.id
 
   host_rule {
+    hosts        = [local.www_domain]
+    path_matcher = "www_redirect"
+  }
+
+  host_rule {
     hosts        = ["*"]
     path_matcher = "docs"
+  }
+
+  path_matcher {
+    name = "www_redirect"
+
+    default_url_redirect {
+      host_redirect          = var.domain
+      https_redirect         = false
+      strip_query            = false
+      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+    }
   }
 
   path_matcher {
@@ -219,6 +236,15 @@ resource "google_dns_record_set" "registry" {
   type         = "A"
   ttl          = 300
   rrdatas      = [google_compute_global_address.docs.address]
+}
+
+resource "google_dns_record_set" "www" {
+  provider     = google.dns
+  managed_zone = google_dns_managed_zone.docs.name
+  name         = "${local.www_domain}."
+  type         = "CNAME"
+  ttl          = 300
+  rrdatas      = ["${var.domain}."]
 }
 
 # ---------- Workload Identity Federation ----------
