@@ -816,9 +816,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if callerKind != "" && callerName != "" {
 		ctx = invocation.WithCallerProvider(ctx, callerKind, callerName)
 	}
-	if len(req.GetTools()) > 0 {
-		return nil, fmt.Errorf("%w: turn-level resolved tools are not supported; configure session tools instead", invocation.ErrInvalidInvocation)
-	}
 	toolSource := coreagent.ToolSourceModeNone
 	var toolRefs []coreagent.ToolRef
 	var listedTools []coreagent.ListedTool

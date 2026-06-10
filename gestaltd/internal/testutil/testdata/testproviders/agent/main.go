@@ -19,12 +19,13 @@ import (
 type agentProvider struct {
 	gestalt.UnimplementedAgentProvider
 
-	mu             sync.Mutex
-	configuredName string
-	sessions       map[string]*gestalt.AgentSession
-	turns          map[string]*gestalt.AgentTurn
-	turnEvents     map[string][]*gestalt.AgentTurnEvent
-	interactions   map[string]*gestalt.AgentInteraction
+	mu                  sync.Mutex
+	configuredName      string
+	sessions            map[string]*gestalt.AgentSession
+	turns               map[string]*gestalt.AgentTurn
+	turnEvents          map[string][]*gestalt.AgentTurnEvent
+	interactions        map[string]*gestalt.AgentInteraction
+	sessionCatalogTools map[string]bool
 }
 
 func newAgentProvider() *agentProvider {
@@ -53,6 +54,12 @@ func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgen
 		req.CreatedBySubjectID,
 		req.Metadata,
 	)
+	if config, ok := req.Tools.(*gestalt.AgentCatalogToolConfig); ok && len(config.Tools) > 0 {
+		if p.sessionCatalogTools == nil {
+			p.sessionCatalogTools = map[string]bool{}
+		}
+		p.sessionCatalogTools[session.ID] = true
+	}
 	return cloneSession(session), nil
 }
 
@@ -100,7 +107,6 @@ func (p *agentProvider) CreateTurn(ctx context.Context, req *gestalt.CreateAgent
 		strings.TrimSpace(req.SessionID),
 		strings.TrimSpace(req.Model),
 		req.Messages,
-		req.Tools,
 		req.Metadata,
 		req.Output,
 		req.CreatedBySubjectID,
@@ -251,7 +257,6 @@ func (p *agentProvider) startTurn(
 	sessionID string,
 	model string,
 	messages []gestalt.AgentMessage,
-	tools []gestalt.ResolvedAgentTool,
 	metadata map[string]any,
 	requestedOutput *gestalt.AgentOutput,
 	createdBySubjectID string,
@@ -297,7 +302,10 @@ func (p *agentProvider) startTurn(
 	})
 	p.mu.Unlock()
 
-	if len(tools) > 0 {
+	p.mu.Lock()
+	hasCatalogTools := p.sessionCatalogTools[sessionID]
+	p.mu.Unlock()
+	if hasCatalogTools {
 		app, err := gestalt.AppFromContext(ctx)
 		if err != nil {
 			output["app_error"] = err.Error()

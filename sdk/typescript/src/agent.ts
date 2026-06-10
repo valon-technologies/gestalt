@@ -49,7 +49,6 @@ import {
   type ListAgentProviderTurnsRequest as ProtoListAgentProviderTurnsRequest,
   type ListedAgentTool as ProtoListedAgentTool,
   type ResolveAgentProviderInteractionRequest as ProtoResolveAgentProviderInteractionRequest,
-  type ResolvedAgentTool as ProtoResolvedAgentTool,
   type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
@@ -206,14 +205,6 @@ export interface AgentCatalogToolConfig {
   tools?: readonly ListedAgentTool[] | undefined;
 }
 
-export interface ResolvedAgentTool {
-  id?: string | undefined;
-  name?: string | undefined;
-  description?: string | undefined;
-  parametersSchema?: JsonObjectInput | undefined;
-  ref?: AgentToolRef | undefined;
-}
-
 export interface AgentProviderCapabilities {
   streamingText?: boolean | undefined;
   toolCalls?: boolean | undefined;
@@ -357,7 +348,6 @@ export interface CreateAgentProviderTurnRequest {
   idempotencyKey: string;
   model: string;
   messages: readonly AgentMessage[];
-  tools: readonly ResolvedAgentTool[];
   output: AgentOutput;
   metadata?: JsonObjectInput | undefined;
   createdBySubjectId?: string | undefined;
@@ -808,7 +798,6 @@ function createAgentProviderTurnRequestFromProto(
     idempotencyKey: request.idempotencyKey,
     model: request.model,
     messages: request.messages.map(agentMessageFromProto),
-    tools: request.tools.map(resolvedAgentToolFromProto),
     output,
     metadata: optionalObjectFromStruct(request.metadata),
     createdBySubjectId: request.createdBySubjectId ?? "",
@@ -991,15 +980,6 @@ function capabilitiesToProto(
   };
 }
 
-function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgentTool {
-  return {
-    id: tool.id,
-    name: tool.name,
-    description: tool.description,
-    parametersSchema: optionalObjectFromStruct(tool.parametersSchema),
-    ref: tool.ref === undefined ? undefined : agentToolRefFromProto(tool.ref),
-  };
-}
 
 function agentRequestSubjectFromProto(
   request: {

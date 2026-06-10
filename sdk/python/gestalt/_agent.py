@@ -457,22 +457,12 @@ class AgentTurnDisplay:
 
 
 @dataclass(slots=True)
-class ResolvedAgentTool:
-    id: str = ""
-    name: str = ""
-    description: str = ""
-    parameters_schema: JsonObjectInput | None = None
-    ref: AgentToolRef | None = None
-
-
-@dataclass(slots=True)
 class CreateAgentProviderTurnRequest:
     turn_id: str = ""
     session_id: str = ""
     idempotency_key: str = ""
     model: str = ""
     messages: Iterable[AgentMessage] = field(default_factory=list)
-    tools: Iterable[ResolvedAgentTool] = field(default_factory=list)
     output: AgentOutput | Mapping[str, Any] | None = None
     metadata: JsonObject | None = None
     created_by_subject_id: str = ""
@@ -699,7 +689,6 @@ def create_agent_provider_turn_request_from_proto(
         idempotency_key=request.idempotency_key,
         model=request.model,
         messages=[agent_message_from_proto(message) for message in request.messages],
-        tools=[resolved_agent_tool_from_proto(tool) for tool in request.tools],
         output=_required_agent_output_from_proto(request.output),
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
@@ -1222,16 +1211,6 @@ def agent_session_start_hook_from_proto(value: Any) -> AgentSessionStartHook:
     )
 
 
-def resolved_agent_tool_from_proto(value: Any) -> ResolvedAgentTool:
-    return ResolvedAgentTool(
-        id=value.id,
-        name=value.name,
-        description=value.description,
-        parameters_schema=struct_to_dict(value.parameters_schema)
-        if has_field(value, "parameters_schema")
-        else None,
-        ref=agent_tool_ref_from_proto(value.ref) if has_field(value, "ref") else None,
-    )
 
 
 def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:

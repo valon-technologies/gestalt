@@ -261,7 +261,6 @@ export {
   type ListAgentProviderTurnsResponse,
   type ListedAgentTool,
   type ResolveAgentProviderInteractionRequest,
-  type ResolvedAgentTool,
   type UpdateAgentProviderSessionRequest,
 } from "../../../../src/agent.ts";
 export * from "../../../../src/workflow.ts";

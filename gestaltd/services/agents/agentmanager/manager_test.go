@@ -2319,53 +2319,12 @@ func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
 	req := alpha.createTurnReqs[0]
-	if len(req.GetTools()) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want none", req.GetTools())
-	}
 	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
 	if scope.ToolSource != coreagent.ToolSourceModeNone {
 		t.Fatalf("scope tool source = %q, want none", scope.ToolSource)
 	}
 	if len(scope.ToolRefs) != 0 || len(scope.Connections) != 0 {
 		t.Fatalf("turn scope = refs:%#v connections:%#v, want no tool or connection scope", scope.ToolRefs, scope.Connections)
-	}
-}
-
-func TestManagerCreateTurnRejectsResolvedTools(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		ProviderName:   "alpha",
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Output:         agentTextOutputProto(),
-		Tools:          []*proto.ResolvedAgentTool{{Id: "tool-1", Name: "tool"}},
-	})
-	if !errors.Is(err, invocation.ErrInvalidInvocation) {
-		t.Fatalf("CreateTurn error = %v, want invalid invocation", err)
-	}
-	if len(alpha.createTurnReqs) != 0 {
-		t.Fatalf("CreateTurn requests = %d, want 0", len(alpha.createTurnReqs))
 	}
 }
 

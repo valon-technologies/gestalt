@@ -315,15 +315,6 @@ pub struct AgentPreparedWorkspace {
     pub cwd: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ResolvedAgentTool {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub parameters_schema: Option<AgentJson>,
-    pub r#ref: Option<AgentToolRef>,
-}
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentToolRef {
     pub app: String,
@@ -588,7 +579,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub idempotency_key: String,
     pub model: String,
     pub messages: Vec<AgentMessage>,
-    pub tools: Vec<ResolvedAgentTool>,
     pub output: AgentOutput,
     pub metadata: Option<AgentJson>,
     pub created_by_subject_id: Option<String>,
@@ -1338,17 +1328,6 @@ fn create_turn_request_from_proto(
         idempotency_key: value.idempotency_key,
         model: value.model,
         messages: value.messages.into_iter().map(message_from_proto).collect(),
-        tools: value
-            .tools
-            .into_iter()
-            .map(|tool| ResolvedAgentTool {
-                id: tool.id,
-                name: tool.name,
-                description: tool.description,
-                parameters_schema: json_from_struct(tool.parameters_schema),
-                r#ref: tool.r#ref.map(agent_tool_ref_from_proto),
-            })
-            .collect(),
         output: required_agent_output_from_proto(value.output)?,
         metadata: json_from_struct(value.metadata),
         created_by_subject_id: Some(value.created_by_subject_id)
