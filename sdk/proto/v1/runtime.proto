@@ -11,6 +11,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
+import "v1/annotations.proto";
 
 enum ProviderKind {
   PROVIDER_KIND_UNSPECIFIED = 0;
@@ -53,6 +54,8 @@ message ConfigureProviderRequest {
 // ConfigureProviderResponse confirms the protocol version the provider is
 // serving.
 message ConfigureProviderResponse {
+  option (unwrap) = "protocol_version";
+
   int32 protocol_version = 1;
 }
 
@@ -65,6 +68,8 @@ message HealthCheckResponse {
 // StartRuntimeProviderResponse confirms the protocol version the provider is
 // serving after the optional runtime start phase.
 message StartRuntimeProviderResponse {
+  option (unwrap) = "protocol_version";
+
   int32 protocol_version = 1;
 }
 
@@ -72,7 +77,11 @@ message StartRuntimeProviderResponse {
 // kind.
 service ProviderLifecycle {
   rpc GetProviderIdentity(google.protobuf.Empty) returns (ProviderIdentity);
-  rpc ConfigureProvider(ConfigureProviderRequest) returns (ConfigureProviderResponse);
+  rpc ConfigureProvider(ConfigureProviderRequest) returns (ConfigureProviderResponse) {
+    option (signature) = "name";
+    option (signature) = "protocol_version";
+    option (signature) = "config";
+  }
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
   rpc StartProvider(google.protobuf.Empty) returns (StartRuntimeProviderResponse);
 }

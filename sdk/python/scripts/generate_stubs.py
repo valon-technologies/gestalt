@@ -6,6 +6,7 @@ from pathlib import Path
 
 PROTO_MODULES = (
     "agent",
+    "annotations",
     "authentication",
     "authorization",
     "cache",
@@ -18,6 +19,7 @@ PROTO_MODULES = (
     "test",
     "workflow",
 )
+SERVICELESS_PROTO_MODULES = ("annotations",)
 GRPC_RUNTIME_IMPORT_PREFIX = "from v1 import "
 GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX = "from . import "
 TOP_LEVEL_V1_IMPORT_MARKERS = ("from v1 import ", "import v1.")
@@ -126,35 +128,37 @@ def main() -> int:
                 source=pb2_source,
             )
 
-            pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
-            pb2_import_module = grpc_pb2_import_module(module_name)
-            pb2_import_alias = grpc_pb2_import_alias(module_name)
-            expected_import = f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n"
-            if expected_import not in pb2_grpc_source:
-                raise RuntimeError(
-                    f"unexpected grpc Python import layout in generated {module_name} stub"
-                )
+            pb2_grpc_source = None
+            if module_name not in SERVICELESS_PROTO_MODULES:
+                pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
+                pb2_import_module = grpc_pb2_import_module(module_name)
+                pb2_import_alias = grpc_pb2_import_alias(module_name)
+                expected_import = f"{GRPC_RUNTIME_IMPORT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n"
+                if expected_import not in pb2_grpc_source:
+                    raise RuntimeError(
+                        f"unexpected grpc Python import layout in generated {module_name} stub"
+                    )
 
-            # Buf's grpc Python app emits a top-level import, but these stubs
-            # are vendored under gestalt._gen.v1 and need package-relative imports.
-            pb2_grpc_source = pb2_grpc_source.replace(
-                expected_import,
-                f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
-                1,
-            )
-            pb2_grpc_source = pb2_grpc_source.replace(
-                "import grpc\n\n"
-                "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
-                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
-                grpc_runtime_header(module_name, include_empty_import=True),
-                1,
-            )
-            pb2_grpc_source = pb2_grpc_source.replace(
-                "import grpc\n\n"
-                f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
-                grpc_runtime_header(module_name, include_empty_import=False),
-                1,
-            )
+                # Buf's grpc Python app emits a top-level import, but these stubs
+                # are vendored under gestalt._gen.v1 and need package-relative imports.
+                pb2_grpc_source = pb2_grpc_source.replace(
+                    expected_import,
+                    f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
+                    1,
+                )
+                pb2_grpc_source = pb2_grpc_source.replace(
+                    "import grpc\n\n"
+                    "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
+                    f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
+                    grpc_runtime_header(module_name, include_empty_import=True),
+                    1,
+                )
+                pb2_grpc_source = pb2_grpc_source.replace(
+                    "import grpc\n\n"
+                    f"from . import {pb2_import_module}_pb2 as v1_dot_{pb2_import_alias}__pb2\n",
+                    grpc_runtime_header(module_name, include_empty_import=False),
+                    1,
+                )
 
             (target_dir / f"{module_name}_pb2.py").write_text(
                 pb2_source, encoding="utf-8"
@@ -171,10 +175,11 @@ def main() -> int:
                 pyi_source,
                 encoding="utf-8",
             )
-            (target_dir / f"{module_name}_pb2_grpc.py").write_text(
-                pb2_grpc_source,
-                encoding="utf-8",
-            )
+            if pb2_grpc_source is not None:
+                (target_dir / f"{module_name}_pb2_grpc.py").write_text(
+                    pb2_grpc_source,
+                    encoding="utf-8",
+                )
 
     return 0
 

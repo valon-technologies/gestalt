@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Gestalt Python SDK &#8212; Gestalt Python SDK</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=12dfc556" />
+    <script src="_static/documentation_options.js?v=f2e818cd"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Python API Reference" href="reference.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="gestalt-python-sdk">
+<h1>Gestalt Python SDK<a class="headerlink" href="#gestalt-python-sdk" title="Link to this heading">¶</a></h1>
+<p>Use <a class="reference internal" href="reference.html#module-gestalt" title="gestalt"><code class="xref py py-mod docutils literal notranslate"><span class="pre">gestalt</span></code></a> to build executable Gestalt providers with Python models,
+decorators, runtime providers, host-service clients, and telemetry helpers.</p>
+<p>The package is published as <code class="docutils literal notranslate"><span class="pre">gestalt-sdk</span></code> and imported as <code class="docutils literal notranslate"><span class="pre">gestalt</span></code> in
+provider projects.</p>
+<p>This reference focuses on the handwritten Python SDK surface. Runtime transport
+internals are intentionally excluded from these authored pages.</p>
+<section id="api-sections">
+<h2>API sections<a class="headerlink" href="#api-sections" title="Link to this heading">¶</a></h2>
+<p>The API reference is organized by the provider-authoring workflow:</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="reference.html#python-core-authoring-types"><span class="std std-ref">Core authoring types</span></a> for models,
+request and response wrappers, and operation results.</p></li>
+<li><p><a class="reference internal" href="reference.html#python-app-authoring"><span class="std std-ref">App authoring</span></a> for executable app
+definitions, catalogs, session catalogs, and HTTP subject resolution.</p></li>
+<li><p><a class="reference internal" href="reference.html#python-workflow-helpers"><span class="std std-ref">Workflow helpers</span></a> for native workflow target,
+run, schedule, signal, and event values.</p></li>
+<li><p><a class="reference internal" href="reference.html#python-agent-provider-models"><span class="std std-ref">Agent provider models</span></a> for agent
+sessions, turns, messages, tools, and provider responses.</p></li>
+<li><p><a class="reference internal" href="reference.html#python-provider-interfaces"><span class="std std-ref">Provider interfaces</span></a> for executable
+provider surfaces and authentication payloads.</p></li>
+<li><p><a class="reference internal" href="reference.html#python-provider-telemetry"><span class="std std-ref">Provider telemetry</span></a> for provider-authored
+GenAI spans and metrics.</p></li>
+<li><p><a class="reference internal" href="reference.html#python-storage-and-host-service-clients"><span class="std std-ref">Storage and host-service clients</span></a> for
+cache, IndexedDB, S3, manager, invocation, and runtime-log clients.</p></li>
+</ul>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">Python API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#core-authoring-types">Core authoring types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#app-authoring">App authoring</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#workflow-helpers">Workflow helpers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#agent-provider-models">Agent provider models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#agent-dictionary-helpers">Agent dictionary helpers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#provider-interfaces">Provider interfaces</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#authentication-payload-models">Authentication payload models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#provider-telemetry">Provider telemetry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#cache-client">Cache client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#indexeddb-client">IndexedDB client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#s3-client">S3 client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#host-service-clients">Host service clients</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reference.html#generated-provider-clients">Generated provider clients</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="#">Gestalt Python SDK</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">Python API Reference</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="#">Documentation overview</a><ul>
+      <li>Next: <a href="reference.html" title="next chapter">Python API Reference</a></li>
+  </ul></li>
+</ul>
+</div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 0.7.16</a>
+      
+      |
+      <a href="_sources/index.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

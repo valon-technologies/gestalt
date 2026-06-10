@@ -2,12 +2,16 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
+import "v1/annotations.proto";
+
 // HelloWorldRequest carries no input fields. It exists to exercise the
 // provider-kind-specific request/response path.
 message HelloWorldRequest {}
 
 // HelloWorldResponse returns the fixed test-provider message.
 message HelloWorldResponse {
+  option (unwrap) = "message";
+
   string message = 1;
 }
 
