@@ -1,0 +1,83 @@
+syntax = "proto3";
+
+package sdkgen.test.v1;
+
+import "provider_annotations.proto";
+
+message FetchRequest {
+  string id = 1;
+  optional int64 limit = 2;
+}
+
+message FetchResponse {
+  option (gestalt.provider.v1.optional_result) = {
+    guard: "found"
+    value: "payload"
+  };
+
+  bool found = 1;
+  bytes payload = 2;
+}
+
+message Item {
+  string name = 1;
+  bool ok = 2;
+  bytes data = 3;
+}
+
+message EntryList {
+  option (gestalt.provider.v1.keyed) = {
+    entries: "items"
+    key: "name"
+    present: "ok"
+    value: "data"
+  };
+
+  repeated Item items = 1;
+}
+
+message CountResponse {
+  option (gestalt.provider.v1.unwrap) = "count";
+
+  int64 count = 1;
+}
+
+message CallResult {
+  int32 status = 1;
+  bytes body = 2;
+}
+
+message Header {
+  string name = 1;
+}
+
+message Frame {
+  oneof body {
+    Header header = 1;
+    bytes data = 2;
+  }
+}
+
+service FetchService {
+  option (gestalt.provider.v1.host_binding) = "fetch";
+
+  rpc Fetch(FetchRequest) returns (FetchResponse) {
+    option (gestalt.provider.v1.signature) = "id";
+    option (gestalt.provider.v1.optional_signature) = "limit";
+  }
+  rpc List(FetchRequest) returns (EntryList);
+  rpc Call(FetchRequest) returns (CallResult) {
+    option (gestalt.provider.v1.json_result) = {
+      status: "status"
+      body: "body"
+    };
+    option (gestalt.provider.v1.signature) = "id";
+  }
+  rpc Count(FetchRequest) returns (CountResponse);
+  rpc Read(FetchRequest) returns (stream Frame) {
+    option (gestalt.provider.v1.initial) = {
+      header: "header"
+      chunk: "data"
+    };
+  }
+}

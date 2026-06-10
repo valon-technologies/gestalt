@@ -5,6 +5,17 @@ import {
   defineS3Provider,
 } from "../../../src/index.ts";
 
+const PRESIGN_METHOD_NAMES: Record<number, string> = {
+  [PresignMethod.GET]: "GET",
+  [PresignMethod.PUT]: "PUT",
+  [PresignMethod.DELETE]: "DELETE",
+  [PresignMethod.HEAD]: "HEAD",
+};
+
+function presignMethodName(method: number): string {
+  return PRESIGN_METHOD_NAMES[method] ?? "GET";
+}
+
 const objects = new Map<string, {
   body: Uint8Array;
   contentType: string;
@@ -107,9 +118,10 @@ export const provider = defineS3Provider({
     return await this.headObject(destination);
   },
   async presignObject(ref, options) {
+    const method = options?.method ?? PresignMethod.GET;
     return {
-      url: `https://fixture.invalid/${encodeURIComponent(ref.key)}?method=${options?.method ?? PresignMethod.Get}`,
-      method: options?.method ?? PresignMethod.Get,
+      url: `https://fixture.invalid/${encodeURIComponent(ref.key)}?method=${presignMethodName(method)}`,
+      method,
       headers: { ...(options?.headers ?? {}) },
       expiresAt: new Date(Date.now() + 60_000),
     };

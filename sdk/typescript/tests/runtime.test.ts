@@ -93,12 +93,11 @@ import {
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,
-} from "../src/runtime.ts";
+} from "../src/providers/runtime.ts";
 import {
   httpSubjectError,
   PresignMethod,
   RuntimeEgressMode,
-  S3,
   WorkflowRunStatus,
   boundWorkflowTargetToProto,
   defineCacheProvider,
@@ -106,7 +105,7 @@ import {
   defineRuntimeProvider,
   defineS3Provider,
 } from "../src/index.ts";
-import { createS3Service } from "../src/s3.ts";
+import { createS3Service } from "../src/providers/s3.ts";
 import {
   captureChildStderr,
   createUnixGrpcClient,
@@ -403,7 +402,7 @@ test("loadProviderFromTarget rejects structural app objects without the full run
 });
 
 test("runtime serves a secrets provider over unix gRPC", async () => {
-  const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
+  const runtimeEntry = join(import.meta.dir, "..", "src", "providers", "runtime.ts");
   const root = fixturePath("secrets-provider");
   const tempDir = makeTempDir("gestalt-typescript-runtime-");
   const socketPath = join(tempDir, "provider.sock");
@@ -2119,7 +2118,7 @@ test("s3 writeObject closes unread request frames when provider returns early", 
     async presignObject() {
       return {
         url: "https://example.invalid",
-        method: PresignMethod.Get,
+        method: PresignMethod.GET,
         headers: {},
       };
     },
@@ -2159,69 +2158,4 @@ test("s3 writeObject closes unread request frames when provider returns early", 
 
   expect(response.meta?.size).toBe(5n);
   expect(requestClosed).toBe(true);
-});
-
-test("s3 client writeObject cancels unread readable streams when upload ends early", async () => {
-  let canceled = false;
-  let pulls = 0;
-  const body = new ReadableStream<Uint8Array>({
-    pull(controller) {
-      pulls += 1;
-      if (pulls === 1) {
-        controller.enqueue(new TextEncoder().encode("hello"));
-        return;
-      }
-      controller.enqueue(new TextEncoder().encode("goodbye"));
-    },
-    cancel() {
-      canceled = true;
-    },
-  });
-
-  const s3 = Object.create(S3.prototype) as {
-    client: {
-      writeObject: (requests: AsyncIterable<unknown>) => Promise<{
-        meta: {
-          ref: { key: string };
-          etag: string;
-          size: bigint;
-          contentType: string;
-          metadata: Record<string, string>;
-          storageClass: string;
-        };
-      }>;
-    };
-  };
-  s3.client = {
-    async writeObject(requests: AsyncIterable<unknown>) {
-      const iterator = requests[Symbol.asyncIterator]();
-      const open = await iterator.next();
-      expect(open.done).toBe(false);
-      const firstChunk = await iterator.next();
-      expect(firstChunk.done).toBe(false);
-      await iterator.return?.();
-      return {
-        meta: {
-          ref: { key: "runtime.txt" },
-          etag: "etag",
-          size: BigInt(
-            (firstChunk.value as { msg: { value: Uint8Array } }).msg.value
-              .byteLength,
-          ),
-          contentType: "text/plain",
-          metadata: {},
-          storageClass: "STANDARD",
-        },
-      };
-    },
-  };
-
-  const meta = await S3.prototype.writeObject.call(
-    s3,
-    { key: "runtime.txt" },
-    body,
-  );
-
-  expect(meta.size).toBe(5n);
-  expect(canceled).toBe(true);
 });

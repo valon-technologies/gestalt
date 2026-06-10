@@ -51,20 +51,18 @@ without introducing a second cache technology.
         "log"
         "time"
 
-        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        "github.com/valon-technologies/gestalt/sdk/go/client"
     )
 
     ctx := context.Background()
 
-    cache, err := gestalt.Cache("session")
+    cache, err := client.ConnectCache(ctx, "session")
     if err != nil {
         log.Fatal(err)
     }
-    defer cache.Close()
 
-    if err := cache.Set(ctx, "user:1", []byte("alpha"), gestalt.CacheSetOptions{
-        TTL: 5 * time.Minute,
-    }); err != nil {
+    ttl := 5 * time.Minute
+    if err := cache.Set(ctx, "user:1", []byte("alpha"), &ttl); err != nil {
         log.Fatal(err)
     }
 
@@ -81,39 +79,34 @@ without introducing a second cache technology.
     import datetime as dt
     from gestalt import Cache
 
-    cache = Cache("session")
-    cache.set("user:1", b"alpha", ttl=dt.timedelta(minutes=5))
-    value = cache.get("user:1") or b""
-    cache.close()
+    cache = Cache.connect("session")
+    cache.set(key="user:1", value=b"alpha", ttl=dt.timedelta(minutes=5))
+    value = cache.get(key="user:1") or b""
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
     use std::time::Duration;
 
-    use gestalt::{Cache, CacheSetOptions};
+    use gestalt::Cache;
 
     let mut cache = Cache::connect_named("session").await?;
     cache
         .set(
-            "user:1",
-            b"alpha",
-            CacheSetOptions {
-                ttl: Some(Duration::from_secs(5 * 60)),
-            },
+            "user:1".to_string(),
+            b"alpha".to_vec(),
+            Some(Duration::from_secs(5 * 60)),
         )
         .await?;
-    let value = cache.get("user:1").await?;
+    let value = cache.get("user:1".to_string()).await?;
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
     import { Cache } from "@valon-technologies/gestalt";
 
-    const cache = new Cache("session");
-    await cache.set("user:1", new TextEncoder().encode("alpha"), {
-      ttlMs: 5 * 60 * 1000,
-    });
+    const cache = Cache.connect("session");
+    await cache.set("user:1", new TextEncoder().encode("alpha"), 5 * 60 * 1000);
     const value = await cache.get("user:1");
     ```
   </Tabs.Tab>
@@ -188,7 +181,7 @@ spec:
     ```python
     import datetime as dt
 
-    from gestalt import CacheEntry, CacheProvider
+    from gestalt import CacheProvider, CacheSetEntry
 
     class ExampleCache(CacheProvider):
         def get(self, key: str) -> bytes | None:
@@ -210,7 +203,7 @@ spec:
 
         def set_many(
             self,
-            entries: list[CacheEntry],
+            entries: list[CacheSetEntry],
             ttl: dt.timedelta | None = None,
         ) -> None:
             """Write multiple values with one TTL policy."""

@@ -88,30 +88,92 @@ type Schema struct {
 }
 
 type Service struct {
+	// Doc is the leading proto comment, normalized; empty when absent.
+	Doc       string
 	FullName  string
 	Name      string
 	ProtoFile string
 	Methods   []*Method
+
+	// HostBinding is the host-service binding name from the host_binding
+	// annotation; empty when unannotated.
+	HostBinding string
 }
 
 type Method struct {
+	Doc           string
 	Name          string
 	Stream        StreamKind
 	Input         *Message // nil when InputIsEmpty
 	InputIsEmpty  bool     // google.protobuf.Empty request: no public request argument
 	Output        *Message // nil when OutputIsEmpty
 	OutputIsEmpty bool
+
+	// Signature lists request fields promoted to parameters, from the
+	// signature annotation. Presence fields come last.
+	Signature []string
+	// OptionalSignature lists request fields promoted to optional call
+	// options, from the optional_signature annotation.
+	OptionalSignature []string
+	// Initial declares the header-then-payload protocol for this method's
+	// streaming side, from the initial annotation: the first streamed message
+	// carries the header variant and every later message carries the chunk
+	// variant.
+	Initial *Initial
+	// JsonResult declares that this method's result carries the standard
+	// JSON operation envelope, from the json_result annotation.
+	JsonResult *JsonResult
+}
+
+// JsonResult names the output message's status and body fields holding an
+// HTTP-shaped JSON operation result.
+type JsonResult struct {
+	Status string
+	Body   string
+}
+
+// Initial identifies the streamed oneof and its header and chunk variants by
+// proto field name.
+type Initial struct {
+	Oneof       string
+	HeaderField string
+	ChunkField  string
 }
 
 type Message struct {
+	Doc       string
 	FullName  string
 	Name      string
 	ProtoFile string
 	Fields    []*Field // declaration order
 	Oneofs    []*Oneof // real oneofs only; synthetic optional-scalar oneofs are presence
+
+	// OptionalResult, Keyed, and Unwrap collapse this message at API
+	// boundaries, from the matching annotations. At most one is set.
+	OptionalResult *OptionalResult
+	Keyed          *Keyed
+	Unwrap         string
+}
+
+// OptionalResult declares that Value is meaningful only when the bool Guard
+// field is true; the message collapses to an optional value.
+type OptionalResult struct {
+	Guard string
+	Value string
+}
+
+// Keyed declares that the repeated Entries field is a collection keyed by
+// Key; entries whose Present field is false are omitted, and the message
+// collapses to a native map from Key to Value.
+type Keyed struct {
+	Entries string
+	Key     string
+	Present string
+	Value   string
 }
 
 type Field struct {
+	Doc      string
 	Name     string
 	JSONName string
 	Number   int32
@@ -142,6 +204,7 @@ type Oneof struct {
 
 // Enum is an open proto3 enum; unknown numeric values are preserved by SDKs.
 type Enum struct {
+	Doc       string
 	FullName  string
 	Name      string
 	ProtoFile string
@@ -149,6 +212,7 @@ type Enum struct {
 }
 
 type EnumValue struct {
+	Doc    string
 	Name   string
 	Number int32
 }

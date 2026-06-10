@@ -22,8 +22,8 @@ from gestalt import (
     AppProviderAdapter,
     AuthenticationProvider,
     BeginLoginRequest,
-    CacheEntry,
     CacheProvider,
+    CacheSetEntry,
     Catalog,
     CatalogOperation,
     CompleteLoginRequest,
@@ -1058,8 +1058,8 @@ class CacheRuntimeTests(unittest.TestCase):
         provider.set("session", b"alpha")
         provider.set_many(
             [
-                CacheEntry(key="a", value=b"one"),
-                CacheEntry(key="b", value=b"two"),
+                CacheSetEntry(key="a", value=b"one"),
+                CacheSetEntry(key="b", value=b"two"),
             ],
             ttl=dt.timedelta(minutes=5),
         )

@@ -71,17 +71,6 @@ func externalCredentialLookupFromProto(value *proto.ExternalCredentialLookup) *E
 	}
 }
 
-func externalCredentialLookupToProto(value *ExternalCredentialLookup) *proto.ExternalCredentialLookup {
-	if value == nil {
-		return nil
-	}
-	return &proto.ExternalCredentialLookup{
-		SubjectId:    value.GetSubjectId(),
-		Instance:     value.GetInstance(),
-		ConnectionId: value.GetConnectionId(),
-	}
-}
-
 func upsertExternalCredentialRequestFromProto(value *proto.UpsertExternalCredentialRequest) (*UpsertExternalCredentialRequest, error) {
 	if value == nil {
 		return nil, nil
@@ -96,28 +85,11 @@ func upsertExternalCredentialRequestFromProto(value *proto.UpsertExternalCredent
 	}, nil
 }
 
-func upsertExternalCredentialRequestToProto(value *UpsertExternalCredentialRequest) *proto.UpsertExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.UpsertExternalCredentialRequest{
-		Credential:         externalCredentialToProto(value.GetCredential()),
-		PreserveTimestamps: value.GetPreserveTimestamps(),
-	}
-}
-
 func getExternalCredentialRequestFromProto(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
 	return &GetExternalCredentialRequest{Lookup: externalCredentialLookupFromProto(value.GetLookup())}
-}
-
-func getExternalCredentialRequestToProto(value *GetExternalCredentialRequest) *proto.GetExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.GetExternalCredentialRequest{Lookup: externalCredentialLookupToProto(value.GetLookup())}
 }
 
 func listExternalCredentialsRequestFromProto(value *proto.ListExternalCredentialsRequest) *ListExternalCredentialsRequest {
@@ -129,32 +101,6 @@ func listExternalCredentialsRequestFromProto(value *proto.ListExternalCredential
 		Instance:     value.GetInstance(),
 		ConnectionID: value.GetConnectionId(),
 	}
-}
-
-func listExternalCredentialsRequestToProto(value *ListExternalCredentialsRequest) *proto.ListExternalCredentialsRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.ListExternalCredentialsRequest{
-		SubjectId:    value.GetSubjectId(),
-		Instance:     value.GetInstance(),
-		ConnectionId: value.GetConnectionId(),
-	}
-}
-
-func listExternalCredentialsResponseFromProto(value *proto.ListExternalCredentialsResponse) (*ListExternalCredentialsResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	credentials := make([]*ExternalCredential, 0, len(value.GetCredentials()))
-	for _, credential := range value.GetCredentials() {
-		native, err := externalCredentialFromProto(credential)
-		if err != nil {
-			return nil, err
-		}
-		credentials = append(credentials, native)
-	}
-	return &ListExternalCredentialsResponse{Credentials: credentials}, nil
 }
 
 func listExternalCredentialsResponseToProto(value *ListExternalCredentialsResponse) *proto.ListExternalCredentialsResponse {
@@ -173,13 +119,6 @@ func deleteExternalCredentialRequestFromProto(value *proto.DeleteExternalCredent
 		return nil
 	}
 	return &DeleteExternalCredentialRequest{ID: value.GetId()}
-}
-
-func deleteExternalCredentialRequestToProto(value *DeleteExternalCredentialRequest) *proto.DeleteExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.DeleteExternalCredentialRequest{Id: value.GetId()}
 }
 
 func externalCredentialAuthConfigFromProto(value *proto.ExternalCredentialAuthConfig) *ExternalCredentialAuthConfig {
@@ -212,55 +151,11 @@ func externalCredentialAuthConfigFromProto(value *proto.ExternalCredentialAuthCo
 	}
 }
 
-func externalCredentialAuthConfigToProto(value *ExternalCredentialAuthConfig) *proto.ExternalCredentialAuthConfig {
-	if value == nil {
-		return nil
-	}
-	drivers := make([]*proto.ExternalCredentialTokenExchangeDriver, 0, len(value.GetTokenExchangeDrivers()))
-	for _, driver := range value.GetTokenExchangeDrivers() {
-		drivers = append(drivers, externalCredentialTokenExchangeDriverToProto(driver))
-	}
-	return &proto.ExternalCredentialAuthConfig{
-		Type:                 value.GetType(),
-		Token:                value.GetToken(),
-		TokenPrefix:          value.GetTokenPrefix(),
-		GrantType:            value.GetGrantType(),
-		TokenUrl:             value.GetTokenUrl(),
-		ClientId:             value.GetClientId(),
-		ClientSecret:         value.GetClientSecret(),
-		ClientAuth:           value.GetClientAuth(),
-		TokenExchange:        value.GetTokenExchange(),
-		Scopes:               copyStringSlice(value.GetScopes()),
-		ScopeParam:           value.GetScopeParam(),
-		ScopeSeparator:       value.GetScopeSeparator(),
-		TokenParams:          copyStringMap(value.GetTokenParams()),
-		RefreshParams:        copyStringMap(value.GetRefreshParams()),
-		AcceptHeader:         value.GetAcceptHeader(),
-		AccessTokenPath:      value.GetAccessTokenPath(),
-		TokenExchangeDrivers: drivers,
-		RefreshToken:         value.GetRefreshToken(),
-	}
-}
-
 func externalCredentialTokenExchangeDriverFromProto(value *proto.ExternalCredentialTokenExchangeDriver) *ExternalCredentialTokenExchangeDriver {
 	if value == nil {
 		return nil
 	}
 	return &ExternalCredentialTokenExchangeDriver{
-		Type:            value.GetType(),
-		TargetPrincipal: value.GetTargetPrincipal(),
-		Scopes:          copyStringSlice(value.GetScopes()),
-		LifetimeSeconds: value.GetLifetimeSeconds(),
-		Endpoint:        value.GetEndpoint(),
-		Params:          copyStringMap(value.GetParams()),
-	}
-}
-
-func externalCredentialTokenExchangeDriverToProto(value *ExternalCredentialTokenExchangeDriver) *proto.ExternalCredentialTokenExchangeDriver {
-	if value == nil {
-		return nil
-	}
-	return &proto.ExternalCredentialTokenExchangeDriver{
 		Type:            value.GetType(),
 		TargetPrincipal: value.GetTargetPrincipal(),
 		Scopes:          copyStringSlice(value.GetScopes()),
@@ -284,20 +179,6 @@ func validateExternalCredentialConfigRequestFromProto(value *proto.ValidateExter
 	}
 }
 
-func validateExternalCredentialConfigRequestToProto(value *ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.ValidateExternalCredentialConfigRequest{
-		Provider:         value.GetProvider(),
-		Connection:       value.GetConnection(),
-		ConnectionId:     value.GetConnectionId(),
-		Mode:             value.GetMode(),
-		Auth:             externalCredentialAuthConfigToProto(value.GetAuth()),
-		ConnectionParams: copyStringMap(value.GetConnectionParams()),
-	}
-}
-
 func resolveExternalCredentialRequestFromProto(value *proto.ResolveExternalCredentialRequest) *ResolveExternalCredentialRequest {
 	if value == nil {
 		return nil
@@ -315,44 +196,6 @@ func resolveExternalCredentialRequestFromProto(value *proto.ResolveExternalCrede
 	}
 }
 
-func resolveExternalCredentialRequestToProto(value *ResolveExternalCredentialRequest) *proto.ResolveExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.ResolveExternalCredentialRequest{
-		Provider:            value.GetProvider(),
-		Connection:          value.GetConnection(),
-		ConnectionId:        value.GetConnectionId(),
-		Mode:                value.GetMode(),
-		CredentialSubjectId: value.GetCredentialSubjectId(),
-		ActorSubjectId:      value.GetActorSubjectId(),
-		Instance:            value.GetInstance(),
-		Auth:                externalCredentialAuthConfigToProto(value.GetAuth()),
-		ConnectionParams:    copyStringMap(value.GetConnectionParams()),
-	}
-}
-
-func resolveExternalCredentialResponseFromProto(value *proto.ResolveExternalCredentialResponse) (*ResolveExternalCredentialResponse, error) {
-	if value == nil {
-		return nil, nil
-	}
-	expiresAt, err := timePtrFromTimestamp(value.GetExpiresAt())
-	if err != nil {
-		return nil, err
-	}
-	credential, err := externalCredentialFromProto(value.GetCredential())
-	if err != nil {
-		return nil, err
-	}
-	return &ResolveExternalCredentialResponse{
-		Token:        value.GetToken(),
-		ExpiresAt:    expiresAt,
-		MetadataJSON: value.GetMetadataJson(),
-		Params:       copyStringMap(value.GetParams()),
-		Credential:   credential,
-	}, nil
-}
-
 func resolveExternalCredentialResponseToProto(value *ResolveExternalCredentialResponse) *proto.ResolveExternalCredentialResponse {
 	if value == nil {
 		return nil
@@ -363,20 +206,6 @@ func resolveExternalCredentialResponseToProto(value *ResolveExternalCredentialRe
 		MetadataJson: value.GetMetadataJson(),
 		Params:       copyStringMap(value.GetParams()),
 		Credential:   externalCredentialToProto(value.GetCredential()),
-	}
-}
-
-func externalCredentialTokenResponseFromProto(value *proto.ExternalCredentialTokenResponse) *ExternalCredentialTokenResponse {
-	if value == nil {
-		return nil
-	}
-	return &ExternalCredentialTokenResponse{
-		AccessToken:   value.GetAccessToken(),
-		RefreshToken:  value.GetRefreshToken(),
-		ExpiresIn:     value.GetExpiresIn(),
-		TokenType:     value.GetTokenType(),
-		ExtraJSON:     value.GetExtraJson(),
-		RefreshSource: value.GetRefreshSource(),
 	}
 }
 
@@ -408,32 +237,6 @@ func exchangeExternalCredentialRequestFromProto(value *proto.ExchangeExternalCre
 		Auth:                externalCredentialAuthConfigFromProto(value.GetAuth()),
 		CredentialJSON:      value.GetCredentialJson(),
 		ConnectionParams:    copyStringMap(value.GetConnectionParams()),
-	}
-}
-
-func exchangeExternalCredentialRequestToProto(value *ExchangeExternalCredentialRequest) *proto.ExchangeExternalCredentialRequest {
-	if value == nil {
-		return nil
-	}
-	return &proto.ExchangeExternalCredentialRequest{
-		Provider:            value.GetProvider(),
-		Connection:          value.GetConnection(),
-		ConnectionId:        value.GetConnectionId(),
-		CredentialSubjectId: value.GetCredentialSubjectId(),
-		ActorSubjectId:      value.GetActorSubjectId(),
-		Instance:            value.GetInstance(),
-		Auth:                externalCredentialAuthConfigToProto(value.GetAuth()),
-		CredentialJson:      value.GetCredentialJson(),
-		ConnectionParams:    copyStringMap(value.GetConnectionParams()),
-	}
-}
-
-func exchangeExternalCredentialResponseFromProto(value *proto.ExchangeExternalCredentialResponse) *ExchangeExternalCredentialResponse {
-	if value == nil {
-		return nil
-	}
-	return &ExchangeExternalCredentialResponse{
-		TokenResponse: externalCredentialTokenResponseFromProto(value.GetTokenResponse()),
 	}
 }
 

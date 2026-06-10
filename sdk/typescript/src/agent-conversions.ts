@@ -17,7 +17,6 @@ import {
   type AgentMessagePart as ProtoAgentMessagePart,
   type AgentOutput as ProtoAgentOutput,
   type AgentTurn as ProtoAgentTurn,
-  type AgentTurnDisplay as ProtoAgentTurnDisplay,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
   SubjectContextSchema,
@@ -27,11 +26,7 @@ import {
   type SubjectPermissionContext as ProtoSubjectPermissionContext,
   type AgentToolRef as ProtoAgentToolRef,
 } from "./internal/gen/v1/app_pb.ts";
-import {
-  jsonFromValue,
-  valueFromJson,
-  type JsonInput,
-} from "./protocol.ts";
+import { valueFromJson } from "./protocol.ts";
 import {
   optionalObjectFromStruct,
   optionalStruct,
@@ -44,30 +39,8 @@ import type {
   AgentToolRef,
   AgentTurnOutput,
   AgentTurnDisplay,
-} from "./agent.ts";
+} from "./providers/agent.ts";
 import type { Subject, SubjectInput, SubjectPermission } from "./api.ts";
-
-export function agentTurnDisplayFromProto(
-  display?: ProtoAgentTurnDisplay | undefined,
-): AgentTurnDisplay | undefined {
-  if (display === undefined) {
-    return undefined;
-  }
-  return {
-    kind: display.kind,
-    phase: display.phase,
-    text: display.text,
-    label: display.label,
-    ref: display.ref,
-    parentRef: display.parentRef,
-    input: display.input === undefined ? undefined : jsonFromValue(display.input) as JsonInput,
-    output: display.output === undefined ? undefined : jsonFromValue(display.output) as JsonInput,
-    error: display.error === undefined ? undefined : jsonFromValue(display.error) as JsonInput,
-    action: display.action,
-    format: display.format,
-    language: display.language,
-  };
-}
 
 export function agentTurnDisplayToProto(
   display: AgentTurnDisplay | undefined,

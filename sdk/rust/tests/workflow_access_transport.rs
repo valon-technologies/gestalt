@@ -6,6 +6,10 @@ mod support_protocol;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use gestalt::Workflow;
+use gestalt::app::{
+    RequestContext as NativeRequestContext, SubjectContext as NativeSubjectContext,
+};
 use gestalt::proto::v1::workflow_server::{Workflow as ProtoWorkflowProvider, WorkflowServer};
 use gestalt::proto::v1::{
     ApplyWorkflowProviderDefinitionRequest, BoundWorkflowTarget, CancelWorkflowProviderRunRequest,
@@ -16,16 +20,23 @@ use gestalt::proto::v1::{
     ListWorkflowProviderRunsRequest, ListWorkflowProviderRunsResponse, RequestContext,
     SetWorkflowProviderActivationPausedRequest, SetWorkflowProviderDefinitionPausedRequest,
     SignalOrStartWorkflowProviderRunRequest, SignalWorkflowProviderRunRequest,
-    SignalWorkflowRunResponse, StartWorkflowProviderRunRequest, SubjectContext, WorkflowActivation,
+    SignalWorkflowRunResponse, StartWorkflowProviderRunRequest, WorkflowActivation,
     WorkflowDefinition, WorkflowEvent, WorkflowRun, WorkflowRunEvent, WorkflowRunStatus,
-    WorkflowScheduleActivation, WorkflowSignal, WorkflowStep, WorkflowStepAppCall,
-    workflow_activation, workflow_step,
+    WorkflowStep, WorkflowStepAppCall, workflow_step,
 };
-use gestalt::{
-    Request, Workflow, WorkflowApplyDefinition, WorkflowCancelRun, WorkflowDeleteDefinition,
-    WorkflowDeliverEvent, WorkflowGetDefinition, WorkflowGetRun, WorkflowGetRunEvents,
-    WorkflowGetRunOutput, WorkflowListRuns, WorkflowSetActivationPaused,
-    WorkflowSetDefinitionPaused, WorkflowSignalOrStartRun, WorkflowSignalRun, WorkflowStartRun,
+use gestalt::workflow::{
+    BoundWorkflowTarget as NativeBoundWorkflowTarget,
+    ListWorkflowProviderDefinitionsRequest as NativeListDefinitionsRequest,
+    StartWorkflowProviderRunRequest as NativeStartRunRequest,
+    WorkflowActivation as NativeWorkflowActivation,
+    WorkflowActivationTrigger as NativeWorkflowActivationTrigger,
+    WorkflowDefinitionSpec as NativeWorkflowDefinitionSpec,
+    WorkflowDeliverEventOptions as NativeWorkflowDeliverEventOptions,
+    WorkflowEvent as NativeWorkflowEvent,
+    WorkflowScheduleActivation as NativeWorkflowScheduleActivation,
+    WorkflowSignal as NativeWorkflowSignal, WorkflowStep as NativeWorkflowStep,
+    WorkflowStepAction as NativeWorkflowStepAction,
+    WorkflowStepAppCall as NativeWorkflowStepAppCall, workflow_run_status,
 };
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
@@ -457,27 +468,22 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
     let _host_socket = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, &socket);
     let _host_token = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token");
 
-    let request = Request {
-        idempotency_key: "default-key".to_string(),
-        ..Default::default()
-    };
-    let mut workflow = gestalt::with_request_context(
-        Some(request_context("user:workflow-access")),
-        Workflow::connect(&request),
-    )
-    .await
-    .expect("connect workflow");
+    let mut workflow = Workflow::connect()
+        .await
+        .expect("connect workflow")
+        .with_context(request_context_native("user:workflow-access"));
 
     let definition = workflow
-        .apply_definition(WorkflowApplyDefinition {
-            provider_name: "temporal".to_string(),
-            spec: Some(gestalt::WorkflowDefinitionSpec {
+        .apply_definition(
+            "temporal".to_string(),
+            "default-key".to_string(),
+            Some(NativeWorkflowDefinitionSpec {
                 id: "definition-42".to_string(),
-                target: Some(app_target()),
-                activations: vec![WorkflowActivation {
+                target: Some(app_target_native()),
+                activations: vec![NativeWorkflowActivation {
                     id: "hourly".to_string(),
-                    trigger: Some(workflow_activation::Trigger::Schedule(
-                        WorkflowScheduleActivation {
+                    trigger: Some(NativeWorkflowActivationTrigger::Schedule(
+                        NativeWorkflowScheduleActivation {
                             cron: "0 * * * *".to_string(),
                             timezone: "America/New_York".to_string(),
                         },
@@ -486,157 +492,150 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
                 }],
                 ..Default::default()
             }),
-            ..Default::default()
-        })
+        )
         .await
         .expect("apply definition");
     assert_eq!(definition.id, "definition-42");
     assert_eq!(definition.generation, 7);
 
-    let listed = workflow.list_definitions().await.expect("list definitions");
-    assert_eq!(listed.definitions[0].id, "definition-42");
+    let listed = workflow
+        .list_definitions(NativeListDefinitionsRequest::default())
+        .await
+        .expect("list definitions");
+    assert_eq!(listed[0].id, "definition-42");
 
     let fetched = workflow
-        .get_definition(WorkflowGetDefinition {
-            definition_id: "definition-42".to_string(),
-        })
+        .get_definition("definition-42".to_string())
         .await
         .expect("get definition");
     assert_eq!(fetched.id, "definition-42");
 
     let paused = workflow
-        .set_definition_paused(WorkflowSetDefinitionPaused {
-            definition_id: "definition-42".to_string(),
-            paused: true,
-            ..Default::default()
-        })
+        .set_definition_paused("definition-42".to_string(), true)
         .await
         .expect("set definition paused");
     assert!(paused.paused);
 
     let activation_paused = workflow
-        .set_activation_paused(WorkflowSetActivationPaused {
-            definition_id: "definition-42".to_string(),
-            activation_id: "hourly".to_string(),
-            paused: true,
-            ..Default::default()
-        })
+        .set_activation_paused("definition-42".to_string(), "hourly".to_string(), true)
         .await
         .expect("set activation paused");
     assert_eq!(activation_paused.activations[0].id, "hourly");
 
+    let run_input = serde_json::json!({"github": {"number": 1}});
     let started = workflow
-        .start_run(WorkflowStartRun {
-            provider_name: "temporal".to_string(),
-            workflow_key: "repo:toolshed".to_string(),
-            definition_id: "definition-42".to_string(),
-            input: Some(serde_json::json!({"github": {"number": 1}})),
-            expected_definition_generation: 7,
-            ..Default::default()
-        })
+        .start_run(
+            "default-key".to_string(),
+            "repo:toolshed".to_string(),
+            "temporal".to_string(),
+            "definition-42".to_string(),
+            7,
+            None,
+            Some(run_input.as_object().expect("run input object").clone()),
+        )
         .await
         .expect("start run");
     assert_eq!(started.id, "run-1");
     assert_eq!(started.definition_generation, 7);
 
     let runs = workflow
-        .list_runs(WorkflowListRuns {
-            target_app: "github".to_string(),
-            ..Default::default()
-        })
+        .list_runs(
+            0,
+            String::new(),
+            workflow_run_status::WORKFLOW_RUN_STATUS_UNSPECIFIED,
+            "github".to_string(),
+        )
         .await
         .expect("list runs");
     assert_eq!(runs.next_page_token, "next");
 
     let run = workflow
-        .get_run(WorkflowGetRun {
-            run_id: "run-1".to_string(),
-        })
+        .get_run("run-1".to_string())
         .await
         .expect("get run");
     assert_eq!(run.id, "run-1");
 
+    let signal_payload = serde_json::json!({ "channel": "C123" });
     let signal_response = workflow
-        .signal_run(WorkflowSignalRun {
-            run_id: "run-1".to_string(),
-            signal: Some(WorkflowSignal {
+        .signal_run(
+            "run-1".to_string(),
+            Some(NativeWorkflowSignal {
                 name: "comment".to_string(),
-                payload: Some(helpers::struct_from_json(serde_json::json!({
-                    "channel": "C123"
-                }))),
+                payload: Some(
+                    signal_payload
+                        .as_object()
+                        .expect("signal payload object")
+                        .clone(),
+                ),
                 ..Default::default()
             }),
-        })
+        )
         .await
         .expect("signal run");
     assert_eq!(signal_response.signal.expect("signal").name, "comment");
 
+    let signal_or_start_input = serde_json::json!({"thread": {"ts": "123.456"}});
     let signal_or_start = workflow
-        .signal_or_start_run(WorkflowSignalOrStartRun {
-            provider_name: "temporal".to_string(),
-            workflow_key: "thread:C123:123".to_string(),
-            definition_id: "definition-42".to_string(),
-            input: Some(serde_json::json!({"thread": {"ts": "123.456"}})),
-            expected_definition_generation: 7,
-            signal: Some(WorkflowSignal {
+        .signal_or_start_run(
+            "thread:C123:123".to_string(),
+            "default-key".to_string(),
+            "temporal".to_string(),
+            "definition-42".to_string(),
+            7,
+            Some(NativeWorkflowSignal {
                 name: "message".to_string(),
                 ..Default::default()
             }),
-            ..Default::default()
-        })
+            None,
+            Some(
+                signal_or_start_input
+                    .as_object()
+                    .expect("signal or start input object")
+                    .clone(),
+            ),
+        )
         .await
         .expect("signal or start");
     assert!(signal_or_start.started_run);
 
     let events = workflow
-        .get_run_events(WorkflowGetRunEvents {
-            run_id: "run-1".to_string(),
-        })
+        .get_run_events("run-1".to_string())
         .await
         .expect("get run events");
-    assert_eq!(events.events[0].step_id, "review");
+    assert_eq!(events[0].step_id, "review");
 
     let output = workflow
-        .get_run_output(WorkflowGetRunOutput {
-            run_id: "run-1".to_string(),
-        })
+        .get_run_output("run-1".to_string())
         .await
         .expect("get run output");
-    assert_eq!(
-        output.output,
-        Some(helpers::json_to_prost(&serde_json::json!({"ok": true})))
-    );
+    assert_eq!(output, Some(serde_json::json!({"ok": true})));
 
     let canceled = workflow
-        .cancel_run(WorkflowCancelRun {
-            run_id: "run-1".to_string(),
-            reason: "done testing".to_string(),
-        })
+        .cancel_run("run-1".to_string(), "done testing".to_string())
         .await
         .expect("cancel run");
     assert_eq!(canceled.status_message, "done testing");
 
     let delivered = workflow
-        .deliver_event(WorkflowDeliverEvent {
-            provider_name: "temporal".to_string(),
-            app_name: "github".to_string(),
-            event: Some(WorkflowEvent {
+        .deliver_event(
+            Some(NativeWorkflowEvent {
                 id: "evt_1".to_string(),
                 source: "github".to_string(),
                 spec_version: "1.0".to_string(),
                 r#type: "github.pull_request".to_string(),
                 ..Default::default()
             }),
-            ..Default::default()
-        })
+            NativeWorkflowDeliverEventOptions {
+                app_name: "github".to_string(),
+                provider_name: "temporal".to_string(),
+            },
+        )
         .await
         .expect("deliver event");
     assert_eq!(delivered.id, "evt_1");
 
     workflow
-        .delete_definition(WorkflowDeleteDefinition {
-            definition_id: "definition-42".to_string(),
-        })
+        .delete_definition("definition-42".to_string())
         .await
         .expect("delete definition");
 
@@ -715,28 +714,23 @@ async fn workflow_connects_over_unix_socket_and_uses_current_rpcs() {
 }
 
 #[tokio::test]
-async fn request_workflow_uses_embedded_context_and_idempotency_key() {
+async fn start_run_raw_injects_default_context_when_unset() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-request-workflow.sock");
     let server = TestWorkflowServer::default();
     let serve_task = serve_workflow(&socket, server.clone()).await;
     let _host_socket = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, &socket);
 
-    let request = Request {
-        idempotency_key: "request-key".to_string(),
-        ..Default::default()
-    };
-    let mut workflow = gestalt::with_request_context(
-        Some(request_context("user:request-workflow")),
-        request.workflow(),
-    )
-    .await
-    .expect("request workflow");
+    let mut workflow = Workflow::connect()
+        .await
+        .expect("connect workflow")
+        .with_context(request_context_native("user:request-workflow"));
     workflow
-        .start_run(WorkflowStartRun {
+        .start_run_raw(NativeStartRunRequest {
             provider_name: "temporal".to_string(),
             workflow_key: "wf-key".to_string(),
             definition_id: "definition-42".to_string(),
+            idempotency_key: "request-key".to_string(),
             ..Default::default()
         })
         .await
@@ -790,9 +784,23 @@ fn app_target() -> BoundWorkflowTarget {
     }
 }
 
-fn request_context(subject_id: &str) -> RequestContext {
-    RequestContext {
-        subject: Some(SubjectContext {
+fn app_target_native() -> NativeBoundWorkflowTarget {
+    NativeBoundWorkflowTarget {
+        steps: vec![NativeWorkflowStep {
+            id: "review".to_string(),
+            action: Some(NativeWorkflowStepAction::App(NativeWorkflowStepAppCall {
+                name: "github".to_string(),
+                operation: "pullRequests.review".to_string(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }],
+    }
+}
+
+fn request_context_native(subject_id: &str) -> NativeRequestContext {
+    NativeRequestContext {
+        subject: Some(NativeSubjectContext {
             id: subject_id.to_string(),
             ..Default::default()
         }),

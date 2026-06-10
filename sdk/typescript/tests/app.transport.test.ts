@@ -12,17 +12,34 @@ import { expect, test } from "bun:test";
 import {
   App as AppService,
   OperationResultSchema,
-  RequestContextSchema,
-  SubjectContextSchema,
 } from "../src/internal/gen/v1/app_pb.ts";
 import {
   App,
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,
+  GestaltError,
+  GestaltErrorCode,
+  InvokeError,
   request,
+  type RequestContext,
+  type SubjectContext,
 } from "../src/index.ts";
-import { structFromObject } from "../src/protocol.ts";
 import { removeTempDir } from "./helpers.ts";
+
+function subjectContext(id: string): SubjectContext {
+  return {
+    id,
+    credentialSubjectId: "",
+    email: "",
+    displayName: "",
+    scopes: [],
+    permissions: [],
+  };
+}
+
+function text(result: { body: Uint8Array }): string {
+  return new TextDecoder().decode(result.body);
+}
 
 function bytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
@@ -64,6 +81,15 @@ test("App forwards request context to operation and GraphQL calls", async () => 
                 : {}),
               idempotencyKey: input.idempotencyKey,
             });
+            if (input.operation === "fail_envelope") {
+              return create(OperationResultSchema, {
+                status: 200,
+                body: bytes(JSON.stringify({
+                  status: "error",
+                  error: { message: "missing credential", code: "missing_credential" },
+                })),
+              });
+            }
             return create(OperationResultSchema, {
               status: 207,
               headers: {
@@ -112,55 +138,86 @@ test("App forwards request context to operation and GraphQL calls", async () => 
     });
 
     process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
-    const context = create(RequestContextSchema, {
-      subject: create(SubjectContextSchema, {
-        id: "user:user-123",
-      }),
-      workflow: structFromObject({
+    const context: RequestContext = {
+      subject: subjectContext("user:user-123"),
+      workflow: {
         provider: "local",
         runId: "run-123",
-      }),
-    });
-    const app = new App(
-      request("", {}, {}, {}, {}, {}, "request-key", {}, {}, [], false, context),
-    );
+      },
+      toolRefs: [],
+      toolRefsSet: false,
+    };
+    const app = App.connect(undefined, { context });
 
-    const first = await app.invokeRaw(
+    const first = await app.invokeRaw({
+      app: "github",
+      operation: "get_issue",
+      connection: "work",
+      instance: "secondary",
+      idempotencyKey: "issue-42-create",
+      credentialMode: "",
+      params: { issue_number: 42 },
+    });
+    expect(first.status).toBe(207);
+    expect(first.headers).toEqual({
+      Location: { values: ["https://example.test/created"] },
+    });
+    expect(text(first)).toBe(JSON.stringify({
+      app: "github",
+      operation: "get_issue",
+      subjectId: "user:user-123",
+      idempotencyKey: "issue-42-create",
+    }));
+    expect(JSON.parse(text(first))).toEqual({
+      app: "github",
+      operation: "get_issue",
+      subjectId: "user:user-123",
+      idempotencyKey: "issue-42-create",
+    });
+
+    const decoded = await app.invoke(
       "github",
       "get_issue",
       { issue_number: 42 },
       {
         connection: "work",
         instance: "secondary",
-        idempotencyKey: " issue-42-create ",
+        idempotencyKey: "issue-42-decode",
       },
     );
-    expect(first.status).toBe(207);
-    expect(first.headers).toEqual({
-      Location: ["https://example.test/created"],
-    });
-    expect(first.text()).toBe(JSON.stringify({
+    expect(decoded).toEqual({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",
-      idempotencyKey: "issue-42-create",
-    }));
-    expect(first.json<Record<string, unknown>>()).toEqual({
-      app: "github",
-      operation: "get_issue",
-      subjectId: "user:user-123",
-      idempotencyKey: "issue-42-create",
+      idempotencyKey: "issue-42-decode",
     });
 
-    const graphql = await app.invokeGraphQLRaw(
+    // A direct try/catch keeps bun's http2 request write deterministic; an
+    // expect().rejects wrapper perturbs the stream and the call dies in the
+    // transport before the envelope decode runs.
+    try {
+      await app.invoke("github", "fail_envelope", undefined, {
+        connection: "work",
+        instance: "secondary",
+        idempotencyKey: "fail-1",
+      });
+      throw new Error("expected InvokeError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvokeError);
+      const invokeError = error as InvokeError;
+      expect(invokeError.message).toBe("missing credential");
+      expect(invokeError.code).toBe("missing_credential");
+      expect(invokeError.app).toBe("github");
+      expect(invokeError.operation).toBe("fail_envelope");
+    }
+
+    const graphql = await app.invokeGraphQL(
       "linear",
       "query Viewer { viewer { id } }",
-      {
-        idempotencyKey: " graphql-call-42 ",
-      },
+      { idempotencyKey: "graphql-call-42" },
     );
     expect(graphql.status).toBe(208);
-    expect(graphql.json<Record<string, unknown>>()).toEqual({
+    expect(JSON.parse(text(graphql))).toEqual({
       app: "linear",
       document: "query Viewer { viewer { id } }",
       subjectId: "user:user-123",
@@ -174,6 +231,20 @@ test("App forwards request context to operation and GraphQL calls", async () => 
         subjectId: "user:user-123",
         workflowRunId: "run-123",
         idempotencyKey: "issue-42-create",
+      },
+      {
+        app: "github",
+        operation: "get_issue",
+        subjectId: "user:user-123",
+        workflowRunId: "run-123",
+        idempotencyKey: "issue-42-decode",
+      },
+      {
+        app: "github",
+        operation: "fail_envelope",
+        subjectId: "user:user-123",
+        workflowRunId: "run-123",
+        idempotencyKey: "fail-1",
       },
     ]);
     expect(graphqlCalls).toEqual([
@@ -199,12 +270,71 @@ test("App forwards request context to operation and GraphQL calls", async () => 
   }
 });
 
+test("App client-level timeoutMs applies a per-call deadline", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-app-timeout-"));
+  const socketPath = join(tempDir, "plugin-app.sock");
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+
+  const handler = connectNodeAdapter({
+    grpc: true,
+    grpcWeb: false,
+    connect: false,
+    routes(router) {
+      router.service(AppService, {
+        async invoke(input) {
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          return create(OperationResultSchema, {
+            status: 200,
+            body: bytes(JSON.stringify({ operation: input.operation })),
+          });
+        },
+      } satisfies Partial<ServiceImpl<typeof AppService>>);
+    },
+  });
+  const server = createServer(handler);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(socketPath, () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+
+    process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
+    const app = App.connect(undefined, { timeoutMs: 50 });
+
+    // A direct try/catch keeps bun's http2 request write deterministic; see
+    // the envelope-failure case above.
+    try {
+      await app.invoke("github", "slow_operation");
+      throw new Error("expected GestaltError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(GestaltError);
+      expect((error as GestaltError).code).toBe(GestaltErrorCode.DeadlineExceeded);
+    }
+  } finally {
+    if (previousSocket === undefined) {
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
+    } else {
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
+    }
+    if (server.listening) {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+    removeTempDir(tempDir);
+  }
+});
+
 test("App still requires host service socket configuration", () => {
   const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
     delete process.env[ENV_HOST_SERVICE_SOCKET];
-    expect(() => new App(request())).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
+    expect(() => App.connect()).toThrow("app: GESTALT_HOST_SERVICE_SOCKET is not set");
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_HOST_SERVICE_SOCKET];
@@ -282,15 +412,24 @@ test("App honors tcp target env and relay token env", async () => {
     process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
     process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
-    const app = new App(request("", {}, {}, {}, {}, {}, "", {}, {}, [], false, create(RequestContextSchema, {
-      subject: create(SubjectContextSchema, {
-        id: "user:user-123",
-      }),
-    })));
-    const response = await app.invokeRaw("github", "get_issue");
+    const app = App.connect(undefined, {
+      context: {
+        subject: subjectContext("user:user-123"),
+        toolRefs: [],
+        toolRefsSet: false,
+      },
+    });
+    const response = await app.invokeRaw({
+      app: "github",
+      operation: "get_issue",
+      connection: "",
+      instance: "",
+      idempotencyKey: "",
+      credentialMode: "",
+    });
 
     expect(response.status).toBe(204);
-    expect(response.json<Record<string, unknown>>()).toEqual({
+    expect(JSON.parse(text(response))).toEqual({
       app: "github",
       operation: "get_issue",
       subjectId: "user:user-123",

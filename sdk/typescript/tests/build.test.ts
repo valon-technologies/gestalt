@@ -48,13 +48,13 @@ import {
   bunTarget,
   parseBuildArgs,
 } from "../src/build.ts";
-import { Cache } from "../src/cache.ts";
+import { Cache } from "../src/index.ts";
 import { ENV_HOST_SERVICE_SOCKET } from "../src/host-service.ts";
-import { boundWorkflowTargetToProto } from "../src/workflow.ts";
+import { boundWorkflowTargetToProto } from "../src/providers/workflow.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   ENV_PROVIDER_SOCKET,
-} from "../src/runtime.ts";
+} from "../src/providers/runtime.ts";
 import {
   captureChildStderr,
   createUnixGrpcClient,
@@ -604,12 +604,10 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
 
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
-    const cache = new Cache();
-    const namedCache = new Cache("named");
+    const cache = Cache.connect();
+    const namedCache = Cache.connect("named");
 
-    await cache.set("alpha", encoder.encode("one"), {
-      ttlMs: 1_500,
-    });
+    await cache.set("alpha", encoder.encode("one"), 1_500);
     await namedCache.setMany([
       { key: "beta", value: encoder.encode("two") },
       { key: "gamma", value: encoder.encode("three") },
@@ -646,7 +644,7 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
         "toString",
         "__proto__",
       ]),
-    ).toBe(4);
+    ).toBe(4n);
 
     const remaining = await rawCache.getMany({
       keys: ["alpha", "beta", "gamma", "toString", "__proto__"],

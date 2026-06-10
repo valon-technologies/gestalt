@@ -8,8 +8,10 @@ package validate
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/diag"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
@@ -27,12 +29,14 @@ const (
 	wellKnownPrefix = "google.protobuf."
 )
 
-// Build constructs the normalized model for the given services. PathPrefix is
-// prepended to descriptor file paths in diagnostics (descriptor paths are
-// relative to the proto module root).
-func Build(services []protoreflect.ServiceDescriptor, pathPrefix string) (*model.Schema, *diag.List) {
+// Build constructs the normalized model for the given services. The file
+// registry resolves SDK annotation extensions, which are defined in the
+// schema itself. PathPrefix is prepended to descriptor file paths in
+// diagnostics (descriptor paths are relative to the proto module root).
+func Build(files *protoregistry.Files, services []protoreflect.ServiceDescriptor, pathPrefix string) (*model.Schema, *diag.List) {
 	b := &builder{
 		pathPrefix: pathPrefix,
+		ann:        newAnnotations(files),
 		diags:      &diag.List{},
 		messages:   map[protoreflect.FullName]*model.Message{},
 		enums:      map[protoreflect.FullName]*model.Enum{},
@@ -55,6 +59,7 @@ func Build(services []protoreflect.ServiceDescriptor, pathPrefix string) (*model
 
 type builder struct {
 	pathPrefix string
+	ann        *annotations
 	diags      *diag.List
 	messages   map[protoreflect.FullName]*model.Message
 	enums      map[protoreflect.FullName]*model.Enum
@@ -64,6 +69,7 @@ type builder struct {
 func (b *builder) service(sd protoreflect.ServiceDescriptor) *model.Service {
 	b.file(sd.ParentFile())
 	svc := &model.Service{
+		Doc:       docFor(sd),
 		FullName:  string(sd.FullName()),
 		Name:      string(sd.Name()),
 		ProtoFile: b.pathPrefix + sd.ParentFile().Path(),
@@ -72,11 +78,12 @@ func (b *builder) service(sd protoreflect.ServiceDescriptor) *model.Service {
 	for i := 0; i < methods.Len(); i++ {
 		svc.Methods = append(svc.Methods, b.method(methods.Get(i)))
 	}
+	b.serviceAnnotations(sd, svc)
 	return svc
 }
 
 func (b *builder) method(md protoreflect.MethodDescriptor) *model.Method {
-	m := &model.Method{Name: string(md.Name())}
+	m := &model.Method{Doc: docFor(md), Name: string(md.Name())}
 	switch {
 	case md.IsStreamingClient() && md.IsStreamingServer():
 		m.Stream = model.Bidi
@@ -97,6 +104,7 @@ func (b *builder) method(md protoreflect.MethodDescriptor) *model.Method {
 	} else {
 		m.Output = b.message(md.Output())
 	}
+	b.methodAnnotations(md, m)
 	return m
 }
 
@@ -117,6 +125,7 @@ func (b *builder) message(md protoreflect.MessageDescriptor) *model.Message {
 	}
 	b.file(md.ParentFile())
 	m := &model.Message{
+		Doc:       docFor(md),
 		FullName:  string(md.FullName()),
 		Name:      string(md.Name()),
 		ProtoFile: b.pathPrefix + md.ParentFile().Path(),
@@ -151,11 +160,13 @@ func (b *builder) message(md protoreflect.MessageDescriptor) *model.Message {
 		}
 		m.Fields = append(m.Fields, f)
 	}
+	b.messageAnnotations(md, m)
 	return m
 }
 
 func (b *builder) field(fd protoreflect.FieldDescriptor) *model.Field {
 	f := &model.Field{
+		Doc:      docFor(fd),
 		Name:     string(fd.Name()),
 		JSONName: fd.JSONName(),
 		Number:   int32(fd.Number()),
@@ -248,6 +259,7 @@ func (b *builder) enum(ed protoreflect.EnumDescriptor) *model.Enum {
 	}
 	b.file(ed.ParentFile())
 	e := &model.Enum{
+		Doc:       docFor(ed),
 		FullName:  string(ed.FullName()),
 		Name:      string(ed.Name()),
 		ProtoFile: b.pathPrefix + ed.ParentFile().Path(),
@@ -255,10 +267,26 @@ func (b *builder) enum(ed protoreflect.EnumDescriptor) *model.Enum {
 	values := ed.Values()
 	for i := 0; i < values.Len(); i++ {
 		vd := values.Get(i)
-		e.Values = append(e.Values, model.EnumValue{Name: string(vd.Name()), Number: int32(vd.Number())})
+		e.Values = append(e.Values, model.EnumValue{Doc: docFor(vd), Name: string(vd.Name()), Number: int32(vd.Number())})
 	}
 	b.enums[ed.FullName()] = e
 	return e
+}
+
+// docFor returns the normalized leading proto comment for a descriptor: each
+// line's single leading space stripped, trailing whitespace removed, and the
+// block trimmed of blank edges.
+func docFor(d protoreflect.Descriptor) string {
+	loc := d.ParentFile().SourceLocations().ByDescriptor(d)
+	if loc.LeadingComments == "" {
+		return ""
+	}
+	lines := strings.Split(loc.LeadingComments, "\n")
+	for i, line := range lines {
+		line = strings.TrimRight(line, " \t")
+		lines[i] = strings.TrimPrefix(line, " ")
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
 func (b *builder) add(d protoreflect.Descriptor, kind, detail string) {

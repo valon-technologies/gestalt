@@ -111,27 +111,6 @@ func (r Request) ConnectionParam(name string) (string, bool) {
 	return value, ok
 }
 
-func (r Request) App() (App, error) {
-	return NewAppFromRequest(r)
-}
-
-func (r Request) Workflow() (Workflow, error) {
-	reqCtx, err := requestContextForRequest(r)
-	if err != nil {
-		return nil, err
-	}
-	client, err := newWorkflow(reqCtx)
-	if err != nil {
-		return nil, err
-	}
-	client.idempotencyKey = r.IdempotencyKey
-	return client, nil
-}
-
-func (r Request) Agent() (Agent, error) {
-	return NewAgentFromRequest(r)
-}
-
 // RequestFromContext reconstructs the current provider request from ctx.
 func RequestFromContext(ctx context.Context) Request {
 	reqCtx := requestContextFromContext(ctx)

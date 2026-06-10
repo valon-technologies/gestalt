@@ -3,10 +3,10 @@ use std::sync::Arc;
 use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::agent::AgentProvider;
+use crate::agent_provider::AgentProvider;
 use crate::api::RuntimeMetadata;
 use crate::auth::AuthenticationProvider;
-use crate::cache::CacheProvider;
+use crate::cache_provider::CacheProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
@@ -14,8 +14,8 @@ use crate::generated::v1::{
     ProviderKind, StartRuntimeProviderResponse,
 };
 use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
-use crate::runtime_provider::RuntimeProvider;
-use crate::secrets::SecretsProvider;
+use crate::runtime_provider_impl::RuntimeProvider;
+use crate::secrets_provider::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider, WorkflowProvider};
 
 #[async_trait]
