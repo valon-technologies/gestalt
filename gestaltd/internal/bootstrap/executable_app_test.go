@@ -3893,9 +3893,6 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	if requireInteraction, _ := turnMetadata["requireInteraction"].(bool); !requireInteraction {
 		t.Fatalf("CreateTurn metadata = %#v, want requireInteraction=true", turnMetadata)
 	}
-	if len(turnReq.Tools) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want none for catalog sessions", turnReq.Tools)
-	}
 }
 
 func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {

@@ -56,9 +56,9 @@ pub use agent::{
     ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
     ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
     ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse, ListedAgentTool,
-    ResolveAgentProviderInteractionRequest, ResolvedAgentTool, UpdateAgentProviderSessionRequest,
-    new_agent_image_ref, new_agent_message, new_agent_message_part, new_agent_tool_call,
-    new_agent_tool_ref, new_agent_tool_result,
+    ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest, new_agent_image_ref,
+    new_agent_message, new_agent_message_part, new_agent_tool_call, new_agent_tool_ref,
+    new_agent_tool_result,
 };
 pub use agent_access::{
     Agent, AgentCancelTurn, AgentContract, AgentCreateSession, AgentCreateTurn, AgentError,

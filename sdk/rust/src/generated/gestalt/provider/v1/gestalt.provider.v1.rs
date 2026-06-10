@@ -537,19 +537,6 @@ pub struct PreparedAgentWorkspace {
     #[prost(string, tag = "2")]
     pub cwd: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ResolvedAgentTool {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub description: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub parameters_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "6")]
-    pub r#ref: ::core::option::Option<AgentToolRef>,
-}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {
     #[prost(bool, tag = "1")]
@@ -855,8 +842,6 @@ pub struct CreateAgentProviderTurnRequest {
     pub model: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "5")]
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(message, repeated, tag = "6")]
-    pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "10")]

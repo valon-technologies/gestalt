@@ -928,9 +928,6 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].GetTools(); len(got) != 0 {
-		t.Fatalf("provider turn tools = %#v, want none for catalog sessions", got)
-	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?provider=managed&after=0&limit=10", nil)
 	eventsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
@@ -1332,9 +1329,6 @@ func TestAgentCreateTurnUsesNoToolsWithStructuredOutput(t *testing.T) {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
 	req := turnRequests[0]
-	if len(req.GetTools()) != 0 {
-		t.Fatalf("provider turn tools = %#v, want none", req.GetTools())
-	}
 	if req.GetOutput().GetStructured() == nil {
 		t.Fatal("provider turn output.structured = nil, want structured output request")
 	}

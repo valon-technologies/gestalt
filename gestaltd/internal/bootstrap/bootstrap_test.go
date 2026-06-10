@@ -329,32 +329,6 @@ func bootstrapAgentMessagesFromProto(src []*proto.AgentMessage) []coreagent.Mess
 	return out
 }
 
-func bootstrapAgentToolsToProto(src []coreagent.Tool) []*proto.ResolvedAgentTool {
-	out := make([]*proto.ResolvedAgentTool, 0, len(src))
-	for _, tool := range src {
-		out = append(out, &proto.ResolvedAgentTool{
-			Id:               tool.ID,
-			Name:             tool.Name,
-			Description:      tool.Description,
-			ParametersSchema: bootstrapAgentMapToProtoStruct(tool.ParametersSchema),
-			Ref:              agentwire.ToolRefToProto(bootstrapAgentToolRefFromTarget(tool.Target)),
-		})
-	}
-	return out
-}
-
-func bootstrapAgentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
-	return coreagent.ToolRef{
-		System:         strings.TrimSpace(target.System),
-		App:            strings.TrimSpace(target.App),
-		Operation:      strings.TrimSpace(target.Operation),
-		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
-		Instance:       strings.TrimSpace(target.Instance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(target.CredentialMode),
-		RunAs:          core.NormalizeRunAsSubject(target.RunAs),
-	}
-}
-
 func bootstrapAgentSessionStateFromProto(src proto.AgentSessionState) coreagent.SessionState {
 	switch src {
 	case proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE:
@@ -2282,9 +2256,6 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.GetCreatedBySubjectId() != p.SubjectID {
 		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", createTurnReq.GetCreatedBySubjectId(), p.SubjectID)
 	}
-	if len(createTurnReq.GetTools()) != 0 {
-		t.Fatalf("CreateTurn tools = %#v, want none for catalog sessions", createTurnReq.GetTools())
-	}
 	if createTurnReq.GetContext() == nil {
 		t.Fatal("CreateTurn context is empty")
 	}
@@ -2694,8 +2665,8 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
-	if len(provider.createTurnRequests) != 1 || len(provider.createTurnRequests[0].GetTools()) != 0 || len(bootstrapAgentProtoStructToMap(provider.createTurnRequests[0].GetMetadata())) != 0 {
-		t.Fatalf("create turn requests = %#v, want plain turn without tools or metadata", provider.createTurnRequests)
+	if len(provider.createTurnRequests) != 1 || len(bootstrapAgentProtoStructToMap(provider.createTurnRequests[0].GetMetadata())) != 0 {
+		t.Fatalf("create turn requests = %#v, want plain turn without metadata", provider.createTurnRequests)
 	}
 }
 
@@ -4754,13 +4725,6 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 
 	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
-	tool := coreagent.Tool{
-		ID: "roadmap.sync",
-		Target: coreagent.ToolTarget{
-			App:       "roadmap",
-			Operation: "sync",
-		},
-	}
 	if _, err := provider.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
 		SessionId: "agent-session-1",
 		Model:     "gpt-test",
@@ -4788,7 +4752,6 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
-		Tools:              bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
 		TimeoutSeconds:     1,
 	}); err == nil {
 		t.Fatal("CreateTurn error = nil, want mismatched turn id failure")
@@ -4814,7 +4777,6 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
-		Tools:              bootstrapAgentToolsToProto([]coreagent.Tool{tool}),
 		TimeoutSeconds:     1,
 	})
 	if err != nil {

@@ -145,14 +145,6 @@ type AgentPreparedWorkspace struct {
 	Cwd  string
 }
 
-type ResolvedAgentTool struct {
-	ID               string
-	Name             string
-	Description      string
-	ParametersSchema map[string]any
-	Ref              *AgentToolRef
-}
-
 type AgentToolRef struct {
 	App            string
 	Operation      string
@@ -340,7 +332,6 @@ type CreateAgentProviderTurnRequest struct {
 	IdempotencyKey     string
 	Model              string
 	Messages           []AgentMessage
-	Tools              []ResolvedAgentTool
 	Output             *AgentOutput
 	Metadata           map[string]any
 	CreatedBySubjectID string

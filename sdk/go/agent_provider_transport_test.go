@@ -418,16 +418,6 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			}},
 			Metadata: mustStruct(t, map[string]any{"priority": "high"}),
 		}},
-		Tools: []*proto.ResolvedAgentTool{{
-			Id:               "tool-1",
-			Name:             "lookup",
-			Description:      "Look up context",
-			ParametersSchema: mustStruct(t, map[string]any{"type": "object"}),
-			Ref: &proto.AgentToolRef{
-				App:       "docs",
-				Operation: "search",
-			},
-		}},
 		Output: &proto.AgentOutput{
 			Kind: &proto.AgentOutput_Structured{
 				Structured: &proto.AgentStructuredOutput{Schema: mustStruct(t, map[string]any{"type": "object"})},
@@ -465,13 +455,6 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if provider.receivedTurnRequest.Context.GetSubject().GetId() != "user:agent-provider" {
 		t.Fatalf("CreateTurn context = %#v, want request context", provider.receivedTurnRequest.Context)
 	}
-	if len(provider.receivedTurnRequest.Tools) != 1 ||
-		provider.receivedTurnRequest.Tools[0].Ref == nil ||
-		provider.receivedTurnRequest.Tools[0].Ref.App != "docs" ||
-		provider.receivedTurnRequest.Tools[0].Ref.Operation != "search" {
-		t.Fatalf("CreateTurn tools = %#v, want docs.search ref", provider.receivedTurnRequest.Tools)
-	}
-
 	fetchedTurn, err := agentClient.GetTurn(rpcCtx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"})
 	if err != nil {
 		t.Fatalf("GetTurn: %v", err)

@@ -223,7 +223,6 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
 
    AgentPreparedWorkspace
    AgentToolRef
-   ResolvedAgentTool
    AgentProviderCapabilities
    AgentSession
    AgentInteraction
@@ -246,8 +245,6 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
 .. autoclass:: AgentPreparedWorkspace
 
 .. autoclass:: AgentToolRef
-
-.. autoclass:: ResolvedAgentTool
 
 .. autoclass:: AgentProviderCapabilities
 

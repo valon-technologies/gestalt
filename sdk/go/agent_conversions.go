@@ -261,30 +261,6 @@ func agentPreparedWorkspaceFromProto(value *proto.PreparedAgentWorkspace) *Agent
 	}
 }
 
-func resolvedAgentToolFromProto(value *proto.ResolvedAgentTool) ResolvedAgentTool {
-	if value == nil {
-		return ResolvedAgentTool{}
-	}
-	return ResolvedAgentTool{
-		ID:               value.GetId(),
-		Name:             value.GetName(),
-		Description:      value.GetDescription(),
-		ParametersSchema: mapFromStruct(value.GetParametersSchema()),
-		Ref:              agentToolRefPtrFromProto(value.GetRef()),
-	}
-}
-
-func resolvedAgentToolsFromProto(values []*proto.ResolvedAgentTool) []ResolvedAgentTool {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]ResolvedAgentTool, 0, len(values))
-	for _, value := range values {
-		out = append(out, resolvedAgentToolFromProto(value))
-	}
-	return out
-}
-
 func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 	if value == nil {
 		return AgentToolRef{}
@@ -787,7 +763,6 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		IdempotencyKey:     req.GetIdempotencyKey(),
 		Model:              req.GetModel(),
 		Messages:           agentMessagesFromProto(req.GetMessages()),
-		Tools:              resolvedAgentToolsFromProto(req.GetTools()),
 		Output:             agentOutputFromProto(req.GetOutput()),
 		Metadata:           mapFromStruct(req.GetMetadata()),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
