@@ -1,14 +1,7 @@
-import { createClient, type Client as ConnectClient } from "@connectrpc/connect";
-
-import { Cache as CacheService } from "../internal/gen/v1/cache_pb.ts";
+import { Cache as CacheRpc } from "../cache.ts";
 import { ProviderBase, type ProviderBaseOptions } from "../provider.ts";
 import type { MaybePromise } from "../api.ts";
-import {
-  createHostServiceGrpcTransport,
-  hostServiceMetadataInterceptors,
-  parseHostServiceTarget,
-  requireHostServiceTarget,
-} from "../host-service.ts";
+import type { DurationMs } from "../rpc_support.ts";
 
 /**
  * Single cache entry used by batch cache APIs.
@@ -77,34 +70,20 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
  * ```
  */
 class CacheImpl implements Cache {
-  private readonly client: ConnectClient<typeof CacheService>;
+  private readonly client: CacheRpc;
 
   constructor(name?: string) {
-    const { target, token } = requireHostServiceTarget("cache");
-    const transport = createHostServiceGrpcTransport(
-      parseHostServiceTarget("cache", target),
-      hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
-    );
-    this.client = createClient(CacheService, transport);
+    this.client = CacheRpc.connect(name);
   }
 
   /** Returns a cached value, or `undefined` when the key is missing. */
   async get(key: string): Promise<Uint8Array | undefined> {
-    const response = await this.client.get({
-      key,
-    });
-    if (!response.found) {
-      return undefined;
-    }
-    return cloneBytes(response.value);
+    return await this.client.get(key);
   }
 
   /** Returns the subset of requested keys that currently exist. */
   async getMany(keys: string[]): Promise<Record<string, Uint8Array>> {
-    const response = await this.client.getMany({
-      keys: [...keys],
-    });
-    return entriesToRecord(response.entries);
+    return await this.client.getMany([...keys]);
   }
 
   /** Stores a cached value with an optional TTL. */
@@ -113,12 +92,7 @@ class CacheImpl implements Cache {
     value: Uint8Array,
     options?: CacheSetOptions,
   ): Promise<void> {
-    const ttl = toProtoDuration(options?.ttlMs);
-    await this.client.set({
-      key,
-      value: cloneBytes(value),
-      ...(ttl ? { ttl } : {}),
-    });
+    await this.client.set(key, value, normalizeTtl(options?.ttlMs));
   }
 
   /** Stores multiple values with an optional shared TTL. */
@@ -126,37 +100,22 @@ class CacheImpl implements Cache {
     entries: Iterable<CacheEntry>,
     options?: CacheSetOptions,
   ): Promise<void> {
-    const ttl = toProtoDuration(options?.ttlMs);
-    await this.client.setMany({
-      entries: cloneEntries(entries),
-      ...(ttl ? { ttl } : {}),
-    });
+    await this.client.setMany([...entries], normalizeTtl(options?.ttlMs));
   }
 
   /** Deletes a cached value and reports whether it existed. */
   async delete(key: string): Promise<boolean> {
-    const response = await this.client.delete({
-      key,
-    });
-    return response.deleted;
+    return await this.client.delete(key);
   }
 
   /** Deletes several cached values and returns the number removed. */
   async deleteMany(keys: string[]): Promise<number | bigint> {
-    const response = await this.client.deleteMany({
-      keys: [...keys],
-    });
-    return toJsInt(response.deleted);
+    return toJsInt(await this.client.deleteMany([...keys]));
   }
 
   /** Refreshes the TTL for an existing key. */
   async touch(key: string, ttlMs: number): Promise<boolean> {
-    const ttl = toProtoDuration(ttlMs);
-    const response = await this.client.touch({
-      key,
-      ...(ttl ? { ttl } : {}),
-    });
-    return response.touched;
+    return await this.client.touch(key, normalizeTtl(ttlMs));
   }
 }
 
@@ -312,34 +271,17 @@ function cloneSetOptions(options?: CacheSetOptions): CacheSetOptions | undefined
   };
 }
 
-function entriesToRecord(
-  entries: ReadonlyArray<{ key: string; found: boolean; value: Uint8Array }>,
-): Record<string, Uint8Array> {
-  const values = createCacheRecord();
-  for (const entry of entries) {
-    if (!entry.found) {
-      continue;
-    }
-    values[entry.key] = cloneBytes(entry.value);
-  }
-  return values;
-}
 
 function createCacheRecord(): Record<string, Uint8Array> {
   return Object.create(null) as Record<string, Uint8Array>;
 }
 
-function toProtoDuration(ttlMs: number | undefined): { seconds: bigint; nanos: number } | undefined {
+
+function normalizeTtl(ttlMs: number | undefined): DurationMs | undefined {
   if (ttlMs === undefined || !Number.isFinite(ttlMs) || ttlMs <= 0) {
     return undefined;
   }
-  const wholeMs = Math.trunc(ttlMs);
-  const seconds = Math.trunc(wholeMs / 1000);
-  const nanos = Math.trunc((wholeMs % 1000) * 1_000_000);
-  return {
-    seconds: BigInt(seconds),
-    nanos,
-  };
+  return Math.trunc(ttlMs);
 }
 
 function toJsInt(value: bigint): number | bigint {
