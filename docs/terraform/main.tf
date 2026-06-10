@@ -118,7 +118,7 @@ resource "google_compute_url_map" "docs" {
 
   host_rule {
     hosts        = [local.www_domain]
-    path_matcher = "www_redirect"
+    path_matcher = "www-redirect"
   }
 
   host_rule {
@@ -127,7 +127,7 @@ resource "google_compute_url_map" "docs" {
   }
 
   path_matcher {
-    name = "www_redirect"
+    name = "www-redirect"
 
     default_url_redirect {
       host_redirect          = var.domain
