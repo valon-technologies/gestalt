@@ -62,9 +62,12 @@ func TestEmitSpikeSurface(t *testing.T) {
 		t.Errorf("generated files = %d, want %d: %v", len(files), len(want), keys(files))
 	}
 
+	// Internal plumbing carries a leading underscore; only the error model
+	// and the native well-known representations are public.
 	assertContains(t, files, "rpc_support.py",
 		"class GestaltError(Exception):",
-		"def to_gestalt_error(error: BaseException) -> GestaltError:",
+		"def _to_gestalt_error(error: BaseException) -> GestaltError:",
+		"def _call_unary(call: Callable[[], _Result]) -> _Result:",
 		"class RpcStatus:",
 		`JsonValue = bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"] | None`,
 	)
@@ -75,6 +78,17 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"deleted: int = 0",
 		"def get(self, request: CacheGetRequest) -> CacheGetResponse:",
 		"def set(self, request: CacheSetRequest) -> None:",
+		// Converters are module-internal and build the typed pb2 messages
+		// directly: no Any-typed _wire alias.
+		"def _to_wire_cache_get_request(value: CacheGetRequest) -> Any:",
+		"return _cache_pb2.CacheGetRequest(",
+		"self._stub = _cache_pb2_grpc.CacheStub(channel)",
+	)
+	assertNotContains(t, files, "cache.py",
+		"_wire: Any",
+		"_wire_grpc: Any",
+		"def to_wire_",
+		"def from_wire_",
 	)
 	assertContains(t, files, "s3.py",
 		"def read_object(self, request: ReadObjectRequest) -> Iterator[ReadObjectChunk]:",
@@ -106,6 +120,16 @@ func assertContains(t *testing.T, files map[string]string, path string, wants ..
 	for _, want := range wants {
 		if !strings.Contains(content, want) {
 			t.Errorf("%s missing %q", path, want)
+		}
+	}
+}
+
+func assertNotContains(t *testing.T, files map[string]string, path string, rejects ...string) {
+	t.Helper()
+	content := files[path]
+	for _, reject := range rejects {
+		if strings.Contains(content, reject) {
+			t.Errorf("%s contains %q", path, reject)
 		}
 	}
 }

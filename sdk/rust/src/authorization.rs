@@ -3,9 +3,7 @@
 //! Generated native types, wire conversions, and clients for authorization.proto.
 
 use crate::generated::v1;
-use crate::rpc_support::{
-    GestaltError, from_wire_struct, from_wire_timestamp, to_wire_struct, to_wire_timestamp,
-};
+use crate::rpc_support::{GestaltError, from_wire_struct, from_wire_timestamp, to_wire_struct};
 
 /// Open enum for `gestalt.provider.v1.DefaultAccessPolicy`; unknown numeric values are preserved.
 pub type DefaultAccessPolicy = i32;
@@ -377,23 +375,15 @@ pub struct SubjectSetType {
 }
 
 /// Converts a native `Action` to its wire message.
-pub fn to_wire_action(value: Action) -> v1::Action {
+pub(crate) fn to_wire_action(value: Action) -> v1::Action {
     v1::Action {
         name: value.name,
         properties: value.properties.map(to_wire_struct),
     }
 }
 
-/// Converts a wire `Action` to its native message.
-pub fn from_wire_action(value: v1::Action) -> Action {
-    Action {
-        name: value.name,
-        properties: value.properties.map(from_wire_struct),
-    }
-}
-
 /// Converts a native `AddRelationshipRequest` to its wire message.
-pub fn to_wire_add_relationship_request(
+pub(crate) fn to_wire_add_relationship_request(
     value: AddRelationshipRequest,
 ) -> v1::AddRelationshipRequest {
     v1::AddRelationshipRequest {
@@ -401,26 +391,8 @@ pub fn to_wire_add_relationship_request(
     }
 }
 
-/// Converts a wire `AddRelationshipRequest` to its native message.
-pub fn from_wire_add_relationship_request(
-    value: v1::AddRelationshipRequest,
-) -> AddRelationshipRequest {
-    AddRelationshipRequest {
-        relationship: value.relationship.map(from_wire_relationship),
-    }
-}
-
-/// Converts a native `AddRelationshipResponse` to its wire message.
-pub fn to_wire_add_relationship_response(
-    value: AddRelationshipResponse,
-) -> v1::AddRelationshipResponse {
-    v1::AddRelationshipResponse {
-        relationship: value.relationship.map(to_wire_relationship),
-    }
-}
-
 /// Converts a wire `AddRelationshipResponse` to its native message.
-pub fn from_wire_add_relationship_response(
+pub(crate) fn from_wire_add_relationship_response(
     value: v1::AddRelationshipResponse,
 ) -> AddRelationshipResponse {
     AddRelationshipResponse {
@@ -429,7 +401,7 @@ pub fn from_wire_add_relationship_response(
 }
 
 /// Converts a native `AuthorizationModel` to its wire message.
-pub fn to_wire_authorization_model(value: AuthorizationModel) -> v1::AuthorizationModel {
+pub(crate) fn to_wire_authorization_model(value: AuthorizationModel) -> v1::AuthorizationModel {
     v1::AuthorizationModel {
         id: value.id,
         version: value.version,
@@ -441,30 +413,8 @@ pub fn to_wire_authorization_model(value: AuthorizationModel) -> v1::Authorizati
     }
 }
 
-/// Converts a wire `AuthorizationModel` to its native message.
-pub fn from_wire_authorization_model(value: v1::AuthorizationModel) -> AuthorizationModel {
-    AuthorizationModel {
-        id: value.id,
-        version: value.version,
-        resource_types: value
-            .resource_types
-            .into_iter()
-            .map(from_wire_authorization_model_resource_type)
-            .collect(),
-    }
-}
-
-/// Converts a native `AuthorizationModelRef` to its wire message.
-pub fn to_wire_authorization_model_ref(value: AuthorizationModelRef) -> v1::AuthorizationModelRef {
-    v1::AuthorizationModelRef {
-        id: value.id,
-        version: value.version,
-        created_at: value.created_at.map(to_wire_timestamp),
-    }
-}
-
 /// Converts a wire `AuthorizationModelRef` to its native message.
-pub fn from_wire_authorization_model_ref(
+pub(crate) fn from_wire_authorization_model_ref(
     value: v1::AuthorizationModelRef,
 ) -> AuthorizationModelRef {
     AuthorizationModelRef {
@@ -475,7 +425,7 @@ pub fn from_wire_authorization_model_ref(
 }
 
 /// Converts a native `AuthorizationModelResourceType` to its wire message.
-pub fn to_wire_authorization_model_resource_type(
+pub(crate) fn to_wire_authorization_model_resource_type(
     value: AuthorizationModelResourceType,
 ) -> v1::AuthorizationModelResourceType {
     v1::AuthorizationModelResourceType {
@@ -496,7 +446,7 @@ pub fn to_wire_authorization_model_resource_type(
 }
 
 /// Converts a wire `AuthorizationModelResourceType` to its native message.
-pub fn from_wire_authorization_model_resource_type(
+pub(crate) fn from_wire_authorization_model_resource_type(
     value: v1::AuthorizationModelResourceType,
 ) -> AuthorizationModelResourceType {
     AuthorizationModelResourceType {
@@ -517,7 +467,7 @@ pub fn from_wire_authorization_model_resource_type(
 }
 
 /// Converts a native `AuthorizationModelResourceTypeFilter` to its wire message.
-pub fn to_wire_authorization_model_resource_type_filter(
+pub(crate) fn to_wire_authorization_model_resource_type_filter(
     value: AuthorizationModelResourceTypeFilter,
 ) -> v1::AuthorizationModelResourceTypeFilter {
     v1::AuthorizationModelResourceTypeFilter {
@@ -526,18 +476,8 @@ pub fn to_wire_authorization_model_resource_type_filter(
     }
 }
 
-/// Converts a wire `AuthorizationModelResourceTypeFilter` to its native message.
-pub fn from_wire_authorization_model_resource_type_filter(
-    value: v1::AuthorizationModelResourceTypeFilter,
-) -> AuthorizationModelResourceTypeFilter {
-    AuthorizationModelResourceTypeFilter {
-        name: value.name,
-        source_layer: value.source_layer,
-    }
-}
-
 /// Converts a native `CheckAccessManyRequest` to its wire message.
-pub fn to_wire_check_access_many_request(
+pub(crate) fn to_wire_check_access_many_request(
     value: CheckAccessManyRequest,
 ) -> v1::CheckAccessManyRequest {
     v1::CheckAccessManyRequest {
@@ -549,34 +489,8 @@ pub fn to_wire_check_access_many_request(
     }
 }
 
-/// Converts a wire `CheckAccessManyRequest` to its native message.
-pub fn from_wire_check_access_many_request(
-    value: v1::CheckAccessManyRequest,
-) -> CheckAccessManyRequest {
-    CheckAccessManyRequest {
-        requests: value
-            .requests
-            .into_iter()
-            .map(from_wire_check_access_request)
-            .collect(),
-    }
-}
-
-/// Converts a native `CheckAccessManyResponse` to its wire message.
-pub fn to_wire_check_access_many_response(
-    value: CheckAccessManyResponse,
-) -> v1::CheckAccessManyResponse {
-    v1::CheckAccessManyResponse {
-        decisions: value
-            .decisions
-            .into_iter()
-            .map(to_wire_check_access_response)
-            .collect(),
-    }
-}
-
 /// Converts a wire `CheckAccessManyResponse` to its native message.
-pub fn from_wire_check_access_many_response(
+pub(crate) fn from_wire_check_access_many_response(
     value: v1::CheckAccessManyResponse,
 ) -> CheckAccessManyResponse {
     CheckAccessManyResponse {
@@ -589,7 +503,7 @@ pub fn from_wire_check_access_many_response(
 }
 
 /// Converts a native `CheckAccessRequest` to its wire message.
-pub fn to_wire_check_access_request(value: CheckAccessRequest) -> v1::CheckAccessRequest {
+pub(crate) fn to_wire_check_access_request(value: CheckAccessRequest) -> v1::CheckAccessRequest {
     v1::CheckAccessRequest {
         subject: value.subject.map(to_wire_subject),
         action: value.action.map(to_wire_action),
@@ -597,25 +511,10 @@ pub fn to_wire_check_access_request(value: CheckAccessRequest) -> v1::CheckAcces
     }
 }
 
-/// Converts a wire `CheckAccessRequest` to its native message.
-pub fn from_wire_check_access_request(value: v1::CheckAccessRequest) -> CheckAccessRequest {
-    CheckAccessRequest {
-        subject: value.subject.map(from_wire_subject),
-        action: value.action.map(from_wire_action),
-        resource: value.resource.map(from_wire_resource),
-    }
-}
-
-/// Converts a native `CheckAccessResponse` to its wire message.
-pub fn to_wire_check_access_response(value: CheckAccessResponse) -> v1::CheckAccessResponse {
-    v1::CheckAccessResponse {
-        allowed: value.allowed,
-        model_id: value.model_id,
-    }
-}
-
 /// Converts a wire `CheckAccessResponse` to its native message.
-pub fn from_wire_check_access_response(value: v1::CheckAccessResponse) -> CheckAccessResponse {
+pub(crate) fn from_wire_check_access_response(
+    value: v1::CheckAccessResponse,
+) -> CheckAccessResponse {
     CheckAccessResponse {
         allowed: value.allowed,
         model_id: value.model_id,
@@ -623,7 +522,7 @@ pub fn from_wire_check_access_response(value: v1::CheckAccessResponse) -> CheckA
 }
 
 /// Converts a native `DeleteRelationshipRequest` to its wire message.
-pub fn to_wire_delete_relationship_request(
+pub(crate) fn to_wire_delete_relationship_request(
     value: DeleteRelationshipRequest,
 ) -> v1::DeleteRelationshipRequest {
     v1::DeleteRelationshipRequest {
@@ -631,40 +530,15 @@ pub fn to_wire_delete_relationship_request(
     }
 }
 
-/// Converts a wire `DeleteRelationshipRequest` to its native message.
-pub fn from_wire_delete_relationship_request(
-    value: v1::DeleteRelationshipRequest,
-) -> DeleteRelationshipRequest {
-    DeleteRelationshipRequest {
-        relationship_tuple: value.relationship_tuple.map(from_wire_relationship_tuple),
-    }
-}
-
-/// Converts a native `DeleteRelationshipResponse` to its wire message.
-pub fn to_wire_delete_relationship_response(
-    _value: DeleteRelationshipResponse,
-) -> v1::DeleteRelationshipResponse {
-    v1::DeleteRelationshipResponse {}
-}
-
 /// Converts a wire `DeleteRelationshipResponse` to its native message.
-pub fn from_wire_delete_relationship_response(
+pub(crate) fn from_wire_delete_relationship_response(
     _value: v1::DeleteRelationshipResponse,
 ) -> DeleteRelationshipResponse {
     DeleteRelationshipResponse {}
 }
 
-/// Converts a native `GetActiveModelRefResponse` to its wire message.
-pub fn to_wire_get_active_model_ref_response(
-    value: GetActiveModelRefResponse,
-) -> v1::GetActiveModelRefResponse {
-    v1::GetActiveModelRefResponse {
-        model: value.model.map(to_wire_authorization_model_ref),
-    }
-}
-
 /// Converts a wire `GetActiveModelRefResponse` to its native message.
-pub fn from_wire_get_active_model_ref_response(
+pub(crate) fn from_wire_get_active_model_ref_response(
     value: v1::GetActiveModelRefResponse,
 ) -> GetActiveModelRefResponse {
     GetActiveModelRefResponse {
@@ -673,7 +547,7 @@ pub fn from_wire_get_active_model_ref_response(
 }
 
 /// Converts a native `ListActiveModelResourceTypesRequest` to its wire message.
-pub fn to_wire_list_active_model_resource_types_request(
+pub(crate) fn to_wire_list_active_model_resource_types_request(
     value: ListActiveModelResourceTypesRequest,
 ) -> v1::ListActiveModelResourceTypesRequest {
     v1::ListActiveModelResourceTypesRequest {
@@ -685,36 +559,8 @@ pub fn to_wire_list_active_model_resource_types_request(
     }
 }
 
-/// Converts a wire `ListActiveModelResourceTypesRequest` to its native message.
-pub fn from_wire_list_active_model_resource_types_request(
-    value: v1::ListActiveModelResourceTypesRequest,
-) -> ListActiveModelResourceTypesRequest {
-    ListActiveModelResourceTypesRequest {
-        filter: value
-            .filter
-            .map(from_wire_authorization_model_resource_type_filter),
-        page_size: value.page_size,
-        page_token: value.page_token,
-    }
-}
-
-/// Converts a native `ListActiveModelResourceTypesResponse` to its wire message.
-pub fn to_wire_list_active_model_resource_types_response(
-    value: ListActiveModelResourceTypesResponse,
-) -> v1::ListActiveModelResourceTypesResponse {
-    v1::ListActiveModelResourceTypesResponse {
-        resource_types: value
-            .resource_types
-            .into_iter()
-            .map(to_wire_authorization_model_resource_type)
-            .collect(),
-        next_page_token: value.next_page_token,
-        model_id: value.model_id,
-    }
-}
-
 /// Converts a wire `ListActiveModelResourceTypesResponse` to its native message.
-pub fn from_wire_list_active_model_resource_types_response(
+pub(crate) fn from_wire_list_active_model_resource_types_response(
     value: v1::ListActiveModelResourceTypesResponse,
 ) -> ListActiveModelResourceTypesResponse {
     ListActiveModelResourceTypesResponse {
@@ -729,7 +575,7 @@ pub fn from_wire_list_active_model_resource_types_response(
 }
 
 /// Converts a native `ListRelationshipsRequest` to its wire message.
-pub fn to_wire_list_relationships_request(
+pub(crate) fn to_wire_list_relationships_request(
     value: ListRelationshipsRequest,
 ) -> v1::ListRelationshipsRequest {
     v1::ListRelationshipsRequest {
@@ -739,33 +585,8 @@ pub fn to_wire_list_relationships_request(
     }
 }
 
-/// Converts a wire `ListRelationshipsRequest` to its native message.
-pub fn from_wire_list_relationships_request(
-    value: v1::ListRelationshipsRequest,
-) -> ListRelationshipsRequest {
-    ListRelationshipsRequest {
-        filter: value.filter.map(from_wire_relationship_filter),
-        page_size: value.page_size,
-        page_token: value.page_token,
-    }
-}
-
-/// Converts a native `ListRelationshipsResponse` to its wire message.
-pub fn to_wire_list_relationships_response(
-    value: ListRelationshipsResponse,
-) -> v1::ListRelationshipsResponse {
-    v1::ListRelationshipsResponse {
-        relationships: value
-            .relationships
-            .into_iter()
-            .map(to_wire_relationship)
-            .collect(),
-        next_page_token: value.next_page_token,
-    }
-}
-
 /// Converts a wire `ListRelationshipsResponse` to its native message.
-pub fn from_wire_list_relationships_response(
+pub(crate) fn from_wire_list_relationships_response(
     value: v1::ListRelationshipsResponse,
 ) -> ListRelationshipsResponse {
     ListRelationshipsResponse {
@@ -779,7 +600,7 @@ pub fn from_wire_list_relationships_response(
 }
 
 /// Converts a native `ModelAction` to its wire message.
-pub fn to_wire_model_action(value: ModelAction) -> v1::ModelAction {
+pub(crate) fn to_wire_model_action(value: ModelAction) -> v1::ModelAction {
     v1::ModelAction {
         name: value.name,
         relations: value.relations,
@@ -787,7 +608,7 @@ pub fn to_wire_model_action(value: ModelAction) -> v1::ModelAction {
 }
 
 /// Converts a wire `ModelAction` to its native message.
-pub fn from_wire_model_action(value: v1::ModelAction) -> ModelAction {
+pub(crate) fn from_wire_model_action(value: v1::ModelAction) -> ModelAction {
     ModelAction {
         name: value.name,
         relations: value.relations,
@@ -795,20 +616,20 @@ pub fn from_wire_model_action(value: v1::ModelAction) -> ModelAction {
 }
 
 /// Converts a native `ModelAllowedTarget` to its wire message.
-pub fn to_wire_model_allowed_target(value: ModelAllowedTarget) -> v1::ModelAllowedTarget {
+pub(crate) fn to_wire_model_allowed_target(value: ModelAllowedTarget) -> v1::ModelAllowedTarget {
     v1::ModelAllowedTarget {
         kind: value.kind.map(to_wire_model_allowed_target_kind),
     }
 }
 
 /// Converts a wire `ModelAllowedTarget` to its native message.
-pub fn from_wire_model_allowed_target(value: v1::ModelAllowedTarget) -> ModelAllowedTarget {
+pub(crate) fn from_wire_model_allowed_target(value: v1::ModelAllowedTarget) -> ModelAllowedTarget {
     ModelAllowedTarget {
         kind: value.kind.map(from_wire_model_allowed_target_kind),
     }
 }
 
-fn to_wire_model_allowed_target_kind(
+pub(crate) fn to_wire_model_allowed_target_kind(
     value: ModelAllowedTargetKind,
 ) -> v1::model_allowed_target::Kind {
     match value {
@@ -824,7 +645,7 @@ fn to_wire_model_allowed_target_kind(
     }
 }
 
-fn from_wire_model_allowed_target_kind(
+pub(crate) fn from_wire_model_allowed_target_kind(
     value: v1::model_allowed_target::Kind,
 ) -> ModelAllowedTargetKind {
     match value {
@@ -841,7 +662,7 @@ fn from_wire_model_allowed_target_kind(
 }
 
 /// Converts a native `ModelRelation` to its wire message.
-pub fn to_wire_model_relation(value: ModelRelation) -> v1::ModelRelation {
+pub(crate) fn to_wire_model_relation(value: ModelRelation) -> v1::ModelRelation {
     v1::ModelRelation {
         name: value.name,
         allowed_targets: value
@@ -853,7 +674,7 @@ pub fn to_wire_model_relation(value: ModelRelation) -> v1::ModelRelation {
 }
 
 /// Converts a wire `ModelRelation` to its native message.
-pub fn from_wire_model_relation(value: v1::ModelRelation) -> ModelRelation {
+pub(crate) fn from_wire_model_relation(value: v1::ModelRelation) -> ModelRelation {
     ModelRelation {
         name: value.name,
         allowed_targets: value
@@ -865,7 +686,7 @@ pub fn from_wire_model_relation(value: v1::ModelRelation) -> ModelRelation {
 }
 
 /// Converts a native `Relationship` to its wire message.
-pub fn to_wire_relationship(value: Relationship) -> v1::Relationship {
+pub(crate) fn to_wire_relationship(value: Relationship) -> v1::Relationship {
     v1::Relationship {
         tuple: value.tuple.map(to_wire_relationship_tuple),
         properties: value.properties.map(to_wire_struct),
@@ -874,7 +695,7 @@ pub fn to_wire_relationship(value: Relationship) -> v1::Relationship {
 }
 
 /// Converts a wire `Relationship` to its native message.
-pub fn from_wire_relationship(value: v1::Relationship) -> Relationship {
+pub(crate) fn from_wire_relationship(value: v1::Relationship) -> Relationship {
     Relationship {
         tuple: value.tuple.map(from_wire_relationship_tuple),
         properties: value.properties.map(from_wire_struct),
@@ -883,7 +704,7 @@ pub fn from_wire_relationship(value: v1::Relationship) -> Relationship {
 }
 
 /// Converts a native `RelationshipFilter` to its wire message.
-pub fn to_wire_relationship_filter(value: RelationshipFilter) -> v1::RelationshipFilter {
+pub(crate) fn to_wire_relationship_filter(value: RelationshipFilter) -> v1::RelationshipFilter {
     v1::RelationshipFilter {
         target: value.target.map(to_wire_relationship_target),
         relation: value.relation,
@@ -895,34 +716,21 @@ pub fn to_wire_relationship_filter(value: RelationshipFilter) -> v1::Relationshi
     }
 }
 
-/// Converts a wire `RelationshipFilter` to its native message.
-pub fn from_wire_relationship_filter(value: v1::RelationshipFilter) -> RelationshipFilter {
-    RelationshipFilter {
-        target: value.target.map(from_wire_relationship_target),
-        relation: value.relation,
-        resource: value.resource.map(from_wire_resource),
-        target_type: value.target_type,
-        target_entity_type: value.target_entity_type,
-        resource_type: value.resource_type,
-        source_layer: value.source_layer,
-    }
-}
-
 /// Converts a native `RelationshipTarget` to its wire message.
-pub fn to_wire_relationship_target(value: RelationshipTarget) -> v1::RelationshipTarget {
+pub(crate) fn to_wire_relationship_target(value: RelationshipTarget) -> v1::RelationshipTarget {
     v1::RelationshipTarget {
         kind: value.kind.map(to_wire_relationship_target_kind),
     }
 }
 
 /// Converts a wire `RelationshipTarget` to its native message.
-pub fn from_wire_relationship_target(value: v1::RelationshipTarget) -> RelationshipTarget {
+pub(crate) fn from_wire_relationship_target(value: v1::RelationshipTarget) -> RelationshipTarget {
     RelationshipTarget {
         kind: value.kind.map(from_wire_relationship_target_kind),
     }
 }
 
-fn to_wire_relationship_target_kind(
+pub(crate) fn to_wire_relationship_target_kind(
     value: RelationshipTargetKind,
 ) -> v1::relationship_target::Kind {
     match value {
@@ -938,7 +746,7 @@ fn to_wire_relationship_target_kind(
     }
 }
 
-fn from_wire_relationship_target_kind(
+pub(crate) fn from_wire_relationship_target_kind(
     value: v1::relationship_target::Kind,
 ) -> RelationshipTargetKind {
     match value {
@@ -955,7 +763,7 @@ fn from_wire_relationship_target_kind(
 }
 
 /// Converts a native `RelationshipTuple` to its wire message.
-pub fn to_wire_relationship_tuple(value: RelationshipTuple) -> v1::RelationshipTuple {
+pub(crate) fn to_wire_relationship_tuple(value: RelationshipTuple) -> v1::RelationshipTuple {
     v1::RelationshipTuple {
         target: value.target.map(to_wire_relationship_target),
         relation: value.relation,
@@ -964,7 +772,7 @@ pub fn to_wire_relationship_tuple(value: RelationshipTuple) -> v1::RelationshipT
 }
 
 /// Converts a wire `RelationshipTuple` to its native message.
-pub fn from_wire_relationship_tuple(value: v1::RelationshipTuple) -> RelationshipTuple {
+pub(crate) fn from_wire_relationship_tuple(value: v1::RelationshipTuple) -> RelationshipTuple {
     RelationshipTuple {
         target: value.target.map(from_wire_relationship_target),
         relation: value.relation,
@@ -973,7 +781,7 @@ pub fn from_wire_relationship_tuple(value: v1::RelationshipTuple) -> Relationshi
 }
 
 /// Converts a native `Resource` to its wire message.
-pub fn to_wire_resource(value: Resource) -> v1::Resource {
+pub(crate) fn to_wire_resource(value: Resource) -> v1::Resource {
     v1::Resource {
         r#type: value.r#type,
         id: value.id,
@@ -982,7 +790,7 @@ pub fn to_wire_resource(value: Resource) -> v1::Resource {
 }
 
 /// Converts a wire `Resource` to its native message.
-pub fn from_wire_resource(value: v1::Resource) -> Resource {
+pub(crate) fn from_wire_resource(value: v1::Resource) -> Resource {
     Resource {
         r#type: value.r#type,
         id: value.id,
@@ -991,32 +799,16 @@ pub fn from_wire_resource(value: v1::Resource) -> Resource {
 }
 
 /// Converts a native `SetActiveModelRequest` to its wire message.
-pub fn to_wire_set_active_model_request(value: SetActiveModelRequest) -> v1::SetActiveModelRequest {
+pub(crate) fn to_wire_set_active_model_request(
+    value: SetActiveModelRequest,
+) -> v1::SetActiveModelRequest {
     v1::SetActiveModelRequest {
         model: value.model.map(to_wire_authorization_model),
     }
 }
 
-/// Converts a wire `SetActiveModelRequest` to its native message.
-pub fn from_wire_set_active_model_request(
-    value: v1::SetActiveModelRequest,
-) -> SetActiveModelRequest {
-    SetActiveModelRequest {
-        model: value.model.map(from_wire_authorization_model),
-    }
-}
-
-/// Converts a native `SetActiveModelResponse` to its wire message.
-pub fn to_wire_set_active_model_response(
-    value: SetActiveModelResponse,
-) -> v1::SetActiveModelResponse {
-    v1::SetActiveModelResponse {
-        model: value.model.map(to_wire_authorization_model_ref),
-    }
-}
-
 /// Converts a wire `SetActiveModelResponse` to its native message.
-pub fn from_wire_set_active_model_response(
+pub(crate) fn from_wire_set_active_model_response(
     value: v1::SetActiveModelResponse,
 ) -> SetActiveModelResponse {
     SetActiveModelResponse {
@@ -1025,7 +817,7 @@ pub fn from_wire_set_active_model_response(
 }
 
 /// Converts a native `SetAuthorizationStateRequest` to its wire message.
-pub fn to_wire_set_authorization_state_request(
+pub(crate) fn to_wire_set_authorization_state_request(
     value: SetAuthorizationStateRequest,
 ) -> v1::SetAuthorizationStateRequest {
     v1::SetAuthorizationStateRequest {
@@ -1038,31 +830,8 @@ pub fn to_wire_set_authorization_state_request(
     }
 }
 
-/// Converts a wire `SetAuthorizationStateRequest` to its native message.
-pub fn from_wire_set_authorization_state_request(
-    value: v1::SetAuthorizationStateRequest,
-) -> SetAuthorizationStateRequest {
-    SetAuthorizationStateRequest {
-        model: value.model.map(from_wire_authorization_model),
-        relationships: value
-            .relationships
-            .into_iter()
-            .map(from_wire_relationship)
-            .collect(),
-    }
-}
-
-/// Converts a native `SetAuthorizationStateResponse` to its wire message.
-pub fn to_wire_set_authorization_state_response(
-    value: SetAuthorizationStateResponse,
-) -> v1::SetAuthorizationStateResponse {
-    v1::SetAuthorizationStateResponse {
-        active_model: value.active_model.map(to_wire_authorization_model_ref),
-    }
-}
-
 /// Converts a wire `SetAuthorizationStateResponse` to its native message.
-pub fn from_wire_set_authorization_state_response(
+pub(crate) fn from_wire_set_authorization_state_response(
     value: v1::SetAuthorizationStateResponse,
 ) -> SetAuthorizationStateResponse {
     SetAuthorizationStateResponse {
@@ -1071,7 +840,7 @@ pub fn from_wire_set_authorization_state_response(
 }
 
 /// Converts a native `Subject` to its wire message.
-pub fn to_wire_subject(value: Subject) -> v1::Subject {
+pub(crate) fn to_wire_subject(value: Subject) -> v1::Subject {
     v1::Subject {
         r#type: value.r#type,
         id: value.id,
@@ -1080,7 +849,7 @@ pub fn to_wire_subject(value: Subject) -> v1::Subject {
 }
 
 /// Converts a wire `Subject` to its native message.
-pub fn from_wire_subject(value: v1::Subject) -> Subject {
+pub(crate) fn from_wire_subject(value: v1::Subject) -> Subject {
     Subject {
         r#type: value.r#type,
         id: value.id,
@@ -1089,7 +858,7 @@ pub fn from_wire_subject(value: v1::Subject) -> Subject {
 }
 
 /// Converts a native `SubjectSet` to its wire message.
-pub fn to_wire_subject_set(value: SubjectSet) -> v1::SubjectSet {
+pub(crate) fn to_wire_subject_set(value: SubjectSet) -> v1::SubjectSet {
     v1::SubjectSet {
         resource: value.resource.map(to_wire_resource),
         relation: value.relation,
@@ -1097,7 +866,7 @@ pub fn to_wire_subject_set(value: SubjectSet) -> v1::SubjectSet {
 }
 
 /// Converts a wire `SubjectSet` to its native message.
-pub fn from_wire_subject_set(value: v1::SubjectSet) -> SubjectSet {
+pub(crate) fn from_wire_subject_set(value: v1::SubjectSet) -> SubjectSet {
     SubjectSet {
         resource: value.resource.map(from_wire_resource),
         relation: value.relation,
@@ -1105,7 +874,7 @@ pub fn from_wire_subject_set(value: v1::SubjectSet) -> SubjectSet {
 }
 
 /// Converts a native `SubjectSetType` to its wire message.
-pub fn to_wire_subject_set_type(value: SubjectSetType) -> v1::SubjectSetType {
+pub(crate) fn to_wire_subject_set_type(value: SubjectSetType) -> v1::SubjectSetType {
     v1::SubjectSetType {
         resource_type: value.resource_type,
         relation: value.relation,
@@ -1113,7 +882,7 @@ pub fn to_wire_subject_set_type(value: SubjectSetType) -> v1::SubjectSetType {
 }
 
 /// Converts a wire `SubjectSetType` to its native message.
-pub fn from_wire_subject_set_type(value: v1::SubjectSetType) -> SubjectSetType {
+pub(crate) fn from_wire_subject_set_type(value: v1::SubjectSetType) -> SubjectSetType {
     SubjectSetType {
         resource_type: value.resource_type,
         relation: value.relation,

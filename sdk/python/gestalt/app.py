@@ -14,16 +14,15 @@ from ._gen.v1 import app_pb2 as _app_pb2
 from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
 from .rpc_support import (
     JsonValue,
-    call_unary,
-    from_wire_struct,
-    from_wire_value,
-    to_wire_struct,
-    to_wire_value,
+    _call_unary,
+    _from_wire_struct,
+    _from_wire_value,
+    _to_wire_enum,
+    _to_wire_struct,
+    _to_wire_value,
 )
 
 _empty: Any = _empty_pb2
-_wire: Any = _app_pb2
-_wire_grpc: Any = _app_pb2_grpc
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -299,29 +298,29 @@ class SubjectPermissionContext:
     all_operations: bool = False
 
 
-def to_wire_access_context(value: AccessContext) -> Any:
-    return _wire.AccessContext(
+def _to_wire_access_context(value: AccessContext) -> Any:
+    return _app_pb2.AccessContext(
         policy=value.policy,
         role=value.role,
     )
 
 
-def from_wire_access_context(value: Any) -> AccessContext:
+def _from_wire_access_context(value: Any) -> AccessContext:
     return AccessContext(
         policy=value.policy,
         role=value.role,
     )
 
 
-def to_wire_agent_invocation_context(value: AgentInvocationContext) -> Any:
-    return _wire.AgentInvocationContext(
+def _to_wire_agent_invocation_context(value: AgentInvocationContext) -> Any:
+    return _app_pb2.AgentInvocationContext(
         provider_name=value.provider_name,
         session_id=value.session_id,
         turn_id=value.turn_id,
     )
 
 
-def from_wire_agent_invocation_context(value: Any) -> AgentInvocationContext:
+def _from_wire_agent_invocation_context(value: Any) -> AgentInvocationContext:
     return AgentInvocationContext(
         provider_name=value.provider_name,
         session_id=value.session_id,
@@ -329,8 +328,8 @@ def from_wire_agent_invocation_context(value: Any) -> AgentInvocationContext:
     )
 
 
-def to_wire_agent_tool_ref(value: AgentToolRef) -> Any:
-    return _wire.AgentToolRef(
+def _to_wire_agent_tool_ref(value: AgentToolRef) -> Any:
+    return _app_pb2.AgentToolRef(
         app=value.app,
         operation=value.operation,
         connection=value.connection,
@@ -339,11 +338,11 @@ def to_wire_agent_tool_ref(value: AgentToolRef) -> Any:
         description=value.description,
         credential_mode=value.credential_mode,
         system=value.system,
-        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
+        run_as=None if value.run_as is None else _to_wire_subject_context(value.run_as),
     )
 
 
-def from_wire_agent_tool_ref(value: Any) -> AgentToolRef:
+def _from_wire_agent_tool_ref(value: Any) -> AgentToolRef:
     return AgentToolRef(
         app=value.app,
         operation=value.operation,
@@ -353,90 +352,90 @@ def from_wire_agent_tool_ref(value: Any) -> AgentToolRef:
         description=value.description,
         credential_mode=value.credential_mode,
         system=value.system,
-        run_as=from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
+        run_as=_from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
     )
 
 
-def to_wire_app_invoke_graph_ql_request(value: AppInvokeGraphQLRequest) -> Any:
-    return _wire.AppInvokeGraphQLRequest(
+def _to_wire_app_invoke_graph_ql_request(value: AppInvokeGraphQLRequest) -> Any:
+    return _app_pb2.AppInvokeGraphQLRequest(
         app=value.app,
         document=value.document,
-        variables=None if value.variables is None else to_wire_struct(value.variables),
+        variables=None if value.variables is None else _to_wire_struct(value.variables),
         connection=value.connection,
         instance=value.instance,
         idempotency_key=value.idempotency_key,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_app_invoke_graph_ql_request(value: Any) -> AppInvokeGraphQLRequest:
+def _from_wire_app_invoke_graph_ql_request(value: Any) -> AppInvokeGraphQLRequest:
     return AppInvokeGraphQLRequest(
         app=value.app,
         document=value.document,
-        variables=from_wire_struct(value.variables) if value.HasField("variables") else None,
+        variables=_from_wire_struct(value.variables) if value.HasField("variables") else None,
         connection=value.connection,
         instance=value.instance,
         idempotency_key=value.idempotency_key,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_app_invoke_request(value: AppInvokeRequest) -> Any:
-    return _wire.AppInvokeRequest(
+def _to_wire_app_invoke_request(value: AppInvokeRequest) -> Any:
+    return _app_pb2.AppInvokeRequest(
         app=value.app,
         operation=value.operation,
-        params=None if value.params is None else to_wire_struct(value.params),
+        params=None if value.params is None else _to_wire_struct(value.params),
         connection=value.connection,
         instance=value.instance,
         idempotency_key=value.idempotency_key,
         credential_mode=value.credential_mode,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_app_invoke_request(value: Any) -> AppInvokeRequest:
+def _from_wire_app_invoke_request(value: Any) -> AppInvokeRequest:
     return AppInvokeRequest(
         app=value.app,
         operation=value.operation,
-        params=from_wire_struct(value.params) if value.HasField("params") else None,
+        params=_from_wire_struct(value.params) if value.HasField("params") else None,
         connection=value.connection,
         instance=value.instance,
         idempotency_key=value.idempotency_key,
         credential_mode=value.credential_mode,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_catalog(value: Catalog) -> Any:
-    return _wire.Catalog(
+def _to_wire_catalog(value: Catalog) -> Any:
+    return _app_pb2.Catalog(
         name=value.name,
         display_name=value.display_name,
         description=value.description,
         icon_svg=value.icon_svg,
-        operations=[to_wire_catalog_operation(item) for item in value.operations],
+        operations=[_to_wire_catalog_operation(item) for item in value.operations],
     )
 
 
-def from_wire_catalog(value: Any) -> Catalog:
+def _from_wire_catalog(value: Any) -> Catalog:
     return Catalog(
         name=value.name,
         display_name=value.display_name,
         description=value.description,
         icon_svg=value.icon_svg,
-        operations=[from_wire_catalog_operation(item) for item in value.operations],
+        operations=[_from_wire_catalog_operation(item) for item in value.operations],
     )
 
 
-def to_wire_catalog_operation(value: CatalogOperation) -> Any:
-    return _wire.CatalogOperation(
+def _to_wire_catalog_operation(value: CatalogOperation) -> Any:
+    return _app_pb2.CatalogOperation(
         id=value.id,
         method=value.method,
         title=value.title,
         description=value.description,
         input_schema=value.input_schema,
         output_schema=value.output_schema,
-        annotations=None if value.annotations is None else to_wire_operation_annotations(value.annotations),
-        parameters=[to_wire_catalog_parameter(item) for item in value.parameters],
+        annotations=None if value.annotations is None else _to_wire_operation_annotations(value.annotations),
+        parameters=[_to_wire_catalog_parameter(item) for item in value.parameters],
         required_scopes=value.required_scopes,
         tags=value.tags,
         read_only=value.read_only,
@@ -446,7 +445,7 @@ def to_wire_catalog_operation(value: CatalogOperation) -> Any:
     )
 
 
-def from_wire_catalog_operation(value: Any) -> CatalogOperation:
+def _from_wire_catalog_operation(value: Any) -> CatalogOperation:
     return CatalogOperation(
         id=value.id,
         method=value.method,
@@ -454,8 +453,8 @@ def from_wire_catalog_operation(value: Any) -> CatalogOperation:
         description=value.description,
         input_schema=value.input_schema,
         output_schema=value.output_schema,
-        annotations=from_wire_operation_annotations(value.annotations) if value.HasField("annotations") else None,
-        parameters=[from_wire_catalog_parameter(item) for item in value.parameters],
+        annotations=_from_wire_operation_annotations(value.annotations) if value.HasField("annotations") else None,
+        parameters=[_from_wire_catalog_parameter(item) for item in value.parameters],
         required_scopes=list(value.required_scopes),
         tags=list(value.tags),
         read_only=value.read_only,
@@ -465,28 +464,28 @@ def from_wire_catalog_operation(value: Any) -> CatalogOperation:
     )
 
 
-def to_wire_catalog_parameter(value: CatalogParameter) -> Any:
-    return _wire.CatalogParameter(
+def _to_wire_catalog_parameter(value: CatalogParameter) -> Any:
+    return _app_pb2.CatalogParameter(
         name=value.name,
         type=value.type,
         description=value.description,
         required=value.required,
-        default=None if value.default is None else to_wire_value(value.default),
+        default=None if value.default is None else _to_wire_value(value.default),
     )
 
 
-def from_wire_catalog_parameter(value: Any) -> CatalogParameter:
+def _from_wire_catalog_parameter(value: Any) -> CatalogParameter:
     return CatalogParameter(
         name=value.name,
         type=value.type,
         description=value.description,
         required=value.required,
-        default=from_wire_value(value.default) if value.HasField("default") else None,
+        default=_from_wire_value(value.default) if value.HasField("default") else None,
     )
 
 
-def to_wire_connection_param_def(value: ConnectionParamDef) -> Any:
-    return _wire.ConnectionParamDef(
+def _to_wire_connection_param_def(value: ConnectionParamDef) -> Any:
+    return _app_pb2.ConnectionParamDef(
         required=value.required,
         description=value.description,
         default_value=value.default_value,
@@ -495,7 +494,7 @@ def to_wire_connection_param_def(value: ConnectionParamDef) -> Any:
     )
 
 
-def from_wire_connection_param_def(value: Any) -> ConnectionParamDef:
+def _from_wire_connection_param_def(value: Any) -> ConnectionParamDef:
     return ConnectionParamDef(
         required=value.required,
         description=value.description,
@@ -505,8 +504,8 @@ def from_wire_connection_param_def(value: Any) -> ConnectionParamDef:
     )
 
 
-def to_wire_credential_context(value: CredentialContext) -> Any:
-    return _wire.CredentialContext(
+def _to_wire_credential_context(value: CredentialContext) -> Any:
+    return _app_pb2.CredentialContext(
         mode=value.mode,
         subject_id=value.subject_id,
         connection=value.connection,
@@ -514,7 +513,7 @@ def to_wire_credential_context(value: CredentialContext) -> Any:
     )
 
 
-def from_wire_credential_context(value: Any) -> CredentialContext:
+def _from_wire_credential_context(value: Any) -> CredentialContext:
     return CredentialContext(
         mode=value.mode,
         subject_id=value.subject_id,
@@ -523,69 +522,69 @@ def from_wire_credential_context(value: Any) -> CredentialContext:
     )
 
 
-def to_wire_execute_request(value: ExecuteRequest) -> Any:
-    return _wire.ExecuteRequest(
+def _to_wire_execute_request(value: ExecuteRequest) -> Any:
+    return _app_pb2.ExecuteRequest(
         operation=value.operation,
-        params=None if value.params is None else to_wire_struct(value.params),
+        params=None if value.params is None else _to_wire_struct(value.params),
         token=value.token,
         connection_params=value.connection_params,
         invocation_id=value.invocation_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         idempotency_key=value.idempotency_key,
     )
 
 
-def from_wire_execute_request(value: Any) -> ExecuteRequest:
+def _from_wire_execute_request(value: Any) -> ExecuteRequest:
     return ExecuteRequest(
         operation=value.operation,
-        params=from_wire_struct(value.params) if value.HasField("params") else None,
+        params=_from_wire_struct(value.params) if value.HasField("params") else None,
         token=value.token,
         connection_params=dict(value.connection_params),
         invocation_id=value.invocation_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         idempotency_key=value.idempotency_key,
     )
 
 
-def to_wire_get_session_catalog_request(value: GetSessionCatalogRequest) -> Any:
-    return _wire.GetSessionCatalogRequest(
+def _to_wire_get_session_catalog_request(value: GetSessionCatalogRequest) -> Any:
+    return _app_pb2.GetSessionCatalogRequest(
         token=value.token,
         connection_params=value.connection_params,
         invocation_id=value.invocation_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_get_session_catalog_request(value: Any) -> GetSessionCatalogRequest:
+def _from_wire_get_session_catalog_request(value: Any) -> GetSessionCatalogRequest:
     return GetSessionCatalogRequest(
         token=value.token,
         connection_params=dict(value.connection_params),
         invocation_id=value.invocation_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_get_session_catalog_response(value: GetSessionCatalogResponse) -> Any:
-    return _wire.GetSessionCatalogResponse(
-        catalog=None if value.catalog is None else to_wire_catalog(value.catalog),
+def _to_wire_get_session_catalog_response(value: GetSessionCatalogResponse) -> Any:
+    return _app_pb2.GetSessionCatalogResponse(
+        catalog=None if value.catalog is None else _to_wire_catalog(value.catalog),
     )
 
 
-def from_wire_get_session_catalog_response(value: Any) -> GetSessionCatalogResponse:
+def _from_wire_get_session_catalog_response(value: Any) -> GetSessionCatalogResponse:
     return GetSessionCatalogResponse(
-        catalog=from_wire_catalog(value.catalog) if value.HasField("catalog") else None,
+        catalog=_from_wire_catalog(value.catalog) if value.HasField("catalog") else None,
     )
 
 
-def to_wire_http_subject_request(value: HTTPSubjectRequest) -> Any:
-    return _wire.HTTPSubjectRequest(
+def _to_wire_http_subject_request(value: HTTPSubjectRequest) -> Any:
+    return _app_pb2.HTTPSubjectRequest(
         binding=value.binding,
         method=value.method,
         path=value.path,
         content_type=value.content_type,
-        headers={key: to_wire_string_list(item) for key, item in value.headers.items()},
-        query={key: to_wire_string_list(item) for key, item in value.query.items()},
-        params=None if value.params is None else to_wire_struct(value.params),
+        headers={key: _to_wire_string_list(item) for key, item in value.headers.items()},
+        query={key: _to_wire_string_list(item) for key, item in value.query.items()},
+        params=None if value.params is None else _to_wire_struct(value.params),
         raw_body=value.raw_body,
         security_scheme=value.security_scheme,
         verified_subject=value.verified_subject,
@@ -593,15 +592,15 @@ def to_wire_http_subject_request(value: HTTPSubjectRequest) -> Any:
     )
 
 
-def from_wire_http_subject_request(value: Any) -> HTTPSubjectRequest:
+def _from_wire_http_subject_request(value: Any) -> HTTPSubjectRequest:
     return HTTPSubjectRequest(
         binding=value.binding,
         method=value.method,
         path=value.path,
         content_type=value.content_type,
-        headers={key: from_wire_string_list(item) for key, item in value.headers.items()},
-        query={key: from_wire_string_list(item) for key, item in value.query.items()},
-        params=from_wire_struct(value.params) if value.HasField("params") else None,
+        headers={key: _from_wire_string_list(item) for key, item in value.headers.items()},
+        query={key: _from_wire_string_list(item) for key, item in value.query.items()},
+        params=_from_wire_struct(value.params) if value.HasField("params") else None,
         raw_body=value.raw_body,
         security_scheme=value.security_scheme,
         verified_subject=value.verified_subject,
@@ -609,20 +608,20 @@ def from_wire_http_subject_request(value: Any) -> HTTPSubjectRequest:
     )
 
 
-def to_wire_host_context(value: HostContext) -> Any:
-    return _wire.HostContext(
+def _to_wire_host_context(value: HostContext) -> Any:
+    return _app_pb2.HostContext(
         public_base_url=value.public_base_url,
     )
 
 
-def from_wire_host_context(value: Any) -> HostContext:
+def _from_wire_host_context(value: Any) -> HostContext:
     return HostContext(
         public_base_url=value.public_base_url,
     )
 
 
-def to_wire_invocation_context(value: InvocationContext) -> Any:
-    return _wire.InvocationContext(
+def _to_wire_invocation_context(value: InvocationContext) -> Any:
+    return _app_pb2.InvocationContext(
         request_id=value.request_id,
         depth=value.depth,
         call_chain=value.call_chain,
@@ -632,7 +631,7 @@ def to_wire_invocation_context(value: InvocationContext) -> Any:
     )
 
 
-def from_wire_invocation_context(value: Any) -> InvocationContext:
+def _from_wire_invocation_context(value: Any) -> InvocationContext:
     return InvocationContext(
         request_id=value.request_id,
         depth=value.depth,
@@ -643,8 +642,8 @@ def from_wire_invocation_context(value: Any) -> InvocationContext:
     )
 
 
-def to_wire_operation_annotations(value: OperationAnnotations) -> Any:
-    return _wire.OperationAnnotations(
+def _to_wire_operation_annotations(value: OperationAnnotations) -> Any:
+    return _app_pb2.OperationAnnotations(
         read_only_hint=value.read_only_hint,
         idempotent_hint=value.idempotent_hint,
         destructive_hint=value.destructive_hint,
@@ -652,7 +651,7 @@ def to_wire_operation_annotations(value: OperationAnnotations) -> Any:
     )
 
 
-def from_wire_operation_annotations(value: Any) -> OperationAnnotations:
+def _from_wire_operation_annotations(value: Any) -> OperationAnnotations:
     return OperationAnnotations(
         read_only_hint=value.read_only_hint if value.HasField("read_only_hint") else None,
         idempotent_hint=value.idempotent_hint if value.HasField("idempotent_hint") else None,
@@ -661,109 +660,109 @@ def from_wire_operation_annotations(value: Any) -> OperationAnnotations:
     )
 
 
-def to_wire_operation_result(value: OperationResult) -> Any:
-    return _wire.OperationResult(
+def _to_wire_operation_result(value: OperationResult) -> Any:
+    return _app_pb2.OperationResult(
         status=value.status,
         body=value.body,
-        headers={key: to_wire_string_list(item) for key, item in value.headers.items()},
+        headers={key: _to_wire_string_list(item) for key, item in value.headers.items()},
     )
 
 
-def from_wire_operation_result(value: Any) -> OperationResult:
+def _from_wire_operation_result(value: Any) -> OperationResult:
     return OperationResult(
         status=value.status,
         body=value.body,
-        headers={key: from_wire_string_list(item) for key, item in value.headers.items()},
+        headers={key: _from_wire_string_list(item) for key, item in value.headers.items()},
     )
 
 
-def to_wire_provider_context(value: ProviderContext) -> Any:
-    return _wire.ProviderContext(
+def _to_wire_provider_context(value: ProviderContext) -> Any:
+    return _app_pb2.ProviderContext(
         kind=value.kind,
         name=value.name,
     )
 
 
-def from_wire_provider_context(value: Any) -> ProviderContext:
+def _from_wire_provider_context(value: Any) -> ProviderContext:
     return ProviderContext(
         kind=value.kind,
         name=value.name,
     )
 
 
-def to_wire_provider_metadata(value: ProviderMetadata) -> Any:
-    return _wire.ProviderMetadata(
+def _to_wire_provider_metadata(value: ProviderMetadata) -> Any:
+    return _app_pb2.ProviderMetadata(
         name=value.name,
         display_name=value.display_name,
         description=value.description,
-        connection_mode=value.connection_mode,
+        connection_mode=_to_wire_enum(value.connection_mode),
         auth_types=value.auth_types,
-        connection_params={key: to_wire_connection_param_def(item) for key, item in value.connection_params.items()},
-        static_catalog=None if value.static_catalog is None else to_wire_catalog(value.static_catalog),
+        connection_params={key: _to_wire_connection_param_def(item) for key, item in value.connection_params.items()},
+        static_catalog=None if value.static_catalog is None else _to_wire_catalog(value.static_catalog),
         supports_session_catalog=value.supports_session_catalog,
         min_protocol_version=value.min_protocol_version,
         max_protocol_version=value.max_protocol_version,
     )
 
 
-def from_wire_provider_metadata(value: Any) -> ProviderMetadata:
+def _from_wire_provider_metadata(value: Any) -> ProviderMetadata:
     return ProviderMetadata(
         name=value.name,
         display_name=value.display_name,
         description=value.description,
         connection_mode=value.connection_mode,
         auth_types=list(value.auth_types),
-        connection_params={key: from_wire_connection_param_def(item) for key, item in value.connection_params.items()},
-        static_catalog=from_wire_catalog(value.static_catalog) if value.HasField("static_catalog") else None,
+        connection_params={key: _from_wire_connection_param_def(item) for key, item in value.connection_params.items()},
+        static_catalog=_from_wire_catalog(value.static_catalog) if value.HasField("static_catalog") else None,
         supports_session_catalog=value.supports_session_catalog,
         min_protocol_version=value.min_protocol_version,
         max_protocol_version=value.max_protocol_version,
     )
 
 
-def to_wire_request_context(value: RequestContext) -> Any:
-    return _wire.RequestContext(
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        credential=None if value.credential is None else to_wire_credential_context(value.credential),
-        access=None if value.access is None else to_wire_access_context(value.access),
-        workflow=None if value.workflow is None else to_wire_struct(value.workflow),
-        host=None if value.host is None else to_wire_host_context(value.host),
-        agent_subject=None if value.agent_subject is None else to_wire_subject_context(value.agent_subject),
-        caller=None if value.caller is None else to_wire_provider_context(value.caller),
-        invocation=None if value.invocation is None else to_wire_invocation_context(value.invocation),
-        tool_refs=[to_wire_agent_tool_ref(item) for item in value.tool_refs],
+def _to_wire_request_context(value: RequestContext) -> Any:
+    return _app_pb2.RequestContext(
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        credential=None if value.credential is None else _to_wire_credential_context(value.credential),
+        access=None if value.access is None else _to_wire_access_context(value.access),
+        workflow=None if value.workflow is None else _to_wire_struct(value.workflow),
+        host=None if value.host is None else _to_wire_host_context(value.host),
+        agent_subject=None if value.agent_subject is None else _to_wire_subject_context(value.agent_subject),
+        caller=None if value.caller is None else _to_wire_provider_context(value.caller),
+        invocation=None if value.invocation is None else _to_wire_invocation_context(value.invocation),
+        tool_refs=[_to_wire_agent_tool_ref(item) for item in value.tool_refs],
         tool_refs_set=value.tool_refs_set,
-        request_meta=None if value.request_meta is None else to_wire_request_meta_context(value.request_meta),
-        agent=None if value.agent is None else to_wire_agent_invocation_context(value.agent),
+        request_meta=None if value.request_meta is None else _to_wire_request_meta_context(value.request_meta),
+        agent=None if value.agent is None else _to_wire_agent_invocation_context(value.agent),
     )
 
 
-def from_wire_request_context(value: Any) -> RequestContext:
+def _from_wire_request_context(value: Any) -> RequestContext:
     return RequestContext(
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        credential=from_wire_credential_context(value.credential) if value.HasField("credential") else None,
-        access=from_wire_access_context(value.access) if value.HasField("access") else None,
-        workflow=from_wire_struct(value.workflow) if value.HasField("workflow") else None,
-        host=from_wire_host_context(value.host) if value.HasField("host") else None,
-        agent_subject=from_wire_subject_context(value.agent_subject) if value.HasField("agent_subject") else None,
-        caller=from_wire_provider_context(value.caller) if value.HasField("caller") else None,
-        invocation=from_wire_invocation_context(value.invocation) if value.HasField("invocation") else None,
-        tool_refs=[from_wire_agent_tool_ref(item) for item in value.tool_refs],
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        credential=_from_wire_credential_context(value.credential) if value.HasField("credential") else None,
+        access=_from_wire_access_context(value.access) if value.HasField("access") else None,
+        workflow=_from_wire_struct(value.workflow) if value.HasField("workflow") else None,
+        host=_from_wire_host_context(value.host) if value.HasField("host") else None,
+        agent_subject=_from_wire_subject_context(value.agent_subject) if value.HasField("agent_subject") else None,
+        caller=_from_wire_provider_context(value.caller) if value.HasField("caller") else None,
+        invocation=_from_wire_invocation_context(value.invocation) if value.HasField("invocation") else None,
+        tool_refs=[_from_wire_agent_tool_ref(item) for item in value.tool_refs],
         tool_refs_set=value.tool_refs_set,
-        request_meta=from_wire_request_meta_context(value.request_meta) if value.HasField("request_meta") else None,
-        agent=from_wire_agent_invocation_context(value.agent) if value.HasField("agent") else None,
+        request_meta=_from_wire_request_meta_context(value.request_meta) if value.HasField("request_meta") else None,
+        agent=_from_wire_agent_invocation_context(value.agent) if value.HasField("agent") else None,
     )
 
 
-def to_wire_request_meta_context(value: RequestMetaContext) -> Any:
-    return _wire.RequestMetaContext(
+def _to_wire_request_meta_context(value: RequestMetaContext) -> Any:
+    return _app_pb2.RequestMetaContext(
         client_ip=value.client_ip,
         remote_addr=value.remote_addr,
         user_agent=value.user_agent,
     )
 
 
-def from_wire_request_meta_context(value: Any) -> RequestMetaContext:
+def _from_wire_request_meta_context(value: Any) -> RequestMetaContext:
     return RequestMetaContext(
         client_ip=value.client_ip,
         remote_addr=value.remote_addr,
@@ -771,107 +770,107 @@ def from_wire_request_meta_context(value: Any) -> RequestMetaContext:
     )
 
 
-def to_wire_resolve_http_subject_request(value: ResolveHTTPSubjectRequest) -> Any:
-    return _wire.ResolveHTTPSubjectRequest(
-        request=None if value.request is None else to_wire_http_subject_request(value.request),
-        context=None if value.context is None else to_wire_request_context(value.context),
+def _to_wire_resolve_http_subject_request(value: ResolveHTTPSubjectRequest) -> Any:
+    return _app_pb2.ResolveHTTPSubjectRequest(
+        request=None if value.request is None else _to_wire_http_subject_request(value.request),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_resolve_http_subject_request(value: Any) -> ResolveHTTPSubjectRequest:
+def _from_wire_resolve_http_subject_request(value: Any) -> ResolveHTTPSubjectRequest:
     return ResolveHTTPSubjectRequest(
-        request=from_wire_http_subject_request(value.request) if value.HasField("request") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        request=_from_wire_http_subject_request(value.request) if value.HasField("request") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_resolve_http_subject_response(value: ResolveHTTPSubjectResponse) -> Any:
-    return _wire.ResolveHTTPSubjectResponse(
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
+def _to_wire_resolve_http_subject_response(value: ResolveHTTPSubjectResponse) -> Any:
+    return _app_pb2.ResolveHTTPSubjectResponse(
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
         reject_status=value.reject_status,
         reject_message=value.reject_message,
     )
 
 
-def from_wire_resolve_http_subject_response(value: Any) -> ResolveHTTPSubjectResponse:
+def _from_wire_resolve_http_subject_response(value: Any) -> ResolveHTTPSubjectResponse:
     return ResolveHTTPSubjectResponse(
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
         reject_status=value.reject_status,
         reject_message=value.reject_message,
     )
 
 
-def to_wire_start_provider_request(value: StartProviderRequest) -> Any:
-    return _wire.StartProviderRequest(
+def _to_wire_start_provider_request(value: StartProviderRequest) -> Any:
+    return _app_pb2.StartProviderRequest(
         name=value.name,
-        config=None if value.config is None else to_wire_struct(value.config),
+        config=None if value.config is None else _to_wire_struct(value.config),
         protocol_version=value.protocol_version,
     )
 
 
-def from_wire_start_provider_request(value: Any) -> StartProviderRequest:
+def _from_wire_start_provider_request(value: Any) -> StartProviderRequest:
     return StartProviderRequest(
         name=value.name,
-        config=from_wire_struct(value.config) if value.HasField("config") else None,
+        config=_from_wire_struct(value.config) if value.HasField("config") else None,
         protocol_version=value.protocol_version,
     )
 
 
-def to_wire_start_provider_response(value: StartProviderResponse) -> Any:
-    return _wire.StartProviderResponse(
+def _to_wire_start_provider_response(value: StartProviderResponse) -> Any:
+    return _app_pb2.StartProviderResponse(
         protocol_version=value.protocol_version,
     )
 
 
-def from_wire_start_provider_response(value: Any) -> StartProviderResponse:
+def _from_wire_start_provider_response(value: Any) -> StartProviderResponse:
     return StartProviderResponse(
         protocol_version=value.protocol_version,
     )
 
 
-def to_wire_string_list(value: StringList) -> Any:
-    return _wire.StringList(
+def _to_wire_string_list(value: StringList) -> Any:
+    return _app_pb2.StringList(
         values=value.values,
     )
 
 
-def from_wire_string_list(value: Any) -> StringList:
+def _from_wire_string_list(value: Any) -> StringList:
     return StringList(
         values=list(value.values),
     )
 
 
-def to_wire_subject_context(value: SubjectContext) -> Any:
-    return _wire.SubjectContext(
+def _to_wire_subject_context(value: SubjectContext) -> Any:
+    return _app_pb2.SubjectContext(
         id=value.id,
         credential_subject_id=value.credential_subject_id,
         email=value.email,
         display_name=value.display_name,
         scopes=value.scopes,
-        permissions=[to_wire_subject_permission_context(item) for item in value.permissions],
+        permissions=[_to_wire_subject_permission_context(item) for item in value.permissions],
     )
 
 
-def from_wire_subject_context(value: Any) -> SubjectContext:
+def _from_wire_subject_context(value: Any) -> SubjectContext:
     return SubjectContext(
         id=value.id,
         credential_subject_id=value.credential_subject_id,
         email=value.email,
         display_name=value.display_name,
         scopes=list(value.scopes),
-        permissions=[from_wire_subject_permission_context(item) for item in value.permissions],
+        permissions=[_from_wire_subject_permission_context(item) for item in value.permissions],
     )
 
 
-def to_wire_subject_permission_context(value: SubjectPermissionContext) -> Any:
-    return _wire.SubjectPermissionContext(
+def _to_wire_subject_permission_context(value: SubjectPermissionContext) -> Any:
+    return _app_pb2.SubjectPermissionContext(
         app=value.app,
         operations=value.operations,
         all_operations=value.all_operations,
     )
 
 
-def from_wire_subject_permission_context(value: Any) -> SubjectPermissionContext:
+def _from_wire_subject_permission_context(value: Any) -> SubjectPermissionContext:
     return SubjectPermissionContext(
         app=value.app,
         operations=list(value.operations),
@@ -883,39 +882,39 @@ class App:
     """Client for the gestalt.provider.v1.App service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.AppStub(channel)
+        self._stub = _app_pb2_grpc.AppStub(channel)
 
     def invoke(self, request: AppInvokeRequest) -> OperationResult:
-        response = call_unary(lambda: self._stub.Invoke(to_wire_app_invoke_request(request)))
-        return from_wire_operation_result(response)
+        response = _call_unary(lambda: self._stub.Invoke(_to_wire_app_invoke_request(request)))
+        return _from_wire_operation_result(response)
 
     def invoke_graph_ql(self, request: AppInvokeGraphQLRequest) -> OperationResult:
-        response = call_unary(lambda: self._stub.InvokeGraphQL(to_wire_app_invoke_graph_ql_request(request)))
-        return from_wire_operation_result(response)
+        response = _call_unary(lambda: self._stub.InvokeGraphQL(_to_wire_app_invoke_graph_ql_request(request)))
+        return _from_wire_operation_result(response)
 
 
 class AppProvider:
     """Client for the gestalt.provider.v1.AppProvider service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.AppProviderStub(channel)
+        self._stub = _app_pb2_grpc.AppProviderStub(channel)
 
     def get_metadata(self) -> ProviderMetadata:
-        response = call_unary(lambda: self._stub.GetMetadata(_empty.Empty()))
-        return from_wire_provider_metadata(response)
+        response = _call_unary(lambda: self._stub.GetMetadata(_empty.Empty()))
+        return _from_wire_provider_metadata(response)
 
     def start_provider(self, request: StartProviderRequest) -> StartProviderResponse:
-        response = call_unary(lambda: self._stub.StartProvider(to_wire_start_provider_request(request)))
-        return from_wire_start_provider_response(response)
+        response = _call_unary(lambda: self._stub.StartProvider(_to_wire_start_provider_request(request)))
+        return _from_wire_start_provider_response(response)
 
     def execute(self, request: ExecuteRequest) -> OperationResult:
-        response = call_unary(lambda: self._stub.Execute(to_wire_execute_request(request)))
-        return from_wire_operation_result(response)
+        response = _call_unary(lambda: self._stub.Execute(_to_wire_execute_request(request)))
+        return _from_wire_operation_result(response)
 
     def resolve_http_subject(self, request: ResolveHTTPSubjectRequest) -> ResolveHTTPSubjectResponse:
-        response = call_unary(lambda: self._stub.ResolveHTTPSubject(to_wire_resolve_http_subject_request(request)))
-        return from_wire_resolve_http_subject_response(response)
+        response = _call_unary(lambda: self._stub.ResolveHTTPSubject(_to_wire_resolve_http_subject_request(request)))
+        return _from_wire_resolve_http_subject_response(response)
 
     def get_session_catalog(self, request: GetSessionCatalogRequest) -> GetSessionCatalogResponse:
-        response = call_unary(lambda: self._stub.GetSessionCatalog(to_wire_get_session_catalog_request(request)))
-        return from_wire_get_session_catalog_response(response)
+        response = _call_unary(lambda: self._stub.GetSessionCatalog(_to_wire_get_session_catalog_request(request)))
+        return _from_wire_get_session_catalog_response(response)

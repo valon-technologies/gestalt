@@ -15,16 +15,15 @@ from ._gen.v1 import authorization_pb2 as _authorization_pb2
 from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
 from .rpc_support import (
     JsonValue,
-    call_unary,
-    from_wire_struct,
-    from_wire_timestamp,
-    to_wire_struct,
-    to_wire_timestamp,
+    _call_unary,
+    _from_wire_struct,
+    _from_wire_timestamp,
+    _to_wire_enum,
+    _to_wire_struct,
+    _to_wire_timestamp,
 )
 
 _empty: Any = _empty_pb2
-_wire: Any = _authorization_pb2
-_wire_grpc: Any = _authorization_pb2_grpc
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -313,279 +312,279 @@ class SubjectSetType:
     relation: str = ""
 
 
-def to_wire_action(value: Action) -> Any:
-    return _wire.Action(
+def _to_wire_action(value: Action) -> Any:
+    return _authorization_pb2.Action(
         name=value.name,
-        properties=None if value.properties is None else to_wire_struct(value.properties),
+        properties=None if value.properties is None else _to_wire_struct(value.properties),
     )
 
 
-def from_wire_action(value: Any) -> Action:
+def _from_wire_action(value: Any) -> Action:
     return Action(
         name=value.name,
-        properties=from_wire_struct(value.properties) if value.HasField("properties") else None,
+        properties=_from_wire_struct(value.properties) if value.HasField("properties") else None,
     )
 
 
-def to_wire_add_relationship_request(value: AddRelationshipRequest) -> Any:
-    return _wire.AddRelationshipRequest(
-        relationship=None if value.relationship is None else to_wire_relationship(value.relationship),
+def _to_wire_add_relationship_request(value: AddRelationshipRequest) -> Any:
+    return _authorization_pb2.AddRelationshipRequest(
+        relationship=None if value.relationship is None else _to_wire_relationship(value.relationship),
     )
 
 
-def from_wire_add_relationship_request(value: Any) -> AddRelationshipRequest:
+def _from_wire_add_relationship_request(value: Any) -> AddRelationshipRequest:
     return AddRelationshipRequest(
-        relationship=from_wire_relationship(value.relationship) if value.HasField("relationship") else None,
+        relationship=_from_wire_relationship(value.relationship) if value.HasField("relationship") else None,
     )
 
 
-def to_wire_add_relationship_response(value: AddRelationshipResponse) -> Any:
-    return _wire.AddRelationshipResponse(
-        relationship=None if value.relationship is None else to_wire_relationship(value.relationship),
+def _to_wire_add_relationship_response(value: AddRelationshipResponse) -> Any:
+    return _authorization_pb2.AddRelationshipResponse(
+        relationship=None if value.relationship is None else _to_wire_relationship(value.relationship),
     )
 
 
-def from_wire_add_relationship_response(value: Any) -> AddRelationshipResponse:
+def _from_wire_add_relationship_response(value: Any) -> AddRelationshipResponse:
     return AddRelationshipResponse(
-        relationship=from_wire_relationship(value.relationship) if value.HasField("relationship") else None,
+        relationship=_from_wire_relationship(value.relationship) if value.HasField("relationship") else None,
     )
 
 
-def to_wire_authorization_model(value: AuthorizationModel) -> Any:
-    return _wire.AuthorizationModel(
+def _to_wire_authorization_model(value: AuthorizationModel) -> Any:
+    return _authorization_pb2.AuthorizationModel(
         id=value.id,
         version=value.version,
-        resource_types=[to_wire_authorization_model_resource_type(item) for item in value.resource_types],
+        resource_types=[_to_wire_authorization_model_resource_type(item) for item in value.resource_types],
     )
 
 
-def from_wire_authorization_model(value: Any) -> AuthorizationModel:
+def _from_wire_authorization_model(value: Any) -> AuthorizationModel:
     return AuthorizationModel(
         id=value.id,
         version=value.version,
-        resource_types=[from_wire_authorization_model_resource_type(item) for item in value.resource_types],
+        resource_types=[_from_wire_authorization_model_resource_type(item) for item in value.resource_types],
     )
 
 
-def to_wire_authorization_model_ref(value: AuthorizationModelRef) -> Any:
-    return _wire.AuthorizationModelRef(
+def _to_wire_authorization_model_ref(value: AuthorizationModelRef) -> Any:
+    return _authorization_pb2.AuthorizationModelRef(
         id=value.id,
         version=value.version,
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
     )
 
 
-def from_wire_authorization_model_ref(value: Any) -> AuthorizationModelRef:
+def _from_wire_authorization_model_ref(value: Any) -> AuthorizationModelRef:
     return AuthorizationModelRef(
         id=value.id,
         version=value.version,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
     )
 
 
-def to_wire_authorization_model_resource_type(value: AuthorizationModelResourceType) -> Any:
-    return _wire.AuthorizationModelResourceType(
+def _to_wire_authorization_model_resource_type(value: AuthorizationModelResourceType) -> Any:
+    return _authorization_pb2.AuthorizationModelResourceType(
         name=value.name,
-        relations=[to_wire_model_relation(item) for item in value.relations],
-        actions=[to_wire_model_action(item) for item in value.actions],
-        source_layer=value.source_layer,
-        default_access_policy=value.default_access_policy,
+        relations=[_to_wire_model_relation(item) for item in value.relations],
+        actions=[_to_wire_model_action(item) for item in value.actions],
+        source_layer=_to_wire_enum(value.source_layer),
+        default_access_policy=_to_wire_enum(value.default_access_policy),
     )
 
 
-def from_wire_authorization_model_resource_type(value: Any) -> AuthorizationModelResourceType:
+def _from_wire_authorization_model_resource_type(value: Any) -> AuthorizationModelResourceType:
     return AuthorizationModelResourceType(
         name=value.name,
-        relations=[from_wire_model_relation(item) for item in value.relations],
-        actions=[from_wire_model_action(item) for item in value.actions],
+        relations=[_from_wire_model_relation(item) for item in value.relations],
+        actions=[_from_wire_model_action(item) for item in value.actions],
         source_layer=value.source_layer,
         default_access_policy=value.default_access_policy,
     )
 
 
-def to_wire_authorization_model_resource_type_filter(value: AuthorizationModelResourceTypeFilter) -> Any:
-    return _wire.AuthorizationModelResourceTypeFilter(
+def _to_wire_authorization_model_resource_type_filter(value: AuthorizationModelResourceTypeFilter) -> Any:
+    return _authorization_pb2.AuthorizationModelResourceTypeFilter(
         name=value.name,
-        source_layer=value.source_layer,
+        source_layer=_to_wire_enum(value.source_layer),
     )
 
 
-def from_wire_authorization_model_resource_type_filter(value: Any) -> AuthorizationModelResourceTypeFilter:
+def _from_wire_authorization_model_resource_type_filter(value: Any) -> AuthorizationModelResourceTypeFilter:
     return AuthorizationModelResourceTypeFilter(
         name=value.name,
         source_layer=value.source_layer,
     )
 
 
-def to_wire_check_access_many_request(value: CheckAccessManyRequest) -> Any:
-    return _wire.CheckAccessManyRequest(
-        requests=[to_wire_check_access_request(item) for item in value.requests],
+def _to_wire_check_access_many_request(value: CheckAccessManyRequest) -> Any:
+    return _authorization_pb2.CheckAccessManyRequest(
+        requests=[_to_wire_check_access_request(item) for item in value.requests],
     )
 
 
-def from_wire_check_access_many_request(value: Any) -> CheckAccessManyRequest:
+def _from_wire_check_access_many_request(value: Any) -> CheckAccessManyRequest:
     return CheckAccessManyRequest(
-        requests=[from_wire_check_access_request(item) for item in value.requests],
+        requests=[_from_wire_check_access_request(item) for item in value.requests],
     )
 
 
-def to_wire_check_access_many_response(value: CheckAccessManyResponse) -> Any:
-    return _wire.CheckAccessManyResponse(
-        decisions=[to_wire_check_access_response(item) for item in value.decisions],
+def _to_wire_check_access_many_response(value: CheckAccessManyResponse) -> Any:
+    return _authorization_pb2.CheckAccessManyResponse(
+        decisions=[_to_wire_check_access_response(item) for item in value.decisions],
     )
 
 
-def from_wire_check_access_many_response(value: Any) -> CheckAccessManyResponse:
+def _from_wire_check_access_many_response(value: Any) -> CheckAccessManyResponse:
     return CheckAccessManyResponse(
-        decisions=[from_wire_check_access_response(item) for item in value.decisions],
+        decisions=[_from_wire_check_access_response(item) for item in value.decisions],
     )
 
 
-def to_wire_check_access_request(value: CheckAccessRequest) -> Any:
-    return _wire.CheckAccessRequest(
-        subject=None if value.subject is None else to_wire_subject(value.subject),
-        action=None if value.action is None else to_wire_action(value.action),
-        resource=None if value.resource is None else to_wire_resource(value.resource),
+def _to_wire_check_access_request(value: CheckAccessRequest) -> Any:
+    return _authorization_pb2.CheckAccessRequest(
+        subject=None if value.subject is None else _to_wire_subject(value.subject),
+        action=None if value.action is None else _to_wire_action(value.action),
+        resource=None if value.resource is None else _to_wire_resource(value.resource),
     )
 
 
-def from_wire_check_access_request(value: Any) -> CheckAccessRequest:
+def _from_wire_check_access_request(value: Any) -> CheckAccessRequest:
     return CheckAccessRequest(
-        subject=from_wire_subject(value.subject) if value.HasField("subject") else None,
-        action=from_wire_action(value.action) if value.HasField("action") else None,
-        resource=from_wire_resource(value.resource) if value.HasField("resource") else None,
+        subject=_from_wire_subject(value.subject) if value.HasField("subject") else None,
+        action=_from_wire_action(value.action) if value.HasField("action") else None,
+        resource=_from_wire_resource(value.resource) if value.HasField("resource") else None,
     )
 
 
-def to_wire_check_access_response(value: CheckAccessResponse) -> Any:
-    return _wire.CheckAccessResponse(
+def _to_wire_check_access_response(value: CheckAccessResponse) -> Any:
+    return _authorization_pb2.CheckAccessResponse(
         allowed=value.allowed,
         model_id=value.model_id,
     )
 
 
-def from_wire_check_access_response(value: Any) -> CheckAccessResponse:
+def _from_wire_check_access_response(value: Any) -> CheckAccessResponse:
     return CheckAccessResponse(
         allowed=value.allowed,
         model_id=value.model_id,
     )
 
 
-def to_wire_delete_relationship_request(value: DeleteRelationshipRequest) -> Any:
-    return _wire.DeleteRelationshipRequest(
-        relationship_tuple=None if value.relationship_tuple is None else to_wire_relationship_tuple(value.relationship_tuple),
+def _to_wire_delete_relationship_request(value: DeleteRelationshipRequest) -> Any:
+    return _authorization_pb2.DeleteRelationshipRequest(
+        relationship_tuple=None if value.relationship_tuple is None else _to_wire_relationship_tuple(value.relationship_tuple),
     )
 
 
-def from_wire_delete_relationship_request(value: Any) -> DeleteRelationshipRequest:
+def _from_wire_delete_relationship_request(value: Any) -> DeleteRelationshipRequest:
     return DeleteRelationshipRequest(
-        relationship_tuple=from_wire_relationship_tuple(value.relationship_tuple) if value.HasField("relationship_tuple") else None,
+        relationship_tuple=_from_wire_relationship_tuple(value.relationship_tuple) if value.HasField("relationship_tuple") else None,
     )
 
 
-def to_wire_delete_relationship_response(_value: DeleteRelationshipResponse) -> Any:
-    return _wire.DeleteRelationshipResponse()
+def _to_wire_delete_relationship_response(_value: DeleteRelationshipResponse) -> Any:
+    return _authorization_pb2.DeleteRelationshipResponse()
 
 
-def from_wire_delete_relationship_response(_value: Any) -> DeleteRelationshipResponse:
+def _from_wire_delete_relationship_response(_value: Any) -> DeleteRelationshipResponse:
     return DeleteRelationshipResponse()
 
 
-def to_wire_get_active_model_ref_response(value: GetActiveModelRefResponse) -> Any:
-    return _wire.GetActiveModelRefResponse(
-        model=None if value.model is None else to_wire_authorization_model_ref(value.model),
+def _to_wire_get_active_model_ref_response(value: GetActiveModelRefResponse) -> Any:
+    return _authorization_pb2.GetActiveModelRefResponse(
+        model=None if value.model is None else _to_wire_authorization_model_ref(value.model),
     )
 
 
-def from_wire_get_active_model_ref_response(value: Any) -> GetActiveModelRefResponse:
+def _from_wire_get_active_model_ref_response(value: Any) -> GetActiveModelRefResponse:
     return GetActiveModelRefResponse(
-        model=from_wire_authorization_model_ref(value.model) if value.HasField("model") else None,
+        model=_from_wire_authorization_model_ref(value.model) if value.HasField("model") else None,
     )
 
 
-def to_wire_list_active_model_resource_types_request(value: ListActiveModelResourceTypesRequest) -> Any:
-    return _wire.ListActiveModelResourceTypesRequest(
-        filter=None if value.filter is None else to_wire_authorization_model_resource_type_filter(value.filter),
+def _to_wire_list_active_model_resource_types_request(value: ListActiveModelResourceTypesRequest) -> Any:
+    return _authorization_pb2.ListActiveModelResourceTypesRequest(
+        filter=None if value.filter is None else _to_wire_authorization_model_resource_type_filter(value.filter),
         page_size=value.page_size,
         page_token=value.page_token,
     )
 
 
-def from_wire_list_active_model_resource_types_request(value: Any) -> ListActiveModelResourceTypesRequest:
+def _from_wire_list_active_model_resource_types_request(value: Any) -> ListActiveModelResourceTypesRequest:
     return ListActiveModelResourceTypesRequest(
-        filter=from_wire_authorization_model_resource_type_filter(value.filter) if value.HasField("filter") else None,
+        filter=_from_wire_authorization_model_resource_type_filter(value.filter) if value.HasField("filter") else None,
         page_size=value.page_size,
         page_token=value.page_token,
     )
 
 
-def to_wire_list_active_model_resource_types_response(value: ListActiveModelResourceTypesResponse) -> Any:
-    return _wire.ListActiveModelResourceTypesResponse(
-        resource_types=[to_wire_authorization_model_resource_type(item) for item in value.resource_types],
+def _to_wire_list_active_model_resource_types_response(value: ListActiveModelResourceTypesResponse) -> Any:
+    return _authorization_pb2.ListActiveModelResourceTypesResponse(
+        resource_types=[_to_wire_authorization_model_resource_type(item) for item in value.resource_types],
         next_page_token=value.next_page_token,
         model_id=value.model_id,
     )
 
 
-def from_wire_list_active_model_resource_types_response(value: Any) -> ListActiveModelResourceTypesResponse:
+def _from_wire_list_active_model_resource_types_response(value: Any) -> ListActiveModelResourceTypesResponse:
     return ListActiveModelResourceTypesResponse(
-        resource_types=[from_wire_authorization_model_resource_type(item) for item in value.resource_types],
+        resource_types=[_from_wire_authorization_model_resource_type(item) for item in value.resource_types],
         next_page_token=value.next_page_token,
         model_id=value.model_id,
     )
 
 
-def to_wire_list_relationships_request(value: ListRelationshipsRequest) -> Any:
-    return _wire.ListRelationshipsRequest(
-        filter=None if value.filter is None else to_wire_relationship_filter(value.filter),
+def _to_wire_list_relationships_request(value: ListRelationshipsRequest) -> Any:
+    return _authorization_pb2.ListRelationshipsRequest(
+        filter=None if value.filter is None else _to_wire_relationship_filter(value.filter),
         page_size=value.page_size,
         page_token=value.page_token,
     )
 
 
-def from_wire_list_relationships_request(value: Any) -> ListRelationshipsRequest:
+def _from_wire_list_relationships_request(value: Any) -> ListRelationshipsRequest:
     return ListRelationshipsRequest(
-        filter=from_wire_relationship_filter(value.filter) if value.HasField("filter") else None,
+        filter=_from_wire_relationship_filter(value.filter) if value.HasField("filter") else None,
         page_size=value.page_size,
         page_token=value.page_token,
     )
 
 
-def to_wire_list_relationships_response(value: ListRelationshipsResponse) -> Any:
-    return _wire.ListRelationshipsResponse(
-        relationships=[to_wire_relationship(item) for item in value.relationships],
+def _to_wire_list_relationships_response(value: ListRelationshipsResponse) -> Any:
+    return _authorization_pb2.ListRelationshipsResponse(
+        relationships=[_to_wire_relationship(item) for item in value.relationships],
         next_page_token=value.next_page_token,
     )
 
 
-def from_wire_list_relationships_response(value: Any) -> ListRelationshipsResponse:
+def _from_wire_list_relationships_response(value: Any) -> ListRelationshipsResponse:
     return ListRelationshipsResponse(
-        relationships=[from_wire_relationship(item) for item in value.relationships],
+        relationships=[_from_wire_relationship(item) for item in value.relationships],
         next_page_token=value.next_page_token,
     )
 
 
-def to_wire_model_action(value: ModelAction) -> Any:
-    return _wire.ModelAction(
+def _to_wire_model_action(value: ModelAction) -> Any:
+    return _authorization_pb2.ModelAction(
         name=value.name,
         relations=value.relations,
     )
 
 
-def from_wire_model_action(value: Any) -> ModelAction:
+def _from_wire_model_action(value: Any) -> ModelAction:
     return ModelAction(
         name=value.name,
         relations=list(value.relations),
     )
 
 
-def to_wire_model_allowed_target(value: ModelAllowedTarget) -> Any:
-    return _wire.ModelAllowedTarget(
+def _to_wire_model_allowed_target(value: ModelAllowedTarget) -> Any:
+    return _authorization_pb2.ModelAllowedTarget(
         **_to_wire_model_allowed_target_kind(value.kind),
     )
 
 
-def from_wire_model_allowed_target(value: Any) -> ModelAllowedTarget:
+def _from_wire_model_allowed_target(value: Any) -> ModelAllowedTarget:
     return ModelAllowedTarget(
         kind=_from_wire_model_allowed_target_kind(value),
     )
@@ -597,7 +596,7 @@ def _to_wire_model_allowed_target_kind(value: ModelAllowedTargetKind) -> dict[st
     if isinstance(value, ModelAllowedTargetResourceType):
         return {"resource_type": value.value}
     if isinstance(value, ModelAllowedTargetSubjectSetType):
-        return {"subject_set_type": to_wire_subject_set_type(value.value)}
+        return {"subject_set_type": _to_wire_subject_set_type(value.value)}
     return {}
 
 
@@ -608,57 +607,57 @@ def _from_wire_model_allowed_target_kind(value: Any) -> ModelAllowedTargetKind:
     if case == "resource_type":
         return ModelAllowedTargetResourceType(value=value.resource_type)
     if case == "subject_set_type":
-        return ModelAllowedTargetSubjectSetType(value=from_wire_subject_set_type(value.subject_set_type))
+        return ModelAllowedTargetSubjectSetType(value=_from_wire_subject_set_type(value.subject_set_type))
     return None
 
 
-def to_wire_model_relation(value: ModelRelation) -> Any:
-    return _wire.ModelRelation(
+def _to_wire_model_relation(value: ModelRelation) -> Any:
+    return _authorization_pb2.ModelRelation(
         name=value.name,
-        allowed_targets=[to_wire_model_allowed_target(item) for item in value.allowed_targets],
+        allowed_targets=[_to_wire_model_allowed_target(item) for item in value.allowed_targets],
     )
 
 
-def from_wire_model_relation(value: Any) -> ModelRelation:
+def _from_wire_model_relation(value: Any) -> ModelRelation:
     return ModelRelation(
         name=value.name,
-        allowed_targets=[from_wire_model_allowed_target(item) for item in value.allowed_targets],
+        allowed_targets=[_from_wire_model_allowed_target(item) for item in value.allowed_targets],
     )
 
 
-def to_wire_relationship(value: Relationship) -> Any:
-    return _wire.Relationship(
-        tuple=None if value.tuple is None else to_wire_relationship_tuple(value.tuple),
-        properties=None if value.properties is None else to_wire_struct(value.properties),
-        source_layer=value.source_layer,
+def _to_wire_relationship(value: Relationship) -> Any:
+    return _authorization_pb2.Relationship(
+        tuple=None if value.tuple is None else _to_wire_relationship_tuple(value.tuple),
+        properties=None if value.properties is None else _to_wire_struct(value.properties),
+        source_layer=_to_wire_enum(value.source_layer),
     )
 
 
-def from_wire_relationship(value: Any) -> Relationship:
+def _from_wire_relationship(value: Any) -> Relationship:
     return Relationship(
-        tuple=from_wire_relationship_tuple(value.tuple) if value.HasField("tuple") else None,
-        properties=from_wire_struct(value.properties) if value.HasField("properties") else None,
+        tuple=_from_wire_relationship_tuple(value.tuple) if value.HasField("tuple") else None,
+        properties=_from_wire_struct(value.properties) if value.HasField("properties") else None,
         source_layer=value.source_layer,
     )
 
 
-def to_wire_relationship_filter(value: RelationshipFilter) -> Any:
-    return _wire.RelationshipFilter(
-        target=None if value.target is None else to_wire_relationship_target(value.target),
+def _to_wire_relationship_filter(value: RelationshipFilter) -> Any:
+    return _authorization_pb2.RelationshipFilter(
+        target=None if value.target is None else _to_wire_relationship_target(value.target),
         relation=value.relation,
-        resource=None if value.resource is None else to_wire_resource(value.resource),
-        target_type=value.target_type,
+        resource=None if value.resource is None else _to_wire_resource(value.resource),
+        target_type=_to_wire_enum(value.target_type),
         target_entity_type=value.target_entity_type,
         resource_type=value.resource_type,
-        source_layer=value.source_layer,
+        source_layer=_to_wire_enum(value.source_layer),
     )
 
 
-def from_wire_relationship_filter(value: Any) -> RelationshipFilter:
+def _from_wire_relationship_filter(value: Any) -> RelationshipFilter:
     return RelationshipFilter(
-        target=from_wire_relationship_target(value.target) if value.HasField("target") else None,
+        target=_from_wire_relationship_target(value.target) if value.HasField("target") else None,
         relation=value.relation,
-        resource=from_wire_resource(value.resource) if value.HasField("resource") else None,
+        resource=_from_wire_resource(value.resource) if value.HasField("resource") else None,
         target_type=value.target_type,
         target_entity_type=value.target_entity_type,
         resource_type=value.resource_type,
@@ -666,13 +665,13 @@ def from_wire_relationship_filter(value: Any) -> RelationshipFilter:
     )
 
 
-def to_wire_relationship_target(value: RelationshipTarget) -> Any:
-    return _wire.RelationshipTarget(
+def _to_wire_relationship_target(value: RelationshipTarget) -> Any:
+    return _authorization_pb2.RelationshipTarget(
         **_to_wire_relationship_target_kind(value.kind),
     )
 
 
-def from_wire_relationship_target(value: Any) -> RelationshipTarget:
+def _from_wire_relationship_target(value: Any) -> RelationshipTarget:
     return RelationshipTarget(
         kind=_from_wire_relationship_target_kind(value),
     )
@@ -680,145 +679,145 @@ def from_wire_relationship_target(value: Any) -> RelationshipTarget:
 
 def _to_wire_relationship_target_kind(value: RelationshipTargetKind) -> dict[str, Any]:
     if isinstance(value, RelationshipTargetSubject):
-        return {"subject": to_wire_subject(value.value)}
+        return {"subject": _to_wire_subject(value.value)}
     if isinstance(value, RelationshipTargetResource):
-        return {"resource": to_wire_resource(value.value)}
+        return {"resource": _to_wire_resource(value.value)}
     if isinstance(value, RelationshipTargetSubjectSet):
-        return {"subject_set": to_wire_subject_set(value.value)}
+        return {"subject_set": _to_wire_subject_set(value.value)}
     return {}
 
 
 def _from_wire_relationship_target_kind(value: Any) -> RelationshipTargetKind:
     case = value.WhichOneof("kind")
     if case == "subject":
-        return RelationshipTargetSubject(value=from_wire_subject(value.subject))
+        return RelationshipTargetSubject(value=_from_wire_subject(value.subject))
     if case == "resource":
-        return RelationshipTargetResource(value=from_wire_resource(value.resource))
+        return RelationshipTargetResource(value=_from_wire_resource(value.resource))
     if case == "subject_set":
-        return RelationshipTargetSubjectSet(value=from_wire_subject_set(value.subject_set))
+        return RelationshipTargetSubjectSet(value=_from_wire_subject_set(value.subject_set))
     return None
 
 
-def to_wire_relationship_tuple(value: RelationshipTuple) -> Any:
-    return _wire.RelationshipTuple(
-        target=None if value.target is None else to_wire_relationship_target(value.target),
+def _to_wire_relationship_tuple(value: RelationshipTuple) -> Any:
+    return _authorization_pb2.RelationshipTuple(
+        target=None if value.target is None else _to_wire_relationship_target(value.target),
         relation=value.relation,
-        resource=None if value.resource is None else to_wire_resource(value.resource),
+        resource=None if value.resource is None else _to_wire_resource(value.resource),
     )
 
 
-def from_wire_relationship_tuple(value: Any) -> RelationshipTuple:
+def _from_wire_relationship_tuple(value: Any) -> RelationshipTuple:
     return RelationshipTuple(
-        target=from_wire_relationship_target(value.target) if value.HasField("target") else None,
+        target=_from_wire_relationship_target(value.target) if value.HasField("target") else None,
         relation=value.relation,
-        resource=from_wire_resource(value.resource) if value.HasField("resource") else None,
+        resource=_from_wire_resource(value.resource) if value.HasField("resource") else None,
     )
 
 
-def to_wire_resource(value: Resource) -> Any:
-    return _wire.Resource(
+def _to_wire_resource(value: Resource) -> Any:
+    return _authorization_pb2.Resource(
         type=value.type,
         id=value.id,
-        properties=None if value.properties is None else to_wire_struct(value.properties),
+        properties=None if value.properties is None else _to_wire_struct(value.properties),
     )
 
 
-def from_wire_resource(value: Any) -> Resource:
+def _from_wire_resource(value: Any) -> Resource:
     return Resource(
         type=value.type,
         id=value.id,
-        properties=from_wire_struct(value.properties) if value.HasField("properties") else None,
+        properties=_from_wire_struct(value.properties) if value.HasField("properties") else None,
     )
 
 
-def to_wire_set_active_model_request(value: SetActiveModelRequest) -> Any:
-    return _wire.SetActiveModelRequest(
-        model=None if value.model is None else to_wire_authorization_model(value.model),
+def _to_wire_set_active_model_request(value: SetActiveModelRequest) -> Any:
+    return _authorization_pb2.SetActiveModelRequest(
+        model=None if value.model is None else _to_wire_authorization_model(value.model),
     )
 
 
-def from_wire_set_active_model_request(value: Any) -> SetActiveModelRequest:
+def _from_wire_set_active_model_request(value: Any) -> SetActiveModelRequest:
     return SetActiveModelRequest(
-        model=from_wire_authorization_model(value.model) if value.HasField("model") else None,
+        model=_from_wire_authorization_model(value.model) if value.HasField("model") else None,
     )
 
 
-def to_wire_set_active_model_response(value: SetActiveModelResponse) -> Any:
-    return _wire.SetActiveModelResponse(
-        model=None if value.model is None else to_wire_authorization_model_ref(value.model),
+def _to_wire_set_active_model_response(value: SetActiveModelResponse) -> Any:
+    return _authorization_pb2.SetActiveModelResponse(
+        model=None if value.model is None else _to_wire_authorization_model_ref(value.model),
     )
 
 
-def from_wire_set_active_model_response(value: Any) -> SetActiveModelResponse:
+def _from_wire_set_active_model_response(value: Any) -> SetActiveModelResponse:
     return SetActiveModelResponse(
-        model=from_wire_authorization_model_ref(value.model) if value.HasField("model") else None,
+        model=_from_wire_authorization_model_ref(value.model) if value.HasField("model") else None,
     )
 
 
-def to_wire_set_authorization_state_request(value: SetAuthorizationStateRequest) -> Any:
-    return _wire.SetAuthorizationStateRequest(
-        model=None if value.model is None else to_wire_authorization_model(value.model),
-        relationships=[to_wire_relationship(item) for item in value.relationships],
+def _to_wire_set_authorization_state_request(value: SetAuthorizationStateRequest) -> Any:
+    return _authorization_pb2.SetAuthorizationStateRequest(
+        model=None if value.model is None else _to_wire_authorization_model(value.model),
+        relationships=[_to_wire_relationship(item) for item in value.relationships],
     )
 
 
-def from_wire_set_authorization_state_request(value: Any) -> SetAuthorizationStateRequest:
+def _from_wire_set_authorization_state_request(value: Any) -> SetAuthorizationStateRequest:
     return SetAuthorizationStateRequest(
-        model=from_wire_authorization_model(value.model) if value.HasField("model") else None,
-        relationships=[from_wire_relationship(item) for item in value.relationships],
+        model=_from_wire_authorization_model(value.model) if value.HasField("model") else None,
+        relationships=[_from_wire_relationship(item) for item in value.relationships],
     )
 
 
-def to_wire_set_authorization_state_response(value: SetAuthorizationStateResponse) -> Any:
-    return _wire.SetAuthorizationStateResponse(
-        active_model=None if value.active_model is None else to_wire_authorization_model_ref(value.active_model),
+def _to_wire_set_authorization_state_response(value: SetAuthorizationStateResponse) -> Any:
+    return _authorization_pb2.SetAuthorizationStateResponse(
+        active_model=None if value.active_model is None else _to_wire_authorization_model_ref(value.active_model),
     )
 
 
-def from_wire_set_authorization_state_response(value: Any) -> SetAuthorizationStateResponse:
+def _from_wire_set_authorization_state_response(value: Any) -> SetAuthorizationStateResponse:
     return SetAuthorizationStateResponse(
-        active_model=from_wire_authorization_model_ref(value.active_model) if value.HasField("active_model") else None,
+        active_model=_from_wire_authorization_model_ref(value.active_model) if value.HasField("active_model") else None,
     )
 
 
-def to_wire_subject(value: Subject) -> Any:
-    return _wire.Subject(
+def _to_wire_subject(value: Subject) -> Any:
+    return _authorization_pb2.Subject(
         type=value.type,
         id=value.id,
-        properties=None if value.properties is None else to_wire_struct(value.properties),
+        properties=None if value.properties is None else _to_wire_struct(value.properties),
     )
 
 
-def from_wire_subject(value: Any) -> Subject:
+def _from_wire_subject(value: Any) -> Subject:
     return Subject(
         type=value.type,
         id=value.id,
-        properties=from_wire_struct(value.properties) if value.HasField("properties") else None,
+        properties=_from_wire_struct(value.properties) if value.HasField("properties") else None,
     )
 
 
-def to_wire_subject_set(value: SubjectSet) -> Any:
-    return _wire.SubjectSet(
-        resource=None if value.resource is None else to_wire_resource(value.resource),
+def _to_wire_subject_set(value: SubjectSet) -> Any:
+    return _authorization_pb2.SubjectSet(
+        resource=None if value.resource is None else _to_wire_resource(value.resource),
         relation=value.relation,
     )
 
 
-def from_wire_subject_set(value: Any) -> SubjectSet:
+def _from_wire_subject_set(value: Any) -> SubjectSet:
     return SubjectSet(
-        resource=from_wire_resource(value.resource) if value.HasField("resource") else None,
+        resource=_from_wire_resource(value.resource) if value.HasField("resource") else None,
         relation=value.relation,
     )
 
 
-def to_wire_subject_set_type(value: SubjectSetType) -> Any:
-    return _wire.SubjectSetType(
+def _to_wire_subject_set_type(value: SubjectSetType) -> Any:
+    return _authorization_pb2.SubjectSetType(
         resource_type=value.resource_type,
         relation=value.relation,
     )
 
 
-def from_wire_subject_set_type(value: Any) -> SubjectSetType:
+def _from_wire_subject_set_type(value: Any) -> SubjectSetType:
     return SubjectSetType(
         resource_type=value.resource_type,
         relation=value.relation,
@@ -829,40 +828,40 @@ class Authorization:
     """Client for the gestalt.provider.v1.Authorization service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.AuthorizationStub(channel)
+        self._stub = _authorization_pb2_grpc.AuthorizationStub(channel)
 
     def check_access(self, request: CheckAccessRequest) -> CheckAccessResponse:
-        response = call_unary(lambda: self._stub.CheckAccess(to_wire_check_access_request(request)))
-        return from_wire_check_access_response(response)
+        response = _call_unary(lambda: self._stub.CheckAccess(_to_wire_check_access_request(request)))
+        return _from_wire_check_access_response(response)
 
     def check_access_many(self, request: CheckAccessManyRequest) -> CheckAccessManyResponse:
-        response = call_unary(lambda: self._stub.CheckAccessMany(to_wire_check_access_many_request(request)))
-        return from_wire_check_access_many_response(response)
+        response = _call_unary(lambda: self._stub.CheckAccessMany(_to_wire_check_access_many_request(request)))
+        return _from_wire_check_access_many_response(response)
 
     def list_relationships(self, request: ListRelationshipsRequest) -> ListRelationshipsResponse:
-        response = call_unary(lambda: self._stub.ListRelationships(to_wire_list_relationships_request(request)))
-        return from_wire_list_relationships_response(response)
+        response = _call_unary(lambda: self._stub.ListRelationships(_to_wire_list_relationships_request(request)))
+        return _from_wire_list_relationships_response(response)
 
     def add_relationship(self, request: AddRelationshipRequest) -> AddRelationshipResponse:
-        response = call_unary(lambda: self._stub.AddRelationship(to_wire_add_relationship_request(request)))
-        return from_wire_add_relationship_response(response)
+        response = _call_unary(lambda: self._stub.AddRelationship(_to_wire_add_relationship_request(request)))
+        return _from_wire_add_relationship_response(response)
 
     def delete_relationship(self, request: DeleteRelationshipRequest) -> DeleteRelationshipResponse:
-        response = call_unary(lambda: self._stub.DeleteRelationship(to_wire_delete_relationship_request(request)))
-        return from_wire_delete_relationship_response(response)
+        response = _call_unary(lambda: self._stub.DeleteRelationship(_to_wire_delete_relationship_request(request)))
+        return _from_wire_delete_relationship_response(response)
 
     def set_authorization_state(self, request: SetAuthorizationStateRequest) -> SetAuthorizationStateResponse:
-        response = call_unary(lambda: self._stub.SetAuthorizationState(to_wire_set_authorization_state_request(request)))
-        return from_wire_set_authorization_state_response(response)
+        response = _call_unary(lambda: self._stub.SetAuthorizationState(_to_wire_set_authorization_state_request(request)))
+        return _from_wire_set_authorization_state_response(response)
 
     def get_active_model_ref(self) -> GetActiveModelRefResponse:
-        response = call_unary(lambda: self._stub.GetActiveModelRef(_empty.Empty()))
-        return from_wire_get_active_model_ref_response(response)
+        response = _call_unary(lambda: self._stub.GetActiveModelRef(_empty.Empty()))
+        return _from_wire_get_active_model_ref_response(response)
 
     def set_active_model(self, request: SetActiveModelRequest) -> SetActiveModelResponse:
-        response = call_unary(lambda: self._stub.SetActiveModel(to_wire_set_active_model_request(request)))
-        return from_wire_set_active_model_response(response)
+        response = _call_unary(lambda: self._stub.SetActiveModel(_to_wire_set_active_model_request(request)))
+        return _from_wire_set_active_model_response(response)
 
     def list_active_model_resource_types(self, request: ListActiveModelResourceTypesRequest) -> ListActiveModelResourceTypesResponse:
-        response = call_unary(lambda: self._stub.ListActiveModelResourceTypes(to_wire_list_active_model_resource_types_request(request)))
-        return from_wire_list_active_model_resource_types_response(response)
+        response = _call_unary(lambda: self._stub.ListActiveModelResourceTypes(_to_wire_list_active_model_resource_types_request(request)))
+        return _from_wire_list_active_model_resource_types_response(response)

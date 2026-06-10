@@ -12,10 +12,7 @@ import grpc
 
 from ._gen.v1 import cache_pb2 as _cache_pb2
 from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
-from .rpc_support import call_unary, from_wire_duration, to_wire_duration
-
-_wire: Any = _cache_pb2
-_wire_grpc: Any = _cache_pb2_grpc
+from .rpc_support import _call_unary, _from_wire_duration, _to_wire_duration
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,113 +93,113 @@ class CacheTouchResponse:
     touched: bool = False
 
 
-def to_wire_cache_delete_many_request(value: CacheDeleteManyRequest) -> Any:
-    return _wire.CacheDeleteManyRequest(
+def _to_wire_cache_delete_many_request(value: CacheDeleteManyRequest) -> Any:
+    return _cache_pb2.CacheDeleteManyRequest(
         keys=value.keys,
     )
 
 
-def from_wire_cache_delete_many_request(value: Any) -> CacheDeleteManyRequest:
+def _from_wire_cache_delete_many_request(value: Any) -> CacheDeleteManyRequest:
     return CacheDeleteManyRequest(
         keys=list(value.keys),
     )
 
 
-def to_wire_cache_delete_many_response(value: CacheDeleteManyResponse) -> Any:
-    return _wire.CacheDeleteManyResponse(
+def _to_wire_cache_delete_many_response(value: CacheDeleteManyResponse) -> Any:
+    return _cache_pb2.CacheDeleteManyResponse(
         deleted=value.deleted,
     )
 
 
-def from_wire_cache_delete_many_response(value: Any) -> CacheDeleteManyResponse:
+def _from_wire_cache_delete_many_response(value: Any) -> CacheDeleteManyResponse:
     return CacheDeleteManyResponse(
         deleted=value.deleted,
     )
 
 
-def to_wire_cache_delete_request(value: CacheDeleteRequest) -> Any:
-    return _wire.CacheDeleteRequest(
+def _to_wire_cache_delete_request(value: CacheDeleteRequest) -> Any:
+    return _cache_pb2.CacheDeleteRequest(
         key=value.key,
     )
 
 
-def from_wire_cache_delete_request(value: Any) -> CacheDeleteRequest:
+def _from_wire_cache_delete_request(value: Any) -> CacheDeleteRequest:
     return CacheDeleteRequest(
         key=value.key,
     )
 
 
-def to_wire_cache_delete_response(value: CacheDeleteResponse) -> Any:
-    return _wire.CacheDeleteResponse(
+def _to_wire_cache_delete_response(value: CacheDeleteResponse) -> Any:
+    return _cache_pb2.CacheDeleteResponse(
         deleted=value.deleted,
     )
 
 
-def from_wire_cache_delete_response(value: Any) -> CacheDeleteResponse:
+def _from_wire_cache_delete_response(value: Any) -> CacheDeleteResponse:
     return CacheDeleteResponse(
         deleted=value.deleted,
     )
 
 
-def to_wire_cache_get_many_request(value: CacheGetManyRequest) -> Any:
-    return _wire.CacheGetManyRequest(
+def _to_wire_cache_get_many_request(value: CacheGetManyRequest) -> Any:
+    return _cache_pb2.CacheGetManyRequest(
         keys=value.keys,
     )
 
 
-def from_wire_cache_get_many_request(value: Any) -> CacheGetManyRequest:
+def _from_wire_cache_get_many_request(value: Any) -> CacheGetManyRequest:
     return CacheGetManyRequest(
         keys=list(value.keys),
     )
 
 
-def to_wire_cache_get_many_response(value: CacheGetManyResponse) -> Any:
-    return _wire.CacheGetManyResponse(
-        entries=[to_wire_cache_result(item) for item in value.entries],
+def _to_wire_cache_get_many_response(value: CacheGetManyResponse) -> Any:
+    return _cache_pb2.CacheGetManyResponse(
+        entries=[_to_wire_cache_result(item) for item in value.entries],
     )
 
 
-def from_wire_cache_get_many_response(value: Any) -> CacheGetManyResponse:
+def _from_wire_cache_get_many_response(value: Any) -> CacheGetManyResponse:
     return CacheGetManyResponse(
-        entries=[from_wire_cache_result(item) for item in value.entries],
+        entries=[_from_wire_cache_result(item) for item in value.entries],
     )
 
 
-def to_wire_cache_get_request(value: CacheGetRequest) -> Any:
-    return _wire.CacheGetRequest(
+def _to_wire_cache_get_request(value: CacheGetRequest) -> Any:
+    return _cache_pb2.CacheGetRequest(
         key=value.key,
     )
 
 
-def from_wire_cache_get_request(value: Any) -> CacheGetRequest:
+def _from_wire_cache_get_request(value: Any) -> CacheGetRequest:
     return CacheGetRequest(
         key=value.key,
     )
 
 
-def to_wire_cache_get_response(value: CacheGetResponse) -> Any:
-    return _wire.CacheGetResponse(
+def _to_wire_cache_get_response(value: CacheGetResponse) -> Any:
+    return _cache_pb2.CacheGetResponse(
         found=value.found,
         value=value.value,
     )
 
 
-def from_wire_cache_get_response(value: Any) -> CacheGetResponse:
+def _from_wire_cache_get_response(value: Any) -> CacheGetResponse:
     return CacheGetResponse(
         found=value.found,
         value=value.value,
     )
 
 
-def to_wire_cache_result(value: CacheResult) -> Any:
-    return _wire.CacheResult(
+def _to_wire_cache_result(value: CacheResult) -> Any:
+    return _cache_pb2.CacheResult(
         key=value.key,
         found=value.found,
         value=value.value,
     )
 
 
-def from_wire_cache_result(value: Any) -> CacheResult:
+def _from_wire_cache_result(value: Any) -> CacheResult:
     return CacheResult(
         key=value.key,
         found=value.found,
@@ -210,71 +207,71 @@ def from_wire_cache_result(value: Any) -> CacheResult:
     )
 
 
-def to_wire_cache_set_entry(value: CacheSetEntry) -> Any:
-    return _wire.CacheSetEntry(
+def _to_wire_cache_set_entry(value: CacheSetEntry) -> Any:
+    return _cache_pb2.CacheSetEntry(
         key=value.key,
         value=value.value,
     )
 
 
-def from_wire_cache_set_entry(value: Any) -> CacheSetEntry:
+def _from_wire_cache_set_entry(value: Any) -> CacheSetEntry:
     return CacheSetEntry(
         key=value.key,
         value=value.value,
     )
 
 
-def to_wire_cache_set_many_request(value: CacheSetManyRequest) -> Any:
-    return _wire.CacheSetManyRequest(
-        entries=[to_wire_cache_set_entry(item) for item in value.entries],
-        ttl=None if value.ttl is None else to_wire_duration(value.ttl),
+def _to_wire_cache_set_many_request(value: CacheSetManyRequest) -> Any:
+    return _cache_pb2.CacheSetManyRequest(
+        entries=[_to_wire_cache_set_entry(item) for item in value.entries],
+        ttl=None if value.ttl is None else _to_wire_duration(value.ttl),
     )
 
 
-def from_wire_cache_set_many_request(value: Any) -> CacheSetManyRequest:
+def _from_wire_cache_set_many_request(value: Any) -> CacheSetManyRequest:
     return CacheSetManyRequest(
-        entries=[from_wire_cache_set_entry(item) for item in value.entries],
-        ttl=from_wire_duration(value.ttl) if value.HasField("ttl") else None,
+        entries=[_from_wire_cache_set_entry(item) for item in value.entries],
+        ttl=_from_wire_duration(value.ttl) if value.HasField("ttl") else None,
     )
 
 
-def to_wire_cache_set_request(value: CacheSetRequest) -> Any:
-    return _wire.CacheSetRequest(
+def _to_wire_cache_set_request(value: CacheSetRequest) -> Any:
+    return _cache_pb2.CacheSetRequest(
         key=value.key,
         value=value.value,
-        ttl=None if value.ttl is None else to_wire_duration(value.ttl),
+        ttl=None if value.ttl is None else _to_wire_duration(value.ttl),
     )
 
 
-def from_wire_cache_set_request(value: Any) -> CacheSetRequest:
+def _from_wire_cache_set_request(value: Any) -> CacheSetRequest:
     return CacheSetRequest(
         key=value.key,
         value=value.value,
-        ttl=from_wire_duration(value.ttl) if value.HasField("ttl") else None,
+        ttl=_from_wire_duration(value.ttl) if value.HasField("ttl") else None,
     )
 
 
-def to_wire_cache_touch_request(value: CacheTouchRequest) -> Any:
-    return _wire.CacheTouchRequest(
+def _to_wire_cache_touch_request(value: CacheTouchRequest) -> Any:
+    return _cache_pb2.CacheTouchRequest(
         key=value.key,
-        ttl=None if value.ttl is None else to_wire_duration(value.ttl),
+        ttl=None if value.ttl is None else _to_wire_duration(value.ttl),
     )
 
 
-def from_wire_cache_touch_request(value: Any) -> CacheTouchRequest:
+def _from_wire_cache_touch_request(value: Any) -> CacheTouchRequest:
     return CacheTouchRequest(
         key=value.key,
-        ttl=from_wire_duration(value.ttl) if value.HasField("ttl") else None,
+        ttl=_from_wire_duration(value.ttl) if value.HasField("ttl") else None,
     )
 
 
-def to_wire_cache_touch_response(value: CacheTouchResponse) -> Any:
-    return _wire.CacheTouchResponse(
+def _to_wire_cache_touch_response(value: CacheTouchResponse) -> Any:
+    return _cache_pb2.CacheTouchResponse(
         touched=value.touched,
     )
 
 
-def from_wire_cache_touch_response(value: Any) -> CacheTouchResponse:
+def _from_wire_cache_touch_response(value: Any) -> CacheTouchResponse:
     return CacheTouchResponse(
         touched=value.touched,
     )
@@ -284,30 +281,30 @@ class Cache:
     """Client for the gestalt.provider.v1.Cache service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.CacheStub(channel)
+        self._stub = _cache_pb2_grpc.CacheStub(channel)
 
     def get(self, request: CacheGetRequest) -> CacheGetResponse:
-        response = call_unary(lambda: self._stub.Get(to_wire_cache_get_request(request)))
-        return from_wire_cache_get_response(response)
+        response = _call_unary(lambda: self._stub.Get(_to_wire_cache_get_request(request)))
+        return _from_wire_cache_get_response(response)
 
     def get_many(self, request: CacheGetManyRequest) -> CacheGetManyResponse:
-        response = call_unary(lambda: self._stub.GetMany(to_wire_cache_get_many_request(request)))
-        return from_wire_cache_get_many_response(response)
+        response = _call_unary(lambda: self._stub.GetMany(_to_wire_cache_get_many_request(request)))
+        return _from_wire_cache_get_many_response(response)
 
     def set(self, request: CacheSetRequest) -> None:
-        call_unary(lambda: self._stub.Set(to_wire_cache_set_request(request)))
+        _call_unary(lambda: self._stub.Set(_to_wire_cache_set_request(request)))
 
     def set_many(self, request: CacheSetManyRequest) -> None:
-        call_unary(lambda: self._stub.SetMany(to_wire_cache_set_many_request(request)))
+        _call_unary(lambda: self._stub.SetMany(_to_wire_cache_set_many_request(request)))
 
     def delete(self, request: CacheDeleteRequest) -> CacheDeleteResponse:
-        response = call_unary(lambda: self._stub.Delete(to_wire_cache_delete_request(request)))
-        return from_wire_cache_delete_response(response)
+        response = _call_unary(lambda: self._stub.Delete(_to_wire_cache_delete_request(request)))
+        return _from_wire_cache_delete_response(response)
 
     def delete_many(self, request: CacheDeleteManyRequest) -> CacheDeleteManyResponse:
-        response = call_unary(lambda: self._stub.DeleteMany(to_wire_cache_delete_many_request(request)))
-        return from_wire_cache_delete_many_response(response)
+        response = _call_unary(lambda: self._stub.DeleteMany(_to_wire_cache_delete_many_request(request)))
+        return _from_wire_cache_delete_many_response(response)
 
     def touch(self, request: CacheTouchRequest) -> CacheTouchResponse:
-        response = call_unary(lambda: self._stub.Touch(to_wire_cache_touch_request(request)))
-        return from_wire_cache_touch_response(response)
+        response = _call_unary(lambda: self._stub.Touch(_to_wire_cache_touch_request(request)))
+        return _from_wire_cache_touch_response(response)

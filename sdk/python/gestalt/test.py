@@ -11,10 +11,7 @@ import grpc
 
 from ._gen.v1 import test_pb2 as _test_pb2
 from ._gen.v1 import test_pb2_grpc as _test_pb2_grpc
-from .rpc_support import call_unary
-
-_wire: Any = _test_pb2
-_wire_grpc: Any = _test_pb2_grpc
+from .rpc_support import _call_unary
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,21 +24,21 @@ class HelloWorldResponse:
     message: str = ""
 
 
-def to_wire_hello_world_request(_value: HelloWorldRequest) -> Any:
-    return _wire.HelloWorldRequest()
+def _to_wire_hello_world_request(_value: HelloWorldRequest) -> Any:
+    return _test_pb2.HelloWorldRequest()
 
 
-def from_wire_hello_world_request(_value: Any) -> HelloWorldRequest:
+def _from_wire_hello_world_request(_value: Any) -> HelloWorldRequest:
     return HelloWorldRequest()
 
 
-def to_wire_hello_world_response(value: HelloWorldResponse) -> Any:
-    return _wire.HelloWorldResponse(
+def _to_wire_hello_world_response(value: HelloWorldResponse) -> Any:
+    return _test_pb2.HelloWorldResponse(
         message=value.message,
     )
 
 
-def from_wire_hello_world_response(value: Any) -> HelloWorldResponse:
+def _from_wire_hello_world_response(value: Any) -> HelloWorldResponse:
     return HelloWorldResponse(
         message=value.message,
     )
@@ -51,8 +48,8 @@ class Test:
     """Client for the gestalt.provider.v1.Test service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.TestStub(channel)
+        self._stub = _test_pb2_grpc.TestStub(channel)
 
     def hello_world(self, request: HelloWorldRequest) -> HelloWorldResponse:
-        response = call_unary(lambda: self._stub.HelloWorld(to_wire_hello_world_request(request)))
-        return from_wire_hello_world_response(response)
+        response = _call_unary(lambda: self._stub.HelloWorld(_to_wire_hello_world_request(request)))
+        return _from_wire_hello_world_response(response)

@@ -12,10 +12,7 @@ import grpc
 
 from ._gen.v1 import external_credential_pb2 as _external_credential_pb2
 from ._gen.v1 import external_credential_pb2_grpc as _external_credential_pb2_grpc
-from .rpc_support import call_unary, from_wire_timestamp, to_wire_timestamp
-
-_wire: Any = _external_credential_pb2
-_wire_grpc: Any = _external_credential_pb2_grpc
+from .rpc_support import _call_unary, _from_wire_timestamp, _to_wire_timestamp
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,33 +159,33 @@ class ValidateExternalCredentialConfigRequest:
     connection_params: dict[str, str] = field(default_factory=dict)
 
 
-def to_wire_delete_external_credential_request(value: DeleteExternalCredentialRequest) -> Any:
-    return _wire.DeleteExternalCredentialRequest(
+def _to_wire_delete_external_credential_request(value: DeleteExternalCredentialRequest) -> Any:
+    return _external_credential_pb2.DeleteExternalCredentialRequest(
         id=value.id,
     )
 
 
-def from_wire_delete_external_credential_request(value: Any) -> DeleteExternalCredentialRequest:
+def _from_wire_delete_external_credential_request(value: Any) -> DeleteExternalCredentialRequest:
     return DeleteExternalCredentialRequest(
         id=value.id,
     )
 
 
-def to_wire_exchange_external_credential_request(value: ExchangeExternalCredentialRequest) -> Any:
-    return _wire.ExchangeExternalCredentialRequest(
+def _to_wire_exchange_external_credential_request(value: ExchangeExternalCredentialRequest) -> Any:
+    return _external_credential_pb2.ExchangeExternalCredentialRequest(
         provider=value.provider,
         connection=value.connection,
         connection_id=value.connection_id,
         credential_subject_id=value.credential_subject_id,
         actor_subject_id=value.actor_subject_id,
         instance=value.instance,
-        auth=None if value.auth is None else to_wire_external_credential_auth_config(value.auth),
+        auth=None if value.auth is None else _to_wire_external_credential_auth_config(value.auth),
         credential_json=value.credential_json,
         connection_params=value.connection_params,
     )
 
 
-def from_wire_exchange_external_credential_request(value: Any) -> ExchangeExternalCredentialRequest:
+def _from_wire_exchange_external_credential_request(value: Any) -> ExchangeExternalCredentialRequest:
     return ExchangeExternalCredentialRequest(
         provider=value.provider,
         connection=value.connection,
@@ -196,43 +193,43 @@ def from_wire_exchange_external_credential_request(value: Any) -> ExchangeExtern
         credential_subject_id=value.credential_subject_id,
         actor_subject_id=value.actor_subject_id,
         instance=value.instance,
-        auth=from_wire_external_credential_auth_config(value.auth) if value.HasField("auth") else None,
+        auth=_from_wire_external_credential_auth_config(value.auth) if value.HasField("auth") else None,
         credential_json=value.credential_json,
         connection_params=dict(value.connection_params),
     )
 
 
-def to_wire_exchange_external_credential_response(value: ExchangeExternalCredentialResponse) -> Any:
-    return _wire.ExchangeExternalCredentialResponse(
-        token_response=None if value.token_response is None else to_wire_external_credential_token_response(value.token_response),
+def _to_wire_exchange_external_credential_response(value: ExchangeExternalCredentialResponse) -> Any:
+    return _external_credential_pb2.ExchangeExternalCredentialResponse(
+        token_response=None if value.token_response is None else _to_wire_external_credential_token_response(value.token_response),
     )
 
 
-def from_wire_exchange_external_credential_response(value: Any) -> ExchangeExternalCredentialResponse:
+def _from_wire_exchange_external_credential_response(value: Any) -> ExchangeExternalCredentialResponse:
     return ExchangeExternalCredentialResponse(
-        token_response=from_wire_external_credential_token_response(value.token_response) if value.HasField("token_response") else None,
+        token_response=_from_wire_external_credential_token_response(value.token_response) if value.HasField("token_response") else None,
     )
 
 
-def to_wire_external_credential(value: ExternalCredential) -> Any:
-    return _wire.ExternalCredential(
+def _to_wire_external_credential(value: ExternalCredential) -> Any:
+    return _external_credential_pb2.ExternalCredential(
         id=value.id,
         subject_id=value.subject_id,
         instance=value.instance,
         access_token=value.access_token,
         refresh_token=value.refresh_token,
         scopes=value.scopes,
-        expires_at=None if value.expires_at is None else to_wire_timestamp(value.expires_at),
-        last_refreshed_at=None if value.last_refreshed_at is None else to_wire_timestamp(value.last_refreshed_at),
+        expires_at=None if value.expires_at is None else _to_wire_timestamp(value.expires_at),
+        last_refreshed_at=None if value.last_refreshed_at is None else _to_wire_timestamp(value.last_refreshed_at),
         refresh_error_count=value.refresh_error_count,
         metadata_json=value.metadata_json,
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        updated_at=None if value.updated_at is None else to_wire_timestamp(value.updated_at),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        updated_at=None if value.updated_at is None else _to_wire_timestamp(value.updated_at),
         connection_id=value.connection_id,
     )
 
 
-def from_wire_external_credential(value: Any) -> ExternalCredential:
+def _from_wire_external_credential(value: Any) -> ExternalCredential:
     return ExternalCredential(
         id=value.id,
         subject_id=value.subject_id,
@@ -240,18 +237,18 @@ def from_wire_external_credential(value: Any) -> ExternalCredential:
         access_token=value.access_token,
         refresh_token=value.refresh_token,
         scopes=value.scopes,
-        expires_at=from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
-        last_refreshed_at=from_wire_timestamp(value.last_refreshed_at) if value.HasField("last_refreshed_at") else None,
+        expires_at=_from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
+        last_refreshed_at=_from_wire_timestamp(value.last_refreshed_at) if value.HasField("last_refreshed_at") else None,
         refresh_error_count=value.refresh_error_count,
         metadata_json=value.metadata_json,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        updated_at=from_wire_timestamp(value.updated_at) if value.HasField("updated_at") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        updated_at=_from_wire_timestamp(value.updated_at) if value.HasField("updated_at") else None,
         connection_id=value.connection_id,
     )
 
 
-def to_wire_external_credential_auth_config(value: ExternalCredentialAuthConfig) -> Any:
-    return _wire.ExternalCredentialAuthConfig(
+def _to_wire_external_credential_auth_config(value: ExternalCredentialAuthConfig) -> Any:
+    return _external_credential_pb2.ExternalCredentialAuthConfig(
         type=value.type,
         token=value.token,
         token_prefix=value.token_prefix,
@@ -268,12 +265,12 @@ def to_wire_external_credential_auth_config(value: ExternalCredentialAuthConfig)
         refresh_params=value.refresh_params,
         accept_header=value.accept_header,
         access_token_path=value.access_token_path,
-        token_exchange_drivers=[to_wire_external_credential_token_exchange_driver(item) for item in value.token_exchange_drivers],
+        token_exchange_drivers=[_to_wire_external_credential_token_exchange_driver(item) for item in value.token_exchange_drivers],
         refresh_token=value.refresh_token,
     )
 
 
-def from_wire_external_credential_auth_config(value: Any) -> ExternalCredentialAuthConfig:
+def _from_wire_external_credential_auth_config(value: Any) -> ExternalCredentialAuthConfig:
     return ExternalCredentialAuthConfig(
         type=value.type,
         token=value.token,
@@ -291,20 +288,20 @@ def from_wire_external_credential_auth_config(value: Any) -> ExternalCredentialA
         refresh_params=dict(value.refresh_params),
         accept_header=value.accept_header,
         access_token_path=value.access_token_path,
-        token_exchange_drivers=[from_wire_external_credential_token_exchange_driver(item) for item in value.token_exchange_drivers],
+        token_exchange_drivers=[_from_wire_external_credential_token_exchange_driver(item) for item in value.token_exchange_drivers],
         refresh_token=value.refresh_token,
     )
 
 
-def to_wire_external_credential_lookup(value: ExternalCredentialLookup) -> Any:
-    return _wire.ExternalCredentialLookup(
+def _to_wire_external_credential_lookup(value: ExternalCredentialLookup) -> Any:
+    return _external_credential_pb2.ExternalCredentialLookup(
         subject_id=value.subject_id,
         instance=value.instance,
         connection_id=value.connection_id,
     )
 
 
-def from_wire_external_credential_lookup(value: Any) -> ExternalCredentialLookup:
+def _from_wire_external_credential_lookup(value: Any) -> ExternalCredentialLookup:
     return ExternalCredentialLookup(
         subject_id=value.subject_id,
         instance=value.instance,
@@ -312,8 +309,8 @@ def from_wire_external_credential_lookup(value: Any) -> ExternalCredentialLookup
     )
 
 
-def to_wire_external_credential_token_exchange_driver(value: ExternalCredentialTokenExchangeDriver) -> Any:
-    return _wire.ExternalCredentialTokenExchangeDriver(
+def _to_wire_external_credential_token_exchange_driver(value: ExternalCredentialTokenExchangeDriver) -> Any:
+    return _external_credential_pb2.ExternalCredentialTokenExchangeDriver(
         type=value.type,
         target_principal=value.target_principal,
         scopes=value.scopes,
@@ -323,7 +320,7 @@ def to_wire_external_credential_token_exchange_driver(value: ExternalCredentialT
     )
 
 
-def from_wire_external_credential_token_exchange_driver(value: Any) -> ExternalCredentialTokenExchangeDriver:
+def _from_wire_external_credential_token_exchange_driver(value: Any) -> ExternalCredentialTokenExchangeDriver:
     return ExternalCredentialTokenExchangeDriver(
         type=value.type,
         target_principal=value.target_principal,
@@ -334,8 +331,8 @@ def from_wire_external_credential_token_exchange_driver(value: Any) -> ExternalC
     )
 
 
-def to_wire_external_credential_token_response(value: ExternalCredentialTokenResponse) -> Any:
-    return _wire.ExternalCredentialTokenResponse(
+def _to_wire_external_credential_token_response(value: ExternalCredentialTokenResponse) -> Any:
+    return _external_credential_pb2.ExternalCredentialTokenResponse(
         access_token=value.access_token,
         refresh_token=value.refresh_token,
         expires_in=value.expires_in,
@@ -345,7 +342,7 @@ def to_wire_external_credential_token_response(value: ExternalCredentialTokenRes
     )
 
 
-def from_wire_external_credential_token_response(value: Any) -> ExternalCredentialTokenResponse:
+def _from_wire_external_credential_token_response(value: Any) -> ExternalCredentialTokenResponse:
     return ExternalCredentialTokenResponse(
         access_token=value.access_token,
         refresh_token=value.refresh_token,
@@ -356,27 +353,27 @@ def from_wire_external_credential_token_response(value: Any) -> ExternalCredenti
     )
 
 
-def to_wire_get_external_credential_request(value: GetExternalCredentialRequest) -> Any:
-    return _wire.GetExternalCredentialRequest(
-        lookup=None if value.lookup is None else to_wire_external_credential_lookup(value.lookup),
+def _to_wire_get_external_credential_request(value: GetExternalCredentialRequest) -> Any:
+    return _external_credential_pb2.GetExternalCredentialRequest(
+        lookup=None if value.lookup is None else _to_wire_external_credential_lookup(value.lookup),
     )
 
 
-def from_wire_get_external_credential_request(value: Any) -> GetExternalCredentialRequest:
+def _from_wire_get_external_credential_request(value: Any) -> GetExternalCredentialRequest:
     return GetExternalCredentialRequest(
-        lookup=from_wire_external_credential_lookup(value.lookup) if value.HasField("lookup") else None,
+        lookup=_from_wire_external_credential_lookup(value.lookup) if value.HasField("lookup") else None,
     )
 
 
-def to_wire_list_external_credentials_request(value: ListExternalCredentialsRequest) -> Any:
-    return _wire.ListExternalCredentialsRequest(
+def _to_wire_list_external_credentials_request(value: ListExternalCredentialsRequest) -> Any:
+    return _external_credential_pb2.ListExternalCredentialsRequest(
         subject_id=value.subject_id,
         instance=value.instance,
         connection_id=value.connection_id,
     )
 
 
-def from_wire_list_external_credentials_request(value: Any) -> ListExternalCredentialsRequest:
+def _from_wire_list_external_credentials_request(value: Any) -> ListExternalCredentialsRequest:
     return ListExternalCredentialsRequest(
         subject_id=value.subject_id,
         instance=value.instance,
@@ -384,20 +381,20 @@ def from_wire_list_external_credentials_request(value: Any) -> ListExternalCrede
     )
 
 
-def to_wire_list_external_credentials_response(value: ListExternalCredentialsResponse) -> Any:
-    return _wire.ListExternalCredentialsResponse(
-        credentials=[to_wire_external_credential(item) for item in value.credentials],
+def _to_wire_list_external_credentials_response(value: ListExternalCredentialsResponse) -> Any:
+    return _external_credential_pb2.ListExternalCredentialsResponse(
+        credentials=[_to_wire_external_credential(item) for item in value.credentials],
     )
 
 
-def from_wire_list_external_credentials_response(value: Any) -> ListExternalCredentialsResponse:
+def _from_wire_list_external_credentials_response(value: Any) -> ListExternalCredentialsResponse:
     return ListExternalCredentialsResponse(
-        credentials=[from_wire_external_credential(item) for item in value.credentials],
+        credentials=[_from_wire_external_credential(item) for item in value.credentials],
     )
 
 
-def to_wire_resolve_external_credential_request(value: ResolveExternalCredentialRequest) -> Any:
-    return _wire.ResolveExternalCredentialRequest(
+def _to_wire_resolve_external_credential_request(value: ResolveExternalCredentialRequest) -> Any:
+    return _external_credential_pb2.ResolveExternalCredentialRequest(
         provider=value.provider,
         connection=value.connection,
         connection_id=value.connection_id,
@@ -405,12 +402,12 @@ def to_wire_resolve_external_credential_request(value: ResolveExternalCredential
         credential_subject_id=value.credential_subject_id,
         actor_subject_id=value.actor_subject_id,
         instance=value.instance,
-        auth=None if value.auth is None else to_wire_external_credential_auth_config(value.auth),
+        auth=None if value.auth is None else _to_wire_external_credential_auth_config(value.auth),
         connection_params=value.connection_params,
     )
 
 
-def from_wire_resolve_external_credential_request(value: Any) -> ResolveExternalCredentialRequest:
+def _from_wire_resolve_external_credential_request(value: Any) -> ResolveExternalCredentialRequest:
     return ResolveExternalCredentialRequest(
         provider=value.provider,
         connection=value.connection,
@@ -419,63 +416,63 @@ def from_wire_resolve_external_credential_request(value: Any) -> ResolveExternal
         credential_subject_id=value.credential_subject_id,
         actor_subject_id=value.actor_subject_id,
         instance=value.instance,
-        auth=from_wire_external_credential_auth_config(value.auth) if value.HasField("auth") else None,
+        auth=_from_wire_external_credential_auth_config(value.auth) if value.HasField("auth") else None,
         connection_params=dict(value.connection_params),
     )
 
 
-def to_wire_resolve_external_credential_response(value: ResolveExternalCredentialResponse) -> Any:
-    return _wire.ResolveExternalCredentialResponse(
+def _to_wire_resolve_external_credential_response(value: ResolveExternalCredentialResponse) -> Any:
+    return _external_credential_pb2.ResolveExternalCredentialResponse(
         token=value.token,
-        expires_at=None if value.expires_at is None else to_wire_timestamp(value.expires_at),
+        expires_at=None if value.expires_at is None else _to_wire_timestamp(value.expires_at),
         metadata_json=value.metadata_json,
         params=value.params,
-        credential=None if value.credential is None else to_wire_external_credential(value.credential),
+        credential=None if value.credential is None else _to_wire_external_credential(value.credential),
     )
 
 
-def from_wire_resolve_external_credential_response(value: Any) -> ResolveExternalCredentialResponse:
+def _from_wire_resolve_external_credential_response(value: Any) -> ResolveExternalCredentialResponse:
     return ResolveExternalCredentialResponse(
         token=value.token,
-        expires_at=from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
+        expires_at=_from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
         metadata_json=value.metadata_json,
         params=dict(value.params),
-        credential=from_wire_external_credential(value.credential) if value.HasField("credential") else None,
+        credential=_from_wire_external_credential(value.credential) if value.HasField("credential") else None,
     )
 
 
-def to_wire_upsert_external_credential_request(value: UpsertExternalCredentialRequest) -> Any:
-    return _wire.UpsertExternalCredentialRequest(
-        credential=None if value.credential is None else to_wire_external_credential(value.credential),
+def _to_wire_upsert_external_credential_request(value: UpsertExternalCredentialRequest) -> Any:
+    return _external_credential_pb2.UpsertExternalCredentialRequest(
+        credential=None if value.credential is None else _to_wire_external_credential(value.credential),
         preserve_timestamps=value.preserve_timestamps,
     )
 
 
-def from_wire_upsert_external_credential_request(value: Any) -> UpsertExternalCredentialRequest:
+def _from_wire_upsert_external_credential_request(value: Any) -> UpsertExternalCredentialRequest:
     return UpsertExternalCredentialRequest(
-        credential=from_wire_external_credential(value.credential) if value.HasField("credential") else None,
+        credential=_from_wire_external_credential(value.credential) if value.HasField("credential") else None,
         preserve_timestamps=value.preserve_timestamps,
     )
 
 
-def to_wire_validate_external_credential_config_request(value: ValidateExternalCredentialConfigRequest) -> Any:
-    return _wire.ValidateExternalCredentialConfigRequest(
+def _to_wire_validate_external_credential_config_request(value: ValidateExternalCredentialConfigRequest) -> Any:
+    return _external_credential_pb2.ValidateExternalCredentialConfigRequest(
         provider=value.provider,
         connection=value.connection,
         connection_id=value.connection_id,
         mode=value.mode,
-        auth=None if value.auth is None else to_wire_external_credential_auth_config(value.auth),
+        auth=None if value.auth is None else _to_wire_external_credential_auth_config(value.auth),
         connection_params=value.connection_params,
     )
 
 
-def from_wire_validate_external_credential_config_request(value: Any) -> ValidateExternalCredentialConfigRequest:
+def _from_wire_validate_external_credential_config_request(value: Any) -> ValidateExternalCredentialConfigRequest:
     return ValidateExternalCredentialConfigRequest(
         provider=value.provider,
         connection=value.connection,
         connection_id=value.connection_id,
         mode=value.mode,
-        auth=from_wire_external_credential_auth_config(value.auth) if value.HasField("auth") else None,
+        auth=_from_wire_external_credential_auth_config(value.auth) if value.HasField("auth") else None,
         connection_params=dict(value.connection_params),
     )
 
@@ -484,30 +481,30 @@ class ExternalCredentials:
     """Client for the gestalt.provider.v1.ExternalCredentials service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.ExternalCredentialsStub(channel)
+        self._stub = _external_credential_pb2_grpc.ExternalCredentialsStub(channel)
 
     def upsert_credential(self, request: UpsertExternalCredentialRequest) -> ExternalCredential:
-        response = call_unary(lambda: self._stub.UpsertCredential(to_wire_upsert_external_credential_request(request)))
-        return from_wire_external_credential(response)
+        response = _call_unary(lambda: self._stub.UpsertCredential(_to_wire_upsert_external_credential_request(request)))
+        return _from_wire_external_credential(response)
 
     def get_credential(self, request: GetExternalCredentialRequest) -> ExternalCredential:
-        response = call_unary(lambda: self._stub.GetCredential(to_wire_get_external_credential_request(request)))
-        return from_wire_external_credential(response)
+        response = _call_unary(lambda: self._stub.GetCredential(_to_wire_get_external_credential_request(request)))
+        return _from_wire_external_credential(response)
 
     def list_credentials(self, request: ListExternalCredentialsRequest) -> ListExternalCredentialsResponse:
-        response = call_unary(lambda: self._stub.ListCredentials(to_wire_list_external_credentials_request(request)))
-        return from_wire_list_external_credentials_response(response)
+        response = _call_unary(lambda: self._stub.ListCredentials(_to_wire_list_external_credentials_request(request)))
+        return _from_wire_list_external_credentials_response(response)
 
     def delete_credential(self, request: DeleteExternalCredentialRequest) -> None:
-        call_unary(lambda: self._stub.DeleteCredential(to_wire_delete_external_credential_request(request)))
+        _call_unary(lambda: self._stub.DeleteCredential(_to_wire_delete_external_credential_request(request)))
 
     def validate_credential_config(self, request: ValidateExternalCredentialConfigRequest) -> None:
-        call_unary(lambda: self._stub.ValidateCredentialConfig(to_wire_validate_external_credential_config_request(request)))
+        _call_unary(lambda: self._stub.ValidateCredentialConfig(_to_wire_validate_external_credential_config_request(request)))
 
     def resolve_credential(self, request: ResolveExternalCredentialRequest) -> ResolveExternalCredentialResponse:
-        response = call_unary(lambda: self._stub.ResolveCredential(to_wire_resolve_external_credential_request(request)))
-        return from_wire_resolve_external_credential_response(response)
+        response = _call_unary(lambda: self._stub.ResolveCredential(_to_wire_resolve_external_credential_request(request)))
+        return _from_wire_resolve_external_credential_response(response)
 
     def exchange_credential(self, request: ExchangeExternalCredentialRequest) -> ExchangeExternalCredentialResponse:
-        response = call_unary(lambda: self._stub.ExchangeCredential(to_wire_exchange_external_credential_request(request)))
-        return from_wire_exchange_external_credential_response(response)
+        response = _call_unary(lambda: self._stub.ExchangeCredential(_to_wire_exchange_external_credential_request(request)))
+        return _from_wire_exchange_external_credential_response(response)

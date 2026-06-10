@@ -208,10 +208,12 @@ func enumValuesClassName(fullName string) string {
 	return localName(fullName) + "Values"
 }
 
+// Converter functions are module-internal plumbing, so their names carry a
+// leading underscore: the public surface is the dataclasses and clients.
 func toWireFunc(messageFullName string) string {
-	return "to_wire_" + snakeCase(localName(messageFullName))
+	return "_to_wire_" + snakeCase(localName(messageFullName))
 }
 
 func fromWireFunc(messageFullName string) string {
-	return "from_wire_" + snakeCase(localName(messageFullName))
+	return "_from_wire_" + snakeCase(localName(messageFullName))
 }

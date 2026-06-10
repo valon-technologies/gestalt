@@ -90,19 +90,9 @@ pub struct RpcStatus {
     pub message: String,
 }
 
-/// Converts a native status to its wire message. Detail payloads are not part
-/// of the native model and are left empty.
-pub fn to_wire_status(value: RpcStatus) -> Status {
-    Status {
-        code: value.code,
-        message: value.message,
-        details: Vec::new(),
-    }
-}
-
 /// Converts a wire status to its native representation, dropping any detail
 /// payloads.
-pub fn from_wire_status(value: Status) -> RpcStatus {
+pub(crate) fn from_wire_status(value: Status) -> RpcStatus {
     RpcStatus {
         code: value.code,
         message: value.message,
@@ -112,7 +102,7 @@ pub fn from_wire_status(value: Status) -> RpcStatus {
 /// Converts a native time to its wire timestamp. Normalized wire
 /// timestamps keep nanos in 0..1_000_000_000, so times before the Unix epoch
 /// borrow one second when they carry nanos.
-pub fn to_wire_timestamp(value: SystemTime) -> prost_types::Timestamp {
+pub(crate) fn to_wire_timestamp(value: SystemTime) -> prost_types::Timestamp {
     match value.duration_since(UNIX_EPOCH) {
         Ok(elapsed) => prost_types::Timestamp {
             seconds: elapsed.as_secs() as i64,
@@ -134,7 +124,7 @@ pub fn to_wire_timestamp(value: SystemTime) -> prost_types::Timestamp {
 /// Converts a wire timestamp to its native time. The conversion is
 /// infallible: out-of-range nanos clamp into range, and timestamps beyond
 /// what SystemTime can represent clamp to the Unix epoch.
-pub fn from_wire_timestamp(value: prost_types::Timestamp) -> SystemTime {
+pub(crate) fn from_wire_timestamp(value: prost_types::Timestamp) -> SystemTime {
     let nanos = value.nanos.clamp(0, 999_999_999) as u32;
     if value.seconds >= 0 {
         UNIX_EPOCH
@@ -150,27 +140,17 @@ pub fn from_wire_timestamp(value: prost_types::Timestamp) -> SystemTime {
 
 /// Converts a native duration to its wire duration, saturating past the wire
 /// range.
-pub fn to_wire_duration(value: Duration) -> prost_types::Duration {
+pub(crate) fn to_wire_duration(value: Duration) -> prost_types::Duration {
     prost_types::Duration {
         seconds: i64::try_from(value.as_secs()).unwrap_or(i64::MAX),
         nanos: value.subsec_nanos() as i32,
     }
 }
 
-/// Converts a wire duration to its native duration. Negative wire durations
-/// clamp to zero because std::time::Duration is unsigned.
-pub fn from_wire_duration(value: prost_types::Duration) -> Duration {
-    if value.seconds < 0 {
-        return Duration::ZERO;
-    }
-    Duration::new(
-        value.seconds as u64,
-        value.nanos.clamp(0, 999_999_999) as u32,
-    )
-}
-
 /// Converts a native JSON object to its wire struct.
-pub fn to_wire_struct(value: serde_json::Map<String, serde_json::Value>) -> prost_types::Struct {
+pub(crate) fn to_wire_struct(
+    value: serde_json::Map<String, serde_json::Value>,
+) -> prost_types::Struct {
     prost_types::Struct {
         fields: value
             .into_iter()
@@ -180,7 +160,9 @@ pub fn to_wire_struct(value: serde_json::Map<String, serde_json::Value>) -> pros
 }
 
 /// Converts a wire struct to its native JSON object.
-pub fn from_wire_struct(value: prost_types::Struct) -> serde_json::Map<String, serde_json::Value> {
+pub(crate) fn from_wire_struct(
+    value: prost_types::Struct,
+) -> serde_json::Map<String, serde_json::Value> {
     value
         .fields
         .into_iter()
@@ -189,7 +171,7 @@ pub fn from_wire_struct(value: prost_types::Struct) -> serde_json::Map<String, s
 }
 
 /// Converts a native JSON value to its wire value.
-pub fn to_wire_value(value: serde_json::Value) -> prost_types::Value {
+pub(crate) fn to_wire_value(value: serde_json::Value) -> prost_types::Value {
     use prost_types::value::Kind;
     let kind = match value {
         serde_json::Value::Null => Kind::NullValue(prost_types::NullValue::NullValue as i32),
@@ -206,7 +188,7 @@ pub fn to_wire_value(value: serde_json::Value) -> prost_types::Value {
 
 /// Converts a wire value to its native JSON value. Wire numbers are f64;
 /// non-finite values have no JSON representation, so they become JSON null.
-pub fn from_wire_value(value: prost_types::Value) -> serde_json::Value {
+pub(crate) fn from_wire_value(value: prost_types::Value) -> serde_json::Value {
     use prost_types::value::Kind;
     match value.kind {
         None | Some(Kind::NullValue(_)) => serde_json::Value::Null,

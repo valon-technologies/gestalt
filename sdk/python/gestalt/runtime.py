@@ -12,11 +12,15 @@ from google.protobuf import empty_pb2 as _empty_pb2
 
 from ._gen.v1 import runtime_pb2 as _runtime_pb2
 from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
-from .rpc_support import JsonValue, call_unary, from_wire_struct, to_wire_struct
+from .rpc_support import (
+    JsonValue,
+    _call_unary,
+    _from_wire_struct,
+    _to_wire_enum,
+    _to_wire_struct,
+)
 
 _empty: Any = _empty_pb2
-_wire: Any = _runtime_pb2
-_wire_grpc: Any = _runtime_pb2_grpc
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -77,51 +81,51 @@ class StartRuntimeProviderResponse:
     protocol_version: int = 0
 
 
-def to_wire_configure_provider_request(value: ConfigureProviderRequest) -> Any:
-    return _wire.ConfigureProviderRequest(
+def _to_wire_configure_provider_request(value: ConfigureProviderRequest) -> Any:
+    return _runtime_pb2.ConfigureProviderRequest(
         name=value.name,
-        config=None if value.config is None else to_wire_struct(value.config),
+        config=None if value.config is None else _to_wire_struct(value.config),
         protocol_version=value.protocol_version,
     )
 
 
-def from_wire_configure_provider_request(value: Any) -> ConfigureProviderRequest:
+def _from_wire_configure_provider_request(value: Any) -> ConfigureProviderRequest:
     return ConfigureProviderRequest(
         name=value.name,
-        config=from_wire_struct(value.config) if value.HasField("config") else None,
+        config=_from_wire_struct(value.config) if value.HasField("config") else None,
         protocol_version=value.protocol_version,
     )
 
 
-def to_wire_configure_provider_response(value: ConfigureProviderResponse) -> Any:
-    return _wire.ConfigureProviderResponse(
+def _to_wire_configure_provider_response(value: ConfigureProviderResponse) -> Any:
+    return _runtime_pb2.ConfigureProviderResponse(
         protocol_version=value.protocol_version,
     )
 
 
-def from_wire_configure_provider_response(value: Any) -> ConfigureProviderResponse:
+def _from_wire_configure_provider_response(value: Any) -> ConfigureProviderResponse:
     return ConfigureProviderResponse(
         protocol_version=value.protocol_version,
     )
 
 
-def to_wire_health_check_response(value: HealthCheckResponse) -> Any:
-    return _wire.HealthCheckResponse(
+def _to_wire_health_check_response(value: HealthCheckResponse) -> Any:
+    return _runtime_pb2.HealthCheckResponse(
         ready=value.ready,
         message=value.message,
     )
 
 
-def from_wire_health_check_response(value: Any) -> HealthCheckResponse:
+def _from_wire_health_check_response(value: Any) -> HealthCheckResponse:
     return HealthCheckResponse(
         ready=value.ready,
         message=value.message,
     )
 
 
-def to_wire_provider_identity(value: ProviderIdentity) -> Any:
-    return _wire.ProviderIdentity(
-        kind=value.kind,
+def _to_wire_provider_identity(value: ProviderIdentity) -> Any:
+    return _runtime_pb2.ProviderIdentity(
+        kind=_to_wire_enum(value.kind),
         name=value.name,
         display_name=value.display_name,
         description=value.description,
@@ -132,7 +136,7 @@ def to_wire_provider_identity(value: ProviderIdentity) -> Any:
     )
 
 
-def from_wire_provider_identity(value: Any) -> ProviderIdentity:
+def _from_wire_provider_identity(value: Any) -> ProviderIdentity:
     return ProviderIdentity(
         kind=value.kind,
         name=value.name,
@@ -145,13 +149,13 @@ def from_wire_provider_identity(value: Any) -> ProviderIdentity:
     )
 
 
-def to_wire_start_runtime_provider_response(value: StartRuntimeProviderResponse) -> Any:
-    return _wire.StartRuntimeProviderResponse(
+def _to_wire_start_runtime_provider_response(value: StartRuntimeProviderResponse) -> Any:
+    return _runtime_pb2.StartRuntimeProviderResponse(
         protocol_version=value.protocol_version,
     )
 
 
-def from_wire_start_runtime_provider_response(value: Any) -> StartRuntimeProviderResponse:
+def _from_wire_start_runtime_provider_response(value: Any) -> StartRuntimeProviderResponse:
     return StartRuntimeProviderResponse(
         protocol_version=value.protocol_version,
     )
@@ -161,20 +165,20 @@ class ProviderLifecycle:
     """Client for the gestalt.provider.v1.ProviderLifecycle service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.ProviderLifecycleStub(channel)
+        self._stub = _runtime_pb2_grpc.ProviderLifecycleStub(channel)
 
     def get_provider_identity(self) -> ProviderIdentity:
-        response = call_unary(lambda: self._stub.GetProviderIdentity(_empty.Empty()))
-        return from_wire_provider_identity(response)
+        response = _call_unary(lambda: self._stub.GetProviderIdentity(_empty.Empty()))
+        return _from_wire_provider_identity(response)
 
     def configure_provider(self, request: ConfigureProviderRequest) -> ConfigureProviderResponse:
-        response = call_unary(lambda: self._stub.ConfigureProvider(to_wire_configure_provider_request(request)))
-        return from_wire_configure_provider_response(response)
+        response = _call_unary(lambda: self._stub.ConfigureProvider(_to_wire_configure_provider_request(request)))
+        return _from_wire_configure_provider_response(response)
 
     def health_check(self) -> HealthCheckResponse:
-        response = call_unary(lambda: self._stub.HealthCheck(_empty.Empty()))
-        return from_wire_health_check_response(response)
+        response = _call_unary(lambda: self._stub.HealthCheck(_empty.Empty()))
+        return _from_wire_health_check_response(response)
 
     def start_provider(self) -> StartRuntimeProviderResponse:
-        response = call_unary(lambda: self._stub.StartProvider(_empty.Empty()))
-        return from_wire_start_runtime_provider_response(response)
+        response = _call_unary(lambda: self._stub.StartProvider(_empty.Empty()))
+        return _from_wire_start_runtime_provider_response(response)

@@ -12,11 +12,9 @@ from google.protobuf import empty_pb2 as _empty_pb2
 
 from ._gen.v1 import authentication_pb2 as _authentication_pb2
 from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
-from .rpc_support import call_unary
+from .rpc_support import _call_unary
 
 _empty: Any = _empty_pb2
-_wire: Any = _authentication_pb2
-_wire_grpc: Any = _authentication_pb2_grpc
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,20 +58,20 @@ class ValidateExternalTokenRequest:
     token: str = ""
 
 
-def to_wire_auth_session_settings(value: AuthSessionSettings) -> Any:
-    return _wire.AuthSessionSettings(
+def _to_wire_auth_session_settings(value: AuthSessionSettings) -> Any:
+    return _authentication_pb2.AuthSessionSettings(
         session_ttl_seconds=value.session_ttl_seconds,
     )
 
 
-def from_wire_auth_session_settings(value: Any) -> AuthSessionSettings:
+def _from_wire_auth_session_settings(value: Any) -> AuthSessionSettings:
     return AuthSessionSettings(
         session_ttl_seconds=value.session_ttl_seconds,
     )
 
 
-def to_wire_authenticated_user(value: AuthenticatedUser) -> Any:
-    return _wire.AuthenticatedUser(
+def _to_wire_authenticated_user(value: AuthenticatedUser) -> Any:
+    return _authentication_pb2.AuthenticatedUser(
         subject=value.subject,
         email=value.email,
         email_verified=value.email_verified,
@@ -83,7 +81,7 @@ def to_wire_authenticated_user(value: AuthenticatedUser) -> Any:
     )
 
 
-def from_wire_authenticated_user(value: Any) -> AuthenticatedUser:
+def _from_wire_authenticated_user(value: Any) -> AuthenticatedUser:
     return AuthenticatedUser(
         subject=value.subject,
         email=value.email,
@@ -94,8 +92,8 @@ def from_wire_authenticated_user(value: Any) -> AuthenticatedUser:
     )
 
 
-def to_wire_begin_login_request(value: BeginLoginRequest) -> Any:
-    return _wire.BeginLoginRequest(
+def _to_wire_begin_login_request(value: BeginLoginRequest) -> Any:
+    return _authentication_pb2.BeginLoginRequest(
         callback_url=value.callback_url,
         host_state=value.host_state,
         scopes=value.scopes,
@@ -103,7 +101,7 @@ def to_wire_begin_login_request(value: BeginLoginRequest) -> Any:
     )
 
 
-def from_wire_begin_login_request(value: Any) -> BeginLoginRequest:
+def _from_wire_begin_login_request(value: Any) -> BeginLoginRequest:
     return BeginLoginRequest(
         callback_url=value.callback_url,
         host_state=value.host_state,
@@ -112,29 +110,29 @@ def from_wire_begin_login_request(value: Any) -> BeginLoginRequest:
     )
 
 
-def to_wire_begin_login_response(value: BeginLoginResponse) -> Any:
-    return _wire.BeginLoginResponse(
+def _to_wire_begin_login_response(value: BeginLoginResponse) -> Any:
+    return _authentication_pb2.BeginLoginResponse(
         authorization_url=value.authorization_url,
         provider_state=value.provider_state,
     )
 
 
-def from_wire_begin_login_response(value: Any) -> BeginLoginResponse:
+def _from_wire_begin_login_response(value: Any) -> BeginLoginResponse:
     return BeginLoginResponse(
         authorization_url=value.authorization_url,
         provider_state=value.provider_state,
     )
 
 
-def to_wire_complete_login_request(value: CompleteLoginRequest) -> Any:
-    return _wire.CompleteLoginRequest(
+def _to_wire_complete_login_request(value: CompleteLoginRequest) -> Any:
+    return _authentication_pb2.CompleteLoginRequest(
         query=value.query,
         provider_state=value.provider_state,
         callback_url=value.callback_url,
     )
 
 
-def from_wire_complete_login_request(value: Any) -> CompleteLoginRequest:
+def _from_wire_complete_login_request(value: Any) -> CompleteLoginRequest:
     return CompleteLoginRequest(
         query=dict(value.query),
         provider_state=value.provider_state,
@@ -142,13 +140,13 @@ def from_wire_complete_login_request(value: Any) -> CompleteLoginRequest:
     )
 
 
-def to_wire_validate_external_token_request(value: ValidateExternalTokenRequest) -> Any:
-    return _wire.ValidateExternalTokenRequest(
+def _to_wire_validate_external_token_request(value: ValidateExternalTokenRequest) -> Any:
+    return _authentication_pb2.ValidateExternalTokenRequest(
         token=value.token,
     )
 
 
-def from_wire_validate_external_token_request(value: Any) -> ValidateExternalTokenRequest:
+def _from_wire_validate_external_token_request(value: Any) -> ValidateExternalTokenRequest:
     return ValidateExternalTokenRequest(
         token=value.token,
     )
@@ -158,20 +156,20 @@ class Authentication:
     """Client for the gestalt.provider.v1.Authentication service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.AuthenticationStub(channel)
+        self._stub = _authentication_pb2_grpc.AuthenticationStub(channel)
 
     def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
-        response = call_unary(lambda: self._stub.BeginLogin(to_wire_begin_login_request(request)))
-        return from_wire_begin_login_response(response)
+        response = _call_unary(lambda: self._stub.BeginLogin(_to_wire_begin_login_request(request)))
+        return _from_wire_begin_login_response(response)
 
     def complete_login(self, request: CompleteLoginRequest) -> AuthenticatedUser:
-        response = call_unary(lambda: self._stub.CompleteLogin(to_wire_complete_login_request(request)))
-        return from_wire_authenticated_user(response)
+        response = _call_unary(lambda: self._stub.CompleteLogin(_to_wire_complete_login_request(request)))
+        return _from_wire_authenticated_user(response)
 
     def validate_external_token(self, request: ValidateExternalTokenRequest) -> AuthenticatedUser:
-        response = call_unary(lambda: self._stub.ValidateExternalToken(to_wire_validate_external_token_request(request)))
-        return from_wire_authenticated_user(response)
+        response = _call_unary(lambda: self._stub.ValidateExternalToken(_to_wire_validate_external_token_request(request)))
+        return _from_wire_authenticated_user(response)
 
     def get_session_settings(self) -> AuthSessionSettings:
-        response = call_unary(lambda: self._stub.GetSessionSettings(_empty.Empty()))
-        return from_wire_auth_session_settings(response)
+        response = _call_unary(lambda: self._stub.GetSessionSettings(_empty.Empty()))
+        return _from_wire_auth_session_settings(response)

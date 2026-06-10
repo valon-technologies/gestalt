@@ -1,5 +1,7 @@
-// Package ts is the TypeScript SDK emitter. It renders native types,
-// wire-stub conversions, and per-service clients from the normalized model.
+// Package ts is the TypeScript SDK emitter. Each proto file renders as two
+// modules: a public module with native types and per-service clients, and an
+// internal codec module (src/internal/codec) with the wire-stub conversions,
+// keeping the wire seam off the public surface.
 package ts
 
 import (
@@ -60,21 +62,32 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("rpc_support.ts", []byte(supportFile)); err != nil {
 		return nil, err
 	}
+	if err := set.Add("internal/codec/support.ts", []byte(runtimeFile)); err != nil {
+		return nil, err
+	}
 	for _, g := range groupFiles(services, messages, enums) {
-		r := newRenderer(idx, g.base)
+		public := newRenderer(idx, g.base, modulePublic)
 		for _, e := range g.enums {
-			r.renderEnum(e)
+			public.renderEnum(e)
 		}
 		for _, m := range g.messages {
-			r.renderMessage(m)
-		}
-		for _, m := range g.messages {
-			r.renderConversions(m)
+			public.renderMessage(m)
 		}
 		for _, svc := range g.services {
-			r.renderClient(svc)
+			public.renderClient(svc)
 		}
-		if err := set.Add(g.base+".ts", []byte(r.assemble())); err != nil {
+		if err := set.Add(g.base+".ts", []byte(public.assemble())); err != nil {
+			return nil, err
+		}
+
+		if len(g.messages) == 0 {
+			continue
+		}
+		codec := newRenderer(idx, g.base, moduleCodec)
+		for _, m := range g.messages {
+			codec.renderConversions(m)
+		}
+		if err := set.Add("internal/codec/"+g.base+".ts", []byte(codec.assemble())); err != nil {
 			return nil, err
 		}
 	}

@@ -249,21 +249,14 @@ pub struct ValidateExternalCredentialConfigRequest {
 }
 
 /// Converts a native `DeleteExternalCredentialRequest` to its wire message.
-pub fn to_wire_delete_external_credential_request(
+pub(crate) fn to_wire_delete_external_credential_request(
     value: DeleteExternalCredentialRequest,
 ) -> v1::DeleteExternalCredentialRequest {
     v1::DeleteExternalCredentialRequest { id: value.id }
 }
 
-/// Converts a wire `DeleteExternalCredentialRequest` to its native message.
-pub fn from_wire_delete_external_credential_request(
-    value: v1::DeleteExternalCredentialRequest,
-) -> DeleteExternalCredentialRequest {
-    DeleteExternalCredentialRequest { id: value.id }
-}
-
 /// Converts a native `ExchangeExternalCredentialRequest` to its wire message.
-pub fn to_wire_exchange_external_credential_request(
+pub(crate) fn to_wire_exchange_external_credential_request(
     value: ExchangeExternalCredentialRequest,
 ) -> v1::ExchangeExternalCredentialRequest {
     v1::ExchangeExternalCredentialRequest {
@@ -279,36 +272,8 @@ pub fn to_wire_exchange_external_credential_request(
     }
 }
 
-/// Converts a wire `ExchangeExternalCredentialRequest` to its native message.
-pub fn from_wire_exchange_external_credential_request(
-    value: v1::ExchangeExternalCredentialRequest,
-) -> ExchangeExternalCredentialRequest {
-    ExchangeExternalCredentialRequest {
-        provider: value.provider,
-        connection: value.connection,
-        connection_id: value.connection_id,
-        credential_subject_id: value.credential_subject_id,
-        actor_subject_id: value.actor_subject_id,
-        instance: value.instance,
-        auth: value.auth.map(from_wire_external_credential_auth_config),
-        credential_json: value.credential_json,
-        connection_params: value.connection_params,
-    }
-}
-
-/// Converts a native `ExchangeExternalCredentialResponse` to its wire message.
-pub fn to_wire_exchange_external_credential_response(
-    value: ExchangeExternalCredentialResponse,
-) -> v1::ExchangeExternalCredentialResponse {
-    v1::ExchangeExternalCredentialResponse {
-        token_response: value
-            .token_response
-            .map(to_wire_external_credential_token_response),
-    }
-}
-
 /// Converts a wire `ExchangeExternalCredentialResponse` to its native message.
-pub fn from_wire_exchange_external_credential_response(
+pub(crate) fn from_wire_exchange_external_credential_response(
     value: v1::ExchangeExternalCredentialResponse,
 ) -> ExchangeExternalCredentialResponse {
     ExchangeExternalCredentialResponse {
@@ -319,7 +284,7 @@ pub fn from_wire_exchange_external_credential_response(
 }
 
 /// Converts a native `ExternalCredential` to its wire message.
-pub fn to_wire_external_credential(value: ExternalCredential) -> v1::ExternalCredential {
+pub(crate) fn to_wire_external_credential(value: ExternalCredential) -> v1::ExternalCredential {
     v1::ExternalCredential {
         id: value.id,
         subject_id: value.subject_id,
@@ -338,7 +303,7 @@ pub fn to_wire_external_credential(value: ExternalCredential) -> v1::ExternalCre
 }
 
 /// Converts a wire `ExternalCredential` to its native message.
-pub fn from_wire_external_credential(value: v1::ExternalCredential) -> ExternalCredential {
+pub(crate) fn from_wire_external_credential(value: v1::ExternalCredential) -> ExternalCredential {
     ExternalCredential {
         id: value.id,
         subject_id: value.subject_id,
@@ -357,7 +322,7 @@ pub fn from_wire_external_credential(value: v1::ExternalCredential) -> ExternalC
 }
 
 /// Converts a native `ExternalCredentialAuthConfig` to its wire message.
-pub fn to_wire_external_credential_auth_config(
+pub(crate) fn to_wire_external_credential_auth_config(
     value: ExternalCredentialAuthConfig,
 ) -> v1::ExternalCredentialAuthConfig {
     v1::ExternalCredentialAuthConfig {
@@ -386,38 +351,8 @@ pub fn to_wire_external_credential_auth_config(
     }
 }
 
-/// Converts a wire `ExternalCredentialAuthConfig` to its native message.
-pub fn from_wire_external_credential_auth_config(
-    value: v1::ExternalCredentialAuthConfig,
-) -> ExternalCredentialAuthConfig {
-    ExternalCredentialAuthConfig {
-        r#type: value.r#type,
-        token: value.token,
-        token_prefix: value.token_prefix,
-        grant_type: value.grant_type,
-        token_url: value.token_url,
-        client_id: value.client_id,
-        client_secret: value.client_secret,
-        client_auth: value.client_auth,
-        token_exchange: value.token_exchange,
-        scopes: value.scopes,
-        scope_param: value.scope_param,
-        scope_separator: value.scope_separator,
-        token_params: value.token_params,
-        refresh_params: value.refresh_params,
-        accept_header: value.accept_header,
-        access_token_path: value.access_token_path,
-        token_exchange_drivers: value
-            .token_exchange_drivers
-            .into_iter()
-            .map(from_wire_external_credential_token_exchange_driver)
-            .collect(),
-        refresh_token: value.refresh_token,
-    }
-}
-
 /// Converts a native `ExternalCredentialLookup` to its wire message.
-pub fn to_wire_external_credential_lookup(
+pub(crate) fn to_wire_external_credential_lookup(
     value: ExternalCredentialLookup,
 ) -> v1::ExternalCredentialLookup {
     v1::ExternalCredentialLookup {
@@ -427,19 +362,8 @@ pub fn to_wire_external_credential_lookup(
     }
 }
 
-/// Converts a wire `ExternalCredentialLookup` to its native message.
-pub fn from_wire_external_credential_lookup(
-    value: v1::ExternalCredentialLookup,
-) -> ExternalCredentialLookup {
-    ExternalCredentialLookup {
-        subject_id: value.subject_id,
-        instance: value.instance,
-        connection_id: value.connection_id,
-    }
-}
-
 /// Converts a native `ExternalCredentialTokenExchangeDriver` to its wire message.
-pub fn to_wire_external_credential_token_exchange_driver(
+pub(crate) fn to_wire_external_credential_token_exchange_driver(
     value: ExternalCredentialTokenExchangeDriver,
 ) -> v1::ExternalCredentialTokenExchangeDriver {
     v1::ExternalCredentialTokenExchangeDriver {
@@ -452,36 +376,8 @@ pub fn to_wire_external_credential_token_exchange_driver(
     }
 }
 
-/// Converts a wire `ExternalCredentialTokenExchangeDriver` to its native message.
-pub fn from_wire_external_credential_token_exchange_driver(
-    value: v1::ExternalCredentialTokenExchangeDriver,
-) -> ExternalCredentialTokenExchangeDriver {
-    ExternalCredentialTokenExchangeDriver {
-        r#type: value.r#type,
-        target_principal: value.target_principal,
-        scopes: value.scopes,
-        lifetime_seconds: value.lifetime_seconds,
-        endpoint: value.endpoint,
-        params: value.params,
-    }
-}
-
-/// Converts a native `ExternalCredentialTokenResponse` to its wire message.
-pub fn to_wire_external_credential_token_response(
-    value: ExternalCredentialTokenResponse,
-) -> v1::ExternalCredentialTokenResponse {
-    v1::ExternalCredentialTokenResponse {
-        access_token: value.access_token,
-        refresh_token: value.refresh_token,
-        expires_in: value.expires_in,
-        token_type: value.token_type,
-        extra_json: value.extra_json,
-        refresh_source: value.refresh_source,
-    }
-}
-
 /// Converts a wire `ExternalCredentialTokenResponse` to its native message.
-pub fn from_wire_external_credential_token_response(
+pub(crate) fn from_wire_external_credential_token_response(
     value: v1::ExternalCredentialTokenResponse,
 ) -> ExternalCredentialTokenResponse {
     ExternalCredentialTokenResponse {
@@ -495,7 +391,7 @@ pub fn from_wire_external_credential_token_response(
 }
 
 /// Converts a native `GetExternalCredentialRequest` to its wire message.
-pub fn to_wire_get_external_credential_request(
+pub(crate) fn to_wire_get_external_credential_request(
     value: GetExternalCredentialRequest,
 ) -> v1::GetExternalCredentialRequest {
     v1::GetExternalCredentialRequest {
@@ -503,17 +399,8 @@ pub fn to_wire_get_external_credential_request(
     }
 }
 
-/// Converts a wire `GetExternalCredentialRequest` to its native message.
-pub fn from_wire_get_external_credential_request(
-    value: v1::GetExternalCredentialRequest,
-) -> GetExternalCredentialRequest {
-    GetExternalCredentialRequest {
-        lookup: value.lookup.map(from_wire_external_credential_lookup),
-    }
-}
-
 /// Converts a native `ListExternalCredentialsRequest` to its wire message.
-pub fn to_wire_list_external_credentials_request(
+pub(crate) fn to_wire_list_external_credentials_request(
     value: ListExternalCredentialsRequest,
 ) -> v1::ListExternalCredentialsRequest {
     v1::ListExternalCredentialsRequest {
@@ -523,32 +410,8 @@ pub fn to_wire_list_external_credentials_request(
     }
 }
 
-/// Converts a wire `ListExternalCredentialsRequest` to its native message.
-pub fn from_wire_list_external_credentials_request(
-    value: v1::ListExternalCredentialsRequest,
-) -> ListExternalCredentialsRequest {
-    ListExternalCredentialsRequest {
-        subject_id: value.subject_id,
-        instance: value.instance,
-        connection_id: value.connection_id,
-    }
-}
-
-/// Converts a native `ListExternalCredentialsResponse` to its wire message.
-pub fn to_wire_list_external_credentials_response(
-    value: ListExternalCredentialsResponse,
-) -> v1::ListExternalCredentialsResponse {
-    v1::ListExternalCredentialsResponse {
-        credentials: value
-            .credentials
-            .into_iter()
-            .map(to_wire_external_credential)
-            .collect(),
-    }
-}
-
 /// Converts a wire `ListExternalCredentialsResponse` to its native message.
-pub fn from_wire_list_external_credentials_response(
+pub(crate) fn from_wire_list_external_credentials_response(
     value: v1::ListExternalCredentialsResponse,
 ) -> ListExternalCredentialsResponse {
     ListExternalCredentialsResponse {
@@ -561,7 +424,7 @@ pub fn from_wire_list_external_credentials_response(
 }
 
 /// Converts a native `ResolveExternalCredentialRequest` to its wire message.
-pub fn to_wire_resolve_external_credential_request(
+pub(crate) fn to_wire_resolve_external_credential_request(
     value: ResolveExternalCredentialRequest,
 ) -> v1::ResolveExternalCredentialRequest {
     v1::ResolveExternalCredentialRequest {
@@ -577,38 +440,8 @@ pub fn to_wire_resolve_external_credential_request(
     }
 }
 
-/// Converts a wire `ResolveExternalCredentialRequest` to its native message.
-pub fn from_wire_resolve_external_credential_request(
-    value: v1::ResolveExternalCredentialRequest,
-) -> ResolveExternalCredentialRequest {
-    ResolveExternalCredentialRequest {
-        provider: value.provider,
-        connection: value.connection,
-        connection_id: value.connection_id,
-        mode: value.mode,
-        credential_subject_id: value.credential_subject_id,
-        actor_subject_id: value.actor_subject_id,
-        instance: value.instance,
-        auth: value.auth.map(from_wire_external_credential_auth_config),
-        connection_params: value.connection_params,
-    }
-}
-
-/// Converts a native `ResolveExternalCredentialResponse` to its wire message.
-pub fn to_wire_resolve_external_credential_response(
-    value: ResolveExternalCredentialResponse,
-) -> v1::ResolveExternalCredentialResponse {
-    v1::ResolveExternalCredentialResponse {
-        token: value.token,
-        expires_at: value.expires_at.map(to_wire_timestamp),
-        metadata_json: value.metadata_json,
-        params: value.params,
-        credential: value.credential.map(to_wire_external_credential),
-    }
-}
-
 /// Converts a wire `ResolveExternalCredentialResponse` to its native message.
-pub fn from_wire_resolve_external_credential_response(
+pub(crate) fn from_wire_resolve_external_credential_response(
     value: v1::ResolveExternalCredentialResponse,
 ) -> ResolveExternalCredentialResponse {
     ResolveExternalCredentialResponse {
@@ -621,7 +454,7 @@ pub fn from_wire_resolve_external_credential_response(
 }
 
 /// Converts a native `UpsertExternalCredentialRequest` to its wire message.
-pub fn to_wire_upsert_external_credential_request(
+pub(crate) fn to_wire_upsert_external_credential_request(
     value: UpsertExternalCredentialRequest,
 ) -> v1::UpsertExternalCredentialRequest {
     v1::UpsertExternalCredentialRequest {
@@ -630,18 +463,8 @@ pub fn to_wire_upsert_external_credential_request(
     }
 }
 
-/// Converts a wire `UpsertExternalCredentialRequest` to its native message.
-pub fn from_wire_upsert_external_credential_request(
-    value: v1::UpsertExternalCredentialRequest,
-) -> UpsertExternalCredentialRequest {
-    UpsertExternalCredentialRequest {
-        credential: value.credential.map(from_wire_external_credential),
-        preserve_timestamps: value.preserve_timestamps,
-    }
-}
-
 /// Converts a native `ValidateExternalCredentialConfigRequest` to its wire message.
-pub fn to_wire_validate_external_credential_config_request(
+pub(crate) fn to_wire_validate_external_credential_config_request(
     value: ValidateExternalCredentialConfigRequest,
 ) -> v1::ValidateExternalCredentialConfigRequest {
     v1::ValidateExternalCredentialConfigRequest {
@@ -650,20 +473,6 @@ pub fn to_wire_validate_external_credential_config_request(
         connection_id: value.connection_id,
         mode: value.mode,
         auth: value.auth.map(to_wire_external_credential_auth_config),
-        connection_params: value.connection_params,
-    }
-}
-
-/// Converts a wire `ValidateExternalCredentialConfigRequest` to its native message.
-pub fn from_wire_validate_external_credential_config_request(
-    value: v1::ValidateExternalCredentialConfigRequest,
-) -> ValidateExternalCredentialConfigRequest {
-    ValidateExternalCredentialConfigRequest {
-        provider: value.provider,
-        connection: value.connection,
-        connection_id: value.connection_id,
-        mode: value.mode,
-        auth: value.auth.map(from_wire_external_credential_auth_config),
         connection_params: value.connection_params,
     }
 }

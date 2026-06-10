@@ -13,16 +13,13 @@ import grpc
 from ._gen.v1 import s3_pb2 as _s3_pb2
 from ._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from .rpc_support import (
-    call_unary,
-    from_wire_timestamp,
-    map_recv,
-    map_send,
-    to_wire_timestamp,
+    _call_unary,
+    _from_wire_timestamp,
+    _map_recv,
+    _map_send,
+    _to_wire_enum,
+    _to_wire_timestamp,
 )
-
-_wire: Any = _s3_pb2
-_wire_grpc: Any = _s3_pb2_grpc
-
 
 # Open enum: unknown numeric values are preserved, so the type is int.
 PresignMethod = int
@@ -214,54 +211,54 @@ class WriteObjectResponse:
     meta: S3ObjectMeta | None = None
 
 
-def to_wire_byte_range(value: ByteRange) -> Any:
-    return _wire.ByteRange(
+def _to_wire_byte_range(value: ByteRange) -> Any:
+    return _s3_pb2.ByteRange(
         start=value.start,
         end=value.end,
     )
 
 
-def from_wire_byte_range(value: Any) -> ByteRange:
+def _from_wire_byte_range(value: Any) -> ByteRange:
     return ByteRange(
         start=value.start if value.HasField("start") else None,
         end=value.end if value.HasField("end") else None,
     )
 
 
-def to_wire_copy_object_request(value: CopyObjectRequest) -> Any:
-    return _wire.CopyObjectRequest(
-        source=None if value.source is None else to_wire_s3_object_ref(value.source),
-        destination=None if value.destination is None else to_wire_s3_object_ref(value.destination),
+def _to_wire_copy_object_request(value: CopyObjectRequest) -> Any:
+    return _s3_pb2.CopyObjectRequest(
+        source=None if value.source is None else _to_wire_s3_object_ref(value.source),
+        destination=None if value.destination is None else _to_wire_s3_object_ref(value.destination),
         if_match=value.if_match,
         if_none_match=value.if_none_match,
     )
 
 
-def from_wire_copy_object_request(value: Any) -> CopyObjectRequest:
+def _from_wire_copy_object_request(value: Any) -> CopyObjectRequest:
     return CopyObjectRequest(
-        source=from_wire_s3_object_ref(value.source) if value.HasField("source") else None,
-        destination=from_wire_s3_object_ref(value.destination) if value.HasField("destination") else None,
+        source=_from_wire_s3_object_ref(value.source) if value.HasField("source") else None,
+        destination=_from_wire_s3_object_ref(value.destination) if value.HasField("destination") else None,
         if_match=value.if_match,
         if_none_match=value.if_none_match,
     )
 
 
-def to_wire_copy_object_response(value: CopyObjectResponse) -> Any:
-    return _wire.CopyObjectResponse(
-        meta=None if value.meta is None else to_wire_s3_object_meta(value.meta),
+def _to_wire_copy_object_response(value: CopyObjectResponse) -> Any:
+    return _s3_pb2.CopyObjectResponse(
+        meta=None if value.meta is None else _to_wire_s3_object_meta(value.meta),
     )
 
 
-def from_wire_copy_object_response(value: Any) -> CopyObjectResponse:
+def _from_wire_copy_object_response(value: Any) -> CopyObjectResponse:
     return CopyObjectResponse(
-        meta=from_wire_s3_object_meta(value.meta) if value.HasField("meta") else None,
+        meta=_from_wire_s3_object_meta(value.meta) if value.HasField("meta") else None,
     )
 
 
-def to_wire_create_object_access_url_request(value: CreateObjectAccessURLRequest) -> Any:
-    return _wire.CreateObjectAccessURLRequest(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
-        method=value.method,
+def _to_wire_create_object_access_url_request(value: CreateObjectAccessURLRequest) -> Any:
+    return _s3_pb2.CreateObjectAccessURLRequest(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
+        method=_to_wire_enum(value.method),
         expires_seconds=value.expires_seconds,
         content_type=value.content_type,
         content_disposition=value.content_disposition,
@@ -269,9 +266,9 @@ def to_wire_create_object_access_url_request(value: CreateObjectAccessURLRequest
     )
 
 
-def from_wire_create_object_access_url_request(value: Any) -> CreateObjectAccessURLRequest:
+def _from_wire_create_object_access_url_request(value: Any) -> CreateObjectAccessURLRequest:
     return CreateObjectAccessURLRequest(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
         method=value.method,
         expires_seconds=value.expires_seconds,
         content_type=value.content_type,
@@ -280,62 +277,62 @@ def from_wire_create_object_access_url_request(value: Any) -> CreateObjectAccess
     )
 
 
-def to_wire_create_object_access_url_response(value: CreateObjectAccessURLResponse) -> Any:
-    return _wire.CreateObjectAccessURLResponse(
+def _to_wire_create_object_access_url_response(value: CreateObjectAccessURLResponse) -> Any:
+    return _s3_pb2.CreateObjectAccessURLResponse(
         url=value.url,
-        method=value.method,
-        expires_at=None if value.expires_at is None else to_wire_timestamp(value.expires_at),
+        method=_to_wire_enum(value.method),
+        expires_at=None if value.expires_at is None else _to_wire_timestamp(value.expires_at),
         headers=value.headers,
     )
 
 
-def from_wire_create_object_access_url_response(value: Any) -> CreateObjectAccessURLResponse:
+def _from_wire_create_object_access_url_response(value: Any) -> CreateObjectAccessURLResponse:
     return CreateObjectAccessURLResponse(
         url=value.url,
         method=value.method,
-        expires_at=from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
+        expires_at=_from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
         headers=dict(value.headers),
     )
 
 
-def to_wire_delete_object_request(value: DeleteObjectRequest) -> Any:
-    return _wire.DeleteObjectRequest(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
+def _to_wire_delete_object_request(value: DeleteObjectRequest) -> Any:
+    return _s3_pb2.DeleteObjectRequest(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
     )
 
 
-def from_wire_delete_object_request(value: Any) -> DeleteObjectRequest:
+def _from_wire_delete_object_request(value: Any) -> DeleteObjectRequest:
     return DeleteObjectRequest(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
     )
 
 
-def to_wire_head_object_request(value: HeadObjectRequest) -> Any:
-    return _wire.HeadObjectRequest(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
+def _to_wire_head_object_request(value: HeadObjectRequest) -> Any:
+    return _s3_pb2.HeadObjectRequest(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
     )
 
 
-def from_wire_head_object_request(value: Any) -> HeadObjectRequest:
+def _from_wire_head_object_request(value: Any) -> HeadObjectRequest:
     return HeadObjectRequest(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
     )
 
 
-def to_wire_head_object_response(value: HeadObjectResponse) -> Any:
-    return _wire.HeadObjectResponse(
-        meta=None if value.meta is None else to_wire_s3_object_meta(value.meta),
+def _to_wire_head_object_response(value: HeadObjectResponse) -> Any:
+    return _s3_pb2.HeadObjectResponse(
+        meta=None if value.meta is None else _to_wire_s3_object_meta(value.meta),
     )
 
 
-def from_wire_head_object_response(value: Any) -> HeadObjectResponse:
+def _from_wire_head_object_response(value: Any) -> HeadObjectResponse:
     return HeadObjectResponse(
-        meta=from_wire_s3_object_meta(value.meta) if value.HasField("meta") else None,
+        meta=_from_wire_s3_object_meta(value.meta) if value.HasField("meta") else None,
     )
 
 
-def to_wire_list_objects_request(value: ListObjectsRequest) -> Any:
-    return _wire.ListObjectsRequest(
+def _to_wire_list_objects_request(value: ListObjectsRequest) -> Any:
+    return _s3_pb2.ListObjectsRequest(
         prefix=value.prefix,
         delimiter=value.delimiter,
         continuation_token=value.continuation_token,
@@ -344,7 +341,7 @@ def to_wire_list_objects_request(value: ListObjectsRequest) -> Any:
     )
 
 
-def from_wire_list_objects_request(value: Any) -> ListObjectsRequest:
+def _from_wire_list_objects_request(value: Any) -> ListObjectsRequest:
     return ListObjectsRequest(
         prefix=value.prefix,
         delimiter=value.delimiter,
@@ -354,28 +351,28 @@ def from_wire_list_objects_request(value: Any) -> ListObjectsRequest:
     )
 
 
-def to_wire_list_objects_response(value: ListObjectsResponse) -> Any:
-    return _wire.ListObjectsResponse(
-        objects=[to_wire_s3_object_meta(item) for item in value.objects],
+def _to_wire_list_objects_response(value: ListObjectsResponse) -> Any:
+    return _s3_pb2.ListObjectsResponse(
+        objects=[_to_wire_s3_object_meta(item) for item in value.objects],
         common_prefixes=value.common_prefixes,
         next_continuation_token=value.next_continuation_token,
         has_more=value.has_more,
     )
 
 
-def from_wire_list_objects_response(value: Any) -> ListObjectsResponse:
+def _from_wire_list_objects_response(value: Any) -> ListObjectsResponse:
     return ListObjectsResponse(
-        objects=[from_wire_s3_object_meta(item) for item in value.objects],
+        objects=[_from_wire_s3_object_meta(item) for item in value.objects],
         common_prefixes=list(value.common_prefixes),
         next_continuation_token=value.next_continuation_token,
         has_more=value.has_more,
     )
 
 
-def to_wire_presign_object_request(value: PresignObjectRequest) -> Any:
-    return _wire.PresignObjectRequest(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
-        method=value.method,
+def _to_wire_presign_object_request(value: PresignObjectRequest) -> Any:
+    return _s3_pb2.PresignObjectRequest(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
+        method=_to_wire_enum(value.method),
         expires_seconds=value.expires_seconds,
         content_type=value.content_type,
         content_disposition=value.content_disposition,
@@ -383,9 +380,9 @@ def to_wire_presign_object_request(value: PresignObjectRequest) -> Any:
     )
 
 
-def from_wire_presign_object_request(value: Any) -> PresignObjectRequest:
+def _from_wire_presign_object_request(value: Any) -> PresignObjectRequest:
     return PresignObjectRequest(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
         method=value.method,
         expires_seconds=value.expires_seconds,
         content_type=value.content_type,
@@ -394,31 +391,31 @@ def from_wire_presign_object_request(value: Any) -> PresignObjectRequest:
     )
 
 
-def to_wire_presign_object_response(value: PresignObjectResponse) -> Any:
-    return _wire.PresignObjectResponse(
+def _to_wire_presign_object_response(value: PresignObjectResponse) -> Any:
+    return _s3_pb2.PresignObjectResponse(
         url=value.url,
-        method=value.method,
-        expires_at=None if value.expires_at is None else to_wire_timestamp(value.expires_at),
+        method=_to_wire_enum(value.method),
+        expires_at=None if value.expires_at is None else _to_wire_timestamp(value.expires_at),
         headers=value.headers,
     )
 
 
-def from_wire_presign_object_response(value: Any) -> PresignObjectResponse:
+def _from_wire_presign_object_response(value: Any) -> PresignObjectResponse:
     return PresignObjectResponse(
         url=value.url,
         method=value.method,
-        expires_at=from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
+        expires_at=_from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
         headers=dict(value.headers),
     )
 
 
-def to_wire_read_object_chunk(value: ReadObjectChunk) -> Any:
-    return _wire.ReadObjectChunk(
+def _to_wire_read_object_chunk(value: ReadObjectChunk) -> Any:
+    return _s3_pb2.ReadObjectChunk(
         **_to_wire_read_object_chunk_result(value.result),
     )
 
 
-def from_wire_read_object_chunk(value: Any) -> ReadObjectChunk:
+def _from_wire_read_object_chunk(value: Any) -> ReadObjectChunk:
     return ReadObjectChunk(
         result=_from_wire_read_object_chunk_result(value),
     )
@@ -426,7 +423,7 @@ def from_wire_read_object_chunk(value: Any) -> ReadObjectChunk:
 
 def _to_wire_read_object_chunk_result(value: ReadObjectChunkResult) -> dict[str, Any]:
     if isinstance(value, ReadObjectChunkMeta):
-        return {"meta": to_wire_s3_object_meta(value.value)}
+        return {"meta": _to_wire_s3_object_meta(value.value)}
     if isinstance(value, ReadObjectChunkData):
         return {"data": value.value}
     return {}
@@ -435,75 +432,75 @@ def _to_wire_read_object_chunk_result(value: ReadObjectChunkResult) -> dict[str,
 def _from_wire_read_object_chunk_result(value: Any) -> ReadObjectChunkResult:
     case = value.WhichOneof("result")
     if case == "meta":
-        return ReadObjectChunkMeta(value=from_wire_s3_object_meta(value.meta))
+        return ReadObjectChunkMeta(value=_from_wire_s3_object_meta(value.meta))
     if case == "data":
         return ReadObjectChunkData(value=value.data)
     return None
 
 
-def to_wire_read_object_request(value: ReadObjectRequest) -> Any:
-    return _wire.ReadObjectRequest(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
-        range=None if value.range is None else to_wire_byte_range(value.range),
+def _to_wire_read_object_request(value: ReadObjectRequest) -> Any:
+    return _s3_pb2.ReadObjectRequest(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
+        range=None if value.range is None else _to_wire_byte_range(value.range),
         if_match=value.if_match,
         if_none_match=value.if_none_match,
-        if_modified_since=None if value.if_modified_since is None else to_wire_timestamp(value.if_modified_since),
-        if_unmodified_since=None if value.if_unmodified_since is None else to_wire_timestamp(value.if_unmodified_since),
+        if_modified_since=None if value.if_modified_since is None else _to_wire_timestamp(value.if_modified_since),
+        if_unmodified_since=None if value.if_unmodified_since is None else _to_wire_timestamp(value.if_unmodified_since),
     )
 
 
-def from_wire_read_object_request(value: Any) -> ReadObjectRequest:
+def _from_wire_read_object_request(value: Any) -> ReadObjectRequest:
     return ReadObjectRequest(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
-        range=from_wire_byte_range(value.range) if value.HasField("range") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        range=_from_wire_byte_range(value.range) if value.HasField("range") else None,
         if_match=value.if_match,
         if_none_match=value.if_none_match,
-        if_modified_since=from_wire_timestamp(value.if_modified_since) if value.HasField("if_modified_since") else None,
-        if_unmodified_since=from_wire_timestamp(value.if_unmodified_since) if value.HasField("if_unmodified_since") else None,
+        if_modified_since=_from_wire_timestamp(value.if_modified_since) if value.HasField("if_modified_since") else None,
+        if_unmodified_since=_from_wire_timestamp(value.if_unmodified_since) if value.HasField("if_unmodified_since") else None,
     )
 
 
-def to_wire_s3_object_meta(value: S3ObjectMeta) -> Any:
-    return _wire.S3ObjectMeta(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
+def _to_wire_s3_object_meta(value: S3ObjectMeta) -> Any:
+    return _s3_pb2.S3ObjectMeta(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
         etag=value.etag,
         size=value.size,
         content_type=value.content_type,
-        last_modified=None if value.last_modified is None else to_wire_timestamp(value.last_modified),
+        last_modified=None if value.last_modified is None else _to_wire_timestamp(value.last_modified),
         metadata=value.metadata,
         storage_class=value.storage_class,
     )
 
 
-def from_wire_s3_object_meta(value: Any) -> S3ObjectMeta:
+def _from_wire_s3_object_meta(value: Any) -> S3ObjectMeta:
     return S3ObjectMeta(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
         etag=value.etag,
         size=value.size,
         content_type=value.content_type,
-        last_modified=from_wire_timestamp(value.last_modified) if value.HasField("last_modified") else None,
+        last_modified=_from_wire_timestamp(value.last_modified) if value.HasField("last_modified") else None,
         metadata=dict(value.metadata),
         storage_class=value.storage_class,
     )
 
 
-def to_wire_s3_object_ref(value: S3ObjectRef) -> Any:
-    return _wire.S3ObjectRef(
+def _to_wire_s3_object_ref(value: S3ObjectRef) -> Any:
+    return _s3_pb2.S3ObjectRef(
         key=value.key,
         version_id=value.version_id,
     )
 
 
-def from_wire_s3_object_ref(value: Any) -> S3ObjectRef:
+def _from_wire_s3_object_ref(value: Any) -> S3ObjectRef:
     return S3ObjectRef(
         key=value.key,
         version_id=value.version_id,
     )
 
 
-def to_wire_write_object_open(value: WriteObjectOpen) -> Any:
-    return _wire.WriteObjectOpen(
-        ref=None if value.ref is None else to_wire_s3_object_ref(value.ref),
+def _to_wire_write_object_open(value: WriteObjectOpen) -> Any:
+    return _s3_pb2.WriteObjectOpen(
+        ref=None if value.ref is None else _to_wire_s3_object_ref(value.ref),
         content_type=value.content_type,
         cache_control=value.cache_control,
         content_disposition=value.content_disposition,
@@ -515,9 +512,9 @@ def to_wire_write_object_open(value: WriteObjectOpen) -> Any:
     )
 
 
-def from_wire_write_object_open(value: Any) -> WriteObjectOpen:
+def _from_wire_write_object_open(value: Any) -> WriteObjectOpen:
     return WriteObjectOpen(
-        ref=from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
+        ref=_from_wire_s3_object_ref(value.ref) if value.HasField("ref") else None,
         content_type=value.content_type,
         cache_control=value.cache_control,
         content_disposition=value.content_disposition,
@@ -529,13 +526,13 @@ def from_wire_write_object_open(value: Any) -> WriteObjectOpen:
     )
 
 
-def to_wire_write_object_request(value: WriteObjectRequest) -> Any:
-    return _wire.WriteObjectRequest(
+def _to_wire_write_object_request(value: WriteObjectRequest) -> Any:
+    return _s3_pb2.WriteObjectRequest(
         **_to_wire_write_object_request_msg(value.msg),
     )
 
 
-def from_wire_write_object_request(value: Any) -> WriteObjectRequest:
+def _from_wire_write_object_request(value: Any) -> WriteObjectRequest:
     return WriteObjectRequest(
         msg=_from_wire_write_object_request_msg(value),
     )
@@ -543,7 +540,7 @@ def from_wire_write_object_request(value: Any) -> WriteObjectRequest:
 
 def _to_wire_write_object_request_msg(value: WriteObjectRequestMsg) -> dict[str, Any]:
     if isinstance(value, WriteObjectRequestOpen):
-        return {"open": to_wire_write_object_open(value.value)}
+        return {"open": _to_wire_write_object_open(value.value)}
     if isinstance(value, WriteObjectRequestData):
         return {"data": value.value}
     return {}
@@ -552,21 +549,21 @@ def _to_wire_write_object_request_msg(value: WriteObjectRequestMsg) -> dict[str,
 def _from_wire_write_object_request_msg(value: Any) -> WriteObjectRequestMsg:
     case = value.WhichOneof("msg")
     if case == "open":
-        return WriteObjectRequestOpen(value=from_wire_write_object_open(value.open))
+        return WriteObjectRequestOpen(value=_from_wire_write_object_open(value.open))
     if case == "data":
         return WriteObjectRequestData(value=value.data)
     return None
 
 
-def to_wire_write_object_response(value: WriteObjectResponse) -> Any:
-    return _wire.WriteObjectResponse(
-        meta=None if value.meta is None else to_wire_s3_object_meta(value.meta),
+def _to_wire_write_object_response(value: WriteObjectResponse) -> Any:
+    return _s3_pb2.WriteObjectResponse(
+        meta=None if value.meta is None else _to_wire_s3_object_meta(value.meta),
     )
 
 
-def from_wire_write_object_response(value: Any) -> WriteObjectResponse:
+def _from_wire_write_object_response(value: Any) -> WriteObjectResponse:
     return WriteObjectResponse(
-        meta=from_wire_s3_object_meta(value.meta) if value.HasField("meta") else None,
+        meta=_from_wire_s3_object_meta(value.meta) if value.HasField("meta") else None,
     )
 
 
@@ -574,41 +571,41 @@ class S3:
     """Client for the gestalt.provider.v1.S3 service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.S3Stub(channel)
+        self._stub = _s3_pb2_grpc.S3Stub(channel)
 
     def head_object(self, request: HeadObjectRequest) -> HeadObjectResponse:
-        response = call_unary(lambda: self._stub.HeadObject(to_wire_head_object_request(request)))
-        return from_wire_head_object_response(response)
+        response = _call_unary(lambda: self._stub.HeadObject(_to_wire_head_object_request(request)))
+        return _from_wire_head_object_response(response)
 
     def read_object(self, request: ReadObjectRequest) -> Iterator[ReadObjectChunk]:
-        return map_recv(self._stub.ReadObject(to_wire_read_object_request(request)), from_wire_read_object_chunk)
+        return _map_recv(self._stub.ReadObject(_to_wire_read_object_request(request)), _from_wire_read_object_chunk)
 
     def write_object(self, requests: Iterable[WriteObjectRequest]) -> WriteObjectResponse:
-        response = call_unary(lambda: self._stub.WriteObject(map_send(requests, to_wire_write_object_request)))
-        return from_wire_write_object_response(response)
+        response = _call_unary(lambda: self._stub.WriteObject(_map_send(requests, _to_wire_write_object_request)))
+        return _from_wire_write_object_response(response)
 
     def delete_object(self, request: DeleteObjectRequest) -> None:
-        call_unary(lambda: self._stub.DeleteObject(to_wire_delete_object_request(request)))
+        _call_unary(lambda: self._stub.DeleteObject(_to_wire_delete_object_request(request)))
 
     def list_objects(self, request: ListObjectsRequest) -> ListObjectsResponse:
-        response = call_unary(lambda: self._stub.ListObjects(to_wire_list_objects_request(request)))
-        return from_wire_list_objects_response(response)
+        response = _call_unary(lambda: self._stub.ListObjects(_to_wire_list_objects_request(request)))
+        return _from_wire_list_objects_response(response)
 
     def copy_object(self, request: CopyObjectRequest) -> CopyObjectResponse:
-        response = call_unary(lambda: self._stub.CopyObject(to_wire_copy_object_request(request)))
-        return from_wire_copy_object_response(response)
+        response = _call_unary(lambda: self._stub.CopyObject(_to_wire_copy_object_request(request)))
+        return _from_wire_copy_object_response(response)
 
     def presign_object(self, request: PresignObjectRequest) -> PresignObjectResponse:
-        response = call_unary(lambda: self._stub.PresignObject(to_wire_presign_object_request(request)))
-        return from_wire_presign_object_response(response)
+        response = _call_unary(lambda: self._stub.PresignObject(_to_wire_presign_object_request(request)))
+        return _from_wire_presign_object_response(response)
 
 
 class S3ObjectAccess:
     """Client for the gestalt.provider.v1.S3ObjectAccess service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.S3ObjectAccessStub(channel)
+        self._stub = _s3_pb2_grpc.S3ObjectAccessStub(channel)
 
     def create_object_access_url(self, request: CreateObjectAccessURLRequest) -> CreateObjectAccessURLResponse:
-        response = call_unary(lambda: self._stub.CreateObjectAccessURL(to_wire_create_object_access_url_request(request)))
-        return from_wire_create_object_access_url_response(response)
+        response = _call_unary(lambda: self._stub.CreateObjectAccessURL(_to_wire_create_object_access_url_request(request)))
+        return _from_wire_create_object_access_url_response(response)

@@ -64,14 +64,25 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"pub struct GestaltError {",
 		"impl From<tonic::Status> for GestaltError",
 		"pub struct RpcStatus {",
-		"pub fn from_wire_duration(value: prost_types::Duration) -> Duration",
+		"pub(crate) fn to_wire_duration(value: Duration) -> prost_types::Duration",
 	)
 	// Wire references must use prost's heck idents even when the proto name
-	// diverges; native types keep the raw proto local name.
+	// diverges; native types keep the raw proto local name. Converters are
+	// crate-private and only the needed direction is emitted.
 	assertContains(t, files, "app.rs",
-		"pub fn to_wire_http_subject_request(value: HTTPSubjectRequest) -> v1::HttpSubjectRequest {",
-		"pub fn from_wire_app_invoke_graph_ql_request(value: v1::AppInvokeGraphQlRequest) -> AppInvokeGraphQLRequest {",
+		"pub(crate) fn to_wire_http_subject_request(value: HTTPSubjectRequest) -> v1::HttpSubjectRequest {",
+		"pub(crate) fn to_wire_app_invoke_graph_ql_request(value: AppInvokeGraphQLRequest) -> v1::AppInvokeGraphQlRequest {",
+		"pub(crate) fn from_wire_resolve_http_subject_response(value: v1::ResolveHttpSubjectResponse) -> ResolveHTTPSubjectResponse {",
 		"self.inner.invoke_graph_ql(",
+	)
+	assertNotContains(t, files, "app.rs",
+		"pub fn to_wire_",
+		"pub fn from_wire_",
+		"fn from_wire_app_invoke_graph_ql_request",
+	)
+	assertNotContains(t, files, "rpc_support.rs",
+		"fn from_wire_duration",
+		"fn to_wire_status",
 	)
 	assertContains(t, files, "s3.rs",
 		"inner: v1::s3_object_access_client::S3ObjectAccessClient<tonic::transport::Channel>,",
@@ -110,6 +121,16 @@ func assertContains(t *testing.T, files map[string]string, path string, wants ..
 	for _, want := range wants {
 		if !strings.Contains(content, want) {
 			t.Errorf("%s missing %q", path, want)
+		}
+	}
+}
+
+func assertNotContains(t *testing.T, files map[string]string, path string, rejects ...string) {
+	t.Helper()
+	content := files[path]
+	for _, reject := range rejects {
+		if strings.Contains(content, reject) {
+			t.Errorf("%s contains %q", path, reject)
 		}
 	}
 }

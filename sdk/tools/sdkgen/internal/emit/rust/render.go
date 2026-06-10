@@ -276,7 +276,15 @@ func (r *renderer) renderMessage(m *model.Message) {
 	r.body.WriteString("}\n\n")
 }
 
+// renderConversions emits the crate-private wire converters a message needs.
+// Only directions with callers are emitted: requests convert to the wire,
+// responses from it, so every pub(crate) converter stays live at crate level.
 func (r *renderer) renderConversions(m *model.Message) {
+	needTo := r.idx.needToWire[m.FullName]
+	needFrom := r.idx.needFromWire[m.FullName]
+	if !needTo && !needFrom {
+		return
+	}
 	name := localName(m.FullName)
 	wireName := wireTypeName(m.FullName)
 	r.features.v1 = true
@@ -285,48 +293,57 @@ func (r *renderer) renderConversions(m *model.Message) {
 		param = "_value"
 	}
 
-	fmt.Fprintf(&r.body, "/// Converts a native `%s` to its wire message.\n", name)
-	fmt.Fprintf(&r.body, "pub fn %s(%s: %s) -> v1::%s {\n", toWireFunc(m.FullName), param, name, wireName)
-	fmt.Fprintf(&r.body, "    v1::%s {\n", wireName)
-	for _, f := range m.Fields {
-		if f.OneofIndex >= 0 {
-			continue
+	if needTo {
+		fmt.Fprintf(&r.body, "/// Converts a native `%s` to its wire message.\n", name)
+		fmt.Fprintf(&r.body, "pub(crate) fn %s(%s: %s) -> v1::%s {\n", toWireFunc(m.FullName), param, name, wireName)
+		fmt.Fprintf(&r.body, "    v1::%s {\n", wireName)
+		for _, f := range m.Fields {
+			if f.OneofIndex >= 0 {
+				continue
+			}
+			ident := escapeIdent(f.Name)
+			fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldToWire(f, "value."+ident))
 		}
-		ident := escapeIdent(f.Name)
-		fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldToWire(f, "value."+ident))
-	}
-	for _, o := range m.Oneofs {
-		ident := escapeIdent(o.Name)
-		fmt.Fprintf(&r.body, "        %s: value.%s.map(%s),\n", ident, ident, oneofToWireFunc(m, o))
-	}
-	r.body.WriteString("    }\n}\n\n")
-
-	fmt.Fprintf(&r.body, "/// Converts a wire `%s` to its native message.\n", name)
-	fmt.Fprintf(&r.body, "pub fn %s(%s: v1::%s) -> %s {\n", fromWireFunc(m.FullName), param, wireName, name)
-	fmt.Fprintf(&r.body, "    %s {\n", name)
-	for _, f := range m.Fields {
-		if f.OneofIndex >= 0 {
-			continue
+		for _, o := range m.Oneofs {
+			ident := escapeIdent(o.Name)
+			fmt.Fprintf(&r.body, "        %s: value.%s.map(%s),\n", ident, ident, oneofToWireFunc(m, o))
 		}
-		ident := escapeIdent(f.Name)
-		fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldFromWire(f, "value."+ident))
+		r.body.WriteString("    }\n}\n\n")
 	}
-	for _, o := range m.Oneofs {
-		ident := escapeIdent(o.Name)
-		fmt.Fprintf(&r.body, "        %s: value.%s.map(%s),\n", ident, ident, oneofFromWireFunc(m, o))
+
+	if needFrom {
+		fmt.Fprintf(&r.body, "/// Converts a wire `%s` to its native message.\n", name)
+		fmt.Fprintf(&r.body, "pub(crate) fn %s(%s: v1::%s) -> %s {\n", fromWireFunc(m.FullName), param, wireName, name)
+		fmt.Fprintf(&r.body, "    %s {\n", name)
+		for _, f := range m.Fields {
+			if f.OneofIndex >= 0 {
+				continue
+			}
+			ident := escapeIdent(f.Name)
+			fmt.Fprintf(&r.body, "        %s: %s,\n", ident, r.fieldFromWire(f, "value."+ident))
+		}
+		for _, o := range m.Oneofs {
+			ident := escapeIdent(o.Name)
+			fmt.Fprintf(&r.body, "        %s: value.%s.map(%s),\n", ident, ident, oneofFromWireFunc(m, o))
+		}
+		r.body.WriteString("    }\n}\n\n")
 	}
-	r.body.WriteString("    }\n}\n\n")
 
 	for _, o := range m.Oneofs {
-		r.renderOneofConverters(m, o)
+		if needTo {
+			r.renderOneofToWire(m, o)
+		}
+		if needFrom {
+			r.renderOneofFromWire(m, o)
+		}
 	}
 }
 
-func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
+func (r *renderer) renderOneofToWire(m *model.Message, o *model.Oneof) {
 	unionName := oneofTypeName(m, o)
 	wireKind := wireOneofKind(m, o)
 
-	fmt.Fprintf(&r.body, "fn %s(value: %s) -> %s {\n", oneofToWireFunc(m, o), unionName, wireKind)
+	fmt.Fprintf(&r.body, "pub(crate) fn %s(value: %s) -> %s {\n", oneofToWireFunc(m, o), unionName, wireKind)
 	r.body.WriteString("    match value {\n")
 	for _, f := range oneofFields(m, o) {
 		variant := heckUpperCamel(f.Name)
@@ -337,8 +354,13 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 		}
 	}
 	r.body.WriteString("    }\n}\n\n")
+}
 
-	fmt.Fprintf(&r.body, "fn %s(value: %s) -> %s {\n", oneofFromWireFunc(m, o), wireKind, unionName)
+func (r *renderer) renderOneofFromWire(m *model.Message, o *model.Oneof) {
+	unionName := oneofTypeName(m, o)
+	wireKind := wireOneofKind(m, o)
+
+	fmt.Fprintf(&r.body, "pub(crate) fn %s(value: %s) -> %s {\n", oneofFromWireFunc(m, o), wireKind, unionName)
 	r.body.WriteString("    match value {\n")
 	for _, f := range oneofFields(m, o) {
 		variant := heckUpperCamel(f.Name)

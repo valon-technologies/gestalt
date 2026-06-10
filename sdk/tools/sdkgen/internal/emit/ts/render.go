@@ -8,6 +8,16 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
+// moduleKind selects which of the two generated modules per proto file is
+// being rendered: the public module (native types and the client class) or
+// the internal codec module (wire converters).
+type moduleKind int
+
+const (
+	modulePublic moduleKind = iota
+	moduleCodec
+)
+
 // features tracks which imports a generated file needs; the import header is
 // assembled after the body renders.
 type features struct {
@@ -18,31 +28,37 @@ type features struct {
 	emptySchema   bool
 	client        bool
 	hostService   bool
-	supportValues map[string]bool
-	supportTypes  map[string]bool
-	cross         map[string]map[string]bool // generated file base -> imported names
+	wire          bool
+	supportValues map[string]bool            // imported from the codec runtime module
+	supportTypes  map[string]bool            // imported from the public rpc_support module
+	crossPublic   map[string]map[string]bool // public module base -> name -> type-only
+	crossCodec    map[string]map[string]bool // codec module base -> imported converter names
 }
 
 type renderer struct {
 	idx      *index
 	base     string // generated file base currently being rendered
+	kind     moduleKind
 	features features
 	body     strings.Builder
 }
 
-func newRenderer(idx *index, base string) *renderer {
+func newRenderer(idx *index, base string, kind moduleKind) *renderer {
 	return &renderer{
 		idx:  idx,
 		base: base,
+		kind: kind,
 		features: features{
 			supportValues: map[string]bool{},
 			supportTypes:  map[string]bool{},
-			cross:         map[string]map[string]bool{},
+			crossPublic:   map[string]map[string]bool{},
+			crossCodec:    map[string]map[string]bool{},
 		},
 	}
 }
 
-// use records an import from the shared rpc_support module.
+// use records an import from a shared support module: values come from the
+// codec runtime, types from the public rpc_support module.
 func (r *renderer) use(name string, isType bool) {
 	if isType {
 		r.features.supportTypes[name] = true
@@ -51,38 +67,55 @@ func (r *renderer) use(name string, isType bool) {
 	}
 }
 
-// crossRef records an import from another generated file and returns the name
-// unchanged. References within the current file are not imports. isType marks
-// names that need a type-only import under verbatimModuleSyntax.
-func (r *renderer) crossRef(protoFile, name string) string {
-	return r.crossRefKind(protoFile, name, false)
-}
-
-func (r *renderer) crossRefKind(protoFile, name string, isType bool) string {
+// typeRef records an import of a native type declared in protoFile's public
+// module and returns the name unchanged. References from a public module to
+// its own declarations are not imports. Codec modules always import native
+// types, and only type-only: the value-level edge runs public -> codec, so
+// the reverse edge must erase under verbatimModuleSyntax.
+func (r *renderer) typeRef(protoFile, name string, isType bool) string {
 	base := generatedFileBase(protoFile)
-	if base != r.base {
-		if r.features.cross[base] == nil {
-			r.features.cross[base] = map[string]bool{}
+	if r.kind == modulePublic && base == r.base {
+		return name
+	}
+	if r.kind == moduleCodec {
+		isType = true
+	}
+	if r.features.crossPublic[base] == nil {
+		r.features.crossPublic[base] = map[string]bool{}
+	}
+	// A name imported as both type and value stays a value import.
+	if isType {
+		if _, ok := r.features.crossPublic[base][name]; !ok {
+			r.features.crossPublic[base][name] = true
 		}
-		// A name imported as both type and value stays a value import.
-		if isType {
-			if _, ok := r.features.cross[base][name]; !ok {
-				r.features.cross[base][name] = true
-			}
-		} else {
-			r.features.cross[base][name] = false
-		}
+	} else {
+		r.features.crossPublic[base][name] = false
 	}
 	return name
 }
 
+// convRef records an import of a converter from protoFile's codec module and
+// returns the name unchanged. References from a codec module to its own
+// converters are not imports.
+func (r *renderer) convRef(protoFile, name string) string {
+	base := generatedFileBase(protoFile)
+	if r.kind == moduleCodec && base == r.base {
+		return name
+	}
+	if r.features.crossCodec[base] == nil {
+		r.features.crossCodec[base] = map[string]bool{}
+	}
+	r.features.crossCodec[base][name] = true
+	return name
+}
+
 func (r *renderer) messageType(fullName string) string {
-	return r.crossRefKind(r.idx.messages[fullName].ProtoFile, localName(fullName), true)
+	return r.typeRef(r.idx.messages[fullName].ProtoFile, localName(fullName), true)
 }
 
 func (r *renderer) enumType(fullName string) string {
 	// Enum constants are value references (and types via the same name).
-	return r.crossRefKind(r.idx.enums[fullName].ProtoFile, localName(fullName), false)
+	return r.typeRef(r.idx.enums[fullName].ProtoFile, localName(fullName), false)
 }
 
 // fnToWire returns the converter function for reference kinds converted by a
@@ -90,7 +123,7 @@ func (r *renderer) enumType(fullName string) string {
 func (r *renderer) fnToWire(ref *model.TypeRef) string {
 	switch ref.Kind {
 	case model.KindMessage:
-		return r.crossRef(r.idx.messages[ref.Message].ProtoFile, toWireFunc(ref.Message))
+		return r.convRef(r.idx.messages[ref.Message].ProtoFile, toWireFunc(ref.Message))
 	case model.KindTimestamp:
 		r.use("toWireTimestamp", false)
 		return "toWireTimestamp"
@@ -112,7 +145,7 @@ func (r *renderer) fnToWire(ref *model.TypeRef) string {
 func (r *renderer) fnFromWire(ref *model.TypeRef) string {
 	switch ref.Kind {
 	case model.KindMessage:
-		return r.crossRef(r.idx.messages[ref.Message].ProtoFile, fromWireFunc(ref.Message))
+		return r.convRef(r.idx.messages[ref.Message].ProtoFile, fromWireFunc(ref.Message))
 	case model.KindTimestamp:
 		r.use("fromWireTimestamp", false)
 		return "fromWireTimestamp"
@@ -282,9 +315,11 @@ func (r *renderer) renderMessage(m *model.Message) {
 
 func (r *renderer) renderConversions(m *model.Message) {
 	name := localName(m.FullName)
+	nativeName := r.typeRef(m.ProtoFile, name, true)
 	r.features.create = true
+	r.features.wire = true
 
-	fmt.Fprintf(&r.body, "export function %s(value: %s): wire.%s {\n", toWireFunc(m.FullName), name, name)
+	fmt.Fprintf(&r.body, "export function %s(value: %s): wire.%s {\n", toWireFunc(m.FullName), nativeName, name)
 	fmt.Fprintf(&r.body, "  return create(wire.%sSchema, {\n", name)
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
@@ -302,7 +337,7 @@ func (r *renderer) renderConversions(m *model.Message) {
 	}
 	r.body.WriteString("  });\n}\n\n")
 
-	fmt.Fprintf(&r.body, "export function %s(value: wire.%s): %s {\n", fromWireFunc(m.FullName), name, name)
+	fmt.Fprintf(&r.body, "export function %s(value: wire.%s): %s {\n", fromWireFunc(m.FullName), name, nativeName)
 	r.body.WriteString("  return {\n")
 	for _, f := range m.Fields {
 		if f.OneofIndex >= 0 {
@@ -335,10 +370,10 @@ func oneofFromWireFunc(m *model.Message, o *model.Oneof) string {
 
 func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 	name := localName(m.FullName)
-	unionName := oneofTypeName(m, o)
+	unionName := r.typeRef(m.ProtoFile, oneofTypeName(m, o), true)
 	prop := oneofProp(o)
 
-	fmt.Fprintf(&r.body, "function %s(value: %s): wire.%s[%q] {\n", oneofToWireFunc(m, o), unionName, name, prop)
+	fmt.Fprintf(&r.body, "export function %s(value: %s): wire.%s[%q] {\n", oneofToWireFunc(m, o), unionName, name, prop)
 	r.body.WriteString("  switch (value.case) {\n")
 	for _, f := range oneofFields(m, o) {
 		fmt.Fprintf(&r.body, "    case %q:\n", f.JSONName)
@@ -346,7 +381,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 	}
 	r.body.WriteString("    default:\n      return { case: undefined };\n  }\n}\n\n")
 
-	fmt.Fprintf(&r.body, "function %s(value: wire.%s[%q]): %s {\n", oneofFromWireFunc(m, o), name, prop, unionName)
+	fmt.Fprintf(&r.body, "export function %s(value: wire.%s[%q]): %s {\n", oneofFromWireFunc(m, o), name, prop, unionName)
 	r.body.WriteString("  switch (value.case) {\n")
 	for _, f := range oneofFields(m, o) {
 		fmt.Fprintf(&r.body, "    case %q:\n", f.JSONName)
@@ -358,6 +393,7 @@ func (r *renderer) renderOneofConverters(m *model.Message, o *model.Oneof) {
 func (r *renderer) renderClient(svc *model.Service) {
 	name := localName(svc.FullName)
 	r.features.client = true
+	r.features.wire = true
 
 	fmt.Fprintf(&r.body, "export class %s {\n", name)
 	fmt.Fprintf(&r.body, "  private readonly client: Client<typeof wire.%s>;\n\n", name)
@@ -487,7 +523,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 		requestLines = append(requestLines, fmt.Sprintf("    const request: %s = { %s };",
 			r.messageType(m.Input.FullName), strings.Join(append(props, spreads...), ", ")))
 	}
-	requestArg := r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
+	requestArg := r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
 
 	r.use("callUnary", false)
 	collapse := r.collapseOutput(m)
@@ -505,7 +541,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 			r.body.WriteString(line + "\n")
 		}
 		fmt.Fprintf(&r.body, "    const response = %s(await callUnary(() => this.client.%s(%s)));\n",
-			r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)), methodName, requestArg)
+			r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)), methodName, requestArg)
 		for _, line := range collapse.lines {
 			r.body.WriteString(line + "\n")
 		}
@@ -517,7 +553,7 @@ func (r *renderer) renderErgonomicUnary(m *model.Method) {
 			r.body.WriteString(line + "\n")
 		}
 		fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", methodName, requestArg)
-		fmt.Fprintf(&r.body, "    return %s(response);\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		fmt.Fprintf(&r.body, "    return %s(response);\n", r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 		r.body.WriteString("  }\n\n")
 	}
 }
@@ -536,7 +572,7 @@ func (r *renderer) renderFramedRead(m *model.Method) {
 	requestArg := "{}"
 	if !m.InputIsEmpty {
 		requestParam = "request: " + r.messageType(m.Input.FullName)
-		requestArg = r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
+		requestArg = r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
 	}
 	r.use("mapRecv", false)
 	r.use("readHeaderFrame", false)
@@ -545,7 +581,7 @@ func (r *renderer) renderFramedRead(m *model.Method) {
 	fmt.Fprintf(&r.body, "  async %s(%s): Promise<{ %s: %s; %s: AsyncIterable<%s> }> {\n",
 		methodName, requestParam, header.JSONName, r.fieldType(header), chunk.JSONName, r.fieldType(chunk))
 	fmt.Fprintf(&r.body, "    const frames = mapRecv(this.client.%s(%s), %s)[Symbol.asyncIterator]();\n",
-		methodName, requestArg, r.crossRef(frames.ProtoFile, fromWireFunc(frames.FullName)))
+		methodName, requestArg, r.convRef(frames.ProtoFile, fromWireFunc(frames.FullName)))
 	fmt.Fprintf(&r.body, "    const %s = await readHeaderFrame(frames, (frame) => (frame.%s.case === %q ? frame.%s.value : undefined));\n",
 		header.JSONName, prop, header.JSONName, prop)
 	fmt.Fprintf(&r.body, "    return { %s, %s: chunkFrames(frames, (frame) => (frame.%s.case === %q ? frame.%s.value : undefined)) };\n",
@@ -561,7 +597,7 @@ func (r *renderer) renderFramedWrite(m *model.Method) {
 	prop := oneofProp(frames.Oneofs[findField(frames, m.Framing.HeaderField).OneofIndex])
 	header := findField(frames, m.Framing.HeaderField)
 	chunk := findField(frames, m.Framing.ChunkField)
-	toWire := r.crossRef(frames.ProtoFile, toWireFunc(frames.FullName))
+	toWire := r.convRef(frames.ProtoFile, toWireFunc(frames.FullName))
 
 	r.use("callUnary", false)
 	r.use("framedSend", false)
@@ -581,7 +617,7 @@ func (r *renderer) renderFramedWrite(m *model.Method) {
 		fmt.Fprintf(&r.body, "    await callUnary(() => this.client.%s(requests));\n", methodName)
 	} else {
 		fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(requests));\n", methodName)
-		fmt.Fprintf(&r.body, "    return %s(response);\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		fmt.Fprintf(&r.body, "    return %s(response);\n", r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 	}
 	r.body.WriteString("  }\n\n")
 }
@@ -602,10 +638,10 @@ func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 		case model.ClientStream, model.Bidi:
 			requestParam = "requests: AsyncIterable<" + requestType + ">"
 			r.use("mapSend", false)
-			requestArg = "mapSend(requests, " + r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + ")"
+			requestArg = "mapSend(requests, " + r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + ")"
 		default:
 			requestParam = "request: " + requestType
-			requestArg = r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
+			requestArg = r.convRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
 		}
 	}
 
@@ -614,7 +650,7 @@ func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 		responseType := r.messageType(m.Output.FullName)
 		r.use("mapRecv", false)
 		fmt.Fprintf(&r.body, "  %s(%s): AsyncIterable<%s> {\n", methodName, requestParam, responseType)
-		fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", lowerFirst(m.Name), requestArg, r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		fmt.Fprintf(&r.body, "    return mapRecv(this.client.%s(%s), %s);\n", lowerFirst(m.Name), requestArg, r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 		r.body.WriteString("  }\n\n")
 	default:
 		r.use("callUnary", false)
@@ -626,7 +662,7 @@ func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 			responseType := r.messageType(m.Output.FullName)
 			fmt.Fprintf(&r.body, "  async %s(%s): Promise<%s> {\n", methodName, requestParam, responseType)
 			fmt.Fprintf(&r.body, "    const response = await callUnary(() => this.client.%s(%s));\n", lowerFirst(m.Name), requestArg)
-			fmt.Fprintf(&r.body, "    return %s(response);\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+			fmt.Fprintf(&r.body, "    return %s(response);\n", r.convRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 			r.body.WriteString("  }\n\n")
 		}
 	}
@@ -667,31 +703,40 @@ func (r *renderer) assemble() string {
 		b.WriteString("\n")
 	}
 
-	fmt.Fprintf(&b, "\nimport * as wire from \"./internal/gen/v1/%s_pb.ts\";\n", r.base)
-
-	var crossBases []string
-	for base := range r.features.cross {
-		crossBases = append(crossBases, base)
+	if r.features.wire {
+		fmt.Fprintf(&b, "\nimport * as wire from \"%s/%s_pb.ts\";\n", r.wireDir(), r.base)
+	} else {
+		b.WriteString("\n")
 	}
-	sort.Strings(crossBases)
-	for _, base := range crossBases {
-		var names []string
-		for _, name := range sortedKeys(r.features.cross[base]) {
-			if r.features.cross[base][name] {
-				names = append(names, "type "+name)
+
+	for _, base := range sortedKeys2(r.features.crossPublic) {
+		names := r.features.crossPublic[base]
+		if r.kind == moduleCodec {
+			// Codec modules import native types type-only so the statement is
+			// erased and the value-level public -> codec edge stays acyclic.
+			fmt.Fprintf(&b, "import type { %s } from \"%s/%s.ts\";\n", strings.Join(sortedKeys(names), ", "), r.publicDir(), base)
+			continue
+		}
+		var specs []string
+		for _, name := range sortedKeys(names) {
+			if names[name] {
+				specs = append(specs, "type "+name)
 			} else {
-				names = append(names, name)
+				specs = append(specs, name)
 			}
 		}
-		fmt.Fprintf(&b, "import { %s } from \"./%s.ts\";\n", strings.Join(names, ", "), base)
+		fmt.Fprintf(&b, "import { %s } from \"%s/%s.ts\";\n", strings.Join(specs, ", "), r.publicDir(), base)
 	}
 
-	supportNames := append([]string{}, sortedKeys(r.features.supportValues)...)
-	for _, name := range sortedKeys(r.features.supportTypes) {
-		supportNames = append(supportNames, "type "+name)
+	for _, base := range sortedKeys2(r.features.crossCodec) {
+		fmt.Fprintf(&b, "import { %s } from \"%s/%s.ts\";\n", strings.Join(sortedKeys(r.features.crossCodec[base]), ", "), r.codecDir(), base)
 	}
-	if len(supportNames) > 0 {
-		fmt.Fprintf(&b, "import { %s } from \"./rpc_support.ts\";\n", strings.Join(supportNames, ", "))
+
+	if names := sortedKeys(r.features.supportValues); len(names) > 0 {
+		fmt.Fprintf(&b, "import { %s } from \"%s/support.ts\";\n", strings.Join(names, ", "), r.codecDir())
+	}
+	if names := sortedKeys(r.features.supportTypes); len(names) > 0 {
+		fmt.Fprintf(&b, "import type { %s } from \"%s/rpc_support.ts\";\n", strings.Join(names, ", "), r.publicDir())
 	}
 
 	b.WriteString("\n")
@@ -699,7 +744,42 @@ func (r *renderer) assemble() string {
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 
+// wireDir is the import prefix for the protobuf-es wire stubs.
+func (r *renderer) wireDir() string {
+	if r.kind == moduleCodec {
+		return "../gen/v1"
+	}
+	return "./internal/gen/v1"
+}
+
+// publicDir is the import prefix for public generated modules (including
+// rpc_support).
+func (r *renderer) publicDir() string {
+	if r.kind == moduleCodec {
+		return "../.."
+	}
+	return "."
+}
+
+// codecDir is the import prefix for internal codec modules (including the
+// codec runtime).
+func (r *renderer) codecDir() string {
+	if r.kind == moduleCodec {
+		return "."
+	}
+	return "./internal/codec"
+}
+
 func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedKeys2(m map[string]map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

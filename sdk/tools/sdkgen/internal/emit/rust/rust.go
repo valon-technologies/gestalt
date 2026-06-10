@@ -23,10 +23,15 @@ func (*Emitter) HeaderStyle() fileset.CommentStyle { return fileset.Slash }
 
 func (*Emitter) Formatter() *toolchain.Tool { return toolchain.Rustfmt() }
 
-// index resolves type references during rendering.
+// index resolves type references during rendering and records which
+// conversion direction each reachable message needs: messages reached from
+// method inputs convert to the wire, messages reached from outputs convert
+// from it.
 type index struct {
-	messages map[string]*model.Message
-	enums    map[string]*model.Enum
+	messages     map[string]*model.Message
+	enums        map[string]*model.Enum
+	needToWire   map[string]bool
+	needFromWire map[string]bool
 }
 
 // group is one generated file: every service, message, and enum declared by
@@ -40,8 +45,10 @@ type group struct {
 
 func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	idx := &index{
-		messages: map[string]*model.Message{},
-		enums:    map[string]*model.Enum{},
+		messages:     map[string]*model.Message{},
+		enums:        map[string]*model.Enum{},
+		needToWire:   map[string]bool{},
+		needFromWire: map[string]bool{},
 	}
 	for _, m := range schema.Messages {
 		idx.messages[m.FullName] = m
@@ -57,9 +64,7 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	}
 
 	messages, enums := reachable(idx, services)
-	if err := set.Add("rpc_support.rs", []byte(supportFile)); err != nil {
-		return nil, err
-	}
+	supportUses := map[string]bool{}
 	for _, g := range groupFiles(services, messages, enums) {
 		r := newRenderer(idx, g.base)
 		for _, e := range g.enums {
@@ -77,29 +82,35 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		if err := set.Add(g.base+".rs", []byte(r.assemble())); err != nil {
 			return nil, err
 		}
+		for name := range r.features.support {
+			supportUses[name] = true
+		}
+	}
+	if err := set.Add("rpc_support.rs", []byte(renderSupport(supportUses))); err != nil {
+		return nil, err
 	}
 	return set, nil
 }
 
 // reachable collects every message and enum referenced transitively from the
-// selected services' method inputs and outputs.
+// selected services' method inputs and outputs, filling the index's
+// per-direction conversion needs along the way.
 func reachable(idx *index, services []*model.Service) ([]*model.Message, []*model.Enum) {
-	seenMessages := map[string]bool{}
 	seenEnums := map[string]bool{}
-	var visit func(fullName string)
-	visitRef := func(ref *model.TypeRef) {
-		switch ref.Kind {
-		case model.KindMessage:
-			visit(ref.Message)
-		case model.KindEnum:
-			seenEnums[ref.Enum] = true
-		}
-	}
-	visit = func(fullName string) {
-		if seenMessages[fullName] {
+	var visit func(need map[string]bool, fullName string)
+	visit = func(need map[string]bool, fullName string) {
+		if need[fullName] {
 			return
 		}
-		seenMessages[fullName] = true
+		need[fullName] = true
+		visitRef := func(ref *model.TypeRef) {
+			switch ref.Kind {
+			case model.KindMessage:
+				visit(need, ref.Message)
+			case model.KindEnum:
+				seenEnums[ref.Enum] = true
+			}
+		}
 		for _, f := range idx.messages[fullName].Fields {
 			switch f.Kind {
 			case model.KindRepeated:
@@ -114,17 +125,23 @@ func reachable(idx *index, services []*model.Service) ([]*model.Message, []*mode
 	for _, svc := range services {
 		for _, method := range svc.Methods {
 			if method.Input != nil {
-				visit(method.Input.FullName)
+				visit(idx.needToWire, method.Input.FullName)
 			}
 			if method.Output != nil {
-				visit(method.Output.FullName)
+				visit(idx.needFromWire, method.Output.FullName)
 			}
 		}
 	}
 
 	var messages []*model.Message
-	for fullName := range seenMessages {
-		messages = append(messages, idx.messages[fullName])
+	seenMessages := map[string]bool{}
+	for _, need := range []map[string]bool{idx.needToWire, idx.needFromWire} {
+		for fullName := range need {
+			if !seenMessages[fullName] {
+				seenMessages[fullName] = true
+				messages = append(messages, idx.messages[fullName])
+			}
+		}
 	}
 	sort.Slice(messages, func(i, j int) bool { return messages[i].FullName < messages[j].FullName })
 	var enums []*model.Enum

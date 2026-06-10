@@ -17,24 +17,12 @@ pub struct HelloWorldResponse {
 }
 
 /// Converts a native `HelloWorldRequest` to its wire message.
-pub fn to_wire_hello_world_request(_value: HelloWorldRequest) -> v1::HelloWorldRequest {
+pub(crate) fn to_wire_hello_world_request(_value: HelloWorldRequest) -> v1::HelloWorldRequest {
     v1::HelloWorldRequest {}
 }
 
-/// Converts a wire `HelloWorldRequest` to its native message.
-pub fn from_wire_hello_world_request(_value: v1::HelloWorldRequest) -> HelloWorldRequest {
-    HelloWorldRequest {}
-}
-
-/// Converts a native `HelloWorldResponse` to its wire message.
-pub fn to_wire_hello_world_response(value: HelloWorldResponse) -> v1::HelloWorldResponse {
-    v1::HelloWorldResponse {
-        message: value.message,
-    }
-}
-
 /// Converts a wire `HelloWorldResponse` to its native message.
-pub fn from_wire_hello_world_response(value: v1::HelloWorldResponse) -> HelloWorldResponse {
+pub(crate) fn from_wire_hello_world_response(value: v1::HelloWorldResponse) -> HelloWorldResponse {
     HelloWorldResponse {
         message: value.message,
     }

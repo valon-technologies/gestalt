@@ -16,16 +16,19 @@ from ._gen.v1 import runtime_provider_pb2_grpc as _runtime_provider_pb2_grpc
 from .agent import (
     AgentWorkspace,
     PreparedAgentWorkspace,
-    from_wire_agent_workspace,
-    from_wire_prepared_agent_workspace,
-    to_wire_agent_workspace,
-    to_wire_prepared_agent_workspace,
+    _from_wire_agent_workspace,
+    _from_wire_prepared_agent_workspace,
+    _to_wire_agent_workspace,
+    _to_wire_prepared_agent_workspace,
 )
-from .rpc_support import call_unary, from_wire_timestamp, to_wire_timestamp
+from .rpc_support import (
+    _call_unary,
+    _from_wire_timestamp,
+    _to_wire_enum,
+    _to_wire_timestamp,
+)
 
 _empty: Any = _empty_pb2
-_wire: Any = _runtime_provider_pb2
-_wire_grpc: Any = _runtime_provider_pb2_grpc
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -172,46 +175,46 @@ class StopRuntimeSessionRequest:
     session_id: str = ""
 
 
-def to_wire_append_runtime_logs_request(value: AppendRuntimeLogsRequest) -> Any:
-    return _wire.AppendRuntimeLogsRequest(
+def _to_wire_append_runtime_logs_request(value: AppendRuntimeLogsRequest) -> Any:
+    return _runtime_provider_pb2.AppendRuntimeLogsRequest(
         session_id=value.session_id,
-        logs=[to_wire_runtime_log_entry(item) for item in value.logs],
+        logs=[_to_wire_runtime_log_entry(item) for item in value.logs],
     )
 
 
-def from_wire_append_runtime_logs_request(value: Any) -> AppendRuntimeLogsRequest:
+def _from_wire_append_runtime_logs_request(value: Any) -> AppendRuntimeLogsRequest:
     return AppendRuntimeLogsRequest(
         session_id=value.session_id,
-        logs=[from_wire_runtime_log_entry(item) for item in value.logs],
+        logs=[_from_wire_runtime_log_entry(item) for item in value.logs],
     )
 
 
-def to_wire_append_runtime_logs_response(value: AppendRuntimeLogsResponse) -> Any:
-    return _wire.AppendRuntimeLogsResponse(
+def _to_wire_append_runtime_logs_response(value: AppendRuntimeLogsResponse) -> Any:
+    return _runtime_provider_pb2.AppendRuntimeLogsResponse(
         last_seq=value.last_seq,
     )
 
 
-def from_wire_append_runtime_logs_response(value: Any) -> AppendRuntimeLogsResponse:
+def _from_wire_append_runtime_logs_response(value: Any) -> AppendRuntimeLogsResponse:
     return AppendRuntimeLogsResponse(
         last_seq=value.last_seq,
     )
 
 
-def to_wire_get_runtime_session_request(value: GetRuntimeSessionRequest) -> Any:
-    return _wire.GetRuntimeSessionRequest(
+def _to_wire_get_runtime_session_request(value: GetRuntimeSessionRequest) -> Any:
+    return _runtime_provider_pb2.GetRuntimeSessionRequest(
         session_id=value.session_id,
     )
 
 
-def from_wire_get_runtime_session_request(value: Any) -> GetRuntimeSessionRequest:
+def _from_wire_get_runtime_session_request(value: Any) -> GetRuntimeSessionRequest:
     return GetRuntimeSessionRequest(
         session_id=value.session_id,
     )
 
 
-def to_wire_hosted_app(value: HostedApp) -> Any:
-    return _wire.HostedApp(
+def _to_wire_hosted_app(value: HostedApp) -> Any:
+    return _runtime_provider_pb2.HostedApp(
         id=value.id,
         session_id=value.session_id,
         app_name=value.app_name,
@@ -219,7 +222,7 @@ def to_wire_hosted_app(value: HostedApp) -> Any:
     )
 
 
-def from_wire_hosted_app(value: Any) -> HostedApp:
+def _from_wire_hosted_app(value: Any) -> HostedApp:
     return HostedApp(
         id=value.id,
         session_id=value.session_id,
@@ -228,153 +231,153 @@ def from_wire_hosted_app(value: Any) -> HostedApp:
     )
 
 
-def to_wire_list_runtime_sessions_request(value: ListRuntimeSessionsRequest) -> Any:
-    return _wire.ListRuntimeSessionsRequest(
+def _to_wire_list_runtime_sessions_request(value: ListRuntimeSessionsRequest) -> Any:
+    return _runtime_provider_pb2.ListRuntimeSessionsRequest(
         page_size=value.page_size,
         page_token=value.page_token,
     )
 
 
-def from_wire_list_runtime_sessions_request(value: Any) -> ListRuntimeSessionsRequest:
+def _from_wire_list_runtime_sessions_request(value: Any) -> ListRuntimeSessionsRequest:
     return ListRuntimeSessionsRequest(
         page_size=value.page_size,
         page_token=value.page_token,
     )
 
 
-def to_wire_list_runtime_sessions_response(value: ListRuntimeSessionsResponse) -> Any:
-    return _wire.ListRuntimeSessionsResponse(
-        sessions=[to_wire_runtime_session(item) for item in value.sessions],
+def _to_wire_list_runtime_sessions_response(value: ListRuntimeSessionsResponse) -> Any:
+    return _runtime_provider_pb2.ListRuntimeSessionsResponse(
+        sessions=[_to_wire_runtime_session(item) for item in value.sessions],
         next_page_token=value.next_page_token,
     )
 
 
-def from_wire_list_runtime_sessions_response(value: Any) -> ListRuntimeSessionsResponse:
+def _from_wire_list_runtime_sessions_response(value: Any) -> ListRuntimeSessionsResponse:
     return ListRuntimeSessionsResponse(
-        sessions=[from_wire_runtime_session(item) for item in value.sessions],
+        sessions=[_from_wire_runtime_session(item) for item in value.sessions],
         next_page_token=value.next_page_token,
     )
 
 
-def to_wire_prepare_runtime_workspace_request(value: PrepareRuntimeWorkspaceRequest) -> Any:
-    return _wire.PrepareRuntimeWorkspaceRequest(
+def _to_wire_prepare_runtime_workspace_request(value: PrepareRuntimeWorkspaceRequest) -> Any:
+    return _runtime_provider_pb2.PrepareRuntimeWorkspaceRequest(
         session_id=value.session_id,
         agent_session_id=value.agent_session_id,
-        workspace=None if value.workspace is None else to_wire_agent_workspace(value.workspace),
+        workspace=None if value.workspace is None else _to_wire_agent_workspace(value.workspace),
     )
 
 
-def from_wire_prepare_runtime_workspace_request(value: Any) -> PrepareRuntimeWorkspaceRequest:
+def _from_wire_prepare_runtime_workspace_request(value: Any) -> PrepareRuntimeWorkspaceRequest:
     return PrepareRuntimeWorkspaceRequest(
         session_id=value.session_id,
         agent_session_id=value.agent_session_id,
-        workspace=from_wire_agent_workspace(value.workspace) if value.HasField("workspace") else None,
+        workspace=_from_wire_agent_workspace(value.workspace) if value.HasField("workspace") else None,
     )
 
 
-def to_wire_prepare_runtime_workspace_response(value: PrepareRuntimeWorkspaceResponse) -> Any:
-    return _wire.PrepareRuntimeWorkspaceResponse(
-        workspace=None if value.workspace is None else to_wire_prepared_agent_workspace(value.workspace),
+def _to_wire_prepare_runtime_workspace_response(value: PrepareRuntimeWorkspaceResponse) -> Any:
+    return _runtime_provider_pb2.PrepareRuntimeWorkspaceResponse(
+        workspace=None if value.workspace is None else _to_wire_prepared_agent_workspace(value.workspace),
     )
 
 
-def from_wire_prepare_runtime_workspace_response(value: Any) -> PrepareRuntimeWorkspaceResponse:
+def _from_wire_prepare_runtime_workspace_response(value: Any) -> PrepareRuntimeWorkspaceResponse:
     return PrepareRuntimeWorkspaceResponse(
-        workspace=from_wire_prepared_agent_workspace(value.workspace) if value.HasField("workspace") else None,
+        workspace=_from_wire_prepared_agent_workspace(value.workspace) if value.HasField("workspace") else None,
     )
 
 
-def to_wire_remove_runtime_workspace_request(value: RemoveRuntimeWorkspaceRequest) -> Any:
-    return _wire.RemoveRuntimeWorkspaceRequest(
+def _to_wire_remove_runtime_workspace_request(value: RemoveRuntimeWorkspaceRequest) -> Any:
+    return _runtime_provider_pb2.RemoveRuntimeWorkspaceRequest(
         session_id=value.session_id,
         agent_session_id=value.agent_session_id,
     )
 
 
-def from_wire_remove_runtime_workspace_request(value: Any) -> RemoveRuntimeWorkspaceRequest:
+def _from_wire_remove_runtime_workspace_request(value: Any) -> RemoveRuntimeWorkspaceRequest:
     return RemoveRuntimeWorkspaceRequest(
         session_id=value.session_id,
         agent_session_id=value.agent_session_id,
     )
 
 
-def to_wire_runtime_image_pull_auth(value: RuntimeImagePullAuth) -> Any:
-    return _wire.RuntimeImagePullAuth(
+def _to_wire_runtime_image_pull_auth(value: RuntimeImagePullAuth) -> Any:
+    return _runtime_provider_pb2.RuntimeImagePullAuth(
         docker_config_json=value.docker_config_json,
     )
 
 
-def from_wire_runtime_image_pull_auth(value: Any) -> RuntimeImagePullAuth:
+def _from_wire_runtime_image_pull_auth(value: Any) -> RuntimeImagePullAuth:
     return RuntimeImagePullAuth(
         docker_config_json=value.docker_config_json,
     )
 
 
-def to_wire_runtime_log_entry(value: RuntimeLogEntry) -> Any:
-    return _wire.RuntimeLogEntry(
-        stream=value.stream,
+def _to_wire_runtime_log_entry(value: RuntimeLogEntry) -> Any:
+    return _runtime_provider_pb2.RuntimeLogEntry(
+        stream=_to_wire_enum(value.stream),
         message=value.message,
-        observed_at=None if value.observed_at is None else to_wire_timestamp(value.observed_at),
+        observed_at=None if value.observed_at is None else _to_wire_timestamp(value.observed_at),
         source_seq=value.source_seq,
     )
 
 
-def from_wire_runtime_log_entry(value: Any) -> RuntimeLogEntry:
+def _from_wire_runtime_log_entry(value: Any) -> RuntimeLogEntry:
     return RuntimeLogEntry(
         stream=value.stream,
         message=value.message,
-        observed_at=from_wire_timestamp(value.observed_at) if value.HasField("observed_at") else None,
+        observed_at=_from_wire_timestamp(value.observed_at) if value.HasField("observed_at") else None,
         source_seq=value.source_seq,
     )
 
 
-def to_wire_runtime_session(value: RuntimeSession) -> Any:
-    return _wire.RuntimeSession(
+def _to_wire_runtime_session(value: RuntimeSession) -> Any:
+    return _runtime_provider_pb2.RuntimeSession(
         id=value.id,
         state=value.state,
         metadata=value.metadata,
-        lifecycle=None if value.lifecycle is None else to_wire_runtime_session_lifecycle(value.lifecycle),
+        lifecycle=None if value.lifecycle is None else _to_wire_runtime_session_lifecycle(value.lifecycle),
         state_reason=value.state_reason,
         state_message=value.state_message,
     )
 
 
-def from_wire_runtime_session(value: Any) -> RuntimeSession:
+def _from_wire_runtime_session(value: Any) -> RuntimeSession:
     return RuntimeSession(
         id=value.id,
         state=value.state,
         metadata=dict(value.metadata),
-        lifecycle=from_wire_runtime_session_lifecycle(value.lifecycle) if value.HasField("lifecycle") else None,
+        lifecycle=_from_wire_runtime_session_lifecycle(value.lifecycle) if value.HasField("lifecycle") else None,
         state_reason=value.state_reason,
         state_message=value.state_message,
     )
 
 
-def to_wire_runtime_session_lifecycle(value: RuntimeSessionLifecycle) -> Any:
-    return _wire.RuntimeSessionLifecycle(
-        started_at=None if value.started_at is None else to_wire_timestamp(value.started_at),
-        recommended_drain_at=None if value.recommended_drain_at is None else to_wire_timestamp(value.recommended_drain_at),
-        expires_at=None if value.expires_at is None else to_wire_timestamp(value.expires_at),
+def _to_wire_runtime_session_lifecycle(value: RuntimeSessionLifecycle) -> Any:
+    return _runtime_provider_pb2.RuntimeSessionLifecycle(
+        started_at=None if value.started_at is None else _to_wire_timestamp(value.started_at),
+        recommended_drain_at=None if value.recommended_drain_at is None else _to_wire_timestamp(value.recommended_drain_at),
+        expires_at=None if value.expires_at is None else _to_wire_timestamp(value.expires_at),
     )
 
 
-def from_wire_runtime_session_lifecycle(value: Any) -> RuntimeSessionLifecycle:
+def _from_wire_runtime_session_lifecycle(value: Any) -> RuntimeSessionLifecycle:
     return RuntimeSessionLifecycle(
-        started_at=from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
-        recommended_drain_at=from_wire_timestamp(value.recommended_drain_at) if value.HasField("recommended_drain_at") else None,
-        expires_at=from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
+        started_at=_from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
+        recommended_drain_at=_from_wire_timestamp(value.recommended_drain_at) if value.HasField("recommended_drain_at") else None,
+        expires_at=_from_wire_timestamp(value.expires_at) if value.HasField("expires_at") else None,
     )
 
 
-def to_wire_runtime_support(value: RuntimeSupport) -> Any:
-    return _wire.RuntimeSupport(
+def _to_wire_runtime_support(value: RuntimeSupport) -> Any:
+    return _runtime_provider_pb2.RuntimeSupport(
         can_host_apps=value.can_host_apps,
-        egress_mode=value.egress_mode,
+        egress_mode=_to_wire_enum(value.egress_mode),
         supports_prepare_workspace=value.supports_prepare_workspace,
     )
 
 
-def from_wire_runtime_support(value: Any) -> RuntimeSupport:
+def _from_wire_runtime_support(value: Any) -> RuntimeSupport:
     return RuntimeSupport(
         can_host_apps=value.can_host_apps,
         egress_mode=value.egress_mode,
@@ -382,8 +385,8 @@ def from_wire_runtime_support(value: Any) -> RuntimeSupport:
     )
 
 
-def to_wire_start_hosted_app_request(value: StartHostedAppRequest) -> Any:
-    return _wire.StartHostedAppRequest(
+def _to_wire_start_hosted_app_request(value: StartHostedAppRequest) -> Any:
+    return _runtime_provider_pb2.StartHostedAppRequest(
         session_id=value.session_id,
         app_name=value.app_name,
         command=value.command,
@@ -396,7 +399,7 @@ def to_wire_start_hosted_app_request(value: StartHostedAppRequest) -> Any:
     )
 
 
-def from_wire_start_hosted_app_request(value: Any) -> StartHostedAppRequest:
+def _from_wire_start_hosted_app_request(value: Any) -> StartHostedAppRequest:
     return StartHostedAppRequest(
         session_id=value.session_id,
         app_name=value.app_name,
@@ -410,33 +413,33 @@ def from_wire_start_hosted_app_request(value: Any) -> StartHostedAppRequest:
     )
 
 
-def to_wire_start_runtime_session_request(value: StartRuntimeSessionRequest) -> Any:
-    return _wire.StartRuntimeSessionRequest(
+def _to_wire_start_runtime_session_request(value: StartRuntimeSessionRequest) -> Any:
+    return _runtime_provider_pb2.StartRuntimeSessionRequest(
         app_name=value.app_name,
         template=value.template,
         image=value.image,
         metadata=value.metadata,
-        image_pull_auth=None if value.image_pull_auth is None else to_wire_runtime_image_pull_auth(value.image_pull_auth),
+        image_pull_auth=None if value.image_pull_auth is None else _to_wire_runtime_image_pull_auth(value.image_pull_auth),
     )
 
 
-def from_wire_start_runtime_session_request(value: Any) -> StartRuntimeSessionRequest:
+def _from_wire_start_runtime_session_request(value: Any) -> StartRuntimeSessionRequest:
     return StartRuntimeSessionRequest(
         app_name=value.app_name,
         template=value.template,
         image=value.image,
         metadata=dict(value.metadata),
-        image_pull_auth=from_wire_runtime_image_pull_auth(value.image_pull_auth) if value.HasField("image_pull_auth") else None,
+        image_pull_auth=_from_wire_runtime_image_pull_auth(value.image_pull_auth) if value.HasField("image_pull_auth") else None,
     )
 
 
-def to_wire_stop_runtime_session_request(value: StopRuntimeSessionRequest) -> Any:
-    return _wire.StopRuntimeSessionRequest(
+def _to_wire_stop_runtime_session_request(value: StopRuntimeSessionRequest) -> Any:
+    return _runtime_provider_pb2.StopRuntimeSessionRequest(
         session_id=value.session_id,
     )
 
 
-def from_wire_stop_runtime_session_request(value: Any) -> StopRuntimeSessionRequest:
+def _from_wire_stop_runtime_session_request(value: Any) -> StopRuntimeSessionRequest:
     return StopRuntimeSessionRequest(
         session_id=value.session_id,
     )
@@ -446,45 +449,45 @@ class Runtime:
     """Client for the gestalt.provider.v1.Runtime service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.RuntimeStub(channel)
+        self._stub = _runtime_provider_pb2_grpc.RuntimeStub(channel)
 
     def get_support(self) -> RuntimeSupport:
-        response = call_unary(lambda: self._stub.GetSupport(_empty.Empty()))
-        return from_wire_runtime_support(response)
+        response = _call_unary(lambda: self._stub.GetSupport(_empty.Empty()))
+        return _from_wire_runtime_support(response)
 
     def start_session(self, request: StartRuntimeSessionRequest) -> RuntimeSession:
-        response = call_unary(lambda: self._stub.StartSession(to_wire_start_runtime_session_request(request)))
-        return from_wire_runtime_session(response)
+        response = _call_unary(lambda: self._stub.StartSession(_to_wire_start_runtime_session_request(request)))
+        return _from_wire_runtime_session(response)
 
     def get_session(self, request: GetRuntimeSessionRequest) -> RuntimeSession:
-        response = call_unary(lambda: self._stub.GetSession(to_wire_get_runtime_session_request(request)))
-        return from_wire_runtime_session(response)
+        response = _call_unary(lambda: self._stub.GetSession(_to_wire_get_runtime_session_request(request)))
+        return _from_wire_runtime_session(response)
 
     def list_sessions(self, request: ListRuntimeSessionsRequest) -> ListRuntimeSessionsResponse:
-        response = call_unary(lambda: self._stub.ListSessions(to_wire_list_runtime_sessions_request(request)))
-        return from_wire_list_runtime_sessions_response(response)
+        response = _call_unary(lambda: self._stub.ListSessions(_to_wire_list_runtime_sessions_request(request)))
+        return _from_wire_list_runtime_sessions_response(response)
 
     def stop_session(self, request: StopRuntimeSessionRequest) -> None:
-        call_unary(lambda: self._stub.StopSession(to_wire_stop_runtime_session_request(request)))
+        _call_unary(lambda: self._stub.StopSession(_to_wire_stop_runtime_session_request(request)))
 
     def prepare_workspace(self, request: PrepareRuntimeWorkspaceRequest) -> PrepareRuntimeWorkspaceResponse:
-        response = call_unary(lambda: self._stub.PrepareWorkspace(to_wire_prepare_runtime_workspace_request(request)))
-        return from_wire_prepare_runtime_workspace_response(response)
+        response = _call_unary(lambda: self._stub.PrepareWorkspace(_to_wire_prepare_runtime_workspace_request(request)))
+        return _from_wire_prepare_runtime_workspace_response(response)
 
     def remove_workspace(self, request: RemoveRuntimeWorkspaceRequest) -> None:
-        call_unary(lambda: self._stub.RemoveWorkspace(to_wire_remove_runtime_workspace_request(request)))
+        _call_unary(lambda: self._stub.RemoveWorkspace(_to_wire_remove_runtime_workspace_request(request)))
 
     def start_app(self, request: StartHostedAppRequest) -> HostedApp:
-        response = call_unary(lambda: self._stub.StartApp(to_wire_start_hosted_app_request(request)))
-        return from_wire_hosted_app(response)
+        response = _call_unary(lambda: self._stub.StartApp(_to_wire_start_hosted_app_request(request)))
+        return _from_wire_hosted_app(response)
 
 
 class RuntimeLogHost:
     """Client for the gestalt.provider.v1.RuntimeLogHost service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.RuntimeLogHostStub(channel)
+        self._stub = _runtime_provider_pb2_grpc.RuntimeLogHostStub(channel)
 
     def append_logs(self, request: AppendRuntimeLogsRequest) -> AppendRuntimeLogsResponse:
-        response = call_unary(lambda: self._stub.AppendLogs(to_wire_append_runtime_logs_request(request)))
-        return from_wire_append_runtime_logs_response(response)
+        response = _call_unary(lambda: self._stub.AppendLogs(_to_wire_append_runtime_logs_request(request)))
+        return _from_wire_append_runtime_logs_response(response)

@@ -5,7 +5,7 @@
 use crate::generated::v1;
 use crate::rpc_support::{
     GestaltError, RpcStatus, from_wire_status, from_wire_timestamp, from_wire_value,
-    to_wire_status, to_wire_timestamp, to_wire_value,
+    to_wire_timestamp, to_wire_value,
 };
 use tokio_stream::StreamExt;
 
@@ -516,7 +516,7 @@ pub struct TypedValue {
 }
 
 /// Converts a native `BeginTransactionRequest` to its wire message.
-pub fn to_wire_begin_transaction_request(
+pub(crate) fn to_wire_begin_transaction_request(
     value: BeginTransactionRequest,
 ) -> v1::BeginTransactionRequest {
     v1::BeginTransactionRequest {
@@ -526,19 +526,8 @@ pub fn to_wire_begin_transaction_request(
     }
 }
 
-/// Converts a wire `BeginTransactionRequest` to its native message.
-pub fn from_wire_begin_transaction_request(
-    value: v1::BeginTransactionRequest,
-) -> BeginTransactionRequest {
-    BeginTransactionRequest {
-        stores: value.stores,
-        mode: value.mode,
-        durability_hint: value.durability_hint,
-    }
-}
-
 /// Converts a native `ColumnDef` to its wire message.
-pub fn to_wire_column_def(value: ColumnDef) -> v1::ColumnDef {
+pub(crate) fn to_wire_column_def(value: ColumnDef) -> v1::ColumnDef {
     v1::ColumnDef {
         name: value.name,
         r#type: value.r#type,
@@ -548,29 +537,13 @@ pub fn to_wire_column_def(value: ColumnDef) -> v1::ColumnDef {
     }
 }
 
-/// Converts a wire `ColumnDef` to its native message.
-pub fn from_wire_column_def(value: v1::ColumnDef) -> ColumnDef {
-    ColumnDef {
-        name: value.name,
-        r#type: value.r#type,
-        primary_key: value.primary_key,
-        not_null: value.not_null,
-        unique: value.unique,
-    }
-}
-
-/// Converts a native `CountResponse` to its wire message.
-pub fn to_wire_count_response(value: CountResponse) -> v1::CountResponse {
-    v1::CountResponse { count: value.count }
-}
-
 /// Converts a wire `CountResponse` to its native message.
-pub fn from_wire_count_response(value: v1::CountResponse) -> CountResponse {
+pub(crate) fn from_wire_count_response(value: v1::CountResponse) -> CountResponse {
     CountResponse { count: value.count }
 }
 
 /// Converts a native `CreateObjectStoreRequest` to its wire message.
-pub fn to_wire_create_object_store_request(
+pub(crate) fn to_wire_create_object_store_request(
     value: CreateObjectStoreRequest,
 ) -> v1::CreateObjectStoreRequest {
     v1::CreateObjectStoreRequest {
@@ -579,31 +552,14 @@ pub fn to_wire_create_object_store_request(
     }
 }
 
-/// Converts a wire `CreateObjectStoreRequest` to its native message.
-pub fn from_wire_create_object_store_request(
-    value: v1::CreateObjectStoreRequest,
-) -> CreateObjectStoreRequest {
-    CreateObjectStoreRequest {
-        name: value.name,
-        schema: value.schema.map(from_wire_object_store_schema),
-    }
-}
-
 /// Converts a native `CursorClientMessage` to its wire message.
-pub fn to_wire_cursor_client_message(value: CursorClientMessage) -> v1::CursorClientMessage {
+pub(crate) fn to_wire_cursor_client_message(value: CursorClientMessage) -> v1::CursorClientMessage {
     v1::CursorClientMessage {
         msg: value.msg.map(to_wire_cursor_client_message_msg),
     }
 }
 
-/// Converts a wire `CursorClientMessage` to its native message.
-pub fn from_wire_cursor_client_message(value: v1::CursorClientMessage) -> CursorClientMessage {
-    CursorClientMessage {
-        msg: value.msg.map(from_wire_cursor_client_message_msg),
-    }
-}
-
-fn to_wire_cursor_client_message_msg(
+pub(crate) fn to_wire_cursor_client_message_msg(
     value: CursorClientMessageMsg,
 ) -> v1::cursor_client_message::Msg {
     match value {
@@ -616,34 +572,16 @@ fn to_wire_cursor_client_message_msg(
     }
 }
 
-fn from_wire_cursor_client_message_msg(
-    value: v1::cursor_client_message::Msg,
-) -> CursorClientMessageMsg {
-    match value {
-        v1::cursor_client_message::Msg::Open(value) => {
-            CursorClientMessageMsg::Open(from_wire_open_cursor_request(value))
-        }
-        v1::cursor_client_message::Msg::Command(value) => {
-            CursorClientMessageMsg::Command(from_wire_cursor_command(value))
-        }
-    }
-}
-
 /// Converts a native `CursorCommand` to its wire message.
-pub fn to_wire_cursor_command(value: CursorCommand) -> v1::CursorCommand {
+pub(crate) fn to_wire_cursor_command(value: CursorCommand) -> v1::CursorCommand {
     v1::CursorCommand {
         command: value.command.map(to_wire_cursor_command_command),
     }
 }
 
-/// Converts a wire `CursorCommand` to its native message.
-pub fn from_wire_cursor_command(value: v1::CursorCommand) -> CursorCommand {
-    CursorCommand {
-        command: value.command.map(from_wire_cursor_command_command),
-    }
-}
-
-fn to_wire_cursor_command_command(value: CursorCommandCommand) -> v1::cursor_command::Command {
+pub(crate) fn to_wire_cursor_command_command(
+    value: CursorCommandCommand,
+) -> v1::cursor_command::Command {
     match value {
         CursorCommandCommand::Next(value) => v1::cursor_command::Command::Next(value),
         CursorCommandCommand::ContinueToKey(value) => {
@@ -658,32 +596,8 @@ fn to_wire_cursor_command_command(value: CursorCommandCommand) -> v1::cursor_com
     }
 }
 
-fn from_wire_cursor_command_command(value: v1::cursor_command::Command) -> CursorCommandCommand {
-    match value {
-        v1::cursor_command::Command::Next(value) => CursorCommandCommand::Next(value),
-        v1::cursor_command::Command::ContinueToKey(value) => {
-            CursorCommandCommand::ContinueToKey(from_wire_cursor_key_target(value))
-        }
-        v1::cursor_command::Command::Advance(value) => CursorCommandCommand::Advance(value),
-        v1::cursor_command::Command::Update(value) => {
-            CursorCommandCommand::Update(from_wire_record(value))
-        }
-        v1::cursor_command::Command::Delete(value) => CursorCommandCommand::Delete(value),
-        v1::cursor_command::Command::Close(value) => CursorCommandCommand::Close(value),
-    }
-}
-
-/// Converts a native `CursorEntry` to its wire message.
-pub fn to_wire_cursor_entry(value: CursorEntry) -> v1::CursorEntry {
-    v1::CursorEntry {
-        key: value.key.into_iter().map(to_wire_key_value).collect(),
-        primary_key: value.primary_key,
-        record: value.record.map(to_wire_record),
-    }
-}
-
 /// Converts a wire `CursorEntry` to its native message.
-pub fn from_wire_cursor_entry(value: v1::CursorEntry) -> CursorEntry {
+pub(crate) fn from_wire_cursor_entry(value: v1::CursorEntry) -> CursorEntry {
     CursorEntry {
         key: value.key.into_iter().map(from_wire_key_value).collect(),
         primary_key: value.primary_key,
@@ -692,43 +606,22 @@ pub fn from_wire_cursor_entry(value: v1::CursorEntry) -> CursorEntry {
 }
 
 /// Converts a native `CursorKeyTarget` to its wire message.
-pub fn to_wire_cursor_key_target(value: CursorKeyTarget) -> v1::CursorKeyTarget {
+pub(crate) fn to_wire_cursor_key_target(value: CursorKeyTarget) -> v1::CursorKeyTarget {
     v1::CursorKeyTarget {
         key: value.key.into_iter().map(to_wire_key_value).collect(),
     }
 }
 
-/// Converts a wire `CursorKeyTarget` to its native message.
-pub fn from_wire_cursor_key_target(value: v1::CursorKeyTarget) -> CursorKeyTarget {
-    CursorKeyTarget {
-        key: value.key.into_iter().map(from_wire_key_value).collect(),
-    }
-}
-
-/// Converts a native `CursorResponse` to its wire message.
-pub fn to_wire_cursor_response(value: CursorResponse) -> v1::CursorResponse {
-    v1::CursorResponse {
-        result: value.result.map(to_wire_cursor_response_result),
-    }
-}
-
 /// Converts a wire `CursorResponse` to its native message.
-pub fn from_wire_cursor_response(value: v1::CursorResponse) -> CursorResponse {
+pub(crate) fn from_wire_cursor_response(value: v1::CursorResponse) -> CursorResponse {
     CursorResponse {
         result: value.result.map(from_wire_cursor_response_result),
     }
 }
 
-fn to_wire_cursor_response_result(value: CursorResponseResult) -> v1::cursor_response::Result {
-    match value {
-        CursorResponseResult::Entry(value) => {
-            v1::cursor_response::Result::Entry(to_wire_cursor_entry(value))
-        }
-        CursorResponseResult::Done(value) => v1::cursor_response::Result::Done(value),
-    }
-}
-
-fn from_wire_cursor_response_result(value: v1::cursor_response::Result) -> CursorResponseResult {
+pub(crate) fn from_wire_cursor_response_result(
+    value: v1::cursor_response::Result,
+) -> CursorResponseResult {
     match value {
         v1::cursor_response::Result::Entry(value) => {
             CursorResponseResult::Entry(from_wire_cursor_entry(value))
@@ -738,35 +631,21 @@ fn from_wire_cursor_response_result(value: v1::cursor_response::Result) -> Curso
 }
 
 /// Converts a native `DeleteObjectStoreRequest` to its wire message.
-pub fn to_wire_delete_object_store_request(
+pub(crate) fn to_wire_delete_object_store_request(
     value: DeleteObjectStoreRequest,
 ) -> v1::DeleteObjectStoreRequest {
     v1::DeleteObjectStoreRequest { name: value.name }
 }
 
-/// Converts a wire `DeleteObjectStoreRequest` to its native message.
-pub fn from_wire_delete_object_store_request(
-    value: v1::DeleteObjectStoreRequest,
-) -> DeleteObjectStoreRequest {
-    DeleteObjectStoreRequest { name: value.name }
-}
-
-/// Converts a native `DeleteResponse` to its wire message.
-pub fn to_wire_delete_response(value: DeleteResponse) -> v1::DeleteResponse {
-    v1::DeleteResponse {
-        deleted: value.deleted,
-    }
-}
-
 /// Converts a wire `DeleteResponse` to its native message.
-pub fn from_wire_delete_response(value: v1::DeleteResponse) -> DeleteResponse {
+pub(crate) fn from_wire_delete_response(value: v1::DeleteResponse) -> DeleteResponse {
     DeleteResponse {
         deleted: value.deleted,
     }
 }
 
 /// Converts a native `IndexQueryRequest` to its wire message.
-pub fn to_wire_index_query_request(value: IndexQueryRequest) -> v1::IndexQueryRequest {
+pub(crate) fn to_wire_index_query_request(value: IndexQueryRequest) -> v1::IndexQueryRequest {
     v1::IndexQueryRequest {
         store: value.store,
         index: value.index,
@@ -775,22 +654,8 @@ pub fn to_wire_index_query_request(value: IndexQueryRequest) -> v1::IndexQueryRe
     }
 }
 
-/// Converts a wire `IndexQueryRequest` to its native message.
-pub fn from_wire_index_query_request(value: v1::IndexQueryRequest) -> IndexQueryRequest {
-    IndexQueryRequest {
-        store: value.store,
-        index: value.index,
-        values: value
-            .values
-            .into_iter()
-            .map(from_wire_typed_value)
-            .collect(),
-        range: value.range.map(from_wire_key_range),
-    }
-}
-
 /// Converts a native `IndexSchema` to its wire message.
-pub fn to_wire_index_schema(value: IndexSchema) -> v1::IndexSchema {
+pub(crate) fn to_wire_index_schema(value: IndexSchema) -> v1::IndexSchema {
     v1::IndexSchema {
         name: value.name,
         key_path: value.key_path,
@@ -798,17 +663,8 @@ pub fn to_wire_index_schema(value: IndexSchema) -> v1::IndexSchema {
     }
 }
 
-/// Converts a wire `IndexSchema` to its native message.
-pub fn from_wire_index_schema(value: v1::IndexSchema) -> IndexSchema {
-    IndexSchema {
-        name: value.name,
-        key_path: value.key_path,
-        unique: value.unique,
-    }
-}
-
 /// Converts a native `KeyRange` to its wire message.
-pub fn to_wire_key_range(value: KeyRange) -> v1::KeyRange {
+pub(crate) fn to_wire_key_range(value: KeyRange) -> v1::KeyRange {
     v1::KeyRange {
         lower: value.lower.map(to_wire_typed_value),
         upper: value.upper.map(to_wire_typed_value),
@@ -817,48 +673,33 @@ pub fn to_wire_key_range(value: KeyRange) -> v1::KeyRange {
     }
 }
 
-/// Converts a wire `KeyRange` to its native message.
-pub fn from_wire_key_range(value: v1::KeyRange) -> KeyRange {
-    KeyRange {
-        lower: value.lower.map(from_wire_typed_value),
-        upper: value.upper.map(from_wire_typed_value),
-        lower_open: value.lower_open,
-        upper_open: value.upper_open,
-    }
-}
-
-/// Converts a native `KeyResponse` to its wire message.
-pub fn to_wire_key_response(value: KeyResponse) -> v1::KeyResponse {
-    v1::KeyResponse { key: value.key }
-}
-
 /// Converts a wire `KeyResponse` to its native message.
-pub fn from_wire_key_response(value: v1::KeyResponse) -> KeyResponse {
+pub(crate) fn from_wire_key_response(value: v1::KeyResponse) -> KeyResponse {
     KeyResponse { key: value.key }
 }
 
 /// Converts a native `KeyValue` to its wire message.
-pub fn to_wire_key_value(value: KeyValue) -> v1::KeyValue {
+pub(crate) fn to_wire_key_value(value: KeyValue) -> v1::KeyValue {
     v1::KeyValue {
         kind: value.kind.map(to_wire_key_value_kind),
     }
 }
 
 /// Converts a wire `KeyValue` to its native message.
-pub fn from_wire_key_value(value: v1::KeyValue) -> KeyValue {
+pub(crate) fn from_wire_key_value(value: v1::KeyValue) -> KeyValue {
     KeyValue {
         kind: value.kind.map(from_wire_key_value_kind),
     }
 }
 
-fn to_wire_key_value_kind(value: KeyValueKind) -> v1::key_value::Kind {
+pub(crate) fn to_wire_key_value_kind(value: KeyValueKind) -> v1::key_value::Kind {
     match value {
         KeyValueKind::Scalar(value) => v1::key_value::Kind::Scalar(to_wire_typed_value(value)),
         KeyValueKind::Array(value) => v1::key_value::Kind::Array(to_wire_key_value_array(value)),
     }
 }
 
-fn from_wire_key_value_kind(value: v1::key_value::Kind) -> KeyValueKind {
+pub(crate) fn from_wire_key_value_kind(value: v1::key_value::Kind) -> KeyValueKind {
     match value {
         v1::key_value::Kind::Scalar(value) => KeyValueKind::Scalar(from_wire_typed_value(value)),
         v1::key_value::Kind::Array(value) => KeyValueKind::Array(from_wire_key_value_array(value)),
@@ -866,14 +707,14 @@ fn from_wire_key_value_kind(value: v1::key_value::Kind) -> KeyValueKind {
 }
 
 /// Converts a native `KeyValueArray` to its wire message.
-pub fn to_wire_key_value_array(value: KeyValueArray) -> v1::KeyValueArray {
+pub(crate) fn to_wire_key_value_array(value: KeyValueArray) -> v1::KeyValueArray {
     v1::KeyValueArray {
         elements: value.elements.into_iter().map(to_wire_key_value).collect(),
     }
 }
 
 /// Converts a wire `KeyValueArray` to its native message.
-pub fn from_wire_key_value_array(value: v1::KeyValueArray) -> KeyValueArray {
+pub(crate) fn from_wire_key_value_array(value: v1::KeyValueArray) -> KeyValueArray {
     KeyValueArray {
         elements: value
             .elements
@@ -883,32 +724,20 @@ pub fn from_wire_key_value_array(value: v1::KeyValueArray) -> KeyValueArray {
     }
 }
 
-/// Converts a native `KeysResponse` to its wire message.
-pub fn to_wire_keys_response(value: KeysResponse) -> v1::KeysResponse {
-    v1::KeysResponse { keys: value.keys }
-}
-
 /// Converts a wire `KeysResponse` to its native message.
-pub fn from_wire_keys_response(value: v1::KeysResponse) -> KeysResponse {
+pub(crate) fn from_wire_keys_response(value: v1::KeysResponse) -> KeysResponse {
     KeysResponse { keys: value.keys }
 }
 
 /// Converts a native `ObjectStoreNameRequest` to its wire message.
-pub fn to_wire_object_store_name_request(
+pub(crate) fn to_wire_object_store_name_request(
     value: ObjectStoreNameRequest,
 ) -> v1::ObjectStoreNameRequest {
     v1::ObjectStoreNameRequest { store: value.store }
 }
 
-/// Converts a wire `ObjectStoreNameRequest` to its native message.
-pub fn from_wire_object_store_name_request(
-    value: v1::ObjectStoreNameRequest,
-) -> ObjectStoreNameRequest {
-    ObjectStoreNameRequest { store: value.store }
-}
-
 /// Converts a native `ObjectStoreRangeRequest` to its wire message.
-pub fn to_wire_object_store_range_request(
+pub(crate) fn to_wire_object_store_range_request(
     value: ObjectStoreRangeRequest,
 ) -> v1::ObjectStoreRangeRequest {
     v1::ObjectStoreRangeRequest {
@@ -917,34 +746,16 @@ pub fn to_wire_object_store_range_request(
     }
 }
 
-/// Converts a wire `ObjectStoreRangeRequest` to its native message.
-pub fn from_wire_object_store_range_request(
-    value: v1::ObjectStoreRangeRequest,
-) -> ObjectStoreRangeRequest {
-    ObjectStoreRangeRequest {
-        store: value.store,
-        range: value.range.map(from_wire_key_range),
-    }
-}
-
 /// Converts a native `ObjectStoreRequest` to its wire message.
-pub fn to_wire_object_store_request(value: ObjectStoreRequest) -> v1::ObjectStoreRequest {
+pub(crate) fn to_wire_object_store_request(value: ObjectStoreRequest) -> v1::ObjectStoreRequest {
     v1::ObjectStoreRequest {
         store: value.store,
         id: value.id,
     }
 }
 
-/// Converts a wire `ObjectStoreRequest` to its native message.
-pub fn from_wire_object_store_request(value: v1::ObjectStoreRequest) -> ObjectStoreRequest {
-    ObjectStoreRequest {
-        store: value.store,
-        id: value.id,
-    }
-}
-
 /// Converts a native `ObjectStoreSchema` to its wire message.
-pub fn to_wire_object_store_schema(value: ObjectStoreSchema) -> v1::ObjectStoreSchema {
+pub(crate) fn to_wire_object_store_schema(value: ObjectStoreSchema) -> v1::ObjectStoreSchema {
     v1::ObjectStoreSchema {
         indexes: value
             .indexes
@@ -955,24 +766,8 @@ pub fn to_wire_object_store_schema(value: ObjectStoreSchema) -> v1::ObjectStoreS
     }
 }
 
-/// Converts a wire `ObjectStoreSchema` to its native message.
-pub fn from_wire_object_store_schema(value: v1::ObjectStoreSchema) -> ObjectStoreSchema {
-    ObjectStoreSchema {
-        indexes: value
-            .indexes
-            .into_iter()
-            .map(from_wire_index_schema)
-            .collect(),
-        columns: value
-            .columns
-            .into_iter()
-            .map(from_wire_column_def)
-            .collect(),
-    }
-}
-
 /// Converts a native `OpenCursorRequest` to its wire message.
-pub fn to_wire_open_cursor_request(value: OpenCursorRequest) -> v1::OpenCursorRequest {
+pub(crate) fn to_wire_open_cursor_request(value: OpenCursorRequest) -> v1::OpenCursorRequest {
     v1::OpenCursorRequest {
         store: value.store,
         range: value.range.map(to_wire_key_range),
@@ -983,24 +778,8 @@ pub fn to_wire_open_cursor_request(value: OpenCursorRequest) -> v1::OpenCursorRe
     }
 }
 
-/// Converts a wire `OpenCursorRequest` to its native message.
-pub fn from_wire_open_cursor_request(value: v1::OpenCursorRequest) -> OpenCursorRequest {
-    OpenCursorRequest {
-        store: value.store,
-        range: value.range.map(from_wire_key_range),
-        direction: value.direction,
-        keys_only: value.keys_only,
-        index: value.index,
-        values: value
-            .values
-            .into_iter()
-            .map(from_wire_typed_value)
-            .collect(),
-    }
-}
-
 /// Converts a native `Record` to its wire message.
-pub fn to_wire_record(value: Record) -> v1::Record {
+pub(crate) fn to_wire_record(value: Record) -> v1::Record {
     v1::Record {
         fields: value
             .fields
@@ -1011,7 +790,7 @@ pub fn to_wire_record(value: Record) -> v1::Record {
 }
 
 /// Converts a wire `Record` to its native message.
-pub fn from_wire_record(value: v1::Record) -> Record {
+pub(crate) fn from_wire_record(value: v1::Record) -> Record {
     Record {
         fields: value
             .fields
@@ -1022,51 +801,29 @@ pub fn from_wire_record(value: v1::Record) -> Record {
 }
 
 /// Converts a native `RecordRequest` to its wire message.
-pub fn to_wire_record_request(value: RecordRequest) -> v1::RecordRequest {
+pub(crate) fn to_wire_record_request(value: RecordRequest) -> v1::RecordRequest {
     v1::RecordRequest {
         store: value.store,
         record: value.record.map(to_wire_record),
     }
 }
 
-/// Converts a wire `RecordRequest` to its native message.
-pub fn from_wire_record_request(value: v1::RecordRequest) -> RecordRequest {
-    RecordRequest {
-        store: value.store,
-        record: value.record.map(from_wire_record),
-    }
-}
-
-/// Converts a native `RecordResponse` to its wire message.
-pub fn to_wire_record_response(value: RecordResponse) -> v1::RecordResponse {
-    v1::RecordResponse {
-        record: value.record.map(to_wire_record),
-    }
-}
-
 /// Converts a wire `RecordResponse` to its native message.
-pub fn from_wire_record_response(value: v1::RecordResponse) -> RecordResponse {
+pub(crate) fn from_wire_record_response(value: v1::RecordResponse) -> RecordResponse {
     RecordResponse {
         record: value.record.map(from_wire_record),
     }
 }
 
-/// Converts a native `RecordsResponse` to its wire message.
-pub fn to_wire_records_response(value: RecordsResponse) -> v1::RecordsResponse {
-    v1::RecordsResponse {
-        records: value.records.into_iter().map(to_wire_record).collect(),
-    }
-}
-
 /// Converts a wire `RecordsResponse` to its native message.
-pub fn from_wire_records_response(value: v1::RecordsResponse) -> RecordsResponse {
+pub(crate) fn from_wire_records_response(value: v1::RecordsResponse) -> RecordsResponse {
     RecordsResponse {
         records: value.records.into_iter().map(from_wire_record).collect(),
     }
 }
 
 /// Converts a native `TransactionAbortRequest` to its wire message.
-pub fn to_wire_transaction_abort_request(
+pub(crate) fn to_wire_transaction_abort_request(
     value: TransactionAbortRequest,
 ) -> v1::TransactionAbortRequest {
     v1::TransactionAbortRequest {
@@ -1074,26 +831,8 @@ pub fn to_wire_transaction_abort_request(
     }
 }
 
-/// Converts a wire `TransactionAbortRequest` to its native message.
-pub fn from_wire_transaction_abort_request(
-    value: v1::TransactionAbortRequest,
-) -> TransactionAbortRequest {
-    TransactionAbortRequest {
-        reason: value.reason,
-    }
-}
-
-/// Converts a native `TransactionAbortResponse` to its wire message.
-pub fn to_wire_transaction_abort_response(
-    value: TransactionAbortResponse,
-) -> v1::TransactionAbortResponse {
-    v1::TransactionAbortResponse {
-        error: value.error.map(to_wire_status),
-    }
-}
-
 /// Converts a wire `TransactionAbortResponse` to its native message.
-pub fn from_wire_transaction_abort_response(
+pub(crate) fn from_wire_transaction_abort_response(
     value: v1::TransactionAbortResponse,
 ) -> TransactionAbortResponse {
     TransactionAbortResponse {
@@ -1101,22 +840,15 @@ pub fn from_wire_transaction_abort_response(
     }
 }
 
-/// Converts a native `TransactionBeginResponse` to its wire message.
-pub fn to_wire_transaction_begin_response(
-    _value: TransactionBeginResponse,
-) -> v1::TransactionBeginResponse {
-    v1::TransactionBeginResponse {}
-}
-
 /// Converts a wire `TransactionBeginResponse` to its native message.
-pub fn from_wire_transaction_begin_response(
+pub(crate) fn from_wire_transaction_begin_response(
     _value: v1::TransactionBeginResponse,
 ) -> TransactionBeginResponse {
     TransactionBeginResponse {}
 }
 
 /// Converts a native `TransactionClientMessage` to its wire message.
-pub fn to_wire_transaction_client_message(
+pub(crate) fn to_wire_transaction_client_message(
     value: TransactionClientMessage,
 ) -> v1::TransactionClientMessage {
     v1::TransactionClientMessage {
@@ -1124,16 +856,7 @@ pub fn to_wire_transaction_client_message(
     }
 }
 
-/// Converts a wire `TransactionClientMessage` to its native message.
-pub fn from_wire_transaction_client_message(
-    value: v1::TransactionClientMessage,
-) -> TransactionClientMessage {
-    TransactionClientMessage {
-        msg: value.msg.map(from_wire_transaction_client_message_msg),
-    }
-}
-
-fn to_wire_transaction_client_message_msg(
+pub(crate) fn to_wire_transaction_client_message_msg(
     value: TransactionClientMessageMsg,
 ) -> v1::transaction_client_message::Msg {
     match value {
@@ -1152,50 +875,15 @@ fn to_wire_transaction_client_message_msg(
     }
 }
 
-fn from_wire_transaction_client_message_msg(
-    value: v1::transaction_client_message::Msg,
-) -> TransactionClientMessageMsg {
-    match value {
-        v1::transaction_client_message::Msg::Begin(value) => {
-            TransactionClientMessageMsg::Begin(from_wire_begin_transaction_request(value))
-        }
-        v1::transaction_client_message::Msg::Operation(value) => {
-            TransactionClientMessageMsg::Operation(from_wire_transaction_operation(value))
-        }
-        v1::transaction_client_message::Msg::Commit(value) => {
-            TransactionClientMessageMsg::Commit(from_wire_transaction_commit_request(value))
-        }
-        v1::transaction_client_message::Msg::Abort(value) => {
-            TransactionClientMessageMsg::Abort(from_wire_transaction_abort_request(value))
-        }
-    }
-}
-
 /// Converts a native `TransactionCommitRequest` to its wire message.
-pub fn to_wire_transaction_commit_request(
+pub(crate) fn to_wire_transaction_commit_request(
     _value: TransactionCommitRequest,
 ) -> v1::TransactionCommitRequest {
     v1::TransactionCommitRequest {}
 }
 
-/// Converts a wire `TransactionCommitRequest` to its native message.
-pub fn from_wire_transaction_commit_request(
-    _value: v1::TransactionCommitRequest,
-) -> TransactionCommitRequest {
-    TransactionCommitRequest {}
-}
-
-/// Converts a native `TransactionCommitResponse` to its wire message.
-pub fn to_wire_transaction_commit_response(
-    value: TransactionCommitResponse,
-) -> v1::TransactionCommitResponse {
-    v1::TransactionCommitResponse {
-        error: value.error.map(to_wire_status),
-    }
-}
-
 /// Converts a wire `TransactionCommitResponse` to its native message.
-pub fn from_wire_transaction_commit_response(
+pub(crate) fn from_wire_transaction_commit_response(
     value: v1::TransactionCommitResponse,
 ) -> TransactionCommitResponse {
     TransactionCommitResponse {
@@ -1204,24 +892,16 @@ pub fn from_wire_transaction_commit_response(
 }
 
 /// Converts a native `TransactionOperation` to its wire message.
-pub fn to_wire_transaction_operation(value: TransactionOperation) -> v1::TransactionOperation {
+pub(crate) fn to_wire_transaction_operation(
+    value: TransactionOperation,
+) -> v1::TransactionOperation {
     v1::TransactionOperation {
         request_id: value.request_id,
         operation: value.operation.map(to_wire_transaction_operation_operation),
     }
 }
 
-/// Converts a wire `TransactionOperation` to its native message.
-pub fn from_wire_transaction_operation(value: v1::TransactionOperation) -> TransactionOperation {
-    TransactionOperation {
-        request_id: value.request_id,
-        operation: value
-            .operation
-            .map(from_wire_transaction_operation_operation),
-    }
-}
-
-fn to_wire_transaction_operation_operation(
+pub(crate) fn to_wire_transaction_operation_operation(
     value: TransactionOperationOperation,
 ) -> v1::transaction_operation::Operation {
     match value {
@@ -1282,76 +962,8 @@ fn to_wire_transaction_operation_operation(
     }
 }
 
-fn from_wire_transaction_operation_operation(
-    value: v1::transaction_operation::Operation,
-) -> TransactionOperationOperation {
-    match value {
-        v1::transaction_operation::Operation::Get(value) => {
-            TransactionOperationOperation::Get(from_wire_object_store_request(value))
-        }
-        v1::transaction_operation::Operation::GetKey(value) => {
-            TransactionOperationOperation::GetKey(from_wire_object_store_request(value))
-        }
-        v1::transaction_operation::Operation::Add(value) => {
-            TransactionOperationOperation::Add(from_wire_record_request(value))
-        }
-        v1::transaction_operation::Operation::Put(value) => {
-            TransactionOperationOperation::Put(from_wire_record_request(value))
-        }
-        v1::transaction_operation::Operation::Delete(value) => {
-            TransactionOperationOperation::Delete(from_wire_object_store_request(value))
-        }
-        v1::transaction_operation::Operation::Clear(value) => {
-            TransactionOperationOperation::Clear(from_wire_object_store_name_request(value))
-        }
-        v1::transaction_operation::Operation::GetAll(value) => {
-            TransactionOperationOperation::GetAll(from_wire_object_store_range_request(value))
-        }
-        v1::transaction_operation::Operation::GetAllKeys(value) => {
-            TransactionOperationOperation::GetAllKeys(from_wire_object_store_range_request(value))
-        }
-        v1::transaction_operation::Operation::Count(value) => {
-            TransactionOperationOperation::Count(from_wire_object_store_range_request(value))
-        }
-        v1::transaction_operation::Operation::DeleteRange(value) => {
-            TransactionOperationOperation::DeleteRange(from_wire_object_store_range_request(value))
-        }
-        v1::transaction_operation::Operation::IndexGet(value) => {
-            TransactionOperationOperation::IndexGet(from_wire_index_query_request(value))
-        }
-        v1::transaction_operation::Operation::IndexGetKey(value) => {
-            TransactionOperationOperation::IndexGetKey(from_wire_index_query_request(value))
-        }
-        v1::transaction_operation::Operation::IndexGetAll(value) => {
-            TransactionOperationOperation::IndexGetAll(from_wire_index_query_request(value))
-        }
-        v1::transaction_operation::Operation::IndexGetAllKeys(value) => {
-            TransactionOperationOperation::IndexGetAllKeys(from_wire_index_query_request(value))
-        }
-        v1::transaction_operation::Operation::IndexCount(value) => {
-            TransactionOperationOperation::IndexCount(from_wire_index_query_request(value))
-        }
-        v1::transaction_operation::Operation::IndexDelete(value) => {
-            TransactionOperationOperation::IndexDelete(from_wire_index_query_request(value))
-        }
-    }
-}
-
-/// Converts a native `TransactionOperationResponse` to its wire message.
-pub fn to_wire_transaction_operation_response(
-    value: TransactionOperationResponse,
-) -> v1::TransactionOperationResponse {
-    v1::TransactionOperationResponse {
-        request_id: value.request_id,
-        error: value.error.map(to_wire_status),
-        result: value
-            .result
-            .map(to_wire_transaction_operation_response_result),
-    }
-}
-
 /// Converts a wire `TransactionOperationResponse` to its native message.
-pub fn from_wire_transaction_operation_response(
+pub(crate) fn from_wire_transaction_operation_response(
     value: v1::TransactionOperationResponse,
 ) -> TransactionOperationResponse {
     TransactionOperationResponse {
@@ -1363,35 +975,7 @@ pub fn from_wire_transaction_operation_response(
     }
 }
 
-fn to_wire_transaction_operation_response_result(
-    value: TransactionOperationResponseResult,
-) -> v1::transaction_operation_response::Result {
-    match value {
-        TransactionOperationResponseResult::Empty => {
-            v1::transaction_operation_response::Result::Empty(())
-        }
-        TransactionOperationResponseResult::Record(value) => {
-            v1::transaction_operation_response::Result::Record(to_wire_record_response(value))
-        }
-        TransactionOperationResponseResult::Records(value) => {
-            v1::transaction_operation_response::Result::Records(to_wire_records_response(value))
-        }
-        TransactionOperationResponseResult::Key(value) => {
-            v1::transaction_operation_response::Result::Key(to_wire_key_response(value))
-        }
-        TransactionOperationResponseResult::Keys(value) => {
-            v1::transaction_operation_response::Result::Keys(to_wire_keys_response(value))
-        }
-        TransactionOperationResponseResult::Count(value) => {
-            v1::transaction_operation_response::Result::Count(to_wire_count_response(value))
-        }
-        TransactionOperationResponseResult::Delete(value) => {
-            v1::transaction_operation_response::Result::Delete(to_wire_delete_response(value))
-        }
-    }
-}
-
-fn from_wire_transaction_operation_response_result(
+pub(crate) fn from_wire_transaction_operation_response_result(
     value: v1::transaction_operation_response::Result,
 ) -> TransactionOperationResponseResult {
     match value {
@@ -1419,17 +1003,8 @@ fn from_wire_transaction_operation_response_result(
     }
 }
 
-/// Converts a native `TransactionServerMessage` to its wire message.
-pub fn to_wire_transaction_server_message(
-    value: TransactionServerMessage,
-) -> v1::TransactionServerMessage {
-    v1::TransactionServerMessage {
-        msg: value.msg.map(to_wire_transaction_server_message_msg),
-    }
-}
-
 /// Converts a wire `TransactionServerMessage` to its native message.
-pub fn from_wire_transaction_server_message(
+pub(crate) fn from_wire_transaction_server_message(
     value: v1::TransactionServerMessage,
 ) -> TransactionServerMessage {
     TransactionServerMessage {
@@ -1437,28 +1012,7 @@ pub fn from_wire_transaction_server_message(
     }
 }
 
-fn to_wire_transaction_server_message_msg(
-    value: TransactionServerMessageMsg,
-) -> v1::transaction_server_message::Msg {
-    match value {
-        TransactionServerMessageMsg::Begin(value) => {
-            v1::transaction_server_message::Msg::Begin(to_wire_transaction_begin_response(value))
-        }
-        TransactionServerMessageMsg::Operation(value) => {
-            v1::transaction_server_message::Msg::Operation(to_wire_transaction_operation_response(
-                value,
-            ))
-        }
-        TransactionServerMessageMsg::Commit(value) => {
-            v1::transaction_server_message::Msg::Commit(to_wire_transaction_commit_response(value))
-        }
-        TransactionServerMessageMsg::Abort(value) => {
-            v1::transaction_server_message::Msg::Abort(to_wire_transaction_abort_response(value))
-        }
-    }
-}
-
-fn from_wire_transaction_server_message_msg(
+pub(crate) fn from_wire_transaction_server_message_msg(
     value: v1::transaction_server_message::Msg,
 ) -> TransactionServerMessageMsg {
     match value {
@@ -1478,20 +1032,20 @@ fn from_wire_transaction_server_message_msg(
 }
 
 /// Converts a native `TypedValue` to its wire message.
-pub fn to_wire_typed_value(value: TypedValue) -> v1::TypedValue {
+pub(crate) fn to_wire_typed_value(value: TypedValue) -> v1::TypedValue {
     v1::TypedValue {
         kind: value.kind.map(to_wire_typed_value_kind),
     }
 }
 
 /// Converts a wire `TypedValue` to its native message.
-pub fn from_wire_typed_value(value: v1::TypedValue) -> TypedValue {
+pub(crate) fn from_wire_typed_value(value: v1::TypedValue) -> TypedValue {
     TypedValue {
         kind: value.kind.map(from_wire_typed_value_kind),
     }
 }
 
-fn to_wire_typed_value_kind(value: TypedValueKind) -> v1::typed_value::Kind {
+pub(crate) fn to_wire_typed_value_kind(value: TypedValueKind) -> v1::typed_value::Kind {
     match value {
         TypedValueKind::NullValue => {
             v1::typed_value::Kind::NullValue(prost_types::NullValue::NullValue as i32)
@@ -1508,7 +1062,7 @@ fn to_wire_typed_value_kind(value: TypedValueKind) -> v1::typed_value::Kind {
     }
 }
 
-fn from_wire_typed_value_kind(value: v1::typed_value::Kind) -> TypedValueKind {
+pub(crate) fn from_wire_typed_value_kind(value: v1::typed_value::Kind) -> TypedValueKind {
     match value {
         v1::typed_value::Kind::NullValue(_) => TypedValueKind::NullValue,
         v1::typed_value::Kind::StringValue(value) => TypedValueKind::StringValue(value),

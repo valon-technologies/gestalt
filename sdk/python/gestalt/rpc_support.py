@@ -2,7 +2,9 @@
 
 """Shared runtime support for generated Gestalt SDK clients: the canonical
 error model, native representations for well-known types, and the call
-helpers every generated client uses."""
+helpers every generated client uses. Underscore-prefixed names are internal
+plumbing for the generated modules; the public surface is GestaltError,
+GestaltErrorCode, RpcStatus, and JsonValue."""
 
 from __future__ import annotations
 
@@ -16,10 +18,12 @@ from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from google.rpc import status_pb2 as _status_pb2
 
-duration_pb2: Any = _duration_pb2
-status_pb2: Any = _status_pb2
-struct_pb2: Any = _struct_pb2
-timestamp_pb2: Any = _timestamp_pb2
+# The protobuf wheel ships no stubs for these modules, so their members are
+# invisible to the type checker and the aliases stay Any.
+_duration: Any = _duration_pb2
+_status: Any = _status_pb2
+_struct: Any = _struct_pb2
+_timestamp: Any = _timestamp_pb2
 
 _UTC = datetime.timezone.utc
 
@@ -71,7 +75,7 @@ class GestaltError(Exception):
         self.message = message
 
 
-def to_gestalt_error(error: BaseException) -> GestaltError:
+def _to_gestalt_error(error: BaseException) -> GestaltError:
     """Convert any raised error to the canonical GestaltError."""
 
     if isinstance(error, GestaltError):
@@ -83,16 +87,16 @@ def to_gestalt_error(error: BaseException) -> GestaltError:
     return GestaltError(GestaltErrorCode.UNKNOWN, str(error))
 
 
-def call_unary(call: Callable[[], _Result]) -> _Result:
+def _call_unary(call: Callable[[], _Result]) -> _Result:
     """Invoke one RPC, converting transport errors to GestaltError."""
 
     try:
         return call()
     except grpc.RpcError as error:
-        raise to_gestalt_error(error) from error
+        raise _to_gestalt_error(error) from error
 
 
-def map_recv(
+def _map_recv(
     stream: Iterable[_Wire], convert: Callable[[_Wire], _Native]
 ) -> Iterator[_Native]:
     """Yield converted response frames, converting transport errors to
@@ -102,10 +106,10 @@ def map_recv(
         for frame in stream:
             yield convert(frame)
     except grpc.RpcError as error:
-        raise to_gestalt_error(error) from error
+        raise _to_gestalt_error(error) from error
 
 
-def map_send(
+def _map_send(
     stream: Iterable[_Native], convert: Callable[[_Native], _Wire]
 ) -> Iterator[_Wire]:
     """Yield converted request frames."""
@@ -114,59 +118,66 @@ def map_send(
         yield convert(frame)
 
 
-def to_wire_timestamp(value: datetime.datetime) -> Any:
+def _to_wire_enum(value: int) -> Any:
+    """Pass an open-enum int to the wire. The wire stubs declare closed enum
+    types on constructor parameters, but proto3 enums accept any int."""
+
+    return value
+
+
+def _to_wire_timestamp(value: datetime.datetime) -> Any:
     """Convert a datetime (naive values are assumed UTC) to a wire Timestamp."""
 
     if value.tzinfo is None:
         value = value.replace(tzinfo=_UTC)
     else:
         value = value.astimezone(_UTC)
-    out = timestamp_pb2.Timestamp()
+    out = _timestamp.Timestamp()
     out.FromDatetime(value)
     return out
 
 
-def from_wire_timestamp(value: Any) -> datetime.datetime:
+def _from_wire_timestamp(value: Any) -> datetime.datetime:
     """Convert a wire Timestamp to a UTC datetime."""
 
     return value.ToDatetime(tzinfo=_UTC)
 
 
-def to_wire_duration(value: datetime.timedelta) -> Any:
+def _to_wire_duration(value: datetime.timedelta) -> Any:
     """Convert a timedelta to a wire Duration."""
 
-    out = duration_pb2.Duration()
+    out = _duration.Duration()
     out.FromTimedelta(value)
     return out
 
 
-def from_wire_duration(value: Any) -> datetime.timedelta:
+def _from_wire_duration(value: Any) -> datetime.timedelta:
     """Convert a wire Duration to a timedelta."""
 
     return value.ToTimedelta()
 
 
-def to_wire_struct(value: dict[str, JsonValue]) -> Any:
+def _to_wire_struct(value: dict[str, JsonValue]) -> Any:
     """Convert a JSON object to a wire Struct."""
 
-    out = struct_pb2.Struct()
+    out = _struct.Struct()
     for key, item in value.items():
-        out.fields[key].CopyFrom(to_wire_value(item))
+        out.fields[key].CopyFrom(_to_wire_value(item))
     return out
 
 
-def from_wire_struct(value: Any) -> dict[str, JsonValue]:
+def _from_wire_struct(value: Any) -> dict[str, JsonValue]:
     """Convert a wire Struct to a JSON object."""
 
-    return {key: from_wire_value(item) for key, item in value.fields.items()}
+    return {key: _from_wire_value(item) for key, item in value.fields.items()}
 
 
-def to_wire_value(value: JsonValue) -> Any:
+def _to_wire_value(value: JsonValue) -> Any:
     """Convert a JSON value to a wire Value."""
 
-    out = struct_pb2.Value()
+    out = _struct.Value()
     if value is None:
-        out.null_value = struct_pb2.NULL_VALUE
+        out.null_value = _struct.NULL_VALUE
     elif isinstance(value, bool):
         out.bool_value = value
     elif isinstance(value, (int, float)):
@@ -174,14 +185,14 @@ def to_wire_value(value: JsonValue) -> Any:
     elif isinstance(value, str):
         out.string_value = value
     elif isinstance(value, list):
-        out.list_value.values.extend(to_wire_value(item) for item in value)
+        out.list_value.values.extend(_to_wire_value(item) for item in value)
     else:
         for key, item in value.items():
-            out.struct_value.fields[key].CopyFrom(to_wire_value(item))
+            out.struct_value.fields[key].CopyFrom(_to_wire_value(item))
     return out
 
 
-def from_wire_value(value: Any) -> JsonValue:
+def _from_wire_value(value: Any) -> JsonValue:
     """Convert a wire Value to a JSON value."""
 
     case = value.WhichOneof("kind")
@@ -194,19 +205,19 @@ def from_wire_value(value: Any) -> JsonValue:
     if case == "bool_value":
         return bool(value.bool_value)
     if case == "struct_value":
-        return from_wire_struct(value.struct_value)
+        return _from_wire_struct(value.struct_value)
     if case == "list_value":
-        return [from_wire_value(item) for item in value.list_value.values]
+        return [_from_wire_value(item) for item in value.list_value.values]
     return None
 
 
-def to_wire_status(value: RpcStatus) -> Any:
+def _to_wire_status(value: RpcStatus) -> Any:
     """Convert a native RpcStatus to a wire google.rpc.Status."""
 
-    return status_pb2.Status(code=value.code, message=value.message)
+    return _status.Status(code=value.code, message=value.message)
 
 
-def from_wire_status(value: Any) -> RpcStatus:
+def _from_wire_status(value: Any) -> RpcStatus:
     """Convert a wire google.rpc.Status to a native RpcStatus."""
 
     return RpcStatus(code=value.code, message=value.message)

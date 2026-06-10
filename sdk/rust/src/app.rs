@@ -3,9 +3,7 @@
 //! Generated native types, wire conversions, and clients for app.proto.
 
 use crate::generated::v1;
-use crate::rpc_support::{
-    GestaltError, from_wire_struct, from_wire_value, to_wire_struct, to_wire_value,
-};
+use crate::rpc_support::{GestaltError, from_wire_value, to_wire_struct};
 
 /// Open enum for `gestalt.provider.v1.ConnectionMode`; unknown numeric values are preserved.
 pub type ConnectionMode = i32;
@@ -456,23 +454,15 @@ pub struct SubjectPermissionContext {
 }
 
 /// Converts a native `AccessContext` to its wire message.
-pub fn to_wire_access_context(value: AccessContext) -> v1::AccessContext {
+pub(crate) fn to_wire_access_context(value: AccessContext) -> v1::AccessContext {
     v1::AccessContext {
         policy: value.policy,
         role: value.role,
     }
 }
 
-/// Converts a wire `AccessContext` to its native message.
-pub fn from_wire_access_context(value: v1::AccessContext) -> AccessContext {
-    AccessContext {
-        policy: value.policy,
-        role: value.role,
-    }
-}
-
 /// Converts a native `AgentInvocationContext` to its wire message.
-pub fn to_wire_agent_invocation_context(
+pub(crate) fn to_wire_agent_invocation_context(
     value: AgentInvocationContext,
 ) -> v1::AgentInvocationContext {
     v1::AgentInvocationContext {
@@ -482,19 +472,8 @@ pub fn to_wire_agent_invocation_context(
     }
 }
 
-/// Converts a wire `AgentInvocationContext` to its native message.
-pub fn from_wire_agent_invocation_context(
-    value: v1::AgentInvocationContext,
-) -> AgentInvocationContext {
-    AgentInvocationContext {
-        provider_name: value.provider_name,
-        session_id: value.session_id,
-        turn_id: value.turn_id,
-    }
-}
-
 /// Converts a native `AgentToolRef` to its wire message.
-pub fn to_wire_agent_tool_ref(value: AgentToolRef) -> v1::AgentToolRef {
+pub(crate) fn to_wire_agent_tool_ref(value: AgentToolRef) -> v1::AgentToolRef {
     v1::AgentToolRef {
         app: value.app,
         operation: value.operation,
@@ -509,7 +488,7 @@ pub fn to_wire_agent_tool_ref(value: AgentToolRef) -> v1::AgentToolRef {
 }
 
 /// Converts a wire `AgentToolRef` to its native message.
-pub fn from_wire_agent_tool_ref(value: v1::AgentToolRef) -> AgentToolRef {
+pub(crate) fn from_wire_agent_tool_ref(value: v1::AgentToolRef) -> AgentToolRef {
     AgentToolRef {
         app: value.app,
         operation: value.operation,
@@ -524,7 +503,7 @@ pub fn from_wire_agent_tool_ref(value: v1::AgentToolRef) -> AgentToolRef {
 }
 
 /// Converts a native `AppInvokeGraphQLRequest` to its wire message.
-pub fn to_wire_app_invoke_graph_ql_request(
+pub(crate) fn to_wire_app_invoke_graph_ql_request(
     value: AppInvokeGraphQLRequest,
 ) -> v1::AppInvokeGraphQlRequest {
     v1::AppInvokeGraphQlRequest {
@@ -538,23 +517,8 @@ pub fn to_wire_app_invoke_graph_ql_request(
     }
 }
 
-/// Converts a wire `AppInvokeGraphQLRequest` to its native message.
-pub fn from_wire_app_invoke_graph_ql_request(
-    value: v1::AppInvokeGraphQlRequest,
-) -> AppInvokeGraphQLRequest {
-    AppInvokeGraphQLRequest {
-        app: value.app,
-        document: value.document,
-        variables: value.variables.map(from_wire_struct),
-        connection: value.connection,
-        instance: value.instance,
-        idempotency_key: value.idempotency_key,
-        context: value.context.map(from_wire_request_context),
-    }
-}
-
 /// Converts a native `AppInvokeRequest` to its wire message.
-pub fn to_wire_app_invoke_request(value: AppInvokeRequest) -> v1::AppInvokeRequest {
+pub(crate) fn to_wire_app_invoke_request(value: AppInvokeRequest) -> v1::AppInvokeRequest {
     v1::AppInvokeRequest {
         app: value.app,
         operation: value.operation,
@@ -567,37 +531,8 @@ pub fn to_wire_app_invoke_request(value: AppInvokeRequest) -> v1::AppInvokeReque
     }
 }
 
-/// Converts a wire `AppInvokeRequest` to its native message.
-pub fn from_wire_app_invoke_request(value: v1::AppInvokeRequest) -> AppInvokeRequest {
-    AppInvokeRequest {
-        app: value.app,
-        operation: value.operation,
-        params: value.params.map(from_wire_struct),
-        connection: value.connection,
-        instance: value.instance,
-        idempotency_key: value.idempotency_key,
-        credential_mode: value.credential_mode,
-        context: value.context.map(from_wire_request_context),
-    }
-}
-
-/// Converts a native `Catalog` to its wire message.
-pub fn to_wire_catalog(value: Catalog) -> v1::Catalog {
-    v1::Catalog {
-        name: value.name,
-        display_name: value.display_name,
-        description: value.description,
-        icon_svg: value.icon_svg,
-        operations: value
-            .operations
-            .into_iter()
-            .map(to_wire_catalog_operation)
-            .collect(),
-    }
-}
-
 /// Converts a wire `Catalog` to its native message.
-pub fn from_wire_catalog(value: v1::Catalog) -> Catalog {
+pub(crate) fn from_wire_catalog(value: v1::Catalog) -> Catalog {
     Catalog {
         name: value.name,
         display_name: value.display_name,
@@ -611,32 +546,8 @@ pub fn from_wire_catalog(value: v1::Catalog) -> Catalog {
     }
 }
 
-/// Converts a native `CatalogOperation` to its wire message.
-pub fn to_wire_catalog_operation(value: CatalogOperation) -> v1::CatalogOperation {
-    v1::CatalogOperation {
-        id: value.id,
-        method: value.method,
-        title: value.title,
-        description: value.description,
-        input_schema: value.input_schema,
-        output_schema: value.output_schema,
-        annotations: value.annotations.map(to_wire_operation_annotations),
-        parameters: value
-            .parameters
-            .into_iter()
-            .map(to_wire_catalog_parameter)
-            .collect(),
-        required_scopes: value.required_scopes,
-        tags: value.tags,
-        read_only: value.read_only,
-        visible: value.visible,
-        transport: value.transport,
-        allowed_roles: value.allowed_roles,
-    }
-}
-
 /// Converts a wire `CatalogOperation` to its native message.
-pub fn from_wire_catalog_operation(value: v1::CatalogOperation) -> CatalogOperation {
+pub(crate) fn from_wire_catalog_operation(value: v1::CatalogOperation) -> CatalogOperation {
     CatalogOperation {
         id: value.id,
         method: value.method,
@@ -659,19 +570,8 @@ pub fn from_wire_catalog_operation(value: v1::CatalogOperation) -> CatalogOperat
     }
 }
 
-/// Converts a native `CatalogParameter` to its wire message.
-pub fn to_wire_catalog_parameter(value: CatalogParameter) -> v1::CatalogParameter {
-    v1::CatalogParameter {
-        name: value.name,
-        r#type: value.r#type,
-        description: value.description,
-        required: value.required,
-        default: value.default.map(to_wire_value),
-    }
-}
-
 /// Converts a wire `CatalogParameter` to its native message.
-pub fn from_wire_catalog_parameter(value: v1::CatalogParameter) -> CatalogParameter {
+pub(crate) fn from_wire_catalog_parameter(value: v1::CatalogParameter) -> CatalogParameter {
     CatalogParameter {
         name: value.name,
         r#type: value.r#type,
@@ -681,19 +581,8 @@ pub fn from_wire_catalog_parameter(value: v1::CatalogParameter) -> CatalogParame
     }
 }
 
-/// Converts a native `ConnectionParamDef` to its wire message.
-pub fn to_wire_connection_param_def(value: ConnectionParamDef) -> v1::ConnectionParamDef {
-    v1::ConnectionParamDef {
-        required: value.required,
-        description: value.description,
-        default_value: value.default_value,
-        from: value.from,
-        field: value.field,
-    }
-}
-
 /// Converts a wire `ConnectionParamDef` to its native message.
-pub fn from_wire_connection_param_def(value: v1::ConnectionParamDef) -> ConnectionParamDef {
+pub(crate) fn from_wire_connection_param_def(value: v1::ConnectionParamDef) -> ConnectionParamDef {
     ConnectionParamDef {
         required: value.required,
         description: value.description,
@@ -704,7 +593,7 @@ pub fn from_wire_connection_param_def(value: v1::ConnectionParamDef) -> Connecti
 }
 
 /// Converts a native `CredentialContext` to its wire message.
-pub fn to_wire_credential_context(value: CredentialContext) -> v1::CredentialContext {
+pub(crate) fn to_wire_credential_context(value: CredentialContext) -> v1::CredentialContext {
     v1::CredentialContext {
         mode: value.mode,
         subject_id: value.subject_id,
@@ -713,18 +602,8 @@ pub fn to_wire_credential_context(value: CredentialContext) -> v1::CredentialCon
     }
 }
 
-/// Converts a wire `CredentialContext` to its native message.
-pub fn from_wire_credential_context(value: v1::CredentialContext) -> CredentialContext {
-    CredentialContext {
-        mode: value.mode,
-        subject_id: value.subject_id,
-        connection: value.connection,
-        instance: value.instance,
-    }
-}
-
 /// Converts a native `ExecuteRequest` to its wire message.
-pub fn to_wire_execute_request(value: ExecuteRequest) -> v1::ExecuteRequest {
+pub(crate) fn to_wire_execute_request(value: ExecuteRequest) -> v1::ExecuteRequest {
     v1::ExecuteRequest {
         operation: value.operation,
         params: value.params.map(to_wire_struct),
@@ -736,21 +615,8 @@ pub fn to_wire_execute_request(value: ExecuteRequest) -> v1::ExecuteRequest {
     }
 }
 
-/// Converts a wire `ExecuteRequest` to its native message.
-pub fn from_wire_execute_request(value: v1::ExecuteRequest) -> ExecuteRequest {
-    ExecuteRequest {
-        operation: value.operation,
-        params: value.params.map(from_wire_struct),
-        token: value.token,
-        connection_params: value.connection_params,
-        invocation_id: value.invocation_id,
-        context: value.context.map(from_wire_request_context),
-        idempotency_key: value.idempotency_key,
-    }
-}
-
 /// Converts a native `GetSessionCatalogRequest` to its wire message.
-pub fn to_wire_get_session_catalog_request(
+pub(crate) fn to_wire_get_session_catalog_request(
     value: GetSessionCatalogRequest,
 ) -> v1::GetSessionCatalogRequest {
     v1::GetSessionCatalogRequest {
@@ -761,29 +627,8 @@ pub fn to_wire_get_session_catalog_request(
     }
 }
 
-/// Converts a wire `GetSessionCatalogRequest` to its native message.
-pub fn from_wire_get_session_catalog_request(
-    value: v1::GetSessionCatalogRequest,
-) -> GetSessionCatalogRequest {
-    GetSessionCatalogRequest {
-        token: value.token,
-        connection_params: value.connection_params,
-        invocation_id: value.invocation_id,
-        context: value.context.map(from_wire_request_context),
-    }
-}
-
-/// Converts a native `GetSessionCatalogResponse` to its wire message.
-pub fn to_wire_get_session_catalog_response(
-    value: GetSessionCatalogResponse,
-) -> v1::GetSessionCatalogResponse {
-    v1::GetSessionCatalogResponse {
-        catalog: value.catalog.map(to_wire_catalog),
-    }
-}
-
 /// Converts a wire `GetSessionCatalogResponse` to its native message.
-pub fn from_wire_get_session_catalog_response(
+pub(crate) fn from_wire_get_session_catalog_response(
     value: v1::GetSessionCatalogResponse,
 ) -> GetSessionCatalogResponse {
     GetSessionCatalogResponse {
@@ -792,7 +637,7 @@ pub fn from_wire_get_session_catalog_response(
 }
 
 /// Converts a native `HTTPSubjectRequest` to its wire message.
-pub fn to_wire_http_subject_request(value: HTTPSubjectRequest) -> v1::HttpSubjectRequest {
+pub(crate) fn to_wire_http_subject_request(value: HTTPSubjectRequest) -> v1::HttpSubjectRequest {
     v1::HttpSubjectRequest {
         binding: value.binding,
         method: value.method,
@@ -816,47 +661,15 @@ pub fn to_wire_http_subject_request(value: HTTPSubjectRequest) -> v1::HttpSubjec
     }
 }
 
-/// Converts a wire `HTTPSubjectRequest` to its native message.
-pub fn from_wire_http_subject_request(value: v1::HttpSubjectRequest) -> HTTPSubjectRequest {
-    HTTPSubjectRequest {
-        binding: value.binding,
-        method: value.method,
-        path: value.path,
-        content_type: value.content_type,
-        headers: value
-            .headers
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_string_list(item)))
-            .collect(),
-        query: value
-            .query
-            .into_iter()
-            .map(|(key, item)| (key, from_wire_string_list(item)))
-            .collect(),
-        params: value.params.map(from_wire_struct),
-        raw_body: value.raw_body,
-        security_scheme: value.security_scheme,
-        verified_subject: value.verified_subject,
-        verified_claims: value.verified_claims,
-    }
-}
-
 /// Converts a native `HostContext` to its wire message.
-pub fn to_wire_host_context(value: HostContext) -> v1::HostContext {
+pub(crate) fn to_wire_host_context(value: HostContext) -> v1::HostContext {
     v1::HostContext {
         public_base_url: value.public_base_url,
     }
 }
 
-/// Converts a wire `HostContext` to its native message.
-pub fn from_wire_host_context(value: v1::HostContext) -> HostContext {
-    HostContext {
-        public_base_url: value.public_base_url,
-    }
-}
-
 /// Converts a native `InvocationContext` to its wire message.
-pub fn to_wire_invocation_context(value: InvocationContext) -> v1::InvocationContext {
+pub(crate) fn to_wire_invocation_context(value: InvocationContext) -> v1::InvocationContext {
     v1::InvocationContext {
         request_id: value.request_id,
         depth: value.depth,
@@ -867,20 +680,10 @@ pub fn to_wire_invocation_context(value: InvocationContext) -> v1::InvocationCon
     }
 }
 
-/// Converts a wire `InvocationContext` to its native message.
-pub fn from_wire_invocation_context(value: v1::InvocationContext) -> InvocationContext {
-    InvocationContext {
-        request_id: value.request_id,
-        depth: value.depth,
-        call_chain: value.call_chain,
-        surface: value.surface,
-        internal_connection_access: value.internal_connection_access,
-        connection: value.connection,
-    }
-}
-
 /// Converts a native `OperationAnnotations` to its wire message.
-pub fn to_wire_operation_annotations(value: OperationAnnotations) -> v1::OperationAnnotations {
+pub(crate) fn to_wire_operation_annotations(
+    value: OperationAnnotations,
+) -> v1::OperationAnnotations {
     v1::OperationAnnotations {
         read_only_hint: value.read_only_hint,
         idempotent_hint: value.idempotent_hint,
@@ -890,7 +693,9 @@ pub fn to_wire_operation_annotations(value: OperationAnnotations) -> v1::Operati
 }
 
 /// Converts a wire `OperationAnnotations` to its native message.
-pub fn from_wire_operation_annotations(value: v1::OperationAnnotations) -> OperationAnnotations {
+pub(crate) fn from_wire_operation_annotations(
+    value: v1::OperationAnnotations,
+) -> OperationAnnotations {
     OperationAnnotations {
         read_only_hint: value.read_only_hint,
         idempotent_hint: value.idempotent_hint,
@@ -899,21 +704,8 @@ pub fn from_wire_operation_annotations(value: v1::OperationAnnotations) -> Opera
     }
 }
 
-/// Converts a native `OperationResult` to its wire message.
-pub fn to_wire_operation_result(value: OperationResult) -> v1::OperationResult {
-    v1::OperationResult {
-        status: value.status,
-        body: value.body,
-        headers: value
-            .headers
-            .into_iter()
-            .map(|(key, item)| (key, to_wire_string_list(item)))
-            .collect(),
-    }
-}
-
 /// Converts a wire `OperationResult` to its native message.
-pub fn from_wire_operation_result(value: v1::OperationResult) -> OperationResult {
+pub(crate) fn from_wire_operation_result(value: v1::OperationResult) -> OperationResult {
     OperationResult {
         status: value.status,
         body: value.body,
@@ -926,43 +718,15 @@ pub fn from_wire_operation_result(value: v1::OperationResult) -> OperationResult
 }
 
 /// Converts a native `ProviderContext` to its wire message.
-pub fn to_wire_provider_context(value: ProviderContext) -> v1::ProviderContext {
+pub(crate) fn to_wire_provider_context(value: ProviderContext) -> v1::ProviderContext {
     v1::ProviderContext {
         kind: value.kind,
         name: value.name,
     }
 }
 
-/// Converts a wire `ProviderContext` to its native message.
-pub fn from_wire_provider_context(value: v1::ProviderContext) -> ProviderContext {
-    ProviderContext {
-        kind: value.kind,
-        name: value.name,
-    }
-}
-
-/// Converts a native `ProviderMetadata` to its wire message.
-pub fn to_wire_provider_metadata(value: ProviderMetadata) -> v1::ProviderMetadata {
-    v1::ProviderMetadata {
-        name: value.name,
-        display_name: value.display_name,
-        description: value.description,
-        connection_mode: value.connection_mode,
-        auth_types: value.auth_types,
-        connection_params: value
-            .connection_params
-            .into_iter()
-            .map(|(key, item)| (key, to_wire_connection_param_def(item)))
-            .collect(),
-        static_catalog: value.static_catalog.map(to_wire_catalog),
-        supports_session_catalog: value.supports_session_catalog,
-        min_protocol_version: value.min_protocol_version,
-        max_protocol_version: value.max_protocol_version,
-    }
-}
-
 /// Converts a wire `ProviderMetadata` to its native message.
-pub fn from_wire_provider_metadata(value: v1::ProviderMetadata) -> ProviderMetadata {
+pub(crate) fn from_wire_provider_metadata(value: v1::ProviderMetadata) -> ProviderMetadata {
     ProviderMetadata {
         name: value.name,
         display_name: value.display_name,
@@ -982,7 +746,7 @@ pub fn from_wire_provider_metadata(value: v1::ProviderMetadata) -> ProviderMetad
 }
 
 /// Converts a native `RequestContext` to its wire message.
-pub fn to_wire_request_context(value: RequestContext) -> v1::RequestContext {
+pub(crate) fn to_wire_request_context(value: RequestContext) -> v1::RequestContext {
     v1::RequestContext {
         subject: value.subject.map(to_wire_subject_context),
         credential: value.credential.map(to_wire_credential_context),
@@ -1003,30 +767,8 @@ pub fn to_wire_request_context(value: RequestContext) -> v1::RequestContext {
     }
 }
 
-/// Converts a wire `RequestContext` to its native message.
-pub fn from_wire_request_context(value: v1::RequestContext) -> RequestContext {
-    RequestContext {
-        subject: value.subject.map(from_wire_subject_context),
-        credential: value.credential.map(from_wire_credential_context),
-        access: value.access.map(from_wire_access_context),
-        workflow: value.workflow.map(from_wire_struct),
-        host: value.host.map(from_wire_host_context),
-        agent_subject: value.agent_subject.map(from_wire_subject_context),
-        caller: value.caller.map(from_wire_provider_context),
-        invocation: value.invocation.map(from_wire_invocation_context),
-        tool_refs: value
-            .tool_refs
-            .into_iter()
-            .map(from_wire_agent_tool_ref)
-            .collect(),
-        tool_refs_set: value.tool_refs_set,
-        request_meta: value.request_meta.map(from_wire_request_meta_context),
-        agent: value.agent.map(from_wire_agent_invocation_context),
-    }
-}
-
 /// Converts a native `RequestMetaContext` to its wire message.
-pub fn to_wire_request_meta_context(value: RequestMetaContext) -> v1::RequestMetaContext {
+pub(crate) fn to_wire_request_meta_context(value: RequestMetaContext) -> v1::RequestMetaContext {
     v1::RequestMetaContext {
         client_ip: value.client_ip,
         remote_addr: value.remote_addr,
@@ -1034,17 +776,8 @@ pub fn to_wire_request_meta_context(value: RequestMetaContext) -> v1::RequestMet
     }
 }
 
-/// Converts a wire `RequestMetaContext` to its native message.
-pub fn from_wire_request_meta_context(value: v1::RequestMetaContext) -> RequestMetaContext {
-    RequestMetaContext {
-        client_ip: value.client_ip,
-        remote_addr: value.remote_addr,
-        user_agent: value.user_agent,
-    }
-}
-
 /// Converts a native `ResolveHTTPSubjectRequest` to its wire message.
-pub fn to_wire_resolve_http_subject_request(
+pub(crate) fn to_wire_resolve_http_subject_request(
     value: ResolveHTTPSubjectRequest,
 ) -> v1::ResolveHttpSubjectRequest {
     v1::ResolveHttpSubjectRequest {
@@ -1053,29 +786,8 @@ pub fn to_wire_resolve_http_subject_request(
     }
 }
 
-/// Converts a wire `ResolveHTTPSubjectRequest` to its native message.
-pub fn from_wire_resolve_http_subject_request(
-    value: v1::ResolveHttpSubjectRequest,
-) -> ResolveHTTPSubjectRequest {
-    ResolveHTTPSubjectRequest {
-        request: value.request.map(from_wire_http_subject_request),
-        context: value.context.map(from_wire_request_context),
-    }
-}
-
-/// Converts a native `ResolveHTTPSubjectResponse` to its wire message.
-pub fn to_wire_resolve_http_subject_response(
-    value: ResolveHTTPSubjectResponse,
-) -> v1::ResolveHttpSubjectResponse {
-    v1::ResolveHttpSubjectResponse {
-        subject: value.subject.map(to_wire_subject_context),
-        reject_status: value.reject_status,
-        reject_message: value.reject_message,
-    }
-}
-
 /// Converts a wire `ResolveHTTPSubjectResponse` to its native message.
-pub fn from_wire_resolve_http_subject_response(
+pub(crate) fn from_wire_resolve_http_subject_response(
     value: v1::ResolveHttpSubjectResponse,
 ) -> ResolveHTTPSubjectResponse {
     ResolveHTTPSubjectResponse {
@@ -1086,7 +798,9 @@ pub fn from_wire_resolve_http_subject_response(
 }
 
 /// Converts a native `StartProviderRequest` to its wire message.
-pub fn to_wire_start_provider_request(value: StartProviderRequest) -> v1::StartProviderRequest {
+pub(crate) fn to_wire_start_provider_request(
+    value: StartProviderRequest,
+) -> v1::StartProviderRequest {
     v1::StartProviderRequest {
         name: value.name,
         config: value.config.map(to_wire_struct),
@@ -1094,24 +808,8 @@ pub fn to_wire_start_provider_request(value: StartProviderRequest) -> v1::StartP
     }
 }
 
-/// Converts a wire `StartProviderRequest` to its native message.
-pub fn from_wire_start_provider_request(value: v1::StartProviderRequest) -> StartProviderRequest {
-    StartProviderRequest {
-        name: value.name,
-        config: value.config.map(from_wire_struct),
-        protocol_version: value.protocol_version,
-    }
-}
-
-/// Converts a native `StartProviderResponse` to its wire message.
-pub fn to_wire_start_provider_response(value: StartProviderResponse) -> v1::StartProviderResponse {
-    v1::StartProviderResponse {
-        protocol_version: value.protocol_version,
-    }
-}
-
 /// Converts a wire `StartProviderResponse` to its native message.
-pub fn from_wire_start_provider_response(
+pub(crate) fn from_wire_start_provider_response(
     value: v1::StartProviderResponse,
 ) -> StartProviderResponse {
     StartProviderResponse {
@@ -1120,21 +818,21 @@ pub fn from_wire_start_provider_response(
 }
 
 /// Converts a native `StringList` to its wire message.
-pub fn to_wire_string_list(value: StringList) -> v1::StringList {
+pub(crate) fn to_wire_string_list(value: StringList) -> v1::StringList {
     v1::StringList {
         values: value.values,
     }
 }
 
 /// Converts a wire `StringList` to its native message.
-pub fn from_wire_string_list(value: v1::StringList) -> StringList {
+pub(crate) fn from_wire_string_list(value: v1::StringList) -> StringList {
     StringList {
         values: value.values,
     }
 }
 
 /// Converts a native `SubjectContext` to its wire message.
-pub fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
+pub(crate) fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
     v1::SubjectContext {
         id: value.id,
         credential_subject_id: value.credential_subject_id,
@@ -1150,7 +848,7 @@ pub fn to_wire_subject_context(value: SubjectContext) -> v1::SubjectContext {
 }
 
 /// Converts a wire `SubjectContext` to its native message.
-pub fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
+pub(crate) fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
     SubjectContext {
         id: value.id,
         credential_subject_id: value.credential_subject_id,
@@ -1166,7 +864,7 @@ pub fn from_wire_subject_context(value: v1::SubjectContext) -> SubjectContext {
 }
 
 /// Converts a native `SubjectPermissionContext` to its wire message.
-pub fn to_wire_subject_permission_context(
+pub(crate) fn to_wire_subject_permission_context(
     value: SubjectPermissionContext,
 ) -> v1::SubjectPermissionContext {
     v1::SubjectPermissionContext {
@@ -1177,7 +875,7 @@ pub fn to_wire_subject_permission_context(
 }
 
 /// Converts a wire `SubjectPermissionContext` to its native message.
-pub fn from_wire_subject_permission_context(
+pub(crate) fn from_wire_subject_permission_context(
     value: v1::SubjectPermissionContext,
 ) -> SubjectPermissionContext {
     SubjectPermissionContext {

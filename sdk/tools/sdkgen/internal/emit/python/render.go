@@ -53,6 +53,17 @@ func (r *renderer) use(name string) {
 	r.features.support[name] = true
 }
 
+// wireModule names this file's pb2 import alias. The vendored .pyi stubs in
+// gestalt/_gen/v1 type these modules, so generated code references them
+// directly instead of going through an Any-typed alias.
+func (r *renderer) wireModule() string {
+	return "_" + r.base + "_pb2"
+}
+
+func (r *renderer) wireGrpcModule() string {
+	return "_" + r.base + "_pb2_grpc"
+}
+
 // crossRef records an import from another generated file and returns the name
 // unchanged. References within the current file are not imports.
 func (r *renderer) crossRef(protoFile, name string) string {
@@ -77,8 +88,13 @@ func (r *renderer) enumType(fullName string) string {
 // toWireExpr renders the wire-bound conversion of a singular value.
 func (r *renderer) toWireExpr(ref *model.TypeRef, expr string) string {
 	switch ref.Kind {
-	case model.KindScalar, model.KindBytes, model.KindEnum:
+	case model.KindScalar, model.KindBytes:
 		return expr
+	case model.KindEnum:
+		// Native enums are open ints; the wire stubs declare closed enum
+		// types, so the value launders through the Any-typed converter.
+		r.use("_to_wire_enum")
+		return "_to_wire_enum(" + expr + ")"
 	case model.KindJSONNull:
 		r.features.structPb = true
 		return "_struct.NULL_VALUE"
@@ -88,7 +104,7 @@ func (r *renderer) toWireExpr(ref *model.TypeRef, expr string) string {
 	case model.KindMessage:
 		return r.crossRef(r.idx.messages[ref.Message].ProtoFile, toWireFunc(ref.Message)) + "(" + expr + ")"
 	default:
-		fn := "to_wire_" + wellKnownSuffix(ref.Kind)
+		fn := "_to_wire_" + wellKnownSuffix(ref.Kind)
 		r.use(fn)
 		return fn + "(" + expr + ")"
 	}
@@ -104,7 +120,7 @@ func (r *renderer) fromWireExpr(ref *model.TypeRef, expr string) string {
 	case model.KindMessage:
 		return r.crossRef(r.idx.messages[ref.Message].ProtoFile, fromWireFunc(ref.Message)) + "(" + expr + ")"
 	default:
-		fn := "from_wire_" + wellKnownSuffix(ref.Kind)
+		fn := "_from_wire_" + wellKnownSuffix(ref.Kind)
 		r.use(fn)
 		return fn + "(" + expr + ")"
 	}
@@ -129,11 +145,13 @@ func wellKnownSuffix(kind model.SemanticKind) string {
 }
 
 func identityToWire(ref *model.TypeRef) bool {
-	return ref.Kind == model.KindScalar || ref.Kind == model.KindBytes || ref.Kind == model.KindEnum
+	return ref.Kind == model.KindScalar || ref.Kind == model.KindBytes
 }
 
+// identityFromWire includes enums: wire enum values are int subclasses, so
+// they satisfy the open-enum int representation directly.
 func identityFromWire(ref *model.TypeRef) bool {
-	return identityToWire(ref)
+	return identityToWire(ref) || ref.Kind == model.KindEnum
 }
 
 // fieldToWire renders the conversion of a whole field value. Wire message
@@ -290,9 +308,9 @@ func (r *renderer) renderConversions(m *model.Message) {
 
 	fmt.Fprintf(&r.body, "def %s(%s: %s) -> Any:\n", toWireFunc(m.FullName), param, name)
 	if len(m.Fields) == 0 {
-		fmt.Fprintf(&r.body, "    return _wire.%s()\n\n\n", name)
+		fmt.Fprintf(&r.body, "    return %s.%s()\n\n\n", r.wireModule(), name)
 	} else {
-		fmt.Fprintf(&r.body, "    return _wire.%s(\n", name)
+		fmt.Fprintf(&r.body, "    return %s.%s(\n", r.wireModule(), name)
 		for _, f := range m.Fields {
 			if f.OneofIndex >= 0 {
 				continue
@@ -381,7 +399,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 	fmt.Fprintf(&r.body, "class %s:\n", name)
 	fmt.Fprintf(&r.body, "    \"\"\"Client for the %s service.\"\"\"\n\n", svc.FullName)
 	r.body.WriteString("    def __init__(self, channel: grpc.Channel) -> None:\n")
-	fmt.Fprintf(&r.body, "        self._stub = _wire_grpc.%sStub(channel)\n\n", name)
+	fmt.Fprintf(&r.body, "        self._stub = %s.%sStub(channel)\n\n", r.wireGrpcModule(), name)
 	for _, method := range svc.Methods {
 		r.renderMethod(method)
 	}
@@ -399,9 +417,9 @@ func (r *renderer) renderMethod(m *model.Method) {
 		switch m.Stream {
 		case model.ClientStream, model.Bidi:
 			r.features.iterable = true
-			r.use("map_send")
+			r.use("_map_send")
 			requestParam = ", requests: Iterable[" + requestType + "]"
-			requestArg = "map_send(requests, " + r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + ")"
+			requestArg = "_map_send(requests, " + r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + ")"
 		default:
 			requestParam = ", request: " + requestType
 			requestArg = r.crossRef(m.Input.ProtoFile, toWireFunc(m.Input.FullName)) + "(request)"
@@ -413,18 +431,18 @@ func (r *renderer) renderMethod(m *model.Method) {
 	case model.ServerStream, model.Bidi:
 		responseType := r.messageType(m.Output.FullName)
 		r.features.iterator = true
-		r.use("map_recv")
+		r.use("_map_recv")
 		fmt.Fprintf(&r.body, "    def %s(self%s) -> Iterator[%s]:\n", methodName, requestParam, responseType)
-		fmt.Fprintf(&r.body, "        return map_recv(%s, %s)\n\n", stubCall, r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
+		fmt.Fprintf(&r.body, "        return _map_recv(%s, %s)\n\n", stubCall, r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 	default:
-		r.use("call_unary")
+		r.use("_call_unary")
 		if m.OutputIsEmpty {
 			fmt.Fprintf(&r.body, "    def %s(self%s) -> None:\n", methodName, requestParam)
-			fmt.Fprintf(&r.body, "        call_unary(lambda: %s)\n\n", stubCall)
+			fmt.Fprintf(&r.body, "        _call_unary(lambda: %s)\n\n", stubCall)
 		} else {
 			responseType := r.messageType(m.Output.FullName)
 			fmt.Fprintf(&r.body, "    def %s(self%s) -> %s:\n", methodName, requestParam, responseType)
-			fmt.Fprintf(&r.body, "        response = call_unary(lambda: %s)\n", stubCall)
+			fmt.Fprintf(&r.body, "        response = _call_unary(lambda: %s)\n", stubCall)
 			fmt.Fprintf(&r.body, "        return %s(response)\n\n", r.crossRef(m.Output.ProtoFile, fromWireFunc(m.Output.FullName)))
 		}
 	}
@@ -524,18 +542,15 @@ func (r *renderer) assemble() string {
 		b.WriteString(fromImport(imp.module, imp.names))
 	}
 
+	// The protobuf wheel ships no stubs for the well-known modules, so their
+	// members are invisible to the type checker and the aliases stay Any. The
+	// _gen pb2 modules are typed by the vendored .pyi stubs and need no alias.
 	var aliases []string
 	if r.features.emptyPb {
 		aliases = append(aliases, "_empty: Any = _empty_pb2\n")
 	}
 	if r.features.structPb {
 		aliases = append(aliases, "_struct: Any = _struct_pb2\n")
-	}
-	if r.features.wire {
-		aliases = append(aliases, fmt.Sprintf("_wire: Any = _%s_pb2\n", r.base))
-	}
-	if r.features.wireGrpc {
-		aliases = append(aliases, fmt.Sprintf("_wire_grpc: Any = _%s_pb2_grpc\n", r.base))
 	}
 	if len(aliases) > 0 {
 		b.WriteString("\n")
@@ -544,7 +559,14 @@ func (r *renderer) assemble() string {
 		}
 	}
 
-	b.WriteString("\n\n")
+	// ruff's isort expects one blank line between the import block and a
+	// following comment, and two before a class or function. The alias block,
+	// when present, ends the import block itself.
+	if len(aliases) == 0 && strings.HasPrefix(r.body.String(), "#") {
+		b.WriteString("\n")
+	} else {
+		b.WriteString("\n\n")
+	}
 	b.WriteString(r.body.String())
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }

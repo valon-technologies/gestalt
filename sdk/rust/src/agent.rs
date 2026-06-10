@@ -3,15 +3,12 @@
 //! Generated native types, wire conversions, and clients for agent.proto.
 
 use crate::app::{
-    AgentToolRef, OperationAnnotations, RequestContext, SubjectContext, from_wire_agent_tool_ref,
-    from_wire_operation_annotations, from_wire_request_context, from_wire_subject_context,
-    to_wire_agent_tool_ref, to_wire_operation_annotations, to_wire_request_context,
-    to_wire_subject_context,
+    AgentToolRef, OperationAnnotations, RequestContext, SubjectContext, to_wire_agent_tool_ref,
+    to_wire_operation_annotations, to_wire_request_context, to_wire_subject_context,
 };
 use crate::generated::v1;
 use crate::rpc_support::{
     GestaltError, from_wire_struct, from_wire_timestamp, from_wire_value, to_wire_struct,
-    to_wire_timestamp, to_wire_value,
 };
 
 /// Open enum for `gestalt.provider.v1.AgentExecutionStatus`; unknown numeric values are preserved.
@@ -778,7 +775,7 @@ pub struct UpdateAgentProviderSessionRequest {
 }
 
 /// Converts a native `AgentCatalogToolConfig` to its wire message.
-pub fn to_wire_agent_catalog_tool_config(
+pub(crate) fn to_wire_agent_catalog_tool_config(
     value: AgentCatalogToolConfig,
 ) -> v1::AgentCatalogToolConfig {
     v1::AgentCatalogToolConfig {
@@ -791,43 +788,8 @@ pub fn to_wire_agent_catalog_tool_config(
     }
 }
 
-/// Converts a wire `AgentCatalogToolConfig` to its native message.
-pub fn from_wire_agent_catalog_tool_config(
-    value: v1::AgentCatalogToolConfig,
-) -> AgentCatalogToolConfig {
-    AgentCatalogToolConfig {
-        refs: value
-            .refs
-            .into_iter()
-            .map(from_wire_agent_tool_ref)
-            .collect(),
-        tools: value
-            .tools
-            .into_iter()
-            .map(from_wire_listed_agent_tool)
-            .collect(),
-    }
-}
-
-/// Converts a native `AgentInteraction` to its wire message.
-pub fn to_wire_agent_interaction(value: AgentInteraction) -> v1::AgentInteraction {
-    v1::AgentInteraction {
-        id: value.id,
-        r#type: value.r#type,
-        state: value.state,
-        title: value.title,
-        prompt: value.prompt,
-        request: value.request.map(to_wire_struct),
-        resolution: value.resolution.map(to_wire_struct),
-        created_at: value.created_at.map(to_wire_timestamp),
-        resolved_at: value.resolved_at.map(to_wire_timestamp),
-        turn_id: value.turn_id,
-        session_id: value.session_id,
-    }
-}
-
 /// Converts a wire `AgentInteraction` to its native message.
-pub fn from_wire_agent_interaction(value: v1::AgentInteraction) -> AgentInteraction {
+pub(crate) fn from_wire_agent_interaction(value: v1::AgentInteraction) -> AgentInteraction {
     AgentInteraction {
         id: value.id,
         r#type: value.r#type,
@@ -844,7 +806,7 @@ pub fn from_wire_agent_interaction(value: v1::AgentInteraction) -> AgentInteract
 }
 
 /// Converts a native `AgentMessage` to its wire message.
-pub fn to_wire_agent_message(value: AgentMessage) -> v1::AgentMessage {
+pub(crate) fn to_wire_agent_message(value: AgentMessage) -> v1::AgentMessage {
     v1::AgentMessage {
         role: value.role,
         text: value.text,
@@ -858,7 +820,7 @@ pub fn to_wire_agent_message(value: AgentMessage) -> v1::AgentMessage {
 }
 
 /// Converts a wire `AgentMessage` to its native message.
-pub fn from_wire_agent_message(value: v1::AgentMessage) -> AgentMessage {
+pub(crate) fn from_wire_agent_message(value: v1::AgentMessage) -> AgentMessage {
     AgentMessage {
         role: value.role,
         text: value.text,
@@ -872,7 +834,7 @@ pub fn from_wire_agent_message(value: v1::AgentMessage) -> AgentMessage {
 }
 
 /// Converts a native `AgentMessagePart` to its wire message.
-pub fn to_wire_agent_message_part(value: AgentMessagePart) -> v1::AgentMessagePart {
+pub(crate) fn to_wire_agent_message_part(value: AgentMessagePart) -> v1::AgentMessagePart {
     v1::AgentMessagePart {
         r#type: value.r#type,
         text: value.text,
@@ -886,7 +848,7 @@ pub fn to_wire_agent_message_part(value: AgentMessagePart) -> v1::AgentMessagePa
 }
 
 /// Converts a wire `AgentMessagePart` to its native message.
-pub fn from_wire_agent_message_part(value: v1::AgentMessagePart) -> AgentMessagePart {
+pub(crate) fn from_wire_agent_message_part(value: v1::AgentMessagePart) -> AgentMessagePart {
     AgentMessagePart {
         r#type: value.r#type,
         text: value.text,
@@ -900,7 +862,7 @@ pub fn from_wire_agent_message_part(value: v1::AgentMessagePart) -> AgentMessage
 }
 
 /// Converts a native `AgentMessagePartImageRef` to its wire message.
-pub fn to_wire_agent_message_part_image_ref(
+pub(crate) fn to_wire_agent_message_part_image_ref(
     value: AgentMessagePartImageRef,
 ) -> v1::AgentMessagePartImageRef {
     v1::AgentMessagePartImageRef {
@@ -910,7 +872,7 @@ pub fn to_wire_agent_message_part_image_ref(
 }
 
 /// Converts a wire `AgentMessagePartImageRef` to its native message.
-pub fn from_wire_agent_message_part_image_ref(
+pub(crate) fn from_wire_agent_message_part_image_ref(
     value: v1::AgentMessagePartImageRef,
 ) -> AgentMessagePartImageRef {
     AgentMessagePartImageRef {
@@ -920,7 +882,7 @@ pub fn from_wire_agent_message_part_image_ref(
 }
 
 /// Converts a native `AgentMessagePartToolCall` to its wire message.
-pub fn to_wire_agent_message_part_tool_call(
+pub(crate) fn to_wire_agent_message_part_tool_call(
     value: AgentMessagePartToolCall,
 ) -> v1::AgentMessagePartToolCall {
     v1::AgentMessagePartToolCall {
@@ -931,7 +893,7 @@ pub fn to_wire_agent_message_part_tool_call(
 }
 
 /// Converts a wire `AgentMessagePartToolCall` to its native message.
-pub fn from_wire_agent_message_part_tool_call(
+pub(crate) fn from_wire_agent_message_part_tool_call(
     value: v1::AgentMessagePartToolCall,
 ) -> AgentMessagePartToolCall {
     AgentMessagePartToolCall {
@@ -942,7 +904,7 @@ pub fn from_wire_agent_message_part_tool_call(
 }
 
 /// Converts a native `AgentMessagePartToolResult` to its wire message.
-pub fn to_wire_agent_message_part_tool_result(
+pub(crate) fn to_wire_agent_message_part_tool_result(
     value: AgentMessagePartToolResult,
 ) -> v1::AgentMessagePartToolResult {
     v1::AgentMessagePartToolResult {
@@ -954,7 +916,7 @@ pub fn to_wire_agent_message_part_tool_result(
 }
 
 /// Converts a wire `AgentMessagePartToolResult` to its native message.
-pub fn from_wire_agent_message_part_tool_result(
+pub(crate) fn from_wire_agent_message_part_tool_result(
     value: v1::AgentMessagePartToolResult,
 ) -> AgentMessagePartToolResult {
     AgentMessagePartToolResult {
@@ -966,30 +928,25 @@ pub fn from_wire_agent_message_part_tool_result(
 }
 
 /// Converts a native `AgentNoTools` to its wire message.
-pub fn to_wire_agent_no_tools(_value: AgentNoTools) -> v1::AgentNoTools {
+pub(crate) fn to_wire_agent_no_tools(_value: AgentNoTools) -> v1::AgentNoTools {
     v1::AgentNoTools {}
 }
 
-/// Converts a wire `AgentNoTools` to its native message.
-pub fn from_wire_agent_no_tools(_value: v1::AgentNoTools) -> AgentNoTools {
-    AgentNoTools {}
-}
-
 /// Converts a native `AgentOutput` to its wire message.
-pub fn to_wire_agent_output(value: AgentOutput) -> v1::AgentOutput {
+pub(crate) fn to_wire_agent_output(value: AgentOutput) -> v1::AgentOutput {
     v1::AgentOutput {
         kind: value.kind.map(to_wire_agent_output_kind),
     }
 }
 
 /// Converts a wire `AgentOutput` to its native message.
-pub fn from_wire_agent_output(value: v1::AgentOutput) -> AgentOutput {
+pub(crate) fn from_wire_agent_output(value: v1::AgentOutput) -> AgentOutput {
     AgentOutput {
         kind: value.kind.map(from_wire_agent_output_kind),
     }
 }
 
-fn to_wire_agent_output_kind(value: AgentOutputKind) -> v1::agent_output::Kind {
+pub(crate) fn to_wire_agent_output_kind(value: AgentOutputKind) -> v1::agent_output::Kind {
     match value {
         AgentOutputKind::Text(value) => {
             v1::agent_output::Kind::Text(to_wire_agent_text_output(value))
@@ -1000,7 +957,7 @@ fn to_wire_agent_output_kind(value: AgentOutputKind) -> v1::agent_output::Kind {
     }
 }
 
-fn from_wire_agent_output_kind(value: v1::agent_output::Kind) -> AgentOutputKind {
+pub(crate) fn from_wire_agent_output_kind(value: v1::agent_output::Kind) -> AgentOutputKind {
     match value {
         v1::agent_output::Kind::Text(value) => {
             AgentOutputKind::Text(from_wire_agent_text_output(value))
@@ -1011,26 +968,8 @@ fn from_wire_agent_output_kind(value: v1::agent_output::Kind) -> AgentOutputKind
     }
 }
 
-/// Converts a native `AgentProviderCapabilities` to its wire message.
-pub fn to_wire_agent_provider_capabilities(
-    value: AgentProviderCapabilities,
-) -> v1::AgentProviderCapabilities {
-    v1::AgentProviderCapabilities {
-        streaming_text: value.streaming_text,
-        tool_calls: value.tool_calls,
-        parallel_tool_calls: value.parallel_tool_calls,
-        interactions: value.interactions,
-        resumable_turns: value.resumable_turns,
-        reasoning_summaries: value.reasoning_summaries,
-        bounded_list_hydration: value.bounded_list_hydration,
-        supported_tool_sources: value.supported_tool_sources,
-        supports_session_start: value.supports_session_start,
-        supports_prepared_workspace: value.supports_prepared_workspace,
-    }
-}
-
 /// Converts a wire `AgentProviderCapabilities` to its native message.
-pub fn from_wire_agent_provider_capabilities(
+pub(crate) fn from_wire_agent_provider_capabilities(
     value: v1::AgentProviderCapabilities,
 ) -> AgentProviderCapabilities {
     AgentProviderCapabilities {
@@ -1047,24 +986,8 @@ pub fn from_wire_agent_provider_capabilities(
     }
 }
 
-/// Converts a native `AgentSession` to its wire message.
-pub fn to_wire_agent_session(value: AgentSession) -> v1::AgentSession {
-    v1::AgentSession {
-        id: value.id,
-        provider_name: value.provider_name,
-        model: value.model,
-        client_ref: value.client_ref,
-        state: value.state,
-        metadata: value.metadata.map(to_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
-        created_at: value.created_at.map(to_wire_timestamp),
-        updated_at: value.updated_at.map(to_wire_timestamp),
-        last_turn_at: value.last_turn_at.map(to_wire_timestamp),
-    }
-}
-
 /// Converts a wire `AgentSession` to its native message.
-pub fn from_wire_agent_session(value: v1::AgentSession) -> AgentSession {
+pub(crate) fn from_wire_agent_session(value: v1::AgentSession) -> AgentSession {
     AgentSession {
         id: value.id,
         provider_name: value.provider_name,
@@ -1080,7 +1003,7 @@ pub fn from_wire_agent_session(value: v1::AgentSession) -> AgentSession {
 }
 
 /// Converts a native `AgentSessionStartConfig` to its wire message.
-pub fn to_wire_agent_session_start_config(
+pub(crate) fn to_wire_agent_session_start_config(
     value: AgentSessionStartConfig,
 ) -> v1::AgentSessionStartConfig {
     v1::AgentSessionStartConfig {
@@ -1092,21 +1015,10 @@ pub fn to_wire_agent_session_start_config(
     }
 }
 
-/// Converts a wire `AgentSessionStartConfig` to its native message.
-pub fn from_wire_agent_session_start_config(
-    value: v1::AgentSessionStartConfig,
-) -> AgentSessionStartConfig {
-    AgentSessionStartConfig {
-        hooks: value
-            .hooks
-            .into_iter()
-            .map(from_wire_agent_session_start_hook)
-            .collect(),
-    }
-}
-
 /// Converts a native `AgentSessionStartHook` to its wire message.
-pub fn to_wire_agent_session_start_hook(value: AgentSessionStartHook) -> v1::AgentSessionStartHook {
+pub(crate) fn to_wire_agent_session_start_hook(
+    value: AgentSessionStartHook,
+) -> v1::AgentSessionStartHook {
     v1::AgentSessionStartHook {
         id: value.id,
         r#type: value.r#type,
@@ -1118,23 +1030,8 @@ pub fn to_wire_agent_session_start_hook(value: AgentSessionStartHook) -> v1::Age
     }
 }
 
-/// Converts a wire `AgentSessionStartHook` to its native message.
-pub fn from_wire_agent_session_start_hook(
-    value: v1::AgentSessionStartHook,
-) -> AgentSessionStartHook {
-    AgentSessionStartHook {
-        id: value.id,
-        r#type: value.r#type,
-        command: value.command,
-        cwd: value.cwd,
-        timeout: value.timeout,
-        env: value.env,
-        output: value.output.map(from_wire_agent_session_start_hook_output),
-    }
-}
-
 /// Converts a native `AgentSessionStartHookOutput` to its wire message.
-pub fn to_wire_agent_session_start_hook_output(
+pub(crate) fn to_wire_agent_session_start_hook_output(
     value: AgentSessionStartHookOutput,
 ) -> v1::AgentSessionStartHookOutput {
     v1::AgentSessionStartHookOutput {
@@ -1143,25 +1040,17 @@ pub fn to_wire_agent_session_start_hook_output(
     }
 }
 
-/// Converts a wire `AgentSessionStartHookOutput` to its native message.
-pub fn from_wire_agent_session_start_hook_output(
-    value: v1::AgentSessionStartHookOutput,
-) -> AgentSessionStartHookOutput {
-    AgentSessionStartHookOutput {
-        additional_context: value.additional_context,
-        metadata: value.metadata,
-    }
-}
-
 /// Converts a native `AgentStructuredOutput` to its wire message.
-pub fn to_wire_agent_structured_output(value: AgentStructuredOutput) -> v1::AgentStructuredOutput {
+pub(crate) fn to_wire_agent_structured_output(
+    value: AgentStructuredOutput,
+) -> v1::AgentStructuredOutput {
     v1::AgentStructuredOutput {
         schema: value.schema.map(to_wire_struct),
     }
 }
 
 /// Converts a wire `AgentStructuredOutput` to its native message.
-pub fn from_wire_agent_structured_output(
+pub(crate) fn from_wire_agent_structured_output(
     value: v1::AgentStructuredOutput,
 ) -> AgentStructuredOutput {
     AgentStructuredOutput {
@@ -1170,30 +1059,25 @@ pub fn from_wire_agent_structured_output(
 }
 
 /// Converts a native `AgentTextOutput` to its wire message.
-pub fn to_wire_agent_text_output(_value: AgentTextOutput) -> v1::AgentTextOutput {
+pub(crate) fn to_wire_agent_text_output(_value: AgentTextOutput) -> v1::AgentTextOutput {
     v1::AgentTextOutput {}
 }
 
 /// Converts a wire `AgentTextOutput` to its native message.
-pub fn from_wire_agent_text_output(_value: v1::AgentTextOutput) -> AgentTextOutput {
+pub(crate) fn from_wire_agent_text_output(_value: v1::AgentTextOutput) -> AgentTextOutput {
     AgentTextOutput {}
 }
 
 /// Converts a native `AgentToolConfig` to its wire message.
-pub fn to_wire_agent_tool_config(value: AgentToolConfig) -> v1::AgentToolConfig {
+pub(crate) fn to_wire_agent_tool_config(value: AgentToolConfig) -> v1::AgentToolConfig {
     v1::AgentToolConfig {
         source: value.source.map(to_wire_agent_tool_config_source),
     }
 }
 
-/// Converts a wire `AgentToolConfig` to its native message.
-pub fn from_wire_agent_tool_config(value: v1::AgentToolConfig) -> AgentToolConfig {
-    AgentToolConfig {
-        source: value.source.map(from_wire_agent_tool_config_source),
-    }
-}
-
-fn to_wire_agent_tool_config_source(value: AgentToolConfigSource) -> v1::agent_tool_config::Source {
+pub(crate) fn to_wire_agent_tool_config_source(
+    value: AgentToolConfigSource,
+) -> v1::agent_tool_config::Source {
     match value {
         AgentToolConfigSource::None(value) => {
             v1::agent_tool_config::Source::None(to_wire_agent_no_tools(value))
@@ -1204,44 +1088,8 @@ fn to_wire_agent_tool_config_source(value: AgentToolConfigSource) -> v1::agent_t
     }
 }
 
-fn from_wire_agent_tool_config_source(
-    value: v1::agent_tool_config::Source,
-) -> AgentToolConfigSource {
-    match value {
-        v1::agent_tool_config::Source::None(value) => {
-            AgentToolConfigSource::None(from_wire_agent_no_tools(value))
-        }
-        v1::agent_tool_config::Source::Catalog(value) => {
-            AgentToolConfigSource::Catalog(from_wire_agent_catalog_tool_config(value))
-        }
-    }
-}
-
-/// Converts a native `AgentTurn` to its wire message.
-pub fn to_wire_agent_turn(value: AgentTurn) -> v1::AgentTurn {
-    v1::AgentTurn {
-        id: value.id,
-        session_id: value.session_id,
-        provider_name: value.provider_name,
-        model: value.model,
-        status: value.status,
-        messages: value
-            .messages
-            .into_iter()
-            .map(to_wire_agent_message)
-            .collect(),
-        status_message: value.status_message,
-        created_by_subject_id: value.created_by_subject_id,
-        created_at: value.created_at.map(to_wire_timestamp),
-        started_at: value.started_at.map(to_wire_timestamp),
-        completed_at: value.completed_at.map(to_wire_timestamp),
-        execution_ref: value.execution_ref,
-        output: value.output.map(to_wire_agent_turn_output),
-    }
-}
-
 /// Converts a wire `AgentTurn` to its native message.
-pub fn from_wire_agent_turn(value: v1::AgentTurn) -> AgentTurn {
+pub(crate) fn from_wire_agent_turn(value: v1::AgentTurn) -> AgentTurn {
     AgentTurn {
         id: value.id,
         session_id: value.session_id,
@@ -1263,18 +1111,7 @@ pub fn from_wire_agent_turn(value: v1::AgentTurn) -> AgentTurn {
     }
 }
 
-fn to_wire_agent_turn_output(value: AgentTurnOutput) -> v1::agent_turn::Output {
-    match value {
-        AgentTurnOutput::Text(value) => {
-            v1::agent_turn::Output::Text(to_wire_agent_turn_text_output(value))
-        }
-        AgentTurnOutput::Structured(value) => {
-            v1::agent_turn::Output::Structured(to_wire_agent_turn_structured_output(value))
-        }
-    }
-}
-
-fn from_wire_agent_turn_output(value: v1::agent_turn::Output) -> AgentTurnOutput {
+pub(crate) fn from_wire_agent_turn_output(value: v1::agent_turn::Output) -> AgentTurnOutput {
     match value {
         v1::agent_turn::Output::Text(value) => {
             AgentTurnOutput::Text(from_wire_agent_turn_text_output(value))
@@ -1285,26 +1122,8 @@ fn from_wire_agent_turn_output(value: v1::agent_turn::Output) -> AgentTurnOutput
     }
 }
 
-/// Converts a native `AgentTurnDisplay` to its wire message.
-pub fn to_wire_agent_turn_display(value: AgentTurnDisplay) -> v1::AgentTurnDisplay {
-    v1::AgentTurnDisplay {
-        kind: value.kind,
-        phase: value.phase,
-        text: value.text,
-        label: value.label,
-        r#ref: value.r#ref,
-        parent_ref: value.parent_ref,
-        input: value.input.map(to_wire_value),
-        output: value.output.map(to_wire_value),
-        error: value.error.map(to_wire_value),
-        action: value.action,
-        format: value.format,
-        language: value.language,
-    }
-}
-
 /// Converts a wire `AgentTurnDisplay` to its native message.
-pub fn from_wire_agent_turn_display(value: v1::AgentTurnDisplay) -> AgentTurnDisplay {
+pub(crate) fn from_wire_agent_turn_display(value: v1::AgentTurnDisplay) -> AgentTurnDisplay {
     AgentTurnDisplay {
         kind: value.kind,
         phase: value.phase,
@@ -1321,23 +1140,8 @@ pub fn from_wire_agent_turn_display(value: v1::AgentTurnDisplay) -> AgentTurnDis
     }
 }
 
-/// Converts a native `AgentTurnEvent` to its wire message.
-pub fn to_wire_agent_turn_event(value: AgentTurnEvent) -> v1::AgentTurnEvent {
-    v1::AgentTurnEvent {
-        id: value.id,
-        turn_id: value.turn_id,
-        seq: value.seq,
-        r#type: value.r#type,
-        source: value.source,
-        visibility: value.visibility,
-        data: value.data.map(to_wire_struct),
-        created_at: value.created_at.map(to_wire_timestamp),
-        display: value.display.map(to_wire_agent_turn_display),
-    }
-}
-
 /// Converts a wire `AgentTurnEvent` to its native message.
-pub fn from_wire_agent_turn_event(value: v1::AgentTurnEvent) -> AgentTurnEvent {
+pub(crate) fn from_wire_agent_turn_event(value: v1::AgentTurnEvent) -> AgentTurnEvent {
     AgentTurnEvent {
         id: value.id,
         turn_id: value.turn_id,
@@ -1351,18 +1155,8 @@ pub fn from_wire_agent_turn_event(value: v1::AgentTurnEvent) -> AgentTurnEvent {
     }
 }
 
-/// Converts a native `AgentTurnStructuredOutput` to its wire message.
-pub fn to_wire_agent_turn_structured_output(
-    value: AgentTurnStructuredOutput,
-) -> v1::AgentTurnStructuredOutput {
-    v1::AgentTurnStructuredOutput {
-        text: value.text,
-        value: value.value.map(to_wire_struct),
-    }
-}
-
 /// Converts a wire `AgentTurnStructuredOutput` to its native message.
-pub fn from_wire_agent_turn_structured_output(
+pub(crate) fn from_wire_agent_turn_structured_output(
     value: v1::AgentTurnStructuredOutput,
 ) -> AgentTurnStructuredOutput {
     AgentTurnStructuredOutput {
@@ -1371,18 +1165,15 @@ pub fn from_wire_agent_turn_structured_output(
     }
 }
 
-/// Converts a native `AgentTurnTextOutput` to its wire message.
-pub fn to_wire_agent_turn_text_output(value: AgentTurnTextOutput) -> v1::AgentTurnTextOutput {
-    v1::AgentTurnTextOutput { text: value.text }
-}
-
 /// Converts a wire `AgentTurnTextOutput` to its native message.
-pub fn from_wire_agent_turn_text_output(value: v1::AgentTurnTextOutput) -> AgentTurnTextOutput {
+pub(crate) fn from_wire_agent_turn_text_output(
+    value: v1::AgentTurnTextOutput,
+) -> AgentTurnTextOutput {
     AgentTurnTextOutput { text: value.text }
 }
 
 /// Converts a native `AgentWorkspace` to its wire message.
-pub fn to_wire_agent_workspace(value: AgentWorkspace) -> v1::AgentWorkspace {
+pub(crate) fn to_wire_agent_workspace(value: AgentWorkspace) -> v1::AgentWorkspace {
     v1::AgentWorkspace {
         checkouts: value
             .checkouts
@@ -1393,20 +1184,8 @@ pub fn to_wire_agent_workspace(value: AgentWorkspace) -> v1::AgentWorkspace {
     }
 }
 
-/// Converts a wire `AgentWorkspace` to its native message.
-pub fn from_wire_agent_workspace(value: v1::AgentWorkspace) -> AgentWorkspace {
-    AgentWorkspace {
-        checkouts: value
-            .checkouts
-            .into_iter()
-            .map(from_wire_agent_workspace_git_checkout)
-            .collect(),
-        cwd: value.cwd,
-    }
-}
-
 /// Converts a native `AgentWorkspaceGitCheckout` to its wire message.
-pub fn to_wire_agent_workspace_git_checkout(
+pub(crate) fn to_wire_agent_workspace_git_checkout(
     value: AgentWorkspaceGitCheckout,
 ) -> v1::AgentWorkspaceGitCheckout {
     v1::AgentWorkspaceGitCheckout {
@@ -1416,19 +1195,8 @@ pub fn to_wire_agent_workspace_git_checkout(
     }
 }
 
-/// Converts a wire `AgentWorkspaceGitCheckout` to its native message.
-pub fn from_wire_agent_workspace_git_checkout(
-    value: v1::AgentWorkspaceGitCheckout,
-) -> AgentWorkspaceGitCheckout {
-    AgentWorkspaceGitCheckout {
-        url: value.url,
-        r#ref: value.r#ref,
-        path: value.path,
-    }
-}
-
 /// Converts a native `CancelAgentProviderTurnRequest` to its wire message.
-pub fn to_wire_cancel_agent_provider_turn_request(
+pub(crate) fn to_wire_cancel_agent_provider_turn_request(
     value: CancelAgentProviderTurnRequest,
 ) -> v1::CancelAgentProviderTurnRequest {
     v1::CancelAgentProviderTurnRequest {
@@ -1440,21 +1208,8 @@ pub fn to_wire_cancel_agent_provider_turn_request(
     }
 }
 
-/// Converts a wire `CancelAgentProviderTurnRequest` to its native message.
-pub fn from_wire_cancel_agent_provider_turn_request(
-    value: v1::CancelAgentProviderTurnRequest,
-) -> CancelAgentProviderTurnRequest {
-    CancelAgentProviderTurnRequest {
-        turn_id: value.turn_id,
-        reason: value.reason,
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
 /// Converts a native `CreateAgentProviderSessionRequest` to its wire message.
-pub fn to_wire_create_agent_provider_session_request(
+pub(crate) fn to_wire_create_agent_provider_session_request(
     value: CreateAgentProviderSessionRequest,
 ) -> v1::CreateAgentProviderSessionRequest {
     v1::CreateAgentProviderSessionRequest {
@@ -1476,33 +1231,8 @@ pub fn to_wire_create_agent_provider_session_request(
     }
 }
 
-/// Converts a wire `CreateAgentProviderSessionRequest` to its native message.
-pub fn from_wire_create_agent_provider_session_request(
-    value: v1::CreateAgentProviderSessionRequest,
-) -> CreateAgentProviderSessionRequest {
-    CreateAgentProviderSessionRequest {
-        session_id: value.session_id,
-        idempotency_key: value.idempotency_key,
-        model: value.model,
-        client_ref: value.client_ref,
-        metadata: value.metadata.map(from_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
-        subject: value.subject.map(from_wire_subject_context),
-        session_start: value
-            .session_start
-            .map(from_wire_agent_session_start_config),
-        prepared_workspace: value
-            .prepared_workspace
-            .map(from_wire_prepared_agent_workspace),
-        provider_name: value.provider_name,
-        workspace: value.workspace.map(from_wire_agent_workspace),
-        context: value.context.map(from_wire_request_context),
-        tools: value.tools.map(from_wire_agent_tool_config),
-    }
-}
-
 /// Converts a native `CreateAgentProviderTurnRequest` to its wire message.
-pub fn to_wire_create_agent_provider_turn_request(
+pub(crate) fn to_wire_create_agent_provider_turn_request(
     value: CreateAgentProviderTurnRequest,
 ) -> v1::CreateAgentProviderTurnRequest {
     v1::CreateAgentProviderTurnRequest {
@@ -1532,53 +1262,15 @@ pub fn to_wire_create_agent_provider_turn_request(
     }
 }
 
-/// Converts a wire `CreateAgentProviderTurnRequest` to its native message.
-pub fn from_wire_create_agent_provider_turn_request(
-    value: v1::CreateAgentProviderTurnRequest,
-) -> CreateAgentProviderTurnRequest {
-    CreateAgentProviderTurnRequest {
-        turn_id: value.turn_id,
-        session_id: value.session_id,
-        idempotency_key: value.idempotency_key,
-        model: value.model,
-        messages: value
-            .messages
-            .into_iter()
-            .map(from_wire_agent_message)
-            .collect(),
-        tools: value
-            .tools
-            .into_iter()
-            .map(from_wire_resolved_agent_tool)
-            .collect(),
-        metadata: value.metadata.map(from_wire_struct),
-        created_by_subject_id: value.created_by_subject_id,
-        execution_ref: value.execution_ref,
-        subject: value.subject.map(from_wire_subject_context),
-        model_options: value.model_options.map(from_wire_struct),
-        timeout_seconds: value.timeout_seconds,
-        output: value.output.map(from_wire_agent_output),
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
 /// Converts a native `GetAgentProviderCapabilitiesRequest` to its wire message.
-pub fn to_wire_get_agent_provider_capabilities_request(
+pub(crate) fn to_wire_get_agent_provider_capabilities_request(
     _value: GetAgentProviderCapabilitiesRequest,
 ) -> v1::GetAgentProviderCapabilitiesRequest {
     v1::GetAgentProviderCapabilitiesRequest {}
 }
 
-/// Converts a wire `GetAgentProviderCapabilitiesRequest` to its native message.
-pub fn from_wire_get_agent_provider_capabilities_request(
-    _value: v1::GetAgentProviderCapabilitiesRequest,
-) -> GetAgentProviderCapabilitiesRequest {
-    GetAgentProviderCapabilitiesRequest {}
-}
-
 /// Converts a native `GetAgentProviderInteractionRequest` to its wire message.
-pub fn to_wire_get_agent_provider_interaction_request(
+pub(crate) fn to_wire_get_agent_provider_interaction_request(
     value: GetAgentProviderInteractionRequest,
 ) -> v1::GetAgentProviderInteractionRequest {
     v1::GetAgentProviderInteractionRequest {
@@ -1588,19 +1280,8 @@ pub fn to_wire_get_agent_provider_interaction_request(
     }
 }
 
-/// Converts a wire `GetAgentProviderInteractionRequest` to its native message.
-pub fn from_wire_get_agent_provider_interaction_request(
-    value: v1::GetAgentProviderInteractionRequest,
-) -> GetAgentProviderInteractionRequest {
-    GetAgentProviderInteractionRequest {
-        interaction_id: value.interaction_id,
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
-    }
-}
-
 /// Converts a native `GetAgentProviderSessionRequest` to its wire message.
-pub fn to_wire_get_agent_provider_session_request(
+pub(crate) fn to_wire_get_agent_provider_session_request(
     value: GetAgentProviderSessionRequest,
 ) -> v1::GetAgentProviderSessionRequest {
     v1::GetAgentProviderSessionRequest {
@@ -1611,20 +1292,8 @@ pub fn to_wire_get_agent_provider_session_request(
     }
 }
 
-/// Converts a wire `GetAgentProviderSessionRequest` to its native message.
-pub fn from_wire_get_agent_provider_session_request(
-    value: v1::GetAgentProviderSessionRequest,
-) -> GetAgentProviderSessionRequest {
-    GetAgentProviderSessionRequest {
-        session_id: value.session_id,
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
 /// Converts a native `GetAgentProviderTurnRequest` to its wire message.
-pub fn to_wire_get_agent_provider_turn_request(
+pub(crate) fn to_wire_get_agent_provider_turn_request(
     value: GetAgentProviderTurnRequest,
 ) -> v1::GetAgentProviderTurnRequest {
     v1::GetAgentProviderTurnRequest {
@@ -1635,20 +1304,8 @@ pub fn to_wire_get_agent_provider_turn_request(
     }
 }
 
-/// Converts a wire `GetAgentProviderTurnRequest` to its native message.
-pub fn from_wire_get_agent_provider_turn_request(
-    value: v1::GetAgentProviderTurnRequest,
-) -> GetAgentProviderTurnRequest {
-    GetAgentProviderTurnRequest {
-        turn_id: value.turn_id,
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
 /// Converts a native `ListAgentProviderInteractionsRequest` to its wire message.
-pub fn to_wire_list_agent_provider_interactions_request(
+pub(crate) fn to_wire_list_agent_provider_interactions_request(
     value: ListAgentProviderInteractionsRequest,
 ) -> v1::ListAgentProviderInteractionsRequest {
     v1::ListAgentProviderInteractionsRequest {
@@ -1659,33 +1316,8 @@ pub fn to_wire_list_agent_provider_interactions_request(
     }
 }
 
-/// Converts a wire `ListAgentProviderInteractionsRequest` to its native message.
-pub fn from_wire_list_agent_provider_interactions_request(
-    value: v1::ListAgentProviderInteractionsRequest,
-) -> ListAgentProviderInteractionsRequest {
-    ListAgentProviderInteractionsRequest {
-        turn_id: value.turn_id,
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
-/// Converts a native `ListAgentProviderInteractionsResponse` to its wire message.
-pub fn to_wire_list_agent_provider_interactions_response(
-    value: ListAgentProviderInteractionsResponse,
-) -> v1::ListAgentProviderInteractionsResponse {
-    v1::ListAgentProviderInteractionsResponse {
-        interactions: value
-            .interactions
-            .into_iter()
-            .map(to_wire_agent_interaction)
-            .collect(),
-    }
-}
-
 /// Converts a wire `ListAgentProviderInteractionsResponse` to its native message.
-pub fn from_wire_list_agent_provider_interactions_response(
+pub(crate) fn from_wire_list_agent_provider_interactions_response(
     value: v1::ListAgentProviderInteractionsResponse,
 ) -> ListAgentProviderInteractionsResponse {
     ListAgentProviderInteractionsResponse {
@@ -1698,7 +1330,7 @@ pub fn from_wire_list_agent_provider_interactions_response(
 }
 
 /// Converts a native `ListAgentProviderSessionsRequest` to its wire message.
-pub fn to_wire_list_agent_provider_sessions_request(
+pub(crate) fn to_wire_list_agent_provider_sessions_request(
     value: ListAgentProviderSessionsRequest,
 ) -> v1::ListAgentProviderSessionsRequest {
     v1::ListAgentProviderSessionsRequest {
@@ -1712,36 +1344,8 @@ pub fn to_wire_list_agent_provider_sessions_request(
     }
 }
 
-/// Converts a wire `ListAgentProviderSessionsRequest` to its native message.
-pub fn from_wire_list_agent_provider_sessions_request(
-    value: v1::ListAgentProviderSessionsRequest,
-) -> ListAgentProviderSessionsRequest {
-    ListAgentProviderSessionsRequest {
-        subject: value.subject.map(from_wire_subject_context),
-        session_ids: value.session_ids,
-        state: value.state,
-        limit: value.limit,
-        summary_only: value.summary_only,
-        provider_name: value.provider_name,
-        context: value.context.map(from_wire_request_context),
-    }
-}
-
-/// Converts a native `ListAgentProviderSessionsResponse` to its wire message.
-pub fn to_wire_list_agent_provider_sessions_response(
-    value: ListAgentProviderSessionsResponse,
-) -> v1::ListAgentProviderSessionsResponse {
-    v1::ListAgentProviderSessionsResponse {
-        sessions: value
-            .sessions
-            .into_iter()
-            .map(to_wire_agent_session)
-            .collect(),
-    }
-}
-
 /// Converts a wire `ListAgentProviderSessionsResponse` to its native message.
-pub fn from_wire_list_agent_provider_sessions_response(
+pub(crate) fn from_wire_list_agent_provider_sessions_response(
     value: v1::ListAgentProviderSessionsResponse,
 ) -> ListAgentProviderSessionsResponse {
     ListAgentProviderSessionsResponse {
@@ -1754,7 +1358,7 @@ pub fn from_wire_list_agent_provider_sessions_response(
 }
 
 /// Converts a native `ListAgentProviderTurnEventsRequest` to its wire message.
-pub fn to_wire_list_agent_provider_turn_events_request(
+pub(crate) fn to_wire_list_agent_provider_turn_events_request(
     value: ListAgentProviderTurnEventsRequest,
 ) -> v1::ListAgentProviderTurnEventsRequest {
     v1::ListAgentProviderTurnEventsRequest {
@@ -1767,35 +1371,8 @@ pub fn to_wire_list_agent_provider_turn_events_request(
     }
 }
 
-/// Converts a wire `ListAgentProviderTurnEventsRequest` to its native message.
-pub fn from_wire_list_agent_provider_turn_events_request(
-    value: v1::ListAgentProviderTurnEventsRequest,
-) -> ListAgentProviderTurnEventsRequest {
-    ListAgentProviderTurnEventsRequest {
-        turn_id: value.turn_id,
-        after_seq: value.after_seq,
-        limit: value.limit,
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
-/// Converts a native `ListAgentProviderTurnEventsResponse` to its wire message.
-pub fn to_wire_list_agent_provider_turn_events_response(
-    value: ListAgentProviderTurnEventsResponse,
-) -> v1::ListAgentProviderTurnEventsResponse {
-    v1::ListAgentProviderTurnEventsResponse {
-        events: value
-            .events
-            .into_iter()
-            .map(to_wire_agent_turn_event)
-            .collect(),
-    }
-}
-
 /// Converts a wire `ListAgentProviderTurnEventsResponse` to its native message.
-pub fn from_wire_list_agent_provider_turn_events_response(
+pub(crate) fn from_wire_list_agent_provider_turn_events_response(
     value: v1::ListAgentProviderTurnEventsResponse,
 ) -> ListAgentProviderTurnEventsResponse {
     ListAgentProviderTurnEventsResponse {
@@ -1808,7 +1385,7 @@ pub fn from_wire_list_agent_provider_turn_events_response(
 }
 
 /// Converts a native `ListAgentProviderTurnsRequest` to its wire message.
-pub fn to_wire_list_agent_provider_turns_request(
+pub(crate) fn to_wire_list_agent_provider_turns_request(
     value: ListAgentProviderTurnsRequest,
 ) -> v1::ListAgentProviderTurnsRequest {
     v1::ListAgentProviderTurnsRequest {
@@ -1823,33 +1400,8 @@ pub fn to_wire_list_agent_provider_turns_request(
     }
 }
 
-/// Converts a wire `ListAgentProviderTurnsRequest` to its native message.
-pub fn from_wire_list_agent_provider_turns_request(
-    value: v1::ListAgentProviderTurnsRequest,
-) -> ListAgentProviderTurnsRequest {
-    ListAgentProviderTurnsRequest {
-        session_id: value.session_id,
-        subject: value.subject.map(from_wire_subject_context),
-        turn_ids: value.turn_ids,
-        status: value.status,
-        limit: value.limit,
-        summary_only: value.summary_only,
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
-/// Converts a native `ListAgentProviderTurnsResponse` to its wire message.
-pub fn to_wire_list_agent_provider_turns_response(
-    value: ListAgentProviderTurnsResponse,
-) -> v1::ListAgentProviderTurnsResponse {
-    v1::ListAgentProviderTurnsResponse {
-        turns: value.turns.into_iter().map(to_wire_agent_turn).collect(),
-    }
-}
-
 /// Converts a wire `ListAgentProviderTurnsResponse` to its native message.
-pub fn from_wire_list_agent_provider_turns_response(
+pub(crate) fn from_wire_list_agent_provider_turns_response(
     value: v1::ListAgentProviderTurnsResponse,
 ) -> ListAgentProviderTurnsResponse {
     ListAgentProviderTurnsResponse {
@@ -1858,7 +1410,7 @@ pub fn from_wire_list_agent_provider_turns_response(
 }
 
 /// Converts a native `ListedAgentTool` to its wire message.
-pub fn to_wire_listed_agent_tool(value: ListedAgentTool) -> v1::ListedAgentTool {
+pub(crate) fn to_wire_listed_agent_tool(value: ListedAgentTool) -> v1::ListedAgentTool {
     v1::ListedAgentTool {
         id: value.id,
         mcp_name: value.mcp_name,
@@ -1873,24 +1425,8 @@ pub fn to_wire_listed_agent_tool(value: ListedAgentTool) -> v1::ListedAgentTool 
     }
 }
 
-/// Converts a wire `ListedAgentTool` to its native message.
-pub fn from_wire_listed_agent_tool(value: v1::ListedAgentTool) -> ListedAgentTool {
-    ListedAgentTool {
-        id: value.id,
-        mcp_name: value.mcp_name,
-        title: value.title,
-        description: value.description,
-        input_schema: value.input_schema,
-        output_schema: value.output_schema,
-        annotations: value.annotations.map(from_wire_operation_annotations),
-        r#ref: value.r#ref.map(from_wire_agent_tool_ref),
-        tags: value.tags,
-        search_text: value.search_text,
-    }
-}
-
 /// Converts a native `PreparedAgentWorkspace` to its wire message.
-pub fn to_wire_prepared_agent_workspace(
+pub(crate) fn to_wire_prepared_agent_workspace(
     value: PreparedAgentWorkspace,
 ) -> v1::PreparedAgentWorkspace {
     v1::PreparedAgentWorkspace {
@@ -1900,7 +1436,7 @@ pub fn to_wire_prepared_agent_workspace(
 }
 
 /// Converts a wire `PreparedAgentWorkspace` to its native message.
-pub fn from_wire_prepared_agent_workspace(
+pub(crate) fn from_wire_prepared_agent_workspace(
     value: v1::PreparedAgentWorkspace,
 ) -> PreparedAgentWorkspace {
     PreparedAgentWorkspace {
@@ -1910,7 +1446,7 @@ pub fn from_wire_prepared_agent_workspace(
 }
 
 /// Converts a native `ResolveAgentProviderInteractionRequest` to its wire message.
-pub fn to_wire_resolve_agent_provider_interaction_request(
+pub(crate) fn to_wire_resolve_agent_provider_interaction_request(
     value: ResolveAgentProviderInteractionRequest,
 ) -> v1::ResolveAgentProviderInteractionRequest {
     v1::ResolveAgentProviderInteractionRequest {
@@ -1923,22 +1459,8 @@ pub fn to_wire_resolve_agent_provider_interaction_request(
     }
 }
 
-/// Converts a wire `ResolveAgentProviderInteractionRequest` to its native message.
-pub fn from_wire_resolve_agent_provider_interaction_request(
-    value: v1::ResolveAgentProviderInteractionRequest,
-) -> ResolveAgentProviderInteractionRequest {
-    ResolveAgentProviderInteractionRequest {
-        interaction_id: value.interaction_id,
-        resolution: value.resolution.map(from_wire_struct),
-        subject: value.subject.map(from_wire_subject_context),
-        turn_id: value.turn_id,
-        context: value.context.map(from_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
 /// Converts a native `ResolvedAgentTool` to its wire message.
-pub fn to_wire_resolved_agent_tool(value: ResolvedAgentTool) -> v1::ResolvedAgentTool {
+pub(crate) fn to_wire_resolved_agent_tool(value: ResolvedAgentTool) -> v1::ResolvedAgentTool {
     v1::ResolvedAgentTool {
         id: value.id,
         name: value.name,
@@ -1948,19 +1470,8 @@ pub fn to_wire_resolved_agent_tool(value: ResolvedAgentTool) -> v1::ResolvedAgen
     }
 }
 
-/// Converts a wire `ResolvedAgentTool` to its native message.
-pub fn from_wire_resolved_agent_tool(value: v1::ResolvedAgentTool) -> ResolvedAgentTool {
-    ResolvedAgentTool {
-        id: value.id,
-        name: value.name,
-        description: value.description,
-        parameters_schema: value.parameters_schema.map(from_wire_struct),
-        r#ref: value.r#ref.map(from_wire_agent_tool_ref),
-    }
-}
-
 /// Converts a native `UpdateAgentProviderSessionRequest` to its wire message.
-pub fn to_wire_update_agent_provider_session_request(
+pub(crate) fn to_wire_update_agent_provider_session_request(
     value: UpdateAgentProviderSessionRequest,
 ) -> v1::UpdateAgentProviderSessionRequest {
     v1::UpdateAgentProviderSessionRequest {
@@ -1970,21 +1481,6 @@ pub fn to_wire_update_agent_provider_session_request(
         metadata: value.metadata.map(to_wire_struct),
         subject: value.subject.map(to_wire_subject_context),
         context: value.context.map(to_wire_request_context),
-        provider_name: value.provider_name,
-    }
-}
-
-/// Converts a wire `UpdateAgentProviderSessionRequest` to its native message.
-pub fn from_wire_update_agent_provider_session_request(
-    value: v1::UpdateAgentProviderSessionRequest,
-) -> UpdateAgentProviderSessionRequest {
-    UpdateAgentProviderSessionRequest {
-        session_id: value.session_id,
-        client_ref: value.client_ref,
-        state: value.state,
-        metadata: value.metadata.map(from_wire_struct),
-        subject: value.subject.map(from_wire_subject_context),
-        context: value.context.map(from_wire_request_context),
         provider_name: value.provider_name,
     }
 }

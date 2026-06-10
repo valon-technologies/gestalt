@@ -12,32 +12,29 @@ import grpc
 
 from ._gen.v1 import workflow_pb2 as _workflow_pb2
 from ._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
-from .agent import AgentOutput, from_wire_agent_output, to_wire_agent_output
+from .agent import AgentOutput, _from_wire_agent_output, _to_wire_agent_output
 from .app import (
     AgentToolRef,
     RequestContext,
     SubjectContext,
-    from_wire_agent_tool_ref,
-    from_wire_request_context,
-    from_wire_subject_context,
-    to_wire_agent_tool_ref,
-    to_wire_request_context,
-    to_wire_subject_context,
+    _from_wire_agent_tool_ref,
+    _from_wire_request_context,
+    _from_wire_subject_context,
+    _to_wire_agent_tool_ref,
+    _to_wire_request_context,
+    _to_wire_subject_context,
 )
 from .rpc_support import (
     JsonValue,
-    call_unary,
-    from_wire_struct,
-    from_wire_timestamp,
-    from_wire_value,
-    to_wire_struct,
-    to_wire_timestamp,
-    to_wire_value,
+    _call_unary,
+    _from_wire_struct,
+    _from_wire_timestamp,
+    _from_wire_value,
+    _to_wire_enum,
+    _to_wire_struct,
+    _to_wire_timestamp,
+    _to_wire_value,
 )
-
-_wire: Any = _workflow_pb2
-_wire_grpc: Any = _workflow_pb2_grpc
-
 
 # Open enum: unknown numeric values are preserved, so the type is int.
 WorkflowRunStatus = int
@@ -569,369 +566,369 @@ class WorkflowValue:
     kind: WorkflowValueKind = None
 
 
-def to_wire_apply_workflow_provider_definition_request(value: ApplyWorkflowProviderDefinitionRequest) -> Any:
-    return _wire.ApplyWorkflowProviderDefinitionRequest(
+def _to_wire_apply_workflow_provider_definition_request(value: ApplyWorkflowProviderDefinitionRequest) -> Any:
+    return _workflow_pb2.ApplyWorkflowProviderDefinitionRequest(
         provider_name=value.provider_name,
-        spec=None if value.spec is None else to_wire_workflow_definition_spec(value.spec),
+        spec=None if value.spec is None else _to_wire_workflow_definition_spec(value.spec),
         idempotency_key=value.idempotency_key,
         requested_by_subject_id=value.requested_by_subject_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_apply_workflow_provider_definition_request(value: Any) -> ApplyWorkflowProviderDefinitionRequest:
+def _from_wire_apply_workflow_provider_definition_request(value: Any) -> ApplyWorkflowProviderDefinitionRequest:
     return ApplyWorkflowProviderDefinitionRequest(
         provider_name=value.provider_name,
-        spec=from_wire_workflow_definition_spec(value.spec) if value.HasField("spec") else None,
+        spec=_from_wire_workflow_definition_spec(value.spec) if value.HasField("spec") else None,
         idempotency_key=value.idempotency_key,
         requested_by_subject_id=value.requested_by_subject_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_bound_workflow_target(value: BoundWorkflowTarget) -> Any:
-    return _wire.BoundWorkflowTarget(
-        steps=[to_wire_workflow_step(item) for item in value.steps],
+def _to_wire_bound_workflow_target(value: BoundWorkflowTarget) -> Any:
+    return _workflow_pb2.BoundWorkflowTarget(
+        steps=[_to_wire_workflow_step(item) for item in value.steps],
     )
 
 
-def from_wire_bound_workflow_target(value: Any) -> BoundWorkflowTarget:
+def _from_wire_bound_workflow_target(value: Any) -> BoundWorkflowTarget:
     return BoundWorkflowTarget(
-        steps=[from_wire_workflow_step(item) for item in value.steps],
+        steps=[_from_wire_workflow_step(item) for item in value.steps],
     )
 
 
-def to_wire_cancel_workflow_provider_run_request(value: CancelWorkflowProviderRunRequest) -> Any:
-    return _wire.CancelWorkflowProviderRunRequest(
+def _to_wire_cancel_workflow_provider_run_request(value: CancelWorkflowProviderRunRequest) -> Any:
+    return _workflow_pb2.CancelWorkflowProviderRunRequest(
         run_id=value.run_id,
         reason=value.reason,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_cancel_workflow_provider_run_request(value: Any) -> CancelWorkflowProviderRunRequest:
+def _from_wire_cancel_workflow_provider_run_request(value: Any) -> CancelWorkflowProviderRunRequest:
     return CancelWorkflowProviderRunRequest(
         run_id=value.run_id,
         reason=value.reason,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_delete_workflow_provider_definition_request(value: DeleteWorkflowProviderDefinitionRequest) -> Any:
-    return _wire.DeleteWorkflowProviderDefinitionRequest(
+def _to_wire_delete_workflow_provider_definition_request(value: DeleteWorkflowProviderDefinitionRequest) -> Any:
+    return _workflow_pb2.DeleteWorkflowProviderDefinitionRequest(
         definition_id=value.definition_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_delete_workflow_provider_definition_request(value: Any) -> DeleteWorkflowProviderDefinitionRequest:
+def _from_wire_delete_workflow_provider_definition_request(value: Any) -> DeleteWorkflowProviderDefinitionRequest:
     return DeleteWorkflowProviderDefinitionRequest(
         definition_id=value.definition_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_deliver_workflow_provider_event_request(value: DeliverWorkflowProviderEventRequest) -> Any:
-    return _wire.DeliverWorkflowProviderEventRequest(
+def _to_wire_deliver_workflow_provider_event_request(value: DeliverWorkflowProviderEventRequest) -> Any:
+    return _workflow_pb2.DeliverWorkflowProviderEventRequest(
         app_name=value.app_name,
-        event=None if value.event is None else to_wire_workflow_event(value.event),
+        event=None if value.event is None else _to_wire_workflow_event(value.event),
         delivered_by_subject_id=value.delivered_by_subject_id,
         provider_name=value.provider_name,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_deliver_workflow_provider_event_request(value: Any) -> DeliverWorkflowProviderEventRequest:
+def _from_wire_deliver_workflow_provider_event_request(value: Any) -> DeliverWorkflowProviderEventRequest:
     return DeliverWorkflowProviderEventRequest(
         app_name=value.app_name,
-        event=from_wire_workflow_event(value.event) if value.HasField("event") else None,
+        event=_from_wire_workflow_event(value.event) if value.HasField("event") else None,
         delivered_by_subject_id=value.delivered_by_subject_id,
         provider_name=value.provider_name,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_get_workflow_provider_definition_request(value: GetWorkflowProviderDefinitionRequest) -> Any:
-    return _wire.GetWorkflowProviderDefinitionRequest(
+def _to_wire_get_workflow_provider_definition_request(value: GetWorkflowProviderDefinitionRequest) -> Any:
+    return _workflow_pb2.GetWorkflowProviderDefinitionRequest(
         definition_id=value.definition_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_get_workflow_provider_definition_request(value: Any) -> GetWorkflowProviderDefinitionRequest:
+def _from_wire_get_workflow_provider_definition_request(value: Any) -> GetWorkflowProviderDefinitionRequest:
     return GetWorkflowProviderDefinitionRequest(
         definition_id=value.definition_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_get_workflow_provider_run_events_request(value: GetWorkflowProviderRunEventsRequest) -> Any:
-    return _wire.GetWorkflowProviderRunEventsRequest(
+def _to_wire_get_workflow_provider_run_events_request(value: GetWorkflowProviderRunEventsRequest) -> Any:
+    return _workflow_pb2.GetWorkflowProviderRunEventsRequest(
         run_id=value.run_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_get_workflow_provider_run_events_request(value: Any) -> GetWorkflowProviderRunEventsRequest:
+def _from_wire_get_workflow_provider_run_events_request(value: Any) -> GetWorkflowProviderRunEventsRequest:
     return GetWorkflowProviderRunEventsRequest(
         run_id=value.run_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_get_workflow_provider_run_events_response(value: GetWorkflowProviderRunEventsResponse) -> Any:
-    return _wire.GetWorkflowProviderRunEventsResponse(
-        events=[to_wire_workflow_run_event(item) for item in value.events],
+def _to_wire_get_workflow_provider_run_events_response(value: GetWorkflowProviderRunEventsResponse) -> Any:
+    return _workflow_pb2.GetWorkflowProviderRunEventsResponse(
+        events=[_to_wire_workflow_run_event(item) for item in value.events],
     )
 
 
-def from_wire_get_workflow_provider_run_events_response(value: Any) -> GetWorkflowProviderRunEventsResponse:
+def _from_wire_get_workflow_provider_run_events_response(value: Any) -> GetWorkflowProviderRunEventsResponse:
     return GetWorkflowProviderRunEventsResponse(
-        events=[from_wire_workflow_run_event(item) for item in value.events],
+        events=[_from_wire_workflow_run_event(item) for item in value.events],
     )
 
 
-def to_wire_get_workflow_provider_run_output_request(value: GetWorkflowProviderRunOutputRequest) -> Any:
-    return _wire.GetWorkflowProviderRunOutputRequest(
+def _to_wire_get_workflow_provider_run_output_request(value: GetWorkflowProviderRunOutputRequest) -> Any:
+    return _workflow_pb2.GetWorkflowProviderRunOutputRequest(
         run_id=value.run_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_get_workflow_provider_run_output_request(value: Any) -> GetWorkflowProviderRunOutputRequest:
+def _from_wire_get_workflow_provider_run_output_request(value: Any) -> GetWorkflowProviderRunOutputRequest:
     return GetWorkflowProviderRunOutputRequest(
         run_id=value.run_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_get_workflow_provider_run_output_response(value: GetWorkflowProviderRunOutputResponse) -> Any:
-    return _wire.GetWorkflowProviderRunOutputResponse(
-        output=None if value.output is None else to_wire_value(value.output),
+def _to_wire_get_workflow_provider_run_output_response(value: GetWorkflowProviderRunOutputResponse) -> Any:
+    return _workflow_pb2.GetWorkflowProviderRunOutputResponse(
+        output=None if value.output is None else _to_wire_value(value.output),
     )
 
 
-def from_wire_get_workflow_provider_run_output_response(value: Any) -> GetWorkflowProviderRunOutputResponse:
+def _from_wire_get_workflow_provider_run_output_response(value: Any) -> GetWorkflowProviderRunOutputResponse:
     return GetWorkflowProviderRunOutputResponse(
-        output=from_wire_value(value.output) if value.HasField("output") else None,
+        output=_from_wire_value(value.output) if value.HasField("output") else None,
     )
 
 
-def to_wire_get_workflow_provider_run_request(value: GetWorkflowProviderRunRequest) -> Any:
-    return _wire.GetWorkflowProviderRunRequest(
+def _to_wire_get_workflow_provider_run_request(value: GetWorkflowProviderRunRequest) -> Any:
+    return _workflow_pb2.GetWorkflowProviderRunRequest(
         run_id=value.run_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_get_workflow_provider_run_request(value: Any) -> GetWorkflowProviderRunRequest:
+def _from_wire_get_workflow_provider_run_request(value: Any) -> GetWorkflowProviderRunRequest:
     return GetWorkflowProviderRunRequest(
         run_id=value.run_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_list_workflow_provider_definitions_request(value: ListWorkflowProviderDefinitionsRequest) -> Any:
-    return _wire.ListWorkflowProviderDefinitionsRequest(
-        context=None if value.context is None else to_wire_request_context(value.context),
+def _to_wire_list_workflow_provider_definitions_request(value: ListWorkflowProviderDefinitionsRequest) -> Any:
+    return _workflow_pb2.ListWorkflowProviderDefinitionsRequest(
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_list_workflow_provider_definitions_request(value: Any) -> ListWorkflowProviderDefinitionsRequest:
+def _from_wire_list_workflow_provider_definitions_request(value: Any) -> ListWorkflowProviderDefinitionsRequest:
     return ListWorkflowProviderDefinitionsRequest(
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_list_workflow_provider_definitions_response(value: ListWorkflowProviderDefinitionsResponse) -> Any:
-    return _wire.ListWorkflowProviderDefinitionsResponse(
-        definitions=[to_wire_workflow_definition(item) for item in value.definitions],
+def _to_wire_list_workflow_provider_definitions_response(value: ListWorkflowProviderDefinitionsResponse) -> Any:
+    return _workflow_pb2.ListWorkflowProviderDefinitionsResponse(
+        definitions=[_to_wire_workflow_definition(item) for item in value.definitions],
     )
 
 
-def from_wire_list_workflow_provider_definitions_response(value: Any) -> ListWorkflowProviderDefinitionsResponse:
+def _from_wire_list_workflow_provider_definitions_response(value: Any) -> ListWorkflowProviderDefinitionsResponse:
     return ListWorkflowProviderDefinitionsResponse(
-        definitions=[from_wire_workflow_definition(item) for item in value.definitions],
+        definitions=[_from_wire_workflow_definition(item) for item in value.definitions],
     )
 
 
-def to_wire_list_workflow_provider_runs_request(value: ListWorkflowProviderRunsRequest) -> Any:
-    return _wire.ListWorkflowProviderRunsRequest(
+def _to_wire_list_workflow_provider_runs_request(value: ListWorkflowProviderRunsRequest) -> Any:
+    return _workflow_pb2.ListWorkflowProviderRunsRequest(
         page_size=value.page_size,
         page_token=value.page_token,
-        status=value.status,
+        status=_to_wire_enum(value.status),
         target_app=value.target_app,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_list_workflow_provider_runs_request(value: Any) -> ListWorkflowProviderRunsRequest:
+def _from_wire_list_workflow_provider_runs_request(value: Any) -> ListWorkflowProviderRunsRequest:
     return ListWorkflowProviderRunsRequest(
         page_size=value.page_size,
         page_token=value.page_token,
         status=value.status,
         target_app=value.target_app,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_list_workflow_provider_runs_response(value: ListWorkflowProviderRunsResponse) -> Any:
-    return _wire.ListWorkflowProviderRunsResponse(
-        runs=[to_wire_workflow_run(item) for item in value.runs],
+def _to_wire_list_workflow_provider_runs_response(value: ListWorkflowProviderRunsResponse) -> Any:
+    return _workflow_pb2.ListWorkflowProviderRunsResponse(
+        runs=[_to_wire_workflow_run(item) for item in value.runs],
         next_page_token=value.next_page_token,
     )
 
 
-def from_wire_list_workflow_provider_runs_response(value: Any) -> ListWorkflowProviderRunsResponse:
+def _from_wire_list_workflow_provider_runs_response(value: Any) -> ListWorkflowProviderRunsResponse:
     return ListWorkflowProviderRunsResponse(
-        runs=[from_wire_workflow_run(item) for item in value.runs],
+        runs=[_from_wire_workflow_run(item) for item in value.runs],
         next_page_token=value.next_page_token,
     )
 
 
-def to_wire_set_workflow_provider_activation_paused_request(value: SetWorkflowProviderActivationPausedRequest) -> Any:
-    return _wire.SetWorkflowProviderActivationPausedRequest(
+def _to_wire_set_workflow_provider_activation_paused_request(value: SetWorkflowProviderActivationPausedRequest) -> Any:
+    return _workflow_pb2.SetWorkflowProviderActivationPausedRequest(
         definition_id=value.definition_id,
         activation_id=value.activation_id,
         paused=value.paused,
         requested_by_subject_id=value.requested_by_subject_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_set_workflow_provider_activation_paused_request(value: Any) -> SetWorkflowProviderActivationPausedRequest:
+def _from_wire_set_workflow_provider_activation_paused_request(value: Any) -> SetWorkflowProviderActivationPausedRequest:
     return SetWorkflowProviderActivationPausedRequest(
         definition_id=value.definition_id,
         activation_id=value.activation_id,
         paused=value.paused,
         requested_by_subject_id=value.requested_by_subject_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_set_workflow_provider_definition_paused_request(value: SetWorkflowProviderDefinitionPausedRequest) -> Any:
-    return _wire.SetWorkflowProviderDefinitionPausedRequest(
+def _to_wire_set_workflow_provider_definition_paused_request(value: SetWorkflowProviderDefinitionPausedRequest) -> Any:
+    return _workflow_pb2.SetWorkflowProviderDefinitionPausedRequest(
         definition_id=value.definition_id,
         paused=value.paused,
         requested_by_subject_id=value.requested_by_subject_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_set_workflow_provider_definition_paused_request(value: Any) -> SetWorkflowProviderDefinitionPausedRequest:
+def _from_wire_set_workflow_provider_definition_paused_request(value: Any) -> SetWorkflowProviderDefinitionPausedRequest:
     return SetWorkflowProviderDefinitionPausedRequest(
         definition_id=value.definition_id,
         paused=value.paused,
         requested_by_subject_id=value.requested_by_subject_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_signal_or_start_workflow_provider_run_request(value: SignalOrStartWorkflowProviderRunRequest) -> Any:
-    return _wire.SignalOrStartWorkflowProviderRunRequest(
+def _to_wire_signal_or_start_workflow_provider_run_request(value: SignalOrStartWorkflowProviderRunRequest) -> Any:
+    return _workflow_pb2.SignalOrStartWorkflowProviderRunRequest(
         workflow_key=value.workflow_key,
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id,
-        signal=None if value.signal is None else to_wire_workflow_signal(value.signal),
+        signal=None if value.signal is None else _to_wire_workflow_signal(value.signal),
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
-        input=None if value.input is None else to_wire_struct(value.input),
+        run_as=None if value.run_as is None else _to_wire_subject_context(value.run_as),
+        input=None if value.input is None else _to_wire_struct(value.input),
         expected_definition_generation=value.expected_definition_generation,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_signal_or_start_workflow_provider_run_request(value: Any) -> SignalOrStartWorkflowProviderRunRequest:
+def _from_wire_signal_or_start_workflow_provider_run_request(value: Any) -> SignalOrStartWorkflowProviderRunRequest:
     return SignalOrStartWorkflowProviderRunRequest(
         workflow_key=value.workflow_key,
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id,
-        signal=from_wire_workflow_signal(value.signal) if value.HasField("signal") else None,
+        signal=_from_wire_workflow_signal(value.signal) if value.HasField("signal") else None,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
-        input=from_wire_struct(value.input) if value.HasField("input") else None,
+        run_as=_from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
+        input=_from_wire_struct(value.input) if value.HasField("input") else None,
         expected_definition_generation=value.expected_definition_generation,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_signal_workflow_provider_run_request(value: SignalWorkflowProviderRunRequest) -> Any:
-    return _wire.SignalWorkflowProviderRunRequest(
+def _to_wire_signal_workflow_provider_run_request(value: SignalWorkflowProviderRunRequest) -> Any:
+    return _workflow_pb2.SignalWorkflowProviderRunRequest(
         run_id=value.run_id,
-        signal=None if value.signal is None else to_wire_workflow_signal(value.signal),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        signal=None if value.signal is None else _to_wire_workflow_signal(value.signal),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_signal_workflow_provider_run_request(value: Any) -> SignalWorkflowProviderRunRequest:
+def _from_wire_signal_workflow_provider_run_request(value: Any) -> SignalWorkflowProviderRunRequest:
     return SignalWorkflowProviderRunRequest(
         run_id=value.run_id,
-        signal=from_wire_workflow_signal(value.signal) if value.HasField("signal") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        signal=_from_wire_workflow_signal(value.signal) if value.HasField("signal") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_signal_workflow_run_response(value: SignalWorkflowRunResponse) -> Any:
-    return _wire.SignalWorkflowRunResponse(
-        run=None if value.run is None else to_wire_workflow_run(value.run),
-        signal=None if value.signal is None else to_wire_workflow_signal(value.signal),
+def _to_wire_signal_workflow_run_response(value: SignalWorkflowRunResponse) -> Any:
+    return _workflow_pb2.SignalWorkflowRunResponse(
+        run=None if value.run is None else _to_wire_workflow_run(value.run),
+        signal=None if value.signal is None else _to_wire_workflow_signal(value.signal),
         started_run=value.started_run,
         workflow_key=value.workflow_key,
     )
 
 
-def from_wire_signal_workflow_run_response(value: Any) -> SignalWorkflowRunResponse:
+def _from_wire_signal_workflow_run_response(value: Any) -> SignalWorkflowRunResponse:
     return SignalWorkflowRunResponse(
-        run=from_wire_workflow_run(value.run) if value.HasField("run") else None,
-        signal=from_wire_workflow_signal(value.signal) if value.HasField("signal") else None,
+        run=_from_wire_workflow_run(value.run) if value.HasField("run") else None,
+        signal=_from_wire_workflow_signal(value.signal) if value.HasField("signal") else None,
         started_run=value.started_run,
         workflow_key=value.workflow_key,
     )
 
 
-def to_wire_start_workflow_provider_run_request(value: StartWorkflowProviderRunRequest) -> Any:
-    return _wire.StartWorkflowProviderRunRequest(
+def _to_wire_start_workflow_provider_run_request(value: StartWorkflowProviderRunRequest) -> Any:
+    return _workflow_pb2.StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
-        input=None if value.input is None else to_wire_struct(value.input),
+        run_as=None if value.run_as is None else _to_wire_subject_context(value.run_as),
+        input=None if value.input is None else _to_wire_struct(value.input),
         expected_definition_generation=value.expected_definition_generation,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_start_workflow_provider_run_request(value: Any) -> StartWorkflowProviderRunRequest:
+def _from_wire_start_workflow_provider_run_request(value: Any) -> StartWorkflowProviderRunRequest:
     return StartWorkflowProviderRunRequest(
         idempotency_key=value.idempotency_key,
         created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
-        input=from_wire_struct(value.input) if value.HasField("input") else None,
+        run_as=_from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
+        input=_from_wire_struct(value.input) if value.HasField("input") else None,
         expected_definition_generation=value.expected_definition_generation,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_workflow_activation(value: WorkflowActivation) -> Any:
-    return _wire.WorkflowActivation(
+def _to_wire_workflow_activation(value: WorkflowActivation) -> Any:
+    return _workflow_pb2.WorkflowActivation(
         id=value.id,
-        input=None if value.input is None else to_wire_workflow_value(value.input),
+        input=None if value.input is None else _to_wire_workflow_value(value.input),
         paused=value.paused,
         **_to_wire_workflow_activation_trigger(value.trigger),
     )
 
 
-def from_wire_workflow_activation(value: Any) -> WorkflowActivation:
+def _from_wire_workflow_activation(value: Any) -> WorkflowActivation:
     return WorkflowActivation(
         id=value.id,
-        input=from_wire_workflow_value(value.input) if value.HasField("input") else None,
+        input=_from_wire_workflow_value(value.input) if value.HasField("input") else None,
         paused=value.paused,
         trigger=_from_wire_workflow_activation_trigger(value),
     )
@@ -939,148 +936,148 @@ def from_wire_workflow_activation(value: Any) -> WorkflowActivation:
 
 def _to_wire_workflow_activation_trigger(value: WorkflowActivationTrigger) -> dict[str, Any]:
     if isinstance(value, WorkflowActivationSchedule):
-        return {"schedule": to_wire_workflow_schedule_activation(value.value)}
+        return {"schedule": _to_wire_workflow_schedule_activation(value.value)}
     if isinstance(value, WorkflowActivationEvent):
-        return {"event": to_wire_workflow_event_activation(value.value)}
+        return {"event": _to_wire_workflow_event_activation(value.value)}
     return {}
 
 
 def _from_wire_workflow_activation_trigger(value: Any) -> WorkflowActivationTrigger:
     case = value.WhichOneof("trigger")
     if case == "schedule":
-        return WorkflowActivationSchedule(value=from_wire_workflow_schedule_activation(value.schedule))
+        return WorkflowActivationSchedule(value=_from_wire_workflow_schedule_activation(value.schedule))
     if case == "event":
-        return WorkflowActivationEvent(value=from_wire_workflow_event_activation(value.event))
+        return WorkflowActivationEvent(value=_from_wire_workflow_event_activation(value.event))
     return None
 
 
-def to_wire_workflow_agent_message(value: WorkflowAgentMessage) -> Any:
-    return _wire.WorkflowAgentMessage(
+def _to_wire_workflow_agent_message(value: WorkflowAgentMessage) -> Any:
+    return _workflow_pb2.WorkflowAgentMessage(
         role=value.role,
-        text=None if value.text is None else to_wire_workflow_text(value.text),
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        text=None if value.text is None else _to_wire_workflow_text(value.text),
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
     )
 
 
-def from_wire_workflow_agent_message(value: Any) -> WorkflowAgentMessage:
+def _from_wire_workflow_agent_message(value: Any) -> WorkflowAgentMessage:
     return WorkflowAgentMessage(
         role=value.role,
-        text=from_wire_workflow_text(value.text) if value.HasField("text") else None,
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        text=_from_wire_workflow_text(value.text) if value.HasField("text") else None,
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
     )
 
 
-def to_wire_workflow_array(value: WorkflowArray) -> Any:
-    return _wire.WorkflowArray(
-        values=[to_wire_workflow_value(item) for item in value.values],
+def _to_wire_workflow_array(value: WorkflowArray) -> Any:
+    return _workflow_pb2.WorkflowArray(
+        values=[_to_wire_workflow_value(item) for item in value.values],
     )
 
 
-def from_wire_workflow_array(value: Any) -> WorkflowArray:
+def _from_wire_workflow_array(value: Any) -> WorkflowArray:
     return WorkflowArray(
-        values=[from_wire_workflow_value(item) for item in value.values],
+        values=[_from_wire_workflow_value(item) for item in value.values],
     )
 
 
-def to_wire_workflow_definition(value: WorkflowDefinition) -> Any:
-    return _wire.WorkflowDefinition(
+def _to_wire_workflow_definition(value: WorkflowDefinition) -> Any:
+    return _workflow_pb2.WorkflowDefinition(
         id=value.id,
         generation=value.generation,
-        target=None if value.target is None else to_wire_bound_workflow_target(value.target),
-        activations=[to_wire_workflow_activation(item) for item in value.activations],
+        target=None if value.target is None else _to_wire_bound_workflow_target(value.target),
+        activations=[_to_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
         created_by_subject_id=value.created_by_subject_id,
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        updated_at=None if value.updated_at is None else to_wire_timestamp(value.updated_at),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        updated_at=None if value.updated_at is None else _to_wire_timestamp(value.updated_at),
         provider_name=value.provider_name,
-        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
+        run_as=None if value.run_as is None else _to_wire_subject_context(value.run_as),
     )
 
 
-def from_wire_workflow_definition(value: Any) -> WorkflowDefinition:
+def _from_wire_workflow_definition(value: Any) -> WorkflowDefinition:
     return WorkflowDefinition(
         id=value.id,
         generation=value.generation,
-        target=from_wire_bound_workflow_target(value.target) if value.HasField("target") else None,
-        activations=[from_wire_workflow_activation(item) for item in value.activations],
+        target=_from_wire_bound_workflow_target(value.target) if value.HasField("target") else None,
+        activations=[_from_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
         created_by_subject_id=value.created_by_subject_id,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        updated_at=from_wire_timestamp(value.updated_at) if value.HasField("updated_at") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        updated_at=_from_wire_timestamp(value.updated_at) if value.HasField("updated_at") else None,
         provider_name=value.provider_name,
-        run_as=from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
+        run_as=_from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
     )
 
 
-def to_wire_workflow_definition_spec(value: WorkflowDefinitionSpec) -> Any:
-    return _wire.WorkflowDefinitionSpec(
+def _to_wire_workflow_definition_spec(value: WorkflowDefinitionSpec) -> Any:
+    return _workflow_pb2.WorkflowDefinitionSpec(
         id=value.id,
-        target=None if value.target is None else to_wire_bound_workflow_target(value.target),
-        activations=[to_wire_workflow_activation(item) for item in value.activations],
+        target=None if value.target is None else _to_wire_bound_workflow_target(value.target),
+        activations=[_to_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
-        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
+        run_as=None if value.run_as is None else _to_wire_subject_context(value.run_as),
     )
 
 
-def from_wire_workflow_definition_spec(value: Any) -> WorkflowDefinitionSpec:
+def _from_wire_workflow_definition_spec(value: Any) -> WorkflowDefinitionSpec:
     return WorkflowDefinitionSpec(
         id=value.id,
-        target=from_wire_bound_workflow_target(value.target) if value.HasField("target") else None,
-        activations=[from_wire_workflow_activation(item) for item in value.activations],
+        target=_from_wire_bound_workflow_target(value.target) if value.HasField("target") else None,
+        activations=[_from_wire_workflow_activation(item) for item in value.activations],
         paused=value.paused,
-        run_as=from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
+        run_as=_from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
     )
 
 
-def to_wire_workflow_event(value: WorkflowEvent) -> Any:
-    return _wire.WorkflowEvent(
+def _to_wire_workflow_event(value: WorkflowEvent) -> Any:
+    return _workflow_pb2.WorkflowEvent(
         id=value.id,
         source=value.source,
         spec_version=value.spec_version,
         type=value.type,
         subject=value.subject,
-        time=None if value.time is None else to_wire_timestamp(value.time),
+        time=None if value.time is None else _to_wire_timestamp(value.time),
         datacontenttype=value.datacontenttype,
-        data=None if value.data is None else to_wire_struct(value.data),
-        extensions={key: to_wire_value(item) for key, item in value.extensions.items()},
+        data=None if value.data is None else _to_wire_struct(value.data),
+        extensions={key: _to_wire_value(item) for key, item in value.extensions.items()},
     )
 
 
-def from_wire_workflow_event(value: Any) -> WorkflowEvent:
+def _from_wire_workflow_event(value: Any) -> WorkflowEvent:
     return WorkflowEvent(
         id=value.id,
         source=value.source,
         spec_version=value.spec_version,
         type=value.type,
         subject=value.subject,
-        time=from_wire_timestamp(value.time) if value.HasField("time") else None,
+        time=_from_wire_timestamp(value.time) if value.HasField("time") else None,
         datacontenttype=value.datacontenttype,
-        data=from_wire_struct(value.data) if value.HasField("data") else None,
-        extensions={key: from_wire_value(item) for key, item in value.extensions.items()},
+        data=_from_wire_struct(value.data) if value.HasField("data") else None,
+        extensions={key: _from_wire_value(item) for key, item in value.extensions.items()},
     )
 
 
-def to_wire_workflow_event_activation(value: WorkflowEventActivation) -> Any:
-    return _wire.WorkflowEventActivation(
-        match=None if value.match is None else to_wire_workflow_event_match(value.match),
+def _to_wire_workflow_event_activation(value: WorkflowEventActivation) -> Any:
+    return _workflow_pb2.WorkflowEventActivation(
+        match=None if value.match is None else _to_wire_workflow_event_match(value.match),
     )
 
 
-def from_wire_workflow_event_activation(value: Any) -> WorkflowEventActivation:
+def _from_wire_workflow_event_activation(value: Any) -> WorkflowEventActivation:
     return WorkflowEventActivation(
-        match=from_wire_workflow_event_match(value.match) if value.HasField("match") else None,
+        match=_from_wire_workflow_event_match(value.match) if value.HasField("match") else None,
     )
 
 
-def to_wire_workflow_event_match(value: WorkflowEventMatch) -> Any:
-    return _wire.WorkflowEventMatch(
+def _to_wire_workflow_event_match(value: WorkflowEventMatch) -> Any:
+    return _workflow_pb2.WorkflowEventMatch(
         type=value.type,
         source=value.source,
         subject=value.subject,
     )
 
 
-def from_wire_workflow_event_match(value: Any) -> WorkflowEventMatch:
+def _from_wire_workflow_event_match(value: Any) -> WorkflowEventMatch:
     return WorkflowEventMatch(
         type=value.type,
         source=value.source,
@@ -1088,127 +1085,127 @@ def from_wire_workflow_event_match(value: Any) -> WorkflowEventMatch:
     )
 
 
-def to_wire_workflow_event_trigger_invocation(value: WorkflowEventTriggerInvocation) -> Any:
-    return _wire.WorkflowEventTriggerInvocation(
+def _to_wire_workflow_event_trigger_invocation(value: WorkflowEventTriggerInvocation) -> Any:
+    return _workflow_pb2.WorkflowEventTriggerInvocation(
         activation_id=value.activation_id,
-        event=None if value.event is None else to_wire_workflow_event(value.event),
+        event=None if value.event is None else _to_wire_workflow_event(value.event),
     )
 
 
-def from_wire_workflow_event_trigger_invocation(value: Any) -> WorkflowEventTriggerInvocation:
+def _from_wire_workflow_event_trigger_invocation(value: Any) -> WorkflowEventTriggerInvocation:
     return WorkflowEventTriggerInvocation(
         activation_id=value.activation_id,
-        event=from_wire_workflow_event(value.event) if value.HasField("event") else None,
+        event=_from_wire_workflow_event(value.event) if value.HasField("event") else None,
     )
 
 
-def to_wire_workflow_manual_trigger(_value: WorkflowManualTrigger) -> Any:
-    return _wire.WorkflowManualTrigger()
+def _to_wire_workflow_manual_trigger(_value: WorkflowManualTrigger) -> Any:
+    return _workflow_pb2.WorkflowManualTrigger()
 
 
-def from_wire_workflow_manual_trigger(_value: Any) -> WorkflowManualTrigger:
+def _from_wire_workflow_manual_trigger(_value: Any) -> WorkflowManualTrigger:
     return WorkflowManualTrigger()
 
 
-def to_wire_workflow_object(value: WorkflowObject) -> Any:
-    return _wire.WorkflowObject(
-        fields={key: to_wire_workflow_value(item) for key, item in value.fields.items()},
+def _to_wire_workflow_object(value: WorkflowObject) -> Any:
+    return _workflow_pb2.WorkflowObject(
+        fields={key: _to_wire_workflow_value(item) for key, item in value.fields.items()},
     )
 
 
-def from_wire_workflow_object(value: Any) -> WorkflowObject:
+def _from_wire_workflow_object(value: Any) -> WorkflowObject:
     return WorkflowObject(
-        fields={key: from_wire_workflow_value(item) for key, item in value.fields.items()},
+        fields={key: _from_wire_workflow_value(item) for key, item in value.fields.items()},
     )
 
 
-def to_wire_workflow_path_source(value: WorkflowPathSource) -> Any:
-    return _wire.WorkflowPathSource(
+def _to_wire_workflow_path_source(value: WorkflowPathSource) -> Any:
+    return _workflow_pb2.WorkflowPathSource(
         path=value.path,
     )
 
 
-def from_wire_workflow_path_source(value: Any) -> WorkflowPathSource:
+def _from_wire_workflow_path_source(value: Any) -> WorkflowPathSource:
     return WorkflowPathSource(
         path=value.path,
     )
 
 
-def to_wire_workflow_run(value: WorkflowRun) -> Any:
-    return _wire.WorkflowRun(
+def _to_wire_workflow_run(value: WorkflowRun) -> Any:
+    return _workflow_pb2.WorkflowRun(
         id=value.id,
-        status=value.status,
-        target=None if value.target is None else to_wire_bound_workflow_target(value.target),
-        trigger=None if value.trigger is None else to_wire_workflow_run_trigger(value.trigger),
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        started_at=None if value.started_at is None else to_wire_timestamp(value.started_at),
-        completed_at=None if value.completed_at is None else to_wire_timestamp(value.completed_at),
+        status=_to_wire_enum(value.status),
+        target=None if value.target is None else _to_wire_bound_workflow_target(value.target),
+        trigger=None if value.trigger is None else _to_wire_workflow_run_trigger(value.trigger),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        started_at=None if value.started_at is None else _to_wire_timestamp(value.started_at),
+        completed_at=None if value.completed_at is None else _to_wire_timestamp(value.completed_at),
         status_message=value.status_message,
-        output=None if value.output is None else to_wire_value(value.output),
+        output=None if value.output is None else _to_wire_value(value.output),
         created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
-        input=None if value.input is None else to_wire_struct(value.input),
+        run_as=None if value.run_as is None else _to_wire_subject_context(value.run_as),
+        input=None if value.input is None else _to_wire_struct(value.input),
         definition_generation=value.definition_generation,
         current_step_id=value.current_step_id,
-        steps=[to_wire_workflow_step_execution(item) for item in value.steps],
+        steps=[_to_wire_workflow_step_execution(item) for item in value.steps],
     )
 
 
-def from_wire_workflow_run(value: Any) -> WorkflowRun:
+def _from_wire_workflow_run(value: Any) -> WorkflowRun:
     return WorkflowRun(
         id=value.id,
         status=value.status,
-        target=from_wire_bound_workflow_target(value.target) if value.HasField("target") else None,
-        trigger=from_wire_workflow_run_trigger(value.trigger) if value.HasField("trigger") else None,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        started_at=from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
-        completed_at=from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
+        target=_from_wire_bound_workflow_target(value.target) if value.HasField("target") else None,
+        trigger=_from_wire_workflow_run_trigger(value.trigger) if value.HasField("trigger") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        started_at=_from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
+        completed_at=_from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
         status_message=value.status_message,
-        output=from_wire_value(value.output) if value.HasField("output") else None,
+        output=_from_wire_value(value.output) if value.HasField("output") else None,
         created_by_subject_id=value.created_by_subject_id,
         workflow_key=value.workflow_key,
         provider_name=value.provider_name,
         definition_id=value.definition_id,
-        run_as=from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
-        input=from_wire_struct(value.input) if value.HasField("input") else None,
+        run_as=_from_wire_subject_context(value.run_as) if value.HasField("run_as") else None,
+        input=_from_wire_struct(value.input) if value.HasField("input") else None,
         definition_generation=value.definition_generation,
         current_step_id=value.current_step_id,
-        steps=[from_wire_workflow_step_execution(item) for item in value.steps],
+        steps=[_from_wire_workflow_step_execution(item) for item in value.steps],
     )
 
 
-def to_wire_workflow_run_event(value: WorkflowRunEvent) -> Any:
-    return _wire.WorkflowRunEvent(
+def _to_wire_workflow_run_event(value: WorkflowRunEvent) -> Any:
+    return _workflow_pb2.WorkflowRunEvent(
         id=value.id,
         run_id=value.run_id,
         step_id=value.step_id,
         type=value.type,
-        data=None if value.data is None else to_wire_struct(value.data),
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
+        data=None if value.data is None else _to_wire_struct(value.data),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
     )
 
 
-def from_wire_workflow_run_event(value: Any) -> WorkflowRunEvent:
+def _from_wire_workflow_run_event(value: Any) -> WorkflowRunEvent:
     return WorkflowRunEvent(
         id=value.id,
         run_id=value.run_id,
         step_id=value.step_id,
         type=value.type,
-        data=from_wire_struct(value.data) if value.HasField("data") else None,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        data=_from_wire_struct(value.data) if value.HasField("data") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
     )
 
 
-def to_wire_workflow_run_trigger(value: WorkflowRunTrigger) -> Any:
-    return _wire.WorkflowRunTrigger(
+def _to_wire_workflow_run_trigger(value: WorkflowRunTrigger) -> Any:
+    return _workflow_pb2.WorkflowRunTrigger(
         **_to_wire_workflow_run_trigger_kind(value.kind),
     )
 
 
-def from_wire_workflow_run_trigger(value: Any) -> WorkflowRunTrigger:
+def _from_wire_workflow_run_trigger(value: Any) -> WorkflowRunTrigger:
     return WorkflowRunTrigger(
         kind=_from_wire_workflow_run_trigger_kind(value),
     )
@@ -1216,281 +1213,281 @@ def from_wire_workflow_run_trigger(value: Any) -> WorkflowRunTrigger:
 
 def _to_wire_workflow_run_trigger_kind(value: WorkflowRunTriggerKind) -> dict[str, Any]:
     if isinstance(value, WorkflowRunTriggerManual):
-        return {"manual": to_wire_workflow_manual_trigger(value.value)}
+        return {"manual": _to_wire_workflow_manual_trigger(value.value)}
     if isinstance(value, WorkflowRunTriggerSchedule):
-        return {"schedule": to_wire_workflow_schedule_trigger(value.value)}
+        return {"schedule": _to_wire_workflow_schedule_trigger(value.value)}
     if isinstance(value, WorkflowRunTriggerEvent):
-        return {"event": to_wire_workflow_event_trigger_invocation(value.value)}
+        return {"event": _to_wire_workflow_event_trigger_invocation(value.value)}
     return {}
 
 
 def _from_wire_workflow_run_trigger_kind(value: Any) -> WorkflowRunTriggerKind:
     case = value.WhichOneof("kind")
     if case == "manual":
-        return WorkflowRunTriggerManual(value=from_wire_workflow_manual_trigger(value.manual))
+        return WorkflowRunTriggerManual(value=_from_wire_workflow_manual_trigger(value.manual))
     if case == "schedule":
-        return WorkflowRunTriggerSchedule(value=from_wire_workflow_schedule_trigger(value.schedule))
+        return WorkflowRunTriggerSchedule(value=_from_wire_workflow_schedule_trigger(value.schedule))
     if case == "event":
-        return WorkflowRunTriggerEvent(value=from_wire_workflow_event_trigger_invocation(value.event))
+        return WorkflowRunTriggerEvent(value=_from_wire_workflow_event_trigger_invocation(value.event))
     return None
 
 
-def to_wire_workflow_schedule_activation(value: WorkflowScheduleActivation) -> Any:
-    return _wire.WorkflowScheduleActivation(
+def _to_wire_workflow_schedule_activation(value: WorkflowScheduleActivation) -> Any:
+    return _workflow_pb2.WorkflowScheduleActivation(
         cron=value.cron,
         timezone=value.timezone,
     )
 
 
-def from_wire_workflow_schedule_activation(value: Any) -> WorkflowScheduleActivation:
+def _from_wire_workflow_schedule_activation(value: Any) -> WorkflowScheduleActivation:
     return WorkflowScheduleActivation(
         cron=value.cron,
         timezone=value.timezone,
     )
 
 
-def to_wire_workflow_schedule_trigger(value: WorkflowScheduleTrigger) -> Any:
-    return _wire.WorkflowScheduleTrigger(
+def _to_wire_workflow_schedule_trigger(value: WorkflowScheduleTrigger) -> Any:
+    return _workflow_pb2.WorkflowScheduleTrigger(
         activation_id=value.activation_id,
-        scheduled_for=None if value.scheduled_for is None else to_wire_timestamp(value.scheduled_for),
+        scheduled_for=None if value.scheduled_for is None else _to_wire_timestamp(value.scheduled_for),
     )
 
 
-def from_wire_workflow_schedule_trigger(value: Any) -> WorkflowScheduleTrigger:
+def _from_wire_workflow_schedule_trigger(value: Any) -> WorkflowScheduleTrigger:
     return WorkflowScheduleTrigger(
         activation_id=value.activation_id,
-        scheduled_for=from_wire_timestamp(value.scheduled_for) if value.HasField("scheduled_for") else None,
+        scheduled_for=_from_wire_timestamp(value.scheduled_for) if value.HasField("scheduled_for") else None,
     )
 
 
-def to_wire_workflow_signal(value: WorkflowSignal) -> Any:
-    return _wire.WorkflowSignal(
+def _to_wire_workflow_signal(value: WorkflowSignal) -> Any:
+    return _workflow_pb2.WorkflowSignal(
         id=value.id,
         name=value.name,
-        payload=None if value.payload is None else to_wire_struct(value.payload),
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        payload=None if value.payload is None else _to_wire_struct(value.payload),
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
         created_by_subject_id=value.created_by_subject_id,
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
     )
 
 
-def from_wire_workflow_signal(value: Any) -> WorkflowSignal:
+def _from_wire_workflow_signal(value: Any) -> WorkflowSignal:
     return WorkflowSignal(
         id=value.id,
         name=value.name,
-        payload=from_wire_struct(value.payload) if value.HasField("payload") else None,
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        payload=_from_wire_struct(value.payload) if value.HasField("payload") else None,
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
         created_by_subject_id=value.created_by_subject_id,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
         idempotency_key=value.idempotency_key,
         sequence=value.sequence,
     )
 
 
-def to_wire_workflow_step(value: WorkflowStep) -> Any:
-    return _wire.WorkflowStep(
+def _to_wire_workflow_step(value: WorkflowStep) -> Any:
+    return _workflow_pb2.WorkflowStep(
         id=value.id,
-        inputs={key: to_wire_workflow_value(item) for key, item in value.inputs.items()},
-        when=None if value.when is None else to_wire_workflow_step_when(value.when),
+        inputs={key: _to_wire_workflow_value(item) for key, item in value.inputs.items()},
+        when=None if value.when is None else _to_wire_workflow_step_when(value.when),
         timeout_seconds=value.timeout_seconds,
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
         **_to_wire_workflow_step_action(value.action),
     )
 
 
-def from_wire_workflow_step(value: Any) -> WorkflowStep:
+def _from_wire_workflow_step(value: Any) -> WorkflowStep:
     return WorkflowStep(
         id=value.id,
-        inputs={key: from_wire_workflow_value(item) for key, item in value.inputs.items()},
-        when=from_wire_workflow_step_when(value.when) if value.HasField("when") else None,
+        inputs={key: _from_wire_workflow_value(item) for key, item in value.inputs.items()},
+        when=_from_wire_workflow_step_when(value.when) if value.HasField("when") else None,
         timeout_seconds=value.timeout_seconds,
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
         action=_from_wire_workflow_step_action(value),
     )
 
 
 def _to_wire_workflow_step_action(value: WorkflowStepAction) -> dict[str, Any]:
     if isinstance(value, WorkflowStepApp):
-        return {"app": to_wire_workflow_step_app_call(value.value)}
+        return {"app": _to_wire_workflow_step_app_call(value.value)}
     if isinstance(value, WorkflowStepAgent):
-        return {"agent": to_wire_workflow_step_agent_turn(value.value)}
+        return {"agent": _to_wire_workflow_step_agent_turn(value.value)}
     return {}
 
 
 def _from_wire_workflow_step_action(value: Any) -> WorkflowStepAction:
     case = value.WhichOneof("action")
     if case == "app":
-        return WorkflowStepApp(value=from_wire_workflow_step_app_call(value.app))
+        return WorkflowStepApp(value=_from_wire_workflow_step_app_call(value.app))
     if case == "agent":
-        return WorkflowStepAgent(value=from_wire_workflow_step_agent_turn(value.agent))
+        return WorkflowStepAgent(value=_from_wire_workflow_step_agent_turn(value.agent))
     return None
 
 
-def to_wire_workflow_step_agent_turn(value: WorkflowStepAgentTurn) -> Any:
-    return _wire.WorkflowStepAgentTurn(
+def _to_wire_workflow_step_agent_turn(value: WorkflowStepAgentTurn) -> Any:
+    return _workflow_pb2.WorkflowStepAgentTurn(
         provider=value.provider,
         model=value.model,
         session_key=value.session_key,
-        prompt=None if value.prompt is None else to_wire_workflow_text(value.prompt),
-        messages=[to_wire_workflow_agent_message(item) for item in value.messages],
-        tools=[to_wire_agent_tool_ref(item) for item in value.tools],
-        output=None if value.output is None else to_wire_agent_output(value.output),
-        model_options=None if value.model_options is None else to_wire_struct(value.model_options),
+        prompt=None if value.prompt is None else _to_wire_workflow_text(value.prompt),
+        messages=[_to_wire_workflow_agent_message(item) for item in value.messages],
+        tools=[_to_wire_agent_tool_ref(item) for item in value.tools],
+        output=None if value.output is None else _to_wire_agent_output(value.output),
+        model_options=None if value.model_options is None else _to_wire_struct(value.model_options),
     )
 
 
-def from_wire_workflow_step_agent_turn(value: Any) -> WorkflowStepAgentTurn:
+def _from_wire_workflow_step_agent_turn(value: Any) -> WorkflowStepAgentTurn:
     return WorkflowStepAgentTurn(
         provider=value.provider,
         model=value.model,
         session_key=value.session_key,
-        prompt=from_wire_workflow_text(value.prompt) if value.HasField("prompt") else None,
-        messages=[from_wire_workflow_agent_message(item) for item in value.messages],
-        tools=[from_wire_agent_tool_ref(item) for item in value.tools],
-        output=from_wire_agent_output(value.output) if value.HasField("output") else None,
-        model_options=from_wire_struct(value.model_options) if value.HasField("model_options") else None,
+        prompt=_from_wire_workflow_text(value.prompt) if value.HasField("prompt") else None,
+        messages=[_from_wire_workflow_agent_message(item) for item in value.messages],
+        tools=[_from_wire_agent_tool_ref(item) for item in value.tools],
+        output=_from_wire_agent_output(value.output) if value.HasField("output") else None,
+        model_options=_from_wire_struct(value.model_options) if value.HasField("model_options") else None,
     )
 
 
-def to_wire_workflow_step_app_call(value: WorkflowStepAppCall) -> Any:
-    return _wire.WorkflowStepAppCall(
+def _to_wire_workflow_step_app_call(value: WorkflowStepAppCall) -> Any:
+    return _workflow_pb2.WorkflowStepAppCall(
         name=value.name,
         operation=value.operation,
-        input=None if value.input is None else to_wire_workflow_value(value.input),
+        input=None if value.input is None else _to_wire_workflow_value(value.input),
         connection=value.connection,
         instance=value.instance,
         credential_mode=value.credential_mode,
     )
 
 
-def from_wire_workflow_step_app_call(value: Any) -> WorkflowStepAppCall:
+def _from_wire_workflow_step_app_call(value: Any) -> WorkflowStepAppCall:
     return WorkflowStepAppCall(
         name=value.name,
         operation=value.operation,
-        input=from_wire_workflow_value(value.input) if value.HasField("input") else None,
+        input=_from_wire_workflow_value(value.input) if value.HasField("input") else None,
         connection=value.connection,
         instance=value.instance,
         credential_mode=value.credential_mode,
     )
 
 
-def to_wire_workflow_step_attempt(value: WorkflowStepAttempt) -> Any:
-    return _wire.WorkflowStepAttempt(
+def _to_wire_workflow_step_attempt(value: WorkflowStepAttempt) -> Any:
+    return _workflow_pb2.WorkflowStepAttempt(
         id=value.id,
-        status=value.status,
+        status=_to_wire_enum(value.status),
         idempotency_key=value.idempotency_key,
-        input=None if value.input is None else to_wire_value(value.input),
-        output=None if value.output is None else to_wire_value(value.output),
+        input=None if value.input is None else _to_wire_value(value.input),
+        output=None if value.output is None else _to_wire_value(value.output),
         status_message=value.status_message,
-        started_at=None if value.started_at is None else to_wire_timestamp(value.started_at),
-        completed_at=None if value.completed_at is None else to_wire_timestamp(value.completed_at),
+        started_at=None if value.started_at is None else _to_wire_timestamp(value.started_at),
+        completed_at=None if value.completed_at is None else _to_wire_timestamp(value.completed_at),
     )
 
 
-def from_wire_workflow_step_attempt(value: Any) -> WorkflowStepAttempt:
+def _from_wire_workflow_step_attempt(value: Any) -> WorkflowStepAttempt:
     return WorkflowStepAttempt(
         id=value.id,
         status=value.status,
         idempotency_key=value.idempotency_key,
-        input=from_wire_value(value.input) if value.HasField("input") else None,
-        output=from_wire_value(value.output) if value.HasField("output") else None,
+        input=_from_wire_value(value.input) if value.HasField("input") else None,
+        output=_from_wire_value(value.output) if value.HasField("output") else None,
         status_message=value.status_message,
-        started_at=from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
-        completed_at=from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
+        started_at=_from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
+        completed_at=_from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
     )
 
 
-def to_wire_workflow_step_execution(value: WorkflowStepExecution) -> Any:
-    return _wire.WorkflowStepExecution(
+def _to_wire_workflow_step_execution(value: WorkflowStepExecution) -> Any:
+    return _workflow_pb2.WorkflowStepExecution(
         step_id=value.step_id,
-        status=value.status,
-        attempts=[to_wire_workflow_step_attempt(item) for item in value.attempts],
-        input=None if value.input is None else to_wire_value(value.input),
-        output=None if value.output is None else to_wire_value(value.output),
+        status=_to_wire_enum(value.status),
+        attempts=[_to_wire_workflow_step_attempt(item) for item in value.attempts],
+        input=None if value.input is None else _to_wire_value(value.input),
+        output=None if value.output is None else _to_wire_value(value.output),
         status_message=value.status_message,
         skip_reason=value.skip_reason,
-        started_at=None if value.started_at is None else to_wire_timestamp(value.started_at),
-        completed_at=None if value.completed_at is None else to_wire_timestamp(value.completed_at),
+        started_at=None if value.started_at is None else _to_wire_timestamp(value.started_at),
+        completed_at=None if value.completed_at is None else _to_wire_timestamp(value.completed_at),
     )
 
 
-def from_wire_workflow_step_execution(value: Any) -> WorkflowStepExecution:
+def _from_wire_workflow_step_execution(value: Any) -> WorkflowStepExecution:
     return WorkflowStepExecution(
         step_id=value.step_id,
         status=value.status,
-        attempts=[from_wire_workflow_step_attempt(item) for item in value.attempts],
-        input=from_wire_value(value.input) if value.HasField("input") else None,
-        output=from_wire_value(value.output) if value.HasField("output") else None,
+        attempts=[_from_wire_workflow_step_attempt(item) for item in value.attempts],
+        input=_from_wire_value(value.input) if value.HasField("input") else None,
+        output=_from_wire_value(value.output) if value.HasField("output") else None,
         status_message=value.status_message,
         skip_reason=value.skip_reason,
-        started_at=from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
-        completed_at=from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
+        started_at=_from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
+        completed_at=_from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
     )
 
 
-def to_wire_workflow_step_input_source(value: WorkflowStepInputSource) -> Any:
-    return _wire.WorkflowStepInputSource(
+def _to_wire_workflow_step_input_source(value: WorkflowStepInputSource) -> Any:
+    return _workflow_pb2.WorkflowStepInputSource(
         step_id=value.step_id,
         path=value.path,
     )
 
 
-def from_wire_workflow_step_input_source(value: Any) -> WorkflowStepInputSource:
+def _from_wire_workflow_step_input_source(value: Any) -> WorkflowStepInputSource:
     return WorkflowStepInputSource(
         step_id=value.step_id,
         path=value.path,
     )
 
 
-def to_wire_workflow_step_output_source(value: WorkflowStepOutputSource) -> Any:
-    return _wire.WorkflowStepOutputSource(
+def _to_wire_workflow_step_output_source(value: WorkflowStepOutputSource) -> Any:
+    return _workflow_pb2.WorkflowStepOutputSource(
         step_id=value.step_id,
         path=value.path,
     )
 
 
-def from_wire_workflow_step_output_source(value: Any) -> WorkflowStepOutputSource:
+def _from_wire_workflow_step_output_source(value: Any) -> WorkflowStepOutputSource:
     return WorkflowStepOutputSource(
         step_id=value.step_id,
         path=value.path,
     )
 
 
-def to_wire_workflow_step_when(value: WorkflowStepWhen) -> Any:
-    return _wire.WorkflowStepWhen(
-        value=None if value.value is None else to_wire_workflow_value(value.value),
-        equals=None if value.equals is None else to_wire_value(value.equals),
+def _to_wire_workflow_step_when(value: WorkflowStepWhen) -> Any:
+    return _workflow_pb2.WorkflowStepWhen(
+        value=None if value.value is None else _to_wire_workflow_value(value.value),
+        equals=None if value.equals is None else _to_wire_value(value.equals),
     )
 
 
-def from_wire_workflow_step_when(value: Any) -> WorkflowStepWhen:
+def _from_wire_workflow_step_when(value: Any) -> WorkflowStepWhen:
     return WorkflowStepWhen(
-        value=from_wire_workflow_value(value.value) if value.HasField("value") else None,
-        equals=from_wire_value(value.equals) if value.HasField("equals") else None,
+        value=_from_wire_workflow_value(value.value) if value.HasField("value") else None,
+        equals=_from_wire_value(value.equals) if value.HasField("equals") else None,
     )
 
 
-def to_wire_workflow_text(value: WorkflowText) -> Any:
-    return _wire.WorkflowText(
+def _to_wire_workflow_text(value: WorkflowText) -> Any:
+    return _workflow_pb2.WorkflowText(
         template=value.template,
     )
 
 
-def from_wire_workflow_text(value: Any) -> WorkflowText:
+def _from_wire_workflow_text(value: Any) -> WorkflowText:
     return WorkflowText(
         template=value.template,
     )
 
 
-def to_wire_workflow_value(value: WorkflowValue) -> Any:
-    return _wire.WorkflowValue(
+def _to_wire_workflow_value(value: WorkflowValue) -> Any:
+    return _workflow_pb2.WorkflowValue(
         **_to_wire_workflow_value_kind(value.kind),
     )
 
 
-def from_wire_workflow_value(value: Any) -> WorkflowValue:
+def _from_wire_workflow_value(value: Any) -> WorkflowValue:
     return WorkflowValue(
         kind=_from_wire_workflow_value_kind(value),
     )
@@ -1498,42 +1495,42 @@ def from_wire_workflow_value(value: Any) -> WorkflowValue:
 
 def _to_wire_workflow_value_kind(value: WorkflowValueKind) -> dict[str, Any]:
     if isinstance(value, WorkflowValueLiteral):
-        return {"literal": to_wire_value(value.value)}
+        return {"literal": _to_wire_value(value.value)}
     if isinstance(value, WorkflowValueObject):
-        return {"object": to_wire_workflow_object(value.value)}
+        return {"object": _to_wire_workflow_object(value.value)}
     if isinstance(value, WorkflowValueArray):
-        return {"array": to_wire_workflow_array(value.value)}
+        return {"array": _to_wire_workflow_array(value.value)}
     if isinstance(value, WorkflowValueTemplate):
-        return {"template": to_wire_workflow_text(value.value)}
+        return {"template": _to_wire_workflow_text(value.value)}
     if isinstance(value, WorkflowValueInput):
-        return {"input": to_wire_workflow_path_source(value.value)}
+        return {"input": _to_wire_workflow_path_source(value.value)}
     if isinstance(value, WorkflowValueSignal):
-        return {"signal": to_wire_workflow_path_source(value.value)}
+        return {"signal": _to_wire_workflow_path_source(value.value)}
     if isinstance(value, WorkflowValueStepOutput):
-        return {"step_output": to_wire_workflow_step_output_source(value.value)}
+        return {"step_output": _to_wire_workflow_step_output_source(value.value)}
     if isinstance(value, WorkflowValueStepInput):
-        return {"step_input": to_wire_workflow_step_input_source(value.value)}
+        return {"step_input": _to_wire_workflow_step_input_source(value.value)}
     return {}
 
 
 def _from_wire_workflow_value_kind(value: Any) -> WorkflowValueKind:
     case = value.WhichOneof("kind")
     if case == "literal":
-        return WorkflowValueLiteral(value=from_wire_value(value.literal))
+        return WorkflowValueLiteral(value=_from_wire_value(value.literal))
     if case == "object":
-        return WorkflowValueObject(value=from_wire_workflow_object(value.object))
+        return WorkflowValueObject(value=_from_wire_workflow_object(value.object))
     if case == "array":
-        return WorkflowValueArray(value=from_wire_workflow_array(value.array))
+        return WorkflowValueArray(value=_from_wire_workflow_array(value.array))
     if case == "template":
-        return WorkflowValueTemplate(value=from_wire_workflow_text(value.template))
+        return WorkflowValueTemplate(value=_from_wire_workflow_text(value.template))
     if case == "input":
-        return WorkflowValueInput(value=from_wire_workflow_path_source(value.input))
+        return WorkflowValueInput(value=_from_wire_workflow_path_source(value.input))
     if case == "signal":
-        return WorkflowValueSignal(value=from_wire_workflow_path_source(value.signal))
+        return WorkflowValueSignal(value=_from_wire_workflow_path_source(value.signal))
     if case == "step_output":
-        return WorkflowValueStepOutput(value=from_wire_workflow_step_output_source(value.step_output))
+        return WorkflowValueStepOutput(value=_from_wire_workflow_step_output_source(value.step_output))
     if case == "step_input":
-        return WorkflowValueStepInput(value=from_wire_workflow_step_input_source(value.step_input))
+        return WorkflowValueStepInput(value=_from_wire_workflow_step_input_source(value.step_input))
     return None
 
 
@@ -1541,63 +1538,63 @@ class Workflow:
     """Client for the gestalt.provider.v1.Workflow service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.WorkflowStub(channel)
+        self._stub = _workflow_pb2_grpc.WorkflowStub(channel)
 
     def apply_definition(self, request: ApplyWorkflowProviderDefinitionRequest) -> WorkflowDefinition:
-        response = call_unary(lambda: self._stub.ApplyDefinition(to_wire_apply_workflow_provider_definition_request(request)))
-        return from_wire_workflow_definition(response)
+        response = _call_unary(lambda: self._stub.ApplyDefinition(_to_wire_apply_workflow_provider_definition_request(request)))
+        return _from_wire_workflow_definition(response)
 
     def get_definition(self, request: GetWorkflowProviderDefinitionRequest) -> WorkflowDefinition:
-        response = call_unary(lambda: self._stub.GetDefinition(to_wire_get_workflow_provider_definition_request(request)))
-        return from_wire_workflow_definition(response)
+        response = _call_unary(lambda: self._stub.GetDefinition(_to_wire_get_workflow_provider_definition_request(request)))
+        return _from_wire_workflow_definition(response)
 
     def list_definitions(self, request: ListWorkflowProviderDefinitionsRequest) -> ListWorkflowProviderDefinitionsResponse:
-        response = call_unary(lambda: self._stub.ListDefinitions(to_wire_list_workflow_provider_definitions_request(request)))
-        return from_wire_list_workflow_provider_definitions_response(response)
+        response = _call_unary(lambda: self._stub.ListDefinitions(_to_wire_list_workflow_provider_definitions_request(request)))
+        return _from_wire_list_workflow_provider_definitions_response(response)
 
     def set_definition_paused(self, request: SetWorkflowProviderDefinitionPausedRequest) -> WorkflowDefinition:
-        response = call_unary(lambda: self._stub.SetDefinitionPaused(to_wire_set_workflow_provider_definition_paused_request(request)))
-        return from_wire_workflow_definition(response)
+        response = _call_unary(lambda: self._stub.SetDefinitionPaused(_to_wire_set_workflow_provider_definition_paused_request(request)))
+        return _from_wire_workflow_definition(response)
 
     def set_activation_paused(self, request: SetWorkflowProviderActivationPausedRequest) -> WorkflowDefinition:
-        response = call_unary(lambda: self._stub.SetActivationPaused(to_wire_set_workflow_provider_activation_paused_request(request)))
-        return from_wire_workflow_definition(response)
+        response = _call_unary(lambda: self._stub.SetActivationPaused(_to_wire_set_workflow_provider_activation_paused_request(request)))
+        return _from_wire_workflow_definition(response)
 
     def delete_definition(self, request: DeleteWorkflowProviderDefinitionRequest) -> None:
-        call_unary(lambda: self._stub.DeleteDefinition(to_wire_delete_workflow_provider_definition_request(request)))
+        _call_unary(lambda: self._stub.DeleteDefinition(_to_wire_delete_workflow_provider_definition_request(request)))
 
     def start_run(self, request: StartWorkflowProviderRunRequest) -> WorkflowRun:
-        response = call_unary(lambda: self._stub.StartRun(to_wire_start_workflow_provider_run_request(request)))
-        return from_wire_workflow_run(response)
+        response = _call_unary(lambda: self._stub.StartRun(_to_wire_start_workflow_provider_run_request(request)))
+        return _from_wire_workflow_run(response)
 
     def list_runs(self, request: ListWorkflowProviderRunsRequest) -> ListWorkflowProviderRunsResponse:
-        response = call_unary(lambda: self._stub.ListRuns(to_wire_list_workflow_provider_runs_request(request)))
-        return from_wire_list_workflow_provider_runs_response(response)
+        response = _call_unary(lambda: self._stub.ListRuns(_to_wire_list_workflow_provider_runs_request(request)))
+        return _from_wire_list_workflow_provider_runs_response(response)
 
     def get_run(self, request: GetWorkflowProviderRunRequest) -> WorkflowRun:
-        response = call_unary(lambda: self._stub.GetRun(to_wire_get_workflow_provider_run_request(request)))
-        return from_wire_workflow_run(response)
+        response = _call_unary(lambda: self._stub.GetRun(_to_wire_get_workflow_provider_run_request(request)))
+        return _from_wire_workflow_run(response)
 
     def get_run_events(self, request: GetWorkflowProviderRunEventsRequest) -> GetWorkflowProviderRunEventsResponse:
-        response = call_unary(lambda: self._stub.GetRunEvents(to_wire_get_workflow_provider_run_events_request(request)))
-        return from_wire_get_workflow_provider_run_events_response(response)
+        response = _call_unary(lambda: self._stub.GetRunEvents(_to_wire_get_workflow_provider_run_events_request(request)))
+        return _from_wire_get_workflow_provider_run_events_response(response)
 
     def get_run_output(self, request: GetWorkflowProviderRunOutputRequest) -> GetWorkflowProviderRunOutputResponse:
-        response = call_unary(lambda: self._stub.GetRunOutput(to_wire_get_workflow_provider_run_output_request(request)))
-        return from_wire_get_workflow_provider_run_output_response(response)
+        response = _call_unary(lambda: self._stub.GetRunOutput(_to_wire_get_workflow_provider_run_output_request(request)))
+        return _from_wire_get_workflow_provider_run_output_response(response)
 
     def cancel_run(self, request: CancelWorkflowProviderRunRequest) -> WorkflowRun:
-        response = call_unary(lambda: self._stub.CancelRun(to_wire_cancel_workflow_provider_run_request(request)))
-        return from_wire_workflow_run(response)
+        response = _call_unary(lambda: self._stub.CancelRun(_to_wire_cancel_workflow_provider_run_request(request)))
+        return _from_wire_workflow_run(response)
 
     def signal_run(self, request: SignalWorkflowProviderRunRequest) -> SignalWorkflowRunResponse:
-        response = call_unary(lambda: self._stub.SignalRun(to_wire_signal_workflow_provider_run_request(request)))
-        return from_wire_signal_workflow_run_response(response)
+        response = _call_unary(lambda: self._stub.SignalRun(_to_wire_signal_workflow_provider_run_request(request)))
+        return _from_wire_signal_workflow_run_response(response)
 
     def signal_or_start_run(self, request: SignalOrStartWorkflowProviderRunRequest) -> SignalWorkflowRunResponse:
-        response = call_unary(lambda: self._stub.SignalOrStartRun(to_wire_signal_or_start_workflow_provider_run_request(request)))
-        return from_wire_signal_workflow_run_response(response)
+        response = _call_unary(lambda: self._stub.SignalOrStartRun(_to_wire_signal_or_start_workflow_provider_run_request(request)))
+        return _from_wire_signal_workflow_run_response(response)
 
     def deliver_event(self, request: DeliverWorkflowProviderEventRequest) -> WorkflowEvent:
-        response = call_unary(lambda: self._stub.DeliverEvent(to_wire_deliver_workflow_provider_event_request(request)))
-        return from_wire_workflow_event(response)
+        response = _call_unary(lambda: self._stub.DeliverEvent(_to_wire_deliver_workflow_provider_event_request(request)))
+        return _from_wire_workflow_event(response)

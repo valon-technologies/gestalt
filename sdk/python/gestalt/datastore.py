@@ -17,21 +17,20 @@ from ._gen.v1 import datastore_pb2_grpc as _datastore_pb2_grpc
 from .rpc_support import (
     JsonValue,
     RpcStatus,
-    call_unary,
-    from_wire_status,
-    from_wire_timestamp,
-    from_wire_value,
-    map_recv,
-    map_send,
-    to_wire_status,
-    to_wire_timestamp,
-    to_wire_value,
+    _call_unary,
+    _from_wire_status,
+    _from_wire_timestamp,
+    _from_wire_value,
+    _map_recv,
+    _map_send,
+    _to_wire_enum,
+    _to_wire_status,
+    _to_wire_timestamp,
+    _to_wire_value,
 )
 
 _empty: Any = _empty_pb2
 _struct: Any = _struct_pb2
-_wire: Any = _datastore_pb2
-_wire_grpc: Any = _datastore_pb2_grpc
 
 
 # Open enum: unknown numeric values are preserved, so the type is int.
@@ -635,15 +634,15 @@ class TypedValue:
     kind: TypedValueKind = None
 
 
-def to_wire_begin_transaction_request(value: BeginTransactionRequest) -> Any:
-    return _wire.BeginTransactionRequest(
+def _to_wire_begin_transaction_request(value: BeginTransactionRequest) -> Any:
+    return _datastore_pb2.BeginTransactionRequest(
         stores=value.stores,
-        mode=value.mode,
-        durability_hint=value.durability_hint,
+        mode=_to_wire_enum(value.mode),
+        durability_hint=_to_wire_enum(value.durability_hint),
     )
 
 
-def from_wire_begin_transaction_request(value: Any) -> BeginTransactionRequest:
+def _from_wire_begin_transaction_request(value: Any) -> BeginTransactionRequest:
     return BeginTransactionRequest(
         stores=list(value.stores),
         mode=value.mode,
@@ -651,8 +650,8 @@ def from_wire_begin_transaction_request(value: Any) -> BeginTransactionRequest:
     )
 
 
-def to_wire_column_def(value: ColumnDef) -> Any:
-    return _wire.ColumnDef(
+def _to_wire_column_def(value: ColumnDef) -> Any:
+    return _datastore_pb2.ColumnDef(
         name=value.name,
         type=value.type,
         primary_key=value.primary_key,
@@ -661,7 +660,7 @@ def to_wire_column_def(value: ColumnDef) -> Any:
     )
 
 
-def from_wire_column_def(value: Any) -> ColumnDef:
+def _from_wire_column_def(value: Any) -> ColumnDef:
     return ColumnDef(
         name=value.name,
         type=value.type,
@@ -671,39 +670,39 @@ def from_wire_column_def(value: Any) -> ColumnDef:
     )
 
 
-def to_wire_count_response(value: CountResponse) -> Any:
-    return _wire.CountResponse(
+def _to_wire_count_response(value: CountResponse) -> Any:
+    return _datastore_pb2.CountResponse(
         count=value.count,
     )
 
 
-def from_wire_count_response(value: Any) -> CountResponse:
+def _from_wire_count_response(value: Any) -> CountResponse:
     return CountResponse(
         count=value.count,
     )
 
 
-def to_wire_create_object_store_request(value: CreateObjectStoreRequest) -> Any:
-    return _wire.CreateObjectStoreRequest(
+def _to_wire_create_object_store_request(value: CreateObjectStoreRequest) -> Any:
+    return _datastore_pb2.CreateObjectStoreRequest(
         name=value.name,
-        schema=None if value.schema is None else to_wire_object_store_schema(value.schema),
+        schema=None if value.schema is None else _to_wire_object_store_schema(value.schema),
     )
 
 
-def from_wire_create_object_store_request(value: Any) -> CreateObjectStoreRequest:
+def _from_wire_create_object_store_request(value: Any) -> CreateObjectStoreRequest:
     return CreateObjectStoreRequest(
         name=value.name,
-        schema=from_wire_object_store_schema(value.schema) if value.HasField("schema") else None,
+        schema=_from_wire_object_store_schema(value.schema) if value.HasField("schema") else None,
     )
 
 
-def to_wire_cursor_client_message(value: CursorClientMessage) -> Any:
-    return _wire.CursorClientMessage(
+def _to_wire_cursor_client_message(value: CursorClientMessage) -> Any:
+    return _datastore_pb2.CursorClientMessage(
         **_to_wire_cursor_client_message_msg(value.msg),
     )
 
 
-def from_wire_cursor_client_message(value: Any) -> CursorClientMessage:
+def _from_wire_cursor_client_message(value: Any) -> CursorClientMessage:
     return CursorClientMessage(
         msg=_from_wire_cursor_client_message_msg(value),
     )
@@ -711,28 +710,28 @@ def from_wire_cursor_client_message(value: Any) -> CursorClientMessage:
 
 def _to_wire_cursor_client_message_msg(value: CursorClientMessageMsg) -> dict[str, Any]:
     if isinstance(value, CursorClientMessageOpen):
-        return {"open": to_wire_open_cursor_request(value.value)}
+        return {"open": _to_wire_open_cursor_request(value.value)}
     if isinstance(value, CursorClientMessageCommand):
-        return {"command": to_wire_cursor_command(value.value)}
+        return {"command": _to_wire_cursor_command(value.value)}
     return {}
 
 
 def _from_wire_cursor_client_message_msg(value: Any) -> CursorClientMessageMsg:
     case = value.WhichOneof("msg")
     if case == "open":
-        return CursorClientMessageOpen(value=from_wire_open_cursor_request(value.open))
+        return CursorClientMessageOpen(value=_from_wire_open_cursor_request(value.open))
     if case == "command":
-        return CursorClientMessageCommand(value=from_wire_cursor_command(value.command))
+        return CursorClientMessageCommand(value=_from_wire_cursor_command(value.command))
     return None
 
 
-def to_wire_cursor_command(value: CursorCommand) -> Any:
-    return _wire.CursorCommand(
+def _to_wire_cursor_command(value: CursorCommand) -> Any:
+    return _datastore_pb2.CursorCommand(
         **_to_wire_cursor_command_command(value.command),
     )
 
 
-def from_wire_cursor_command(value: Any) -> CursorCommand:
+def _from_wire_cursor_command(value: Any) -> CursorCommand:
     return CursorCommand(
         command=_from_wire_cursor_command_command(value),
     )
@@ -742,11 +741,11 @@ def _to_wire_cursor_command_command(value: CursorCommandCommand) -> dict[str, An
     if isinstance(value, CursorCommandNext):
         return {"next": value.value}
     if isinstance(value, CursorCommandContinueToKey):
-        return {"continue_to_key": to_wire_cursor_key_target(value.value)}
+        return {"continue_to_key": _to_wire_cursor_key_target(value.value)}
     if isinstance(value, CursorCommandAdvance):
         return {"advance": value.value}
     if isinstance(value, CursorCommandUpdate):
-        return {"update": to_wire_record(value.value)}
+        return {"update": _to_wire_record(value.value)}
     if isinstance(value, CursorCommandDelete):
         return {"delete": value.value}
     if isinstance(value, CursorCommandClose):
@@ -759,11 +758,11 @@ def _from_wire_cursor_command_command(value: Any) -> CursorCommandCommand:
     if case == "next":
         return CursorCommandNext(value=value.next)
     if case == "continue_to_key":
-        return CursorCommandContinueToKey(value=from_wire_cursor_key_target(value.continue_to_key))
+        return CursorCommandContinueToKey(value=_from_wire_cursor_key_target(value.continue_to_key))
     if case == "advance":
         return CursorCommandAdvance(value=value.advance)
     if case == "update":
-        return CursorCommandUpdate(value=from_wire_record(value.update))
+        return CursorCommandUpdate(value=_from_wire_record(value.update))
     if case == "delete":
         return CursorCommandDelete(value=value.delete)
     if case == "close":
@@ -771,41 +770,41 @@ def _from_wire_cursor_command_command(value: Any) -> CursorCommandCommand:
     return None
 
 
-def to_wire_cursor_entry(value: CursorEntry) -> Any:
-    return _wire.CursorEntry(
-        key=[to_wire_key_value(item) for item in value.key],
+def _to_wire_cursor_entry(value: CursorEntry) -> Any:
+    return _datastore_pb2.CursorEntry(
+        key=[_to_wire_key_value(item) for item in value.key],
         primary_key=value.primary_key,
-        record=None if value.record is None else to_wire_record(value.record),
+        record=None if value.record is None else _to_wire_record(value.record),
     )
 
 
-def from_wire_cursor_entry(value: Any) -> CursorEntry:
+def _from_wire_cursor_entry(value: Any) -> CursorEntry:
     return CursorEntry(
-        key=[from_wire_key_value(item) for item in value.key],
+        key=[_from_wire_key_value(item) for item in value.key],
         primary_key=value.primary_key,
-        record=from_wire_record(value.record) if value.HasField("record") else None,
+        record=_from_wire_record(value.record) if value.HasField("record") else None,
     )
 
 
-def to_wire_cursor_key_target(value: CursorKeyTarget) -> Any:
-    return _wire.CursorKeyTarget(
-        key=[to_wire_key_value(item) for item in value.key],
+def _to_wire_cursor_key_target(value: CursorKeyTarget) -> Any:
+    return _datastore_pb2.CursorKeyTarget(
+        key=[_to_wire_key_value(item) for item in value.key],
     )
 
 
-def from_wire_cursor_key_target(value: Any) -> CursorKeyTarget:
+def _from_wire_cursor_key_target(value: Any) -> CursorKeyTarget:
     return CursorKeyTarget(
-        key=[from_wire_key_value(item) for item in value.key],
+        key=[_from_wire_key_value(item) for item in value.key],
     )
 
 
-def to_wire_cursor_response(value: CursorResponse) -> Any:
-    return _wire.CursorResponse(
+def _to_wire_cursor_response(value: CursorResponse) -> Any:
+    return _datastore_pb2.CursorResponse(
         **_to_wire_cursor_response_result(value.result),
     )
 
 
-def from_wire_cursor_response(value: Any) -> CursorResponse:
+def _from_wire_cursor_response(value: Any) -> CursorResponse:
     return CursorResponse(
         result=_from_wire_cursor_response_result(value),
     )
@@ -813,7 +812,7 @@ def from_wire_cursor_response(value: Any) -> CursorResponse:
 
 def _to_wire_cursor_response_result(value: CursorResponseResult) -> dict[str, Any]:
     if isinstance(value, CursorResponseEntry):
-        return {"entry": to_wire_cursor_entry(value.value)}
+        return {"entry": _to_wire_cursor_entry(value.value)}
     if isinstance(value, CursorResponseDone):
         return {"done": value.value}
     return {}
@@ -822,63 +821,63 @@ def _to_wire_cursor_response_result(value: CursorResponseResult) -> dict[str, An
 def _from_wire_cursor_response_result(value: Any) -> CursorResponseResult:
     case = value.WhichOneof("result")
     if case == "entry":
-        return CursorResponseEntry(value=from_wire_cursor_entry(value.entry))
+        return CursorResponseEntry(value=_from_wire_cursor_entry(value.entry))
     if case == "done":
         return CursorResponseDone(value=value.done)
     return None
 
 
-def to_wire_delete_object_store_request(value: DeleteObjectStoreRequest) -> Any:
-    return _wire.DeleteObjectStoreRequest(
+def _to_wire_delete_object_store_request(value: DeleteObjectStoreRequest) -> Any:
+    return _datastore_pb2.DeleteObjectStoreRequest(
         name=value.name,
     )
 
 
-def from_wire_delete_object_store_request(value: Any) -> DeleteObjectStoreRequest:
+def _from_wire_delete_object_store_request(value: Any) -> DeleteObjectStoreRequest:
     return DeleteObjectStoreRequest(
         name=value.name,
     )
 
 
-def to_wire_delete_response(value: DeleteResponse) -> Any:
-    return _wire.DeleteResponse(
+def _to_wire_delete_response(value: DeleteResponse) -> Any:
+    return _datastore_pb2.DeleteResponse(
         deleted=value.deleted,
     )
 
 
-def from_wire_delete_response(value: Any) -> DeleteResponse:
+def _from_wire_delete_response(value: Any) -> DeleteResponse:
     return DeleteResponse(
         deleted=value.deleted,
     )
 
 
-def to_wire_index_query_request(value: IndexQueryRequest) -> Any:
-    return _wire.IndexQueryRequest(
+def _to_wire_index_query_request(value: IndexQueryRequest) -> Any:
+    return _datastore_pb2.IndexQueryRequest(
         store=value.store,
         index=value.index,
-        values=[to_wire_typed_value(item) for item in value.values],
-        range=None if value.range is None else to_wire_key_range(value.range),
+        values=[_to_wire_typed_value(item) for item in value.values],
+        range=None if value.range is None else _to_wire_key_range(value.range),
     )
 
 
-def from_wire_index_query_request(value: Any) -> IndexQueryRequest:
+def _from_wire_index_query_request(value: Any) -> IndexQueryRequest:
     return IndexQueryRequest(
         store=value.store,
         index=value.index,
-        values=[from_wire_typed_value(item) for item in value.values],
-        range=from_wire_key_range(value.range) if value.HasField("range") else None,
+        values=[_from_wire_typed_value(item) for item in value.values],
+        range=_from_wire_key_range(value.range) if value.HasField("range") else None,
     )
 
 
-def to_wire_index_schema(value: IndexSchema) -> Any:
-    return _wire.IndexSchema(
+def _to_wire_index_schema(value: IndexSchema) -> Any:
+    return _datastore_pb2.IndexSchema(
         name=value.name,
         key_path=value.key_path,
         unique=value.unique,
     )
 
 
-def from_wire_index_schema(value: Any) -> IndexSchema:
+def _from_wire_index_schema(value: Any) -> IndexSchema:
     return IndexSchema(
         name=value.name,
         key_path=list(value.key_path),
@@ -886,43 +885,43 @@ def from_wire_index_schema(value: Any) -> IndexSchema:
     )
 
 
-def to_wire_key_range(value: KeyRange) -> Any:
-    return _wire.KeyRange(
-        lower=None if value.lower is None else to_wire_typed_value(value.lower),
-        upper=None if value.upper is None else to_wire_typed_value(value.upper),
+def _to_wire_key_range(value: KeyRange) -> Any:
+    return _datastore_pb2.KeyRange(
+        lower=None if value.lower is None else _to_wire_typed_value(value.lower),
+        upper=None if value.upper is None else _to_wire_typed_value(value.upper),
         lower_open=value.lower_open,
         upper_open=value.upper_open,
     )
 
 
-def from_wire_key_range(value: Any) -> KeyRange:
+def _from_wire_key_range(value: Any) -> KeyRange:
     return KeyRange(
-        lower=from_wire_typed_value(value.lower) if value.HasField("lower") else None,
-        upper=from_wire_typed_value(value.upper) if value.HasField("upper") else None,
+        lower=_from_wire_typed_value(value.lower) if value.HasField("lower") else None,
+        upper=_from_wire_typed_value(value.upper) if value.HasField("upper") else None,
         lower_open=value.lower_open,
         upper_open=value.upper_open,
     )
 
 
-def to_wire_key_response(value: KeyResponse) -> Any:
-    return _wire.KeyResponse(
+def _to_wire_key_response(value: KeyResponse) -> Any:
+    return _datastore_pb2.KeyResponse(
         key=value.key,
     )
 
 
-def from_wire_key_response(value: Any) -> KeyResponse:
+def _from_wire_key_response(value: Any) -> KeyResponse:
     return KeyResponse(
         key=value.key,
     )
 
 
-def to_wire_key_value(value: KeyValue) -> Any:
-    return _wire.KeyValue(
+def _to_wire_key_value(value: KeyValue) -> Any:
+    return _datastore_pb2.KeyValue(
         **_to_wire_key_value_kind(value.kind),
     )
 
 
-def from_wire_key_value(value: Any) -> KeyValue:
+def _from_wire_key_value(value: Any) -> KeyValue:
     return KeyValue(
         kind=_from_wire_key_value_kind(value),
     )
@@ -930,210 +929,210 @@ def from_wire_key_value(value: Any) -> KeyValue:
 
 def _to_wire_key_value_kind(value: KeyValueKind) -> dict[str, Any]:
     if isinstance(value, KeyValueKindScalar):
-        return {"scalar": to_wire_typed_value(value.value)}
+        return {"scalar": _to_wire_typed_value(value.value)}
     if isinstance(value, KeyValueKindArray):
-        return {"array": to_wire_key_value_array(value.value)}
+        return {"array": _to_wire_key_value_array(value.value)}
     return {}
 
 
 def _from_wire_key_value_kind(value: Any) -> KeyValueKind:
     case = value.WhichOneof("kind")
     if case == "scalar":
-        return KeyValueKindScalar(value=from_wire_typed_value(value.scalar))
+        return KeyValueKindScalar(value=_from_wire_typed_value(value.scalar))
     if case == "array":
-        return KeyValueKindArray(value=from_wire_key_value_array(value.array))
+        return KeyValueKindArray(value=_from_wire_key_value_array(value.array))
     return None
 
 
-def to_wire_key_value_array(value: KeyValueArray) -> Any:
-    return _wire.KeyValueArray(
-        elements=[to_wire_key_value(item) for item in value.elements],
+def _to_wire_key_value_array(value: KeyValueArray) -> Any:
+    return _datastore_pb2.KeyValueArray(
+        elements=[_to_wire_key_value(item) for item in value.elements],
     )
 
 
-def from_wire_key_value_array(value: Any) -> KeyValueArray:
+def _from_wire_key_value_array(value: Any) -> KeyValueArray:
     return KeyValueArray(
-        elements=[from_wire_key_value(item) for item in value.elements],
+        elements=[_from_wire_key_value(item) for item in value.elements],
     )
 
 
-def to_wire_keys_response(value: KeysResponse) -> Any:
-    return _wire.KeysResponse(
+def _to_wire_keys_response(value: KeysResponse) -> Any:
+    return _datastore_pb2.KeysResponse(
         keys=value.keys,
     )
 
 
-def from_wire_keys_response(value: Any) -> KeysResponse:
+def _from_wire_keys_response(value: Any) -> KeysResponse:
     return KeysResponse(
         keys=list(value.keys),
     )
 
 
-def to_wire_object_store_name_request(value: ObjectStoreNameRequest) -> Any:
-    return _wire.ObjectStoreNameRequest(
+def _to_wire_object_store_name_request(value: ObjectStoreNameRequest) -> Any:
+    return _datastore_pb2.ObjectStoreNameRequest(
         store=value.store,
     )
 
 
-def from_wire_object_store_name_request(value: Any) -> ObjectStoreNameRequest:
+def _from_wire_object_store_name_request(value: Any) -> ObjectStoreNameRequest:
     return ObjectStoreNameRequest(
         store=value.store,
     )
 
 
-def to_wire_object_store_range_request(value: ObjectStoreRangeRequest) -> Any:
-    return _wire.ObjectStoreRangeRequest(
+def _to_wire_object_store_range_request(value: ObjectStoreRangeRequest) -> Any:
+    return _datastore_pb2.ObjectStoreRangeRequest(
         store=value.store,
-        range=None if value.range is None else to_wire_key_range(value.range),
+        range=None if value.range is None else _to_wire_key_range(value.range),
     )
 
 
-def from_wire_object_store_range_request(value: Any) -> ObjectStoreRangeRequest:
+def _from_wire_object_store_range_request(value: Any) -> ObjectStoreRangeRequest:
     return ObjectStoreRangeRequest(
         store=value.store,
-        range=from_wire_key_range(value.range) if value.HasField("range") else None,
+        range=_from_wire_key_range(value.range) if value.HasField("range") else None,
     )
 
 
-def to_wire_object_store_request(value: ObjectStoreRequest) -> Any:
-    return _wire.ObjectStoreRequest(
+def _to_wire_object_store_request(value: ObjectStoreRequest) -> Any:
+    return _datastore_pb2.ObjectStoreRequest(
         store=value.store,
         id=value.id,
     )
 
 
-def from_wire_object_store_request(value: Any) -> ObjectStoreRequest:
+def _from_wire_object_store_request(value: Any) -> ObjectStoreRequest:
     return ObjectStoreRequest(
         store=value.store,
         id=value.id,
     )
 
 
-def to_wire_object_store_schema(value: ObjectStoreSchema) -> Any:
-    return _wire.ObjectStoreSchema(
-        indexes=[to_wire_index_schema(item) for item in value.indexes],
-        columns=[to_wire_column_def(item) for item in value.columns],
+def _to_wire_object_store_schema(value: ObjectStoreSchema) -> Any:
+    return _datastore_pb2.ObjectStoreSchema(
+        indexes=[_to_wire_index_schema(item) for item in value.indexes],
+        columns=[_to_wire_column_def(item) for item in value.columns],
     )
 
 
-def from_wire_object_store_schema(value: Any) -> ObjectStoreSchema:
+def _from_wire_object_store_schema(value: Any) -> ObjectStoreSchema:
     return ObjectStoreSchema(
-        indexes=[from_wire_index_schema(item) for item in value.indexes],
-        columns=[from_wire_column_def(item) for item in value.columns],
+        indexes=[_from_wire_index_schema(item) for item in value.indexes],
+        columns=[_from_wire_column_def(item) for item in value.columns],
     )
 
 
-def to_wire_open_cursor_request(value: OpenCursorRequest) -> Any:
-    return _wire.OpenCursorRequest(
+def _to_wire_open_cursor_request(value: OpenCursorRequest) -> Any:
+    return _datastore_pb2.OpenCursorRequest(
         store=value.store,
-        range=None if value.range is None else to_wire_key_range(value.range),
-        direction=value.direction,
+        range=None if value.range is None else _to_wire_key_range(value.range),
+        direction=_to_wire_enum(value.direction),
         keys_only=value.keys_only,
         index=value.index,
-        values=[to_wire_typed_value(item) for item in value.values],
+        values=[_to_wire_typed_value(item) for item in value.values],
     )
 
 
-def from_wire_open_cursor_request(value: Any) -> OpenCursorRequest:
+def _from_wire_open_cursor_request(value: Any) -> OpenCursorRequest:
     return OpenCursorRequest(
         store=value.store,
-        range=from_wire_key_range(value.range) if value.HasField("range") else None,
+        range=_from_wire_key_range(value.range) if value.HasField("range") else None,
         direction=value.direction,
         keys_only=value.keys_only,
         index=value.index,
-        values=[from_wire_typed_value(item) for item in value.values],
+        values=[_from_wire_typed_value(item) for item in value.values],
     )
 
 
-def to_wire_record(value: Record) -> Any:
-    return _wire.Record(
-        fields={key: to_wire_typed_value(item) for key, item in value.fields.items()},
+def _to_wire_record(value: Record) -> Any:
+    return _datastore_pb2.Record(
+        fields={key: _to_wire_typed_value(item) for key, item in value.fields.items()},
     )
 
 
-def from_wire_record(value: Any) -> Record:
+def _from_wire_record(value: Any) -> Record:
     return Record(
-        fields={key: from_wire_typed_value(item) for key, item in value.fields.items()},
+        fields={key: _from_wire_typed_value(item) for key, item in value.fields.items()},
     )
 
 
-def to_wire_record_request(value: RecordRequest) -> Any:
-    return _wire.RecordRequest(
+def _to_wire_record_request(value: RecordRequest) -> Any:
+    return _datastore_pb2.RecordRequest(
         store=value.store,
-        record=None if value.record is None else to_wire_record(value.record),
+        record=None if value.record is None else _to_wire_record(value.record),
     )
 
 
-def from_wire_record_request(value: Any) -> RecordRequest:
+def _from_wire_record_request(value: Any) -> RecordRequest:
     return RecordRequest(
         store=value.store,
-        record=from_wire_record(value.record) if value.HasField("record") else None,
+        record=_from_wire_record(value.record) if value.HasField("record") else None,
     )
 
 
-def to_wire_record_response(value: RecordResponse) -> Any:
-    return _wire.RecordResponse(
-        record=None if value.record is None else to_wire_record(value.record),
+def _to_wire_record_response(value: RecordResponse) -> Any:
+    return _datastore_pb2.RecordResponse(
+        record=None if value.record is None else _to_wire_record(value.record),
     )
 
 
-def from_wire_record_response(value: Any) -> RecordResponse:
+def _from_wire_record_response(value: Any) -> RecordResponse:
     return RecordResponse(
-        record=from_wire_record(value.record) if value.HasField("record") else None,
+        record=_from_wire_record(value.record) if value.HasField("record") else None,
     )
 
 
-def to_wire_records_response(value: RecordsResponse) -> Any:
-    return _wire.RecordsResponse(
-        records=[to_wire_record(item) for item in value.records],
+def _to_wire_records_response(value: RecordsResponse) -> Any:
+    return _datastore_pb2.RecordsResponse(
+        records=[_to_wire_record(item) for item in value.records],
     )
 
 
-def from_wire_records_response(value: Any) -> RecordsResponse:
+def _from_wire_records_response(value: Any) -> RecordsResponse:
     return RecordsResponse(
-        records=[from_wire_record(item) for item in value.records],
+        records=[_from_wire_record(item) for item in value.records],
     )
 
 
-def to_wire_transaction_abort_request(value: TransactionAbortRequest) -> Any:
-    return _wire.TransactionAbortRequest(
+def _to_wire_transaction_abort_request(value: TransactionAbortRequest) -> Any:
+    return _datastore_pb2.TransactionAbortRequest(
         reason=value.reason,
     )
 
 
-def from_wire_transaction_abort_request(value: Any) -> TransactionAbortRequest:
+def _from_wire_transaction_abort_request(value: Any) -> TransactionAbortRequest:
     return TransactionAbortRequest(
         reason=value.reason,
     )
 
 
-def to_wire_transaction_abort_response(value: TransactionAbortResponse) -> Any:
-    return _wire.TransactionAbortResponse(
-        error=None if value.error is None else to_wire_status(value.error),
+def _to_wire_transaction_abort_response(value: TransactionAbortResponse) -> Any:
+    return _datastore_pb2.TransactionAbortResponse(
+        error=None if value.error is None else _to_wire_status(value.error),
     )
 
 
-def from_wire_transaction_abort_response(value: Any) -> TransactionAbortResponse:
+def _from_wire_transaction_abort_response(value: Any) -> TransactionAbortResponse:
     return TransactionAbortResponse(
-        error=from_wire_status(value.error) if value.HasField("error") else None,
+        error=_from_wire_status(value.error) if value.HasField("error") else None,
     )
 
 
-def to_wire_transaction_begin_response(_value: TransactionBeginResponse) -> Any:
-    return _wire.TransactionBeginResponse()
+def _to_wire_transaction_begin_response(_value: TransactionBeginResponse) -> Any:
+    return _datastore_pb2.TransactionBeginResponse()
 
 
-def from_wire_transaction_begin_response(_value: Any) -> TransactionBeginResponse:
+def _from_wire_transaction_begin_response(_value: Any) -> TransactionBeginResponse:
     return TransactionBeginResponse()
 
 
-def to_wire_transaction_client_message(value: TransactionClientMessage) -> Any:
-    return _wire.TransactionClientMessage(
+def _to_wire_transaction_client_message(value: TransactionClientMessage) -> Any:
+    return _datastore_pb2.TransactionClientMessage(
         **_to_wire_transaction_client_message_msg(value.msg),
     )
 
 
-def from_wire_transaction_client_message(value: Any) -> TransactionClientMessage:
+def _from_wire_transaction_client_message(value: Any) -> TransactionClientMessage:
     return TransactionClientMessage(
         msg=_from_wire_transaction_client_message_msg(value),
     )
@@ -1141,57 +1140,57 @@ def from_wire_transaction_client_message(value: Any) -> TransactionClientMessage
 
 def _to_wire_transaction_client_message_msg(value: TransactionClientMessageMsg) -> dict[str, Any]:
     if isinstance(value, TransactionClientMessageBegin):
-        return {"begin": to_wire_begin_transaction_request(value.value)}
+        return {"begin": _to_wire_begin_transaction_request(value.value)}
     if isinstance(value, TransactionClientMessageOperation):
-        return {"operation": to_wire_transaction_operation(value.value)}
+        return {"operation": _to_wire_transaction_operation(value.value)}
     if isinstance(value, TransactionClientMessageCommit):
-        return {"commit": to_wire_transaction_commit_request(value.value)}
+        return {"commit": _to_wire_transaction_commit_request(value.value)}
     if isinstance(value, TransactionClientMessageAbort):
-        return {"abort": to_wire_transaction_abort_request(value.value)}
+        return {"abort": _to_wire_transaction_abort_request(value.value)}
     return {}
 
 
 def _from_wire_transaction_client_message_msg(value: Any) -> TransactionClientMessageMsg:
     case = value.WhichOneof("msg")
     if case == "begin":
-        return TransactionClientMessageBegin(value=from_wire_begin_transaction_request(value.begin))
+        return TransactionClientMessageBegin(value=_from_wire_begin_transaction_request(value.begin))
     if case == "operation":
-        return TransactionClientMessageOperation(value=from_wire_transaction_operation(value.operation))
+        return TransactionClientMessageOperation(value=_from_wire_transaction_operation(value.operation))
     if case == "commit":
-        return TransactionClientMessageCommit(value=from_wire_transaction_commit_request(value.commit))
+        return TransactionClientMessageCommit(value=_from_wire_transaction_commit_request(value.commit))
     if case == "abort":
-        return TransactionClientMessageAbort(value=from_wire_transaction_abort_request(value.abort))
+        return TransactionClientMessageAbort(value=_from_wire_transaction_abort_request(value.abort))
     return None
 
 
-def to_wire_transaction_commit_request(_value: TransactionCommitRequest) -> Any:
-    return _wire.TransactionCommitRequest()
+def _to_wire_transaction_commit_request(_value: TransactionCommitRequest) -> Any:
+    return _datastore_pb2.TransactionCommitRequest()
 
 
-def from_wire_transaction_commit_request(_value: Any) -> TransactionCommitRequest:
+def _from_wire_transaction_commit_request(_value: Any) -> TransactionCommitRequest:
     return TransactionCommitRequest()
 
 
-def to_wire_transaction_commit_response(value: TransactionCommitResponse) -> Any:
-    return _wire.TransactionCommitResponse(
-        error=None if value.error is None else to_wire_status(value.error),
+def _to_wire_transaction_commit_response(value: TransactionCommitResponse) -> Any:
+    return _datastore_pb2.TransactionCommitResponse(
+        error=None if value.error is None else _to_wire_status(value.error),
     )
 
 
-def from_wire_transaction_commit_response(value: Any) -> TransactionCommitResponse:
+def _from_wire_transaction_commit_response(value: Any) -> TransactionCommitResponse:
     return TransactionCommitResponse(
-        error=from_wire_status(value.error) if value.HasField("error") else None,
+        error=_from_wire_status(value.error) if value.HasField("error") else None,
     )
 
 
-def to_wire_transaction_operation(value: TransactionOperation) -> Any:
-    return _wire.TransactionOperation(
+def _to_wire_transaction_operation(value: TransactionOperation) -> Any:
+    return _datastore_pb2.TransactionOperation(
         request_id=value.request_id,
         **_to_wire_transaction_operation_operation(value.operation),
     )
 
 
-def from_wire_transaction_operation(value: Any) -> TransactionOperation:
+def _from_wire_transaction_operation(value: Any) -> TransactionOperation:
     return TransactionOperation(
         request_id=value.request_id,
         operation=_from_wire_transaction_operation_operation(value),
@@ -1200,89 +1199,89 @@ def from_wire_transaction_operation(value: Any) -> TransactionOperation:
 
 def _to_wire_transaction_operation_operation(value: TransactionOperationOperation) -> dict[str, Any]:
     if isinstance(value, TransactionOperationGet):
-        return {"get": to_wire_object_store_request(value.value)}
+        return {"get": _to_wire_object_store_request(value.value)}
     if isinstance(value, TransactionOperationGetKey):
-        return {"get_key": to_wire_object_store_request(value.value)}
+        return {"get_key": _to_wire_object_store_request(value.value)}
     if isinstance(value, TransactionOperationAdd):
-        return {"add": to_wire_record_request(value.value)}
+        return {"add": _to_wire_record_request(value.value)}
     if isinstance(value, TransactionOperationPut):
-        return {"put": to_wire_record_request(value.value)}
+        return {"put": _to_wire_record_request(value.value)}
     if isinstance(value, TransactionOperationDelete):
-        return {"delete": to_wire_object_store_request(value.value)}
+        return {"delete": _to_wire_object_store_request(value.value)}
     if isinstance(value, TransactionOperationClear):
-        return {"clear": to_wire_object_store_name_request(value.value)}
+        return {"clear": _to_wire_object_store_name_request(value.value)}
     if isinstance(value, TransactionOperationGetAll):
-        return {"get_all": to_wire_object_store_range_request(value.value)}
+        return {"get_all": _to_wire_object_store_range_request(value.value)}
     if isinstance(value, TransactionOperationGetAllKeys):
-        return {"get_all_keys": to_wire_object_store_range_request(value.value)}
+        return {"get_all_keys": _to_wire_object_store_range_request(value.value)}
     if isinstance(value, TransactionOperationCount):
-        return {"count": to_wire_object_store_range_request(value.value)}
+        return {"count": _to_wire_object_store_range_request(value.value)}
     if isinstance(value, TransactionOperationDeleteRange):
-        return {"delete_range": to_wire_object_store_range_request(value.value)}
+        return {"delete_range": _to_wire_object_store_range_request(value.value)}
     if isinstance(value, TransactionOperationIndexGet):
-        return {"index_get": to_wire_index_query_request(value.value)}
+        return {"index_get": _to_wire_index_query_request(value.value)}
     if isinstance(value, TransactionOperationIndexGetKey):
-        return {"index_get_key": to_wire_index_query_request(value.value)}
+        return {"index_get_key": _to_wire_index_query_request(value.value)}
     if isinstance(value, TransactionOperationIndexGetAll):
-        return {"index_get_all": to_wire_index_query_request(value.value)}
+        return {"index_get_all": _to_wire_index_query_request(value.value)}
     if isinstance(value, TransactionOperationIndexGetAllKeys):
-        return {"index_get_all_keys": to_wire_index_query_request(value.value)}
+        return {"index_get_all_keys": _to_wire_index_query_request(value.value)}
     if isinstance(value, TransactionOperationIndexCount):
-        return {"index_count": to_wire_index_query_request(value.value)}
+        return {"index_count": _to_wire_index_query_request(value.value)}
     if isinstance(value, TransactionOperationIndexDelete):
-        return {"index_delete": to_wire_index_query_request(value.value)}
+        return {"index_delete": _to_wire_index_query_request(value.value)}
     return {}
 
 
 def _from_wire_transaction_operation_operation(value: Any) -> TransactionOperationOperation:
     case = value.WhichOneof("operation")
     if case == "get":
-        return TransactionOperationGet(value=from_wire_object_store_request(value.get))
+        return TransactionOperationGet(value=_from_wire_object_store_request(value.get))
     if case == "get_key":
-        return TransactionOperationGetKey(value=from_wire_object_store_request(value.get_key))
+        return TransactionOperationGetKey(value=_from_wire_object_store_request(value.get_key))
     if case == "add":
-        return TransactionOperationAdd(value=from_wire_record_request(value.add))
+        return TransactionOperationAdd(value=_from_wire_record_request(value.add))
     if case == "put":
-        return TransactionOperationPut(value=from_wire_record_request(value.put))
+        return TransactionOperationPut(value=_from_wire_record_request(value.put))
     if case == "delete":
-        return TransactionOperationDelete(value=from_wire_object_store_request(value.delete))
+        return TransactionOperationDelete(value=_from_wire_object_store_request(value.delete))
     if case == "clear":
-        return TransactionOperationClear(value=from_wire_object_store_name_request(value.clear))
+        return TransactionOperationClear(value=_from_wire_object_store_name_request(value.clear))
     if case == "get_all":
-        return TransactionOperationGetAll(value=from_wire_object_store_range_request(value.get_all))
+        return TransactionOperationGetAll(value=_from_wire_object_store_range_request(value.get_all))
     if case == "get_all_keys":
-        return TransactionOperationGetAllKeys(value=from_wire_object_store_range_request(value.get_all_keys))
+        return TransactionOperationGetAllKeys(value=_from_wire_object_store_range_request(value.get_all_keys))
     if case == "count":
-        return TransactionOperationCount(value=from_wire_object_store_range_request(value.count))
+        return TransactionOperationCount(value=_from_wire_object_store_range_request(value.count))
     if case == "delete_range":
-        return TransactionOperationDeleteRange(value=from_wire_object_store_range_request(value.delete_range))
+        return TransactionOperationDeleteRange(value=_from_wire_object_store_range_request(value.delete_range))
     if case == "index_get":
-        return TransactionOperationIndexGet(value=from_wire_index_query_request(value.index_get))
+        return TransactionOperationIndexGet(value=_from_wire_index_query_request(value.index_get))
     if case == "index_get_key":
-        return TransactionOperationIndexGetKey(value=from_wire_index_query_request(value.index_get_key))
+        return TransactionOperationIndexGetKey(value=_from_wire_index_query_request(value.index_get_key))
     if case == "index_get_all":
-        return TransactionOperationIndexGetAll(value=from_wire_index_query_request(value.index_get_all))
+        return TransactionOperationIndexGetAll(value=_from_wire_index_query_request(value.index_get_all))
     if case == "index_get_all_keys":
-        return TransactionOperationIndexGetAllKeys(value=from_wire_index_query_request(value.index_get_all_keys))
+        return TransactionOperationIndexGetAllKeys(value=_from_wire_index_query_request(value.index_get_all_keys))
     if case == "index_count":
-        return TransactionOperationIndexCount(value=from_wire_index_query_request(value.index_count))
+        return TransactionOperationIndexCount(value=_from_wire_index_query_request(value.index_count))
     if case == "index_delete":
-        return TransactionOperationIndexDelete(value=from_wire_index_query_request(value.index_delete))
+        return TransactionOperationIndexDelete(value=_from_wire_index_query_request(value.index_delete))
     return None
 
 
-def to_wire_transaction_operation_response(value: TransactionOperationResponse) -> Any:
-    return _wire.TransactionOperationResponse(
+def _to_wire_transaction_operation_response(value: TransactionOperationResponse) -> Any:
+    return _datastore_pb2.TransactionOperationResponse(
         request_id=value.request_id,
-        error=None if value.error is None else to_wire_status(value.error),
+        error=None if value.error is None else _to_wire_status(value.error),
         **_to_wire_transaction_operation_response_result(value.result),
     )
 
 
-def from_wire_transaction_operation_response(value: Any) -> TransactionOperationResponse:
+def _from_wire_transaction_operation_response(value: Any) -> TransactionOperationResponse:
     return TransactionOperationResponse(
         request_id=value.request_id,
-        error=from_wire_status(value.error) if value.HasField("error") else None,
+        error=_from_wire_status(value.error) if value.HasField("error") else None,
         result=_from_wire_transaction_operation_response_result(value),
     )
 
@@ -1291,17 +1290,17 @@ def _to_wire_transaction_operation_response_result(value: TransactionOperationRe
     if isinstance(value, TransactionOperationResponseEmpty):
         return {"empty": _empty.Empty()}
     if isinstance(value, TransactionOperationResponseRecord):
-        return {"record": to_wire_record_response(value.value)}
+        return {"record": _to_wire_record_response(value.value)}
     if isinstance(value, TransactionOperationResponseRecords):
-        return {"records": to_wire_records_response(value.value)}
+        return {"records": _to_wire_records_response(value.value)}
     if isinstance(value, TransactionOperationResponseKey):
-        return {"key": to_wire_key_response(value.value)}
+        return {"key": _to_wire_key_response(value.value)}
     if isinstance(value, TransactionOperationResponseKeys):
-        return {"keys": to_wire_keys_response(value.value)}
+        return {"keys": _to_wire_keys_response(value.value)}
     if isinstance(value, TransactionOperationResponseCount):
-        return {"count": to_wire_count_response(value.value)}
+        return {"count": _to_wire_count_response(value.value)}
     if isinstance(value, TransactionOperationResponseDelete):
-        return {"delete": to_wire_delete_response(value.value)}
+        return {"delete": _to_wire_delete_response(value.value)}
     return {}
 
 
@@ -1310,27 +1309,27 @@ def _from_wire_transaction_operation_response_result(value: Any) -> TransactionO
     if case == "empty":
         return TransactionOperationResponseEmpty()
     if case == "record":
-        return TransactionOperationResponseRecord(value=from_wire_record_response(value.record))
+        return TransactionOperationResponseRecord(value=_from_wire_record_response(value.record))
     if case == "records":
-        return TransactionOperationResponseRecords(value=from_wire_records_response(value.records))
+        return TransactionOperationResponseRecords(value=_from_wire_records_response(value.records))
     if case == "key":
-        return TransactionOperationResponseKey(value=from_wire_key_response(value.key))
+        return TransactionOperationResponseKey(value=_from_wire_key_response(value.key))
     if case == "keys":
-        return TransactionOperationResponseKeys(value=from_wire_keys_response(value.keys))
+        return TransactionOperationResponseKeys(value=_from_wire_keys_response(value.keys))
     if case == "count":
-        return TransactionOperationResponseCount(value=from_wire_count_response(value.count))
+        return TransactionOperationResponseCount(value=_from_wire_count_response(value.count))
     if case == "delete":
-        return TransactionOperationResponseDelete(value=from_wire_delete_response(value.delete))
+        return TransactionOperationResponseDelete(value=_from_wire_delete_response(value.delete))
     return None
 
 
-def to_wire_transaction_server_message(value: TransactionServerMessage) -> Any:
-    return _wire.TransactionServerMessage(
+def _to_wire_transaction_server_message(value: TransactionServerMessage) -> Any:
+    return _datastore_pb2.TransactionServerMessage(
         **_to_wire_transaction_server_message_msg(value.msg),
     )
 
 
-def from_wire_transaction_server_message(value: Any) -> TransactionServerMessage:
+def _from_wire_transaction_server_message(value: Any) -> TransactionServerMessage:
     return TransactionServerMessage(
         msg=_from_wire_transaction_server_message_msg(value),
     )
@@ -1338,36 +1337,36 @@ def from_wire_transaction_server_message(value: Any) -> TransactionServerMessage
 
 def _to_wire_transaction_server_message_msg(value: TransactionServerMessageMsg) -> dict[str, Any]:
     if isinstance(value, TransactionServerMessageBegin):
-        return {"begin": to_wire_transaction_begin_response(value.value)}
+        return {"begin": _to_wire_transaction_begin_response(value.value)}
     if isinstance(value, TransactionServerMessageOperation):
-        return {"operation": to_wire_transaction_operation_response(value.value)}
+        return {"operation": _to_wire_transaction_operation_response(value.value)}
     if isinstance(value, TransactionServerMessageCommit):
-        return {"commit": to_wire_transaction_commit_response(value.value)}
+        return {"commit": _to_wire_transaction_commit_response(value.value)}
     if isinstance(value, TransactionServerMessageAbort):
-        return {"abort": to_wire_transaction_abort_response(value.value)}
+        return {"abort": _to_wire_transaction_abort_response(value.value)}
     return {}
 
 
 def _from_wire_transaction_server_message_msg(value: Any) -> TransactionServerMessageMsg:
     case = value.WhichOneof("msg")
     if case == "begin":
-        return TransactionServerMessageBegin(value=from_wire_transaction_begin_response(value.begin))
+        return TransactionServerMessageBegin(value=_from_wire_transaction_begin_response(value.begin))
     if case == "operation":
-        return TransactionServerMessageOperation(value=from_wire_transaction_operation_response(value.operation))
+        return TransactionServerMessageOperation(value=_from_wire_transaction_operation_response(value.operation))
     if case == "commit":
-        return TransactionServerMessageCommit(value=from_wire_transaction_commit_response(value.commit))
+        return TransactionServerMessageCommit(value=_from_wire_transaction_commit_response(value.commit))
     if case == "abort":
-        return TransactionServerMessageAbort(value=from_wire_transaction_abort_response(value.abort))
+        return TransactionServerMessageAbort(value=_from_wire_transaction_abort_response(value.abort))
     return None
 
 
-def to_wire_typed_value(value: TypedValue) -> Any:
-    return _wire.TypedValue(
+def _to_wire_typed_value(value: TypedValue) -> Any:
+    return _datastore_pb2.TypedValue(
         **_to_wire_typed_value_kind(value.kind),
     )
 
 
-def from_wire_typed_value(value: Any) -> TypedValue:
+def _from_wire_typed_value(value: Any) -> TypedValue:
     return TypedValue(
         kind=_from_wire_typed_value_kind(value),
     )
@@ -1385,11 +1384,11 @@ def _to_wire_typed_value_kind(value: TypedValueKind) -> dict[str, Any]:
     if isinstance(value, TypedValueBoolValue):
         return {"bool_value": value.value}
     if isinstance(value, TypedValueTimeValue):
-        return {"time_value": to_wire_timestamp(value.value)}
+        return {"time_value": _to_wire_timestamp(value.value)}
     if isinstance(value, TypedValueBytesValue):
         return {"bytes_value": value.value}
     if isinstance(value, TypedValueJsonValue):
-        return {"json_value": to_wire_value(value.value)}
+        return {"json_value": _to_wire_value(value.value)}
     return {}
 
 
@@ -1406,11 +1405,11 @@ def _from_wire_typed_value_kind(value: Any) -> TypedValueKind:
     if case == "bool_value":
         return TypedValueBoolValue(value=value.bool_value)
     if case == "time_value":
-        return TypedValueTimeValue(value=from_wire_timestamp(value.time_value))
+        return TypedValueTimeValue(value=_from_wire_timestamp(value.time_value))
     if case == "bytes_value":
         return TypedValueBytesValue(value=value.bytes_value)
     if case == "json_value":
-        return TypedValueJsonValue(value=from_wire_value(value.json_value))
+        return TypedValueJsonValue(value=_from_wire_value(value.json_value))
     return None
 
 
@@ -1418,76 +1417,76 @@ class IndexedDB:
     """Client for the gestalt.provider.v1.IndexedDB service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.IndexedDBStub(channel)
+        self._stub = _datastore_pb2_grpc.IndexedDBStub(channel)
 
     def create_object_store(self, request: CreateObjectStoreRequest) -> None:
-        call_unary(lambda: self._stub.CreateObjectStore(to_wire_create_object_store_request(request)))
+        _call_unary(lambda: self._stub.CreateObjectStore(_to_wire_create_object_store_request(request)))
 
     def delete_object_store(self, request: DeleteObjectStoreRequest) -> None:
-        call_unary(lambda: self._stub.DeleteObjectStore(to_wire_delete_object_store_request(request)))
+        _call_unary(lambda: self._stub.DeleteObjectStore(_to_wire_delete_object_store_request(request)))
 
     def get(self, request: ObjectStoreRequest) -> RecordResponse:
-        response = call_unary(lambda: self._stub.Get(to_wire_object_store_request(request)))
-        return from_wire_record_response(response)
+        response = _call_unary(lambda: self._stub.Get(_to_wire_object_store_request(request)))
+        return _from_wire_record_response(response)
 
     def get_key(self, request: ObjectStoreRequest) -> KeyResponse:
-        response = call_unary(lambda: self._stub.GetKey(to_wire_object_store_request(request)))
-        return from_wire_key_response(response)
+        response = _call_unary(lambda: self._stub.GetKey(_to_wire_object_store_request(request)))
+        return _from_wire_key_response(response)
 
     def add(self, request: RecordRequest) -> None:
-        call_unary(lambda: self._stub.Add(to_wire_record_request(request)))
+        _call_unary(lambda: self._stub.Add(_to_wire_record_request(request)))
 
     def put(self, request: RecordRequest) -> None:
-        call_unary(lambda: self._stub.Put(to_wire_record_request(request)))
+        _call_unary(lambda: self._stub.Put(_to_wire_record_request(request)))
 
     def delete(self, request: ObjectStoreRequest) -> None:
-        call_unary(lambda: self._stub.Delete(to_wire_object_store_request(request)))
+        _call_unary(lambda: self._stub.Delete(_to_wire_object_store_request(request)))
 
     def clear(self, request: ObjectStoreNameRequest) -> None:
-        call_unary(lambda: self._stub.Clear(to_wire_object_store_name_request(request)))
+        _call_unary(lambda: self._stub.Clear(_to_wire_object_store_name_request(request)))
 
     def get_all(self, request: ObjectStoreRangeRequest) -> RecordsResponse:
-        response = call_unary(lambda: self._stub.GetAll(to_wire_object_store_range_request(request)))
-        return from_wire_records_response(response)
+        response = _call_unary(lambda: self._stub.GetAll(_to_wire_object_store_range_request(request)))
+        return _from_wire_records_response(response)
 
     def get_all_keys(self, request: ObjectStoreRangeRequest) -> KeysResponse:
-        response = call_unary(lambda: self._stub.GetAllKeys(to_wire_object_store_range_request(request)))
-        return from_wire_keys_response(response)
+        response = _call_unary(lambda: self._stub.GetAllKeys(_to_wire_object_store_range_request(request)))
+        return _from_wire_keys_response(response)
 
     def count(self, request: ObjectStoreRangeRequest) -> CountResponse:
-        response = call_unary(lambda: self._stub.Count(to_wire_object_store_range_request(request)))
-        return from_wire_count_response(response)
+        response = _call_unary(lambda: self._stub.Count(_to_wire_object_store_range_request(request)))
+        return _from_wire_count_response(response)
 
     def delete_range(self, request: ObjectStoreRangeRequest) -> DeleteResponse:
-        response = call_unary(lambda: self._stub.DeleteRange(to_wire_object_store_range_request(request)))
-        return from_wire_delete_response(response)
+        response = _call_unary(lambda: self._stub.DeleteRange(_to_wire_object_store_range_request(request)))
+        return _from_wire_delete_response(response)
 
     def index_get(self, request: IndexQueryRequest) -> RecordResponse:
-        response = call_unary(lambda: self._stub.IndexGet(to_wire_index_query_request(request)))
-        return from_wire_record_response(response)
+        response = _call_unary(lambda: self._stub.IndexGet(_to_wire_index_query_request(request)))
+        return _from_wire_record_response(response)
 
     def index_get_key(self, request: IndexQueryRequest) -> KeyResponse:
-        response = call_unary(lambda: self._stub.IndexGetKey(to_wire_index_query_request(request)))
-        return from_wire_key_response(response)
+        response = _call_unary(lambda: self._stub.IndexGetKey(_to_wire_index_query_request(request)))
+        return _from_wire_key_response(response)
 
     def index_get_all(self, request: IndexQueryRequest) -> RecordsResponse:
-        response = call_unary(lambda: self._stub.IndexGetAll(to_wire_index_query_request(request)))
-        return from_wire_records_response(response)
+        response = _call_unary(lambda: self._stub.IndexGetAll(_to_wire_index_query_request(request)))
+        return _from_wire_records_response(response)
 
     def index_get_all_keys(self, request: IndexQueryRequest) -> KeysResponse:
-        response = call_unary(lambda: self._stub.IndexGetAllKeys(to_wire_index_query_request(request)))
-        return from_wire_keys_response(response)
+        response = _call_unary(lambda: self._stub.IndexGetAllKeys(_to_wire_index_query_request(request)))
+        return _from_wire_keys_response(response)
 
     def index_count(self, request: IndexQueryRequest) -> CountResponse:
-        response = call_unary(lambda: self._stub.IndexCount(to_wire_index_query_request(request)))
-        return from_wire_count_response(response)
+        response = _call_unary(lambda: self._stub.IndexCount(_to_wire_index_query_request(request)))
+        return _from_wire_count_response(response)
 
     def index_delete(self, request: IndexQueryRequest) -> DeleteResponse:
-        response = call_unary(lambda: self._stub.IndexDelete(to_wire_index_query_request(request)))
-        return from_wire_delete_response(response)
+        response = _call_unary(lambda: self._stub.IndexDelete(_to_wire_index_query_request(request)))
+        return _from_wire_delete_response(response)
 
     def open_cursor(self, requests: Iterable[CursorClientMessage]) -> Iterator[CursorResponse]:
-        return map_recv(self._stub.OpenCursor(map_send(requests, to_wire_cursor_client_message)), from_wire_cursor_response)
+        return _map_recv(self._stub.OpenCursor(_map_send(requests, _to_wire_cursor_client_message)), _from_wire_cursor_response)
 
     def transaction(self, requests: Iterable[TransactionClientMessage]) -> Iterator[TransactionServerMessage]:
-        return map_recv(self._stub.Transaction(map_send(requests, to_wire_transaction_client_message)), from_wire_transaction_server_message)
+        return _map_recv(self._stub.Transaction(_map_send(requests, _to_wire_transaction_client_message)), _from_wire_transaction_server_message)

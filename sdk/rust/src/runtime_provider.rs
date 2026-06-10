@@ -3,8 +3,8 @@
 //! Generated native types, wire conversions, and clients for runtime_provider.proto.
 
 use crate::agent::{
-    AgentWorkspace, PreparedAgentWorkspace, from_wire_agent_workspace,
-    from_wire_prepared_agent_workspace, to_wire_agent_workspace, to_wire_prepared_agent_workspace,
+    AgentWorkspace, PreparedAgentWorkspace, from_wire_prepared_agent_workspace,
+    to_wire_agent_workspace,
 };
 use crate::generated::v1;
 use crate::rpc_support::{GestaltError, from_wire_timestamp, to_wire_timestamp};
@@ -225,7 +225,7 @@ pub struct StopRuntimeSessionRequest {
 }
 
 /// Converts a native `AppendRuntimeLogsRequest` to its wire message.
-pub fn to_wire_append_runtime_logs_request(
+pub(crate) fn to_wire_append_runtime_logs_request(
     value: AppendRuntimeLogsRequest,
 ) -> v1::AppendRuntimeLogsRequest {
     v1::AppendRuntimeLogsRequest {
@@ -238,31 +238,8 @@ pub fn to_wire_append_runtime_logs_request(
     }
 }
 
-/// Converts a wire `AppendRuntimeLogsRequest` to its native message.
-pub fn from_wire_append_runtime_logs_request(
-    value: v1::AppendRuntimeLogsRequest,
-) -> AppendRuntimeLogsRequest {
-    AppendRuntimeLogsRequest {
-        session_id: value.session_id,
-        logs: value
-            .logs
-            .into_iter()
-            .map(from_wire_runtime_log_entry)
-            .collect(),
-    }
-}
-
-/// Converts a native `AppendRuntimeLogsResponse` to its wire message.
-pub fn to_wire_append_runtime_logs_response(
-    value: AppendRuntimeLogsResponse,
-) -> v1::AppendRuntimeLogsResponse {
-    v1::AppendRuntimeLogsResponse {
-        last_seq: value.last_seq,
-    }
-}
-
 /// Converts a wire `AppendRuntimeLogsResponse` to its native message.
-pub fn from_wire_append_runtime_logs_response(
+pub(crate) fn from_wire_append_runtime_logs_response(
     value: v1::AppendRuntimeLogsResponse,
 ) -> AppendRuntimeLogsResponse {
     AppendRuntimeLogsResponse {
@@ -271,7 +248,7 @@ pub fn from_wire_append_runtime_logs_response(
 }
 
 /// Converts a native `GetRuntimeSessionRequest` to its wire message.
-pub fn to_wire_get_runtime_session_request(
+pub(crate) fn to_wire_get_runtime_session_request(
     value: GetRuntimeSessionRequest,
 ) -> v1::GetRuntimeSessionRequest {
     v1::GetRuntimeSessionRequest {
@@ -279,27 +256,8 @@ pub fn to_wire_get_runtime_session_request(
     }
 }
 
-/// Converts a wire `GetRuntimeSessionRequest` to its native message.
-pub fn from_wire_get_runtime_session_request(
-    value: v1::GetRuntimeSessionRequest,
-) -> GetRuntimeSessionRequest {
-    GetRuntimeSessionRequest {
-        session_id: value.session_id,
-    }
-}
-
-/// Converts a native `HostedApp` to its wire message.
-pub fn to_wire_hosted_app(value: HostedApp) -> v1::HostedApp {
-    v1::HostedApp {
-        id: value.id,
-        session_id: value.session_id,
-        app_name: value.app_name,
-        dial_target: value.dial_target,
-    }
-}
-
 /// Converts a wire `HostedApp` to its native message.
-pub fn from_wire_hosted_app(value: v1::HostedApp) -> HostedApp {
+pub(crate) fn from_wire_hosted_app(value: v1::HostedApp) -> HostedApp {
     HostedApp {
         id: value.id,
         session_id: value.session_id,
@@ -309,7 +267,7 @@ pub fn from_wire_hosted_app(value: v1::HostedApp) -> HostedApp {
 }
 
 /// Converts a native `ListRuntimeSessionsRequest` to its wire message.
-pub fn to_wire_list_runtime_sessions_request(
+pub(crate) fn to_wire_list_runtime_sessions_request(
     value: ListRuntimeSessionsRequest,
 ) -> v1::ListRuntimeSessionsRequest {
     v1::ListRuntimeSessionsRequest {
@@ -318,32 +276,8 @@ pub fn to_wire_list_runtime_sessions_request(
     }
 }
 
-/// Converts a wire `ListRuntimeSessionsRequest` to its native message.
-pub fn from_wire_list_runtime_sessions_request(
-    value: v1::ListRuntimeSessionsRequest,
-) -> ListRuntimeSessionsRequest {
-    ListRuntimeSessionsRequest {
-        page_size: value.page_size,
-        page_token: value.page_token,
-    }
-}
-
-/// Converts a native `ListRuntimeSessionsResponse` to its wire message.
-pub fn to_wire_list_runtime_sessions_response(
-    value: ListRuntimeSessionsResponse,
-) -> v1::ListRuntimeSessionsResponse {
-    v1::ListRuntimeSessionsResponse {
-        sessions: value
-            .sessions
-            .into_iter()
-            .map(to_wire_runtime_session)
-            .collect(),
-        next_page_token: value.next_page_token,
-    }
-}
-
 /// Converts a wire `ListRuntimeSessionsResponse` to its native message.
-pub fn from_wire_list_runtime_sessions_response(
+pub(crate) fn from_wire_list_runtime_sessions_response(
     value: v1::ListRuntimeSessionsResponse,
 ) -> ListRuntimeSessionsResponse {
     ListRuntimeSessionsResponse {
@@ -357,7 +291,7 @@ pub fn from_wire_list_runtime_sessions_response(
 }
 
 /// Converts a native `PrepareRuntimeWorkspaceRequest` to its wire message.
-pub fn to_wire_prepare_runtime_workspace_request(
+pub(crate) fn to_wire_prepare_runtime_workspace_request(
     value: PrepareRuntimeWorkspaceRequest,
 ) -> v1::PrepareRuntimeWorkspaceRequest {
     v1::PrepareRuntimeWorkspaceRequest {
@@ -367,28 +301,8 @@ pub fn to_wire_prepare_runtime_workspace_request(
     }
 }
 
-/// Converts a wire `PrepareRuntimeWorkspaceRequest` to its native message.
-pub fn from_wire_prepare_runtime_workspace_request(
-    value: v1::PrepareRuntimeWorkspaceRequest,
-) -> PrepareRuntimeWorkspaceRequest {
-    PrepareRuntimeWorkspaceRequest {
-        session_id: value.session_id,
-        agent_session_id: value.agent_session_id,
-        workspace: value.workspace.map(from_wire_agent_workspace),
-    }
-}
-
-/// Converts a native `PrepareRuntimeWorkspaceResponse` to its wire message.
-pub fn to_wire_prepare_runtime_workspace_response(
-    value: PrepareRuntimeWorkspaceResponse,
-) -> v1::PrepareRuntimeWorkspaceResponse {
-    v1::PrepareRuntimeWorkspaceResponse {
-        workspace: value.workspace.map(to_wire_prepared_agent_workspace),
-    }
-}
-
 /// Converts a wire `PrepareRuntimeWorkspaceResponse` to its native message.
-pub fn from_wire_prepare_runtime_workspace_response(
+pub(crate) fn from_wire_prepare_runtime_workspace_response(
     value: v1::PrepareRuntimeWorkspaceResponse,
 ) -> PrepareRuntimeWorkspaceResponse {
     PrepareRuntimeWorkspaceResponse {
@@ -397,7 +311,7 @@ pub fn from_wire_prepare_runtime_workspace_response(
 }
 
 /// Converts a native `RemoveRuntimeWorkspaceRequest` to its wire message.
-pub fn to_wire_remove_runtime_workspace_request(
+pub(crate) fn to_wire_remove_runtime_workspace_request(
     value: RemoveRuntimeWorkspaceRequest,
 ) -> v1::RemoveRuntimeWorkspaceRequest {
     v1::RemoveRuntimeWorkspaceRequest {
@@ -406,32 +320,17 @@ pub fn to_wire_remove_runtime_workspace_request(
     }
 }
 
-/// Converts a wire `RemoveRuntimeWorkspaceRequest` to its native message.
-pub fn from_wire_remove_runtime_workspace_request(
-    value: v1::RemoveRuntimeWorkspaceRequest,
-) -> RemoveRuntimeWorkspaceRequest {
-    RemoveRuntimeWorkspaceRequest {
-        session_id: value.session_id,
-        agent_session_id: value.agent_session_id,
-    }
-}
-
 /// Converts a native `RuntimeImagePullAuth` to its wire message.
-pub fn to_wire_runtime_image_pull_auth(value: RuntimeImagePullAuth) -> v1::RuntimeImagePullAuth {
+pub(crate) fn to_wire_runtime_image_pull_auth(
+    value: RuntimeImagePullAuth,
+) -> v1::RuntimeImagePullAuth {
     v1::RuntimeImagePullAuth {
         docker_config_json: value.docker_config_json,
     }
 }
 
-/// Converts a wire `RuntimeImagePullAuth` to its native message.
-pub fn from_wire_runtime_image_pull_auth(value: v1::RuntimeImagePullAuth) -> RuntimeImagePullAuth {
-    RuntimeImagePullAuth {
-        docker_config_json: value.docker_config_json,
-    }
-}
-
 /// Converts a native `RuntimeLogEntry` to its wire message.
-pub fn to_wire_runtime_log_entry(value: RuntimeLogEntry) -> v1::RuntimeLogEntry {
+pub(crate) fn to_wire_runtime_log_entry(value: RuntimeLogEntry) -> v1::RuntimeLogEntry {
     v1::RuntimeLogEntry {
         stream: value.stream,
         message: value.message,
@@ -440,30 +339,8 @@ pub fn to_wire_runtime_log_entry(value: RuntimeLogEntry) -> v1::RuntimeLogEntry 
     }
 }
 
-/// Converts a wire `RuntimeLogEntry` to its native message.
-pub fn from_wire_runtime_log_entry(value: v1::RuntimeLogEntry) -> RuntimeLogEntry {
-    RuntimeLogEntry {
-        stream: value.stream,
-        message: value.message,
-        observed_at: value.observed_at.map(from_wire_timestamp),
-        source_seq: value.source_seq,
-    }
-}
-
-/// Converts a native `RuntimeSession` to its wire message.
-pub fn to_wire_runtime_session(value: RuntimeSession) -> v1::RuntimeSession {
-    v1::RuntimeSession {
-        id: value.id,
-        state: value.state,
-        metadata: value.metadata,
-        lifecycle: value.lifecycle.map(to_wire_runtime_session_lifecycle),
-        state_reason: value.state_reason,
-        state_message: value.state_message,
-    }
-}
-
 /// Converts a wire `RuntimeSession` to its native message.
-pub fn from_wire_runtime_session(value: v1::RuntimeSession) -> RuntimeSession {
+pub(crate) fn from_wire_runtime_session(value: v1::RuntimeSession) -> RuntimeSession {
     RuntimeSession {
         id: value.id,
         state: value.state,
@@ -474,19 +351,8 @@ pub fn from_wire_runtime_session(value: v1::RuntimeSession) -> RuntimeSession {
     }
 }
 
-/// Converts a native `RuntimeSessionLifecycle` to its wire message.
-pub fn to_wire_runtime_session_lifecycle(
-    value: RuntimeSessionLifecycle,
-) -> v1::RuntimeSessionLifecycle {
-    v1::RuntimeSessionLifecycle {
-        started_at: value.started_at.map(to_wire_timestamp),
-        recommended_drain_at: value.recommended_drain_at.map(to_wire_timestamp),
-        expires_at: value.expires_at.map(to_wire_timestamp),
-    }
-}
-
 /// Converts a wire `RuntimeSessionLifecycle` to its native message.
-pub fn from_wire_runtime_session_lifecycle(
+pub(crate) fn from_wire_runtime_session_lifecycle(
     value: v1::RuntimeSessionLifecycle,
 ) -> RuntimeSessionLifecycle {
     RuntimeSessionLifecycle {
@@ -496,17 +362,8 @@ pub fn from_wire_runtime_session_lifecycle(
     }
 }
 
-/// Converts a native `RuntimeSupport` to its wire message.
-pub fn to_wire_runtime_support(value: RuntimeSupport) -> v1::RuntimeSupport {
-    v1::RuntimeSupport {
-        can_host_apps: value.can_host_apps,
-        egress_mode: value.egress_mode,
-        supports_prepare_workspace: value.supports_prepare_workspace,
-    }
-}
-
 /// Converts a wire `RuntimeSupport` to its native message.
-pub fn from_wire_runtime_support(value: v1::RuntimeSupport) -> RuntimeSupport {
+pub(crate) fn from_wire_runtime_support(value: v1::RuntimeSupport) -> RuntimeSupport {
     RuntimeSupport {
         can_host_apps: value.can_host_apps,
         egress_mode: value.egress_mode,
@@ -515,7 +372,9 @@ pub fn from_wire_runtime_support(value: v1::RuntimeSupport) -> RuntimeSupport {
 }
 
 /// Converts a native `StartHostedAppRequest` to its wire message.
-pub fn to_wire_start_hosted_app_request(value: StartHostedAppRequest) -> v1::StartHostedAppRequest {
+pub(crate) fn to_wire_start_hosted_app_request(
+    value: StartHostedAppRequest,
+) -> v1::StartHostedAppRequest {
     v1::StartHostedAppRequest {
         session_id: value.session_id,
         app_name: value.app_name,
@@ -529,25 +388,8 @@ pub fn to_wire_start_hosted_app_request(value: StartHostedAppRequest) -> v1::Sta
     }
 }
 
-/// Converts a wire `StartHostedAppRequest` to its native message.
-pub fn from_wire_start_hosted_app_request(
-    value: v1::StartHostedAppRequest,
-) -> StartHostedAppRequest {
-    StartHostedAppRequest {
-        session_id: value.session_id,
-        app_name: value.app_name,
-        command: value.command,
-        args: value.args,
-        env: value.env,
-        allowed_hosts: value.allowed_hosts,
-        default_action: value.default_action,
-        host_binary: value.host_binary,
-        workdir: value.workdir,
-    }
-}
-
 /// Converts a native `StartRuntimeSessionRequest` to its wire message.
-pub fn to_wire_start_runtime_session_request(
+pub(crate) fn to_wire_start_runtime_session_request(
     value: StartRuntimeSessionRequest,
 ) -> v1::StartRuntimeSessionRequest {
     v1::StartRuntimeSessionRequest {
@@ -559,33 +401,11 @@ pub fn to_wire_start_runtime_session_request(
     }
 }
 
-/// Converts a wire `StartRuntimeSessionRequest` to its native message.
-pub fn from_wire_start_runtime_session_request(
-    value: v1::StartRuntimeSessionRequest,
-) -> StartRuntimeSessionRequest {
-    StartRuntimeSessionRequest {
-        app_name: value.app_name,
-        template: value.template,
-        image: value.image,
-        metadata: value.metadata,
-        image_pull_auth: value.image_pull_auth.map(from_wire_runtime_image_pull_auth),
-    }
-}
-
 /// Converts a native `StopRuntimeSessionRequest` to its wire message.
-pub fn to_wire_stop_runtime_session_request(
+pub(crate) fn to_wire_stop_runtime_session_request(
     value: StopRuntimeSessionRequest,
 ) -> v1::StopRuntimeSessionRequest {
     v1::StopRuntimeSessionRequest {
-        session_id: value.session_id,
-    }
-}
-
-/// Converts a wire `StopRuntimeSessionRequest` to its native message.
-pub fn from_wire_stop_runtime_session_request(
-    value: v1::StopRuntimeSessionRequest,
-) -> StopRuntimeSessionRequest {
-    StopRuntimeSessionRequest {
         session_id: value.session_id,
     }
 }

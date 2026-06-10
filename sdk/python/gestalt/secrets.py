@@ -11,10 +11,7 @@ import grpc
 
 from ._gen.v1 import secrets_pb2 as _secrets_pb2
 from ._gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
-from .rpc_support import call_unary
-
-_wire: Any = _secrets_pb2
-_wire_grpc: Any = _secrets_pb2_grpc
+from .rpc_support import _call_unary
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,25 +24,25 @@ class GetSecretResponse:
     value: str = ""
 
 
-def to_wire_get_secret_request(value: GetSecretRequest) -> Any:
-    return _wire.GetSecretRequest(
+def _to_wire_get_secret_request(value: GetSecretRequest) -> Any:
+    return _secrets_pb2.GetSecretRequest(
         name=value.name,
     )
 
 
-def from_wire_get_secret_request(value: Any) -> GetSecretRequest:
+def _from_wire_get_secret_request(value: Any) -> GetSecretRequest:
     return GetSecretRequest(
         name=value.name,
     )
 
 
-def to_wire_get_secret_response(value: GetSecretResponse) -> Any:
-    return _wire.GetSecretResponse(
+def _to_wire_get_secret_response(value: GetSecretResponse) -> Any:
+    return _secrets_pb2.GetSecretResponse(
         value=value.value,
     )
 
 
-def from_wire_get_secret_response(value: Any) -> GetSecretResponse:
+def _from_wire_get_secret_response(value: Any) -> GetSecretResponse:
     return GetSecretResponse(
         value=value.value,
     )
@@ -55,8 +52,8 @@ class Secrets:
     """Client for the gestalt.provider.v1.Secrets service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.SecretsStub(channel)
+        self._stub = _secrets_pb2_grpc.SecretsStub(channel)
 
     def get_secret(self, request: GetSecretRequest) -> GetSecretResponse:
-        response = call_unary(lambda: self._stub.GetSecret(to_wire_get_secret_request(request)))
-        return from_wire_get_secret_response(response)
+        response = _call_unary(lambda: self._stub.GetSecret(_to_wire_get_secret_request(request)))
+        return _from_wire_get_secret_response(response)

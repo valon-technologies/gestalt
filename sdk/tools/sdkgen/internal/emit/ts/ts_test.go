@@ -36,19 +36,33 @@ func TestEmitSpikeSurface(t *testing.T) {
 	for _, f := range set.Files() {
 		files[f.Path] = string(f.Content)
 	}
-	for _, want := range []string{"rpc_support.ts", "cache.ts", "s3.ts", "datastore.ts"} {
+	for _, want := range []string{
+		"rpc_support.ts", "internal/codec/support.ts",
+		"cache.ts", "internal/codec/cache.ts",
+		"s3.ts", "internal/codec/s3.ts",
+		"datastore.ts", "internal/codec/datastore.ts",
+	} {
 		if _, ok := files[want]; !ok {
 			t.Fatalf("missing generated file %s (have %v)", want, keys(files))
 		}
 	}
-	if len(files) != 14 {
-		t.Errorf("generated files = %d, want 14: %v", len(files), keys(files))
+	if len(files) != 28 {
+		t.Errorf("generated files = %d, want 28: %v", len(files), keys(files))
 	}
 
 	assertContains(t, files, "rpc_support.ts",
 		"export class GestaltError extends Error",
 		"export type DurationMs = number;",
 		"export interface RpcStatus",
+	)
+	assertNotContains(t, files, "rpc_support.ts",
+		"callUnary",
+		"toWireDuration",
+	)
+	assertContains(t, files, "internal/codec/support.ts",
+		"export async function callUnary",
+		"export function toWireDuration",
+		`from "../../rpc_support.ts"`,
 	)
 	assertContains(t, files, "cache.ts",
 		"export class Cache {",
@@ -79,6 +93,29 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"error?: RpcStatus;",
 		"range?: KeyRange;",
 	)
+
+	// The wire-conversion seam is not part of the public surface: converters
+	// live only in the internal codec modules, which the public clients import.
+	for _, base := range []string{"cache.ts", "s3.ts", "datastore.ts"} {
+		assertNotContains(t, files, base,
+			"export function toWire",
+			"export function fromWire",
+		)
+		assertContains(t, files, base, `from "./internal/codec/`+base+`";`)
+	}
+	assertContains(t, files, "internal/codec/cache.ts",
+		"export function toWireCacheGetRequest(value: CacheGetRequest): wire.CacheGetRequest",
+		"export function fromWireCacheGetResponse(value: wire.CacheGetResponse): CacheGetResponse",
+		`import type { CacheDeleteManyRequest`,
+	)
+	assertContains(t, files, "internal/codec/datastore.ts",
+		"export function toWireTypedValueKind(value: TypedValueKind)",
+		"export function fromWireTypedValueKind(",
+	)
+	assertContains(t, files, "internal/codec/s3.ts",
+		`import * as wire from "../gen/v1/s3_pb.ts";`,
+		`import { fromWireTimestamp, toWireTimestamp } from "./support.ts";`,
+	)
 }
 
 func assertContains(t *testing.T, files map[string]string, path string, wants ...string) {
@@ -87,6 +124,16 @@ func assertContains(t *testing.T, files map[string]string, path string, wants ..
 	for _, want := range wants {
 		if !strings.Contains(content, want) {
 			t.Errorf("%s missing %q", path, want)
+		}
+	}
+}
+
+func assertNotContains(t *testing.T, files map[string]string, path string, rejects ...string) {
+	t.Helper()
+	content := files[path]
+	for _, reject := range rejects {
+		if strings.Contains(content, reject) {
+			t.Errorf("%s unexpectedly contains %q", path, reject)
 		}
 	}
 }

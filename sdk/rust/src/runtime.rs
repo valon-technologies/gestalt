@@ -3,7 +3,7 @@
 //! Generated native types, wire conversions, and clients for runtime.proto.
 
 use crate::generated::v1;
-use crate::rpc_support::{GestaltError, from_wire_struct, to_wire_struct};
+use crate::rpc_support::{GestaltError, to_wire_struct};
 
 /// Open enum for `gestalt.provider.v1.ProviderKind`; unknown numeric values are preserved.
 pub type ProviderKind = i32;
@@ -96,7 +96,7 @@ pub struct StartRuntimeProviderResponse {
 }
 
 /// Converts a native `ConfigureProviderRequest` to its wire message.
-pub fn to_wire_configure_provider_request(
+pub(crate) fn to_wire_configure_provider_request(
     value: ConfigureProviderRequest,
 ) -> v1::ConfigureProviderRequest {
     v1::ConfigureProviderRequest {
@@ -106,28 +106,8 @@ pub fn to_wire_configure_provider_request(
     }
 }
 
-/// Converts a wire `ConfigureProviderRequest` to its native message.
-pub fn from_wire_configure_provider_request(
-    value: v1::ConfigureProviderRequest,
-) -> ConfigureProviderRequest {
-    ConfigureProviderRequest {
-        name: value.name,
-        config: value.config.map(from_wire_struct),
-        protocol_version: value.protocol_version,
-    }
-}
-
-/// Converts a native `ConfigureProviderResponse` to its wire message.
-pub fn to_wire_configure_provider_response(
-    value: ConfigureProviderResponse,
-) -> v1::ConfigureProviderResponse {
-    v1::ConfigureProviderResponse {
-        protocol_version: value.protocol_version,
-    }
-}
-
 /// Converts a wire `ConfigureProviderResponse` to its native message.
-pub fn from_wire_configure_provider_response(
+pub(crate) fn from_wire_configure_provider_response(
     value: v1::ConfigureProviderResponse,
 ) -> ConfigureProviderResponse {
     ConfigureProviderResponse {
@@ -135,38 +115,18 @@ pub fn from_wire_configure_provider_response(
     }
 }
 
-/// Converts a native `HealthCheckResponse` to its wire message.
-pub fn to_wire_health_check_response(value: HealthCheckResponse) -> v1::HealthCheckResponse {
-    v1::HealthCheckResponse {
-        ready: value.ready,
-        message: value.message,
-    }
-}
-
 /// Converts a wire `HealthCheckResponse` to its native message.
-pub fn from_wire_health_check_response(value: v1::HealthCheckResponse) -> HealthCheckResponse {
+pub(crate) fn from_wire_health_check_response(
+    value: v1::HealthCheckResponse,
+) -> HealthCheckResponse {
     HealthCheckResponse {
         ready: value.ready,
         message: value.message,
     }
 }
 
-/// Converts a native `ProviderIdentity` to its wire message.
-pub fn to_wire_provider_identity(value: ProviderIdentity) -> v1::ProviderIdentity {
-    v1::ProviderIdentity {
-        kind: value.kind,
-        name: value.name,
-        display_name: value.display_name,
-        description: value.description,
-        version: value.version,
-        warnings: value.warnings,
-        min_protocol_version: value.min_protocol_version,
-        max_protocol_version: value.max_protocol_version,
-    }
-}
-
 /// Converts a wire `ProviderIdentity` to its native message.
-pub fn from_wire_provider_identity(value: v1::ProviderIdentity) -> ProviderIdentity {
+pub(crate) fn from_wire_provider_identity(value: v1::ProviderIdentity) -> ProviderIdentity {
     ProviderIdentity {
         kind: value.kind,
         name: value.name,
@@ -179,17 +139,8 @@ pub fn from_wire_provider_identity(value: v1::ProviderIdentity) -> ProviderIdent
     }
 }
 
-/// Converts a native `StartRuntimeProviderResponse` to its wire message.
-pub fn to_wire_start_runtime_provider_response(
-    value: StartRuntimeProviderResponse,
-) -> v1::StartRuntimeProviderResponse {
-    v1::StartRuntimeProviderResponse {
-        protocol_version: value.protocol_version,
-    }
-}
-
 /// Converts a wire `StartRuntimeProviderResponse` to its native message.
-pub fn from_wire_start_runtime_provider_response(
+pub(crate) fn from_wire_start_runtime_provider_response(
     value: v1::StartRuntimeProviderResponse,
 ) -> StartRuntimeProviderResponse {
     StartRuntimeProviderResponse {

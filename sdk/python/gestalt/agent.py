@@ -17,29 +17,26 @@ from .app import (
     OperationAnnotations,
     RequestContext,
     SubjectContext,
-    from_wire_agent_tool_ref,
-    from_wire_operation_annotations,
-    from_wire_request_context,
-    from_wire_subject_context,
-    to_wire_agent_tool_ref,
-    to_wire_operation_annotations,
-    to_wire_request_context,
-    to_wire_subject_context,
+    _from_wire_agent_tool_ref,
+    _from_wire_operation_annotations,
+    _from_wire_request_context,
+    _from_wire_subject_context,
+    _to_wire_agent_tool_ref,
+    _to_wire_operation_annotations,
+    _to_wire_request_context,
+    _to_wire_subject_context,
 )
 from .rpc_support import (
     JsonValue,
-    call_unary,
-    from_wire_struct,
-    from_wire_timestamp,
-    from_wire_value,
-    to_wire_struct,
-    to_wire_timestamp,
-    to_wire_value,
+    _call_unary,
+    _from_wire_struct,
+    _from_wire_timestamp,
+    _from_wire_value,
+    _to_wire_enum,
+    _to_wire_struct,
+    _to_wire_timestamp,
+    _to_wire_value,
 )
-
-_wire: Any = _agent_pb2
-_wire_grpc: Any = _agent_pb2_grpc
-
 
 # Open enum: unknown numeric values are preserved, so the type is int.
 AgentExecutionStatus = int
@@ -562,155 +559,155 @@ class UpdateAgentProviderSessionRequest:
     provider_name: str = ""
 
 
-def to_wire_agent_catalog_tool_config(value: AgentCatalogToolConfig) -> Any:
-    return _wire.AgentCatalogToolConfig(
-        refs=[to_wire_agent_tool_ref(item) for item in value.refs],
-        tools=[to_wire_listed_agent_tool(item) for item in value.tools],
+def _to_wire_agent_catalog_tool_config(value: AgentCatalogToolConfig) -> Any:
+    return _agent_pb2.AgentCatalogToolConfig(
+        refs=[_to_wire_agent_tool_ref(item) for item in value.refs],
+        tools=[_to_wire_listed_agent_tool(item) for item in value.tools],
     )
 
 
-def from_wire_agent_catalog_tool_config(value: Any) -> AgentCatalogToolConfig:
+def _from_wire_agent_catalog_tool_config(value: Any) -> AgentCatalogToolConfig:
     return AgentCatalogToolConfig(
-        refs=[from_wire_agent_tool_ref(item) for item in value.refs],
-        tools=[from_wire_listed_agent_tool(item) for item in value.tools],
+        refs=[_from_wire_agent_tool_ref(item) for item in value.refs],
+        tools=[_from_wire_listed_agent_tool(item) for item in value.tools],
     )
 
 
-def to_wire_agent_interaction(value: AgentInteraction) -> Any:
-    return _wire.AgentInteraction(
+def _to_wire_agent_interaction(value: AgentInteraction) -> Any:
+    return _agent_pb2.AgentInteraction(
         id=value.id,
-        type=value.type,
-        state=value.state,
+        type=_to_wire_enum(value.type),
+        state=_to_wire_enum(value.state),
         title=value.title,
         prompt=value.prompt,
-        request=None if value.request is None else to_wire_struct(value.request),
-        resolution=None if value.resolution is None else to_wire_struct(value.resolution),
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        resolved_at=None if value.resolved_at is None else to_wire_timestamp(value.resolved_at),
+        request=None if value.request is None else _to_wire_struct(value.request),
+        resolution=None if value.resolution is None else _to_wire_struct(value.resolution),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        resolved_at=None if value.resolved_at is None else _to_wire_timestamp(value.resolved_at),
         turn_id=value.turn_id,
         session_id=value.session_id,
     )
 
 
-def from_wire_agent_interaction(value: Any) -> AgentInteraction:
+def _from_wire_agent_interaction(value: Any) -> AgentInteraction:
     return AgentInteraction(
         id=value.id,
         type=value.type,
         state=value.state,
         title=value.title,
         prompt=value.prompt,
-        request=from_wire_struct(value.request) if value.HasField("request") else None,
-        resolution=from_wire_struct(value.resolution) if value.HasField("resolution") else None,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        resolved_at=from_wire_timestamp(value.resolved_at) if value.HasField("resolved_at") else None,
+        request=_from_wire_struct(value.request) if value.HasField("request") else None,
+        resolution=_from_wire_struct(value.resolution) if value.HasField("resolution") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        resolved_at=_from_wire_timestamp(value.resolved_at) if value.HasField("resolved_at") else None,
         turn_id=value.turn_id,
         session_id=value.session_id,
     )
 
 
-def to_wire_agent_message(value: AgentMessage) -> Any:
-    return _wire.AgentMessage(
+def _to_wire_agent_message(value: AgentMessage) -> Any:
+    return _agent_pb2.AgentMessage(
         role=value.role,
         text=value.text,
-        parts=[to_wire_agent_message_part(item) for item in value.parts],
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        parts=[_to_wire_agent_message_part(item) for item in value.parts],
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
     )
 
 
-def from_wire_agent_message(value: Any) -> AgentMessage:
+def _from_wire_agent_message(value: Any) -> AgentMessage:
     return AgentMessage(
         role=value.role,
         text=value.text,
-        parts=[from_wire_agent_message_part(item) for item in value.parts],
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        parts=[_from_wire_agent_message_part(item) for item in value.parts],
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
     )
 
 
-def to_wire_agent_message_part(value: AgentMessagePart) -> Any:
-    return _wire.AgentMessagePart(
-        type=value.type,
+def _to_wire_agent_message_part(value: AgentMessagePart) -> Any:
+    return _agent_pb2.AgentMessagePart(
+        type=_to_wire_enum(value.type),
         text=value.text,
-        json=None if value.json is None else to_wire_struct(value.json),
-        tool_call=None if value.tool_call is None else to_wire_agent_message_part_tool_call(value.tool_call),
-        tool_result=None if value.tool_result is None else to_wire_agent_message_part_tool_result(value.tool_result),
-        image_ref=None if value.image_ref is None else to_wire_agent_message_part_image_ref(value.image_ref),
+        json=None if value.json is None else _to_wire_struct(value.json),
+        tool_call=None if value.tool_call is None else _to_wire_agent_message_part_tool_call(value.tool_call),
+        tool_result=None if value.tool_result is None else _to_wire_agent_message_part_tool_result(value.tool_result),
+        image_ref=None if value.image_ref is None else _to_wire_agent_message_part_image_ref(value.image_ref),
     )
 
 
-def from_wire_agent_message_part(value: Any) -> AgentMessagePart:
+def _from_wire_agent_message_part(value: Any) -> AgentMessagePart:
     return AgentMessagePart(
         type=value.type,
         text=value.text,
-        json=from_wire_struct(value.json) if value.HasField("json") else None,
-        tool_call=from_wire_agent_message_part_tool_call(value.tool_call) if value.HasField("tool_call") else None,
-        tool_result=from_wire_agent_message_part_tool_result(value.tool_result) if value.HasField("tool_result") else None,
-        image_ref=from_wire_agent_message_part_image_ref(value.image_ref) if value.HasField("image_ref") else None,
+        json=_from_wire_struct(value.json) if value.HasField("json") else None,
+        tool_call=_from_wire_agent_message_part_tool_call(value.tool_call) if value.HasField("tool_call") else None,
+        tool_result=_from_wire_agent_message_part_tool_result(value.tool_result) if value.HasField("tool_result") else None,
+        image_ref=_from_wire_agent_message_part_image_ref(value.image_ref) if value.HasField("image_ref") else None,
     )
 
 
-def to_wire_agent_message_part_image_ref(value: AgentMessagePartImageRef) -> Any:
-    return _wire.AgentMessagePartImageRef(
+def _to_wire_agent_message_part_image_ref(value: AgentMessagePartImageRef) -> Any:
+    return _agent_pb2.AgentMessagePartImageRef(
         uri=value.uri,
         mime_type=value.mime_type,
     )
 
 
-def from_wire_agent_message_part_image_ref(value: Any) -> AgentMessagePartImageRef:
+def _from_wire_agent_message_part_image_ref(value: Any) -> AgentMessagePartImageRef:
     return AgentMessagePartImageRef(
         uri=value.uri,
         mime_type=value.mime_type,
     )
 
 
-def to_wire_agent_message_part_tool_call(value: AgentMessagePartToolCall) -> Any:
-    return _wire.AgentMessagePartToolCall(
+def _to_wire_agent_message_part_tool_call(value: AgentMessagePartToolCall) -> Any:
+    return _agent_pb2.AgentMessagePartToolCall(
         id=value.id,
         tool_id=value.tool_id,
-        arguments=None if value.arguments is None else to_wire_struct(value.arguments),
+        arguments=None if value.arguments is None else _to_wire_struct(value.arguments),
     )
 
 
-def from_wire_agent_message_part_tool_call(value: Any) -> AgentMessagePartToolCall:
+def _from_wire_agent_message_part_tool_call(value: Any) -> AgentMessagePartToolCall:
     return AgentMessagePartToolCall(
         id=value.id,
         tool_id=value.tool_id,
-        arguments=from_wire_struct(value.arguments) if value.HasField("arguments") else None,
+        arguments=_from_wire_struct(value.arguments) if value.HasField("arguments") else None,
     )
 
 
-def to_wire_agent_message_part_tool_result(value: AgentMessagePartToolResult) -> Any:
-    return _wire.AgentMessagePartToolResult(
+def _to_wire_agent_message_part_tool_result(value: AgentMessagePartToolResult) -> Any:
+    return _agent_pb2.AgentMessagePartToolResult(
         tool_call_id=value.tool_call_id,
         status=value.status,
         content=value.content,
-        output=None if value.output is None else to_wire_struct(value.output),
+        output=None if value.output is None else _to_wire_struct(value.output),
     )
 
 
-def from_wire_agent_message_part_tool_result(value: Any) -> AgentMessagePartToolResult:
+def _from_wire_agent_message_part_tool_result(value: Any) -> AgentMessagePartToolResult:
     return AgentMessagePartToolResult(
         tool_call_id=value.tool_call_id,
         status=value.status,
         content=value.content,
-        output=from_wire_struct(value.output) if value.HasField("output") else None,
+        output=_from_wire_struct(value.output) if value.HasField("output") else None,
     )
 
 
-def to_wire_agent_no_tools(_value: AgentNoTools) -> Any:
-    return _wire.AgentNoTools()
+def _to_wire_agent_no_tools(_value: AgentNoTools) -> Any:
+    return _agent_pb2.AgentNoTools()
 
 
-def from_wire_agent_no_tools(_value: Any) -> AgentNoTools:
+def _from_wire_agent_no_tools(_value: Any) -> AgentNoTools:
     return AgentNoTools()
 
 
-def to_wire_agent_output(value: AgentOutput) -> Any:
-    return _wire.AgentOutput(
+def _to_wire_agent_output(value: AgentOutput) -> Any:
+    return _agent_pb2.AgentOutput(
         **_to_wire_agent_output_kind(value.kind),
     )
 
 
-def from_wire_agent_output(value: Any) -> AgentOutput:
+def _from_wire_agent_output(value: Any) -> AgentOutput:
     return AgentOutput(
         kind=_from_wire_agent_output_kind(value),
     )
@@ -718,23 +715,23 @@ def from_wire_agent_output(value: Any) -> AgentOutput:
 
 def _to_wire_agent_output_kind(value: AgentOutputKind) -> dict[str, Any]:
     if isinstance(value, AgentOutputText):
-        return {"text": to_wire_agent_text_output(value.value)}
+        return {"text": _to_wire_agent_text_output(value.value)}
     if isinstance(value, AgentOutputStructured):
-        return {"structured": to_wire_agent_structured_output(value.value)}
+        return {"structured": _to_wire_agent_structured_output(value.value)}
     return {}
 
 
 def _from_wire_agent_output_kind(value: Any) -> AgentOutputKind:
     case = value.WhichOneof("kind")
     if case == "text":
-        return AgentOutputText(value=from_wire_agent_text_output(value.text))
+        return AgentOutputText(value=_from_wire_agent_text_output(value.text))
     if case == "structured":
-        return AgentOutputStructured(value=from_wire_agent_structured_output(value.structured))
+        return AgentOutputStructured(value=_from_wire_agent_structured_output(value.structured))
     return None
 
 
-def to_wire_agent_provider_capabilities(value: AgentProviderCapabilities) -> Any:
-    return _wire.AgentProviderCapabilities(
+def _to_wire_agent_provider_capabilities(value: AgentProviderCapabilities) -> Any:
+    return _agent_pb2.AgentProviderCapabilities(
         streaming_text=value.streaming_text,
         tool_calls=value.tool_calls,
         parallel_tool_calls=value.parallel_tool_calls,
@@ -742,13 +739,13 @@ def to_wire_agent_provider_capabilities(value: AgentProviderCapabilities) -> Any
         resumable_turns=value.resumable_turns,
         reasoning_summaries=value.reasoning_summaries,
         bounded_list_hydration=value.bounded_list_hydration,
-        supported_tool_sources=value.supported_tool_sources,
+        supported_tool_sources=[_to_wire_enum(item) for item in value.supported_tool_sources],
         supports_session_start=value.supports_session_start,
         supports_prepared_workspace=value.supports_prepared_workspace,
     )
 
 
-def from_wire_agent_provider_capabilities(value: Any) -> AgentProviderCapabilities:
+def _from_wire_agent_provider_capabilities(value: Any) -> AgentProviderCapabilities:
     return AgentProviderCapabilities(
         streaming_text=value.streaming_text,
         tool_calls=value.tool_calls,
@@ -763,61 +760,61 @@ def from_wire_agent_provider_capabilities(value: Any) -> AgentProviderCapabiliti
     )
 
 
-def to_wire_agent_session(value: AgentSession) -> Any:
-    return _wire.AgentSession(
+def _to_wire_agent_session(value: AgentSession) -> Any:
+    return _agent_pb2.AgentSession(
         id=value.id,
         provider_name=value.provider_name,
         model=value.model,
         client_ref=value.client_ref,
-        state=value.state,
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        state=_to_wire_enum(value.state),
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
         created_by_subject_id=value.created_by_subject_id,
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        updated_at=None if value.updated_at is None else to_wire_timestamp(value.updated_at),
-        last_turn_at=None if value.last_turn_at is None else to_wire_timestamp(value.last_turn_at),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        updated_at=None if value.updated_at is None else _to_wire_timestamp(value.updated_at),
+        last_turn_at=None if value.last_turn_at is None else _to_wire_timestamp(value.last_turn_at),
     )
 
 
-def from_wire_agent_session(value: Any) -> AgentSession:
+def _from_wire_agent_session(value: Any) -> AgentSession:
     return AgentSession(
         id=value.id,
         provider_name=value.provider_name,
         model=value.model,
         client_ref=value.client_ref,
         state=value.state,
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
         created_by_subject_id=value.created_by_subject_id,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        updated_at=from_wire_timestamp(value.updated_at) if value.HasField("updated_at") else None,
-        last_turn_at=from_wire_timestamp(value.last_turn_at) if value.HasField("last_turn_at") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        updated_at=_from_wire_timestamp(value.updated_at) if value.HasField("updated_at") else None,
+        last_turn_at=_from_wire_timestamp(value.last_turn_at) if value.HasField("last_turn_at") else None,
     )
 
 
-def to_wire_agent_session_start_config(value: AgentSessionStartConfig) -> Any:
-    return _wire.AgentSessionStartConfig(
-        hooks=[to_wire_agent_session_start_hook(item) for item in value.hooks],
+def _to_wire_agent_session_start_config(value: AgentSessionStartConfig) -> Any:
+    return _agent_pb2.AgentSessionStartConfig(
+        hooks=[_to_wire_agent_session_start_hook(item) for item in value.hooks],
     )
 
 
-def from_wire_agent_session_start_config(value: Any) -> AgentSessionStartConfig:
+def _from_wire_agent_session_start_config(value: Any) -> AgentSessionStartConfig:
     return AgentSessionStartConfig(
-        hooks=[from_wire_agent_session_start_hook(item) for item in value.hooks],
+        hooks=[_from_wire_agent_session_start_hook(item) for item in value.hooks],
     )
 
 
-def to_wire_agent_session_start_hook(value: AgentSessionStartHook) -> Any:
-    return _wire.AgentSessionStartHook(
+def _to_wire_agent_session_start_hook(value: AgentSessionStartHook) -> Any:
+    return _agent_pb2.AgentSessionStartHook(
         id=value.id,
         type=value.type,
         command=value.command,
         cwd=value.cwd,
         timeout=value.timeout,
         env=value.env,
-        output=None if value.output is None else to_wire_agent_session_start_hook_output(value.output),
+        output=None if value.output is None else _to_wire_agent_session_start_hook_output(value.output),
     )
 
 
-def from_wire_agent_session_start_hook(value: Any) -> AgentSessionStartHook:
+def _from_wire_agent_session_start_hook(value: Any) -> AgentSessionStartHook:
     return AgentSessionStartHook(
         id=value.id,
         type=value.type,
@@ -825,51 +822,51 @@ def from_wire_agent_session_start_hook(value: Any) -> AgentSessionStartHook:
         cwd=value.cwd,
         timeout=value.timeout,
         env=dict(value.env),
-        output=from_wire_agent_session_start_hook_output(value.output) if value.HasField("output") else None,
+        output=_from_wire_agent_session_start_hook_output(value.output) if value.HasField("output") else None,
     )
 
 
-def to_wire_agent_session_start_hook_output(value: AgentSessionStartHookOutput) -> Any:
-    return _wire.AgentSessionStartHookOutput(
+def _to_wire_agent_session_start_hook_output(value: AgentSessionStartHookOutput) -> Any:
+    return _agent_pb2.AgentSessionStartHookOutput(
         additional_context=value.additional_context,
         metadata=value.metadata,
     )
 
 
-def from_wire_agent_session_start_hook_output(value: Any) -> AgentSessionStartHookOutput:
+def _from_wire_agent_session_start_hook_output(value: Any) -> AgentSessionStartHookOutput:
     return AgentSessionStartHookOutput(
         additional_context=value.additional_context,
         metadata=value.metadata,
     )
 
 
-def to_wire_agent_structured_output(value: AgentStructuredOutput) -> Any:
-    return _wire.AgentStructuredOutput(
-        schema=None if value.schema is None else to_wire_struct(value.schema),
+def _to_wire_agent_structured_output(value: AgentStructuredOutput) -> Any:
+    return _agent_pb2.AgentStructuredOutput(
+        schema=None if value.schema is None else _to_wire_struct(value.schema),
     )
 
 
-def from_wire_agent_structured_output(value: Any) -> AgentStructuredOutput:
+def _from_wire_agent_structured_output(value: Any) -> AgentStructuredOutput:
     return AgentStructuredOutput(
-        schema=from_wire_struct(value.schema) if value.HasField("schema") else None,
+        schema=_from_wire_struct(value.schema) if value.HasField("schema") else None,
     )
 
 
-def to_wire_agent_text_output(_value: AgentTextOutput) -> Any:
-    return _wire.AgentTextOutput()
+def _to_wire_agent_text_output(_value: AgentTextOutput) -> Any:
+    return _agent_pb2.AgentTextOutput()
 
 
-def from_wire_agent_text_output(_value: Any) -> AgentTextOutput:
+def _from_wire_agent_text_output(_value: Any) -> AgentTextOutput:
     return AgentTextOutput()
 
 
-def to_wire_agent_tool_config(value: AgentToolConfig) -> Any:
-    return _wire.AgentToolConfig(
+def _to_wire_agent_tool_config(value: AgentToolConfig) -> Any:
+    return _agent_pb2.AgentToolConfig(
         **_to_wire_agent_tool_config_source(value.source),
     )
 
 
-def from_wire_agent_tool_config(value: Any) -> AgentToolConfig:
+def _from_wire_agent_tool_config(value: Any) -> AgentToolConfig:
     return AgentToolConfig(
         source=_from_wire_agent_tool_config_source(value),
     )
@@ -877,52 +874,52 @@ def from_wire_agent_tool_config(value: Any) -> AgentToolConfig:
 
 def _to_wire_agent_tool_config_source(value: AgentToolConfigSource) -> dict[str, Any]:
     if isinstance(value, AgentToolConfigNone):
-        return {"none": to_wire_agent_no_tools(value.value)}
+        return {"none": _to_wire_agent_no_tools(value.value)}
     if isinstance(value, AgentToolConfigCatalog):
-        return {"catalog": to_wire_agent_catalog_tool_config(value.value)}
+        return {"catalog": _to_wire_agent_catalog_tool_config(value.value)}
     return {}
 
 
 def _from_wire_agent_tool_config_source(value: Any) -> AgentToolConfigSource:
     case = value.WhichOneof("source")
     if case == "none":
-        return AgentToolConfigNone(value=from_wire_agent_no_tools(value.none))
+        return AgentToolConfigNone(value=_from_wire_agent_no_tools(value.none))
     if case == "catalog":
-        return AgentToolConfigCatalog(value=from_wire_agent_catalog_tool_config(value.catalog))
+        return AgentToolConfigCatalog(value=_from_wire_agent_catalog_tool_config(value.catalog))
     return None
 
 
-def to_wire_agent_turn(value: AgentTurn) -> Any:
-    return _wire.AgentTurn(
+def _to_wire_agent_turn(value: AgentTurn) -> Any:
+    return _agent_pb2.AgentTurn(
         id=value.id,
         session_id=value.session_id,
         provider_name=value.provider_name,
         model=value.model,
-        status=value.status,
-        messages=[to_wire_agent_message(item) for item in value.messages],
+        status=_to_wire_enum(value.status),
+        messages=[_to_wire_agent_message(item) for item in value.messages],
         status_message=value.status_message,
         created_by_subject_id=value.created_by_subject_id,
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        started_at=None if value.started_at is None else to_wire_timestamp(value.started_at),
-        completed_at=None if value.completed_at is None else to_wire_timestamp(value.completed_at),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        started_at=None if value.started_at is None else _to_wire_timestamp(value.started_at),
+        completed_at=None if value.completed_at is None else _to_wire_timestamp(value.completed_at),
         execution_ref=value.execution_ref,
         **_to_wire_agent_turn_output(value.output),
     )
 
 
-def from_wire_agent_turn(value: Any) -> AgentTurn:
+def _from_wire_agent_turn(value: Any) -> AgentTurn:
     return AgentTurn(
         id=value.id,
         session_id=value.session_id,
         provider_name=value.provider_name,
         model=value.model,
         status=value.status,
-        messages=[from_wire_agent_message(item) for item in value.messages],
+        messages=[_from_wire_agent_message(item) for item in value.messages],
         status_message=value.status_message,
         created_by_subject_id=value.created_by_subject_id,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        started_at=from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
-        completed_at=from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        started_at=_from_wire_timestamp(value.started_at) if value.HasField("started_at") else None,
+        completed_at=_from_wire_timestamp(value.completed_at) if value.HasField("completed_at") else None,
         execution_ref=value.execution_ref,
         output=_from_wire_agent_turn_output(value),
     )
@@ -930,39 +927,39 @@ def from_wire_agent_turn(value: Any) -> AgentTurn:
 
 def _to_wire_agent_turn_output(value: AgentTurnOutput) -> dict[str, Any]:
     if isinstance(value, AgentTurnText):
-        return {"text": to_wire_agent_turn_text_output(value.value)}
+        return {"text": _to_wire_agent_turn_text_output(value.value)}
     if isinstance(value, AgentTurnStructured):
-        return {"structured": to_wire_agent_turn_structured_output(value.value)}
+        return {"structured": _to_wire_agent_turn_structured_output(value.value)}
     return {}
 
 
 def _from_wire_agent_turn_output(value: Any) -> AgentTurnOutput:
     case = value.WhichOneof("output")
     if case == "text":
-        return AgentTurnText(value=from_wire_agent_turn_text_output(value.text))
+        return AgentTurnText(value=_from_wire_agent_turn_text_output(value.text))
     if case == "structured":
-        return AgentTurnStructured(value=from_wire_agent_turn_structured_output(value.structured))
+        return AgentTurnStructured(value=_from_wire_agent_turn_structured_output(value.structured))
     return None
 
 
-def to_wire_agent_turn_display(value: AgentTurnDisplay) -> Any:
-    return _wire.AgentTurnDisplay(
+def _to_wire_agent_turn_display(value: AgentTurnDisplay) -> Any:
+    return _agent_pb2.AgentTurnDisplay(
         kind=value.kind,
         phase=value.phase,
         text=value.text,
         label=value.label,
         ref=value.ref,
         parent_ref=value.parent_ref,
-        input=None if value.input is None else to_wire_value(value.input),
-        output=None if value.output is None else to_wire_value(value.output),
-        error=None if value.error is None else to_wire_value(value.error),
+        input=None if value.input is None else _to_wire_value(value.input),
+        output=None if value.output is None else _to_wire_value(value.output),
+        error=None if value.error is None else _to_wire_value(value.error),
         action=value.action,
         format=value.format,
         language=value.language,
     )
 
 
-def from_wire_agent_turn_display(value: Any) -> AgentTurnDisplay:
+def _from_wire_agent_turn_display(value: Any) -> AgentTurnDisplay:
     return AgentTurnDisplay(
         kind=value.kind,
         phase=value.phase,
@@ -970,30 +967,30 @@ def from_wire_agent_turn_display(value: Any) -> AgentTurnDisplay:
         label=value.label,
         ref=value.ref,
         parent_ref=value.parent_ref,
-        input=from_wire_value(value.input) if value.HasField("input") else None,
-        output=from_wire_value(value.output) if value.HasField("output") else None,
-        error=from_wire_value(value.error) if value.HasField("error") else None,
+        input=_from_wire_value(value.input) if value.HasField("input") else None,
+        output=_from_wire_value(value.output) if value.HasField("output") else None,
+        error=_from_wire_value(value.error) if value.HasField("error") else None,
         action=value.action,
         format=value.format,
         language=value.language,
     )
 
 
-def to_wire_agent_turn_event(value: AgentTurnEvent) -> Any:
-    return _wire.AgentTurnEvent(
+def _to_wire_agent_turn_event(value: AgentTurnEvent) -> Any:
+    return _agent_pb2.AgentTurnEvent(
         id=value.id,
         turn_id=value.turn_id,
         seq=value.seq,
         type=value.type,
         source=value.source,
         visibility=value.visibility,
-        data=None if value.data is None else to_wire_struct(value.data),
-        created_at=None if value.created_at is None else to_wire_timestamp(value.created_at),
-        display=None if value.display is None else to_wire_agent_turn_display(value.display),
+        data=None if value.data is None else _to_wire_struct(value.data),
+        created_at=None if value.created_at is None else _to_wire_timestamp(value.created_at),
+        display=None if value.display is None else _to_wire_agent_turn_display(value.display),
     )
 
 
-def from_wire_agent_turn_event(value: Any) -> AgentTurnEvent:
+def _from_wire_agent_turn_event(value: Any) -> AgentTurnEvent:
     return AgentTurnEvent(
         id=value.id,
         turn_id=value.turn_id,
@@ -1001,61 +998,61 @@ def from_wire_agent_turn_event(value: Any) -> AgentTurnEvent:
         type=value.type,
         source=value.source,
         visibility=value.visibility,
-        data=from_wire_struct(value.data) if value.HasField("data") else None,
-        created_at=from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
-        display=from_wire_agent_turn_display(value.display) if value.HasField("display") else None,
+        data=_from_wire_struct(value.data) if value.HasField("data") else None,
+        created_at=_from_wire_timestamp(value.created_at) if value.HasField("created_at") else None,
+        display=_from_wire_agent_turn_display(value.display) if value.HasField("display") else None,
     )
 
 
-def to_wire_agent_turn_structured_output(value: AgentTurnStructuredOutput) -> Any:
-    return _wire.AgentTurnStructuredOutput(
+def _to_wire_agent_turn_structured_output(value: AgentTurnStructuredOutput) -> Any:
+    return _agent_pb2.AgentTurnStructuredOutput(
         text=value.text,
-        value=None if value.value is None else to_wire_struct(value.value),
+        value=None if value.value is None else _to_wire_struct(value.value),
     )
 
 
-def from_wire_agent_turn_structured_output(value: Any) -> AgentTurnStructuredOutput:
+def _from_wire_agent_turn_structured_output(value: Any) -> AgentTurnStructuredOutput:
     return AgentTurnStructuredOutput(
         text=value.text,
-        value=from_wire_struct(value.value) if value.HasField("value") else None,
+        value=_from_wire_struct(value.value) if value.HasField("value") else None,
     )
 
 
-def to_wire_agent_turn_text_output(value: AgentTurnTextOutput) -> Any:
-    return _wire.AgentTurnTextOutput(
+def _to_wire_agent_turn_text_output(value: AgentTurnTextOutput) -> Any:
+    return _agent_pb2.AgentTurnTextOutput(
         text=value.text,
     )
 
 
-def from_wire_agent_turn_text_output(value: Any) -> AgentTurnTextOutput:
+def _from_wire_agent_turn_text_output(value: Any) -> AgentTurnTextOutput:
     return AgentTurnTextOutput(
         text=value.text,
     )
 
 
-def to_wire_agent_workspace(value: AgentWorkspace) -> Any:
-    return _wire.AgentWorkspace(
-        checkouts=[to_wire_agent_workspace_git_checkout(item) for item in value.checkouts],
+def _to_wire_agent_workspace(value: AgentWorkspace) -> Any:
+    return _agent_pb2.AgentWorkspace(
+        checkouts=[_to_wire_agent_workspace_git_checkout(item) for item in value.checkouts],
         cwd=value.cwd,
     )
 
 
-def from_wire_agent_workspace(value: Any) -> AgentWorkspace:
+def _from_wire_agent_workspace(value: Any) -> AgentWorkspace:
     return AgentWorkspace(
-        checkouts=[from_wire_agent_workspace_git_checkout(item) for item in value.checkouts],
+        checkouts=[_from_wire_agent_workspace_git_checkout(item) for item in value.checkouts],
         cwd=value.cwd,
     )
 
 
-def to_wire_agent_workspace_git_checkout(value: AgentWorkspaceGitCheckout) -> Any:
-    return _wire.AgentWorkspaceGitCheckout(
+def _to_wire_agent_workspace_git_checkout(value: AgentWorkspaceGitCheckout) -> Any:
+    return _agent_pb2.AgentWorkspaceGitCheckout(
         url=value.url,
         ref=value.ref,
         path=value.path,
     )
 
 
-def from_wire_agent_workspace_git_checkout(value: Any) -> AgentWorkspaceGitCheckout:
+def _from_wire_agent_workspace_git_checkout(value: Any) -> AgentWorkspaceGitCheckout:
     return AgentWorkspaceGitCheckout(
         url=value.url,
         ref=value.ref,
@@ -1063,316 +1060,316 @@ def from_wire_agent_workspace_git_checkout(value: Any) -> AgentWorkspaceGitCheck
     )
 
 
-def to_wire_cancel_agent_provider_turn_request(value: CancelAgentProviderTurnRequest) -> Any:
-    return _wire.CancelAgentProviderTurnRequest(
+def _to_wire_cancel_agent_provider_turn_request(value: CancelAgentProviderTurnRequest) -> Any:
+    return _agent_pb2.CancelAgentProviderTurnRequest(
         turn_id=value.turn_id,
         reason=value.reason,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_cancel_agent_provider_turn_request(value: Any) -> CancelAgentProviderTurnRequest:
+def _from_wire_cancel_agent_provider_turn_request(value: Any) -> CancelAgentProviderTurnRequest:
     return CancelAgentProviderTurnRequest(
         turn_id=value.turn_id,
         reason=value.reason,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_create_agent_provider_session_request(value: CreateAgentProviderSessionRequest) -> Any:
-    return _wire.CreateAgentProviderSessionRequest(
+def _to_wire_create_agent_provider_session_request(value: CreateAgentProviderSessionRequest) -> Any:
+    return _agent_pb2.CreateAgentProviderSessionRequest(
         session_id=value.session_id,
         idempotency_key=value.idempotency_key,
         model=value.model,
         client_ref=value.client_ref,
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
         created_by_subject_id=value.created_by_subject_id,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        session_start=None if value.session_start is None else to_wire_agent_session_start_config(value.session_start),
-        prepared_workspace=None if value.prepared_workspace is None else to_wire_prepared_agent_workspace(value.prepared_workspace),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        session_start=None if value.session_start is None else _to_wire_agent_session_start_config(value.session_start),
+        prepared_workspace=None if value.prepared_workspace is None else _to_wire_prepared_agent_workspace(value.prepared_workspace),
         provider_name=value.provider_name,
-        workspace=None if value.workspace is None else to_wire_agent_workspace(value.workspace),
-        context=None if value.context is None else to_wire_request_context(value.context),
-        tools=None if value.tools is None else to_wire_agent_tool_config(value.tools),
+        workspace=None if value.workspace is None else _to_wire_agent_workspace(value.workspace),
+        context=None if value.context is None else _to_wire_request_context(value.context),
+        tools=None if value.tools is None else _to_wire_agent_tool_config(value.tools),
     )
 
 
-def from_wire_create_agent_provider_session_request(value: Any) -> CreateAgentProviderSessionRequest:
+def _from_wire_create_agent_provider_session_request(value: Any) -> CreateAgentProviderSessionRequest:
     return CreateAgentProviderSessionRequest(
         session_id=value.session_id,
         idempotency_key=value.idempotency_key,
         model=value.model,
         client_ref=value.client_ref,
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
         created_by_subject_id=value.created_by_subject_id,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        session_start=from_wire_agent_session_start_config(value.session_start) if value.HasField("session_start") else None,
-        prepared_workspace=from_wire_prepared_agent_workspace(value.prepared_workspace) if value.HasField("prepared_workspace") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        session_start=_from_wire_agent_session_start_config(value.session_start) if value.HasField("session_start") else None,
+        prepared_workspace=_from_wire_prepared_agent_workspace(value.prepared_workspace) if value.HasField("prepared_workspace") else None,
         provider_name=value.provider_name,
-        workspace=from_wire_agent_workspace(value.workspace) if value.HasField("workspace") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
-        tools=from_wire_agent_tool_config(value.tools) if value.HasField("tools") else None,
+        workspace=_from_wire_agent_workspace(value.workspace) if value.HasField("workspace") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
+        tools=_from_wire_agent_tool_config(value.tools) if value.HasField("tools") else None,
     )
 
 
-def to_wire_create_agent_provider_turn_request(value: CreateAgentProviderTurnRequest) -> Any:
-    return _wire.CreateAgentProviderTurnRequest(
+def _to_wire_create_agent_provider_turn_request(value: CreateAgentProviderTurnRequest) -> Any:
+    return _agent_pb2.CreateAgentProviderTurnRequest(
         turn_id=value.turn_id,
         session_id=value.session_id,
         idempotency_key=value.idempotency_key,
         model=value.model,
-        messages=[to_wire_agent_message(item) for item in value.messages],
-        tools=[to_wire_resolved_agent_tool(item) for item in value.tools],
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
+        messages=[_to_wire_agent_message(item) for item in value.messages],
+        tools=[_to_wire_resolved_agent_tool(item) for item in value.tools],
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
         created_by_subject_id=value.created_by_subject_id,
         execution_ref=value.execution_ref,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        model_options=None if value.model_options is None else to_wire_struct(value.model_options),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        model_options=None if value.model_options is None else _to_wire_struct(value.model_options),
         timeout_seconds=value.timeout_seconds,
-        output=None if value.output is None else to_wire_agent_output(value.output),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        output=None if value.output is None else _to_wire_agent_output(value.output),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_create_agent_provider_turn_request(value: Any) -> CreateAgentProviderTurnRequest:
+def _from_wire_create_agent_provider_turn_request(value: Any) -> CreateAgentProviderTurnRequest:
     return CreateAgentProviderTurnRequest(
         turn_id=value.turn_id,
         session_id=value.session_id,
         idempotency_key=value.idempotency_key,
         model=value.model,
-        messages=[from_wire_agent_message(item) for item in value.messages],
-        tools=[from_wire_resolved_agent_tool(item) for item in value.tools],
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        messages=[_from_wire_agent_message(item) for item in value.messages],
+        tools=[_from_wire_resolved_agent_tool(item) for item in value.tools],
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
         created_by_subject_id=value.created_by_subject_id,
         execution_ref=value.execution_ref,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        model_options=from_wire_struct(value.model_options) if value.HasField("model_options") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        model_options=_from_wire_struct(value.model_options) if value.HasField("model_options") else None,
         timeout_seconds=value.timeout_seconds,
-        output=from_wire_agent_output(value.output) if value.HasField("output") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        output=_from_wire_agent_output(value.output) if value.HasField("output") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_get_agent_provider_capabilities_request(_value: GetAgentProviderCapabilitiesRequest) -> Any:
-    return _wire.GetAgentProviderCapabilitiesRequest()
+def _to_wire_get_agent_provider_capabilities_request(_value: GetAgentProviderCapabilitiesRequest) -> Any:
+    return _agent_pb2.GetAgentProviderCapabilitiesRequest()
 
 
-def from_wire_get_agent_provider_capabilities_request(_value: Any) -> GetAgentProviderCapabilitiesRequest:
+def _from_wire_get_agent_provider_capabilities_request(_value: Any) -> GetAgentProviderCapabilitiesRequest:
     return GetAgentProviderCapabilitiesRequest()
 
 
-def to_wire_get_agent_provider_interaction_request(value: GetAgentProviderInteractionRequest) -> Any:
-    return _wire.GetAgentProviderInteractionRequest(
+def _to_wire_get_agent_provider_interaction_request(value: GetAgentProviderInteractionRequest) -> Any:
+    return _agent_pb2.GetAgentProviderInteractionRequest(
         interaction_id=value.interaction_id,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_get_agent_provider_interaction_request(value: Any) -> GetAgentProviderInteractionRequest:
+def _from_wire_get_agent_provider_interaction_request(value: Any) -> GetAgentProviderInteractionRequest:
     return GetAgentProviderInteractionRequest(
         interaction_id=value.interaction_id,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_get_agent_provider_session_request(value: GetAgentProviderSessionRequest) -> Any:
-    return _wire.GetAgentProviderSessionRequest(
+def _to_wire_get_agent_provider_session_request(value: GetAgentProviderSessionRequest) -> Any:
+    return _agent_pb2.GetAgentProviderSessionRequest(
         session_id=value.session_id,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_get_agent_provider_session_request(value: Any) -> GetAgentProviderSessionRequest:
+def _from_wire_get_agent_provider_session_request(value: Any) -> GetAgentProviderSessionRequest:
     return GetAgentProviderSessionRequest(
         session_id=value.session_id,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_get_agent_provider_turn_request(value: GetAgentProviderTurnRequest) -> Any:
-    return _wire.GetAgentProviderTurnRequest(
+def _to_wire_get_agent_provider_turn_request(value: GetAgentProviderTurnRequest) -> Any:
+    return _agent_pb2.GetAgentProviderTurnRequest(
         turn_id=value.turn_id,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_get_agent_provider_turn_request(value: Any) -> GetAgentProviderTurnRequest:
+def _from_wire_get_agent_provider_turn_request(value: Any) -> GetAgentProviderTurnRequest:
     return GetAgentProviderTurnRequest(
         turn_id=value.turn_id,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_list_agent_provider_interactions_request(value: ListAgentProviderInteractionsRequest) -> Any:
-    return _wire.ListAgentProviderInteractionsRequest(
+def _to_wire_list_agent_provider_interactions_request(value: ListAgentProviderInteractionsRequest) -> Any:
+    return _agent_pb2.ListAgentProviderInteractionsRequest(
         turn_id=value.turn_id,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_list_agent_provider_interactions_request(value: Any) -> ListAgentProviderInteractionsRequest:
+def _from_wire_list_agent_provider_interactions_request(value: Any) -> ListAgentProviderInteractionsRequest:
     return ListAgentProviderInteractionsRequest(
         turn_id=value.turn_id,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_list_agent_provider_interactions_response(value: ListAgentProviderInteractionsResponse) -> Any:
-    return _wire.ListAgentProviderInteractionsResponse(
-        interactions=[to_wire_agent_interaction(item) for item in value.interactions],
+def _to_wire_list_agent_provider_interactions_response(value: ListAgentProviderInteractionsResponse) -> Any:
+    return _agent_pb2.ListAgentProviderInteractionsResponse(
+        interactions=[_to_wire_agent_interaction(item) for item in value.interactions],
     )
 
 
-def from_wire_list_agent_provider_interactions_response(value: Any) -> ListAgentProviderInteractionsResponse:
+def _from_wire_list_agent_provider_interactions_response(value: Any) -> ListAgentProviderInteractionsResponse:
     return ListAgentProviderInteractionsResponse(
-        interactions=[from_wire_agent_interaction(item) for item in value.interactions],
+        interactions=[_from_wire_agent_interaction(item) for item in value.interactions],
     )
 
 
-def to_wire_list_agent_provider_sessions_request(value: ListAgentProviderSessionsRequest) -> Any:
-    return _wire.ListAgentProviderSessionsRequest(
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
+def _to_wire_list_agent_provider_sessions_request(value: ListAgentProviderSessionsRequest) -> Any:
+    return _agent_pb2.ListAgentProviderSessionsRequest(
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
         session_ids=value.session_ids,
-        state=value.state,
+        state=_to_wire_enum(value.state),
         limit=value.limit,
         summary_only=value.summary_only,
         provider_name=value.provider_name,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
     )
 
 
-def from_wire_list_agent_provider_sessions_request(value: Any) -> ListAgentProviderSessionsRequest:
+def _from_wire_list_agent_provider_sessions_request(value: Any) -> ListAgentProviderSessionsRequest:
     return ListAgentProviderSessionsRequest(
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
         session_ids=list(value.session_ids),
         state=value.state,
         limit=value.limit,
         summary_only=value.summary_only,
         provider_name=value.provider_name,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
     )
 
 
-def to_wire_list_agent_provider_sessions_response(value: ListAgentProviderSessionsResponse) -> Any:
-    return _wire.ListAgentProviderSessionsResponse(
-        sessions=[to_wire_agent_session(item) for item in value.sessions],
+def _to_wire_list_agent_provider_sessions_response(value: ListAgentProviderSessionsResponse) -> Any:
+    return _agent_pb2.ListAgentProviderSessionsResponse(
+        sessions=[_to_wire_agent_session(item) for item in value.sessions],
     )
 
 
-def from_wire_list_agent_provider_sessions_response(value: Any) -> ListAgentProviderSessionsResponse:
+def _from_wire_list_agent_provider_sessions_response(value: Any) -> ListAgentProviderSessionsResponse:
     return ListAgentProviderSessionsResponse(
-        sessions=[from_wire_agent_session(item) for item in value.sessions],
+        sessions=[_from_wire_agent_session(item) for item in value.sessions],
     )
 
 
-def to_wire_list_agent_provider_turn_events_request(value: ListAgentProviderTurnEventsRequest) -> Any:
-    return _wire.ListAgentProviderTurnEventsRequest(
+def _to_wire_list_agent_provider_turn_events_request(value: ListAgentProviderTurnEventsRequest) -> Any:
+    return _agent_pb2.ListAgentProviderTurnEventsRequest(
         turn_id=value.turn_id,
         after_seq=value.after_seq,
         limit=value.limit,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_list_agent_provider_turn_events_request(value: Any) -> ListAgentProviderTurnEventsRequest:
+def _from_wire_list_agent_provider_turn_events_request(value: Any) -> ListAgentProviderTurnEventsRequest:
     return ListAgentProviderTurnEventsRequest(
         turn_id=value.turn_id,
         after_seq=value.after_seq,
         limit=value.limit,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_list_agent_provider_turn_events_response(value: ListAgentProviderTurnEventsResponse) -> Any:
-    return _wire.ListAgentProviderTurnEventsResponse(
-        events=[to_wire_agent_turn_event(item) for item in value.events],
+def _to_wire_list_agent_provider_turn_events_response(value: ListAgentProviderTurnEventsResponse) -> Any:
+    return _agent_pb2.ListAgentProviderTurnEventsResponse(
+        events=[_to_wire_agent_turn_event(item) for item in value.events],
     )
 
 
-def from_wire_list_agent_provider_turn_events_response(value: Any) -> ListAgentProviderTurnEventsResponse:
+def _from_wire_list_agent_provider_turn_events_response(value: Any) -> ListAgentProviderTurnEventsResponse:
     return ListAgentProviderTurnEventsResponse(
-        events=[from_wire_agent_turn_event(item) for item in value.events],
+        events=[_from_wire_agent_turn_event(item) for item in value.events],
     )
 
 
-def to_wire_list_agent_provider_turns_request(value: ListAgentProviderTurnsRequest) -> Any:
-    return _wire.ListAgentProviderTurnsRequest(
+def _to_wire_list_agent_provider_turns_request(value: ListAgentProviderTurnsRequest) -> Any:
+    return _agent_pb2.ListAgentProviderTurnsRequest(
         session_id=value.session_id,
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
         turn_ids=value.turn_ids,
-        status=value.status,
+        status=_to_wire_enum(value.status),
         limit=value.limit,
         summary_only=value.summary_only,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_list_agent_provider_turns_request(value: Any) -> ListAgentProviderTurnsRequest:
+def _from_wire_list_agent_provider_turns_request(value: Any) -> ListAgentProviderTurnsRequest:
     return ListAgentProviderTurnsRequest(
         session_id=value.session_id,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
         turn_ids=list(value.turn_ids),
         status=value.status,
         limit=value.limit,
         summary_only=value.summary_only,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_list_agent_provider_turns_response(value: ListAgentProviderTurnsResponse) -> Any:
-    return _wire.ListAgentProviderTurnsResponse(
-        turns=[to_wire_agent_turn(item) for item in value.turns],
+def _to_wire_list_agent_provider_turns_response(value: ListAgentProviderTurnsResponse) -> Any:
+    return _agent_pb2.ListAgentProviderTurnsResponse(
+        turns=[_to_wire_agent_turn(item) for item in value.turns],
     )
 
 
-def from_wire_list_agent_provider_turns_response(value: Any) -> ListAgentProviderTurnsResponse:
+def _from_wire_list_agent_provider_turns_response(value: Any) -> ListAgentProviderTurnsResponse:
     return ListAgentProviderTurnsResponse(
-        turns=[from_wire_agent_turn(item) for item in value.turns],
+        turns=[_from_wire_agent_turn(item) for item in value.turns],
     )
 
 
-def to_wire_listed_agent_tool(value: ListedAgentTool) -> Any:
-    return _wire.ListedAgentTool(
+def _to_wire_listed_agent_tool(value: ListedAgentTool) -> Any:
+    return _agent_pb2.ListedAgentTool(
         id=value.id,
         mcp_name=value.mcp_name,
         title=value.title,
         description=value.description,
         input_schema=value.input_schema,
         output_schema=value.output_schema,
-        annotations=None if value.annotations is None else to_wire_operation_annotations(value.annotations),
-        ref=None if value.ref is None else to_wire_agent_tool_ref(value.ref),
+        annotations=None if value.annotations is None else _to_wire_operation_annotations(value.annotations),
+        ref=None if value.ref is None else _to_wire_agent_tool_ref(value.ref),
         tags=value.tags,
         search_text=value.search_text,
     )
 
 
-def from_wire_listed_agent_tool(value: Any) -> ListedAgentTool:
+def _from_wire_listed_agent_tool(value: Any) -> ListedAgentTool:
     return ListedAgentTool(
         id=value.id,
         mcp_name=value.mcp_name,
@@ -1380,89 +1377,89 @@ def from_wire_listed_agent_tool(value: Any) -> ListedAgentTool:
         description=value.description,
         input_schema=value.input_schema,
         output_schema=value.output_schema,
-        annotations=from_wire_operation_annotations(value.annotations) if value.HasField("annotations") else None,
-        ref=from_wire_agent_tool_ref(value.ref) if value.HasField("ref") else None,
+        annotations=_from_wire_operation_annotations(value.annotations) if value.HasField("annotations") else None,
+        ref=_from_wire_agent_tool_ref(value.ref) if value.HasField("ref") else None,
         tags=list(value.tags),
         search_text=value.search_text,
     )
 
 
-def to_wire_prepared_agent_workspace(value: PreparedAgentWorkspace) -> Any:
-    return _wire.PreparedAgentWorkspace(
+def _to_wire_prepared_agent_workspace(value: PreparedAgentWorkspace) -> Any:
+    return _agent_pb2.PreparedAgentWorkspace(
         root=value.root,
         cwd=value.cwd,
     )
 
 
-def from_wire_prepared_agent_workspace(value: Any) -> PreparedAgentWorkspace:
+def _from_wire_prepared_agent_workspace(value: Any) -> PreparedAgentWorkspace:
     return PreparedAgentWorkspace(
         root=value.root,
         cwd=value.cwd,
     )
 
 
-def to_wire_resolve_agent_provider_interaction_request(value: ResolveAgentProviderInteractionRequest) -> Any:
-    return _wire.ResolveAgentProviderInteractionRequest(
+def _to_wire_resolve_agent_provider_interaction_request(value: ResolveAgentProviderInteractionRequest) -> Any:
+    return _agent_pb2.ResolveAgentProviderInteractionRequest(
         interaction_id=value.interaction_id,
-        resolution=None if value.resolution is None else to_wire_struct(value.resolution),
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
+        resolution=None if value.resolution is None else _to_wire_struct(value.resolution),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
         turn_id=value.turn_id,
-        context=None if value.context is None else to_wire_request_context(value.context),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_resolve_agent_provider_interaction_request(value: Any) -> ResolveAgentProviderInteractionRequest:
+def _from_wire_resolve_agent_provider_interaction_request(value: Any) -> ResolveAgentProviderInteractionRequest:
     return ResolveAgentProviderInteractionRequest(
         interaction_id=value.interaction_id,
-        resolution=from_wire_struct(value.resolution) if value.HasField("resolution") else None,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        resolution=_from_wire_struct(value.resolution) if value.HasField("resolution") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
         turn_id=value.turn_id,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
 
-def to_wire_resolved_agent_tool(value: ResolvedAgentTool) -> Any:
-    return _wire.ResolvedAgentTool(
+def _to_wire_resolved_agent_tool(value: ResolvedAgentTool) -> Any:
+    return _agent_pb2.ResolvedAgentTool(
         id=value.id,
         name=value.name,
         description=value.description,
-        parameters_schema=None if value.parameters_schema is None else to_wire_struct(value.parameters_schema),
-        ref=None if value.ref is None else to_wire_agent_tool_ref(value.ref),
+        parameters_schema=None if value.parameters_schema is None else _to_wire_struct(value.parameters_schema),
+        ref=None if value.ref is None else _to_wire_agent_tool_ref(value.ref),
     )
 
 
-def from_wire_resolved_agent_tool(value: Any) -> ResolvedAgentTool:
+def _from_wire_resolved_agent_tool(value: Any) -> ResolvedAgentTool:
     return ResolvedAgentTool(
         id=value.id,
         name=value.name,
         description=value.description,
-        parameters_schema=from_wire_struct(value.parameters_schema) if value.HasField("parameters_schema") else None,
-        ref=from_wire_agent_tool_ref(value.ref) if value.HasField("ref") else None,
+        parameters_schema=_from_wire_struct(value.parameters_schema) if value.HasField("parameters_schema") else None,
+        ref=_from_wire_agent_tool_ref(value.ref) if value.HasField("ref") else None,
     )
 
 
-def to_wire_update_agent_provider_session_request(value: UpdateAgentProviderSessionRequest) -> Any:
-    return _wire.UpdateAgentProviderSessionRequest(
+def _to_wire_update_agent_provider_session_request(value: UpdateAgentProviderSessionRequest) -> Any:
+    return _agent_pb2.UpdateAgentProviderSessionRequest(
         session_id=value.session_id,
         client_ref=value.client_ref,
-        state=value.state,
-        metadata=None if value.metadata is None else to_wire_struct(value.metadata),
-        subject=None if value.subject is None else to_wire_subject_context(value.subject),
-        context=None if value.context is None else to_wire_request_context(value.context),
+        state=_to_wire_enum(value.state),
+        metadata=None if value.metadata is None else _to_wire_struct(value.metadata),
+        subject=None if value.subject is None else _to_wire_subject_context(value.subject),
+        context=None if value.context is None else _to_wire_request_context(value.context),
         provider_name=value.provider_name,
     )
 
 
-def from_wire_update_agent_provider_session_request(value: Any) -> UpdateAgentProviderSessionRequest:
+def _from_wire_update_agent_provider_session_request(value: Any) -> UpdateAgentProviderSessionRequest:
     return UpdateAgentProviderSessionRequest(
         session_id=value.session_id,
         client_ref=value.client_ref,
         state=value.state,
-        metadata=from_wire_struct(value.metadata) if value.HasField("metadata") else None,
-        subject=from_wire_subject_context(value.subject) if value.HasField("subject") else None,
-        context=from_wire_request_context(value.context) if value.HasField("context") else None,
+        metadata=_from_wire_struct(value.metadata) if value.HasField("metadata") else None,
+        subject=_from_wire_subject_context(value.subject) if value.HasField("subject") else None,
+        context=_from_wire_request_context(value.context) if value.HasField("context") else None,
         provider_name=value.provider_name,
     )
 
@@ -1471,56 +1468,56 @@ class Agent:
     """Client for the gestalt.provider.v1.Agent service."""
 
     def __init__(self, channel: grpc.Channel) -> None:
-        self._stub = _wire_grpc.AgentStub(channel)
+        self._stub = _agent_pb2_grpc.AgentStub(channel)
 
     def create_session(self, request: CreateAgentProviderSessionRequest) -> AgentSession:
-        response = call_unary(lambda: self._stub.CreateSession(to_wire_create_agent_provider_session_request(request)))
-        return from_wire_agent_session(response)
+        response = _call_unary(lambda: self._stub.CreateSession(_to_wire_create_agent_provider_session_request(request)))
+        return _from_wire_agent_session(response)
 
     def get_session(self, request: GetAgentProviderSessionRequest) -> AgentSession:
-        response = call_unary(lambda: self._stub.GetSession(to_wire_get_agent_provider_session_request(request)))
-        return from_wire_agent_session(response)
+        response = _call_unary(lambda: self._stub.GetSession(_to_wire_get_agent_provider_session_request(request)))
+        return _from_wire_agent_session(response)
 
     def list_sessions(self, request: ListAgentProviderSessionsRequest) -> ListAgentProviderSessionsResponse:
-        response = call_unary(lambda: self._stub.ListSessions(to_wire_list_agent_provider_sessions_request(request)))
-        return from_wire_list_agent_provider_sessions_response(response)
+        response = _call_unary(lambda: self._stub.ListSessions(_to_wire_list_agent_provider_sessions_request(request)))
+        return _from_wire_list_agent_provider_sessions_response(response)
 
     def update_session(self, request: UpdateAgentProviderSessionRequest) -> AgentSession:
-        response = call_unary(lambda: self._stub.UpdateSession(to_wire_update_agent_provider_session_request(request)))
-        return from_wire_agent_session(response)
+        response = _call_unary(lambda: self._stub.UpdateSession(_to_wire_update_agent_provider_session_request(request)))
+        return _from_wire_agent_session(response)
 
     def create_turn(self, request: CreateAgentProviderTurnRequest) -> AgentTurn:
-        response = call_unary(lambda: self._stub.CreateTurn(to_wire_create_agent_provider_turn_request(request)))
-        return from_wire_agent_turn(response)
+        response = _call_unary(lambda: self._stub.CreateTurn(_to_wire_create_agent_provider_turn_request(request)))
+        return _from_wire_agent_turn(response)
 
     def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn:
-        response = call_unary(lambda: self._stub.GetTurn(to_wire_get_agent_provider_turn_request(request)))
-        return from_wire_agent_turn(response)
+        response = _call_unary(lambda: self._stub.GetTurn(_to_wire_get_agent_provider_turn_request(request)))
+        return _from_wire_agent_turn(response)
 
     def list_turns(self, request: ListAgentProviderTurnsRequest) -> ListAgentProviderTurnsResponse:
-        response = call_unary(lambda: self._stub.ListTurns(to_wire_list_agent_provider_turns_request(request)))
-        return from_wire_list_agent_provider_turns_response(response)
+        response = _call_unary(lambda: self._stub.ListTurns(_to_wire_list_agent_provider_turns_request(request)))
+        return _from_wire_list_agent_provider_turns_response(response)
 
     def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn:
-        response = call_unary(lambda: self._stub.CancelTurn(to_wire_cancel_agent_provider_turn_request(request)))
-        return from_wire_agent_turn(response)
+        response = _call_unary(lambda: self._stub.CancelTurn(_to_wire_cancel_agent_provider_turn_request(request)))
+        return _from_wire_agent_turn(response)
 
     def list_turn_events(self, request: ListAgentProviderTurnEventsRequest) -> ListAgentProviderTurnEventsResponse:
-        response = call_unary(lambda: self._stub.ListTurnEvents(to_wire_list_agent_provider_turn_events_request(request)))
-        return from_wire_list_agent_provider_turn_events_response(response)
+        response = _call_unary(lambda: self._stub.ListTurnEvents(_to_wire_list_agent_provider_turn_events_request(request)))
+        return _from_wire_list_agent_provider_turn_events_response(response)
 
     def get_interaction(self, request: GetAgentProviderInteractionRequest) -> AgentInteraction:
-        response = call_unary(lambda: self._stub.GetInteraction(to_wire_get_agent_provider_interaction_request(request)))
-        return from_wire_agent_interaction(response)
+        response = _call_unary(lambda: self._stub.GetInteraction(_to_wire_get_agent_provider_interaction_request(request)))
+        return _from_wire_agent_interaction(response)
 
     def list_interactions(self, request: ListAgentProviderInteractionsRequest) -> ListAgentProviderInteractionsResponse:
-        response = call_unary(lambda: self._stub.ListInteractions(to_wire_list_agent_provider_interactions_request(request)))
-        return from_wire_list_agent_provider_interactions_response(response)
+        response = _call_unary(lambda: self._stub.ListInteractions(_to_wire_list_agent_provider_interactions_request(request)))
+        return _from_wire_list_agent_provider_interactions_response(response)
 
     def resolve_interaction(self, request: ResolveAgentProviderInteractionRequest) -> AgentInteraction:
-        response = call_unary(lambda: self._stub.ResolveInteraction(to_wire_resolve_agent_provider_interaction_request(request)))
-        return from_wire_agent_interaction(response)
+        response = _call_unary(lambda: self._stub.ResolveInteraction(_to_wire_resolve_agent_provider_interaction_request(request)))
+        return _from_wire_agent_interaction(response)
 
     def get_capabilities(self, request: GetAgentProviderCapabilitiesRequest) -> AgentProviderCapabilities:
-        response = call_unary(lambda: self._stub.GetCapabilities(to_wire_get_agent_provider_capabilities_request(request)))
-        return from_wire_agent_provider_capabilities(response)
+        response = _call_unary(lambda: self._stub.GetCapabilities(_to_wire_get_agent_provider_capabilities_request(request)))
+        return _from_wire_agent_provider_capabilities(response)

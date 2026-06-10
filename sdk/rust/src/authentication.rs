@@ -69,34 +69,17 @@ pub struct ValidateExternalTokenRequest {
     pub token: String,
 }
 
-/// Converts a native `AuthSessionSettings` to its wire message.
-pub fn to_wire_auth_session_settings(value: AuthSessionSettings) -> v1::AuthSessionSettings {
-    v1::AuthSessionSettings {
-        session_ttl_seconds: value.session_ttl_seconds,
-    }
-}
-
 /// Converts a wire `AuthSessionSettings` to its native message.
-pub fn from_wire_auth_session_settings(value: v1::AuthSessionSettings) -> AuthSessionSettings {
+pub(crate) fn from_wire_auth_session_settings(
+    value: v1::AuthSessionSettings,
+) -> AuthSessionSettings {
     AuthSessionSettings {
         session_ttl_seconds: value.session_ttl_seconds,
     }
 }
 
-/// Converts a native `AuthenticatedUser` to its wire message.
-pub fn to_wire_authenticated_user(value: AuthenticatedUser) -> v1::AuthenticatedUser {
-    v1::AuthenticatedUser {
-        subject: value.subject,
-        email: value.email,
-        email_verified: value.email_verified,
-        display_name: value.display_name,
-        avatar_url: value.avatar_url,
-        claims: value.claims,
-    }
-}
-
 /// Converts a wire `AuthenticatedUser` to its native message.
-pub fn from_wire_authenticated_user(value: v1::AuthenticatedUser) -> AuthenticatedUser {
+pub(crate) fn from_wire_authenticated_user(value: v1::AuthenticatedUser) -> AuthenticatedUser {
     AuthenticatedUser {
         subject: value.subject,
         email: value.email,
@@ -108,7 +91,7 @@ pub fn from_wire_authenticated_user(value: v1::AuthenticatedUser) -> Authenticat
 }
 
 /// Converts a native `BeginLoginRequest` to its wire message.
-pub fn to_wire_begin_login_request(value: BeginLoginRequest) -> v1::BeginLoginRequest {
+pub(crate) fn to_wire_begin_login_request(value: BeginLoginRequest) -> v1::BeginLoginRequest {
     v1::BeginLoginRequest {
         callback_url: value.callback_url,
         host_state: value.host_state,
@@ -117,26 +100,8 @@ pub fn to_wire_begin_login_request(value: BeginLoginRequest) -> v1::BeginLoginRe
     }
 }
 
-/// Converts a wire `BeginLoginRequest` to its native message.
-pub fn from_wire_begin_login_request(value: v1::BeginLoginRequest) -> BeginLoginRequest {
-    BeginLoginRequest {
-        callback_url: value.callback_url,
-        host_state: value.host_state,
-        scopes: value.scopes,
-        options: value.options,
-    }
-}
-
-/// Converts a native `BeginLoginResponse` to its wire message.
-pub fn to_wire_begin_login_response(value: BeginLoginResponse) -> v1::BeginLoginResponse {
-    v1::BeginLoginResponse {
-        authorization_url: value.authorization_url,
-        provider_state: value.provider_state,
-    }
-}
-
 /// Converts a wire `BeginLoginResponse` to its native message.
-pub fn from_wire_begin_login_response(value: v1::BeginLoginResponse) -> BeginLoginResponse {
+pub(crate) fn from_wire_begin_login_response(value: v1::BeginLoginResponse) -> BeginLoginResponse {
     BeginLoginResponse {
         authorization_url: value.authorization_url,
         provider_state: value.provider_state,
@@ -144,7 +109,9 @@ pub fn from_wire_begin_login_response(value: v1::BeginLoginResponse) -> BeginLog
 }
 
 /// Converts a native `CompleteLoginRequest` to its wire message.
-pub fn to_wire_complete_login_request(value: CompleteLoginRequest) -> v1::CompleteLoginRequest {
+pub(crate) fn to_wire_complete_login_request(
+    value: CompleteLoginRequest,
+) -> v1::CompleteLoginRequest {
     v1::CompleteLoginRequest {
         query: value.query,
         provider_state: value.provider_state,
@@ -152,27 +119,11 @@ pub fn to_wire_complete_login_request(value: CompleteLoginRequest) -> v1::Comple
     }
 }
 
-/// Converts a wire `CompleteLoginRequest` to its native message.
-pub fn from_wire_complete_login_request(value: v1::CompleteLoginRequest) -> CompleteLoginRequest {
-    CompleteLoginRequest {
-        query: value.query,
-        provider_state: value.provider_state,
-        callback_url: value.callback_url,
-    }
-}
-
 /// Converts a native `ValidateExternalTokenRequest` to its wire message.
-pub fn to_wire_validate_external_token_request(
+pub(crate) fn to_wire_validate_external_token_request(
     value: ValidateExternalTokenRequest,
 ) -> v1::ValidateExternalTokenRequest {
     v1::ValidateExternalTokenRequest { token: value.token }
-}
-
-/// Converts a wire `ValidateExternalTokenRequest` to its native message.
-pub fn from_wire_validate_external_token_request(
-    value: v1::ValidateExternalTokenRequest,
-) -> ValidateExternalTokenRequest {
-    ValidateExternalTokenRequest { token: value.token }
 }
 
 /// Client for the `gestalt.provider.v1.Authentication` service.
