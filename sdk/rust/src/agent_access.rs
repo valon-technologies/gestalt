@@ -10,7 +10,7 @@ use tower::service_fn;
 
 use crate::generated::v1::{self as pb, agent_client::AgentClient as ProtoAgentProviderClient};
 use crate::{
-    agent::{
+    agent_provider::{
         AgentExecutionStatus, AgentInteraction, AgentMessage, AgentOutput, AgentSession,
         AgentSessionState, AgentToolConfig, AgentTurn, AgentTurnEvent, AgentWorkspace,
         agent_output_to_proto, event_from_proto, interaction_from_proto, new_agent_messages,

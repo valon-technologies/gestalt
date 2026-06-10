@@ -286,7 +286,7 @@ async fn serves_provider_requests_over_unix_socket() {
     let serve_provider = Arc::clone(&provider);
     let serve_router = router.clone();
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_provider(serve_provider, serve_router)
+        gestalt::runtime_impl::serve_provider(serve_provider, serve_router)
             .await
             .expect("serve provider");
     });
@@ -619,7 +619,7 @@ async fn default_http_subject_resolver_returns_empty_response() {
     let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_provider(Arc::new(PlainProvider), Router::new())
+        gestalt::runtime_impl::serve_provider(Arc::new(PlainProvider), Router::new())
             .await
             .expect("serve provider");
     });

@@ -754,3 +754,122 @@ These clients connect to host services made available to a provider process by
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
+
+.. _python-generated-provider-clients:
+
+Generated provider clients
+--------------------------
+
+Each provider service ships a typed module under :mod:`gestalt` that pairs
+native dataclasses for request and response payloads with one gRPC client
+class per service. Docstrings come from the service definitions, and
+:mod:`gestalt.rpc_support` carries the shared error model and the native
+``JsonValue`` representation used by structured payload fields.
+
+Shared support: gestalt.rpc_support
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.rpc_support
+   :members:
+   :undoc-members:
+
+gestalt.agent
+~~~~~~~~~~~~~
+
+.. automodule:: gestalt.agent
+   :members:
+   :undoc-members:
+
+gestalt.app
+~~~~~~~~~~~
+
+.. ProviderMetadata is excluded: its protocol-version field names would trip
+   the published-docs leak check that guards transport internals out of this
+   reference.
+
+.. automodule:: gestalt.app
+   :members:
+   :undoc-members:
+   :exclude-members: ProviderMetadata
+
+gestalt.authentication
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.authentication
+   :members:
+   :undoc-members:
+
+gestalt.authorization
+~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.authorization
+   :members:
+   :undoc-members:
+
+gestalt.cache
+~~~~~~~~~~~~~
+
+.. automodule:: gestalt.cache
+   :members:
+   :undoc-members:
+
+gestalt.indexeddb
+~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.indexeddb
+   :members:
+   :undoc-members:
+
+gestalt.external_credential
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.external_credential
+   :members:
+   :undoc-members:
+
+gestalt.runtime
+~~~~~~~~~~~~~~~
+
+.. ProviderIdentity is excluded: its protocol-version field names would trip
+   the published-docs leak check that guards transport internals out of this
+   reference.
+
+.. automodule:: gestalt.runtime
+   :members:
+   :undoc-members:
+   :exclude-members: ProviderIdentity
+
+gestalt.runtime_provider
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.runtime_provider
+   :members:
+   :undoc-members:
+
+gestalt.s3
+~~~~~~~~~~
+
+.. automodule:: gestalt.s3
+   :members:
+   :undoc-members:
+
+gestalt.secrets
+~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.secrets
+   :members:
+   :undoc-members:
+
+gestalt.test
+~~~~~~~~~~~~
+
+.. automodule:: gestalt.test
+   :members:
+   :undoc-members:
+
+gestalt.workflow
+~~~~~~~~~~~~~~~~
+
+.. automodule:: gestalt.workflow
+   :members:
+   :undoc-members:

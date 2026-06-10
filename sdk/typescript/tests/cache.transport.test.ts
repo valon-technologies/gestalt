@@ -6,7 +6,7 @@ import { spawn, type Subprocess } from "bun";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { Cache } from "../src/cache.ts";
+import { Cache } from "../src/providers/cache.ts";
 import {
   ENV_HOST_SERVICE_SOCKET,
   ENV_HOST_SERVICE_TOKEN,

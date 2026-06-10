@@ -8,7 +8,9 @@ import (
 
 	"github.com/bufbuild/protocompile"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
+	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/diag"
 	"github.com/valon-technologies/gestalt/sdk/tools/sdkgen/internal/model"
 )
 
@@ -27,15 +29,30 @@ func compileFixture(t *testing.T, filename string) protoreflect.FileDescriptor {
 	return files[0]
 }
 
-func fixtureServices(t *testing.T, filename string) []protoreflect.ServiceDescriptor {
+func fixtureServices(t *testing.T, filename string) (*protoregistry.Files, []protoreflect.ServiceDescriptor) {
 	t.Helper()
 	fd := compileFixture(t, filename)
+	registry := &protoregistry.Files{}
+	var register func(protoreflect.FileDescriptor)
+	register = func(f protoreflect.FileDescriptor) {
+		if _, err := registry.FindFileByPath(f.Path()); err == nil {
+			return
+		}
+		imports := f.Imports()
+		for i := 0; i < imports.Len(); i++ {
+			register(imports.Get(i).FileDescriptor)
+		}
+		if err := registry.RegisterFile(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	register(fd)
 	var out []protoreflect.ServiceDescriptor
 	services := fd.Services()
 	for i := 0; i < services.Len(); i++ {
 		out = append(out, services.Get(i))
 	}
-	return out
+	return registry, out
 }
 
 func findMessage(t *testing.T, schema *model.Schema, fullName string) *model.Message {
@@ -62,7 +79,7 @@ func findField(t *testing.T, m *model.Message, name string) *model.Field {
 
 func TestBuildClassifiesAllowedConstructs(t *testing.T) {
 	t.Parallel()
-	schema, diags := Build(fixtureServices(t, "widget.proto"), "")
+	schema, diags := build(t, "widget.proto")
 	if !diags.Empty() {
 		t.Fatalf("unexpected diagnostics:\n%v", diags.Err())
 	}
@@ -150,7 +167,7 @@ func TestBuildClassifiesAllowedConstructs(t *testing.T) {
 
 func TestBuildClassifiesMethods(t *testing.T) {
 	t.Parallel()
-	schema, diags := Build(fixtureServices(t, "widget.proto"), "")
+	schema, diags := build(t, "widget.proto")
 	if !diags.Empty() {
 		t.Fatalf("unexpected diagnostics:\n%v", diags.Err())
 	}
@@ -205,7 +222,7 @@ func TestBuildRejectsUnsupportedConstructs(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.file, func(t *testing.T) {
 			t.Parallel()
-			_, diags := Build(fixtureServices(t, tc.file), "")
+			_, diags := build(t, tc.file)
 			all := diags.All()
 			if len(all) != 1 {
 				t.Fatalf("diagnostics = %d, want 1:\n%v", len(all), diags.Err())
@@ -226,13 +243,83 @@ func TestBuildRejectsUnsupportedConstructs(t *testing.T) {
 
 func TestBuildIsDeterministic(t *testing.T) {
 	t.Parallel()
-	services := fixtureServices(t, "widget.proto")
-	first, diags := Build(services, "")
+	registry, services := fixtureServices(t, "widget.proto")
+	first, diags := Build(registry, services, "")
 	if !diags.Empty() {
 		t.Fatalf("unexpected diagnostics:\n%v", diags.Err())
 	}
-	second, _ := Build(services, "")
+	second, _ := Build(registry, services, "")
 	if !reflect.DeepEqual(first, second) {
 		t.Error("two builds of the same descriptor differ")
+	}
+}
+
+// build compiles a fixture and runs Build over its services.
+func build(t *testing.T, filename string) (*model.Schema, *diag.List) {
+	t.Helper()
+	registry, services := fixtureServices(t, filename)
+	return Build(registry, services, "")
+}
+
+func TestBuildParsesAnnotations(t *testing.T) {
+	t.Parallel()
+	schema, diags := build(t, "annotated.proto")
+	if !diags.Empty() {
+		t.Fatalf("unexpected diagnostics:\n%v", diags.Err())
+	}
+	svc := schema.Services[0]
+	if svc.HostBinding != "fetch" {
+		t.Errorf("host binding = %q, want fetch", svc.HostBinding)
+	}
+	methods := map[string]*model.Method{}
+	for _, m := range svc.Methods {
+		methods[m.Name] = m
+	}
+	if got := methods["Fetch"].Signature; !reflect.DeepEqual(got, []string{"id", "limit"}) {
+		t.Errorf("Fetch signature = %v, want [id limit]", got)
+	}
+	if got := methods["Read"].Framing; !reflect.DeepEqual(got, &model.Framing{Oneof: "body", HeaderField: "header", ChunkField: "data"}) {
+		t.Errorf("Read framing = %+v", got)
+	}
+	if got := findMessage(t, schema, "sdkgen.test.v1.FetchResponse").OptionalResult; !reflect.DeepEqual(got, &model.OptionalResult{Guard: "found", Value: "payload"}) {
+		t.Errorf("FetchResponse optional_result = %+v", got)
+	}
+	if got := findMessage(t, schema, "sdkgen.test.v1.EntryList").Keyed; !reflect.DeepEqual(got, &model.Keyed{Entries: "items", Key: "name", Present: "ok", Value: "data"}) {
+		t.Errorf("EntryList keyed = %+v", got)
+	}
+	if got := findMessage(t, schema, "sdkgen.test.v1.CountResponse").Unwrap; got != "count" {
+		t.Errorf("CountResponse unwrap = %q, want count", got)
+	}
+}
+
+func TestBuildRejectsBadAnnotations(t *testing.T) {
+	t.Parallel()
+	_, diags := build(t, "rejected_annotations.proto")
+	all := diags.All()
+	if len(all) != 2 {
+		t.Fatalf("diagnostics = %d, want 2:\n%v", len(all), diags.Err())
+	}
+	wants := []string{"optional_result guard", "signature names unknown request field"}
+	for i, want := range wants {
+		if !strings.Contains(all[i].Detail, want) {
+			t.Errorf("diagnostic %d = %q, want substring %q", i, all[i].Detail, want)
+		}
+	}
+}
+
+func TestBuildCapturesProtoComments(t *testing.T) {
+	t.Parallel()
+	schema, diags := build(t, "widget.proto")
+	if !diags.Empty() {
+		t.Fatalf("unexpected diagnostics:\n%v", diags.Err())
+	}
+	if got := findMessage(t, schema, "sdkgen.test.v1.Gadget").Doc; got != "Gadget is a documented fixture message." {
+		t.Errorf("Gadget doc = %q", got)
+	}
+	if got := findField(t, findMessage(t, schema, "sdkgen.test.v1.Gadget"), "label").Doc; got != "label names the gadget." {
+		t.Errorf("label doc = %q", got)
+	}
+	if got := schema.Services[0].Doc; got != "WidgetService exercises every allowed construct." {
+		t.Errorf("service doc = %q", got)
 	}
 }

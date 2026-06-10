@@ -93,7 +93,7 @@ import {
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,
-} from "../src/runtime.ts";
+} from "../src/providers/runtime.ts";
 import {
   httpSubjectError,
   PresignMethod,
@@ -106,7 +106,7 @@ import {
   defineRuntimeProvider,
   defineS3Provider,
 } from "../src/index.ts";
-import { createS3Service } from "../src/s3.ts";
+import { createS3Service } from "../src/providers/s3.ts";
 import {
   captureChildStderr,
   createUnixGrpcClient,
@@ -403,7 +403,7 @@ test("loadProviderFromTarget rejects structural app objects without the full run
 });
 
 test("runtime serves a secrets provider over unix gRPC", async () => {
-  const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
+  const runtimeEntry = join(import.meta.dir, "..", "src", "providers", "runtime.ts");
   const root = fixturePath("secrets-provider");
   const tempDir = makeTempDir("gestalt-typescript-runtime-");
   const socketPath = join(tempDir, "provider.sock");

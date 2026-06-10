@@ -4,7 +4,7 @@ use std::future::Future;
 
 use tonic::codegen::async_trait;
 
-use crate::agent::AgentToolRef;
+use crate::agent_provider::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 use crate::proto::v1;

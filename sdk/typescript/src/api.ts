@@ -1,7 +1,7 @@
 /**
  * Common request and response types shared across authored Gestalt providers.
  */
-import type { AgentToolRef } from "./agent.ts";
+import type { AgentToolRef } from "./providers/agent.ts";
 import { App } from "./app-access.ts";
 import type { RequestContext as ProtoRequestContext } from "./internal/gen/v1/app_pb.ts";
 

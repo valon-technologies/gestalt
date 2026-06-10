@@ -8,7 +8,9 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
+// Gadget is a documented fixture message.
 message Gadget {
+  // label names the gadget.
   string label = 1;
 }
 
@@ -57,6 +59,7 @@ message Chunk {
   bytes data = 1;
 }
 
+// WidgetService exercises every allowed construct.
 service WidgetService {
   rpc GetWidget(WidgetRequest) returns (WidgetResponse);
   rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);

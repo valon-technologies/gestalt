@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use gestalt::ENV_HOST_SERVICE_SOCKET;
-use gestalt::s3::{
+use gestalt::s3_provider::{
     ByteRange, ListOptions, PresignMethod, PresignOptions, ReadOptions, S3, S3Error, WriteOptions,
 };
 
@@ -421,11 +421,11 @@ async fn list_copy_delete_and_exists() {
 
     let copied = s3
         .copy_object(
-            gestalt::s3::ObjectRef {
+            gestalt::s3_provider::ObjectRef {
                 key: "docs/a.txt".to_string(),
                 version_id: String::new(),
             },
-            gestalt::s3::ObjectRef {
+            gestalt::s3_provider::ObjectRef {
                 key: "archive/a.txt".to_string(),
                 version_id: String::new(),
             },

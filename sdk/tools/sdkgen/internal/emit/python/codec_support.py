@@ -1,0 +1,226 @@
+"""Internal runtime for the generated wire codec modules: stream/unary call
+helpers and converters for the well-known types. Nothing in the _codec package
+is public SDK surface; the error model it raises lives in rpc_support."""
+
+from __future__ import annotations
+
+import datetime
+from typing import Any, Callable, Iterable, Iterator, TypeVar
+
+import grpc
+from google.protobuf import duration_pb2 as _duration_pb2
+from google.protobuf import struct_pb2 as _struct_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
+from google.rpc import status_pb2 as _status_pb2
+
+from ..rpc_support import GestaltError, GestaltErrorCode, JsonValue, RpcStatus
+
+# The protobuf wheel ships no stubs for these modules, so their members are
+# invisible to the type checker and the aliases stay Any.
+_duration: Any = _duration_pb2
+_status: Any = _status_pb2
+_struct: Any = _struct_pb2
+_timestamp: Any = _timestamp_pb2
+
+_UTC = datetime.timezone.utc
+
+_Native = TypeVar("_Native")
+_Result = TypeVar("_Result")
+_Wire = TypeVar("_Wire")
+
+
+def to_gestalt_error(error: BaseException) -> GestaltError:
+    """Convert any raised error to the canonical GestaltError."""
+
+    if isinstance(error, GestaltError):
+        return error
+    if isinstance(error, grpc.Call):
+        code = error.code()
+        numeric = code.value[0] if code is not None else GestaltErrorCode.UNKNOWN
+        return GestaltError(int(numeric), str(error.details() or ""))
+    return GestaltError(GestaltErrorCode.UNKNOWN, str(error))
+
+
+def call_unary(call: Callable[[], _Result]) -> _Result:
+    """Invoke one RPC, converting transport errors to GestaltError."""
+
+    try:
+        return call()
+    except grpc.RpcError as error:
+        raise to_gestalt_error(error) from error
+
+
+def map_recv(
+    stream: Iterable[_Wire], convert: Callable[[_Wire], _Native]
+) -> Iterator[_Native]:
+    """Yield converted response frames, converting transport errors to
+    GestaltError."""
+
+    try:
+        for frame in stream:
+            yield convert(frame)
+    except grpc.RpcError as error:
+        raise to_gestalt_error(error) from error
+
+
+def map_send(
+    stream: Iterable[_Native], convert: Callable[[_Native], _Wire]
+) -> Iterator[_Wire]:
+    """Yield converted request frames."""
+
+    for frame in stream:
+        yield convert(frame)
+
+
+def read_header_frame(
+    frames: Iterator[_Wire], extract: Callable[[_Wire], _Native | None]
+) -> _Native:
+    """Consume the first frame of a framed read and return its header, raising
+    GestaltError when the stream is empty or does not begin with the header
+    frame."""
+
+    try:
+        frame = next(frames, None)
+    except grpc.RpcError as error:
+        raise to_gestalt_error(error) from error
+    if frame is not None:
+        header = extract(frame)
+        if header is not None:
+            return header
+    raise GestaltError(
+        GestaltErrorCode.INTERNAL,
+        "stream did not begin with the expected header frame",
+    )
+
+
+def chunk_frames(
+    frames: Iterator[_Wire], extract: Callable[[_Wire], _Native | None]
+) -> Iterator[_Native]:
+    """Yield the payload of every remaining frame of a framed read, raising
+    GestaltError on frames that do not carry the payload variant."""
+
+    try:
+        for frame in frames:
+            chunk = extract(frame)
+            if chunk is None:
+                raise GestaltError(
+                    GestaltErrorCode.INTERNAL, "unexpected frame in payload stream"
+                )
+            yield chunk
+    except grpc.RpcError as error:
+        raise to_gestalt_error(error) from error
+
+
+def framed_send(
+    header: _Wire, chunks: Iterable[_Native], wrap: Callable[[_Native], _Wire]
+) -> Iterator[_Wire]:
+    """Yield the header frame, then every payload chunk wrapped as a frame."""
+
+    yield header
+    for chunk in chunks:
+        yield wrap(chunk)
+
+
+def to_wire_enum(value: int) -> Any:
+    """Pass an open-enum int to the wire. The wire stubs declare closed enum
+    types on constructor parameters, but proto3 enums accept any int."""
+
+    return value
+
+
+def to_wire_timestamp(value: datetime.datetime) -> Any:
+    """Convert a datetime (naive values are assumed UTC) to a wire Timestamp."""
+
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=_UTC)
+    else:
+        value = value.astimezone(_UTC)
+    out = _timestamp.Timestamp()
+    out.FromDatetime(value)
+    return out
+
+
+def from_wire_timestamp(value: Any) -> datetime.datetime:
+    """Convert a wire Timestamp to a UTC datetime."""
+
+    return value.ToDatetime(tzinfo=_UTC)
+
+
+def to_wire_duration(value: datetime.timedelta) -> Any:
+    """Convert a timedelta to a wire Duration."""
+
+    out = _duration.Duration()
+    out.FromTimedelta(value)
+    return out
+
+
+def from_wire_duration(value: Any) -> datetime.timedelta:
+    """Convert a wire Duration to a timedelta."""
+
+    return value.ToTimedelta()
+
+
+def to_wire_struct(value: dict[str, JsonValue]) -> Any:
+    """Convert a JSON object to a wire Struct."""
+
+    out = _struct.Struct()
+    for key, item in value.items():
+        out.fields[key].CopyFrom(to_wire_value(item))
+    return out
+
+
+def from_wire_struct(value: Any) -> dict[str, JsonValue]:
+    """Convert a wire Struct to a JSON object."""
+
+    return {key: from_wire_value(item) for key, item in value.fields.items()}
+
+
+def to_wire_value(value: JsonValue) -> Any:
+    """Convert a JSON value to a wire Value."""
+
+    out = _struct.Value()
+    if value is None:
+        out.null_value = _struct.NULL_VALUE
+    elif isinstance(value, bool):
+        out.bool_value = value
+    elif isinstance(value, (int, float)):
+        out.number_value = float(value)
+    elif isinstance(value, str):
+        out.string_value = value
+    elif isinstance(value, list):
+        out.list_value.values.extend(to_wire_value(item) for item in value)
+    else:
+        for key, item in value.items():
+            out.struct_value.fields[key].CopyFrom(to_wire_value(item))
+    return out
+
+
+def from_wire_value(value: Any) -> JsonValue:
+    """Convert a wire Value to a JSON value."""
+
+    case = value.WhichOneof("kind")
+    if case == "null_value":
+        return None
+    if case == "number_value":
+        return float(value.number_value)
+    if case == "string_value":
+        return str(value.string_value)
+    if case == "bool_value":
+        return bool(value.bool_value)
+    if case == "struct_value":
+        return from_wire_struct(value.struct_value)
+    if case == "list_value":
+        return [from_wire_value(item) for item in value.list_value.values]
+    return None
+
+
+def to_wire_status(value: RpcStatus) -> Any:
+    """Convert a native RpcStatus to a wire google.rpc.Status."""
+
+    return _status.Status(code=value.code, message=value.message)
+
+
+def from_wire_status(value: Any) -> RpcStatus:
+    """Convert a wire google.rpc.Status to a native RpcStatus."""
+
+    return RpcStatus(code=value.code, message=value.message)

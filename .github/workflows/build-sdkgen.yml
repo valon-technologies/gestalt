@@ -47,6 +47,9 @@ jobs:
       - name: Install Buf
         run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
 
+      - name: Install ruff
+        run: pip install ruff==0.15.14
+
       - name: Verify buf pin consistency
         run: |
           pin="$(sed -n 's/^const BufVersion = "\(.*\)"$/\1/p' internal/toolchain/versions.go)"

@@ -1,0 +1,39 @@
+// Test mirror of sdk/proto/v1/annotations.proto: only the extension full
+// names and shapes matter to the parser.
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/descriptor.proto";
+
+message OptionalResult {
+  string guard = 1;
+  string value = 2;
+}
+
+message Keyed {
+  string entries = 1;
+  string key = 2;
+  string present = 3;
+  string value = 4;
+}
+
+message Framing {
+  string header = 1;
+  string chunk = 2;
+}
+
+extend google.protobuf.MethodOptions {
+  repeated string signature = 50001;
+  Framing framing = 50002;
+}
+
+extend google.protobuf.MessageOptions {
+  OptionalResult optional_result = 50001;
+  Keyed keyed = 50002;
+  string unwrap = 50003;
+}
+
+extend google.protobuf.ServiceOptions {
+  string host_binding = 50001;
+}

@@ -3,7 +3,21 @@
   "entryPoints": [
     "docs/entrypoints/@valon-technologies/gestalt",
     "docs/entrypoints/schema",
-    "docs/entrypoints/telemetry"
+    "docs/entrypoints/telemetry",
+    "docs/entrypoints/services/agent",
+    "docs/entrypoints/services/app",
+    "docs/entrypoints/services/authentication",
+    "docs/entrypoints/services/authorization",
+    "docs/entrypoints/services/cache",
+    "docs/entrypoints/services/indexeddb",
+    "docs/entrypoints/services/external_credential",
+    "docs/entrypoints/services/rpc_support",
+    "docs/entrypoints/services/runtime",
+    "docs/entrypoints/services/runtime_provider",
+    "docs/entrypoints/services/s3",
+    "docs/entrypoints/services/secrets",
+    "docs/entrypoints/services/test",
+    "docs/entrypoints/services/workflow"
   ],
   "displayBasePath": "docs/entrypoints",
   "tsconfig": "tsconfig.json",
