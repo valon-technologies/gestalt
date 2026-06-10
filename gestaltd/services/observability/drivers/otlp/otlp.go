@@ -199,7 +199,13 @@ func buildProviderTelemetryEnv(cfg yamlConfig) map[string]string {
 		"OTEL_EXPORTER_OTLP_PROTOCOL": otelEnvProtocol(cfg.Protocol),
 	}
 	if cfg.Endpoint != "" {
-		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = cfg.Endpoint
+		// OTEL_EXPORTER_OTLP_ENDPOINT requires a URL; the host:port form used
+		// by WithEndpoint parses with an empty host in the SDK env config.
+		scheme := "https"
+		if cfg.Insecure {
+			scheme = "http"
+		}
+		env["OTEL_EXPORTER_OTLP_ENDPOINT"] = scheme + "://" + cfg.Endpoint
 	}
 	if cfg.Insecure {
 		env["OTEL_EXPORTER_OTLP_INSECURE"] = "true"
