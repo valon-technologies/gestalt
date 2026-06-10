@@ -928,10 +928,8 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if len(turnRequests) != 1 {
 		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
 	}
-	if got := turnRequests[0].GetTools(); len(got) != 1 {
-		t.Fatalf("provider turn tools = %#v, want one resolved catalog tool", got)
-	} else if ref := got[0].GetRef(); ref.GetApp() != "docs" || ref.GetOperation() != "search" {
-		t.Fatalf("provider turn tool ref = %#v, want docs.search", ref)
+	if got := turnRequests[0].GetTools(); len(got) != 0 {
+		t.Fatalf("provider turn tools = %#v, want none for catalog sessions", got)
 	}
 
 	eventsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/agent/turns/"+turnID+"/events?provider=managed&after=0&limit=10", nil)

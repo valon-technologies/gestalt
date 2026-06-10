@@ -329,23 +329,6 @@ func bootstrapAgentMessagesFromProto(src []*proto.AgentMessage) []coreagent.Mess
 	return out
 }
 
-func bootstrapAgentToolsFromProto(src []*proto.ResolvedAgentTool) []coreagent.Tool {
-	out := make([]coreagent.Tool, 0, len(src))
-	for _, tool := range src {
-		if tool == nil {
-			continue
-		}
-		out = append(out, coreagent.Tool{
-			ID:               tool.GetId(),
-			Name:             tool.GetName(),
-			Description:      tool.GetDescription(),
-			ParametersSchema: bootstrapAgentProtoStructToMap(tool.GetParametersSchema()),
-			Target:           bootstrapAgentToolTargetFromProto(tool.GetRef()),
-		})
-	}
-	return out
-}
-
 func bootstrapAgentToolsToProto(src []coreagent.Tool) []*proto.ResolvedAgentTool {
 	out := make([]*proto.ResolvedAgentTool, 0, len(src))
 	for _, tool := range src {
@@ -358,21 +341,6 @@ func bootstrapAgentToolsToProto(src []coreagent.Tool) []*proto.ResolvedAgentTool
 		})
 	}
 	return out
-}
-
-func bootstrapAgentToolTargetFromProto(ref *proto.AgentToolRef) coreagent.ToolTarget {
-	if ref == nil {
-		return coreagent.ToolTarget{}
-	}
-	return coreagent.ToolTarget{
-		System:         strings.TrimSpace(ref.GetSystem()),
-		App:            strings.TrimSpace(ref.GetApp()),
-		Operation:      strings.TrimSpace(ref.GetOperation()),
-		Connection:     core.ResolveConnectionAlias(strings.TrimSpace(ref.GetConnection())),
-		Instance:       strings.TrimSpace(ref.GetInstance()),
-		CredentialMode: core.ConnectionMode(strings.TrimSpace(ref.GetCredentialMode())),
-		RunAs:          agentwire.RunAsSubjectFromProto(ref.GetRunAs()),
-	}
 }
 
 func bootstrapAgentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
@@ -731,7 +699,24 @@ type callbackAgentProvider struct {
 	*recordingAgentProvider
 	started                *runtimehost.StartedHostServices
 	toolBodies             []string
+	sessionToolRefs        map[string]*proto.AgentToolRef
 	resolveInteractionHook func(context.Context, *proto.ResolveAgentProviderInteractionRequest) error
+}
+
+func (p *callbackAgentProvider) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+	session, err := p.recordingAgentProvider.CreateSession(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if tools := req.GetTools().GetCatalog().GetTools(); len(tools) > 0 {
+		p.mu.Lock()
+		if p.sessionToolRefs == nil {
+			p.sessionToolRefs = map[string]*proto.AgentToolRef{}
+		}
+		p.sessionToolRefs[session.ID] = gproto.Clone(tools[0].GetRef()).(*proto.AgentToolRef)
+		p.mu.Unlock()
+	}
+	return session, nil
 }
 
 type callbackSessionCatalogIntegration struct {
@@ -816,7 +801,10 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 	}
 
 	outputBody := ""
-	if len(req.GetTools()) > 0 {
+	p.mu.Lock()
+	toolRef := p.sessionToolRefs[req.GetSessionId()]
+	p.mu.Unlock()
+	if toolRef != nil {
 		socketPath := strings.TrimSpace(p.started.SocketBinding().SocketPath)
 		if socketPath == "" {
 			cleanupPendingTurn()
@@ -835,35 +823,31 @@ func (p *callbackAgentProvider) CreateTurn(ctx context.Context, req *proto.Creat
 			return nil, fmt.Errorf("dial app host: %w", err)
 		}
 		defer func() { _ = conn.Close() }()
-		tools := bootstrapAgentToolsFromProto(req.GetTools())
-		if len(tools) > 0 {
-			target := tools[0].Target
-			if strings.TrimSpace(target.App) == "" || strings.TrimSpace(target.Operation) == "" {
-				cleanupPendingTurn()
-				return nil, fmt.Errorf("resolved app tool target is missing")
-			}
-			resp, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
-				App:            strings.TrimSpace(target.App),
-				Operation:      strings.TrimSpace(target.Operation),
-				Connection:     core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
-				Instance:       strings.TrimSpace(target.Instance),
-				CredentialMode: string(core.NormalizeOptionalConnectionMode(target.CredentialMode)),
-				Context:        req.GetContext(),
-				Params: func() *structpb.Struct {
-					value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
-					if err != nil {
-						panic(err)
-					}
-					return value
-				}(),
-				IdempotencyKey: "tool-call-1",
-			})
-			if err != nil {
-				cleanupPendingTurn()
-				return nil, err
-			}
-			outputBody = string(resp.GetBody())
+		if strings.TrimSpace(toolRef.GetApp()) == "" || strings.TrimSpace(toolRef.GetOperation()) == "" {
+			cleanupPendingTurn()
+			return nil, fmt.Errorf("session catalog tool ref is missing")
 		}
+		resp, err := proto.NewAppClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
+			App:            strings.TrimSpace(toolRef.GetApp()),
+			Operation:      strings.TrimSpace(toolRef.GetOperation()),
+			Connection:     core.ResolveConnectionAlias(strings.TrimSpace(toolRef.GetConnection())),
+			Instance:       strings.TrimSpace(toolRef.GetInstance()),
+			CredentialMode: string(core.NormalizeOptionalConnectionMode(core.ConnectionMode(toolRef.GetCredentialMode()))),
+			Context:        req.GetContext(),
+			Params: func() *structpb.Struct {
+				value, err := structpb.NewStruct(map[string]any{"taskId": "task-123"})
+				if err != nil {
+					panic(err)
+				}
+				return value
+			}(),
+			IdempotencyKey: "tool-call-1",
+		})
+		if err != nil {
+			cleanupPendingTurn()
+			return nil, err
+		}
+		outputBody = string(resp.GetBody())
 	}
 
 	p.mu.Lock()
@@ -2298,11 +2282,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 	if createTurnReq.GetCreatedBySubjectId() != p.SubjectID {
 		t.Fatalf("CreateTurn created_by_subject_id = %q, want %q", createTurnReq.GetCreatedBySubjectId(), p.SubjectID)
 	}
-	if len(createTurnReq.GetTools()) != 1 {
-		t.Fatalf("CreateTurn tools = %#v, want one resolved catalog tool", createTurnReq.GetTools())
-	}
-	if ref := createTurnReq.GetTools()[0].GetRef(); ref.GetApp() != "roadmap" || ref.GetOperation() != "sync" {
-		t.Fatalf("CreateTurn tool ref = %#v, want roadmap.sync", ref)
+	if len(createTurnReq.GetTools()) != 0 {
+		t.Fatalf("CreateTurn tools = %#v, want none for catalog sessions", createTurnReq.GetTools())
 	}
 	if createTurnReq.GetContext() == nil {
 		t.Fatal("CreateTurn context is empty")
