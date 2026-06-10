@@ -28,8 +28,8 @@ func TestProviderTelemetryEnvUsesOTLPConfig(t *testing.T) {
 	if got := env["OTEL_SERVICE_NAME"]; got != "gestalt-provider-simple" {
 		t.Fatalf("OTEL_SERVICE_NAME = %q, want provider service name", got)
 	}
-	if got := env["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "otel-collector:4317" {
-		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want endpoint", got)
+	if got := env["OTEL_EXPORTER_OTLP_ENDPOINT"]; got != "http://otel-collector:4317" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_ENDPOINT = %q, want endpoint URL", got)
 	}
 	if got := env["OTEL_EXPORTER_OTLP_PROTOCOL"]; got != "grpc" {
 		t.Fatalf("OTEL_EXPORTER_OTLP_PROTOCOL = %q, want grpc", got)
