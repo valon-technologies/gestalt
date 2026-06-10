@@ -22,19 +22,24 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from . import annotations_pb2 as v1_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\")\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value2e\n\x07Secrets\x12Z\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"4\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value:\t\x9a\xb5\x18\x05value2o\n\x07Secrets\x12\x64\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponse\"\x08\x8a\xb5\x18\x04nameb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.secrets_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_GETSECRETREQUEST']._serialized_start=41
-  _globals['_GETSECRETREQUEST']._serialized_end=79
-  _globals['_GETSECRETRESPONSE']._serialized_start=81
-  _globals['_GETSECRETRESPONSE']._serialized_end=122
-  _globals['_SECRETS']._serialized_start=124
-  _globals['_SECRETS']._serialized_end=225
+  _globals['_GETSECRETRESPONSE']._loaded_options = None
+  _globals['_GETSECRETRESPONSE']._serialized_options = b'\232\265\030\005value'
+  _globals['_SECRETS'].methods_by_name['GetSecret']._loaded_options = None
+  _globals['_SECRETS'].methods_by_name['GetSecret']._serialized_options = b'\212\265\030\004name'
+  _globals['_GETSECRETREQUEST']._serialized_start=63
+  _globals['_GETSECRETREQUEST']._serialized_end=101
+  _globals['_GETSECRETRESPONSE']._serialized_start=103
+  _globals['_GETSECRETRESPONSE']._serialized_end=155
+  _globals['_SECRETS']._serialized_start=157
+  _globals['_SECRETS']._serialized_end=268
 # @@protoc_insertion_point(module_scope)

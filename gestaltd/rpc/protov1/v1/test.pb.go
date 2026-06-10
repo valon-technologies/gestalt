@@ -108,10 +108,10 @@ var File_v1_test_proto protoreflect.FileDescriptor
 
 const file_v1_test_proto_rawDesc = "" +
 	"\n" +
-	"\rv1/test.proto\x12\x13gestalt.provider.v1\"\x13\n" +
-	"\x11HelloWorldRequest\".\n" +
+	"\rv1/test.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"\x13\n" +
+	"\x11HelloWorldRequest\";\n" +
 	"\x12HelloWorldResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2e\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage:\v\x9a\xb5\x18\amessage2e\n" +
 	"\x04Test\x12]\n" +
 	"\n" +
 	"HelloWorld\x12&.gestalt.provider.v1.HelloWorldRequest\x1a'.gestalt.provider.v1.HelloWorldResponseB\xd5\x01\n" +
@@ -149,6 +149,7 @@ func file_v1_test_proto_init() {
 	if File_v1_test_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
