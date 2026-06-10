@@ -1,9 +1,8 @@
 /**
  * Common request and response types shared across authored Gestalt providers.
  */
-import type { AgentToolRef } from "./agent.ts";
-import { App } from "./app-access.ts";
-import type { RequestContext as ProtoRequestContext } from "./internal/gen/v1/app_pb.ts";
+import type { AgentToolRef } from "./providers/agent.ts";
+import { App, type RequestContext } from "./app.ts";
 
 export interface Subject {
   id: string;
@@ -75,7 +74,7 @@ export interface Request {
   workflow: Record<string, unknown>;
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;
-  __requestContext?: ProtoRequestContext | undefined;
+  __requestContext?: RequestContext | undefined;
   app(): Promise<App>;
 }
 
@@ -179,7 +178,7 @@ export function request(
   agentSubject: Partial<Subject> = {},
   toolRefs: readonly AgentToolRef[] = [],
   toolRefsSet = false,
-  requestContext?: ProtoRequestContext,
+  requestContext?: RequestContext,
 ): Request {
   const req: Omit<Request, "app"> = {
     token,
@@ -235,7 +234,7 @@ export function request(
 
 export function attachRequestHelpers<T extends Omit<Request, "app">>(input: T): Request {
   const req = input as unknown as Request;
-  req.app = async () => new App(req);
+  req.app = async () => App.connect({ context: req.__requestContext });
   return req;
 }
 

@@ -208,8 +208,6 @@ workflows:
           app:
             name: workspace_review
             operation: reports.generateNightly
-            input:
-              bucket: workspace-review-reports
       on:
         nightly:
           schedule:
@@ -241,7 +239,7 @@ details. Those come from the deployment bindings.
       "time"
 
       gestalt "github.com/valon-technologies/gestalt/sdk/go"
-      proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+      "github.com/valon-technologies/gestalt/sdk/go/client"
     )
 
     type Provider struct{}
@@ -261,7 +259,7 @@ details. Those come from the deployment bindings.
       input SaveItemInput,
       _ gestalt.Request,
     ) (gestalt.Response[SaveItemOutput], error) {
-      db, err := gestalt.IndexedDB()
+      db, err := gestalt.IndexedDB(ctx)
       if err != nil {
         return gestalt.Response[SaveItemOutput]{}, err
       }
@@ -279,9 +277,7 @@ details. Those come from the deployment bindings.
       return gestalt.OK(SaveItemOutput{OK: true}), nil
     }
 
-    type NightlyReportInput struct {
-      Bucket string `json:"bucket" required:"true"`
-    }
+    type NightlyReportInput struct{}
 
     type NightlyReportOutput struct {
       ReportURL string `json:"reportUrl"`
@@ -292,17 +288,16 @@ details. Those come from the deployment bindings.
       input NightlyReportInput,
       req gestalt.Request,
     ) (gestalt.Response[NightlyReportOutput], error) {
-      db, err := gestalt.IndexedDB()
+      db, err := gestalt.IndexedDB(ctx)
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
       defer db.Close()
 
-      s3, err := gestalt.S3("reports")
+      s3, err := client.ConnectS3(ctx, "reports")
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      defer s3.Close()
 
       body, err := json.Marshal(map[string]string{
         "generatedAt": time.Now().UTC().Format(time.RFC3339),
@@ -310,45 +305,52 @@ details. Those come from the deployment bindings.
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      obj := s3.Object(input.Bucket, "nightly/"+req.IdempotencyKey+".json")
-      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteRequest{
+      ref := &client.S3ObjectRef{Key: "nightly/" + req.IdempotencyKey + ".json"}
+      stream, err := s3.WriteObject(ctx, &client.WriteObjectOpen{
+        Ref:         ref,
         ContentType: "application/json",
-      }); err != nil {
+      })
+      if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      access, err := obj.CreateAccessURL(ctx, &gestalt.PresignRequest{
-        Method:  gestalt.PresignMethodGet,
-        Expires: 15 * time.Minute,
-      })
+      if err := stream.Send(body); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      if _, err := stream.CloseAndRecv(); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      access, err := s3.PresignObject(
+        ctx, client.PresignMethodGet, 900, ref,
+        &client.S3PresignObjectOptions{ContentType: "application/json"},
+      )
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
 
       if err := db.ObjectStore("reports").Put(ctx, gestalt.Record{
         "id":        req.IdempotencyKey,
-        "url":       access.URL,
+        "url":       access.Url,
         "createdAt": time.Now().UTC().Format(time.RFC3339),
       }); err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
 
-      workflows, err := req.Workflow()
+      workflows, err := gestalt.WorkflowFromContext(ctx)
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      _, err = workflows.DeliverEvent(ctx, gestalt.WorkflowDeliverEvent{
-        Event: &gestalt.WorkflowEvent{
-          Type:            "workspace_review.report.generated",
-          Source:          "workspace_review",
-          Subject:         "nightly",
-          Datacontenttype: "application/json",
-        },
-      })
+      _, err = workflows.DeliverEvent(ctx, &client.WorkflowEvent{
+        Type:            "workspace_review.report.generated",
+        Source:          "workspace_review",
+        Subject:         "nightly",
+        Datacontenttype: "application/json",
+        Data:            map[string]any{"reportUrl": access.Url},
+      }, nil)
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
 
-      return gestalt.OK(NightlyReportOutput{ReportURL: access.URL}), nil
+      return gestalt.OK(NightlyReportOutput{ReportURL: access.Url}), nil
     }
 
     var Router = gestalt.MustRouter(
@@ -376,11 +378,11 @@ details. Those come from the deployment bindings.
         App,
         Model,
         IndexedDB,
+        PresignMethodValues,
         Request,
         S3,
-        WriteOptions,
-        PresignOptions,
-        PresignMethod,
+        S3ObjectRef,
+        WriteObjectOpen,
         WorkflowEvent,
         WorkflowDeliverEvent,
     )
@@ -406,27 +408,23 @@ details. Those come from the deployment bindings.
         db.close()
         return {"ok": True}
 
-    class NightlyReportInput(Model):
-        bucket: str
-
     @app.operation(id="reports.generateNightly", method="POST")
-    def generate_nightly(
-        input: NightlyReportInput, request: Request
-    ) -> dict[str, str]:
+    def generate_nightly(request: Request) -> dict[str, str]:
         db = IndexedDB()
-        s3 = S3("reports")
+        s3 = S3.connect("reports")
 
-        object_key = f"nightly/{request.idempotency_key}.json"
-        report = s3.object(input.bucket, object_key)
-        report.write_bytes(
-            json.dumps({"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat()}).encode(),
-            WriteOptions(content_type="application/json"),
+        ref = S3ObjectRef(key=f"nightly/{request.idempotency_key}.json")
+        body = json.dumps(
+            {"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat()}
+        ).encode()
+        s3.write_object(
+            WriteObjectOpen(ref=ref, content_type="application/json"),
+            [body],
         )
-        access = report.create_access_url(
-            PresignOptions(
-                method=PresignMethod.GET,
-                expires=dt.timedelta(seconds=900),
-            )
+        access = s3.presign_object(
+            method=PresignMethodValues.GET,
+            expires_seconds=900,
+            ref=ref,
         )
 
         db.object_store("reports").put(
@@ -451,7 +449,6 @@ details. Those come from the deployment bindings.
             )
 
         db.close()
-        s3.close()
         return {"reportUrl": access.url}
     ```
   </Tabs.Tab>
@@ -459,10 +456,9 @@ details. Those come from the deployment bindings.
     ```rust
     use std::collections::BTreeMap;
 
-    use gestalt::{
-        IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEvent,
-        WorkflowDeliverEvent,
-    };
+    use gestalt::s3::{S3ObjectRef, S3PresignObjectOptions, WriteObjectOpen, presign_method};
+    use gestalt::workflow::{WorkflowDeliverEventOptions, WorkflowEvent};
+    use gestalt::{IndexedDB, S3, Workflow};
     use serde::{Deserialize, Serialize};
     use serde_json::json;
 
@@ -498,11 +494,6 @@ details. Those come from the deployment bindings.
         Ok(SaveItemOutput { ok: true })
     }
 
-    #[derive(Deserialize)]
-    struct NightlyReportInput {
-        bucket: String,
-    }
-
     #[derive(Serialize)]
     struct NightlyReportOutput {
         report_url: String,
@@ -510,7 +501,6 @@ details. Those come from the deployment bindings.
 
     async fn generate_nightly(
         request: &gestalt::Request,
-        input: NightlyReportInput,
     ) -> Result<NightlyReportOutput, Box<dyn std::error::Error>> {
         let db = IndexedDB::connect().await?;
         let mut reports = db.object_store("reports");
@@ -519,18 +509,34 @@ details. Those come from the deployment bindings.
             .as_secs()
             .to_string();
 
-        let s3 = S3::connect_named("reports").await?;
+        let mut s3 = S3::connect_named("reports").await?;
         let key = format!("nightly/{}.json", request.idempotency_key);
-        let mut report = s3.object(&input.bucket, &key);
-        report
-            .write_json(&json!({ "generatedAt": generated_at.clone() }), None)
-            .await?;
-        let access = report
-            .create_access_url(Some(PresignOptions {
-                method: PresignMethod::Get,
-                expires: std::time::Duration::from_secs(900),
-                ..PresignOptions::default()
-            }))
+        let body = serde_json::to_vec(&json!({ "generatedAt": generated_at.clone() }))?;
+        s3.write_object(
+            WriteObjectOpen {
+                r#ref: Some(S3ObjectRef {
+                    key: key.clone(),
+                    ..Default::default()
+                }),
+                content_type: "application/json".to_string(),
+                ..Default::default()
+            },
+            tokio_stream::once(body),
+        )
+        .await?;
+        let access = s3
+            .presign_object(
+                presign_method::PRESIGN_METHOD_GET,
+                900,
+                Some(S3ObjectRef {
+                    key,
+                    ..Default::default()
+                }),
+                S3PresignObjectOptions {
+                    content_type: "application/json".to_string(),
+                    ..Default::default()
+                },
+            )
             .await?;
 
         reports
@@ -541,19 +547,21 @@ details. Those come from the deployment bindings.
             ]))
             .await?;
 
-        let mut workflows = request.workflows().await?;
+        let mut workflows = Workflow::connect().await?;
         workflows
-            .deliver_event(WorkflowDeliverEvent {
-                event: Some(WorkflowEvent {
-                    event_type: "workspace_review.report.generated".to_string(),
+            .deliver_event(
+                Some(WorkflowEvent {
+                    r#type: "workspace_review.report.generated".to_string(),
                     source: "workspace_review".to_string(),
                     subject: "nightly".to_string(),
                     datacontenttype: "application/json".to_string(),
-                    data: Some(json!({ "reportUrl": access.url.clone() })),
+                    data: json!({ "reportUrl": access.url.clone() })
+                        .as_object()
+                        .cloned(),
                     ..Default::default()
                 }),
-                ..Default::default()
-            })
+                WorkflowDeliverEventOptions::default(),
+            )
             .await?;
 
         Ok(NightlyReportOutput {
@@ -573,7 +581,6 @@ details. Those come from the deployment bindings.
       ok,
       operation,
       s,
-      workflowEvent,
     } from "@valon-technologies/gestalt";
 
     export const app = defineApp({
@@ -601,25 +608,24 @@ details. Those come from the deployment bindings.
         operation({
           id: "reports.generateNightly",
           method: "POST",
-          input: s.object({ bucket: s.string() }),
+          input: s.object({}),
           output: s.object({ reportUrl: s.string() }),
-          async handler(input, request) {
+          async handler(_input, request) {
             const db = new IndexedDB();
-            const s3 = new S3("reports");
-            const object = s3.object(
-              input.bucket,
-              `nightly/${request.idempotencyKey}.json`,
-            );
+            const s3 = S3.connect({ name: "reports" });
+            const ref = { key: `nightly/${request.idempotencyKey}.json` };
 
-            await object.write(
-              new TextEncoder().encode(
-                JSON.stringify({ generatedAt: new Date().toISOString() }),
-              ),
-              { contentType: "application/json" },
+            const body = new TextEncoder().encode(
+              JSON.stringify({ generatedAt: new Date().toISOString() }),
             );
-            const access = await object.createAccessUrl({
-              method: PresignMethod.Get,
-              expiresSeconds: 900,
+            await s3.writeObject(
+              { ref, contentType: "application/json" },
+              (async function* () {
+                yield body;
+              })(),
+            );
+            const access = await s3.presignObject(PresignMethod.GET, 900n, ref, {
+              contentType: "application/json",
             });
 
             await db.objectStore("reports").put({
@@ -628,15 +634,13 @@ details. Those come from the deployment bindings.
               createdAt: new Date().toISOString(),
             });
 
-            const workflows = new Workflow(request);
+            const workflows = Workflow.connect();
             await workflows.deliverEvent({
-              event: workflowEvent({
-                type: "workspace_review.report.generated",
-                source: "workspace_review",
-                subject: "nightly",
-                datacontenttype: "application/json",
-                data: { reportUrl: access.url },
-              }),
+              type: "workspace_review.report.generated",
+              source: "workspace_review",
+              subject: "nightly",
+              datacontenttype: "application/json",
+              data: { reportUrl: access.url },
             });
 
             return ok({ reportUrl: access.url });
@@ -650,11 +654,14 @@ details. Those come from the deployment bindings.
 
 ## Calling Another App From Your Application
 
-Use `App` when executable app code needs to call another configured app as
-part of the same request. The caller must declare the
-allowed call graph in `apps.<caller>.invokes`; at runtime the SDK sends the
-current request context to the host, and the host preserves the original
-subject, credential context, and permission ceiling for the nested call.
+Use the generated `App` client when executable app code needs to call another
+configured app as part of the same request. Open it with the request-scoped
+helper for your language (`gestalt.AppFromContext(ctx)` in Go, `request.app()`
+in Python and TypeScript, `App::connect().await?.with_context(...)` in Rust).
+The caller must declare the allowed call graph in `apps.<caller>.invokes`; at
+runtime the client sends the current request context to the host, and the host
+preserves the original subject, credential context, and permission ceiling for
+the nested call.
 
 ```yaml
 apps:
@@ -674,104 +681,120 @@ apps:
     ```go
     import (
         "context"
-        "encoding/json"
 
         gestalt "github.com/valon-technologies/gestalt/sdk/go"
+        "github.com/valon-technologies/gestalt/sdk/go/client"
     )
 
     func loadLinkedIssue(ctx context.Context, request gestalt.Request, issueNumber int) (map[string]any, error) {
-        app, err := request.App()
-        if err != nil {
-            return nil, err
-        }
-        defer app.Close()
-
-        result, err := app.Invoke(ctx, "github", "issues.get", map[string]any{
-            "owner":  "acme",
-            "repo":   "roadmap",
-            "number": issueNumber,
-        }, &gestalt.InvokeOptions{
-            Connection:     "default",
-            IdempotencyKey: request.IdempotencyKey,
-        })
+        app, err := gestalt.AppFromContext(ctx)
         if err != nil {
             return nil, err
         }
 
-        var issue map[string]any
-        if err := json.Unmarshal([]byte(result.Body), &issue); err != nil {
-            return nil, err
-        }
-        return issue, nil
+        // Invoke decodes the standard JSON operation envelope; payload
+        // failures return *client.InvokeError. Use InvokeRaw for the raw
+        // status, headers, and body.
+        return client.JSONResultAs[map[string]any](app.Invoke(
+            ctx,
+            "github",
+            "issues.get",
+            map[string]any{
+                "owner":  "acme",
+                "repo":   "roadmap",
+                "number": issueNumber,
+            },
+            &client.AppInvokeOptions{
+                Connection:     "default",
+                IdempotencyKey: request.IdempotencyKey,
+            },
+        ))
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import json
-
     from gestalt import Request
 
     def load_linked_issue(
         request: Request,
         issue_number: int,
     ) -> dict[str, object]:
-        with request.app() as app:
-            result = app.invoke(
-                "github",
-                "issues.get",
-                {
-                    "owner": "acme",
-                    "repo": "roadmap",
-                    "number": issue_number,
-                },
-                connection="default",
-                idempotency_key=request.idempotency_key,
-            )
-
-        return json.loads(result.body)
+        app = request.app()
+        # invoke decodes the standard JSON operation envelope; payload
+        # failures raise InvokeError. Use invoke_raw for the raw status,
+        # headers, and body.
+        return app.invoke(
+            app="github",
+            operation="issues.get",
+            params={
+                "owner": "acme",
+                "repo": "roadmap",
+                "number": issue_number,
+            },
+            connection="default",
+            idempotency_key=request.idempotency_key,
+        )
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt::{InvokeOptions, Request};
+    use gestalt::app::{AppInvokeOptions, RequestContext, SubjectContext};
+    use gestalt::{App, Request};
     use serde_json::{json, Value};
 
     async fn load_linked_issue(
         request: &Request,
         issue_number: i64,
     ) -> Result<Value, Box<dyn std::error::Error>> {
-        let mut app = request.app().await?;
+        let context = RequestContext {
+            subject: Some(SubjectContext {
+                id: request.subject.id.clone(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut app = App::connect().await?.with_context(context);
 
-        let result = app
+        let params = json!({
+            "owner": "acme",
+            "repo": "roadmap",
+            "number": issue_number,
+        })
+        .as_object()
+        .cloned();
+
+        // invoke decodes the standard JSON operation envelope; payload and
+        // transport failures both surface as InvokeError. Use invoke_raw for
+        // the raw status, headers, and body.
+        let issue = app
             .invoke(
-                "github",
-                "issues.get",
-                json!({
-                    "owner": "acme",
-                    "repo": "roadmap",
-                    "number": issue_number,
-                }),
-                Some(InvokeOptions {
+                "github".to_string(),
+                "issues.get".to_string(),
+                params,
+                AppInvokeOptions {
                     connection: "default".to_string(),
                     idempotency_key: request.idempotency_key.clone(),
                     ..Default::default()
-                }),
+                },
             )
             .await?;
 
-        Ok(serde_json::from_str(&result.body)?)
+        Ok(issue)
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { App, type Request } from "@valon-technologies/gestalt";
+    import { type Request } from "@valon-technologies/gestalt";
 
     export async function loadLinkedIssue(request: Request, issueNumber: number) {
-      const app = new App(request);
+      const app = await request.app();
 
-      const result = await app.invoke(
+      // invoke decodes the standard JSON operation envelope; payload
+      // failures throw InvokeError. Use invokeRaw for the raw status,
+      // headers, and body.
+      return await app.invoke<Record<string, unknown>>(
         "github",
         "issues.get",
         {
@@ -784,8 +807,6 @@ apps:
           idempotencyKey: request.idempotencyKey,
         },
       );
-
-      return JSON.parse(result.body);
     }
     ```
   </Tabs.Tab>
@@ -795,7 +816,9 @@ The nested call must fit inside the caller's configured `invokes` authorization 
 `connection`, `instance`, or an idempotency key when the target app should
 use a specific connected account, provider instance, or retry boundary. For raw
 GraphQL surfaces, use `InvokeGraphQL`, `invoke_graphql`, or `invokeGraphQL` in
-the same SDK client.
+the same SDK client; they return the raw result, and the SDK's
+`decodeGraphQLResult` helpers apply the same envelope decoding plus GraphQL
+`errors` handling.
 
 ## Lightweight Frontend
 

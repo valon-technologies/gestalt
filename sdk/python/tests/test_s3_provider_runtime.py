@@ -17,26 +17,32 @@ from gestalt import (
     S3,
     AppProviderAdapter,
     ByteRange,
-    CopyOptions,
-    ListOptions,
-    ListPage,
-    ObjectMeta,
-    ObjectRef,
-    PresignMethod,
-    PresignOptions,
-    PresignResult,
+    CopyObjectRequest,
+    CopyObjectResponse,
+    DeleteObjectRequest,
+    HeadObjectRequest,
+    HeadObjectResponse,
+    ListObjectsRequest,
+    ListObjectsResponse,
+    PresignObjectRequest,
+    PresignObjectResponse,
     ProviderKind,
     ProviderReadResult,
-    ReadOptions,
+    ReadObjectRequest,
     S3InvalidRangeError,
     S3NotFoundError,
+    S3ObjectMeta,
+    S3ObjectRef,
     S3PreconditionFailedError,
     S3Provider,
-    WriteOptions,
+    WriteObjectOpen,
+    WriteObjectResponse,
     _grpc_transport,
     _runtime,
 )
 from gestalt._gen.v1 import s3_pb2, s3_pb2_grpc
+from gestalt.rpc_support import GestaltError, GestaltErrorCode
+from gestalt.s3 import PresignMethodValues
 
 UTC = dt.timezone.utc
 
@@ -62,15 +68,15 @@ class _BrokenBody:
 class _AuthoredS3Provider(S3Provider):
     def __init__(self) -> None:
         self.objects: dict[str, tuple[bytes, str, dict[str, str]]] = {}
-        self.last_read_options: ReadOptions | None = None
-        self.last_write_options: WriteOptions | None = None
-        self.last_copy_options: CopyOptions | None = None
-        self.last_presign_options: PresignOptions | None = None
+        self.last_read_request: ReadObjectRequest | None = None
+        self.last_write_open: WriteObjectOpen | None = None
+        self.last_copy_request: CopyObjectRequest | None = None
+        self.last_presign_request: PresignObjectRequest | None = None
         self.closable_body: _ClosableBody | None = None
 
-    def _meta(self, ref: ObjectRef) -> ObjectMeta:
+    def _meta(self, ref: S3ObjectRef) -> S3ObjectMeta:
         data, content_type, metadata = self._get(ref)
-        return ObjectMeta(
+        return S3ObjectMeta(
             ref=ref,
             etag=f"etag-{len(data)}",
             size=len(data),
@@ -80,31 +86,34 @@ class _AuthoredS3Provider(S3Provider):
             storage_class="STANDARD",
         )
 
-    def _get(self, ref: ObjectRef) -> tuple[bytes, str, dict[str, str]]:
+    def _get(self, ref: S3ObjectRef) -> tuple[bytes, str, dict[str, str]]:
         try:
             return self.objects[ref.key]
         except KeyError as error:
             raise S3NotFoundError("missing object") from error
 
-    def head_object(self, ref: ObjectRef) -> ObjectMeta:
-        return self._meta(ref)
+    def head_object(self, request: HeadObjectRequest) -> HeadObjectResponse:
+        assert request.ref is not None
+        return HeadObjectResponse(meta=self._meta(request.ref))
 
-    def read_object(
-        self,
-        ref: ObjectRef,
-        opts: ReadOptions | None = None,
-    ) -> ProviderReadResult:
-        self.last_read_options = opts
+    def read_object(self, request: ReadObjectRequest) -> ProviderReadResult:
+        self.last_read_request = request
+        ref = request.ref
+        assert ref is not None
         if ref.key == "broken-body.txt":
             return ProviderReadResult(
-                meta=ObjectMeta(ref=ref, size=12),
+                meta=S3ObjectMeta(ref=ref, size=12),
                 body=_BrokenBody(),
             )
 
         data, _content_type, _metadata = self._get(ref)
-        if opts and opts.range:
-            start = opts.range.start if opts.range.start is not None else 0
-            end = opts.range.end if opts.range.end is not None else len(data) - 1
+        if request.range is not None:
+            start = request.range.start if request.range.start is not None else 0
+            end = (
+                request.range.end
+                if request.range.end is not None
+                else len(data) - 1
+            )
             if start >= len(data):
                 raise S3InvalidRangeError("range starts after object end")
             data = data[start : end + 1]
@@ -119,69 +128,63 @@ class _AuthoredS3Provider(S3Provider):
 
     def write_object(
         self,
-        ref: ObjectRef,
+        open: WriteObjectOpen,
         body: Iterable[bytes],
-        opts: WriteOptions | None = None,
-    ) -> ObjectMeta:
-        self.last_write_options = opts
-        if opts and opts.if_none_match == "fail":
+    ) -> WriteObjectResponse:
+        self.last_write_open = open
+        ref = open.ref
+        assert ref is not None
+        if open.if_none_match == "fail":
             raise S3PreconditionFailedError("write precondition failed")
         if ref.key == "ignore-body.txt":
-            self.objects[ref.key] = (
-                b"",
-                opts.content_type if opts else "",
-                {},
-            )
-            return self._meta(ref)
+            self.objects[ref.key] = (b"", open.content_type, {})
+            return WriteObjectResponse(meta=self._meta(ref))
         data = b"".join(bytes(chunk) for chunk in body)
         self.objects[ref.key] = (
             data,
-            opts.content_type if opts else "",
-            dict(opts.metadata) if opts else {},
+            open.content_type,
+            dict(open.metadata),
         )
-        return self._meta(ref)
+        return WriteObjectResponse(meta=self._meta(ref))
 
-    def delete_object(self, ref: ObjectRef) -> None:
-        self.objects.pop(ref.key, None)
+    def delete_object(self, request: DeleteObjectRequest) -> None:
+        assert request.ref is not None
+        self.objects.pop(request.ref.key, None)
 
-    def list_objects(self, opts: ListOptions) -> ListPage:
+    def list_objects(self, request: ListObjectsRequest) -> ListObjectsResponse:
         objects = [
-            self._meta(ObjectRef(key=key))
+            self._meta(S3ObjectRef(key=key))
             for key in sorted(self.objects)
-            if key.startswith(opts.prefix)
+            if key.startswith(request.prefix)
         ]
-        if opts.max_keys:
-            objects = objects[: opts.max_keys]
-        return ListPage(objects=objects)
+        if request.max_keys:
+            objects = objects[: request.max_keys]
+        return ListObjectsResponse(objects=objects)
 
-    def copy_object(
-        self,
-        source: ObjectRef,
-        destination: ObjectRef,
-        opts: CopyOptions | None = None,
-    ) -> ObjectMeta:
-        self.last_copy_options = opts
-        if opts and opts.if_match == "fail":
+    def copy_object(self, request: CopyObjectRequest) -> CopyObjectResponse:
+        self.last_copy_request = request
+        assert request.source is not None
+        assert request.destination is not None
+        if request.if_match == "fail":
             raise S3PreconditionFailedError("copy precondition failed")
-        data, content_type, metadata = self._get(source)
-        self.objects[destination.key] = (
+        data, content_type, metadata = self._get(request.source)
+        self.objects[request.destination.key] = (
             data,
             content_type,
             dict(metadata),
         )
-        return self._meta(destination)
+        return CopyObjectResponse(meta=self._meta(request.destination))
 
-    def presign_object(
-        self,
-        ref: ObjectRef,
-        opts: PresignOptions | None = None,
-    ) -> PresignResult:
-        self.last_presign_options = opts
-        return PresignResult(
-            url=f"https://example.invalid/{ref.key}",
-            method=opts.method if opts and opts.method else PresignMethod.GET,
+    def presign_object(self, request: PresignObjectRequest) -> PresignObjectResponse:
+        self.last_presign_request = request
+        assert request.ref is not None
+        return PresignObjectResponse(
+            url=f"https://example.invalid/{request.ref.key}",
+            method=request.method
+            if request.method
+            else PresignMethodValues.GET,
             expires_at=dt.datetime(2026, 1, 2, 3, 9, 5, tzinfo=UTC),
-            headers=dict(opts.headers) if opts else {},
+            headers=dict(request.headers),
         )
 
 
@@ -225,52 +228,70 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         self.running.close()
 
     def test_client_round_trips_against_authored_provider(self) -> None:
-        client = S3()
-        obj = client.object("hello.txt")
-        written = obj.write_text(
-            "hello",
-            WriteOptions(content_type="text/plain", metadata={"lang": "en"}),
+        client = S3.connect()
+        written = client.write_object(
+            WriteObjectOpen(
+                ref=S3ObjectRef(key="hello.txt"),
+                content_type="text/plain",
+                metadata={"lang": "en"},
+            ),
+            [b"hello"],
         )
-        self.assertEqual(written.size, 5)
-        self.assertIsInstance(self.provider.last_write_options, WriteOptions)
-        assert self.provider.last_write_options is not None
-        self.assertEqual(self.provider.last_write_options.content_type, "text/plain")
-        self.assertEqual(self.provider.last_write_options.metadata, {"lang": "en"})
+        assert written.meta is not None
+        self.assertEqual(written.meta.size, 5)
+        self.assertIsInstance(self.provider.last_write_open, WriteObjectOpen)
+        assert self.provider.last_write_open is not None
+        self.assertEqual(self.provider.last_write_open.content_type, "text/plain")
+        self.assertEqual(self.provider.last_write_open.metadata, {"lang": "en"})
 
-        self.assertEqual(obj.stat().content_type, "text/plain")
-        self.assertEqual(obj.text(), "hello")
+        stat = client.head_object(ref=S3ObjectRef(key="hello.txt")).meta
+        assert stat is not None
+        self.assertEqual(stat.content_type, "text/plain")
+        _read_meta, chunks = client.read_object(
+            ReadObjectRequest(ref=S3ObjectRef(key="hello.txt"))
+        )
+        self.assertEqual(b"".join(chunks), b"hello")
 
-        page = client.list_objects(ListOptions(prefix="he"))
-        self.assertEqual([item.ref.key for item in page.objects], ["hello.txt"])
+        page = client.list_objects(prefix="he")
+        self.assertEqual(
+            [item.ref.key for item in page.objects if item.ref is not None],
+            ["hello.txt"],
+        )
 
         copied = client.copy_object(
-            ObjectRef(key="hello.txt"),
-            ObjectRef(key="copy.txt"),
-            CopyOptions(if_match="etag-5"),
+            source=S3ObjectRef(key="hello.txt"),
+            destination=S3ObjectRef(key="copy.txt"),
+            if_match="etag-5",
         )
-        self.assertEqual(copied.ref.key, "copy.txt")
-        self.assertIsInstance(self.provider.last_copy_options, CopyOptions)
+        assert copied.meta is not None
+        assert copied.meta.ref is not None
+        self.assertEqual(copied.meta.ref.key, "copy.txt")
+        self.assertIsInstance(self.provider.last_copy_request, CopyObjectRequest)
 
-        signed = client.object("copy.txt").presign(
-            PresignOptions(
-                method=PresignMethod.PUT,
-                expires=dt.timedelta(seconds=30),
+        signed = client.presign_object(
+            PresignObjectRequest(
+                ref=S3ObjectRef(key="copy.txt"),
+                method=PresignMethodValues.PUT,
+                expires_seconds=30,
                 headers={"x-test": "1"},
             )
         )
-        self.assertEqual(signed.method, PresignMethod.PUT)
+        self.assertEqual(signed.method, PresignMethodValues.PUT)
         self.assertEqual(signed.headers, {"x-test": "1"})
-        self.assertIsInstance(self.provider.last_presign_options, PresignOptions)
+        self.assertIsInstance(self.provider.last_presign_request, PresignObjectRequest)
 
-        default_signed = client.object("copy.txt").presign()
-        self.assertEqual(default_signed.method, PresignMethod.GET)
-        self.assertIsInstance(self.provider.last_presign_options, PresignOptions)
-        assert self.provider.last_presign_options is not None
-        self.assertIsNone(self.provider.last_presign_options.expires)
+        default_signed = client.presign_object(ref=S3ObjectRef(key="copy.txt"))
+        self.assertEqual(
+            default_signed.method, PresignMethodValues.GET
+        )
+        self.assertIsInstance(self.provider.last_presign_request, PresignObjectRequest)
+        assert self.provider.last_presign_request is not None
+        self.assertEqual(self.provider.last_presign_request.expires_seconds, 0)
 
-        client.object("copy.txt").delete()
-        self.assertFalse(client.object("copy.txt").exists())
-        client.close()
+        client.delete_object(ref=S3ObjectRef(key="copy.txt"))
+        with self.assertRaises(GestaltError) as missing:
+            client.head_object(ref=S3ObjectRef(key="copy.txt"))
+        self.assertEqual(missing.exception.code, GestaltErrorCode.NOT_FOUND)
 
     def test_read_options_preserve_zero_range_values(self) -> None:
         self.provider.objects["letters.txt"] = (
@@ -289,11 +310,11 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(frames[1].data, b"a")
-        self.assertIsInstance(self.provider.last_read_options, ReadOptions)
-        assert self.provider.last_read_options is not None
-        assert self.provider.last_read_options.range is not None
-        self.assertEqual(self.provider.last_read_options.range.start, 0)
-        self.assertEqual(self.provider.last_read_options.range.end, 0)
+        self.assertIsInstance(self.provider.last_read_request, ReadObjectRequest)
+        assert self.provider.last_read_request is not None
+        assert self.provider.last_read_request.range is not None
+        self.assertEqual(self.provider.last_read_request.range.start, 0)
+        self.assertEqual(self.provider.last_read_request.range.end, 0)
 
     def test_read_object_closes_returned_body(self) -> None:
         self.provider.objects["closable.txt"] = (b"close me", "", {})
@@ -312,26 +333,43 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
         self.assertTrue(self.provider.closable_body.closed)
 
     def test_s3_errors_map_through_grpc_statuses(self) -> None:
-        client = S3()
-        with self.assertRaises(S3NotFoundError):
-            client.object("missing.txt").stat()
+        client = S3.connect()
+        with self.assertRaises(GestaltError) as missing:
+            client.head_object(ref=S3ObjectRef(key="missing.txt"))
+        self.assertEqual(missing.exception.code, GestaltErrorCode.NOT_FOUND)
 
-        with self.assertRaises(S3PreconditionFailedError):
-            client.object("guarded.txt").write_text(
-                "body",
-                WriteOptions(if_none_match="fail"),
+        with self.assertRaises(GestaltError) as guarded:
+            client.write_object(
+                WriteObjectOpen(
+                    ref=S3ObjectRef(key="guarded.txt"),
+                    if_none_match="fail",
+                ),
+                [b"body"],
             )
+        self.assertEqual(
+            guarded.exception.code, GestaltErrorCode.FAILED_PRECONDITION
+        )
 
         self.provider.objects["small.txt"] = (b"abc", "", {})
-        with self.assertRaises(S3InvalidRangeError):
-            client.object("small.txt").bytes(
-                ReadOptions(range=ByteRange(start=10))
+        with self.assertRaises(GestaltError) as out_of_range:
+            _meta, chunks = client.read_object(
+                ReadObjectRequest(
+                    ref=S3ObjectRef(key="small.txt"),
+                    range=ByteRange(start=10),
+                )
             )
+            b"".join(chunks)
+        self.assertEqual(
+            out_of_range.exception.code, GestaltErrorCode.OUT_OF_RANGE
+        )
 
         self.provider.objects["broken-body.txt"] = (b"ignored", "", {})
-        with self.assertRaises(S3InvalidRangeError):
-            client.object("broken-body.txt").bytes()
-        client.close()
+        with self.assertRaises(GestaltError) as broken:
+            _meta, chunks = client.read_object(
+                ReadObjectRequest(ref=S3ObjectRef(key="broken-body.txt"))
+            )
+            b"".join(chunks)
+        self.assertEqual(broken.exception.code, GestaltErrorCode.OUT_OF_RANGE)
 
     def test_write_object_rejects_malformed_streams(self) -> None:
         cases = [

@@ -34,6 +34,7 @@ var pyProtoModules = []string{
 	"authorization",
 	"cache",
 	"indexeddb",
+	"external_credential",
 	"app",
 	"runtime_provider",
 	"runtime",

@@ -19,7 +19,7 @@ use generated::v1::{
     ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, ValidateExternalTokenRequest,
     WriteObjectRequest as ProtoWriteObjectRequest,
 };
-use gestalt::s3::{
+use gestalt::s3_provider::{
     CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest,
     HeadObjectResponse, ListObjectsRequest, ListObjectsResponse, ObjectMeta, ObjectRef,
     PresignObjectRequest, PresignObjectResponse, ReadObjectRequest, S3ReadObjectFrame,
@@ -311,7 +311,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_authentication_provider(serve_provider)
+        gestalt::runtime_impl::serve_authentication_provider(serve_provider)
             .await
             .expect("serve authentication provider");
     });
@@ -413,7 +413,7 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
     let provider = Arc::new(TestS3Provider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_s3_provider(serve_provider)
+        gestalt::runtime_impl::serve_s3_provider(serve_provider)
             .await
             .expect("serve s3 provider");
     });

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -101,7 +102,8 @@ func (h *agentTransportHarness) CancelTurn(ctx context.Context, req *proto.Cance
 	}, nil
 }
 
-func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
+func startAgentTransportHarness(t *testing.T) (*agentTransportHarness, string) {
+	t.Helper()
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -116,37 +118,51 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 		_ = srv.Serve(lis)
 	}()
 	t.Cleanup(srv.Stop)
+	return harness, address
+}
+
+func agentTransportRequestContext() *client.RequestContext {
+	return &client.RequestContext{
+		Subject: &client.SubjectContext{
+			Id:                  "user:transport",
+			CredentialSubjectId: "user:transport",
+			Email:               "transport@example.test",
+		},
+	}
+}
+
+func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
+	harness, address := startAgentTransportHarness(t)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewAgentFromRequest(agentTransportRequest())
+	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(agentTransportRequestContext()))
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	session, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+	session, err := agent.CreateSessionRaw(context.Background(), &client.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-1",
-		Tools: &gestalt.AgentCatalogToolConfig{
-			Refs: []gestalt.AgentToolRef{{
+		Tools: &client.AgentToolConfig{Source: &client.AgentToolConfigSourceCatalog{Value: &client.AgentCatalogToolConfig{
+			Refs: []*client.AgentToolRef{{
 				App:       "slack",
 				Operation: "chat.postMessage",
 			}},
-			Tools: []gestalt.ListedAgentTool{{
-				ID:          "tool-slack",
-				MCPName:     "slack__chat_post_message",
+			Tools: []*client.ListedAgentTool{{
+				Id:          "tool-slack",
+				McpName:     "slack__chat_post_message",
 				Title:       "Send Slack message",
 				Description: "Post a Slack message",
 				InputSchema: `{"type":"object"}`,
-				Ref: &gestalt.AgentToolRef{
+				Ref: &client.AgentToolRef{
 					App:       "slack",
 					Operation: "chat.postMessage",
 				},
 			}},
-		},
+		}}},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
@@ -154,20 +170,20 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	if session.ProviderName != "managed" {
 		t.Fatalf("provider_name = %q, want %q", session.ProviderName, "managed")
 	}
-	if session.ID != "session-1" {
-		t.Fatalf("session id = %q, want %q", session.ID, "session-1")
+	if session.Id != "session-1" {
+		t.Fatalf("session id = %q, want %q", session.Id, "session-1")
 	}
 
-	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
-		SessionID:      "session-1",
+	turn, err := agent.CreateTurnRaw(context.Background(), &client.CreateAgentProviderTurnRequest{
+		SessionId:      "session-1",
 		Model:          "gpt-test",
 		TimeoutSeconds: 120,
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn.ID != "turn-1" {
-		t.Fatalf("turn id = %q, want %q", turn.ID, "turn-1")
+	if turn.Id != "turn-1" {
+		t.Fatalf("turn id = %q, want %q", turn.Id, "turn-1")
 	}
 
 	harness.mu.Lock()
@@ -206,29 +222,10 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 }
 
 func TestTransport_AgentWorkflowContext(t *testing.T) {
-	address := reserveTCPAddress()
-	lis, err := net.Listen("tcp", address)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	harness := &agentTransportHarness{}
-	srv := grpc.NewServer()
-	proto.RegisterAgentServer(srv, harness)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(srv.Stop)
+	harness, address := startAgentTransportHarness(t)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
-
-	client, err := gestalt.NewAgentFromRequest(agentTransportRequest())
-	if err != nil {
-		t.Fatalf("Agent: %v", err)
-	}
-	defer func() { _ = client.Close() }()
 
 	workflow := map[string]any{
 		"providerName": "indexeddb",
@@ -239,24 +236,31 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 			"credentialSubjectId": "service_account:workflow-runner",
 		},
 	}
-	ctx := gestalt.WithWorkflowContext(context.Background(), workflow)
-	if _, err := client.CreateSession(ctx, gestalt.AgentCreateSession{
+	requestContext := agentTransportRequestContext()
+	requestContext.Workflow = workflow
+	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(requestContext))
+	if err != nil {
+		t.Fatalf("Agent: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := agent.CreateSessionRaw(ctx, &client.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
 	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, err := client.CreateTurn(ctx, gestalt.AgentCreateTurn{
-		SessionID:      "session-1",
+	if _, err := agent.CreateTurnRaw(ctx, &client.CreateAgentProviderTurnRequest{
+		SessionId:      "session-1",
 		Model:          "gpt-test",
 		TimeoutSeconds: 120,
 	}); err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if _, err := client.GetTurn(ctx, gestalt.AgentGetTurn{TurnID: "turn-1"}); err != nil {
+	if _, err := agent.GetTurn(ctx, "turn-1", nil); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
-	if _, err := client.CancelTurn(ctx, gestalt.AgentCancelTurn{TurnID: "turn-1", Reason: "test"}); err != nil {
+	if _, err := agent.CancelTurn(ctx, "turn-1", &client.AgentCancelTurnOptions{Reason: "test"}); err != nil {
 		t.Fatalf("CancelTurn: %v", err)
 	}
 
@@ -276,37 +280,22 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 	}
 }
 
-func TestTransport_AgentCreateSessionTypedNilTools(t *testing.T) {
-	address := reserveTCPAddress()
-	lis, err := net.Listen("tcp", address)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	harness := &agentTransportHarness{}
-	srv := grpc.NewServer()
-	proto.RegisterAgentServer(srv, harness)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(srv.Stop)
+func TestTransport_AgentCreateSessionNilTools(t *testing.T) {
+	harness, address := startAgentTransportHarness(t)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 
-	client, err := gestalt.NewAgentFromRequest(agentTransportRequest())
+	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(agentTransportRequestContext()))
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	var typedNilCatalog *gestalt.AgentCatalogToolConfig
-	if _, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+	if _, err := agent.CreateSessionRaw(context.Background(), &client.CreateAgentProviderSessionRequest{
 		ProviderName: "managed",
 		Model:        "gpt-test",
-		Tools:        typedNilCatalog,
+		Tools:        nil,
 	}); err != nil {
-		t.Fatalf("CreateSession typed nil catalog: %v", err)
+		t.Fatalf("CreateSession nil tools: %v", err)
 	}
 
 	harness.mu.Lock()
@@ -315,54 +304,39 @@ func TestTransport_AgentCreateSessionTypedNilTools(t *testing.T) {
 		t.Fatalf("session requests len = %d, want 1", len(harness.sessionRequests))
 	}
 	if harness.sessionRequests[0].GetTools() != nil {
-		t.Fatalf("session tools = %#v, want nil for typed nil catalog", harness.sessionRequests[0].GetTools())
+		t.Fatalf("session tools = %#v, want nil for nil tools", harness.sessionRequests[0].GetTools())
 	}
 }
 
-func TestTransport_AgentRequestBuilderCallerAndWorkflowContext(t *testing.T) {
-	address := reserveTCPAddress()
-	lis, err := net.Listen("tcp", address)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	harness := &agentTransportHarness{}
-	srv := grpc.NewServer()
-	proto.RegisterAgentServer(srv, harness)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(srv.Stop)
+func TestTransport_AgentCallerAndWorkflowContext(t *testing.T) {
+	harness, address := startAgentTransportHarness(t)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	req, err := gestalt.NewRequest(gestalt.RequestInput{
-		Subject: gestalt.Subject{ID: "service_account:workflow-runner", CredentialSubjectID: "service_account:workflow-runner"},
-		Caller:  gestalt.RequestCaller{Kind: gestalt.RequestCallerKindWorkflow, Name: "temporal"},
-		WorkflowContext: map[string]any{
+	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(&client.RequestContext{
+		Subject: &client.SubjectContext{
+			Id:                  "service_account:workflow-runner",
+			CredentialSubjectId: "service_account:workflow-runner",
+		},
+		Caller: &client.ProviderContext{Kind: "workflow", Name: "temporal"},
+		Workflow: map[string]any{
 			"providerName":  "temporal",
 			"runId":         "run-1",
 			"currentStepId": "review",
 		},
-	})
-	if err != nil {
-		t.Fatalf("NewRequest: %v", err)
-	}
-	client, err := gestalt.NewAgentFromRequest(req)
+	}))
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	if _, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+	if _, err := agent.CreateSessionRaw(context.Background(), &client.CreateAgentProviderSessionRequest{
 		ProviderName: "claude",
 		Model:        "default",
 	}); err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if _, err := client.GetTurn(context.Background(), gestalt.AgentGetTurn{TurnID: "turn-1"}); err != nil {
+	if _, err := agent.GetTurn(context.Background(), "turn-1", nil); err != nil {
 		t.Fatalf("GetTurn: %v", err)
 	}
 
@@ -384,56 +358,45 @@ func TestTransport_AgentRequestBuilderCallerAndWorkflowContext(t *testing.T) {
 }
 
 func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
-	address := reserveTCPAddress()
-	lis, err := net.Listen("tcp", address)
-	if err != nil {
-		t.Fatalf("net.Listen: %v", err)
-	}
-	t.Cleanup(func() { _ = lis.Close() })
-
-	harness := &agentTransportHarness{}
-	srv := grpc.NewServer()
-	proto.RegisterAgentServer(srv, harness)
-	go func() {
-		_ = srv.Serve(lis)
-	}()
-	t.Cleanup(srv.Stop)
+	harness, address := startAgentTransportHarness(t)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.NewAgentFromRequest(agentTransportRequest())
+	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(agentTransportRequestContext()))
 	if err != nil {
 		t.Fatalf("Agent: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	session, err := client.CreateSession(context.Background(), gestalt.AgentCreateSession{
+	session, err := agent.CreateSessionRaw(context.Background(), &client.CreateAgentProviderSessionRequest{
 		ProviderName: "alpha",
 		Model:        "gpt-test",
-		Tools: &gestalt.AgentCatalogToolConfig{Refs: []gestalt.AgentToolRef{{
-			App:        "github",
-			Operation:  "issues.get",
-			Connection: "default",
+		Tools: &client.AgentToolConfig{Source: &client.AgentToolConfigSourceCatalog{Value: &client.AgentCatalogToolConfig{
+			Refs: []*client.AgentToolRef{{
+				App:        "github",
+				Operation:  "issues.get",
+				Connection: "default",
+			}},
 		}}},
 	})
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 
-	turn, err := client.CreateTurn(context.Background(), gestalt.AgentCreateTurn{
-		SessionID: session.ID,
+	turn, err := agent.CreateTurnRaw(context.Background(), &client.CreateAgentProviderTurnRequest{
+		SessionId: session.Id,
 		Model:     "gpt-test",
-		Messages: []gestalt.AgentMessage{{
+		Messages: []*client.AgentMessage{{
 			Role: "user",
 			Text: "Summarize",
-			Parts: []gestalt.AgentMessagePart{{
+			Parts: []*client.AgentMessagePart{{
+				Type: client.AgentMessagePartTypeText,
 				Text: "Summarize",
 			}},
 			Metadata: map[string]any{"source": "native"},
 		}},
-		Output: &gestalt.AgentOutput{
-			Structured: &gestalt.AgentStructuredOutput{Schema: map[string]any{"type": "object"}},
+		Output: &client.AgentOutput{
+			Kind: &client.AgentOutputKindStructured{Value: &client.AgentStructuredOutput{Schema: map[string]any{"type": "object"}}},
 		},
 		Metadata:       map[string]any{"request": "native"},
 		ModelOptions:   map[string]any{"temperature": 0},
@@ -442,8 +405,8 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn.ID != "turn-1" {
-		t.Fatalf("turn id = %q, want turn-1", turn.ID)
+	if turn.Id != "turn-1" {
+		t.Fatalf("turn id = %q, want turn-1", turn.Id)
 	}
 
 	harness.mu.Lock()
@@ -472,15 +435,5 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 	if got.GetTimeoutSeconds() != 120 {
 		t.Fatalf("timeout_seconds = %d, want 120", got.GetTimeoutSeconds())
-	}
-}
-
-func agentTransportRequest() gestalt.Request {
-	return gestalt.Request{
-		Subject: gestalt.Subject{
-			ID:                  "user:transport",
-			CredentialSubjectID: "user:transport",
-			Email:               "transport@example.test",
-		},
 	}
 }

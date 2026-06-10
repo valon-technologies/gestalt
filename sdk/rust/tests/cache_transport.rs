@@ -17,6 +17,7 @@ use generated::v1::{
     CacheSetManyRequest, CacheSetRequest, CacheTouchRequest, CacheTouchResponse,
     ConfigureProviderRequest, ProviderKind,
 };
+use gestalt::cache::CacheSetEntry;
 use gestalt::{
     CacheEntry, CacheProvider, CacheSetOptions, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN,
     RuntimeMetadata,
@@ -144,6 +145,7 @@ impl TestCacheProvider {
 #[derive(Clone)]
 struct ObservedCacheServer {
     provider: Arc<TestCacheProvider>,
+    get_delay: Option<Duration>,
 }
 
 #[gestalt::async_trait]
@@ -152,6 +154,9 @@ impl ProtoCache for ObservedCacheServer {
         &self,
         request: GrpcRequest<CacheGetRequest>,
     ) -> std::result::Result<GrpcResponse<CacheGetResponse>, Status> {
+        if let Some(delay) = self.get_delay {
+            tokio::time::sleep(delay).await;
+        }
         self.provider.record_relay_tokens(request.metadata());
         let request = request.into_inner();
         let value = self
@@ -298,7 +303,7 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
     let provider = Arc::new(TestCacheProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_cache_provider(serve_provider)
+        gestalt::runtime_impl::serve_cache_provider(serve_provider)
             .await
             .expect("serve cache provider");
     });
@@ -371,40 +376,40 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
         .expect("connect cache");
     cache
         .set(
-            "alpha",
-            b"one",
-            CacheSetOptions {
-                ttl: Some(Duration::from_secs(60)),
-            },
+            "alpha".to_string(),
+            b"one".to_vec(),
+            Some(Duration::from_secs(60)),
         )
         .await
         .expect("set alpha");
     cache
         .set_many(
-            &[
-                CacheEntry {
+            vec![
+                CacheSetEntry {
                     key: "beta".to_string(),
                     value: b"two".to_vec(),
                 },
-                CacheEntry {
+                CacheSetEntry {
                     key: "gamma".to_string(),
                     value: b"three".to_vec(),
                 },
             ],
-            CacheSetOptions {
-                ttl: Some(Duration::from_secs(120)),
-            },
+            Some(Duration::from_secs(120)),
         )
         .await
         .expect("set many");
 
     assert_eq!(
-        cache.get("alpha").await.expect("get alpha"),
+        cache.get("alpha".to_string()).await.expect("get alpha"),
         Some(b"one".to_vec())
     );
 
     let values = cache
-        .get_many(&["alpha", "beta", "missing"])
+        .get_many(vec![
+            "alpha".to_string(),
+            "beta".to_string(),
+            "missing".to_string(),
+        ])
         .await
         .expect("get many");
     assert_eq!(values.get("alpha").map(Vec::as_slice), Some(&b"one"[..]));
@@ -413,14 +418,23 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
 
     assert!(
         cache
-            .touch("alpha", Duration::from_secs(30))
+            .touch("alpha".to_string(), Some(Duration::from_secs(30)))
             .await
             .expect("touch alpha")
     );
-    assert!(cache.delete("alpha").await.expect("delete alpha"));
+    assert!(
+        cache
+            .delete("alpha".to_string())
+            .await
+            .expect("delete alpha")
+    );
     assert_eq!(
         cache
-            .delete_many(&["beta", "missing", "beta"])
+            .delete_many(vec![
+                "beta".to_string(),
+                "missing".to_string(),
+                "beta".to_string(),
+            ])
             .await
             .expect("delete many"),
         1
@@ -467,6 +481,7 @@ async fn cache_connects_over_tcp_and_forwards_relay_token() {
     let provider = Arc::new(TestCacheProvider::default());
     let server = ObservedCacheServer {
         provider: Arc::clone(&provider),
+        get_delay: None,
     };
     let serve_task = tokio::spawn(async move {
         Server::builder()
@@ -479,16 +494,17 @@ async fn cache_connects_over_tcp_and_forwards_relay_token() {
     let mut cache = gestalt::Cache::connect().await.expect("connect cache");
     cache
         .set(
-            "tcp-alpha",
-            b"over-tcp",
-            CacheSetOptions {
-                ttl: Some(Duration::from_secs(45)),
-            },
+            "tcp-alpha".to_string(),
+            b"over-tcp".to_vec(),
+            Some(Duration::from_secs(45)),
         )
         .await
         .expect("set over tcp");
     assert_eq!(
-        cache.get("tcp-alpha").await.expect("get over tcp"),
+        cache
+            .get("tcp-alpha".to_string())
+            .await
+            .expect("get over tcp"),
         Some(b"over-tcp".to_vec())
     );
 
@@ -502,6 +518,44 @@ async fn cache_connects_over_tcp_and_forwards_relay_token() {
             "relay-token-rust".to_string(),
             "relay-token-rust".to_string()
         ]
+    );
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn cache_calls_fail_with_deadline_exceeded_past_the_client_timeout() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind tcp listener");
+    let address = listener.local_addr().expect("local addr");
+    let _socket_guard = helpers::EnvGuard::set(ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+
+    let server = ObservedCacheServer {
+        provider: Arc::new(TestCacheProvider::default()),
+        get_delay: Some(Duration::from_secs(30)),
+    };
+    let serve_task = tokio::spawn(async move {
+        Server::builder()
+            .add_service(CacheServer::new(server))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+            .expect("serve cache over tcp");
+    });
+
+    let mut cache = gestalt::Cache::connect()
+        .await
+        .expect("connect cache")
+        .with_timeout(Duration::from_millis(100));
+    let err = cache
+        .get("slow".to_string())
+        .await
+        .expect_err("get should run past the client deadline");
+    assert_eq!(
+        err.code,
+        gestalt::rpc_support::gestalt_error_code::DEADLINE_EXCEEDED
     );
 
     serve_task.abort();

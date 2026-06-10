@@ -3,11 +3,9 @@ package gestalt
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func agentMessageFromProto(value *proto.AgentMessage) AgentMessage {
@@ -278,14 +276,6 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 	}
 }
 
-func agentToolRefPtrFromProto(value *proto.AgentToolRef) *AgentToolRef {
-	if value == nil {
-		return nil
-	}
-	out := agentToolRefFromProto(value)
-	return &out
-}
-
 func agentToolRefsFromProto(values []*proto.AgentToolRef) []AgentToolRef {
 	if len(values) == 0 {
 		return nil
@@ -338,31 +328,6 @@ func agentToolConfigFromProto(value *proto.AgentToolConfig) AgentToolConfig {
 			Refs:  agentToolRefsFromProto(catalog.GetRefs()),
 			Tools: listedAgentToolsFromProto(catalog.GetTools()),
 		}
-	default:
-		return nil
-	}
-}
-
-func agentToolConfigToProto(value AgentToolConfig) *proto.AgentToolConfig {
-	if value == nil {
-		return nil
-	}
-	switch toolConfig := value.(type) {
-	case *AgentCatalogToolConfig:
-		if toolConfig == nil {
-			return nil
-		}
-		return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_Catalog{
-			Catalog: &proto.AgentCatalogToolConfig{
-				Refs:  agentToolRefsToProto(toolConfig.Refs),
-				Tools: listedAgentToolsToProto(toolConfig.Tools),
-			},
-		}}
-	case *AgentNoTools:
-		if toolConfig == nil {
-			return nil
-		}
-		return &proto.AgentToolConfig{Source: &proto.AgentToolConfig_None{None: &proto.AgentNoTools{}}}
 	default:
 		return nil
 	}
@@ -431,24 +396,6 @@ func agentOutputToProto(value *AgentOutput) (*proto.AgentOutput, error) {
 	}
 }
 
-func agentTurnOutputFromProto(value *proto.AgentTurn) *AgentTurnOutput {
-	if value == nil || value.GetOutput() == nil {
-		return nil
-	}
-	if text := value.GetText(); text != nil {
-		return &AgentTurnOutput{Text: &AgentTurnTextOutput{Text: text.GetText()}}
-	}
-	if structured := value.GetStructured(); structured != nil {
-		return &AgentTurnOutput{
-			Structured: &AgentTurnStructuredOutput{
-				Text:  structured.GetText(),
-				Value: mapFromStruct(structured.GetValue()),
-			},
-		}
-	}
-	return nil
-}
-
 func applyAgentTurnOutputToProto(out *proto.AgentTurn, value *AgentTurnOutput) error {
 	if value == nil {
 		return nil
@@ -511,46 +458,6 @@ func agentSessionsToProto(values []AgentSession) ([]*proto.AgentSession, error) 
 		out = append(out, pbValue)
 	}
 	return out, nil
-}
-
-func agentSessionFromProto(value *proto.AgentSession) *AgentSession {
-	if value == nil {
-		return nil
-	}
-	return &AgentSession{
-		ID:                 value.GetId(),
-		ProviderName:       value.GetProviderName(),
-		Model:              value.GetModel(),
-		ClientRef:          value.GetClientRef(),
-		State:              AgentSessionState(value.GetState()),
-		Metadata:           mapFromStruct(value.GetMetadata()),
-		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
-		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:          timeFromTimestamp(value.GetUpdatedAt()),
-		LastTurnAt:         timePtrFromTimestampUnchecked(value.GetLastTurnAt()),
-	}
-}
-
-func agentSessionsFromProto(values []*proto.AgentSession) []AgentSession {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentSession, 0, len(values))
-	for _, value := range values {
-		session := agentSessionFromProto(value)
-		if session == nil {
-			continue
-		}
-		out = append(out, *session)
-	}
-	return out
-}
-
-func listAgentSessionsResponseFromProto(value *proto.ListAgentProviderSessionsResponse) *ListAgentSessionsResponse {
-	if value == nil {
-		return nil
-	}
-	return &ListAgentSessionsResponse{Sessions: agentSessionsFromProto(value.GetSessions())}
 }
 
 func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
@@ -705,49 +612,6 @@ func agentTurnsToProto(values []AgentTurn) ([]*proto.AgentTurn, error) {
 	return out, nil
 }
 
-func agentTurnFromProto(value *proto.AgentTurn) *AgentTurn {
-	if value == nil {
-		return nil
-	}
-	return &AgentTurn{
-		ID:                 value.GetId(),
-		SessionID:          value.GetSessionId(),
-		ProviderName:       value.GetProviderName(),
-		Model:              value.GetModel(),
-		Status:             AgentExecutionStatus(value.GetStatus()),
-		Messages:           agentMessagesFromProto(value.GetMessages()),
-		Output:             agentTurnOutputFromProto(value),
-		StatusMessage:      value.GetStatusMessage(),
-		CreatedBySubjectID: strings.TrimSpace(value.GetCreatedBySubjectId()),
-		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
-		StartedAt:          timePtrFromTimestampUnchecked(value.GetStartedAt()),
-		CompletedAt:        timePtrFromTimestampUnchecked(value.GetCompletedAt()),
-		ExecutionRef:       value.GetExecutionRef(),
-	}
-}
-
-func agentTurnsFromProto(values []*proto.AgentTurn) []AgentTurn {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentTurn, 0, len(values))
-	for _, value := range values {
-		turn := agentTurnFromProto(value)
-		if turn == nil {
-			continue
-		}
-		out = append(out, *turn)
-	}
-	return out
-}
-
-func listAgentTurnsResponseFromProto(value *proto.ListAgentProviderTurnsResponse) *ListAgentTurnsResponse {
-	if value == nil {
-		return nil
-	}
-	return &ListAgentTurnsResponse{Turns: agentTurnsFromProto(value.GetTurns())}
-}
-
 func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) (*CreateAgentProviderTurnRequest, error) {
 	if req == nil {
 		return nil, InvalidArgument("agent create turn request is required")
@@ -860,64 +724,6 @@ func agentTurnEventsToProto(values []AgentTurnEvent) ([]*proto.AgentTurnEvent, e
 		out = append(out, pbValue)
 	}
 	return out, nil
-}
-
-func agentTurnDisplayFromProto(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
-	if value == nil {
-		return nil
-	}
-	return &AgentTurnDisplay{
-		Kind:      value.GetKind(),
-		Phase:     value.GetPhase(),
-		Text:      value.GetText(),
-		Label:     value.GetLabel(),
-		Ref:       value.GetRef(),
-		ParentRef: value.GetParentRef(),
-		Input:     anyFromValue(value.GetInput()),
-		Output:    anyFromValue(value.GetOutput()),
-		Error:     anyFromValue(value.GetError()),
-		Action:    value.GetAction(),
-		Format:    value.GetFormat(),
-		Language:  value.GetLanguage(),
-	}
-}
-
-func agentTurnEventFromProto(value *proto.AgentTurnEvent) AgentTurnEvent {
-	if value == nil {
-		return AgentTurnEvent{}
-	}
-	return AgentTurnEvent{
-		ID:         value.GetId(),
-		TurnID:     value.GetTurnId(),
-		Seq:        value.GetSeq(),
-		Type:       value.GetType(),
-		Source:     value.GetSource(),
-		Visibility: value.GetVisibility(),
-		Data:       mapFromStruct(value.GetData()),
-		CreatedAt:  timeFromTimestamp(value.GetCreatedAt()),
-		Display:    agentTurnDisplayFromProto(value.GetDisplay()),
-	}
-}
-
-func agentTurnEventsFromProto(values []*proto.AgentTurnEvent) []AgentTurnEvent {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentTurnEvent, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, agentTurnEventFromProto(value))
-	}
-	return out
-}
-
-func listAgentTurnEventsResponseFromProto(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentTurnEventsResponse {
-	if value == nil {
-		return nil
-	}
-	return &ListAgentTurnEventsResponse{Events: agentTurnEventsFromProto(value.GetEvents())}
 }
 
 func agentTurnDisplayToProto(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, error) {
@@ -1042,47 +848,6 @@ func agentInteractionsToProto(values []AgentInteraction) ([]*proto.AgentInteract
 	return out, nil
 }
 
-func agentInteractionFromProto(value *proto.AgentInteraction) *AgentInteraction {
-	if value == nil {
-		return nil
-	}
-	return &AgentInteraction{
-		ID:         value.GetId(),
-		Type:       AgentInteractionType(value.GetType()),
-		State:      AgentInteractionState(value.GetState()),
-		Title:      value.GetTitle(),
-		Prompt:     value.GetPrompt(),
-		Request:    mapFromStruct(value.GetRequest()),
-		Resolution: mapFromStruct(value.GetResolution()),
-		CreatedAt:  timeFromTimestamp(value.GetCreatedAt()),
-		ResolvedAt: timePtrFromTimestampUnchecked(value.GetResolvedAt()),
-		TurnID:     value.GetTurnId(),
-		SessionID:  value.GetSessionId(),
-	}
-}
-
-func agentInteractionsFromProto(values []*proto.AgentInteraction) []AgentInteraction {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]AgentInteraction, 0, len(values))
-	for _, value := range values {
-		interaction := agentInteractionFromProto(value)
-		if interaction == nil {
-			continue
-		}
-		out = append(out, *interaction)
-	}
-	return out
-}
-
-func listAgentInteractionsResponseFromProto(value *proto.ListAgentProviderInteractionsResponse) *ListAgentInteractionsResponse {
-	if value == nil {
-		return nil
-	}
-	return &ListAgentInteractionsResponse{Interactions: agentInteractionsFromProto(value.GetInteractions())}
-}
-
 func listAgentProviderInteractionsResponseToProto(value *ListAgentProviderInteractionsResponse) (*proto.ListAgentProviderInteractionsResponse, error) {
 	if value == nil {
 		return nil, nil
@@ -1142,32 +907,6 @@ func listedAgentToolsFromProto(values []*proto.ListedAgentTool) []ListedAgentToo
 	return out
 }
 
-func listedAgentToolToProto(value ListedAgentTool) *proto.ListedAgentTool {
-	return &proto.ListedAgentTool{
-		Id:           value.ID,
-		McpName:      value.MCPName,
-		Title:        value.Title,
-		Description:  value.Description,
-		InputSchema:  value.InputSchema,
-		OutputSchema: value.OutputSchema,
-		Annotations:  agentToolAnnotationsToProto(value.Annotations),
-		Ref:          agentToolRefPtrToProto(value.Ref),
-		Tags:         append([]string(nil), value.Tags...),
-		SearchText:   value.SearchText,
-	}
-}
-
-func listedAgentToolsToProto(values []ListedAgentTool) []*proto.ListedAgentTool {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*proto.ListedAgentTool, 0, len(values))
-	for _, value := range values {
-		out = append(out, listedAgentToolToProto(value))
-	}
-	return out
-}
-
 func agentToolAnnotationsFromProto(value *proto.OperationAnnotations) *AgentToolAnnotations {
 	if value == nil {
 		return nil
@@ -1178,33 +917,6 @@ func agentToolAnnotationsFromProto(value *proto.OperationAnnotations) *AgentTool
 		DestructiveHint: value.DestructiveHint,
 		OpenWorldHint:   value.OpenWorldHint,
 	}
-}
-
-func agentToolAnnotationsToProto(value *AgentToolAnnotations) *proto.OperationAnnotations {
-	if value == nil {
-		return nil
-	}
-	return &proto.OperationAnnotations{
-		ReadOnlyHint:    value.ReadOnlyHint,
-		IdempotentHint:  value.IdempotentHint,
-		DestructiveHint: value.DestructiveHint,
-		OpenWorldHint:   value.OpenWorldHint,
-	}
-}
-
-func agentToolRefPtrToProto(value *AgentToolRef) *proto.AgentToolRef {
-	if value == nil {
-		return nil
-	}
-	return agentToolRefToProto(*value)
-}
-
-func timePtrFromTimestampUnchecked(value *timestamppb.Timestamp) *time.Time {
-	if value == nil {
-		return nil
-	}
-	out := value.AsTime()
-	return &out
 }
 
 func optionalValueFromAny(value any) (*structpb.Value, error) {

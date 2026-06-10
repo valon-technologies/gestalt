@@ -9,84 +9,134 @@ Cloudflare R2, and other compatible backends.
 
 ## Using `S3` from a plugin
 
-The SDK exposes an S3 client plus object-handle helpers in every supported
-language.
+The SDK exposes a generated `S3` client in every supported language. The
+client connects to one configured S3 binding by name; the backing bucket comes
+from provider configuration, so object references carry only `key` and an
+optional `version_id`. Object reads and writes are streamed: writes open with
+object metadata and then send byte chunks, and reads return object metadata
+plus a byte-chunk stream.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     import (
       "context"
+      "io"
       "log"
 
-      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      "github.com/valon-technologies/gestalt/sdk/go/client"
     )
 
     ctx := context.Background()
 
-    s3, err := gestalt.S3()
+    s3, err := client.ConnectS3(ctx, "uploads")
     if err != nil {
       log.Fatal(err)
     }
-    defer s3.Close()
 
-    avatar := s3.Object("uploads", "avatars/user-123.png")
-    if _, err := avatar.WriteBytes(ctx, pngBytes, &gestalt.WriteRequest{
+    avatar := &client.S3ObjectRef{Key: "avatars/user-123.png"}
+
+    stream, err := s3.WriteObject(ctx, &client.WriteObjectOpen{
+      Ref:         avatar,
       ContentType: "image/png",
-    }); err != nil {
-      log.Fatal(err)
-    }
-
-    body, err := avatar.Bytes(ctx, nil)
+    })
     if err != nil {
       log.Fatal(err)
     }
+    if err := stream.Send(pngBytes); err != nil {
+      log.Fatal(err)
+    }
+    if _, err := stream.CloseAndRecv(); err != nil {
+      log.Fatal(err)
+    }
+
+    meta, data, err := s3.ReadObject(ctx, &client.ReadObjectRequest{Ref: avatar})
+    if err != nil {
+      log.Fatal(err)
+    }
+    var body []byte
+    for {
+      chunk, err := data.Recv()
+      if err == io.EOF {
+        break
+      }
+      if err != nil {
+        log.Fatal(err)
+      }
+      body = append(body, chunk...)
+    }
+    _ = meta
     _ = body
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import S3, WriteOptions
+    from gestalt import ReadObjectRequest, S3, S3ObjectRef, WriteObjectOpen
 
-    s3 = S3()
-    avatar = s3.object("uploads", "avatars/user-123.png")
-    avatar.write_bytes(
-        png_bytes,
-        WriteOptions(content_type="image/png"),
+    s3 = S3.connect("uploads")
+    avatar = S3ObjectRef(key="avatars/user-123.png")
+
+    s3.write_object(
+        WriteObjectOpen(ref=avatar, content_type="image/png"),
+        [png_bytes],
     )
-    body = avatar.bytes()
-    s3.close()
+
+    meta, chunks = s3.read_object(ReadObjectRequest(ref=avatar))
+    body = b"".join(chunks)
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt::{s3::WriteOptions, S3};
+    use gestalt::s3::{ReadObjectRequest, S3ObjectRef, WriteObjectOpen};
+    use gestalt::S3;
 
-    let s3 = S3::connect().await?;
-    let mut avatar = s3.object("uploads", "avatars/user-123.png");
+    let mut s3 = S3::connect_named("uploads").await?;
+    let avatar = S3ObjectRef {
+        key: "avatars/user-123.png".to_string(),
+        ..Default::default()
+    };
 
-    avatar
-        .write_bytes(
-            &png_bytes,
-            Some(WriteOptions {
-                content_type: "image/png".to_string(),
-                ..Default::default()
-            }),
-        )
+    s3.write_object(
+        WriteObjectOpen {
+            r#ref: Some(avatar.clone()),
+            content_type: "image/png".to_string(),
+            ..Default::default()
+        },
+        tokio_stream::once(png_bytes),
+    )
+    .await?;
+
+    let (meta, mut data) = s3
+        .read_object(ReadObjectRequest {
+            r#ref: Some(avatar),
+            ..Default::default()
+        })
         .await?;
-
-    let body = avatar.bytes(None).await?;
+    let mut body = Vec::new();
+    while let Some(chunk) = data.recv().await? {
+        body.extend_from_slice(&chunk);
+    }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
     import { S3 } from "@valon-technologies/gestalt";
 
-    const s3 = new S3();
-    const avatar = s3.object("uploads", "avatars/user-123.png");
+    const s3 = S3.connect({ name: "uploads" });
+    const avatar = { key: "avatars/user-123.png" };
 
-    await avatar.write(pngBytes, { contentType: "image/png" });
-    const body = await avatar.bytes();
+    await s3.writeObject(
+      { ref: avatar, contentType: "image/png" },
+      (async function* () {
+        yield pngBytes;
+      })(),
+    );
+
+    const { meta, data } = await s3.readObject({ ref: avatar });
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of data) {
+      chunks.push(chunk);
+    }
     ```
   </Tabs.Tab>
 </Tabs>
@@ -118,7 +168,7 @@ interface to the underlying gRPC service:
 | Read object | Stream one object body with its metadata. |
 | Write object | Accept a body stream and return committed metadata. |
 | Delete object | Delete one object reference. |
-| List objects | List objects by bucket, prefix, delimiter, and continuation token. |
+| List objects | List objects in the configured bucket by prefix, delimiter, and continuation token. |
 | Copy object | Copy an object server-side between object references. |
 | Presign object | Produce a presigned request URL plus required headers. |
 
@@ -199,50 +249,70 @@ interface to the underlying gRPC service:
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    from collections.abc import Iterable
+
     from gestalt import (
-        ListPage,
-        ObjectMeta,
-        PresignMethod,
-        PresignResult,
+        CopyObjectRequest,
+        CopyObjectResponse,
+        DeleteObjectRequest,
+        HeadObjectRequest,
+        HeadObjectResponse,
+        ListObjectsRequest,
+        ListObjectsResponse,
+        PresignMethodValues,
+        PresignObjectRequest,
+        PresignObjectResponse,
         ProviderReadResult,
+        ReadObjectRequest,
+        S3ObjectMeta,
         S3Provider,
+        WriteObjectOpen,
+        WriteObjectResponse,
     )
 
     class Provider(S3Provider):
-        def head_object(self, ref):
-            return ObjectMeta(
-                ref=ref,
-                etag="",
-                size=0,
-                content_type="application/octet-stream",
-                metadata={},
+        def head_object(self, request: HeadObjectRequest) -> HeadObjectResponse:
+            return HeadObjectResponse(
+                meta=S3ObjectMeta(
+                    ref=request.ref,
+                    etag="",
+                    size=0,
+                    content_type="application/octet-stream",
+                )
             )
 
-        def read_object(self, ref, opts=None):
-            return ProviderReadResult(
-                meta=self.head_object(ref),
-                body=iter(()),
-            )
+        def read_object(self, request: ReadObjectRequest) -> ProviderReadResult:
+            head = self.head_object(HeadObjectRequest(ref=request.ref))
+            return ProviderReadResult(meta=head.meta, body=iter(()))
 
-        def write_object(self, ref, body, opts=None):
+        def write_object(
+            self,
+            open: WriteObjectOpen,
+            body: Iterable[bytes],
+        ) -> WriteObjectResponse:
             for _chunk in body:
                 pass
-            return self.head_object(ref)
+            head = self.head_object(HeadObjectRequest(ref=open.ref))
+            return WriteObjectResponse(meta=head.meta)
 
-        def delete_object(self, ref):
+        def delete_object(self, request: DeleteObjectRequest) -> None:
             pass
 
-        def list_objects(self, opts):
-            return ListPage()
+        def list_objects(self, request: ListObjectsRequest) -> ListObjectsResponse:
+            return ListObjectsResponse()
 
-        def copy_object(self, source, destination, opts=None):
-            return self.head_object(destination)
+        def copy_object(self, request: CopyObjectRequest) -> CopyObjectResponse:
+            head = self.head_object(HeadObjectRequest(ref=request.destination))
+            return CopyObjectResponse(meta=head.meta)
 
-        def presign_object(self, ref, opts=None):
-            return PresignResult(
-                url=f"https://example.invalid/{ref.bucket}/{ref.key}",
-                method=opts.method if opts and opts.method else PresignMethod.GET,
-                headers=dict(opts.headers) if opts else {},
+        def presign_object(
+            self, request: PresignObjectRequest
+        ) -> PresignObjectResponse:
+            key = request.ref.key if request.ref else ""
+            return PresignObjectResponse(
+                url=f"https://example.invalid/{key}",
+                method=request.method or PresignMethodValues.GET,
+                headers=dict(request.headers),
             )
 
     provider = Provider()
@@ -250,11 +320,19 @@ interface to the underlying gRPC service:
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
+    use gestalt::s3_provider::{
+        CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest,
+        HeadObjectRequest, HeadObjectResponse, ListObjectsRequest,
+        ListObjectsResponse, PresignObjectRequest, PresignObjectResponse,
+        ReadObjectRequest, WriteObjectResponse,
+    };
+    use gestalt::{S3Provider, S3ReadObjectStream, S3WriteObjectStream};
+
     #[derive(Default)]
     pub struct MinioS3;
 
     #[gestalt::async_trait]
-    impl gestalt::S3Provider for MinioS3 {
+    impl S3Provider for MinioS3 {
         async fn configure(
             &self,
             _name: &str,
@@ -265,50 +343,50 @@ interface to the underlying gRPC service:
 
         async fn head_object(
             &self,
-            _request: gestalt::HeadObjectRequest,
-        ) -> gestalt::Result<gestalt::HeadObjectResponse> {
+            _request: HeadObjectRequest,
+        ) -> gestalt::Result<HeadObjectResponse> {
             Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn read_object(
             &self,
-            _request: gestalt::ReadObjectRequest,
-        ) -> gestalt::Result<gestalt::S3ReadObjectStream> {
+            _request: ReadObjectRequest,
+        ) -> gestalt::Result<S3ReadObjectStream> {
             Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn write_object(
             &self,
-            _request: gestalt::S3WriteObjectStream,
-        ) -> gestalt::Result<gestalt::WriteObjectResponse> {
+            _request: S3WriteObjectStream,
+        ) -> gestalt::Result<WriteObjectResponse> {
             Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn delete_object(
             &self,
-            _request: gestalt::DeleteObjectRequest,
+            _request: DeleteObjectRequest,
         ) -> gestalt::Result<()> {
             Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn list_objects(
             &self,
-            _request: gestalt::ListObjectsRequest,
-        ) -> gestalt::Result<gestalt::ListObjectsResponse> {
+            _request: ListObjectsRequest,
+        ) -> gestalt::Result<ListObjectsResponse> {
             Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn copy_object(
             &self,
-            _request: gestalt::CopyObjectRequest,
-        ) -> gestalt::Result<gestalt::CopyObjectResponse> {
+            _request: CopyObjectRequest,
+        ) -> gestalt::Result<CopyObjectResponse> {
             Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn presign_object(
             &self,
-            _request: gestalt::PresignObjectRequest,
-        ) -> gestalt::Result<gestalt::PresignObjectResponse> {
+            _request: PresignObjectRequest,
+        ) -> gestalt::Result<PresignObjectResponse> {
             Err(gestalt::Error::unimplemented("todo"))
         }
     }
@@ -373,8 +451,8 @@ interface to the underlying gRPC service:
 
       async presignObject(ref, options) {
         return {
-          url: `https://example.invalid/${ref.bucket}/${encodeURIComponent(ref.key)}`,
-          method: options?.method ?? PresignMethod.Get,
+          url: `https://example.invalid/${encodeURIComponent(ref.key)}`,
+          method: options?.method ?? PresignMethod.GET,
           headers: { ...(options?.headers ?? {}) },
           expiresAt: new Date(Date.now() + 60_000),
         };
@@ -419,7 +497,7 @@ For packaging and published release URLs, see
 
 ### Implementation notes
 
-- Treat object references as `{bucket, key, version_id}` values, not filesystem paths.
+- Treat object references as `{key, version_id}` values scoped to the provider's configured bucket, not filesystem paths.
 - Keep reads and writes streaming. Do not require the caller to buffer the full object in memory.
 - Preserve backend metadata that fits the portable model: `etag`, `size`, `content_type`, `last_modified`, `metadata`, and `storage_class`.
 - `CopyObject` conditionals apply to the source object, not the destination object.
