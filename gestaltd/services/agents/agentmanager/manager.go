@@ -818,14 +818,11 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	toolSource := coreagent.ToolSourceModeNone
 	var toolRefs []coreagent.ToolRef
-	var listedTools []coreagent.ListedTool
-	toolRefsSet := true
 	if sessionScope, ok, err := m.sessionScopeForSession(ctx, p, ownedSession.providerName, ownedSession.session); err != nil {
 		return nil, err
 	} else if ok {
 		toolSource = normalizeAgentToolSource(sessionScope.ToolSource)
 		toolRefs = append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...)
-		listedTools = append([]coreagent.ListedTool(nil), sessionScope.ListedTools...)
 	}
 	requestedOutput := agentOutputFromProto(req.GetOutput())
 	if err := validateAgentOutput(requestedOutput); err != nil {
@@ -855,18 +852,26 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	default:
 		return nil, fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
 	}
-	if toolSource == coreagent.ToolSourceModeNone {
-		listedTools = nil
-	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	if err := m.storeTurnScope(ctx, req.GetContext(), p, ownedSession.providerName, ownedSession.session.ID, turnID, callerKind, callerName, toolRefs, toolRefsSet, listedTools, toolSource); err != nil {
+	workflowRunID, workflowStepID, err := workflowTurnScope(ctx, req.GetContext(), callerKind, ownedSession.providerName)
+	if err != nil {
 		return nil, err
 	}
-	scopeCommitted := false
+	if m.turnScopes != nil {
+		if err := m.turnScopes.PutTurnBinding(ownedSession.providerName, ownedSession.session.ID, turnID, agentturnscope.TurnBinding{
+			CallerKind:     callerKind,
+			CallerName:     strings.TrimSpace(callerName),
+			WorkflowRunID:  workflowRunID,
+			WorkflowStepID: workflowStepID,
+		}); err != nil {
+			return nil, fmt.Errorf("%w: store agent turn binding: %v", invocation.ErrInternal, err)
+		}
+	}
+	bindingCommitted := false
 	defer func() {
-		if !scopeCommitted {
-			m.deleteTurnScope(ownedSession.providerName, ownedSession.session.ID, turnID)
+		if !bindingCommitted && m.turnScopes != nil {
+			m.turnScopes.DeleteTurnBinding(ownedSession.providerName, ownedSession.session.ID, turnID)
 		}
 	}()
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderTurnRequest{})
@@ -906,12 +911,14 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req *p
 	if err := validateAgentTurnOutput(requestedOutput, normalized); err != nil {
 		return nil, err
 	}
-	if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" {
-		if err := m.turnScopes.BindProviderTurnID(ownedSession.providerName, normalized.SessionID, executionRef, normalized.ID); err != nil {
-			return nil, fmt.Errorf("%w: bind agent provider turn scope: %v", invocation.ErrInternal, err)
+	if m.turnScopes != nil {
+		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" {
+			if err := m.turnScopes.BindProviderTurnID(ownedSession.providerName, normalized.SessionID, executionRef, normalized.ID); err != nil {
+				return nil, fmt.Errorf("%w: bind agent provider turn binding: %v", invocation.ErrInternal, err)
+			}
 		}
 	}
-	scopeCommitted = true
+	bindingCommitted = true
 	return normalized, nil
 }
 
@@ -1055,12 +1062,6 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, req *p
 	}
 	if coreagent.ExecutionStatusIsLive(normalized.Status) {
 		return nil, fmt.Errorf("%w: agent provider %q returned live turn %q after cancel", invocation.ErrInternal, owned.providerName, strings.TrimSpace(normalized.ID))
-	}
-	if m.turnScopes != nil {
-		m.turnScopes.Revoke(owned.providerName, normalized.SessionID, normalized.ID)
-		if executionRef := strings.TrimSpace(normalized.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(normalized.ID) {
-			m.turnScopes.Revoke(owned.providerName, normalized.SessionID, executionRef)
-		}
 	}
 	return normalized, nil
 }
@@ -1584,40 +1585,6 @@ func agentProviderReturnedNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
-func (m *Manager) storeTurnScope(ctx context.Context, reqContext *proto.RequestContext, p *principal.Principal, providerName, sessionID, turnID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, listedTools []coreagent.ListedTool, toolSource coreagent.ToolSourceMode) error {
-	if m == nil || m.turnScopes == nil {
-		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
-	}
-	workflowRunID, workflowStepID, err := workflowTurnScope(ctx, reqContext, callerKind, providerName)
-	if err != nil {
-		return err
-	}
-	subject := agentSubjectFromPrincipal(p)
-	permissions := agentTurnPermissions(ctx, p, callerKind, callerName, toolRefs)
-	connections := m.agentConnectionBindings(providerName)
-	if toolSource == coreagent.ToolSourceModeNone {
-		connections = nil
-	}
-	return m.turnScopes.Put(agentturnscope.Scope{
-		ProviderName:        providerName,
-		SessionID:           sessionID,
-		TurnID:              turnID,
-		ProviderTurnID:      turnID,
-		CallerKind:          callerKind,
-		CallerName:          callerName,
-		WorkflowRunID:       workflowRunID,
-		WorkflowStepID:      workflowStepID,
-		SubjectID:           subject.SubjectID,
-		CredentialSubjectID: subject.CredentialSubjectID,
-		Permissions:         permissions,
-		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolRefsSet:         toolRefsSet,
-		ListedTools:         append([]coreagent.ListedTool(nil), listedTools...),
-		ToolSource:          toolSource,
-		Connections:         connections,
-	})
-}
-
 func (m *Manager) storeSessionScope(ctx context.Context, reqContext *proto.RequestContext, p *principal.Principal, providerName, sessionID string, callerKind invocation.ProviderKind, callerName string, toolRefs []coreagent.ToolRef, listedTools []coreagent.ListedTool, toolSource coreagent.ToolSourceMode) error {
 	if m == nil || m.turnScopes == nil {
 		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
@@ -1819,16 +1786,16 @@ func (m *Manager) authorizeWorkflowTurnAccess(ctx context.Context, owned *access
 		}
 	}
 	if m == nil || m.turnScopes == nil {
-		return fmt.Errorf("%w: agent turn scopes are not configured", invocation.ErrInternal)
+		return fmt.Errorf("%w: agent turn bindings are not configured", invocation.ErrInternal)
 	}
-	scope, ok := m.turnScopes.Get(owned.providerName, owned.turn.SessionID, owned.turn.ID)
+	binding, ok := m.turnScopes.GetTurnBinding(owned.providerName, owned.turn.SessionID, owned.turn.ID)
 	if !ok {
 		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
 	}
-	if scope.CallerKind != invocation.ProviderKindWorkflow ||
-		strings.TrimSpace(scope.CallerName) != callerName ||
-		strings.TrimSpace(scope.WorkflowRunID) != step.RunID ||
-		strings.TrimSpace(scope.WorkflowStepID) != step.ID {
+	if binding.CallerKind != invocation.ProviderKindWorkflow ||
+		strings.TrimSpace(binding.CallerName) != callerName ||
+		strings.TrimSpace(binding.WorkflowRunID) != step.RunID ||
+		strings.TrimSpace(binding.WorkflowStepID) != step.ID {
 		return fmt.Errorf("%w: workflow %q step %q may not access agent turn %q", invocation.ErrAuthorizationDenied, callerName, step.ID, strings.TrimSpace(owned.turn.ID))
 	}
 	return nil
@@ -1842,13 +1809,6 @@ func agentWorkflowContext(ctx context.Context, reqContext *proto.RequestContext)
 		return workflow.AsMap()
 	}
 	return nil
-}
-
-func (m *Manager) deleteTurnScope(providerName, sessionID, turnID string) {
-	if m == nil || m.turnScopes == nil {
-		return
-	}
-	m.turnScopes.Delete(providerName, sessionID, turnID)
 }
 
 func (m *Manager) agentConnectionBindings(providerName string) []agentturnscope.ConnectionBinding {
