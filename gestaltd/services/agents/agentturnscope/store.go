@@ -2,7 +2,6 @@ package agentturnscope
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 	"sync"
 
@@ -30,7 +29,6 @@ type Scope struct {
 	ToolRefs            []coreagent.ToolRef
 	ToolRefsSet         bool
 	ListedTools         []coreagent.ListedTool
-	Tools               []coreagent.Tool
 	ToolSource          coreagent.ToolSourceMode
 	Connections         []ConnectionBinding
 	Revoked             bool
@@ -216,7 +214,6 @@ func cloneScope(src Scope) Scope {
 		ToolRefs:            cloneToolRefs(src.ToolRefs),
 		ToolRefsSet:         src.ToolRefsSet || len(src.ToolRefs) > 0,
 		ListedTools:         cloneListedTools(src.ListedTools),
-		Tools:               cloneTools(src.Tools),
 		ToolSource:          src.ToolSource,
 		Connections:         cloneConnectionBindings(src.Connections),
 		Revoked:             src.Revoked,
@@ -275,24 +272,6 @@ func cloneListedTools(src []coreagent.ListedTool) []coreagent.ListedTool {
 			OutputSchemaJSON: strings.TrimSpace(src[i].OutputSchemaJSON),
 			Annotations:      src[i].Annotations,
 			Ref:              cloneToolRefs([]coreagent.ToolRef{src[i].Ref})[0],
-			Target:           cloneToolTarget(src[i].Target),
-			Hidden:           src[i].Hidden,
-		})
-	}
-	return out
-}
-
-func cloneTools(src []coreagent.Tool) []coreagent.Tool {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make([]coreagent.Tool, 0, len(src))
-	for i := range src {
-		out = append(out, coreagent.Tool{
-			ID:               strings.TrimSpace(src[i].ID),
-			Name:             strings.TrimSpace(src[i].Name),
-			Description:      strings.TrimSpace(src[i].Description),
-			ParametersSchema: maps.Clone(src[i].ParametersSchema),
 			Target:           cloneToolTarget(src[i].Target),
 			Hidden:           src[i].Hidden,
 		})
