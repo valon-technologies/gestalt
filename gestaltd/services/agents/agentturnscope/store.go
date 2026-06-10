@@ -18,7 +18,6 @@ type Scope struct {
 	ProviderName        string
 	SessionID           string
 	TurnID              string
-	ProviderTurnID      string
 	CallerKind          invocation.ProviderKind
 	CallerName          string
 	WorkflowRunID       string
@@ -31,41 +30,30 @@ type Scope struct {
 	ListedTools         []coreagent.ListedTool
 	ToolSource          coreagent.ToolSourceMode
 	Connections         []ConnectionBinding
-	Revoked             bool
+}
+
+// TurnBinding records which caller created a turn so workflow callers can be
+// held to their own runs. It intentionally carries no authorization payload:
+// tool authority is derived per callback from durable sources.
+type TurnBinding struct {
+	CallerKind     invocation.ProviderKind
+	CallerName     string
+	WorkflowRunID  string
+	WorkflowStepID string
+	ProviderTurnID string
 }
 
 type Store struct {
 	mu            sync.RWMutex
-	scopes        map[string]*Scope
 	sessionScopes map[string]*Scope
+	turnBindings  map[string]*TurnBinding
 }
 
 func NewStore() *Store {
 	return &Store{
-		scopes:        map[string]*Scope{},
 		sessionScopes: map[string]*Scope{},
+		turnBindings:  map[string]*TurnBinding{},
 	}
-}
-
-func (s *Store) Put(scope Scope) error {
-	scope = cloneScope(scope)
-	key := scopeKey(scope.ProviderName, scope.SessionID, scope.TurnID)
-	if key == "" {
-		return fmt.Errorf("agent turn scope requires provider, session, and turn")
-	}
-	if scope.ToolRefsSet || len(scope.ToolRefs) > 0 {
-		scope.ToolRefsSet = true
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.scopes == nil {
-		s.scopes = map[string]*Scope{}
-	}
-	s.scopes[key] = &scope
-	if providerKey := scopeKey(scope.ProviderName, scope.SessionID, scope.ProviderTurnID); providerKey != "" && providerKey != key {
-		s.scopes[providerKey] = &scope
-	}
-	return nil
 }
 
 func (s *Store) PutSession(scope Scope) error {
@@ -75,7 +63,6 @@ func (s *Store) PutSession(scope Scope) error {
 		return fmt.Errorf("agent session scope requires provider and session")
 	}
 	scope.TurnID = ""
-	scope.ProviderTurnID = ""
 	if scope.ToolRefsSet || len(scope.ToolRefs) > 0 {
 		scope.ToolRefsSet = true
 	}
@@ -88,40 +75,6 @@ func (s *Store) PutSession(scope Scope) error {
 	return nil
 }
 
-func (s *Store) BindProviderTurnID(providerName, sessionID, turnID, providerTurnID string) error {
-	key := scopeKey(providerName, sessionID, turnID)
-	providerKey := scopeKey(providerName, sessionID, providerTurnID)
-	if key == "" || providerKey == "" {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	scope := s.scopes[key]
-	if scope == nil {
-		return fmt.Errorf("agent turn scope not found")
-	}
-	scope.ProviderTurnID = strings.TrimSpace(providerTurnID)
-	if key != providerKey {
-		s.scopes[providerKey] = scope
-	}
-	return nil
-}
-
-func (s *Store) Delete(providerName, sessionID, turnID string) {
-	key := scopeKey(providerName, sessionID, turnID)
-	if key == "" || s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	target := s.scopes[key]
-	for existingKey, scope := range s.scopes {
-		if scope == target {
-			delete(s.scopes, existingKey)
-		}
-	}
-}
-
 func (s *Store) DeleteSession(providerName, sessionID string) {
 	key := sessionScopeKey(providerName, sessionID)
 	if key == "" || s == nil {
@@ -130,32 +83,6 @@ func (s *Store) DeleteSession(providerName, sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.sessionScopes, key)
-}
-
-func (s *Store) Revoke(providerName, sessionID, turnID string) {
-	key := scopeKey(providerName, sessionID, turnID)
-	if key == "" || s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if scope := s.scopes[key]; scope != nil {
-		scope.Revoked = true
-	}
-}
-
-func (s *Store) Get(providerName, sessionID, turnID string) (Scope, bool) {
-	key := scopeKey(providerName, sessionID, turnID)
-	if key == "" || s == nil {
-		return Scope{}, false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	scope := s.scopes[key]
-	if scope == nil {
-		return Scope{}, false
-	}
-	return cloneScope(*scope), true
 }
 
 func (s *Store) GetSession(providerName, sessionID string) (Scope, bool) {
@@ -172,16 +99,6 @@ func (s *Store) GetSession(providerName, sessionID string) (Scope, bool) {
 	return cloneScope(*scope), true
 }
 
-func scopeKey(providerName, sessionID, turnID string) string {
-	providerName = strings.TrimSpace(providerName)
-	sessionID = strings.TrimSpace(sessionID)
-	turnID = strings.TrimSpace(turnID)
-	if providerName == "" || sessionID == "" || turnID == "" {
-		return ""
-	}
-	return providerName + "\x00" + sessionID + "\x00" + turnID
-}
-
 func sessionScopeKey(providerName, sessionID string) string {
 	providerName = strings.TrimSpace(providerName)
 	sessionID = strings.TrimSpace(sessionID)
@@ -195,15 +112,10 @@ func cloneScope(src Scope) Scope {
 	callerKind := invocation.ProviderKind(strings.TrimSpace(string(src.CallerKind)))
 	callerName := strings.TrimSpace(src.CallerName)
 	turnID := strings.TrimSpace(src.TurnID)
-	providerTurnID := strings.TrimSpace(src.ProviderTurnID)
-	if providerTurnID == "" {
-		providerTurnID = turnID
-	}
 	return Scope{
 		ProviderName:        strings.TrimSpace(src.ProviderName),
 		SessionID:           strings.TrimSpace(src.SessionID),
 		TurnID:              turnID,
-		ProviderTurnID:      providerTurnID,
 		CallerKind:          callerKind,
 		CallerName:          callerName,
 		WorkflowRunID:       strings.TrimSpace(src.WorkflowRunID),
@@ -216,7 +128,6 @@ func cloneScope(src Scope) Scope {
 		ListedTools:         cloneListedTools(src.ListedTools),
 		ToolSource:          src.ToolSource,
 		Connections:         cloneConnectionBindings(src.Connections),
-		Revoked:             src.Revoked,
 	}
 }
 
@@ -315,4 +226,79 @@ func cloneConnectionBindings(src []ConnectionBinding) []ConnectionBinding {
 		out = append(out, ConnectionBinding{Connection: connection})
 	}
 	return out
+}
+
+func (s *Store) PutTurnBinding(providerName, sessionID, turnID string, binding TurnBinding) error {
+	key := turnBindingKey(providerName, sessionID, turnID)
+	if key == "" {
+		return fmt.Errorf("agent turn binding requires provider, session, and turn")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.turnBindings == nil {
+		s.turnBindings = map[string]*TurnBinding{}
+	}
+	s.turnBindings[key] = &binding
+	return nil
+}
+
+func (s *Store) BindProviderTurnID(providerName, sessionID, turnID, providerTurnID string) error {
+	key := turnBindingKey(providerName, sessionID, turnID)
+	aliasKey := turnBindingKey(providerName, sessionID, providerTurnID)
+	if key == "" || aliasKey == "" {
+		return fmt.Errorf("agent turn binding alias requires provider, session, and turn")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	binding := s.turnBindings[key]
+	if binding == nil {
+		return fmt.Errorf("agent turn binding was not found")
+	}
+	binding.ProviderTurnID = strings.TrimSpace(providerTurnID)
+	if aliasKey != key {
+		s.turnBindings[aliasKey] = binding
+	}
+	return nil
+}
+
+func (s *Store) GetTurnBinding(providerName, sessionID, turnID string) (TurnBinding, bool) {
+	key := turnBindingKey(providerName, sessionID, turnID)
+	if key == "" || s == nil {
+		return TurnBinding{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	binding := s.turnBindings[key]
+	if binding == nil {
+		return TurnBinding{}, false
+	}
+	return *binding, true
+}
+
+func (s *Store) DeleteTurnBinding(providerName, sessionID, turnID string) {
+	key := turnBindingKey(providerName, sessionID, turnID)
+	if key == "" || s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	target := s.turnBindings[key]
+	if target == nil {
+		return
+	}
+	for existingKey, binding := range s.turnBindings {
+		if binding == target {
+			delete(s.turnBindings, existingKey)
+		}
+	}
+}
+
+func turnBindingKey(providerName, sessionID, turnID string) string {
+	providerName = strings.TrimSpace(providerName)
+	sessionID = strings.TrimSpace(sessionID)
+	turnID = strings.TrimSpace(turnID)
+	if providerName == "" || sessionID == "" || turnID == "" {
+		return ""
+	}
+	return providerName + "\x00" + sessionID + "\x00" + turnID
 }

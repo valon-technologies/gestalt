@@ -89,64 +89,76 @@ func (m *Manager) AuthorizeWorkflowInvocation(ctx context.Context, req invocatio
 	return invocation.AgentWorkflowAuthorization{Principal: p}, nil
 }
 
+// authorizeAgentInvocationScope derives the authority for one agent tool
+// callback from durable sources: the verified request context (caller,
+// subject, workflow scope, agent invocation identity), the provider-persisted
+// session and its tool scope, and a live turn fetch. Nothing instance-local is
+// consulted, so callbacks may land on any gestaltd instance.
 func (m *Manager) authorizeAgentInvocationScope(ctx context.Context, req agentInvocationScopeRequest) (agentturnscope.Scope, error) {
-	if m == nil || m.turnScopes == nil {
-		return agentturnscope.Scope{}, status.Error(codes.FailedPrecondition, "agent turn scopes are not configured")
-	}
 	agent := req.Agent
 	if strings.TrimSpace(agent.ProviderName) == "" || strings.TrimSpace(agent.SessionID) == "" || strings.TrimSpace(agent.TurnID) == "" {
 		return agentturnscope.Scope{}, status.Error(codes.FailedPrecondition, "agent invocation context is required")
 	}
-	scope, ok := m.turnScopes.Get(agent.ProviderName, agent.SessionID, agent.TurnID)
-	if !ok {
-		return agentturnscope.Scope{}, status.Error(codes.PermissionDenied, "agent turn scope was not found")
-	}
-	if scope.Revoked {
-		return agentturnscope.Scope{}, status.Error(codes.PermissionDenied, "agent turn scope is revoked")
-	}
 	requestedTurnID := strings.TrimSpace(agent.TurnID)
-	if agentProviderName := strings.TrimSpace(req.AgentProviderName); agentProviderName == "" || agentProviderName != strings.TrimSpace(scope.ProviderName) {
-		return agentturnscope.Scope{}, status.Error(codes.PermissionDenied, "agent provider does not match turn scope")
+	if agentProviderName := strings.TrimSpace(req.AgentProviderName); agentProviderName == "" || agentProviderName != strings.TrimSpace(agent.ProviderName) {
+		return agentturnscope.Scope{}, status.Error(codes.PermissionDenied, "agent provider does not match invocation context")
 	}
-	if err := validateAgentInvocationCaller(scope, req, requestedTurnID); err != nil {
+	if req.CallerKind == "" || strings.TrimSpace(req.CallerName) == "" {
+		return agentturnscope.Scope{}, status.Error(codes.FailedPrecondition, "agent invocation caller context is required")
+	}
+	p := principal.Canonicalized(req.Principal)
+	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
+		return agentturnscope.Scope{}, status.Error(codes.PermissionDenied, "agent request context subject is required")
+	}
+	providerName, provider, err := m.resolveProvider(ctx, agent.ProviderName)
+	if err != nil {
+		return agentturnscope.Scope{}, status.Errorf(codes.PermissionDenied, "agent provider %q is not available for turn scope", strings.TrimSpace(agent.ProviderName))
+	}
+	session, err := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
+		SessionId:    strings.TrimSpace(agent.SessionID),
+		ProviderName: providerName,
+		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
+		Context:      req.RequestContext,
+	})
+	if err != nil || session == nil {
+		return agentturnscope.Scope{}, status.Errorf(codes.PermissionDenied, "agent session %q was not found for turn scope", strings.TrimSpace(agent.SessionID))
+	}
+	if !providerSessionOwnedBy(session, p) {
+		return agentturnscope.Scope{}, status.Error(codes.PermissionDenied, "agent request context subject does not own the session")
+	}
+	sessionScope, ok, err := m.sessionScopeForSession(ctx, p, providerName, session)
+	if err != nil {
 		return agentturnscope.Scope{}, err
 	}
-	if err := validateAgentInvocationSubject(scope, req.Principal); err != nil {
+	if !ok {
+		return agentturnscope.Scope{}, status.Errorf(codes.PermissionDenied, "agent session %q has no tool scope", strings.TrimSpace(agent.SessionID))
+	}
+	workflowRunID, workflowStepID, err := workflowTurnScope(ctx, req.RequestContext, req.CallerKind, providerName)
+	if err != nil {
 		return agentturnscope.Scope{}, err
+	}
+	subject := agentSubjectFromPrincipal(p)
+	scope := agentturnscope.Scope{
+		ProviderName:        providerName,
+		SessionID:           strings.TrimSpace(agent.SessionID),
+		TurnID:              requestedTurnID,
+		CallerKind:          req.CallerKind,
+		CallerName:          strings.TrimSpace(req.CallerName),
+		WorkflowRunID:       workflowRunID,
+		WorkflowStepID:      workflowStepID,
+		SubjectID:           subject.SubjectID,
+		CredentialSubjectID: subject.CredentialSubjectID,
+		Permissions:         agentTurnPermissions(ctx, p, req.CallerKind, strings.TrimSpace(req.CallerName), sessionScope.ToolRefs),
+		ToolRefs:            append([]coreagent.ToolRef(nil), sessionScope.ToolRefs...),
+		ToolRefsSet:         sessionScope.ToolRefsSet,
+		ListedTools:         append([]coreagent.ListedTool(nil), sessionScope.ListedTools...),
+		ToolSource:          sessionScope.ToolSource,
+		Connections:         m.agentConnectionBindings(providerName),
 	}
 	if err := m.validateAgentInvocationTurn(ctx, scope, requestedTurnID, req.RequestContext); err != nil {
 		return agentturnscope.Scope{}, err
 	}
 	return scope, nil
-}
-
-func validateAgentInvocationCaller(scope agentturnscope.Scope, req agentInvocationScopeRequest, requestedTurnID string) error {
-	if strings.TrimSpace(scope.ProviderName) != strings.TrimSpace(req.Agent.ProviderName) ||
-		strings.TrimSpace(scope.SessionID) != strings.TrimSpace(req.Agent.SessionID) ||
-		requestedTurnID == "" {
-		return status.Error(codes.PermissionDenied, "agent invocation context does not match turn scope")
-	}
-	if scope.CallerKind == "" || strings.TrimSpace(scope.CallerName) == "" {
-		return status.Error(codes.FailedPrecondition, "agent turn scope caller context is required")
-	}
-	if scope.CallerKind != req.CallerKind || strings.TrimSpace(scope.CallerName) != strings.TrimSpace(req.CallerName) {
-		return status.Error(codes.PermissionDenied, "agent invocation caller does not match turn scope")
-	}
-	return nil
-}
-
-func validateAgentInvocationSubject(scope agentturnscope.Scope, p *principal.Principal) error {
-	p = principal.Canonicalized(p)
-	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
-		return status.Error(codes.PermissionDenied, "agent request context subject is required")
-	}
-	if strings.TrimSpace(p.SubjectID) != strings.TrimSpace(scope.SubjectID) {
-		return status.Error(codes.PermissionDenied, "agent request context subject does not match turn scope")
-	}
-	if credentialSubjectID := strings.TrimSpace(scope.CredentialSubjectID); credentialSubjectID != "" && strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)) != credentialSubjectID {
-		return status.Error(codes.PermissionDenied, "agent request context credential subject does not match turn scope")
-	}
-	return nil
 }
 
 func (m *Manager) validateAgentInvocationTurn(ctx context.Context, scope agentturnscope.Scope, requestedTurnID string, reqCtx *proto.RequestContext) error {
@@ -165,7 +177,13 @@ func (m *Manager) validateAgentInvocationTurn(ctx context.Context, scope agenttu
 }
 
 func (m *Manager) getAgentInvocationTurn(ctx context.Context, provider coreagent.Provider, scope agentturnscope.Scope, requestedTurnID string, reqCtx *proto.RequestContext) (*coreagent.Turn, error) {
-	ids := []string{strings.TrimSpace(scope.ProviderTurnID), strings.TrimSpace(requestedTurnID), strings.TrimSpace(scope.TurnID)}
+	ids := []string{strings.TrimSpace(requestedTurnID), strings.TrimSpace(scope.TurnID)}
+	if m != nil && m.turnScopes != nil {
+		// Best-effort alias for providers that assign their own turn IDs.
+		if binding, ok := m.turnScopes.GetTurnBinding(scope.ProviderName, scope.SessionID, requestedTurnID); ok {
+			ids = append(ids, strings.TrimSpace(binding.ProviderTurnID))
+		}
+	}
 	var sawNotFound bool
 	seen := map[string]struct{}{}
 	for _, turnID := range ids {

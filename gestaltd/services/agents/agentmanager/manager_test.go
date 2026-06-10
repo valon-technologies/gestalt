@@ -85,11 +85,11 @@ func newTestManager(t testing.TB, cfg Config) *Manager {
 	return New(cfg)
 }
 
-func requireAgentManagerTurnScope(t testing.TB, scopes *agentturnscope.Store, providerName, sessionID, turnID string) agentturnscope.Scope {
+func requireAgentManagerSessionScope(t testing.TB, scopes *agentturnscope.Store, providerName, sessionID string) agentturnscope.Scope {
 	t.Helper()
-	scope, ok := scopes.Get(providerName, sessionID, turnID)
+	scope, ok := scopes.GetSession(providerName, sessionID)
 	if !ok {
-		t.Fatalf("turn scope %s/%s/%s not found", providerName, sessionID, turnID)
+		t.Fatalf("session scope %s/%s not found", providerName, sessionID)
 	}
 	return scope
 }
@@ -1259,7 +1259,7 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
+	_, err = manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
 		ProviderName:   "alpha",
 		SessionId:      session.ID,
 		Model:          "test-model",
@@ -1269,7 +1269,7 @@ func TestCreateTurnInheritsSessionToolScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
+	scope := requireAgentManagerSessionScope(t, scopes, "alpha", session.ID)
 	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "slack" {
 		t.Fatalf("turn scope refs = %#v, want inherited slack ref", scope.ToolRefs)
 	}
@@ -1330,7 +1330,7 @@ func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 	if agent := providerReqCtx.GetAgent(); agent.GetProviderName() != "alpha" || agent.GetSessionId() != session.ID || agent.GetTurnId() != turn.ID {
 		t.Fatalf("provider request agent context = %#v, want alpha/%s/%s", agent, session.ID, turn.ID)
 	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
+	scope := requireAgentManagerSessionScope(t, scopes, "alpha", session.ID)
 	if len(scope.ListedTools) != 1 || scope.ListedTools[0].Target.App != "slack" || scope.ListedTools[0].Target.Operation != "chat.postMessage" {
 		t.Fatalf("turn listed tools = %#v, want slack chat.postMessage", scope.ListedTools)
 	}
@@ -1339,8 +1339,8 @@ func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 		CredentialSubjectID: "service_account:automation",
 	}
 	scope.ListedTools[0].Target.RunAs = runAs
-	if err := scopes.Put(scope); err != nil {
-		t.Fatalf("Put delegated turn scope: %v", err)
+	if err := scopes.PutSession(scope); err != nil {
+		t.Fatalf("PutSession delegated scope: %v", err)
 	}
 
 	req := invocation.AgentAppAuthorizationRequest{
@@ -1637,8 +1637,8 @@ func TestAuthorizeAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 	if strings.TrimSpace(turn.ExecutionRef) == "" || turn.ExecutionRef == turn.ID {
 		t.Fatalf("CreateTurn ExecutionRef = %q, want generated execution ref distinct from provider turn ID", turn.ExecutionRef)
 	}
-	if _, ok := scopes.Get("alpha", session.ID, turn.ID); !ok {
-		t.Fatalf("provider-owned turn scope alias %q was not stored", turn.ID)
+	if _, ok := scopes.GetTurnBinding("alpha", session.ID, turn.ID); !ok {
+		t.Fatalf("provider-owned turn binding alias %q was not stored", turn.ID)
 	}
 	providerReqCtx := alpha.createTurnReqs[0].GetContext()
 	executionRefReqCtx := cloneAgentRequest(providerReqCtx, &proto.RequestContext{})
@@ -1688,8 +1688,8 @@ func TestAuthorizeAppInvocationAcceptsProviderOwnedTurnID(t *testing.T) {
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID {
 		t.Fatalf("authorized principal = %#v, want %s", authorized.Principal, p.SubjectID)
 	}
-	if alpha.getTurnCalls != 2 {
-		t.Fatalf("GetTurn calls = %d, want 2 provider-owned turn lookups", alpha.getTurnCalls)
+	if alpha.getTurnCalls != 3 {
+		t.Fatalf("GetTurn calls = %d, want 3 provider-owned turn lookups", alpha.getTurnCalls)
 	}
 }
 
@@ -1736,7 +1736,7 @@ func TestCreateTurnRejectsToolsOutsideSessionScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	scope := requireAgentManagerTurnScope(t, manager.turnScopes, "alpha", session.ID, alpha.createTurnReqs[0].GetTurnId())
+	scope := requireAgentManagerSessionScope(t, manager.turnScopes, "alpha", session.ID)
 	if len(scope.ToolRefs) != 1 || scope.ToolRefs[0].App != "docs" {
 		t.Fatalf("turn scope refs = %#v, want durable docs scope", scope.ToolRefs)
 	}
@@ -2020,9 +2020,12 @@ func TestManagerWorkflowTurnAccessRequiresSameRunAndStepScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID)
-	if scope.CallerKind != invocation.ProviderKindWorkflow || scope.CallerName != "temporal" || scope.WorkflowRunID != "run-1" || scope.WorkflowStepID != "review" {
-		t.Fatalf("turn scope = %#v, want workflow temporal run-1/review", scope)
+	binding, ok := scopes.GetTurnBinding("alpha", session.ID, turn.ID)
+	if !ok {
+		t.Fatalf("turn binding alpha/%s/%s not found", session.ID, turn.ID)
+	}
+	if binding.CallerKind != invocation.ProviderKindWorkflow || binding.CallerName != "temporal" || binding.WorkflowRunID != "run-1" || binding.WorkflowStepID != "review" {
+		t.Fatalf("turn binding = %#v, want workflow temporal run-1/review", binding)
 	}
 
 	if _, err := manager.GetTurn(context.Background(), p, &proto.GetAgentProviderTurnRequest{ProviderName: "alpha", Context: run1, TurnId: turn.ID}); err != nil {
@@ -2318,14 +2321,6 @@ func TestManagerCreateTurnUsesNoToolsWhenSessionToolsAreOmitted(t *testing.T) {
 	if len(alpha.createTurnReqs) != 1 {
 		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
 	}
-	req := alpha.createTurnReqs[0]
-	scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, req.GetTurnId())
-	if scope.ToolSource != coreagent.ToolSourceModeNone {
-		t.Fatalf("scope tool source = %q, want none", scope.ToolSource)
-	}
-	if len(scope.ToolRefs) != 0 || len(scope.Connections) != 0 {
-		t.Fatalf("turn scope = refs:%#v connections:%#v, want no tool or connection scope", scope.ToolRefs, scope.Connections)
-	}
 }
 
 func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
@@ -2505,106 +2500,6 @@ func TestManagerRejectsAmbiguousSuccessfulTurnOutput(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("CreateTurn error = nil, want ambiguous successful output error")
-	}
-}
-
-func TestManagerCancelTurnRevokesTurnScopeWithoutBootstrapWrapper(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	scopes := newAgentManagerTestTurnScopes()
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes: scopes,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		ProviderName:   "alpha",
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		Model:          "test-model",
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID); scope.Revoked {
-		t.Fatalf("scope before cancel is revoked")
-	}
-
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", TurnId: turn.ID, Reason: "done"}); err != nil {
-		t.Fatalf("CancelTurn: %v", err)
-	}
-	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ID); !scope.Revoked {
-		t.Fatalf("scope after cancel is not revoked")
-	}
-}
-
-func TestManagerCancelTurnRevokesExecutionRefScopeWithoutBootstrapWrapper(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	alpha.turnIDOverride = "provider-turn-1"
-	scopes := newAgentManagerTestTurnScopes()
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		TurnScopes: scopes,
-	})
-	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
-
-	session, err := manager.CreateSession(context.Background(), p, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	turn, err := manager.CreateTurn(context.Background(), p, &proto.CreateAgentProviderTurnRequest{
-		ProviderName:   "alpha",
-		TimeoutSeconds: 1,
-		SessionId:      session.ID,
-		IdempotencyKey: "provider-owned-turn",
-		Model:          "test-model",
-		Output:         agentTextOutputProto(),
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if turn.ID != "provider-turn-1" {
-		t.Fatalf("CreateTurn ID = %q, want provider-turn-1", turn.ID)
-	}
-	if strings.TrimSpace(turn.ExecutionRef) == "" || turn.ExecutionRef == turn.ID {
-		t.Fatalf("CreateTurn ExecutionRef = %q, want generated requested ID distinct from provider turn ID %q", turn.ExecutionRef, turn.ID)
-	}
-	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ExecutionRef); scope.Revoked {
-		t.Fatalf("execution-ref scope before cancel is revoked")
-	}
-
-	if _, err := manager.CancelTurn(context.Background(), p, &proto.CancelAgentProviderTurnRequest{ProviderName: "alpha", TurnId: turn.ID, Reason: "done"}); err != nil {
-		t.Fatalf("CancelTurn: %v", err)
-	}
-	if scope := requireAgentManagerTurnScope(t, scopes, "alpha", session.ID, turn.ExecutionRef); !scope.Revoked {
-		t.Fatalf("execution-ref scope after cancel is not revoked")
 	}
 }
 
