@@ -24,43 +24,70 @@ _sym_db = _symbol_database.Default()
 
 from google.protobuf import duration_pb2 as google_dot_protobuf_dot_duration__pb2
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
+from . import annotations_pb2 as v1_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0ev1/cache.proto\x12\x13gestalt.provider.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\"7\n\rCacheSetEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\x0cR\x05value\"K\n\x0b\x43\x61\x63heResult\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05\x66ound\x18\x02 \x01(\x08R\x05\x66ound\x12\x14\n\x05value\x18\x03 \x01(\x0cR\x05value\"#\n\x0f\x43\x61\x63heGetRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\">\n\x10\x43\x61\x63heGetResponse\x12\x14\n\x05\x66ound\x18\x01 \x01(\x08R\x05\x66ound\x12\x14\n\x05value\x18\x02 \x01(\x0cR\x05value\")\n\x13\x43\x61\x63heGetManyRequest\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\"R\n\x14\x43\x61\x63heGetManyResponse\x12:\n\x07\x65ntries\x18\x01 \x03(\x0b\x32 .gestalt.provider.v1.CacheResultR\x07\x65ntries\"f\n\x0f\x43\x61\x63heSetRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\x0cR\x05value\x12+\n\x03ttl\x18\x03 \x01(\x0b\x32\x19.google.protobuf.DurationR\x03ttl\"\x80\x01\n\x13\x43\x61\x63heSetManyRequest\x12<\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\".gestalt.provider.v1.CacheSetEntryR\x07\x65ntries\x12+\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.DurationR\x03ttl\"&\n\x12\x43\x61\x63heDeleteRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\"/\n\x13\x43\x61\x63heDeleteResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x08R\x07\x64\x65leted\",\n\x16\x43\x61\x63heDeleteManyRequest\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\"3\n\x17\x43\x61\x63heDeleteManyResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x03R\x07\x64\x65leted\"R\n\x11\x43\x61\x63heTouchRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12+\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.DurationR\x03ttl\".\n\x12\x43\x61\x63heTouchResponse\x12\x18\n\x07touched\x18\x01 \x01(\x08R\x07touched2\xed\x04\n\x05\x43\x61\x63he\x12R\n\x03Get\x12$.gestalt.provider.v1.CacheGetRequest\x1a%.gestalt.provider.v1.CacheGetResponse\x12^\n\x07GetMany\x12(.gestalt.provider.v1.CacheGetManyRequest\x1a).gestalt.provider.v1.CacheGetManyResponse\x12\x43\n\x03Set\x12$.gestalt.provider.v1.CacheSetRequest\x1a\x16.google.protobuf.Empty\x12K\n\x07SetMany\x12(.gestalt.provider.v1.CacheSetManyRequest\x1a\x16.google.protobuf.Empty\x12[\n\x06\x44\x65lete\x12\'.gestalt.provider.v1.CacheDeleteRequest\x1a(.gestalt.provider.v1.CacheDeleteResponse\x12g\n\nDeleteMany\x12+.gestalt.provider.v1.CacheDeleteManyRequest\x1a,.gestalt.provider.v1.CacheDeleteManyResponse\x12X\n\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a\'.gestalt.provider.v1.CacheTouchResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0ev1/cache.proto\x12\x13gestalt.provider.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x14v1/annotations.proto\"7\n\rCacheSetEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\x0cR\x05value\"K\n\x0b\x43\x61\x63heResult\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05\x66ound\x18\x02 \x01(\x08R\x05\x66ound\x12\x14\n\x05value\x18\x03 \x01(\x0cR\x05value\"#\n\x0f\x43\x61\x63heGetRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\"R\n\x10\x43\x61\x63heGetResponse\x12\x14\n\x05\x66ound\x18\x01 \x01(\x08R\x05\x66ound\x12\x14\n\x05value\x18\x02 \x01(\x0cR\x05value:\x12\x8a\xb5\x18\x0e\n\x05\x66ound\x12\x05value\")\n\x13\x43\x61\x63heGetManyRequest\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\"t\n\x14\x43\x61\x63heGetManyResponse\x12:\n\x07\x65ntries\x18\x01 \x03(\x0b\x32 .gestalt.provider.v1.CacheResultR\x07\x65ntries: \x92\xb5\x18\x1c\n\x07\x65ntries\x12\x03key\x1a\x05\x66ound\"\x05value\"f\n\x0f\x43\x61\x63heSetRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\x0cR\x05value\x12+\n\x03ttl\x18\x03 \x01(\x0b\x32\x19.google.protobuf.DurationR\x03ttl\"\x80\x01\n\x13\x43\x61\x63heSetManyRequest\x12<\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\".gestalt.provider.v1.CacheSetEntryR\x07\x65ntries\x12+\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.DurationR\x03ttl\"&\n\x12\x43\x61\x63heDeleteRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\"<\n\x13\x43\x61\x63heDeleteResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x08R\x07\x64\x65leted:\x0b\x9a\xb5\x18\x07\x64\x65leted\",\n\x16\x43\x61\x63heDeleteManyRequest\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\"@\n\x17\x43\x61\x63heDeleteManyResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x03R\x07\x64\x65leted:\x0b\x9a\xb5\x18\x07\x64\x65leted\"R\n\x11\x43\x61\x63heTouchRequest\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12+\n\x03ttl\x18\x02 \x01(\x0b\x32\x19.google.protobuf.DurationR\x03ttl\";\n\x12\x43\x61\x63heTouchResponse\x12\x18\n\x07touched\x18\x01 \x01(\x08R\x07touched:\x0b\x9a\xb5\x18\x07touched2\xdb\x05\n\x05\x43\x61\x63he\x12[\n\x03Get\x12$.gestalt.provider.v1.CacheGetRequest\x1a%.gestalt.provider.v1.CacheGetResponse\"\x07\x8a\xb5\x18\x03key\x12h\n\x07GetMany\x12(.gestalt.provider.v1.CacheGetManyRequest\x1a).gestalt.provider.v1.CacheGetManyResponse\"\x08\x8a\xb5\x18\x04keys\x12\\\n\x03Set\x12$.gestalt.provider.v1.CacheSetRequest\x1a\x16.google.protobuf.Empty\"\x17\x8a\xb5\x18\x03key\x8a\xb5\x18\x05value\x8a\xb5\x18\x03ttl\x12_\n\x07SetMany\x12(.gestalt.provider.v1.CacheSetManyRequest\x1a\x16.google.protobuf.Empty\"\x12\x8a\xb5\x18\x07\x65ntries\x8a\xb5\x18\x03ttl\x12\x64\n\x06\x44\x65lete\x12\'.gestalt.provider.v1.CacheDeleteRequest\x1a(.gestalt.provider.v1.CacheDeleteResponse\"\x07\x8a\xb5\x18\x03key\x12q\n\nDeleteMany\x12+.gestalt.provider.v1.CacheDeleteManyRequest\x1a,.gestalt.provider.v1.CacheDeleteManyResponse\"\x08\x8a\xb5\x18\x04keys\x12h\n\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a\'.gestalt.provider.v1.CacheTouchResponse\"\x0e\x8a\xb5\x18\x03key\x8a\xb5\x18\x03ttl\x1a\t\x8a\xb5\x18\x05\x63\x61\x63heb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.cache_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_CACHESETENTRY']._serialized_start=100
-  _globals['_CACHESETENTRY']._serialized_end=155
-  _globals['_CACHERESULT']._serialized_start=157
-  _globals['_CACHERESULT']._serialized_end=232
-  _globals['_CACHEGETREQUEST']._serialized_start=234
-  _globals['_CACHEGETREQUEST']._serialized_end=269
-  _globals['_CACHEGETRESPONSE']._serialized_start=271
-  _globals['_CACHEGETRESPONSE']._serialized_end=333
-  _globals['_CACHEGETMANYREQUEST']._serialized_start=335
-  _globals['_CACHEGETMANYREQUEST']._serialized_end=376
-  _globals['_CACHEGETMANYRESPONSE']._serialized_start=378
-  _globals['_CACHEGETMANYRESPONSE']._serialized_end=460
-  _globals['_CACHESETREQUEST']._serialized_start=462
-  _globals['_CACHESETREQUEST']._serialized_end=564
-  _globals['_CACHESETMANYREQUEST']._serialized_start=567
-  _globals['_CACHESETMANYREQUEST']._serialized_end=695
-  _globals['_CACHEDELETEREQUEST']._serialized_start=697
-  _globals['_CACHEDELETEREQUEST']._serialized_end=735
-  _globals['_CACHEDELETERESPONSE']._serialized_start=737
-  _globals['_CACHEDELETERESPONSE']._serialized_end=784
-  _globals['_CACHEDELETEMANYREQUEST']._serialized_start=786
-  _globals['_CACHEDELETEMANYREQUEST']._serialized_end=830
-  _globals['_CACHEDELETEMANYRESPONSE']._serialized_start=832
-  _globals['_CACHEDELETEMANYRESPONSE']._serialized_end=883
-  _globals['_CACHETOUCHREQUEST']._serialized_start=885
-  _globals['_CACHETOUCHREQUEST']._serialized_end=967
-  _globals['_CACHETOUCHRESPONSE']._serialized_start=969
-  _globals['_CACHETOUCHRESPONSE']._serialized_end=1015
-  _globals['_CACHE']._serialized_start=1018
-  _globals['_CACHE']._serialized_end=1639
+  _globals['_CACHEGETRESPONSE']._loaded_options = None
+  _globals['_CACHEGETRESPONSE']._serialized_options = b'\212\265\030\016\n\005found\022\005value'
+  _globals['_CACHEGETMANYRESPONSE']._loaded_options = None
+  _globals['_CACHEGETMANYRESPONSE']._serialized_options = b'\222\265\030\034\n\007entries\022\003key\032\005found\"\005value'
+  _globals['_CACHEDELETERESPONSE']._loaded_options = None
+  _globals['_CACHEDELETERESPONSE']._serialized_options = b'\232\265\030\007deleted'
+  _globals['_CACHEDELETEMANYRESPONSE']._loaded_options = None
+  _globals['_CACHEDELETEMANYRESPONSE']._serialized_options = b'\232\265\030\007deleted'
+  _globals['_CACHETOUCHRESPONSE']._loaded_options = None
+  _globals['_CACHETOUCHRESPONSE']._serialized_options = b'\232\265\030\007touched'
+  _globals['_CACHE']._loaded_options = None
+  _globals['_CACHE']._serialized_options = b'\212\265\030\005cache'
+  _globals['_CACHE'].methods_by_name['Get']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['Get']._serialized_options = b'\212\265\030\003key'
+  _globals['_CACHE'].methods_by_name['GetMany']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['GetMany']._serialized_options = b'\212\265\030\004keys'
+  _globals['_CACHE'].methods_by_name['Set']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['Set']._serialized_options = b'\212\265\030\003key\212\265\030\005value\212\265\030\003ttl'
+  _globals['_CACHE'].methods_by_name['SetMany']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['SetMany']._serialized_options = b'\212\265\030\007entries\212\265\030\003ttl'
+  _globals['_CACHE'].methods_by_name['Delete']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['Delete']._serialized_options = b'\212\265\030\003key'
+  _globals['_CACHE'].methods_by_name['DeleteMany']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['DeleteMany']._serialized_options = b'\212\265\030\004keys'
+  _globals['_CACHE'].methods_by_name['Touch']._loaded_options = None
+  _globals['_CACHE'].methods_by_name['Touch']._serialized_options = b'\212\265\030\003key\212\265\030\003ttl'
+  _globals['_CACHESETENTRY']._serialized_start=122
+  _globals['_CACHESETENTRY']._serialized_end=177
+  _globals['_CACHERESULT']._serialized_start=179
+  _globals['_CACHERESULT']._serialized_end=254
+  _globals['_CACHEGETREQUEST']._serialized_start=256
+  _globals['_CACHEGETREQUEST']._serialized_end=291
+  _globals['_CACHEGETRESPONSE']._serialized_start=293
+  _globals['_CACHEGETRESPONSE']._serialized_end=375
+  _globals['_CACHEGETMANYREQUEST']._serialized_start=377
+  _globals['_CACHEGETMANYREQUEST']._serialized_end=418
+  _globals['_CACHEGETMANYRESPONSE']._serialized_start=420
+  _globals['_CACHEGETMANYRESPONSE']._serialized_end=536
+  _globals['_CACHESETREQUEST']._serialized_start=538
+  _globals['_CACHESETREQUEST']._serialized_end=640
+  _globals['_CACHESETMANYREQUEST']._serialized_start=643
+  _globals['_CACHESETMANYREQUEST']._serialized_end=771
+  _globals['_CACHEDELETEREQUEST']._serialized_start=773
+  _globals['_CACHEDELETEREQUEST']._serialized_end=811
+  _globals['_CACHEDELETERESPONSE']._serialized_start=813
+  _globals['_CACHEDELETERESPONSE']._serialized_end=873
+  _globals['_CACHEDELETEMANYREQUEST']._serialized_start=875
+  _globals['_CACHEDELETEMANYREQUEST']._serialized_end=919
+  _globals['_CACHEDELETEMANYRESPONSE']._serialized_start=921
+  _globals['_CACHEDELETEMANYRESPONSE']._serialized_end=985
+  _globals['_CACHETOUCHREQUEST']._serialized_start=987
+  _globals['_CACHETOUCHREQUEST']._serialized_end=1069
+  _globals['_CACHETOUCHRESPONSE']._serialized_start=1071
+  _globals['_CACHETOUCHRESPONSE']._serialized_end=1130
+  _globals['_CACHE']._serialized_start=1133
+  _globals['_CACHE']._serialized_end=1864
 # @@protoc_insertion_point(module_scope)

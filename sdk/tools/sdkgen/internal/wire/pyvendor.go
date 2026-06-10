@@ -29,6 +29,7 @@ const (
 
 var pyProtoModules = []string{
 	"agent",
+	"annotations",
 	"authentication",
 	"authorization",
 	"cache",
@@ -44,6 +45,12 @@ var pyProtoModules = []string{
 }
 
 var pyTopLevelImportMarkers = []string{"from v1 import ", "import v1."}
+
+// pyServicelessModules have no grpc service; the grpc plugin still emits a
+// boilerplate stub for them, which is not vendored.
+var pyServicelessModules = map[string]bool{
+	"annotations": true,
+}
 
 // renderPython generates and vendors the Python wire stubs into outDir.
 func renderPython(bufTool *toolchain.Tool, protoDir, outDir string) error {
@@ -104,6 +111,9 @@ func pythonVendoredStubs(bufTool *toolchain.Tool, protoDir string) (map[string][
 		}
 		out["v1/"+module+"_pb2.pyi"] = []byte(pyiSource)
 
+		if pyServicelessModules[module] {
+			continue
+		}
 		grpcStub, err := os.ReadFile(filepath.Join(genDir, module+"_pb2_grpc.py"))
 		if err != nil {
 			return nil, err

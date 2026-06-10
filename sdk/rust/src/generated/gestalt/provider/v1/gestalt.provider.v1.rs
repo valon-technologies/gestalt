@@ -1259,6 +1259,49 @@ impl AgentInteractionState {
         }
     }
 }
+// SDK annotations: a closed vocabulary of options that move API conventions
+// out of comments and into the schema, so sdkgen can generate ergonomic
+// surfaces once for every language. Each annotation is validated during
+// generation; naming a missing field or annotating the wrong shape fails
+// with a diagnostic. See the sdkgen RFC's SDK Annotations section.
+
+/// OptionalResult declares that `value` is meaningful only when the bool
+/// `guard` field is true. At API boundaries the message collapses to an
+/// optional value (TypeScript `T | undefined`, Python `T | None`, Go
+/// `(T, bool)`, Rust `Option<T>`).
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OptionalResult {
+    #[prost(string, tag = "1")]
+    pub guard: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub value: ::prost::alloc::string::String,
+}
+/// Keyed declares that the repeated `entries` field is a collection keyed by
+/// each entry's `key` field; entries whose bool `present` field is false are
+/// omitted. At API boundaries the message collapses to a native map from key
+/// to the entry's `value` field.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Keyed {
+    #[prost(string, tag = "1")]
+    pub entries: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub key: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub present: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub value: ::prost::alloc::string::String,
+}
+/// Framing declares a header-then-payload stream protocol over a frame
+/// message with a oneof: the first frame always carries `header`, and every
+/// later frame carries `chunk`. Generated surfaces expose the header and a
+/// native payload stream instead of raw frames.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct Framing {
+    #[prost(string, tag = "1")]
+    pub header: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub chunk: ::prost::alloc::string::String,
+}
 /// AuthenticatedUser is the normalized user identity returned by an authentication
 /// provider after a login or token-validation flow.
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -2940,7 +2940,7 @@ var File_v1_datastore_proto protoreflect.FileDescriptor
 
 const file_v1_datastore_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xf2\x02\n" +
+	"\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x14v1/annotations.proto\"\xf2\x02\n" +
 	"\n" +
 	"TypedValue\x12;\n" +
 	"\n" +
@@ -3127,7 +3127,7 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x19TransactionDurabilityHint\x12\"\n" +
 	"\x1eTRANSACTION_DURABILITY_DEFAULT\x10\x00\x12!\n" +
 	"\x1dTRANSACTION_DURABILITY_STRICT\x10\x01\x12\"\n" +
-	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xfb\r\n" +
+	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\x8a\x0e\n" +
 	"\tIndexedDB\x12Z\n" +
 	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
 	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
@@ -3151,7 +3151,7 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12_\n" +
 	"\n" +
 	"OpenCursor\x12(.gestalt.provider.v1.CursorClientMessage\x1a#.gestalt.provider.v1.CursorResponse(\x010\x01\x12o\n" +
-	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01B\xda\x01\n" +
+	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01\x1a\r\x8a\xb5\x18\tIndexedDBB\xda\x01\n" +
 	"\x17com.gestalt.provider.v1B\x0eDatastoreProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -3335,6 +3335,7 @@ func file_v1_datastore_proto_init() {
 	if File_v1_datastore_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	file_v1_datastore_proto_msgTypes[0].OneofWrappers = []any{
 		(*TypedValue_NullValue)(nil),
 		(*TypedValue_StringValue)(nil),

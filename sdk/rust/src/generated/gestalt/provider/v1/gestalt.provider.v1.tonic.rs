@@ -3315,7 +3315,6 @@ pub mod cache_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn get(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheGetRequest>,
@@ -3440,7 +3439,6 @@ pub mod cache_server {
     /// Generated trait containing gRPC methods that should be implemented for use with CacheServer.
     #[async_trait]
     pub trait Cache: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn get(
             &self,
             request: tonic::Request<super::CacheGetRequest>,
@@ -3937,8 +3935,6 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /** Lifecycle
-        */
         pub async fn create_object_store(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateObjectStoreRequest>,
@@ -4305,8 +4301,6 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
-        /** Lifecycle
-        */
         async fn create_object_store(
             &self,
             request: tonic::Request<super::CreateObjectStoreRequest>,
@@ -7573,7 +7567,6 @@ pub mod s3_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn head_object(
             &mut self,
             request: impl tonic::IntoRequest<super::HeadObjectRequest>,
@@ -7589,9 +7582,6 @@ pub mod s3_client {
                 .insert(GrpcMethod::new("gestalt.provider.v1.S3", "HeadObject"));
             self.inner.unary(req, path, codec).await
         }
-        /** The first response frame carries object metadata. All subsequent frames
-         carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-        */
         pub async fn read_object(
             &mut self,
             request: impl tonic::IntoRequest<super::ReadObjectRequest>,
@@ -7707,7 +7697,6 @@ pub mod s3_server {
     /// Generated trait containing gRPC methods that should be implemented for use with S3Server.
     #[async_trait]
     pub trait S3: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn head_object(
             &self,
             request: tonic::Request<super::HeadObjectRequest>,
@@ -7717,9 +7706,6 @@ pub mod s3_server {
                 Item = std::result::Result<super::ReadObjectChunk, tonic::Status>,
             > + std::marker::Send
             + 'static;
-        /** The first response frame carries object metadata. All subsequent frames
-         carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-        */
         async fn read_object(
             &self,
             request: tonic::Request<super::ReadObjectRequest>,

@@ -722,7 +722,7 @@ var File_v1_cache_proto protoreflect.FileDescriptor
 
 const file_v1_cache_proto_rawDesc = "" +
 	"\n" +
-	"\x0ev1/cache.proto\x12\x13gestalt.provider.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\"7\n" +
+	"\x0ev1/cache.proto\x12\x13gestalt.provider.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x14v1/annotations.proto\"7\n" +
 	"\rCacheSetEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\"K\n" +
@@ -731,14 +731,16 @@ const file_v1_cache_proto_rawDesc = "" +
 	"\x05found\x18\x02 \x01(\bR\x05found\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\fR\x05value\"#\n" +
 	"\x0fCacheGetRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\">\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"R\n" +
 	"\x10CacheGetResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\fR\x05value\")\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x12\x8a\xb5\x18\x0e\n" +
+	"\x05found\x12\x05value\")\n" +
 	"\x13CacheGetManyRequest\x12\x12\n" +
-	"\x04keys\x18\x01 \x03(\tR\x04keys\"R\n" +
+	"\x04keys\x18\x01 \x03(\tR\x04keys\"t\n" +
 	"\x14CacheGetManyResponse\x12:\n" +
-	"\aentries\x18\x01 \x03(\v2 .gestalt.provider.v1.CacheResultR\aentries\"f\n" +
+	"\aentries\x18\x01 \x03(\v2 .gestalt.provider.v1.CacheResultR\aentries: \x92\xb5\x18\x1c\n" +
+	"\aentries\x12\x03key\x1a\x05found\"\x05value\"f\n" +
 	"\x0fCacheSetRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value\x12+\n" +
@@ -747,27 +749,27 @@ const file_v1_cache_proto_rawDesc = "" +
 	"\aentries\x18\x01 \x03(\v2\".gestalt.provider.v1.CacheSetEntryR\aentries\x12+\n" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\"&\n" +
 	"\x12CacheDeleteRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"/\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"<\n" +
 	"\x13CacheDeleteResponse\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted\",\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted:\v\x9a\xb5\x18\adeleted\",\n" +
 	"\x16CacheDeleteManyRequest\x12\x12\n" +
-	"\x04keys\x18\x01 \x03(\tR\x04keys\"3\n" +
+	"\x04keys\x18\x01 \x03(\tR\x04keys\"@\n" +
 	"\x17CacheDeleteManyResponse\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\x03R\adeleted\"R\n" +
+	"\adeleted\x18\x01 \x01(\x03R\adeleted:\v\x9a\xb5\x18\adeleted\"R\n" +
 	"\x11CacheTouchRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
-	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\".\n" +
+	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\";\n" +
 	"\x12CacheTouchResponse\x12\x18\n" +
-	"\atouched\x18\x01 \x01(\bR\atouched2\xed\x04\n" +
-	"\x05Cache\x12R\n" +
-	"\x03Get\x12$.gestalt.provider.v1.CacheGetRequest\x1a%.gestalt.provider.v1.CacheGetResponse\x12^\n" +
-	"\aGetMany\x12(.gestalt.provider.v1.CacheGetManyRequest\x1a).gestalt.provider.v1.CacheGetManyResponse\x12C\n" +
-	"\x03Set\x12$.gestalt.provider.v1.CacheSetRequest\x1a\x16.google.protobuf.Empty\x12K\n" +
-	"\aSetMany\x12(.gestalt.provider.v1.CacheSetManyRequest\x1a\x16.google.protobuf.Empty\x12[\n" +
-	"\x06Delete\x12'.gestalt.provider.v1.CacheDeleteRequest\x1a(.gestalt.provider.v1.CacheDeleteResponse\x12g\n" +
+	"\atouched\x18\x01 \x01(\bR\atouched:\v\x9a\xb5\x18\atouched2\xdb\x05\n" +
+	"\x05Cache\x12[\n" +
+	"\x03Get\x12$.gestalt.provider.v1.CacheGetRequest\x1a%.gestalt.provider.v1.CacheGetResponse\"\a\x8a\xb5\x18\x03key\x12h\n" +
+	"\aGetMany\x12(.gestalt.provider.v1.CacheGetManyRequest\x1a).gestalt.provider.v1.CacheGetManyResponse\"\b\x8a\xb5\x18\x04keys\x12\\\n" +
+	"\x03Set\x12$.gestalt.provider.v1.CacheSetRequest\x1a\x16.google.protobuf.Empty\"\x17\x8a\xb5\x18\x03key\x8a\xb5\x18\x05value\x8a\xb5\x18\x03ttl\x12_\n" +
+	"\aSetMany\x12(.gestalt.provider.v1.CacheSetManyRequest\x1a\x16.google.protobuf.Empty\"\x12\x8a\xb5\x18\aentries\x8a\xb5\x18\x03ttl\x12d\n" +
+	"\x06Delete\x12'.gestalt.provider.v1.CacheDeleteRequest\x1a(.gestalt.provider.v1.CacheDeleteResponse\"\a\x8a\xb5\x18\x03key\x12q\n" +
 	"\n" +
-	"DeleteMany\x12+.gestalt.provider.v1.CacheDeleteManyRequest\x1a,.gestalt.provider.v1.CacheDeleteManyResponse\x12X\n" +
-	"\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a'.gestalt.provider.v1.CacheTouchResponseB\xd6\x01\n" +
+	"DeleteMany\x12+.gestalt.provider.v1.CacheDeleteManyRequest\x1a,.gestalt.provider.v1.CacheDeleteManyResponse\"\b\x8a\xb5\x18\x04keys\x12h\n" +
+	"\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a'.gestalt.provider.v1.CacheTouchResponse\"\x0e\x8a\xb5\x18\x03key\x8a\xb5\x18\x03ttl\x1a\t\x8a\xb5\x18\x05cacheB\xd6\x01\n" +
 	"\x17com.gestalt.provider.v1B\n" +
 	"CacheProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
@@ -834,6 +836,7 @@ func file_v1_cache_proto_init() {
 	if File_v1_cache_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

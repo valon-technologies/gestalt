@@ -6,6 +6,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
+import "v1/annotations.proto";
 
 // TypedValue stores one scalar or structured value in an IndexedDB record.
 message TypedValue {
@@ -310,6 +311,8 @@ message TransactionServerMessage {
 
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 service IndexedDB {
+  option (host_binding) = "IndexedDB";
+
   // Lifecycle
   rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty);
   rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty);

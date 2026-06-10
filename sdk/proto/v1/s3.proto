@@ -3,6 +3,7 @@ syntax = "proto3";
 package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
+import "v1/annotations.proto";
 import "google/protobuf/timestamp.proto";
 
 // S3ObjectRef identifies one object or object version.
@@ -172,14 +173,26 @@ message CreateObjectAccessURLResponse {
 
 // S3 models the shared Gestalt S3-provider protocol.
 service S3 {
+  option (host_binding) = "s3";
+
   rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse);
   // The first response frame carries object metadata. All subsequent frames
   // carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-  rpc ReadObject(ReadObjectRequest) returns (stream ReadObjectChunk);
+  rpc ReadObject(ReadObjectRequest) returns (stream ReadObjectChunk) {
+    option (framing) = {
+      header: "meta"
+      chunk: "data"
+    };
+  }
   // The first request frame must carry WriteObjectOpen metadata. All
   // subsequent frames carry raw bytes. The response is emitted only after the
   // object has been durably committed by the provider.
-  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse);
+  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse) {
+    option (framing) = {
+      header: "open"
+      chunk: "data"
+    };
+  }
   rpc DeleteObject(DeleteObjectRequest) returns (google.protobuf.Empty);
   rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
   rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse);
