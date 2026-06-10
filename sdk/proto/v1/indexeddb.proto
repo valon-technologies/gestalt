@@ -6,6 +6,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
+import "v1/annotations.proto";
 
 // TypedValue stores one scalar or structured value in an IndexedDB record.
 message TypedValue {
@@ -310,31 +311,97 @@ message TransactionServerMessage {
 
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 service IndexedDB {
+  option (host_binding) = "IndexedDB";
+
   // Lifecycle
-  rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty);
-  rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty);
+  rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty) {
+    option (signature) = "name";
+    option (signature) = "schema";
+  }
+  rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty) {
+    option (signature) = "name";
+  }
 
   // Primary key CRUD
-  rpc Get(ObjectStoreRequest) returns (RecordResponse);
-  rpc GetKey(ObjectStoreRequest) returns (KeyResponse);
-  rpc Add(RecordRequest) returns (google.protobuf.Empty);
-  rpc Put(RecordRequest) returns (google.protobuf.Empty);
-  rpc Delete(ObjectStoreRequest) returns (google.protobuf.Empty);
+  rpc Get(ObjectStoreRequest) returns (RecordResponse) {
+    option (signature) = "store";
+    option (signature) = "id";
+  }
+  rpc GetKey(ObjectStoreRequest) returns (KeyResponse) {
+    option (signature) = "store";
+    option (signature) = "id";
+  }
+  rpc Add(RecordRequest) returns (google.protobuf.Empty) {
+    option (signature) = "store";
+    option (signature) = "record";
+  }
+  rpc Put(RecordRequest) returns (google.protobuf.Empty) {
+    option (signature) = "store";
+    option (signature) = "record";
+  }
+  rpc Delete(ObjectStoreRequest) returns (google.protobuf.Empty) {
+    option (signature) = "store";
+    option (signature) = "id";
+  }
 
   // Bulk operations (with optional key range)
-  rpc Clear(ObjectStoreNameRequest) returns (google.protobuf.Empty);
-  rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse);
-  rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse);
-  rpc Count(ObjectStoreRangeRequest) returns (CountResponse);
-  rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse);
+  rpc Clear(ObjectStoreNameRequest) returns (google.protobuf.Empty) {
+    option (signature) = "store";
+  }
+  rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse) {
+    option (signature) = "store";
+    option (signature) = "range";
+  }
+  rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse) {
+    option (signature) = "store";
+    option (signature) = "range";
+  }
+  rpc Count(ObjectStoreRangeRequest) returns (CountResponse) {
+    option (signature) = "store";
+    option (signature) = "range";
+  }
+  rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse) {
+    option (signature) = "store";
+    option (signature) = "range";
+  }
 
   // Index queries
-  rpc IndexGet(IndexQueryRequest) returns (RecordResponse);
-  rpc IndexGetKey(IndexQueryRequest) returns (KeyResponse);
-  rpc IndexGetAll(IndexQueryRequest) returns (RecordsResponse);
-  rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse);
-  rpc IndexCount(IndexQueryRequest) returns (CountResponse);
-  rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse);
+  rpc IndexGet(IndexQueryRequest) returns (RecordResponse) {
+    option (signature) = "store";
+    option (signature) = "index";
+    option (signature) = "values";
+    option (signature) = "range";
+  }
+  rpc IndexGetKey(IndexQueryRequest) returns (KeyResponse) {
+    option (signature) = "store";
+    option (signature) = "index";
+    option (signature) = "values";
+    option (signature) = "range";
+  }
+  rpc IndexGetAll(IndexQueryRequest) returns (RecordsResponse) {
+    option (signature) = "store";
+    option (signature) = "index";
+    option (signature) = "values";
+    option (signature) = "range";
+  }
+  rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse) {
+    option (signature) = "store";
+    option (signature) = "index";
+    option (signature) = "values";
+    option (signature) = "range";
+  }
+  rpc IndexCount(IndexQueryRequest) returns (CountResponse) {
+    option (signature) = "store";
+    option (signature) = "index";
+    option (signature) = "values";
+    option (signature) = "range";
+  }
+  rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse) {
+    option (signature) = "store";
+    option (signature) = "index";
+    option (signature) = "values";
+    option (signature) = "range";
+  }
 
   // Cursor iteration (bidirectional stream)
   rpc OpenCursor(stream CursorClientMessage) returns (stream CursorResponse);

@@ -22,19 +22,22 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from . import annotations_pb2 as v1_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rv1/test.proto\x12\x13gestalt.provider.v1\"\x13\n\x11HelloWorldRequest\".\n\x12HelloWorldResponse\x12\x18\n\x07message\x18\x01 \x01(\tR\x07message2e\n\x04Test\x12]\n\nHelloWorld\x12&.gestalt.provider.v1.HelloWorldRequest\x1a\'.gestalt.provider.v1.HelloWorldResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rv1/test.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"\x13\n\x11HelloWorldRequest\";\n\x12HelloWorldResponse\x12\x18\n\x07message\x18\x01 \x01(\tR\x07message:\x0b\x9a\xb5\x18\x07message2e\n\x04Test\x12]\n\nHelloWorld\x12&.gestalt.provider.v1.HelloWorldRequest\x1a\'.gestalt.provider.v1.HelloWorldResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.test_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_HELLOWORLDREQUEST']._serialized_start=38
-  _globals['_HELLOWORLDREQUEST']._serialized_end=57
-  _globals['_HELLOWORLDRESPONSE']._serialized_start=59
-  _globals['_HELLOWORLDRESPONSE']._serialized_end=105
-  _globals['_TEST']._serialized_start=107
-  _globals['_TEST']._serialized_end=208
+  _globals['_HELLOWORLDRESPONSE']._loaded_options = None
+  _globals['_HELLOWORLDRESPONSE']._serialized_options = b'\232\265\030\007message'
+  _globals['_HELLOWORLDREQUEST']._serialized_start=60
+  _globals['_HELLOWORLDREQUEST']._serialized_end=79
+  _globals['_HELLOWORLDRESPONSE']._serialized_start=81
+  _globals['_HELLOWORLDRESPONSE']._serialized_end=140
+  _globals['_TEST']._serialized_start=142
+  _globals['_TEST']._serialized_end=243
 # @@protoc_insertion_point(module_scope)

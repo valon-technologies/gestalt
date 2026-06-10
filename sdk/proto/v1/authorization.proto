@@ -5,6 +5,7 @@ package gestalt.provider.v1;
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "v1/annotations.proto";
 
 message Subject {
   string type = 1;
@@ -68,6 +69,8 @@ message AddRelationshipRequest {
 }
 
 message AddRelationshipResponse {
+  option (unwrap) = "relationship";
+
   Relationship relationship = 1;
 }
 
@@ -83,6 +86,8 @@ message SetAuthorizationStateRequest {
 }
 
 message SetAuthorizationStateResponse {
+  option (unwrap) = "active_model";
+
   AuthorizationModelRef active_model = 1;
 }
 
@@ -167,6 +172,8 @@ message AuthorizationModelRef {
 }
 
 message GetActiveModelRefResponse {
+  option (unwrap) = "model";
+
   AuthorizationModelRef model = 1;
 }
 
@@ -175,6 +182,8 @@ message SetActiveModelRequest {
 }
 
 message SetActiveModelResponse {
+  option (unwrap) = "model";
+
   AuthorizationModelRef model = 1;
 }
 
@@ -202,15 +211,39 @@ enum SourceLayer {
 }
 
 service Authorization {
-  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse);
-  rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse);
+  option (host_binding) = "authorization";
 
-  rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse);
-  rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse);
-  rpc DeleteRelationship(DeleteRelationshipRequest) returns (DeleteRelationshipResponse);
-  rpc SetAuthorizationState(SetAuthorizationStateRequest) returns (SetAuthorizationStateResponse);
+  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
+    option (signature) = "action";
+    option (signature) = "resource";
+  }
+  rpc CheckAccessMany(CheckAccessManyRequest) returns (CheckAccessManyResponse) {
+    option (signature) = "requests";
+  }
+
+  rpc ListRelationships(ListRelationshipsRequest) returns (ListRelationshipsResponse) {
+    option (signature) = "page_size";
+    option (signature) = "page_token";
+    option (signature) = "filter";
+  }
+  rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse) {
+    option (signature) = "relationship";
+  }
+  rpc DeleteRelationship(DeleteRelationshipRequest) returns (DeleteRelationshipResponse) {
+    option (signature) = "relationship_tuple";
+  }
+  rpc SetAuthorizationState(SetAuthorizationStateRequest) returns (SetAuthorizationStateResponse) {
+    option (signature) = "relationships";
+    option (signature) = "model";
+  }
 
   rpc GetActiveModelRef(google.protobuf.Empty) returns (GetActiveModelRefResponse);
-  rpc SetActiveModel(SetActiveModelRequest) returns (SetActiveModelResponse);
-  rpc ListActiveModelResourceTypes(ListActiveModelResourceTypesRequest) returns (ListActiveModelResourceTypesResponse);
+  rpc SetActiveModel(SetActiveModelRequest) returns (SetActiveModelResponse) {
+    option (signature) = "model";
+  }
+  rpc ListActiveModelResourceTypes(ListActiveModelResourceTypesRequest) returns (ListActiveModelResourceTypesResponse) {
+    option (signature) = "page_size";
+    option (signature) = "page_token";
+    option (signature) = "filter";
+  }
 }

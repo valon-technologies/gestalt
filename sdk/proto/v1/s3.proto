@@ -4,6 +4,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
+import "v1/annotations.proto";
 
 // S3ObjectRef identifies one object or object version.
 message S3ObjectRef {
@@ -172,23 +173,62 @@ message CreateObjectAccessURLResponse {
 
 // S3 models the shared Gestalt S3-provider protocol.
 service S3 {
-  rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse);
+  option (host_binding) = "s3";
+
+  rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse) {
+    option (signature) = "ref";
+  }
   // The first response frame carries object metadata. All subsequent frames
   // carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-  rpc ReadObject(ReadObjectRequest) returns (stream ReadObjectChunk);
+  rpc ReadObject(ReadObjectRequest) returns (stream ReadObjectChunk) {
+    option (framing) = {
+      header: "meta"
+      chunk: "data"
+    };
+  }
   // The first request frame must carry WriteObjectOpen metadata. All
   // subsequent frames carry raw bytes. The response is emitted only after the
   // object has been durably committed by the provider.
-  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse);
-  rpc DeleteObject(DeleteObjectRequest) returns (google.protobuf.Empty);
-  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
-  rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse);
-  rpc PresignObject(PresignObjectRequest) returns (PresignObjectResponse);
+  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse) {
+    option (framing) = {
+      header: "open"
+      chunk: "data"
+    };
+  }
+  rpc DeleteObject(DeleteObjectRequest) returns (google.protobuf.Empty) {
+    option (signature) = "ref";
+  }
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse) {
+    option (signature) = "prefix";
+    option (signature) = "delimiter";
+    option (signature) = "continuation_token";
+    option (signature) = "start_after";
+    option (signature) = "max_keys";
+  }
+  rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse) {
+    option (signature) = "if_match";
+    option (signature) = "if_none_match";
+    option (signature) = "source";
+    option (signature) = "destination";
+  }
+  rpc PresignObject(PresignObjectRequest) returns (PresignObjectResponse) {
+    option (signature) = "method";
+    option (signature) = "expires_seconds";
+    option (signature) = "content_type";
+    option (signature) = "content_disposition";
+    option (signature) = "ref";
+  }
 }
 
 // S3ObjectAccess models host-mediated object access for plugin-scoped S3
 // bindings. It is registered by gestaltd for apps and is not implemented by
 // S3 providers.
 service S3ObjectAccess {
-  rpc CreateObjectAccessURL(CreateObjectAccessURLRequest) returns (CreateObjectAccessURLResponse);
+  rpc CreateObjectAccessURL(CreateObjectAccessURLRequest) returns (CreateObjectAccessURLResponse) {
+    option (signature) = "method";
+    option (signature) = "expires_seconds";
+    option (signature) = "content_type";
+    option (signature) = "content_disposition";
+    option (signature) = "ref";
+  }
 }

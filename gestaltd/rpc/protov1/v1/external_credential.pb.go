@@ -1239,7 +1239,7 @@ var File_v1_external_credential_proto protoreflect.FileDescriptor
 
 const file_v1_external_credential_proto_rawDesc = "" +
 	"\n" +
-	"\x1cv1/external_credential.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd7\x04\n" +
+	"\x1cv1/external_credential.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14v1/annotations.proto\"\xd7\x04\n" +
 	"\x12ExternalCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1278,9 +1278,9 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"subject_id\x18\x01 \x01(\tR\tsubjectId\x12\x1a\n" +
 	"\binstance\x18\x04 \x01(\tR\binstance\x12#\n" +
 	"\rconnection_id\x18\x05 \x01(\tR\fconnectionIdJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04R\vintegrationR\n" +
-	"connection\"l\n" +
+	"connection\"}\n" +
 	"\x1fListExternalCredentialsResponse\x12I\n" +
-	"\vcredentials\x18\x01 \x03(\v2'.gestalt.provider.v1.ExternalCredentialR\vcredentials\"1\n" +
+	"\vcredentials\x18\x01 \x03(\v2'.gestalt.provider.v1.ExternalCredentialR\vcredentials:\x0f\x9a\xb5\x18\vcredentials\"1\n" +
 	"\x1fDeleteExternalCredentialRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\xe0\x02\n" +
 	"%ExternalCredentialTokenExchangeDriver\x12\x12\n" +
@@ -1385,17 +1385,23 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x11connection_params\x18\t \x03(\v2L.gestalt.provider.v1.ExchangeExternalCredentialRequest.ConnectionParamsEntryR\x10connectionParams\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\"ExchangeExternalCredentialResponse\x12[\n" +
-	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse2\xd4\x06\n" +
-	"\x13ExternalCredentials\x12q\n" +
-	"\x10UpsertCredential\x124.gestalt.provider.v1.UpsertExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12k\n" +
-	"\rGetCredential\x121.gestalt.provider.v1.GetExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\x12|\n" +
-	"\x0fListCredentials\x123.gestalt.provider.v1.ListExternalCredentialsRequest\x1a4.gestalt.provider.v1.ListExternalCredentialsResponse\x12`\n" +
-	"\x10DeleteCredential\x124.gestalt.provider.v1.DeleteExternalCredentialRequest\x1a\x16.google.protobuf.Empty\x12p\n" +
-	"\x18ValidateCredentialConfig\x12<.gestalt.provider.v1.ValidateExternalCredentialConfigRequest\x1a\x16.google.protobuf.Empty\x12\x82\x01\n" +
-	"\x11ResolveCredential\x125.gestalt.provider.v1.ResolveExternalCredentialRequest\x1a6.gestalt.provider.v1.ResolveExternalCredentialResponse\x12\x85\x01\n" +
-	"\x12ExchangeCredential\x126.gestalt.provider.v1.ExchangeExternalCredentialRequest\x1a7.gestalt.provider.v1.ExchangeExternalCredentialResponseB\xe3\x01\n" +
+	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse:\x12\x9a\xb5\x18\x0etoken_response2\xf3\t\n" +
+	"\x13ExternalCredentials\x12\x98\x01\n" +
+	"\x10UpsertCredential\x124.gestalt.provider.v1.UpsertExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\"%\x8a\xb5\x18\x13preserve_timestamps\x8a\xb5\x18\n" +
+	"credential\x12w\n" +
+	"\rGetCredential\x121.gestalt.provider.v1.GetExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\"\n" +
+	"\x8a\xb5\x18\x06lookup\x12\xa9\x01\n" +
+	"\x0fListCredentials\x123.gestalt.provider.v1.ListExternalCredentialsRequest\x1a4.gestalt.provider.v1.ListExternalCredentialsResponse\"+\x8a\xb5\x18\n" +
+	"subject_id\x8a\xb5\x18\binstance\x8a\xb5\x18\rconnection_id\x12h\n" +
+	"\x10DeleteCredential\x124.gestalt.provider.v1.DeleteExternalCredentialRequest\x1a\x16.google.protobuf.Empty\"\x06\x8a\xb5\x18\x02id\x12\xad\x01\n" +
+	"\x18ValidateCredentialConfig\x12<.gestalt.provider.v1.ValidateExternalCredentialConfigRequest\x1a\x16.google.protobuf.Empty\";\x8a\xb5\x18\bprovider\x8a\xb5\x18\n" +
+	"connection\x8a\xb5\x18\rconnection_id\x8a\xb5\x18\x04mode\x8a\xb5\x18\x04auth\x12\xf8\x01\n" +
+	"\x11ResolveCredential\x125.gestalt.provider.v1.ResolveExternalCredentialRequest\x1a6.gestalt.provider.v1.ResolveExternalCredentialResponse\"t\x8a\xb5\x18\bprovider\x8a\xb5\x18\n" +
+	"connection\x8a\xb5\x18\rconnection_id\x8a\xb5\x18\x04mode\x8a\xb5\x18\x15credential_subject_id\x8a\xb5\x18\x10actor_subject_id\x8a\xb5\x18\binstance\x8a\xb5\x18\x04auth\x12\x86\x02\n" +
+	"\x12ExchangeCredential\x126.gestalt.provider.v1.ExchangeExternalCredentialRequest\x1a7.gestalt.provider.v1.ExchangeExternalCredentialResponse\"\x7f\x8a\xb5\x18\bprovider\x8a\xb5\x18\n" +
+	"connection\x8a\xb5\x18\rconnection_id\x8a\xb5\x18\x15credential_subject_id\x8a\xb5\x18\x10actor_subject_id\x8a\xb5\x18\binstance\x8a\xb5\x18\x0fcredential_json\x8a\xb5\x18\x04authB\xe3\x01\n" +
 	"\x17com.gestalt.provider.v1B\x17ExternalCredentialProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -1485,6 +1491,7 @@ func file_v1_external_credential_proto_init() {
 	if File_v1_external_credential_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
