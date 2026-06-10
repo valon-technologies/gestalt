@@ -45,7 +45,7 @@ func buildProviderHostServices(name string, deps Deps, extraHostServices ...runt
 	} else if ok {
 		hostServices = append(hostServices, s3HostService)
 	}
-	if authorizationHostService, ok := authorizationHostServiceFromDeps(deps); ok {
+	if authorizationHostService, ok := authorizationHostServiceFromDeps(name, deps); ok {
 		hostServices = append(hostServices, authorizationHostService)
 	}
 	hostServices = append(hostServices,
@@ -69,10 +69,11 @@ func appProviderHostServiceDeps(entry *config.ProviderEntry, deps Deps) Deps {
 	return deps
 }
 
-func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool) {
+func authorizationHostServiceFromDeps(providerName string, deps Deps) (runtimehost.HostService, bool) {
 	if deps.Authorization == nil {
 		return runtimehost.HostService{}, false
 	}
+	providerName = strings.TrimSpace(providerName)
 	return runtimehost.HostService{
 		Name:           "authorization",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Authorization_ServiceDesc.ServiceName)},
@@ -80,6 +81,7 @@ func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool)
 			proto.RegisterAuthorizationServer(srv, authorizationservice.NewProviderServer(
 				deps.Authorization,
 				authorizationservice.WithGatewaySource(providergateway.GatewaySourceSDKGRPC),
+				authorizationservice.WithInvokingSubjectID(providerName),
 			))
 		},
 	}, true
