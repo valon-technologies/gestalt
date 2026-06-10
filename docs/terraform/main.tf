@@ -20,9 +20,8 @@ provider "google" {
 }
 
 locals {
-  docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
-  docs_www_cert_name        = "${var.resource_prefix}-cert-www-${replace(var.domain, ".", "-")}"
   www_domain                = "www.${var.domain}"
+  docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(local.www_domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
   github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
   sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
   sdk_api_docs_backend_name = "${var.resource_prefix}-sdk-api-docs-backend"
@@ -157,23 +156,7 @@ resource "google_compute_managed_ssl_certificate" "docs" {
   name = local.docs_cert_name
 
   managed {
-    domains = [var.domain, var.registry_domain]
-  }
-
-  lifecycle {
-    create_before_destroy = true
-    # A newly-created Google-managed certificate can be provisioned in Terraform
-    # before it is actually served at the edge. Refuse certificate replacement
-    # plans so domain changes cannot detach the active certificate first.
-    prevent_destroy = true
-  }
-}
-
-resource "google_compute_managed_ssl_certificate" "docs_www" {
-  name = local.docs_www_cert_name
-
-  managed {
-    domains = [local.www_domain]
+    domains = [var.domain, local.www_domain, var.registry_domain]
   }
 
   lifecycle {
@@ -182,12 +165,9 @@ resource "google_compute_managed_ssl_certificate" "docs_www" {
 }
 
 resource "google_compute_target_https_proxy" "docs" {
-  name    = "${var.resource_prefix}-https-proxy"
-  url_map = google_compute_url_map.docs.id
-  ssl_certificates = [
-    google_compute_managed_ssl_certificate.docs.id,
-    google_compute_managed_ssl_certificate.docs_www.id,
-  ]
+  name             = "${var.resource_prefix}-https-proxy"
+  url_map          = google_compute_url_map.docs.id
+  ssl_certificates = [google_compute_managed_ssl_certificate.docs.id]
 }
 
 resource "google_compute_global_address" "docs" {
@@ -258,9 +238,9 @@ resource "google_dns_record_set" "www" {
   provider     = google.dns
   managed_zone = google_dns_managed_zone.docs.name
   name         = "${local.www_domain}."
-  type         = "A"
+  type         = "CNAME"
   ttl          = 300
-  rrdatas      = [google_compute_global_address.docs.address]
+  rrdatas      = ["${var.domain}."]
 }
 
 # ---------- Workload Identity Federation ----------
