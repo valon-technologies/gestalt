@@ -203,7 +203,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     let provider = Arc::new(TestWorkflowProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_workflow_provider(serve_provider)
+        gestalt::runtime_impl::serve_workflow_provider(serve_provider)
             .await
             .expect("serve workflow provider");
     });

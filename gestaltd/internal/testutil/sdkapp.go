@@ -488,6 +488,7 @@ func GeneratedExternalCredentialPackageSource() string {
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -496,8 +497,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 )
 
 type Provider struct {
@@ -524,11 +524,17 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 }
 
 func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		return client.UpsertCredential(ctx, req)
+		resp, err := hostClient.UpsertCredentialRaw(ctx, &sdkclient.UpsertExternalCredentialRequest{
+			Credential:         externalCredentialToClient(req.GetCredential()),
+			PreserveTimestamps: req.GetPreserveTimestamps(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		return externalCredentialFromClient(resp), nil
 	}
 	if req == nil || req.GetCredential() == nil {
 		return nil, fmt.Errorf("credential is required")
@@ -564,11 +570,19 @@ func (p *Provider) UpsertCredential(ctx context.Context, req *gestalt.UpsertExte
 }
 
 func (p *Provider) GetCredential(ctx context.Context, req *gestalt.GetExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		return client.GetCredential(ctx, req)
+		resp, err := hostClient.GetCredentialRaw(ctx, &sdkclient.GetExternalCredentialRequest{
+			Lookup: externalCredentialLookupToClient(req.GetLookup()),
+		})
+		if externalCredentialHostServiceMissing(err) {
+			return nil, gestalt.ErrExternalCredentialNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return externalCredentialFromClient(resp), nil
 	}
 	if req == nil || req.GetLookup() == nil {
 		return nil, fmt.Errorf("lookup is required")
@@ -589,11 +603,25 @@ func (p *Provider) GetCredential(ctx context.Context, req *gestalt.GetExternalCr
 }
 
 func (p *Provider) ListCredentials(ctx context.Context, req *gestalt.ListExternalCredentialsRequest) (*gestalt.ListExternalCredentialsResponse, error) {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		return client.ListCredentials(ctx, req)
+		resp, err := hostClient.ListCredentialsRaw(ctx, &sdkclient.ListExternalCredentialsRequest{
+			SubjectId:    req.GetSubjectId(),
+			Instance:     req.GetInstance(),
+			ConnectionId: req.GetConnectionId(),
+		})
+		if externalCredentialHostServiceMissing(err) {
+			return &gestalt.ListExternalCredentialsResponse{}, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		out := &gestalt.ListExternalCredentialsResponse{}
+		for _, credential := range resp.Credentials {
+			out.Credentials = append(out.Credentials, externalCredentialFromClient(credential))
+		}
+		return out, nil
 	}
 	if req == nil {
 		return nil, fmt.Errorf("request is required")
@@ -622,11 +650,10 @@ func (p *Provider) ListCredentials(ctx context.Context, req *gestalt.ListExterna
 }
 
 func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExternalCredentialRequest) error {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		return client.DeleteCredential(ctx, req)
+		return hostClient.DeleteCredentialRaw(ctx, &sdkclient.DeleteExternalCredentialRequest{Id: req.GetId()})
 	}
 	if req == nil || req.GetId() == "" {
 		return fmt.Errorf("credential id is required")
@@ -645,11 +672,17 @@ func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExte
 }
 
 func (p *Provider) ValidateCredentialConfig(ctx context.Context, req *gestalt.ValidateExternalCredentialConfigRequest) error {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		if err := client.ValidateCredentialConfig(ctx, req); err != nil {
+		if err := hostClient.ValidateCredentialConfigRaw(ctx, &sdkclient.ValidateExternalCredentialConfigRequest{
+			Provider:         req.GetProvider(),
+			Connection:       req.GetConnection(),
+			ConnectionId:     req.GetConnectionId(),
+			Mode:             req.GetMode(),
+			Auth:             externalCredentialAuthConfigToClient(req.GetAuth()),
+			ConnectionParams: req.GetConnectionParams(),
+		}); err != nil {
 			if externalCredentialHostServiceMissing(err) {
 				return nil
 			}
@@ -660,11 +693,33 @@ func (p *Provider) ValidateCredentialConfig(ctx context.Context, req *gestalt.Va
 }
 
 func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveExternalCredentialRequest) (*gestalt.ResolveExternalCredentialResponse, error) {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		return client.ResolveCredential(ctx, req)
+		resp, err := hostClient.ResolveCredentialRaw(ctx, &sdkclient.ResolveExternalCredentialRequest{
+			Provider:            req.GetProvider(),
+			Connection:          req.GetConnection(),
+			ConnectionId:        req.GetConnectionId(),
+			Mode:                req.GetMode(),
+			CredentialSubjectId: req.GetCredentialSubjectId(),
+			ActorSubjectId:      req.GetActorSubjectId(),
+			Instance:            req.GetInstance(),
+			Auth:                externalCredentialAuthConfigToClient(req.GetAuth()),
+			ConnectionParams:    req.GetConnectionParams(),
+		})
+		if externalCredentialHostServiceMissing(err) {
+			return nil, gestalt.ErrExternalCredentialNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return &gestalt.ResolveExternalCredentialResponse{
+			Token:        resp.Token,
+			ExpiresAt:    cloneTime(resp.ExpiresAt),
+			MetadataJSON: resp.MetadataJson,
+			Params:       resp.Params,
+			Credential:   externalCredentialFromClient(resp.Credential),
+		}, nil
 	}
 	if req == nil {
 		return nil, fmt.Errorf("request is required")
@@ -696,11 +751,35 @@ func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveEx
 }
 
 func (p *Provider) ExchangeCredential(ctx context.Context, req *gestalt.ExchangeExternalCredentialRequest) (*gestalt.ExchangeExternalCredentialResponse, error) {
-	if client, ok, err := externalCredentialHostClient(); err != nil {
+	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return nil, err
 	} else if ok {
-		defer func() { _ = client.Close() }()
-		return client.ExchangeCredential(ctx, req)
+		resp, err := hostClient.ExchangeCredentialRaw(ctx, &sdkclient.ExchangeExternalCredentialRequest{
+			Provider:            req.GetProvider(),
+			Connection:          req.GetConnection(),
+			ConnectionId:        req.GetConnectionId(),
+			CredentialSubjectId: req.GetCredentialSubjectId(),
+			ActorSubjectId:      req.GetActorSubjectId(),
+			Instance:            req.GetInstance(),
+			Auth:                externalCredentialAuthConfigToClient(req.GetAuth()),
+			CredentialJson:      req.GetCredentialJson(),
+			ConnectionParams:    req.GetConnectionParams(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		out := &gestalt.ExchangeExternalCredentialResponse{}
+		if resp.TokenResponse != nil {
+			out.TokenResponse = &gestalt.ExternalCredentialTokenResponse{
+				AccessToken:   resp.TokenResponse.AccessToken,
+				RefreshToken:  resp.TokenResponse.RefreshToken,
+				ExpiresIn:     resp.TokenResponse.ExpiresIn,
+				TokenType:     resp.TokenResponse.TokenType,
+				ExtraJSON:     resp.TokenResponse.ExtraJson,
+				RefreshSource: resp.TokenResponse.RefreshSource,
+			}
+		}
+		return out, nil
 	}
 	if req == nil {
 		return nil, fmt.Errorf("request is required")
@@ -739,22 +818,115 @@ func externalCredentialLookupKey(subjectID, connectionID, instance string) strin
 	return subjectID + "\x00" + connectionID + "\x00" + instance
 }
 
-func externalCredentialHostClient() (*gestalt.ExternalCredentialClient, bool, error) {
+func externalCredentialHostClient(ctx context.Context) (*sdkclient.ExternalCredentials, bool, error) {
 	if os.Getenv(gestalt.EnvHostServiceSocket) == "" {
 		return nil, false, nil
 	}
-	client, err := gestalt.ExternalCredentials()
+	hostClient, err := gestalt.ExternalCredentials(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	return client, true, nil
+	return hostClient, true, nil
 }
 
 func externalCredentialHostServiceMissing(err error) bool {
-	if status.Code(err) != codes.Unimplemented {
+	var gestaltErr *sdkclient.GestaltError
+	if !errors.As(err, &gestaltErr) || gestaltErr.Code != sdkclient.GestaltErrorCodeUnimplemented {
 		return false
 	}
-	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentials")
+	return strings.Contains(gestaltErr.Message, "unknown service gestalt.provider.v1.ExternalCredentials")
+}
+
+func externalCredentialToClient(value *gestalt.ExternalCredential) *sdkclient.ExternalCredential {
+	if value == nil {
+		return nil
+	}
+	return &sdkclient.ExternalCredential{
+		Id:                value.ID,
+		SubjectId:         value.SubjectID,
+		Instance:          value.Instance,
+		AccessToken:       value.AccessToken,
+		RefreshToken:      value.RefreshToken,
+		Scopes:            value.Scopes,
+		ExpiresAt:         cloneTime(value.ExpiresAt),
+		LastRefreshedAt:   cloneTime(value.LastRefreshedAt),
+		RefreshErrorCount: value.RefreshErrorCount,
+		MetadataJson:      value.MetadataJSON,
+		CreatedAt:         cloneTime(value.CreatedAt),
+		UpdatedAt:         cloneTime(value.UpdatedAt),
+		ConnectionId:      value.ConnectionID,
+	}
+}
+
+func externalCredentialFromClient(value *sdkclient.ExternalCredential) *gestalt.ExternalCredential {
+	if value == nil {
+		return nil
+	}
+	return &gestalt.ExternalCredential{
+		ID:                value.Id,
+		SubjectID:         value.SubjectId,
+		Instance:          value.Instance,
+		AccessToken:       value.AccessToken,
+		RefreshToken:      value.RefreshToken,
+		Scopes:            value.Scopes,
+		ExpiresAt:         cloneTime(value.ExpiresAt),
+		LastRefreshedAt:   cloneTime(value.LastRefreshedAt),
+		RefreshErrorCount: value.RefreshErrorCount,
+		MetadataJSON:      value.MetadataJson,
+		CreatedAt:         cloneTime(value.CreatedAt),
+		UpdatedAt:         cloneTime(value.UpdatedAt),
+		ConnectionID:      value.ConnectionId,
+	}
+}
+
+func externalCredentialLookupToClient(lookup *gestalt.ExternalCredentialLookup) *sdkclient.ExternalCredentialLookup {
+	if lookup == nil {
+		return nil
+	}
+	return &sdkclient.ExternalCredentialLookup{
+		SubjectId:    lookup.SubjectID,
+		Instance:     lookup.Instance,
+		ConnectionId: lookup.ConnectionID,
+	}
+}
+
+func externalCredentialAuthConfigToClient(auth *gestalt.ExternalCredentialAuthConfig) *sdkclient.ExternalCredentialAuthConfig {
+	if auth == nil {
+		return nil
+	}
+	out := &sdkclient.ExternalCredentialAuthConfig{
+		Type:           auth.Type,
+		Token:          auth.Token,
+		TokenPrefix:    auth.TokenPrefix,
+		GrantType:      auth.GrantType,
+		TokenUrl:       auth.TokenURL,
+		ClientId:       auth.ClientID,
+		ClientSecret:   auth.ClientSecret,
+		ClientAuth:     auth.ClientAuth,
+		TokenExchange:  auth.TokenExchange,
+		Scopes:         auth.Scopes,
+		ScopeParam:     auth.ScopeParam,
+		ScopeSeparator: auth.ScopeSeparator,
+		TokenParams:    auth.TokenParams,
+		RefreshParams:  auth.RefreshParams,
+		AcceptHeader:   auth.AcceptHeader,
+		AccessTokenPath: auth.AccessTokenPath,
+		RefreshToken:   auth.RefreshToken,
+	}
+	for _, driver := range auth.TokenExchangeDrivers {
+		if driver == nil {
+			continue
+		}
+		out.TokenExchangeDrivers = append(out.TokenExchangeDrivers, &sdkclient.ExternalCredentialTokenExchangeDriver{
+			Type:            driver.Type,
+			TargetPrincipal: driver.TargetPrincipal,
+			Scopes:          driver.Scopes,
+			LifetimeSeconds: driver.LifetimeSeconds,
+			Endpoint:        driver.Endpoint,
+			Params:          driver.Params,
+		})
+	}
+	return out
 }
 `
 }

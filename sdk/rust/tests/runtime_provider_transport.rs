@@ -198,7 +198,7 @@ async fn runtime_provider_transport_uses_native_trait_types() {
     let provider = Arc::new(TestRuntimeProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt::runtime::serve_runtime_provider(serve_provider)
+        gestalt::runtime_impl::serve_runtime_provider(serve_provider)
             .await
             .expect("serve runtime provider");
     });

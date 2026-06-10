@@ -24,15 +24,19 @@ use generated::v1::{
     ListAgentProviderTurnsResponse, RequestContext as ProviderRequestContext,
     ResolveAgentProviderInteractionRequest, UpdateAgentProviderSessionRequest,
 };
-use gestalt::proto::v1::{RequestContext, SubjectContext};
-use gestalt::{
-    Agent, AgentCancelTurn, AgentCatalogToolConfig, AgentCreateSession, AgentCreateTurn,
-    AgentGetSession, AgentGetTurn, AgentInteractionState, AgentListInteractions, AgentListSessions,
-    AgentListTurnEvents, AgentListTurns, AgentMessage, AgentMessagePart,
-    AgentMessagePartType as NativeAgentMessagePartType, AgentOutput, AgentResolveInteraction,
-    AgentSessionState, AgentToolConfig, AgentToolConfigSource, AgentToolRef, AgentUpdateSession,
-    ListedAgentTool, Request,
+use gestalt::Agent;
+use gestalt::agent::{
+    AgentCancelTurnOptions, AgentCatalogToolConfig, AgentCreateSessionOptions,
+    AgentCreateTurnOptions, AgentGetSessionOptions, AgentGetTurnOptions,
+    AgentListInteractionsOptions, AgentListSessionsOptions, AgentListTurnEventsOptions,
+    AgentListTurnsOptions, AgentMessage, AgentMessagePart, AgentOutput, AgentOutputKind,
+    AgentResolveInteractionOptions, AgentStructuredOutput, AgentTextOutput,
+    AgentToolConfig as NativeAgentToolConfig, AgentToolConfigSource as NativeAgentToolConfigSource,
+    AgentUpdateSessionOptions, GetAgentProviderSessionRequest as NativeGetSessionRequest,
+    ListedAgentTool as NativeListedAgentTool, agent_interaction_state, agent_message_part_type,
+    agent_session_state,
 };
+use gestalt::app::{AgentToolRef as NativeAgentToolRef, RequestContext, SubjectContext};
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
@@ -442,6 +446,33 @@ impl ProtoAgentProvider for TestAgentServer {
     }
 }
 
+fn catalog_tool_config() -> NativeAgentToolConfig {
+    NativeAgentToolConfig {
+        source: Some(NativeAgentToolConfigSource::Catalog(
+            AgentCatalogToolConfig {
+                refs: vec![NativeAgentToolRef {
+                    app: "slack".to_string(),
+                    operation: "chat.postMessage".to_string(),
+                    ..Default::default()
+                }],
+                tools: vec![NativeListedAgentTool {
+                    id: "tool-slack".to_string(),
+                    mcp_name: "slack__chat_post_message".to_string(),
+                    title: "Send Slack message".to_string(),
+                    description: "Post a Slack message".to_string(),
+                    input_schema: r#"{"type":"object"}"#.to_string(),
+                    r#ref: Some(NativeAgentToolRef {
+                        app: "slack".to_string(),
+                        operation: "chat.postMessage".to_string(),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+            },
+        )),
+    }
+}
+
 #[tokio::test]
 async fn agent_connects_over_tcp_and_sends_relay_token() {
     let _env_lock = helpers::env_lock().lock().await;
@@ -462,42 +493,21 @@ async fn agent_connects_over_tcp_and_sends_relay_token() {
             .expect("serve agent");
     });
 
-    let request = Request::default();
-    let mut manager = gestalt::with_request_context(
-        Some(request_context("user:agent-access")),
-        Agent::connect(&request),
-    )
-    .await
-    .expect("connect agent");
-    let created = manager
-        .create_session(AgentCreateSession {
-            provider_name: "openai".to_string(),
-            model: "gpt-5.1".to_string(),
-            client_ref: "cli-session-1".to_string(),
-            tools: Some(AgentToolConfig {
-                source: Some(AgentToolConfigSource::Catalog(AgentCatalogToolConfig {
-                    refs: vec![AgentToolRef {
-                        app: "slack".to_string(),
-                        operation: "chat.postMessage".to_string(),
-                        ..Default::default()
-                    }],
-                    tools: vec![ListedAgentTool {
-                        id: "tool-slack".to_string(),
-                        mcp_name: "slack__chat_post_message".to_string(),
-                        title: "Send Slack message".to_string(),
-                        description: "Post a Slack message".to_string(),
-                        input_schema: r#"{"type":"object"}"#.to_string(),
-                        r#ref: Some(AgentToolRef {
-                            app: "slack".to_string(),
-                            operation: "chat.postMessage".to_string(),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    }],
-                })),
-            }),
-            ..Default::default()
-        })
+    let mut agent = Agent::connect()
+        .await
+        .expect("connect agent")
+        .with_context(request_context("user:agent-access"));
+    let created = agent
+        .create_session(
+            String::new(),
+            "gpt-5.1".to_string(),
+            AgentCreateSessionOptions {
+                provider_name: "openai".to_string(),
+                client_ref: "cli-session-1".to_string(),
+                tools: Some(catalog_tool_config()),
+                ..Default::default()
+            },
+        )
         .await
         .expect("create session");
 
@@ -533,155 +543,155 @@ async fn agent_connects_over_unix_socket_and_sends_context_subject_id() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let request = Request::default();
-    let mut manager = gestalt::with_request_context(
-        Some(request_context("user:agent-access")),
-        Agent::connect(&request),
-    )
-    .await
-    .expect("connect agent");
-    let created_session = manager
-        .create_session(AgentCreateSession {
-            provider_name: "openai".to_string(),
-            model: "gpt-5.1".to_string(),
-            client_ref: "cli-session-1".to_string(),
-            tools: Some(AgentToolConfig {
-                source: Some(AgentToolConfigSource::Catalog(AgentCatalogToolConfig {
-                    refs: vec![AgentToolRef {
-                        app: "slack".to_string(),
-                        operation: "chat.postMessage".to_string(),
-                        ..Default::default()
-                    }],
-                    tools: vec![ListedAgentTool {
-                        id: "tool-slack".to_string(),
-                        mcp_name: "slack__chat_post_message".to_string(),
-                        title: "Send Slack message".to_string(),
-                        description: "Post a Slack message".to_string(),
-                        input_schema: r#"{"type":"object"}"#.to_string(),
-                        r#ref: Some(AgentToolRef {
-                            app: "slack".to_string(),
-                            operation: "chat.postMessage".to_string(),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
-                    }],
-                })),
-            }),
-            ..Default::default()
-        })
+    let mut agent = Agent::connect()
+        .await
+        .expect("connect agent")
+        .with_context(request_context("user:agent-access"));
+    let created_session = agent
+        .create_session(
+            String::new(),
+            "gpt-5.1".to_string(),
+            AgentCreateSessionOptions {
+                provider_name: "openai".to_string(),
+                client_ref: "cli-session-1".to_string(),
+                tools: Some(catalog_tool_config()),
+                ..Default::default()
+            },
+        )
         .await
         .expect("create session");
-    let fetched_session = manager
-        .get_session(AgentGetSession {
-            provider_name: "openai".to_string(),
-            session_id: "session-managed-1".to_string(),
-        })
+    let fetched_session = agent
+        .get_session(
+            "session-managed-1".to_string(),
+            AgentGetSessionOptions {
+                provider_name: "openai".to_string(),
+            },
+        )
         .await
         .expect("get session");
-    let listed_sessions = manager
-        .list_sessions(AgentListSessions {
+    let listed_sessions = agent
+        .list_sessions(AgentListSessionsOptions {
             provider_name: "openai".to_string(),
             ..Default::default()
         })
         .await
         .expect("list sessions");
-    let updated_session = manager
-        .update_session(AgentUpdateSession {
-            provider_name: "openai".to_string(),
-            session_id: "session-managed-1".to_string(),
-            client_ref: "cli-session-2".to_string(),
-            state: AgentSessionState::Archived,
-            ..Default::default()
-        })
+    let updated_session = agent
+        .update_session(
+            "session-managed-1".to_string(),
+            AgentUpdateSessionOptions {
+                client_ref: "cli-session-2".to_string(),
+                state: agent_session_state::AGENT_SESSION_STATE_ARCHIVED,
+                provider_name: "openai".to_string(),
+                metadata: None,
+            },
+        )
         .await
         .expect("update session");
-    let created_turn = manager
-        .create_turn(AgentCreateTurn {
-            provider_name: "openai".to_string(),
-            session_id: "session-managed-1".to_string(),
-            model: "gpt-5.1".to_string(),
-            messages: vec![AgentMessage {
+    let created_turn = agent
+        .create_turn(
+            "session-managed-1".to_string(),
+            String::new(),
+            "gpt-5.1".to_string(),
+            vec![AgentMessage {
                 role: "user".to_string(),
                 text: "Summarize this".to_string(),
                 parts: vec![AgentMessagePart {
-                    r#type: NativeAgentMessagePartType::Text,
+                    r#type: agent_message_part_type::AGENT_MESSAGE_PART_TYPE_TEXT,
                     text: "Summarize this".to_string(),
                     ..Default::default()
                 }],
                 ..Default::default()
             }],
-            output: AgentOutput::text(),
-            metadata: None,
-            idempotency_key: String::new(),
-            model_options: None,
-            timeout_seconds: 120,
-        })
+            AgentCreateTurnOptions {
+                timeout_seconds: 120,
+                provider_name: "openai".to_string(),
+                output: Some(AgentOutput {
+                    kind: Some(AgentOutputKind::Text(AgentTextOutput {})),
+                }),
+                ..Default::default()
+            },
+        )
         .await
         .expect("create turn");
-    let fetched_turn = manager
-        .get_turn(AgentGetTurn {
-            provider_name: "openai".to_string(),
-            turn_id: "turn-managed-1".to_string(),
-        })
+    let fetched_turn = agent
+        .get_turn(
+            "turn-managed-1".to_string(),
+            AgentGetTurnOptions {
+                provider_name: "openai".to_string(),
+            },
+        )
         .await
         .expect("get turn");
-    let listed_turns = manager
-        .list_turns(AgentListTurns {
-            provider_name: "openai".to_string(),
-            session_id: "session-managed-1".to_string(),
-            ..Default::default()
-        })
+    let listed_turns = agent
+        .list_turns(
+            "session-managed-1".to_string(),
+            AgentListTurnsOptions {
+                provider_name: "openai".to_string(),
+                ..Default::default()
+            },
+        )
         .await
         .expect("list turns");
-    let canceled_turn = manager
-        .cancel_turn(AgentCancelTurn {
-            provider_name: "openai".to_string(),
-            turn_id: "turn-managed-1".to_string(),
-            reason: "user canceled".to_string(),
-        })
+    let canceled_turn = agent
+        .cancel_turn(
+            "turn-managed-1".to_string(),
+            AgentCancelTurnOptions {
+                reason: "user canceled".to_string(),
+                provider_name: "openai".to_string(),
+            },
+        )
         .await
         .expect("cancel turn");
-    let turn_events = manager
-        .list_turn_events(AgentListTurnEvents {
-            provider_name: "openai".to_string(),
-            turn_id: "turn-managed-1".to_string(),
-            after_seq: 0,
-            limit: 10,
-        })
+    let turn_events = agent
+        .list_turn_events(
+            "turn-managed-1".to_string(),
+            AgentListTurnEventsOptions {
+                after_seq: 0,
+                limit: 10,
+                provider_name: "openai".to_string(),
+            },
+        )
         .await
         .expect("list turn events");
-    let interactions = manager
-        .list_interactions(AgentListInteractions {
-            provider_name: "openai".to_string(),
-            turn_id: "turn-managed-1".to_string(),
-        })
+    let interactions = agent
+        .list_interactions(
+            "turn-managed-1".to_string(),
+            AgentListInteractionsOptions {
+                provider_name: "openai".to_string(),
+            },
+        )
         .await
         .expect("list interactions");
-    let resolved = manager
-        .resolve_interaction(AgentResolveInteraction {
-            provider_name: "openai".to_string(),
-            turn_id: "turn-managed-1".to_string(),
-            interaction_id: "interaction-1".to_string(),
-            resolution: Some(serde_json::json!({
-                "approved": true
-            })),
-        })
+    let resolution = serde_json::json!({ "approved": true });
+    let resolved = agent
+        .resolve_interaction(
+            "interaction-1".to_string(),
+            Some(resolution.as_object().expect("resolution object").clone()),
+            AgentResolveInteractionOptions {
+                turn_id: "turn-managed-1".to_string(),
+                provider_name: "openai".to_string(),
+            },
+        )
         .await
         .expect("resolve interaction");
 
     assert_eq!(created_session.id, "session-managed-1");
     assert_eq!(fetched_session.id, "session-managed-1");
-    assert_eq!(listed_sessions.sessions.len(), 1);
+    assert_eq!(listed_sessions.len(), 1);
     assert_eq!(updated_session.client_ref, "cli-session-2");
     assert_eq!(created_turn.id, "turn-managed-1");
     assert_eq!(created_turn.messages[0].parts.len(), 1);
     assert_eq!(fetched_turn.id, "turn-managed-1");
-    assert_eq!(listed_turns.turns.len(), 1);
+    assert_eq!(listed_turns.len(), 1);
     assert_eq!(canceled_turn.status_message, "user canceled");
-    assert_eq!(turn_events.events.len(), 1);
-    assert_eq!(interactions.interactions.len(), 1);
+    assert_eq!(turn_events.len(), 1);
+    assert_eq!(interactions.len(), 1);
     assert_eq!(resolved.id, "interaction-1");
-    assert_eq!(resolved.state, AgentInteractionState::Resolved);
+    assert_eq!(
+        resolved.state,
+        agent_interaction_state::AGENT_INTERACTION_STATE_RESOLVED
+    );
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(
@@ -823,34 +833,57 @@ async fn agent_create_turn_accepts_native_values() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let request = Request::default();
-    let mut manager = gestalt::with_request_context(
-        Some(request_context("user:agent-access")),
-        Agent::connect(&request),
-    )
-    .await
-    .expect("connect agent");
-    let created_turn = manager
-        .create_turn(AgentCreateTurn {
-            provider_name: "openai".to_string(),
-            session_id: "session-managed-1".to_string(),
-            model: "gpt-5.1".to_string(),
-            messages: vec![AgentMessage {
+    let mut agent = Agent::connect()
+        .await
+        .expect("connect agent")
+        .with_context(request_context("user:agent-access"));
+    let message_metadata = serde_json::json!({ "source": "native" });
+    let turn_metadata = serde_json::json!({ "request": "native" });
+    let model_options = serde_json::json!({ "temperature": 0 });
+    let schema = serde_json::json!({ "type": "object" });
+    let created_turn = agent
+        .create_turn(
+            "session-managed-1".to_string(),
+            String::new(),
+            "gpt-5.1".to_string(),
+            vec![AgentMessage {
                 role: "user".to_string(),
                 text: "Summarize this".to_string(),
                 parts: vec![AgentMessagePart {
+                    r#type: agent_message_part_type::AGENT_MESSAGE_PART_TYPE_TEXT,
                     text: "Summarize this".to_string(),
                     ..Default::default()
                 }],
-                metadata: Some(serde_json::json!({ "source": "native" })),
+                metadata: Some(
+                    message_metadata
+                        .as_object()
+                        .expect("message metadata object")
+                        .clone(),
+                ),
             }],
-            output: AgentOutput::structured_schema(serde_json::json!({ "type": "object" }))
-                .expect("structured output"),
-            metadata: Some(serde_json::json!({ "request": "native" })),
-            idempotency_key: String::new(),
-            model_options: Some(serde_json::json!({ "temperature": 0 })),
-            timeout_seconds: 120,
-        })
+            AgentCreateTurnOptions {
+                timeout_seconds: 120,
+                provider_name: "openai".to_string(),
+                metadata: Some(
+                    turn_metadata
+                        .as_object()
+                        .expect("turn metadata object")
+                        .clone(),
+                ),
+                model_options: Some(
+                    model_options
+                        .as_object()
+                        .expect("model options object")
+                        .clone(),
+                ),
+                output: Some(AgentOutput {
+                    kind: Some(AgentOutputKind::Structured(AgentStructuredOutput {
+                        schema: Some(schema.as_object().expect("schema object").clone()),
+                    })),
+                }),
+                ..Default::default()
+            },
+        )
         .await
         .expect("create turn");
 
@@ -906,7 +939,7 @@ async fn agent_create_turn_accepts_native_values() {
 }
 
 #[tokio::test]
-async fn request_agent_uses_embedded_context() {
+async fn get_session_raw_injects_default_context_when_unset() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-agent.sock");
     let _socket_guard =
@@ -923,15 +956,15 @@ async fn request_agent_uses_embedded_context() {
 
     helpers::wait_for_socket(&socket).await;
 
-    let request = Request::default();
-    let mut manager =
-        gestalt::with_request_context(Some(request_context("user:request-agent")), request.agent())
-            .await
-            .expect("request agent");
-    let response = manager
-        .get_session(AgentGetSession {
-            provider_name: "openai".to_string(),
+    let mut agent = Agent::connect()
+        .await
+        .expect("connect agent")
+        .with_context(request_context("user:request-agent"));
+    let response = agent
+        .get_session_raw(NativeGetSessionRequest {
             session_id: "session-managed-1".to_string(),
+            provider_name: "openai".to_string(),
+            ..Default::default()
         })
         .await
         .expect("get session");

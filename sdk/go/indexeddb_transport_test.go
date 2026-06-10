@@ -14,8 +14,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	cachesdk "github.com/valon-technologies/gestalt/sdk/go/cache"
-	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -26,8 +25,8 @@ import (
 
 var (
 	testClient      gestalt.IndexedDBDatabase
-	testCacheClient cachesdk.Cache
-	testS3Client    s3sdk.S3
+	testCacheClient *client.Cache
+	testS3Client    *client.S3
 	testIDBSocket   string
 	testCacheSocket string
 	testS3Socket    string
@@ -46,19 +45,19 @@ func TestMain(m *testing.M) {
 	testS3Socket = s3Sock
 
 	os.Setenv(gestalt.EnvHostServiceSocket, idbSock)
-	client, err := gestalt.IndexedDB(context.Background())
+	idbClient, err := gestalt.IndexedDB(context.Background())
 	if err != nil {
 		_ = idbCmd.Process.Kill()
 		_ = cacheCmd.Process.Kill()
 		_ = s3Cmd.Process.Kill()
 		panic("connect: " + err.Error())
 	}
-	testClient = client
+	testClient = idbClient
 
 	os.Setenv(gestalt.EnvHostServiceSocket, cacheSock)
-	cacheClient, err := gestalt.Cache()
+	cacheClient, err := client.ConnectCache(context.Background(), "")
 	if err != nil {
-		_ = client.Close()
+		_ = idbClient.Close()
 		_ = idbCmd.Process.Kill()
 		_ = cacheCmd.Process.Kill()
 		_ = s3Cmd.Process.Kill()
@@ -67,9 +66,9 @@ func TestMain(m *testing.M) {
 	testCacheClient = cacheClient
 
 	os.Setenv(gestalt.EnvHostServiceSocket, s3Sock)
-	s3Client, err := gestalt.S3(context.Background())
+	s3Client, err := client.ConnectS3(context.Background(), "")
 	if err != nil {
-		_ = client.Close()
+		_ = idbClient.Close()
 		_ = idbCmd.Process.Kill()
 		_ = cacheCmd.Process.Kill()
 		_ = s3Cmd.Process.Kill()
@@ -79,8 +78,7 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	_ = client.Close()
-	_ = s3Client.Close()
+	_ = idbClient.Close()
 	_ = idbCmd.Process.Kill()
 	_ = cacheCmd.Process.Kill()
 	_ = s3Cmd.Process.Kill()

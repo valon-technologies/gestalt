@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -325,8 +326,11 @@ func (p *agentProvider) startTurn(
 		if err != nil {
 			output["app_error"] = err.Error()
 		} else {
-			resp, err := app.InvokeRaw(ctx, "roadmap", "sync", map[string]any{"taskId": "task-123"}, &gestalt.InvokeOptions{
-				IdempotencyKey: " tool-call-key-1 ",
+			resp, err := app.InvokeRaw(ctx, &client.AppInvokeRequest{
+				App:            "roadmap",
+				Operation:      "sync",
+				IdempotencyKey: "tool-call-key-1",
+				Params:         map[string]any{"taskId": "task-123"},
 			})
 			if err != nil {
 				output["tool_error"] = err.Error()

@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::cache::{CacheEntry, CacheProvider, CacheSetOptions};
+use crate::cache_provider::{CacheEntry, CacheProvider, CacheSetOptions};
 use crate::generated::v1::cache_server::Cache as CacheGrpc;
 use crate::generated::v1::{
     CacheDeleteManyRequest, CacheDeleteManyResponse, CacheDeleteRequest, CacheDeleteResponse,
