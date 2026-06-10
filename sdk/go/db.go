@@ -16,12 +16,12 @@ var schemeDriverMap = map[string]string{
 	"sqlite3":    "sqlite3",
 }
 
-// OpenDB opens the datastore DSN configured at `GESTALT_DATASTORE_<ALIAS>`.
+// OpenDB opens the IndexedDB DSN configured at `GESTALT_INDEXEDDB_<ALIAS>`.
 func OpenDB(alias string) (*sql.DB, error) {
-	envKey := "GESTALT_DATASTORE_" + strings.ToUpper(alias)
+	envKey := "GESTALT_INDEXEDDB_" + strings.ToUpper(alias)
 	dsn := os.Getenv(envKey)
 	if dsn == "" {
-		return nil, fmt.Errorf("datastore %q not configured (env %s is empty)", alias, envKey)
+		return nil, fmt.Errorf("indexeddb %q not configured (env %s is empty)", alias, envKey)
 	}
 
 	u, err := url.Parse(dsn)

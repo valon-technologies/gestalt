@@ -882,7 +882,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 	if selectedIndexedDBName == "" || def == nil {
-		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
+		return nil, fmt.Errorf("bootstrap: indexeddb resource name is required")
 	}
 	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
@@ -1877,22 +1877,22 @@ func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *co
 
 func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
 	if entry == nil {
-		return nil, fmt.Errorf("datastore provider is required")
+		return nil, fmt.Errorf("indexeddb provider is required")
 	}
 	if factories.IndexedDB == nil {
-		return nil, fmt.Errorf("datastore factory is not registered")
+		return nil, fmt.Errorf("indexeddb factory is not registered")
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
 		node, err = config.BuildComponentRuntimeConfigNode("indexeddb", "indexeddb", entry, entry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("datastore provider: %w", err)
+			return nil, fmt.Errorf("indexeddb provider: %w", err)
 		}
 	}
 	ds, err := factories.IndexedDB(node)
 	if err != nil {
-		return nil, fmt.Errorf("datastore provider: %w", err)
+		return nil, fmt.Errorf("indexeddb provider: %w", err)
 	}
 	return ds, nil
 }

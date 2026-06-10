@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: v1/datastore.proto
+// source: v1/indexeddb.proto
 
 package proto
 
@@ -62,11 +62,11 @@ func (x CursorDirection) String() string {
 }
 
 func (CursorDirection) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_datastore_proto_enumTypes[0].Descriptor()
+	return file_v1_indexeddb_proto_enumTypes[0].Descriptor()
 }
 
 func (CursorDirection) Type() protoreflect.EnumType {
-	return &file_v1_datastore_proto_enumTypes[0]
+	return &file_v1_indexeddb_proto_enumTypes[0]
 }
 
 func (x CursorDirection) Number() protoreflect.EnumNumber {
@@ -75,7 +75,7 @@ func (x CursorDirection) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CursorDirection.Descriptor instead.
 func (CursorDirection) EnumDescriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{0}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{0}
 }
 
 // TransactionMode controls whether a transaction may mutate scoped stores.
@@ -109,11 +109,11 @@ func (x TransactionMode) String() string {
 }
 
 func (TransactionMode) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_datastore_proto_enumTypes[1].Descriptor()
+	return file_v1_indexeddb_proto_enumTypes[1].Descriptor()
 }
 
 func (TransactionMode) Type() protoreflect.EnumType {
-	return &file_v1_datastore_proto_enumTypes[1]
+	return &file_v1_indexeddb_proto_enumTypes[1]
 }
 
 func (x TransactionMode) Number() protoreflect.EnumNumber {
@@ -122,7 +122,7 @@ func (x TransactionMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TransactionMode.Descriptor instead.
 func (TransactionMode) EnumDescriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{1}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{1}
 }
 
 // TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
@@ -160,11 +160,11 @@ func (x TransactionDurabilityHint) String() string {
 }
 
 func (TransactionDurabilityHint) Descriptor() protoreflect.EnumDescriptor {
-	return file_v1_datastore_proto_enumTypes[2].Descriptor()
+	return file_v1_indexeddb_proto_enumTypes[2].Descriptor()
 }
 
 func (TransactionDurabilityHint) Type() protoreflect.EnumType {
-	return &file_v1_datastore_proto_enumTypes[2]
+	return &file_v1_indexeddb_proto_enumTypes[2]
 }
 
 func (x TransactionDurabilityHint) Number() protoreflect.EnumNumber {
@@ -173,7 +173,7 @@ func (x TransactionDurabilityHint) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TransactionDurabilityHint.Descriptor instead.
 func (TransactionDurabilityHint) EnumDescriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{2}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{2}
 }
 
 // TypedValue stores one scalar or structured value in an IndexedDB record.
@@ -196,7 +196,7 @@ type TypedValue struct {
 
 func (x *TypedValue) Reset() {
 	*x = TypedValue{}
-	mi := &file_v1_datastore_proto_msgTypes[0]
+	mi := &file_v1_indexeddb_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -208,7 +208,7 @@ func (x *TypedValue) String() string {
 func (*TypedValue) ProtoMessage() {}
 
 func (x *TypedValue) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[0]
+	mi := &file_v1_indexeddb_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -221,7 +221,7 @@ func (x *TypedValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypedValue.ProtoReflect.Descriptor instead.
 func (*TypedValue) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{0}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *TypedValue) GetKind() isTypedValue_Kind {
@@ -365,7 +365,7 @@ type Record struct {
 
 func (x *Record) Reset() {
 	*x = Record{}
-	mi := &file_v1_datastore_proto_msgTypes[1]
+	mi := &file_v1_indexeddb_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -377,7 +377,7 @@ func (x *Record) String() string {
 func (*Record) ProtoMessage() {}
 
 func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[1]
+	mi := &file_v1_indexeddb_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -390,7 +390,7 @@ func (x *Record) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Record.ProtoReflect.Descriptor instead.
 func (*Record) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{1}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Record) GetFields() map[string]*TypedValue {
@@ -412,7 +412,7 @@ type ObjectStoreSchema struct {
 
 func (x *ObjectStoreSchema) Reset() {
 	*x = ObjectStoreSchema{}
-	mi := &file_v1_datastore_proto_msgTypes[2]
+	mi := &file_v1_indexeddb_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -424,7 +424,7 @@ func (x *ObjectStoreSchema) String() string {
 func (*ObjectStoreSchema) ProtoMessage() {}
 
 func (x *ObjectStoreSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[2]
+	mi := &file_v1_indexeddb_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -437,7 +437,7 @@ func (x *ObjectStoreSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreSchema.ProtoReflect.Descriptor instead.
 func (*ObjectStoreSchema) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{2}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ObjectStoreSchema) GetIndexes() []*IndexSchema {
@@ -466,7 +466,7 @@ type IndexSchema struct {
 
 func (x *IndexSchema) Reset() {
 	*x = IndexSchema{}
-	mi := &file_v1_datastore_proto_msgTypes[3]
+	mi := &file_v1_indexeddb_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -478,7 +478,7 @@ func (x *IndexSchema) String() string {
 func (*IndexSchema) ProtoMessage() {}
 
 func (x *IndexSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[3]
+	mi := &file_v1_indexeddb_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -491,7 +491,7 @@ func (x *IndexSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexSchema.ProtoReflect.Descriptor instead.
 func (*IndexSchema) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{3}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IndexSchema) GetName() string {
@@ -529,7 +529,7 @@ type ColumnDef struct {
 
 func (x *ColumnDef) Reset() {
 	*x = ColumnDef{}
-	mi := &file_v1_datastore_proto_msgTypes[4]
+	mi := &file_v1_indexeddb_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -541,7 +541,7 @@ func (x *ColumnDef) String() string {
 func (*ColumnDef) ProtoMessage() {}
 
 func (x *ColumnDef) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[4]
+	mi := &file_v1_indexeddb_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -554,7 +554,7 @@ func (x *ColumnDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ColumnDef.ProtoReflect.Descriptor instead.
 func (*ColumnDef) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{4}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ColumnDef) GetName() string {
@@ -605,7 +605,7 @@ type KeyRange struct {
 
 func (x *KeyRange) Reset() {
 	*x = KeyRange{}
-	mi := &file_v1_datastore_proto_msgTypes[5]
+	mi := &file_v1_indexeddb_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +617,7 @@ func (x *KeyRange) String() string {
 func (*KeyRange) ProtoMessage() {}
 
 func (x *KeyRange) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[5]
+	mi := &file_v1_indexeddb_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +630,7 @@ func (x *KeyRange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyRange.ProtoReflect.Descriptor instead.
 func (*KeyRange) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{5}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *KeyRange) GetLower() *TypedValue {
@@ -672,7 +672,7 @@ type RecordRequest struct {
 
 func (x *RecordRequest) Reset() {
 	*x = RecordRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[6]
+	mi := &file_v1_indexeddb_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -684,7 +684,7 @@ func (x *RecordRequest) String() string {
 func (*RecordRequest) ProtoMessage() {}
 
 func (x *RecordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[6]
+	mi := &file_v1_indexeddb_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -697,7 +697,7 @@ func (x *RecordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordRequest.ProtoReflect.Descriptor instead.
 func (*RecordRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{6}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RecordRequest) GetStore() string {
@@ -724,7 +724,7 @@ type RecordResponse struct {
 
 func (x *RecordResponse) Reset() {
 	*x = RecordResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[7]
+	mi := &file_v1_indexeddb_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -736,7 +736,7 @@ func (x *RecordResponse) String() string {
 func (*RecordResponse) ProtoMessage() {}
 
 func (x *RecordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[7]
+	mi := &file_v1_indexeddb_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -749,7 +749,7 @@ func (x *RecordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordResponse.ProtoReflect.Descriptor instead.
 func (*RecordResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{7}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *RecordResponse) GetRecord() *Record {
@@ -769,7 +769,7 @@ type RecordsResponse struct {
 
 func (x *RecordsResponse) Reset() {
 	*x = RecordsResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[8]
+	mi := &file_v1_indexeddb_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -781,7 +781,7 @@ func (x *RecordsResponse) String() string {
 func (*RecordsResponse) ProtoMessage() {}
 
 func (x *RecordsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[8]
+	mi := &file_v1_indexeddb_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -794,7 +794,7 @@ func (x *RecordsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordsResponse.ProtoReflect.Descriptor instead.
 func (*RecordsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{8}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *RecordsResponse) GetRecords() []*Record {
@@ -814,7 +814,7 @@ type KeysResponse struct {
 
 func (x *KeysResponse) Reset() {
 	*x = KeysResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[9]
+	mi := &file_v1_indexeddb_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -826,7 +826,7 @@ func (x *KeysResponse) String() string {
 func (*KeysResponse) ProtoMessage() {}
 
 func (x *KeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[9]
+	mi := &file_v1_indexeddb_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -839,7 +839,7 @@ func (x *KeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeysResponse.ProtoReflect.Descriptor instead.
 func (*KeysResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{9}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *KeysResponse) GetKeys() []string {
@@ -860,7 +860,7 @@ type ObjectStoreRequest struct {
 
 func (x *ObjectStoreRequest) Reset() {
 	*x = ObjectStoreRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[10]
+	mi := &file_v1_indexeddb_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -872,7 +872,7 @@ func (x *ObjectStoreRequest) String() string {
 func (*ObjectStoreRequest) ProtoMessage() {}
 
 func (x *ObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[10]
+	mi := &file_v1_indexeddb_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -885,7 +885,7 @@ func (x *ObjectStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreRequest.ProtoReflect.Descriptor instead.
 func (*ObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{10}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ObjectStoreRequest) GetStore() string {
@@ -912,7 +912,7 @@ type ObjectStoreNameRequest struct {
 
 func (x *ObjectStoreNameRequest) Reset() {
 	*x = ObjectStoreNameRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[11]
+	mi := &file_v1_indexeddb_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -924,7 +924,7 @@ func (x *ObjectStoreNameRequest) String() string {
 func (*ObjectStoreNameRequest) ProtoMessage() {}
 
 func (x *ObjectStoreNameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[11]
+	mi := &file_v1_indexeddb_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -937,7 +937,7 @@ func (x *ObjectStoreNameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreNameRequest.ProtoReflect.Descriptor instead.
 func (*ObjectStoreNameRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{11}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ObjectStoreNameRequest) GetStore() string {
@@ -958,7 +958,7 @@ type ObjectStoreRangeRequest struct {
 
 func (x *ObjectStoreRangeRequest) Reset() {
 	*x = ObjectStoreRangeRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[12]
+	mi := &file_v1_indexeddb_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +970,7 @@ func (x *ObjectStoreRangeRequest) String() string {
 func (*ObjectStoreRangeRequest) ProtoMessage() {}
 
 func (x *ObjectStoreRangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[12]
+	mi := &file_v1_indexeddb_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +983,7 @@ func (x *ObjectStoreRangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreRangeRequest.ProtoReflect.Descriptor instead.
 func (*ObjectStoreRangeRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{12}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ObjectStoreRangeRequest) GetStore() string {
@@ -1011,7 +1011,7 @@ type CreateObjectStoreRequest struct {
 
 func (x *CreateObjectStoreRequest) Reset() {
 	*x = CreateObjectStoreRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[13]
+	mi := &file_v1_indexeddb_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1023,7 +1023,7 @@ func (x *CreateObjectStoreRequest) String() string {
 func (*CreateObjectStoreRequest) ProtoMessage() {}
 
 func (x *CreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[13]
+	mi := &file_v1_indexeddb_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1036,7 +1036,7 @@ func (x *CreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateObjectStoreRequest.ProtoReflect.Descriptor instead.
 func (*CreateObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{13}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateObjectStoreRequest) GetName() string {
@@ -1063,7 +1063,7 @@ type DeleteObjectStoreRequest struct {
 
 func (x *DeleteObjectStoreRequest) Reset() {
 	*x = DeleteObjectStoreRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[14]
+	mi := &file_v1_indexeddb_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1075,7 +1075,7 @@ func (x *DeleteObjectStoreRequest) String() string {
 func (*DeleteObjectStoreRequest) ProtoMessage() {}
 
 func (x *DeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[14]
+	mi := &file_v1_indexeddb_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1088,7 +1088,7 @@ func (x *DeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectStoreRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{14}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteObjectStoreRequest) GetName() string {
@@ -1112,7 +1112,7 @@ type IndexQueryRequest struct {
 
 func (x *IndexQueryRequest) Reset() {
 	*x = IndexQueryRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[15]
+	mi := &file_v1_indexeddb_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1124,7 +1124,7 @@ func (x *IndexQueryRequest) String() string {
 func (*IndexQueryRequest) ProtoMessage() {}
 
 func (x *IndexQueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[15]
+	mi := &file_v1_indexeddb_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1137,7 +1137,7 @@ func (x *IndexQueryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexQueryRequest.ProtoReflect.Descriptor instead.
 func (*IndexQueryRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{15}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *IndexQueryRequest) GetStore() string {
@@ -1178,7 +1178,7 @@ type CountResponse struct {
 
 func (x *CountResponse) Reset() {
 	*x = CountResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[16]
+	mi := &file_v1_indexeddb_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +1190,7 @@ func (x *CountResponse) String() string {
 func (*CountResponse) ProtoMessage() {}
 
 func (x *CountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[16]
+	mi := &file_v1_indexeddb_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +1203,7 @@ func (x *CountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountResponse.ProtoReflect.Descriptor instead.
 func (*CountResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{16}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CountResponse) GetCount() int64 {
@@ -1231,7 +1231,7 @@ type OpenCursorRequest struct {
 
 func (x *OpenCursorRequest) Reset() {
 	*x = OpenCursorRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[17]
+	mi := &file_v1_indexeddb_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1243,7 +1243,7 @@ func (x *OpenCursorRequest) String() string {
 func (*OpenCursorRequest) ProtoMessage() {}
 
 func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[17]
+	mi := &file_v1_indexeddb_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1256,7 +1256,7 @@ func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenCursorRequest.ProtoReflect.Descriptor instead.
 func (*OpenCursorRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{17}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *OpenCursorRequest) GetStore() string {
@@ -1316,7 +1316,7 @@ type KeyValue struct {
 
 func (x *KeyValue) Reset() {
 	*x = KeyValue{}
-	mi := &file_v1_datastore_proto_msgTypes[18]
+	mi := &file_v1_indexeddb_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1328,7 +1328,7 @@ func (x *KeyValue) String() string {
 func (*KeyValue) ProtoMessage() {}
 
 func (x *KeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[18]
+	mi := &file_v1_indexeddb_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1341,7 +1341,7 @@ func (x *KeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{18}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *KeyValue) GetKind() isKeyValue_Kind {
@@ -1394,7 +1394,7 @@ type KeyValueArray struct {
 
 func (x *KeyValueArray) Reset() {
 	*x = KeyValueArray{}
-	mi := &file_v1_datastore_proto_msgTypes[19]
+	mi := &file_v1_indexeddb_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1406,7 +1406,7 @@ func (x *KeyValueArray) String() string {
 func (*KeyValueArray) ProtoMessage() {}
 
 func (x *KeyValueArray) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[19]
+	mi := &file_v1_indexeddb_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1419,7 +1419,7 @@ func (x *KeyValueArray) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValueArray.ProtoReflect.Descriptor instead.
 func (*KeyValueArray) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{19}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *KeyValueArray) GetElements() []*KeyValue {
@@ -1439,7 +1439,7 @@ type CursorKeyTarget struct {
 
 func (x *CursorKeyTarget) Reset() {
 	*x = CursorKeyTarget{}
-	mi := &file_v1_datastore_proto_msgTypes[20]
+	mi := &file_v1_indexeddb_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1451,7 +1451,7 @@ func (x *CursorKeyTarget) String() string {
 func (*CursorKeyTarget) ProtoMessage() {}
 
 func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[20]
+	mi := &file_v1_indexeddb_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1464,7 +1464,7 @@ func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorKeyTarget.ProtoReflect.Descriptor instead.
 func (*CursorKeyTarget) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{20}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CursorKeyTarget) GetKey() []*KeyValue {
@@ -1492,7 +1492,7 @@ type CursorCommand struct {
 
 func (x *CursorCommand) Reset() {
 	*x = CursorCommand{}
-	mi := &file_v1_datastore_proto_msgTypes[21]
+	mi := &file_v1_indexeddb_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1504,7 +1504,7 @@ func (x *CursorCommand) String() string {
 func (*CursorCommand) ProtoMessage() {}
 
 func (x *CursorCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[21]
+	mi := &file_v1_indexeddb_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1517,7 +1517,7 @@ func (x *CursorCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorCommand.ProtoReflect.Descriptor instead.
 func (*CursorCommand) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{21}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CursorCommand) GetCommand() isCursorCommand_Command {
@@ -1635,7 +1635,7 @@ type CursorClientMessage struct {
 
 func (x *CursorClientMessage) Reset() {
 	*x = CursorClientMessage{}
-	mi := &file_v1_datastore_proto_msgTypes[22]
+	mi := &file_v1_indexeddb_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1647,7 +1647,7 @@ func (x *CursorClientMessage) String() string {
 func (*CursorClientMessage) ProtoMessage() {}
 
 func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[22]
+	mi := &file_v1_indexeddb_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1660,7 +1660,7 @@ func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorClientMessage.ProtoReflect.Descriptor instead.
 func (*CursorClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{22}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CursorClientMessage) GetMsg() isCursorClientMessage_Msg {
@@ -1719,7 +1719,7 @@ type CursorEntry struct {
 
 func (x *CursorEntry) Reset() {
 	*x = CursorEntry{}
-	mi := &file_v1_datastore_proto_msgTypes[23]
+	mi := &file_v1_indexeddb_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1731,7 @@ func (x *CursorEntry) String() string {
 func (*CursorEntry) ProtoMessage() {}
 
 func (x *CursorEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[23]
+	mi := &file_v1_indexeddb_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1744,7 @@ func (x *CursorEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorEntry.ProtoReflect.Descriptor instead.
 func (*CursorEntry) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{23}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CursorEntry) GetKey() []*KeyValue {
@@ -1782,7 +1782,7 @@ type CursorResponse struct {
 
 func (x *CursorResponse) Reset() {
 	*x = CursorResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[24]
+	mi := &file_v1_indexeddb_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1794,7 +1794,7 @@ func (x *CursorResponse) String() string {
 func (*CursorResponse) ProtoMessage() {}
 
 func (x *CursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[24]
+	mi := &file_v1_indexeddb_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1807,7 +1807,7 @@ func (x *CursorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorResponse.ProtoReflect.Descriptor instead.
 func (*CursorResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{24}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CursorResponse) GetResult() isCursorResponse_Result {
@@ -1861,7 +1861,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[25]
+	mi := &file_v1_indexeddb_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1873,7 +1873,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[25]
+	mi := &file_v1_indexeddb_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1886,7 +1886,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{25}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeleteResponse) GetDeleted() int64 {
@@ -1906,7 +1906,7 @@ type KeyResponse struct {
 
 func (x *KeyResponse) Reset() {
 	*x = KeyResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[26]
+	mi := &file_v1_indexeddb_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1918,7 +1918,7 @@ func (x *KeyResponse) String() string {
 func (*KeyResponse) ProtoMessage() {}
 
 func (x *KeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[26]
+	mi := &file_v1_indexeddb_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1931,7 +1931,7 @@ func (x *KeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyResponse.ProtoReflect.Descriptor instead.
 func (*KeyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{26}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *KeyResponse) GetKey() string {
@@ -1953,7 +1953,7 @@ type BeginTransactionRequest struct {
 
 func (x *BeginTransactionRequest) Reset() {
 	*x = BeginTransactionRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[27]
+	mi := &file_v1_indexeddb_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +1965,7 @@ func (x *BeginTransactionRequest) String() string {
 func (*BeginTransactionRequest) ProtoMessage() {}
 
 func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[27]
+	mi := &file_v1_indexeddb_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +1978,7 @@ func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginTransactionRequest.ProtoReflect.Descriptor instead.
 func (*BeginTransactionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{27}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *BeginTransactionRequest) GetStores() []string {
@@ -2010,7 +2010,7 @@ type TransactionBeginResponse struct {
 
 func (x *TransactionBeginResponse) Reset() {
 	*x = TransactionBeginResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[28]
+	mi := &file_v1_indexeddb_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2022,7 +2022,7 @@ func (x *TransactionBeginResponse) String() string {
 func (*TransactionBeginResponse) ProtoMessage() {}
 
 func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[28]
+	mi := &file_v1_indexeddb_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2035,7 +2035,7 @@ func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionBeginResponse.ProtoReflect.Descriptor instead.
 func (*TransactionBeginResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{28}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{28}
 }
 
 type TransactionCommitRequest struct {
@@ -2046,7 +2046,7 @@ type TransactionCommitRequest struct {
 
 func (x *TransactionCommitRequest) Reset() {
 	*x = TransactionCommitRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[29]
+	mi := &file_v1_indexeddb_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2058,7 +2058,7 @@ func (x *TransactionCommitRequest) String() string {
 func (*TransactionCommitRequest) ProtoMessage() {}
 
 func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[29]
+	mi := &file_v1_indexeddb_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2071,7 +2071,7 @@ func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitRequest.ProtoReflect.Descriptor instead.
 func (*TransactionCommitRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{29}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{29}
 }
 
 // TransactionCommitResponse carries a non-OK status when commit failed after
@@ -2085,7 +2085,7 @@ type TransactionCommitResponse struct {
 
 func (x *TransactionCommitResponse) Reset() {
 	*x = TransactionCommitResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[30]
+	mi := &file_v1_indexeddb_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2097,7 +2097,7 @@ func (x *TransactionCommitResponse) String() string {
 func (*TransactionCommitResponse) ProtoMessage() {}
 
 func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[30]
+	mi := &file_v1_indexeddb_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2110,7 +2110,7 @@ func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitResponse.ProtoReflect.Descriptor instead.
 func (*TransactionCommitResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{30}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *TransactionCommitResponse) GetError() *status.Status {
@@ -2129,7 +2129,7 @@ type TransactionAbortRequest struct {
 
 func (x *TransactionAbortRequest) Reset() {
 	*x = TransactionAbortRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[31]
+	mi := &file_v1_indexeddb_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2141,7 +2141,7 @@ func (x *TransactionAbortRequest) String() string {
 func (*TransactionAbortRequest) ProtoMessage() {}
 
 func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[31]
+	mi := &file_v1_indexeddb_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2154,7 +2154,7 @@ func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortRequest.ProtoReflect.Descriptor instead.
 func (*TransactionAbortRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{31}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *TransactionAbortRequest) GetReason() string {
@@ -2174,7 +2174,7 @@ type TransactionAbortResponse struct {
 
 func (x *TransactionAbortResponse) Reset() {
 	*x = TransactionAbortResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[32]
+	mi := &file_v1_indexeddb_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2186,7 +2186,7 @@ func (x *TransactionAbortResponse) String() string {
 func (*TransactionAbortResponse) ProtoMessage() {}
 
 func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[32]
+	mi := &file_v1_indexeddb_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2199,7 +2199,7 @@ func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortResponse.ProtoReflect.Descriptor instead.
 func (*TransactionAbortResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{32}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TransactionAbortResponse) GetError() *status.Status {
@@ -2240,7 +2240,7 @@ type TransactionOperation struct {
 
 func (x *TransactionOperation) Reset() {
 	*x = TransactionOperation{}
-	mi := &file_v1_datastore_proto_msgTypes[33]
+	mi := &file_v1_indexeddb_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2252,7 +2252,7 @@ func (x *TransactionOperation) String() string {
 func (*TransactionOperation) ProtoMessage() {}
 
 func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[33]
+	mi := &file_v1_indexeddb_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2265,7 +2265,7 @@ func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperation.ProtoReflect.Descriptor instead.
 func (*TransactionOperation) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{33}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TransactionOperation) GetRequestId() uint64 {
@@ -2548,7 +2548,7 @@ type TransactionOperationResponse struct {
 
 func (x *TransactionOperationResponse) Reset() {
 	*x = TransactionOperationResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[34]
+	mi := &file_v1_indexeddb_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2560,7 +2560,7 @@ func (x *TransactionOperationResponse) String() string {
 func (*TransactionOperationResponse) ProtoMessage() {}
 
 func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[34]
+	mi := &file_v1_indexeddb_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2573,7 +2573,7 @@ func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperationResponse.ProtoReflect.Descriptor instead.
 func (*TransactionOperationResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{34}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TransactionOperationResponse) GetRequestId() uint64 {
@@ -2723,7 +2723,7 @@ type TransactionClientMessage struct {
 
 func (x *TransactionClientMessage) Reset() {
 	*x = TransactionClientMessage{}
-	mi := &file_v1_datastore_proto_msgTypes[35]
+	mi := &file_v1_indexeddb_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2735,7 +2735,7 @@ func (x *TransactionClientMessage) String() string {
 func (*TransactionClientMessage) ProtoMessage() {}
 
 func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[35]
+	mi := &file_v1_indexeddb_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2748,7 +2748,7 @@ func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionClientMessage.ProtoReflect.Descriptor instead.
 func (*TransactionClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{35}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *TransactionClientMessage) GetMsg() isTransactionClientMessage_Msg {
@@ -2837,7 +2837,7 @@ type TransactionServerMessage struct {
 
 func (x *TransactionServerMessage) Reset() {
 	*x = TransactionServerMessage{}
-	mi := &file_v1_datastore_proto_msgTypes[36]
+	mi := &file_v1_indexeddb_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2849,7 +2849,7 @@ func (x *TransactionServerMessage) String() string {
 func (*TransactionServerMessage) ProtoMessage() {}
 
 func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[36]
+	mi := &file_v1_indexeddb_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2862,7 +2862,7 @@ func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionServerMessage.ProtoReflect.Descriptor instead.
 func (*TransactionServerMessage) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{36}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *TransactionServerMessage) GetMsg() isTransactionServerMessage_Msg {
@@ -2936,11 +2936,11 @@ func (*TransactionServerMessage_Commit) isTransactionServerMessage_Msg() {}
 
 func (*TransactionServerMessage_Abort) isTransactionServerMessage_Msg() {}
 
-var File_v1_datastore_proto protoreflect.FileDescriptor
+var File_v1_indexeddb_proto protoreflect.FileDescriptor
 
-const file_v1_datastore_proto_rawDesc = "" +
+const file_v1_indexeddb_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xf2\x02\n" +
+	"\x12v1/indexeddb.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xf2\x02\n" +
 	"\n" +
 	"TypedValue\x12;\n" +
 	"\n" +
@@ -3152,23 +3152,23 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\n" +
 	"OpenCursor\x12(.gestalt.provider.v1.CursorClientMessage\x1a#.gestalt.provider.v1.CursorResponse(\x010\x01\x12o\n" +
 	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01B\xda\x01\n" +
-	"\x17com.gestalt.provider.v1B\x0eDatastoreProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
+	"\x17com.gestalt.provider.v1B\x0eIndexeddbProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
-	file_v1_datastore_proto_rawDescOnce sync.Once
-	file_v1_datastore_proto_rawDescData []byte
+	file_v1_indexeddb_proto_rawDescOnce sync.Once
+	file_v1_indexeddb_proto_rawDescData []byte
 )
 
-func file_v1_datastore_proto_rawDescGZIP() []byte {
-	file_v1_datastore_proto_rawDescOnce.Do(func() {
-		file_v1_datastore_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_datastore_proto_rawDesc), len(file_v1_datastore_proto_rawDesc)))
+func file_v1_indexeddb_proto_rawDescGZIP() []byte {
+	file_v1_indexeddb_proto_rawDescOnce.Do(func() {
+		file_v1_indexeddb_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_v1_indexeddb_proto_rawDesc), len(file_v1_indexeddb_proto_rawDesc)))
 	})
-	return file_v1_datastore_proto_rawDescData
+	return file_v1_indexeddb_proto_rawDescData
 }
 
-var file_v1_datastore_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
-var file_v1_datastore_proto_goTypes = []any{
+var file_v1_indexeddb_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_v1_indexeddb_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_v1_indexeddb_proto_goTypes = []any{
 	(CursorDirection)(0),                 // 0: gestalt.provider.v1.CursorDirection
 	(TransactionMode)(0),                 // 1: gestalt.provider.v1.TransactionMode
 	(TransactionDurabilityHint)(0),       // 2: gestalt.provider.v1.TransactionDurabilityHint
@@ -3216,7 +3216,7 @@ var file_v1_datastore_proto_goTypes = []any{
 	(*status.Status)(nil),                // 44: google.rpc.Status
 	(*emptypb.Empty)(nil),                // 45: google.protobuf.Empty
 }
-var file_v1_datastore_proto_depIdxs = []int32{
+var file_v1_indexeddb_proto_depIdxs = []int32{
 	41, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
 	42, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
 	43, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
@@ -3330,12 +3330,12 @@ var file_v1_datastore_proto_depIdxs = []int32{
 	0,  // [0:66] is the sub-list for field type_name
 }
 
-func init() { file_v1_datastore_proto_init() }
-func file_v1_datastore_proto_init() {
-	if File_v1_datastore_proto != nil {
+func init() { file_v1_indexeddb_proto_init() }
+func file_v1_indexeddb_proto_init() {
+	if File_v1_indexeddb_proto != nil {
 		return
 	}
-	file_v1_datastore_proto_msgTypes[0].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[0].OneofWrappers = []any{
 		(*TypedValue_NullValue)(nil),
 		(*TypedValue_StringValue)(nil),
 		(*TypedValue_IntValue)(nil),
@@ -3345,14 +3345,14 @@ func file_v1_datastore_proto_init() {
 		(*TypedValue_BytesValue)(nil),
 		(*TypedValue_JsonValue)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[12].OneofWrappers = []any{}
-	file_v1_datastore_proto_msgTypes[15].OneofWrappers = []any{}
-	file_v1_datastore_proto_msgTypes[17].OneofWrappers = []any{}
-	file_v1_datastore_proto_msgTypes[18].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[12].OneofWrappers = []any{}
+	file_v1_indexeddb_proto_msgTypes[15].OneofWrappers = []any{}
+	file_v1_indexeddb_proto_msgTypes[17].OneofWrappers = []any{}
+	file_v1_indexeddb_proto_msgTypes[18].OneofWrappers = []any{
 		(*KeyValue_Scalar)(nil),
 		(*KeyValue_Array)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[21].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[21].OneofWrappers = []any{
 		(*CursorCommand_Next)(nil),
 		(*CursorCommand_ContinueToKey)(nil),
 		(*CursorCommand_Advance)(nil),
@@ -3360,15 +3360,15 @@ func file_v1_datastore_proto_init() {
 		(*CursorCommand_Delete)(nil),
 		(*CursorCommand_Close)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[22].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[22].OneofWrappers = []any{
 		(*CursorClientMessage_Open)(nil),
 		(*CursorClientMessage_Command)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[24].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[24].OneofWrappers = []any{
 		(*CursorResponse_Entry)(nil),
 		(*CursorResponse_Done)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[33].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[33].OneofWrappers = []any{
 		(*TransactionOperation_Get)(nil),
 		(*TransactionOperation_GetKey)(nil),
 		(*TransactionOperation_Add)(nil),
@@ -3386,7 +3386,7 @@ func file_v1_datastore_proto_init() {
 		(*TransactionOperation_IndexCount)(nil),
 		(*TransactionOperation_IndexDelete)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[34].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[34].OneofWrappers = []any{
 		(*TransactionOperationResponse_Empty)(nil),
 		(*TransactionOperationResponse_Record)(nil),
 		(*TransactionOperationResponse_Records)(nil),
@@ -3395,13 +3395,13 @@ func file_v1_datastore_proto_init() {
 		(*TransactionOperationResponse_Count)(nil),
 		(*TransactionOperationResponse_Delete)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[35].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[35].OneofWrappers = []any{
 		(*TransactionClientMessage_Begin)(nil),
 		(*TransactionClientMessage_Operation)(nil),
 		(*TransactionClientMessage_Commit)(nil),
 		(*TransactionClientMessage_Abort)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[36].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[36].OneofWrappers = []any{
 		(*TransactionServerMessage_Begin)(nil),
 		(*TransactionServerMessage_Operation)(nil),
 		(*TransactionServerMessage_Commit)(nil),
@@ -3411,18 +3411,18 @@ func file_v1_datastore_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_datastore_proto_rawDesc), len(file_v1_datastore_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_indexeddb_proto_rawDesc), len(file_v1_indexeddb_proto_rawDesc)),
 			NumEnums:      3,
 			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_v1_datastore_proto_goTypes,
-		DependencyIndexes: file_v1_datastore_proto_depIdxs,
-		EnumInfos:         file_v1_datastore_proto_enumTypes,
-		MessageInfos:      file_v1_datastore_proto_msgTypes,
+		GoTypes:           file_v1_indexeddb_proto_goTypes,
+		DependencyIndexes: file_v1_indexeddb_proto_depIdxs,
+		EnumInfos:         file_v1_indexeddb_proto_enumTypes,
+		MessageInfos:      file_v1_indexeddb_proto_msgTypes,
 	}.Build()
-	File_v1_datastore_proto = out.File
-	file_v1_datastore_proto_goTypes = nil
-	file_v1_datastore_proto_depIdxs = nil
+	File_v1_indexeddb_proto = out.File
+	file_v1_indexeddb_proto_goTypes = nil
+	file_v1_indexeddb_proto_depIdxs = nil
 }

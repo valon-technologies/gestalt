@@ -169,7 +169,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 apps:
   service-a:
     displayName: Service A
@@ -364,11 +364,11 @@ providers:
   indexeddb:
     main:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
     archive:
       default: true
       source:
-        path: ./providers/datastore/archive
+        path: ./providers/indexeddb/archive
   authorization:
     memory:
       source:
@@ -433,7 +433,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 apps:
   service-a:
     source:
@@ -491,7 +491,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 `)
 
 	cfg, err := Load(path)
@@ -525,7 +525,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -559,7 +559,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -602,7 +602,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
   secrets:
     default:
       source: env
@@ -637,7 +637,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -664,7 +664,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -694,7 +694,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -724,7 +724,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -1181,7 +1181,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -1190,7 +1190,7 @@ server:
 			wantErr: false,
 		},
 		{
-			name: "missing datastore",
+			name: "missing indexeddb",
 			yaml: `
 server:
   encryptionKey: server-key
@@ -1204,7 +1204,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -1218,7 +1218,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -1270,7 +1270,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 `)
 
 		if _, err := Load(path); err != nil {
@@ -1292,7 +1292,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 `)
 
 		if _, err := Load(path); err != nil {
@@ -1326,7 +1326,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
   authorization:
     indexeddb:
       source:
@@ -1368,7 +1368,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
   authorization:
     indexeddb:
       source:
@@ -1408,7 +1408,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
   authorization:
     indexeddb:
       source:
@@ -1445,7 +1445,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 `)
 
 		_, err := Load(path)
@@ -2047,7 +2047,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2076,7 +2076,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2110,7 +2110,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2149,7 +2149,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2186,7 +2186,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 apps:
   roadmap:
     source:
@@ -2238,7 +2238,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2270,7 +2270,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2299,7 +2299,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2333,7 +2333,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2368,7 +2368,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2397,7 +2397,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 apps:
   admin:
     source:
@@ -2432,7 +2432,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2460,7 +2460,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2488,7 +2488,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2527,10 +2527,10 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
     archive:
       source:
-        path: ./providers/datastore/archive
+        path: ./providers/indexeddb/archive
 server:
   providers:
     indexeddb: sqlite
@@ -2565,7 +2565,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2600,7 +2600,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2631,7 +2631,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2664,7 +2664,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2697,7 +2697,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2727,7 +2727,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2757,7 +2757,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -2897,7 +2897,7 @@ providers:
   indexeddb:
     main:
       source:
-        path: ./providers/datastore/main
+        path: ./providers/indexeddb/main
 server:
   providers:
     indexeddb: main
@@ -2928,10 +2928,10 @@ providers:
   indexeddb:
     main:
       source:
-        path: ./providers/datastore/main
+        path: ./providers/indexeddb/main
     archive:
       source:
-        path: ./providers/datastore/archive
+        path: ./providers/indexeddb/archive
 server:
   providers:
     indexeddb: main
@@ -2965,7 +2965,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3037,7 +3037,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3655,7 +3655,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3696,7 +3696,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3740,7 +3740,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3789,7 +3789,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3833,7 +3833,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3878,7 +3878,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3923,7 +3923,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -3972,7 +3972,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite
@@ -4006,7 +4006,7 @@ providers:
   indexeddb:
     workflow_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: workflow_state
@@ -4052,7 +4052,7 @@ providers:
   indexeddb:
     agent_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: agent_state
@@ -4094,7 +4094,7 @@ providers:
   indexeddb:
     workflow_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: workflow_state
@@ -4124,7 +4124,7 @@ providers:
   indexeddb:
     agent_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: agent_state
@@ -4225,7 +4225,7 @@ providers:
   indexeddb:
     agent_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 runtime:
   providers:
     hosted:
@@ -4275,7 +4275,7 @@ providers:
   indexeddb:
     agent_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 runtime:
   providers:
     hosted:
@@ -4319,7 +4319,7 @@ providers:
   indexeddb:
     agent_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 runtime:
   providers:
     hosted:
@@ -4366,7 +4366,7 @@ providers:
   indexeddb:
     agent_state:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 runtime:
   providers:
     hosted:
@@ -6569,7 +6569,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 apps:
   service-a:
     iconFile: ../assets/service.svg
@@ -6669,7 +6669,7 @@ providers:
   indexeddb:
     sqlite:
       source:
-        path: ./providers/datastore/sqlite
+        path: ./providers/indexeddb/sqlite
 server:
   providers:
     indexeddb: sqlite

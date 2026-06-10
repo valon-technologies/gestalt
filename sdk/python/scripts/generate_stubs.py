@@ -9,7 +9,7 @@ PROTO_MODULES = (
     "authentication",
     "authorization",
     "cache",
-    "datastore",
+    "indexeddb",
     "app",
     "runtime_provider",
     "runtime",

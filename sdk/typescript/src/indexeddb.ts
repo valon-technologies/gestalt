@@ -7,7 +7,7 @@ import {
   CursorDirection as ProtoCursorDirection,
   TransactionMode as ProtoTransactionMode,
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
-} from "./internal/gen/v1/datastore_pb.ts";
+} from "./internal/gen/v1/indexeddb_pb.ts";
 import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
 import {
   createHostServiceGrpcTransport,
@@ -554,7 +554,7 @@ export interface IndexSchema {
 }
 
 /**
- * Column type metadata used by the datastore schema.
+ * Column type metadata used by the IndexedDB schema.
  */
 export enum ColumnType {
   String = 0,

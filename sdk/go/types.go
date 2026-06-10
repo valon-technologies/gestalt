@@ -20,8 +20,8 @@ const (
 	// ProviderKindAuthorization serves generic authorization model,
 	// relationship, and access-check flows.
 	ProviderKindAuthorization ProviderKind = "authorization"
-	// ProviderKindIndexedDB serves the IndexedDB-style datastore surface.
-	ProviderKindIndexedDB ProviderKind = "datastore"
+	// ProviderKindIndexedDB serves the IndexedDB surface.
+	ProviderKindIndexedDB ProviderKind = "indexeddb"
 	// ProviderKindCache serves the cache surface.
 	ProviderKindCache ProviderKind = "cache"
 	// ProviderKindSecrets serves secret lookups.

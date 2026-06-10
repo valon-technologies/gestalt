@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: v1/datastore.proto
+// source: v1/indexeddb.proto
 
 package proto
 
@@ -847,5 +847,5 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "v1/datastore.proto",
+	Metadata: "v1/indexeddb.proto",
 }

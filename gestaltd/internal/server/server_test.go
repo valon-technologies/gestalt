@@ -3480,11 +3480,11 @@ func TestReadinessCheck_NotReady(t *testing.T) {
 	}
 }
 
-func TestReadinessCheck_DatastoreDown(t *testing.T) {
+func TestReadinessCheck_IndexedDBDown(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Readiness = func() string {
-			return "datastore unavailable"
+			return "indexeddb unavailable"
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -3503,8 +3503,8 @@ func TestReadinessCheck_DatastoreDown(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
-	if body["status"] != "datastore unavailable" {
-		t.Fatalf("expected status 'datastore unavailable', got %q", body["status"])
+	if body["status"] != "indexeddb unavailable" {
+		t.Fatalf("expected status 'indexeddb unavailable', got %q", body["status"])
 	}
 }
 
@@ -11088,7 +11088,7 @@ func TestExecuteOperation_ConnectionModeNone(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 	if tokenCalled {
-		t.Fatal("datastore.Token should not be called for ConnectionModeNone")
+		t.Fatal("indexeddb.Token should not be called for ConnectionModeNone")
 	}
 }
 
