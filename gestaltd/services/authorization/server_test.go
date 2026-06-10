@@ -10,6 +10,8 @@ import (
 )
 
 func TestProviderServerLeavesGatewaySourceInternalByDefault(t *testing.T) {
+	t.Parallel()
+
 	provider := &sourceRecordingAuthorizationProvider{}
 	server := NewProviderServer(provider)
 
@@ -26,6 +28,8 @@ func TestProviderServerLeavesGatewaySourceInternalByDefault(t *testing.T) {
 }
 
 func TestProviderServerAppliesConfiguredGatewayContext(t *testing.T) {
+	t.Parallel()
+
 	provider := &sourceRecordingAuthorizationProvider{}
 	server := NewProviderServer(
 		provider,

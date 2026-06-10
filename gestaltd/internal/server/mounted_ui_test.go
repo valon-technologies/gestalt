@@ -11,6 +11,8 @@ import (
 )
 
 func TestAuthorizeMountedUIRouteAttributesGatewayCallsToPrincipalSubject(t *testing.T) {
+	t.Parallel()
+
 	authz := &mountedUIRecordingAuthorizationProvider{}
 	s := &Server{authorization: authz}
 	p := &principal.Principal{
