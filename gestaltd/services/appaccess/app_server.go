@@ -13,6 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -297,6 +298,8 @@ func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestI
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for app invocation")
 	}
+	ctx = providergateway.WithInvokingSubjectID(ctx, callCtx.callerName)
+	ctx = providergateway.WithRequestContext(ctx, callCtx.requestContext)
 	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type: appInvocationAuthorizationSubjectTypeApp,

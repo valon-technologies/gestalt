@@ -8,11 +8,12 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"gopkg.in/yaml.v3"
 )
 
-func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService) (core.AuthorizationProvider, error) {
+func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, gateway providergateway.ProviderGateway) (core.AuthorizationProvider, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("authorization provider: parsing config: %w", err)
@@ -39,5 +40,6 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
 		Name:         name,
+		Gateway:      gateway,
 	})
 }

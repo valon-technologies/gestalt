@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowauth"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -596,6 +597,7 @@ func (s *ProviderServer) requireWorkflowAccess(ctx context.Context, authCtx work
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for workflow manager operation")
 	}
+	ctx = providergateway.WithInvokingSubjectID(ctx, authCtx.CallerName())
 	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type: workflowauth.SubjectTypeApp,
