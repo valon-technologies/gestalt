@@ -960,7 +960,6 @@ pub mod agent_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn create_session(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateAgentProviderSessionRequest>,
@@ -1209,7 +1208,6 @@ pub mod agent_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AgentServer.
     #[async_trait]
     pub trait Agent: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn create_session(
             &self,
             request: tonic::Request<super::CreateAgentProviderSessionRequest>,
@@ -2496,7 +2494,6 @@ pub mod authorization_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn check_access(
             &mut self,
             request: impl tonic::IntoRequest<super::CheckAccessRequest>,
@@ -2693,7 +2690,6 @@ pub mod authorization_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AuthorizationServer.
     #[async_trait]
     pub trait Authorization: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn check_access(
             &self,
             request: tonic::Request<super::CheckAccessRequest>,
@@ -3315,7 +3311,6 @@ pub mod cache_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn get(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheGetRequest>,
@@ -3440,7 +3435,6 @@ pub mod cache_server {
     /// Generated trait containing gRPC methods that should be implemented for use with CacheServer.
     #[async_trait]
     pub trait Cache: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn get(
             &self,
             request: tonic::Request<super::CacheGetRequest>,
@@ -6871,7 +6865,6 @@ pub mod s3_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn head_object(
             &mut self,
             request: impl tonic::IntoRequest<super::HeadObjectRequest>,
@@ -7005,7 +6998,6 @@ pub mod s3_server {
     /// Generated trait containing gRPC methods that should be implemented for use with S3Server.
     #[async_trait]
     pub trait S3: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn head_object(
             &self,
             request: tonic::Request<super::HeadObjectRequest>,
@@ -8354,7 +8346,6 @@ pub mod workflow_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn apply_definition(
             &mut self,
             request: impl tonic::IntoRequest<super::ApplyWorkflowProviderDefinitionRequest>,
@@ -8652,7 +8643,6 @@ pub mod workflow_server {
     /// Generated trait containing gRPC methods that should be implemented for use with WorkflowServer.
     #[async_trait]
     pub trait Workflow: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn apply_definition(
             &self,
             request: tonic::Request<super::ApplyWorkflowProviderDefinitionRequest>,

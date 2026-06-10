@@ -5,6 +5,7 @@ package gestalt.provider.v1;
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "v1/agent.proto";
+import "v1/annotations.proto";
 
 enum RuntimeEgressMode {
   RUNTIME_EGRESS_MODE_UNSPECIFIED = 0;
@@ -78,6 +79,8 @@ message PrepareRuntimeWorkspaceRequest {
 }
 
 message PrepareRuntimeWorkspaceResponse {
+  option (unwrap) = "workspace";
+
   PreparedAgentWorkspace workspace = 1;
 }
 
@@ -132,20 +135,52 @@ message AppendRuntimeLogsRequest {
 }
 
 message AppendRuntimeLogsResponse {
+  option (unwrap) = "last_seq";
+
   int64 last_seq = 1;
 }
 
 service RuntimeLogHost {
-  rpc AppendLogs(AppendRuntimeLogsRequest) returns (AppendRuntimeLogsResponse);
+  option (host_binding) = "runtime log host";
+
+  rpc AppendLogs(AppendRuntimeLogsRequest) returns (AppendRuntimeLogsResponse) {
+    option (signature) = "session_id";
+    option (signature) = "logs";
+  }
 }
 
 service Runtime {
   rpc GetSupport(google.protobuf.Empty) returns (RuntimeSupport);
-  rpc StartSession(StartRuntimeSessionRequest) returns (RuntimeSession);
-  rpc GetSession(GetRuntimeSessionRequest) returns (RuntimeSession);
+  rpc StartSession(StartRuntimeSessionRequest) returns (RuntimeSession) {
+    option (signature) = "app_name";
+    option (signature) = "template";
+    option (signature) = "image";
+    option (signature) = "image_pull_auth";
+  }
+  rpc GetSession(GetRuntimeSessionRequest) returns (RuntimeSession) {
+    option (signature) = "session_id";
+  }
   rpc ListSessions(ListRuntimeSessionsRequest) returns (ListRuntimeSessionsResponse);
-  rpc StopSession(StopRuntimeSessionRequest) returns (google.protobuf.Empty);
-  rpc PrepareWorkspace(PrepareRuntimeWorkspaceRequest) returns (PrepareRuntimeWorkspaceResponse);
-  rpc RemoveWorkspace(RemoveRuntimeWorkspaceRequest) returns (google.protobuf.Empty);
-  rpc StartApp(StartHostedAppRequest) returns (HostedApp);
+  rpc StopSession(StopRuntimeSessionRequest) returns (google.protobuf.Empty) {
+    option (signature) = "session_id";
+  }
+  rpc PrepareWorkspace(PrepareRuntimeWorkspaceRequest) returns (PrepareRuntimeWorkspaceResponse) {
+    option (signature) = "session_id";
+    option (signature) = "agent_session_id";
+    option (signature) = "workspace";
+  }
+  rpc RemoveWorkspace(RemoveRuntimeWorkspaceRequest) returns (google.protobuf.Empty) {
+    option (signature) = "session_id";
+    option (signature) = "agent_session_id";
+  }
+  rpc StartApp(StartHostedAppRequest) returns (HostedApp) {
+    option (signature) = "session_id";
+    option (signature) = "app_name";
+    option (signature) = "command";
+    option (signature) = "args";
+    option (signature) = "allowed_hosts";
+    option (signature) = "default_action";
+    option (signature) = "host_binary";
+    option (signature) = "workdir";
+  }
 }

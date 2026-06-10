@@ -418,7 +418,7 @@ var File_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_v1_runtime_proto_rawDesc = "" +
 	"\n" +
-	"\x10v1/runtime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xbc\x02\n" +
+	"\x10v1/runtime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x14v1/annotations.proto\"\xbc\x02\n" +
 	"\x10ProviderIdentity\x125\n" +
 	"\x04kind\x18\x01 \x01(\x0e2!.gestalt.provider.v1.ProviderKindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
@@ -432,14 +432,14 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x18ConfigureProviderRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12)\n" +
-	"\x10protocol_version\x18\x03 \x01(\x05R\x0fprotocolVersion\"F\n" +
+	"\x10protocol_version\x18\x03 \x01(\x05R\x0fprotocolVersion\"\\\n" +
 	"\x19ConfigureProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"I\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"_\n" +
 	"\x1cStartRuntimeProviderResponse\x12)\n" +
-	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion*\x9a\x03\n" +
+	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion:\x14\x9a\xb5\x18\x10protocol_version*\x9a\x03\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11PROVIDER_KIND_APP\x10\x01\x12 \n" +
@@ -455,10 +455,10 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x12\x17\n" +
 	"\x13PROVIDER_KIND_AGENT\x10\v\x12%\n" +
 	"!PROVIDER_KIND_EXTERNAL_CREDENTIAL\x10\f\x12\x16\n" +
-	"\x12PROVIDER_KIND_TEST\x10\r2\x8a\x03\n" +
+	"\x12PROVIDER_KIND_TEST\x10\r2\xb3\x03\n" +
 	"\x11ProviderLifecycle\x12T\n" +
-	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
-	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +
+	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12\x9a\x01\n" +
+	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\"&\x8a\xb5\x18\x04name\x8a\xb5\x18\x10protocol_version\x8a\xb5\x18\x06config\x12O\n" +
 	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.HealthCheckResponse\x12Z\n" +
 	"\rStartProvider\x12\x16.google.protobuf.Empty\x1a1.gestalt.provider.v1.StartRuntimeProviderResponseB\xd8\x01\n" +
 	"\x17com.gestalt.provider.v1B\fRuntimeProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
@@ -510,6 +510,7 @@ func file_v1_runtime_proto_init() {
 	if File_v1_runtime_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

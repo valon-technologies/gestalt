@@ -115,13 +115,13 @@ var File_v1_secrets_proto protoreflect.FileDescriptor
 
 const file_v1_secrets_proto_rawDesc = "" +
 	"\n" +
-	"\x10v1/secrets.proto\x12\x13gestalt.provider.v1\"&\n" +
+	"\x10v1/secrets.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"&\n" +
 	"\x10GetSecretRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\")\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"4\n" +
 	"\x11GetSecretResponse\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value2e\n" +
-	"\aSecrets\x12Z\n" +
-	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseB\xd8\x01\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value:\t\x9a\xb5\x18\x05value2o\n" +
+	"\aSecrets\x12d\n" +
+	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponse\"\b\x8a\xb5\x18\x04nameB\xd8\x01\n" +
 	"\x17com.gestalt.provider.v1B\fSecretsProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -156,6 +156,7 @@ func file_v1_secrets_proto_init() {
 	if File_v1_secrets_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

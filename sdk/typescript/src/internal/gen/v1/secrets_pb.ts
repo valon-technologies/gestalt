@@ -4,13 +4,14 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_v1_annotations } from "./annotations_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/secrets.proto.
  */
 export const file_v1_secrets: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIiChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCTJlCgdTZWNyZXRzEloKCUdldFNlY3JldBIlLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2VjcmV0UmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuR2V0U2VjcmV0UmVzcG9uc2ViBnByb3RvMw");
+  fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSItChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCToJmrUYBXZhbHVlMm8KB1NlY3JldHMSZAoJR2V0U2VjcmV0EiUuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXNwb25zZSIIirUYBG5hbWViBnByb3RvMw", [file_v1_annotations]);
 
 /**
  * GetSecretRequest looks up one named secret.

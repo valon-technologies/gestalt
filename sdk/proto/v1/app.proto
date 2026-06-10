@@ -4,6 +4,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
+import "v1/annotations.proto";
 
 // CatalogParameter describes one input parameter surfaced in the generated
 // catalog for an operation.
@@ -298,13 +299,43 @@ message StartProviderResponse {
 // AppProvider models the shared Gestalt integration-provider protocol.
 service AppProvider {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
-  rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
-  rpc Execute(ExecuteRequest) returns (OperationResult);
+  rpc StartProvider(StartProviderRequest) returns (StartProviderResponse) {
+    option (signature) = "name";
+    option (signature) = "protocol_version";
+    option (signature) = "config";
+  }
+  rpc Execute(ExecuteRequest) returns (OperationResult) {
+    option (signature) = "operation";
+    option (signature) = "token";
+    option (signature) = "invocation_id";
+    option (signature) = "idempotency_key";
+    option (signature) = "params";
+  }
   rpc ResolveHTTPSubject(ResolveHTTPSubjectRequest) returns (ResolveHTTPSubjectResponse);
-  rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
+  rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse) {
+    option (signature) = "token";
+    option (signature) = "invocation_id";
+  }
 }
 
 service App {
-  rpc Invoke(AppInvokeRequest) returns (OperationResult);
-  rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult);
+  option (host_binding) = "app";
+
+  rpc Invoke(AppInvokeRequest) returns (OperationResult) {
+    option (signature) = "app";
+    option (signature) = "operation";
+    option (signature) = "connection";
+    option (signature) = "instance";
+    option (signature) = "idempotency_key";
+    option (signature) = "credential_mode";
+    option (signature) = "params";
+  }
+  rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult) {
+    option (signature) = "app";
+    option (signature) = "document";
+    option (signature) = "connection";
+    option (signature) = "instance";
+    option (signature) = "idempotency_key";
+    option (signature) = "variables";
+  }
 }

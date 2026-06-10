@@ -7,6 +7,7 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "v1/agent.proto";
 import "v1/app.proto";
+import "v1/annotations.proto";
 
 message BoundWorkflowTarget {
   reserved 1 to 7;
@@ -275,6 +276,8 @@ message ListWorkflowProviderDefinitionsRequest {
 }
 
 message ListWorkflowProviderDefinitionsResponse {
+  option (unwrap) = "definitions";
+
   repeated WorkflowDefinition definitions = 1;
 }
 
@@ -406,6 +409,8 @@ message GetWorkflowProviderRunEventsRequest {
 }
 
 message GetWorkflowProviderRunEventsResponse {
+  option (unwrap) = "events";
+
   repeated WorkflowRunEvent events = 1;
 }
 
@@ -417,25 +422,82 @@ message GetWorkflowProviderRunOutputRequest {
 }
 
 message GetWorkflowProviderRunOutputResponse {
+  option (unwrap) = "output";
+
   google.protobuf.Value output = 1;
 }
 
 service Workflow {
-  rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition);
-  rpc GetDefinition(GetWorkflowProviderDefinitionRequest) returns (WorkflowDefinition);
+  option (host_binding) = "workflow";
+
+  rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
+    option (signature) = "provider_name";
+    option (signature) = "idempotency_key";
+    option (signature) = "spec";
+  }
+  rpc GetDefinition(GetWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
+    option (signature) = "definition_id";
+  }
   rpc ListDefinitions(ListWorkflowProviderDefinitionsRequest) returns (ListWorkflowProviderDefinitionsResponse);
-  rpc SetDefinitionPaused(SetWorkflowProviderDefinitionPausedRequest) returns (WorkflowDefinition);
-  rpc SetActivationPaused(SetWorkflowProviderActivationPausedRequest) returns (WorkflowDefinition);
-  rpc DeleteDefinition(DeleteWorkflowProviderDefinitionRequest) returns (google.protobuf.Empty);
+  rpc SetDefinitionPaused(SetWorkflowProviderDefinitionPausedRequest) returns (WorkflowDefinition) {
+    option (signature) = "definition_id";
+    option (signature) = "paused";
+  }
+  rpc SetActivationPaused(SetWorkflowProviderActivationPausedRequest) returns (WorkflowDefinition) {
+    option (signature) = "definition_id";
+    option (signature) = "activation_id";
+    option (signature) = "paused";
+  }
+  rpc DeleteDefinition(DeleteWorkflowProviderDefinitionRequest) returns (google.protobuf.Empty) {
+    option (signature) = "definition_id";
+  }
 
-  rpc StartRun(StartWorkflowProviderRunRequest) returns (WorkflowRun);
-  rpc ListRuns(ListWorkflowProviderRunsRequest) returns (ListWorkflowProviderRunsResponse);
-  rpc GetRun(GetWorkflowProviderRunRequest) returns (WorkflowRun);
-  rpc GetRunEvents(GetWorkflowProviderRunEventsRequest) returns (GetWorkflowProviderRunEventsResponse);
-  rpc GetRunOutput(GetWorkflowProviderRunOutputRequest) returns (GetWorkflowProviderRunOutputResponse);
-  rpc CancelRun(CancelWorkflowProviderRunRequest) returns (WorkflowRun);
-  rpc SignalRun(SignalWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse);
-  rpc SignalOrStartRun(SignalOrStartWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse);
+  rpc StartRun(StartWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (signature) = "idempotency_key";
+    option (signature) = "workflow_key";
+    option (signature) = "provider_name";
+    option (signature) = "definition_id";
+    option (signature) = "expected_definition_generation";
+    option (signature) = "run_as";
+    option (signature) = "input";
+  }
+  rpc ListRuns(ListWorkflowProviderRunsRequest) returns (ListWorkflowProviderRunsResponse) {
+    option (signature) = "page_size";
+    option (signature) = "page_token";
+    option (signature) = "status";
+    option (signature) = "target_app";
+  }
+  rpc GetRun(GetWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (signature) = "run_id";
+  }
+  rpc GetRunEvents(GetWorkflowProviderRunEventsRequest) returns (GetWorkflowProviderRunEventsResponse) {
+    option (signature) = "run_id";
+  }
+  rpc GetRunOutput(GetWorkflowProviderRunOutputRequest) returns (GetWorkflowProviderRunOutputResponse) {
+    option (signature) = "run_id";
+  }
+  rpc CancelRun(CancelWorkflowProviderRunRequest) returns (WorkflowRun) {
+    option (signature) = "run_id";
+    option (signature) = "reason";
+  }
+  rpc SignalRun(SignalWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse) {
+    option (signature) = "run_id";
+    option (signature) = "signal";
+  }
+  rpc SignalOrStartRun(SignalOrStartWorkflowProviderRunRequest) returns (SignalWorkflowRunResponse) {
+    option (signature) = "workflow_key";
+    option (signature) = "idempotency_key";
+    option (signature) = "provider_name";
+    option (signature) = "definition_id";
+    option (signature) = "expected_definition_generation";
+    option (signature) = "signal";
+    option (signature) = "run_as";
+    option (signature) = "input";
+  }
 
-  rpc DeliverEvent(DeliverWorkflowProviderEventRequest) returns (WorkflowEvent);
+  rpc DeliverEvent(DeliverWorkflowProviderEventRequest) returns (WorkflowEvent) {
+    option (signature) = "app_name";
+    option (signature) = "provider_name";
+    option (signature) = "event";
+  }
 }

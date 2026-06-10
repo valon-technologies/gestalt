@@ -5,6 +5,7 @@ package gestalt.provider.v1;
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "v1/app.proto";
+import "v1/annotations.proto";
 
 message AgentMessage {
   string role = 1;
@@ -233,6 +234,8 @@ message ListAgentProviderSessionsRequest {
 }
 
 message ListAgentProviderSessionsResponse {
+  option (unwrap) = "sessions";
+
   repeated AgentSession sessions = 1;
 }
 
@@ -358,6 +361,8 @@ message ListAgentProviderTurnsRequest {
 }
 
 message ListAgentProviderTurnsResponse {
+  option (unwrap) = "turns";
+
   repeated AgentTurn turns = 1;
 }
 
@@ -397,6 +402,8 @@ message ListAgentProviderTurnEventsRequest {
 }
 
 message ListAgentProviderTurnEventsResponse {
+  option (unwrap) = "events";
+
   repeated AgentTurnEvent events = 1;
 }
 
@@ -419,6 +426,8 @@ message ListAgentProviderInteractionsRequest {
 }
 
 message ListAgentProviderInteractionsResponse {
+  option (unwrap) = "interactions";
+
   repeated AgentInteraction interactions = 1;
 }
 
@@ -452,20 +461,85 @@ message ListedAgentTool {
 // control-plane state and should not require a live execution sandbox,
 // pod-level transport, or cached tunnel.
 service Agent {
-  rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession);
-  rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession);
-  rpc ListSessions(ListAgentProviderSessionsRequest) returns (ListAgentProviderSessionsResponse);
-  rpc UpdateSession(UpdateAgentProviderSessionRequest) returns (AgentSession);
+  option (host_binding) = "agent";
 
-  rpc CreateTurn(CreateAgentProviderTurnRequest) returns (AgentTurn);
-  rpc GetTurn(GetAgentProviderTurnRequest) returns (AgentTurn);
-  rpc ListTurns(ListAgentProviderTurnsRequest) returns (ListAgentProviderTurnsResponse);
-  rpc CancelTurn(CancelAgentProviderTurnRequest) returns (AgentTurn);
+  rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession) {
+    option (signature) = "provider_name";
+    option (signature) = "idempotency_key";
+    option (signature) = "model";
+    option (signature) = "client_ref";
+    option (signature) = "metadata";
+    option (signature) = "workspace";
+    option (signature) = "tools";
+  }
+  rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession) {
+    option (signature) = "session_id";
+    option (signature) = "provider_name";
+  }
+  rpc ListSessions(ListAgentProviderSessionsRequest) returns (ListAgentProviderSessionsResponse) {
+    option (signature) = "session_ids";
+    option (signature) = "state";
+    option (signature) = "limit";
+    option (signature) = "summary_only";
+    option (signature) = "provider_name";
+  }
+  rpc UpdateSession(UpdateAgentProviderSessionRequest) returns (AgentSession) {
+    option (signature) = "session_id";
+    option (signature) = "client_ref";
+    option (signature) = "state";
+    option (signature) = "provider_name";
+    option (signature) = "metadata";
+  }
 
-  rpc ListTurnEvents(ListAgentProviderTurnEventsRequest) returns (ListAgentProviderTurnEventsResponse);
+  rpc CreateTurn(CreateAgentProviderTurnRequest) returns (AgentTurn) {
+    option (signature) = "session_id";
+    option (signature) = "idempotency_key";
+    option (signature) = "model";
+    option (signature) = "execution_ref";
+    option (signature) = "timeout_seconds";
+    option (signature) = "provider_name";
+    option (signature) = "messages";
+    option (signature) = "metadata";
+    option (signature) = "model_options";
+    option (signature) = "output";
+  }
+  rpc GetTurn(GetAgentProviderTurnRequest) returns (AgentTurn) {
+    option (signature) = "turn_id";
+    option (signature) = "provider_name";
+  }
+  rpc ListTurns(ListAgentProviderTurnsRequest) returns (ListAgentProviderTurnsResponse) {
+    option (signature) = "session_id";
+    option (signature) = "turn_ids";
+    option (signature) = "status";
+    option (signature) = "limit";
+    option (signature) = "summary_only";
+    option (signature) = "provider_name";
+  }
+  rpc CancelTurn(CancelAgentProviderTurnRequest) returns (AgentTurn) {
+    option (signature) = "turn_id";
+    option (signature) = "reason";
+    option (signature) = "provider_name";
+  }
 
-  rpc GetInteraction(GetAgentProviderInteractionRequest) returns (AgentInteraction);
-  rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse);
-  rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction);
+  rpc ListTurnEvents(ListAgentProviderTurnEventsRequest) returns (ListAgentProviderTurnEventsResponse) {
+    option (signature) = "turn_id";
+    option (signature) = "after_seq";
+    option (signature) = "limit";
+    option (signature) = "provider_name";
+  }
+
+  rpc GetInteraction(GetAgentProviderInteractionRequest) returns (AgentInteraction) {
+    option (signature) = "interaction_id";
+  }
+  rpc ListInteractions(ListAgentProviderInteractionsRequest) returns (ListAgentProviderInteractionsResponse) {
+    option (signature) = "turn_id";
+    option (signature) = "provider_name";
+  }
+  rpc ResolveInteraction(ResolveAgentProviderInteractionRequest) returns (AgentInteraction) {
+    option (signature) = "interaction_id";
+    option (signature) = "turn_id";
+    option (signature) = "provider_name";
+    option (signature) = "resolution";
+  }
   rpc GetCapabilities(GetAgentProviderCapabilitiesRequest) returns (AgentProviderCapabilities);
 }
