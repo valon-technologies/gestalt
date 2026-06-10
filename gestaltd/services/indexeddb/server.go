@@ -1,6 +1,6 @@
 package indexeddb
 
-//go:generate go run ../../tools/routinggen -grpc ../../rpc/protov1/v1/datastore_grpc.pb.go -service IndexedDBServer -receiver routingIndexedDBServer -binding indexeddb -package indexeddb -server-type proto.IndexedDBServer -output routing_indexeddb_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../rpc/protov1/v1/indexeddb_grpc.pb.go -service IndexedDBServer -receiver routingIndexedDBServer -binding indexeddb -package indexeddb -server-type proto.IndexedDBServer -output routing_indexeddb_gen.go
 
 import (
 	"context"

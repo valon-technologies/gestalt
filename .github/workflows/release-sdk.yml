@@ -190,7 +190,7 @@ jobs:
         sdk/rust
         sdk/proto
       component-summary: |
-        Rust SDK for building Gestalt executable providers, including integration, auth, and datastore surfaces, against the shared protocol bindings in this repository.
+        Rust SDK for building Gestalt executable providers, including integration, auth, and IndexedDB surfaces, against the shared protocol bindings in this repository.
       install-markdown: |
         - Crate: `cargo add gestalt-sdk`
         - In code, continue importing the library as `gestalt`

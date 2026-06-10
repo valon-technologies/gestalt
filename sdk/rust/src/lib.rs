@@ -14,7 +14,7 @@ mod catalog;
 mod env;
 mod error;
 mod generated;
-/// IndexedDB-style datastore client and provider helpers.
+/// IndexedDB client and provider helpers.
 pub mod indexeddb;
 mod protocol;
 mod provider_server;

@@ -24,7 +24,7 @@ import (
 
 const (
 	runtimeShutdownTimeout        = 15 * time.Second
-	readinessDatastorePingTimeout = 2 * time.Second
+	readinessIndexedDBPingTimeout = 2 * time.Second
 )
 
 func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]string {
@@ -179,11 +179,11 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady)
 }
 
-type datastorePinger interface {
+type indexedDBPinger interface {
 	Ping(context.Context) error
 }
 
-func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct{}, services datastorePinger) ReadinessChecker {
+func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct{}, services indexedDBPinger) ReadinessChecker {
 	return func() string {
 		select {
 		case <-providersReady:
@@ -198,12 +198,12 @@ func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct
 		}
 
 		if services == nil {
-			return "datastore unavailable"
+			return "indexeddb unavailable"
 		}
-		pingCtx, cancel := context.WithTimeout(context.Background(), readinessDatastorePingTimeout)
+		pingCtx, cancel := context.WithTimeout(context.Background(), readinessIndexedDBPingTimeout)
 		defer cancel()
 		if err := services.Ping(pingCtx); err != nil {
-			return "datastore unavailable"
+			return "indexeddb unavailable"
 		}
 		return ""
 	}

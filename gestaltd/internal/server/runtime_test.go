@@ -36,11 +36,11 @@ func TestHTTPCatalogConnectionMapUsesAPIConnection(t *testing.T) {
 	}
 }
 
-type fakeDatastorePinger struct {
+type fakeIndexedDBPinger struct {
 	err error
 }
 
-func (p fakeDatastorePinger) Ping(context.Context) error {
+func (p fakeIndexedDBPinger) Ping(context.Context) error {
 	return p.err
 }
 
@@ -49,7 +49,7 @@ func TestRuntimeReadinessStatusWaitsForWorkflowProviders(t *testing.T) {
 
 	providersReady := make(chan struct{})
 	workflowProvidersReady := make(chan struct{})
-	check := runtimeReadinessStatus(providersReady, workflowProvidersReady, fakeDatastorePinger{})
+	check := runtimeReadinessStatus(providersReady, workflowProvidersReady, fakeIndexedDBPinger{})
 
 	if got := check(); got != "providers loading" {
 		t.Fatalf("readiness before providers = %q, want %q", got, "providers loading")
@@ -66,7 +66,7 @@ func TestRuntimeReadinessStatusWaitsForWorkflowProviders(t *testing.T) {
 	}
 }
 
-func TestRuntimeReadinessStatusChecksDatastoreAfterProviders(t *testing.T) {
+func TestRuntimeReadinessStatusChecksIndexedDBAfterProviders(t *testing.T) {
 	t.Parallel()
 
 	providersReady := make(chan struct{})
@@ -76,11 +76,11 @@ func TestRuntimeReadinessStatusChecksDatastoreAfterProviders(t *testing.T) {
 	check := runtimeReadinessStatus(
 		providersReady,
 		workflowProvidersReady,
-		fakeDatastorePinger{err: errors.New("down")},
+		fakeIndexedDBPinger{err: errors.New("down")},
 	)
 
-	if got := check(); got != "datastore unavailable" {
-		t.Fatalf("readiness with datastore error = %q, want %q", got, "datastore unavailable")
+	if got := check(); got != "indexeddb unavailable" {
+		t.Fatalf("readiness with indexeddb error = %q, want %q", got, "indexeddb unavailable")
 	}
 }
 

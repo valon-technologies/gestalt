@@ -16,10 +16,10 @@ import (
 )
 
 // ServeIndexedDBProvider starts a gRPC server for an [IndexedDBProvider].
-func ServeIndexedDBProvider(ctx context.Context, datastore IndexedDBProvider) error {
-	return serveProvider(withProviderCloser(ctx, datastore), func(srv *grpc.Server) {
-		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindIndexedDB, datastore))
-		proto.RegisterIndexedDBServer(srv, indexedDBProviderServer{provider: datastore})
+func ServeIndexedDBProvider(ctx context.Context, provider IndexedDBProvider) error {
+	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
+		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindIndexedDB, provider))
+		proto.RegisterIndexedDBServer(srv, indexedDBProviderServer{provider: provider})
 	})
 }
 

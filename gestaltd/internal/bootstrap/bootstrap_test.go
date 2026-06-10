@@ -1620,7 +1620,7 @@ func TestBootstrap(t *testing.T) {
 		t.Errorf("Auth.Name: got %q, want %q", result.Auth.Name(), "test-auth")
 	}
 	if result.Services == nil {
-		t.Fatal("Datastore is nil")
+		t.Fatal("IndexedDB is nil")
 	}
 	if result.Telemetry == nil {
 		t.Fatal("Telemetry is nil")

@@ -96,7 +96,7 @@
 // Use the host-service capabilities when provider code needs to call sibling
 // services exposed by gestaltd. These include Cache, Workflow, Agent, and App.
 // Apps use
-// [IndexedDB] and [S3] for datastore and object storage bindings.
+// [IndexedDB] and [S3] for record and object storage bindings.
 //
 // Workflow and Agent use native Go request and response structs at provider
 // boundaries. Generated protocol messages stay inside the SDK transport

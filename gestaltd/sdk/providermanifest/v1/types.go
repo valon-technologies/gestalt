@@ -147,7 +147,7 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 	}, nil
 }
 
-// Spec is a union type validated per kind. For auth/datastore/secrets only
+// Spec is a union type validated per kind. For auth/indexeddb/secrets only
 // ConfigSchemaPath is valid. For apps all surface/connection fields are
 // valid. For ui AssetRoot + ConfigSchemaPath.
 type Spec struct {

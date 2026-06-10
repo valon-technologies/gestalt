@@ -131,7 +131,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	}
 
 	// Validate indexeddbs
-	if err := validateDatastoreConfig(cfg); err != nil {
+	if err := validateIndexedDBConfig(cfg); err != nil {
 		return err
 	}
 	if err := validateCacheConfig(cfg); err != nil {
@@ -761,7 +761,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 }
 
 // ValidateRuntime checks runtime-only requirements: encryption key plus the
-// required top-level datastore provider.
+// required top-level IndexedDB provider.
 func ValidateRuntime(cfg *Config) error {
 	name, _, err := cfg.SelectedIndexedDBProvider()
 	if err != nil {
@@ -993,7 +993,7 @@ func normalizeAppInvocationRunAs(path string, invoke *AppInvocationDependency) e
 	return nil
 }
 
-func validateDatastoreConfig(cfg *Config) error {
+func validateIndexedDBConfig(cfg *Config) error {
 	for name, entry := range cfg.Providers.IndexedDB {
 		if entry == nil {
 			return fmt.Errorf("config validation: providers.indexeddb.%s is required", name)

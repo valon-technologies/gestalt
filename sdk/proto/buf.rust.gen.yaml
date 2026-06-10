@@ -11,7 +11,7 @@ inputs:
       - v1/runtime.proto
       - v1/cache.proto
       - v1/secrets.proto
-      - v1/datastore.proto
+      - v1/indexeddb.proto
       - v1/s3.proto
       - v1/workflow.proto
       - v1/test.proto

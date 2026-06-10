@@ -14,12 +14,12 @@ import (
 func IndexedDBFactory(node yaml.Node) (indexeddb.IndexedDB, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("datastore provider: parsing config: %w", err)
+		return nil, fmt.Errorf("indexeddb provider: parsing config: %w", err)
 	}
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindIndexedDB,
-		Subject:              "datastore provider",
-		SourceMissingMessage: "no Go, Rust, or Python datastore provider source package found",
+		Subject:              "indexeddb provider",
+		SourceMissingMessage: "no Go, Rust, or Python indexeddb provider source package found",
 		Config:               cfg,
 	})
 	if err != nil {

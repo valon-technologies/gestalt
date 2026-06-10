@@ -1374,7 +1374,7 @@ func componentProviderManifestPath(t *testing.T, providerDir string) string {
 	return manifestPath
 }
 
-func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath string) string {
+func authIndexedDBConfigYAML(t *testing.T, dir, authName, indexedDBName, dbPath string) string {
 	t.Helper()
 
 	authBlock := ""
@@ -1384,7 +1384,7 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	serverProvidersBlock := fmt.Sprintf(`  providers:
     indexeddb: %s
     externalCredentials: %s
-`, datastoreName, externalCredentialsName)
+`, indexedDBName, externalCredentialsName)
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
 		serverProvidersBlock += fmt.Sprintf("    authentication: %s\n", authName)
@@ -1406,7 +1406,7 @@ providers:
         path: %s
       config:
         dsn: %q
-`, serverProvidersBlock, authBlock, externalCredentialsName, externalCredentialsManifestPath, datastoreName, indexedDBManifestPath, "sqlite://"+dbPath)
+`, serverProvidersBlock, authBlock, externalCredentialsName, externalCredentialsManifestPath, indexedDBName, indexedDBManifestPath, "sqlite://"+dbPath)
 }
 
 func writeManifestFile(t *testing.T, appDir string, manifest *providermanifestv1.Manifest) {

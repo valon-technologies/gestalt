@@ -2,8 +2,8 @@ package gestalt
 
 import "context"
 
-// IndexedDBProvider is implemented by providers that serve an IndexedDB-style
-// datastore. The SDK owns the gRPC/protobuf transport adapter; provider code
+// IndexedDBProvider is implemented by providers that serve the IndexedDB
+// surface. The SDK owns the gRPC/protobuf transport adapter; provider code
 // implements this typed interface instead of importing generated protobuf
 // bindings.
 type IndexedDBProvider interface {

@@ -4,7 +4,7 @@ import grpc
 import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from . import datastore_pb2 as v1_dot_datastore__pb2
+from . import indexeddb_pb2 as v1_dot_indexeddb__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -19,7 +19,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in v1/datastore_pb2_grpc.py depends on'
+        + ' but the generated code in v1/indexeddb_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -38,103 +38,103 @@ class IndexedDBStub(object):
         """
         self.CreateObjectStore = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/CreateObjectStore',
-                request_serializer=v1_dot_datastore__pb2.CreateObjectStoreRequest.SerializeToString,
+                request_serializer=v1_dot_indexeddb__pb2.CreateObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.DeleteObjectStore = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/DeleteObjectStore',
-                request_serializer=v1_dot_datastore__pb2.DeleteObjectStoreRequest.SerializeToString,
+                request_serializer=v1_dot_indexeddb__pb2.DeleteObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Get = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Get',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.RecordResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.RecordResponse.FromString,
                 _registered_method=True)
         self.GetKey = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/GetKey',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.KeyResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.KeyResponse.FromString,
                 _registered_method=True)
         self.Add = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Add',
-                request_serializer=v1_dot_datastore__pb2.RecordRequest.SerializeToString,
+                request_serializer=v1_dot_indexeddb__pb2.RecordRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Put = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Put',
-                request_serializer=v1_dot_datastore__pb2.RecordRequest.SerializeToString,
+                request_serializer=v1_dot_indexeddb__pb2.RecordRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Delete = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Delete',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Clear = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Clear',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreNameRequest.SerializeToString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreNameRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetAll = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/GetAll',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.RecordsResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.RecordsResponse.FromString,
                 _registered_method=True)
         self.GetAllKeys = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/GetAllKeys',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.KeysResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.KeysResponse.FromString,
                 _registered_method=True)
         self.Count = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Count',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.CountResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.CountResponse.FromString,
                 _registered_method=True)
         self.DeleteRange = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/DeleteRange',
-                request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.DeleteResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.DeleteResponse.FromString,
                 _registered_method=True)
         self.IndexGet = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/IndexGet',
-                request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.RecordResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.RecordResponse.FromString,
                 _registered_method=True)
         self.IndexGetKey = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/IndexGetKey',
-                request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.KeyResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.KeyResponse.FromString,
                 _registered_method=True)
         self.IndexGetAll = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/IndexGetAll',
-                request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.RecordsResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.RecordsResponse.FromString,
                 _registered_method=True)
         self.IndexGetAllKeys = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/IndexGetAllKeys',
-                request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.KeysResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.KeysResponse.FromString,
                 _registered_method=True)
         self.IndexCount = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/IndexCount',
-                request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.CountResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.CountResponse.FromString,
                 _registered_method=True)
         self.IndexDelete = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/IndexDelete',
-                request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.DeleteResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.DeleteResponse.FromString,
                 _registered_method=True)
         self.OpenCursor = channel.stream_stream(
                 '/gestalt.provider.v1.IndexedDB/OpenCursor',
-                request_serializer=v1_dot_datastore__pb2.CursorClientMessage.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.CursorResponse.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.CursorClientMessage.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.CursorResponse.FromString,
                 _registered_method=True)
         self.Transaction = channel.stream_stream(
                 '/gestalt.provider.v1.IndexedDB/Transaction',
-                request_serializer=v1_dot_datastore__pb2.TransactionClientMessage.SerializeToString,
-                response_deserializer=v1_dot_datastore__pb2.TransactionServerMessage.FromString,
+                request_serializer=v1_dot_indexeddb__pb2.TransactionClientMessage.SerializeToString,
+                response_deserializer=v1_dot_indexeddb__pb2.TransactionServerMessage.FromString,
                 _registered_method=True)
 
 
@@ -274,103 +274,103 @@ def add_IndexedDBServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateObjectStore': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateObjectStore,
-                    request_deserializer=v1_dot_datastore__pb2.CreateObjectStoreRequest.FromString,
+                    request_deserializer=v1_dot_indexeddb__pb2.CreateObjectStoreRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'DeleteObjectStore': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteObjectStore,
-                    request_deserializer=v1_dot_datastore__pb2.DeleteObjectStoreRequest.FromString,
+                    request_deserializer=v1_dot_indexeddb__pb2.DeleteObjectStoreRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Get': grpc.unary_unary_rpc_method_handler(
                     servicer.Get,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.RecordResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.RecordResponse.SerializeToString,
             ),
             'GetKey': grpc.unary_unary_rpc_method_handler(
                     servicer.GetKey,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.KeyResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.KeyResponse.SerializeToString,
             ),
             'Add': grpc.unary_unary_rpc_method_handler(
                     servicer.Add,
-                    request_deserializer=v1_dot_datastore__pb2.RecordRequest.FromString,
+                    request_deserializer=v1_dot_indexeddb__pb2.RecordRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Put': grpc.unary_unary_rpc_method_handler(
                     servicer.Put,
-                    request_deserializer=v1_dot_datastore__pb2.RecordRequest.FromString,
+                    request_deserializer=v1_dot_indexeddb__pb2.RecordRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Delete': grpc.unary_unary_rpc_method_handler(
                     servicer.Delete,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRequest.FromString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'Clear': grpc.unary_unary_rpc_method_handler(
                     servicer.Clear,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreNameRequest.FromString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreNameRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'GetAll': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAll,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.RecordsResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.RecordsResponse.SerializeToString,
             ),
             'GetAllKeys': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAllKeys,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.KeysResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.KeysResponse.SerializeToString,
             ),
             'Count': grpc.unary_unary_rpc_method_handler(
                     servicer.Count,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.CountResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.CountResponse.SerializeToString,
             ),
             'DeleteRange': grpc.unary_unary_rpc_method_handler(
                     servicer.DeleteRange,
-                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.DeleteResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.DeleteResponse.SerializeToString,
             ),
             'IndexGet': grpc.unary_unary_rpc_method_handler(
                     servicer.IndexGet,
-                    request_deserializer=v1_dot_datastore__pb2.IndexQueryRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.RecordResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.RecordResponse.SerializeToString,
             ),
             'IndexGetKey': grpc.unary_unary_rpc_method_handler(
                     servicer.IndexGetKey,
-                    request_deserializer=v1_dot_datastore__pb2.IndexQueryRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.KeyResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.KeyResponse.SerializeToString,
             ),
             'IndexGetAll': grpc.unary_unary_rpc_method_handler(
                     servicer.IndexGetAll,
-                    request_deserializer=v1_dot_datastore__pb2.IndexQueryRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.RecordsResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.RecordsResponse.SerializeToString,
             ),
             'IndexGetAllKeys': grpc.unary_unary_rpc_method_handler(
                     servicer.IndexGetAllKeys,
-                    request_deserializer=v1_dot_datastore__pb2.IndexQueryRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.KeysResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.KeysResponse.SerializeToString,
             ),
             'IndexCount': grpc.unary_unary_rpc_method_handler(
                     servicer.IndexCount,
-                    request_deserializer=v1_dot_datastore__pb2.IndexQueryRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.CountResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.CountResponse.SerializeToString,
             ),
             'IndexDelete': grpc.unary_unary_rpc_method_handler(
                     servicer.IndexDelete,
-                    request_deserializer=v1_dot_datastore__pb2.IndexQueryRequest.FromString,
-                    response_serializer=v1_dot_datastore__pb2.DeleteResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.IndexQueryRequest.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.DeleteResponse.SerializeToString,
             ),
             'OpenCursor': grpc.stream_stream_rpc_method_handler(
                     servicer.OpenCursor,
-                    request_deserializer=v1_dot_datastore__pb2.CursorClientMessage.FromString,
-                    response_serializer=v1_dot_datastore__pb2.CursorResponse.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.CursorClientMessage.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.CursorResponse.SerializeToString,
             ),
             'Transaction': grpc.stream_stream_rpc_method_handler(
                     servicer.Transaction,
-                    request_deserializer=v1_dot_datastore__pb2.TransactionClientMessage.FromString,
-                    response_serializer=v1_dot_datastore__pb2.TransactionServerMessage.SerializeToString,
+                    request_deserializer=v1_dot_indexeddb__pb2.TransactionClientMessage.FromString,
+                    response_serializer=v1_dot_indexeddb__pb2.TransactionServerMessage.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -399,7 +399,7 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/CreateObjectStore',
-            v1_dot_datastore__pb2.CreateObjectStoreRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.CreateObjectStoreRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -426,7 +426,7 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/DeleteObjectStore',
-            v1_dot_datastore__pb2.DeleteObjectStoreRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.DeleteObjectStoreRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -453,8 +453,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/Get',
-            v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
-            v1_dot_datastore__pb2.RecordResponse.FromString,
+            v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.RecordResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -480,8 +480,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/GetKey',
-            v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
-            v1_dot_datastore__pb2.KeyResponse.FromString,
+            v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.KeyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -507,7 +507,7 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/Add',
-            v1_dot_datastore__pb2.RecordRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.RecordRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -534,7 +534,7 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/Put',
-            v1_dot_datastore__pb2.RecordRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.RecordRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -561,7 +561,7 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/Delete',
-            v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.ObjectStoreRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -588,7 +588,7 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/Clear',
-            v1_dot_datastore__pb2.ObjectStoreNameRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.ObjectStoreNameRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -615,8 +615,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/GetAll',
-            v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-            v1_dot_datastore__pb2.RecordsResponse.FromString,
+            v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.RecordsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -642,8 +642,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/GetAllKeys',
-            v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-            v1_dot_datastore__pb2.KeysResponse.FromString,
+            v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.KeysResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -669,8 +669,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/Count',
-            v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-            v1_dot_datastore__pb2.CountResponse.FromString,
+            v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.CountResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -696,8 +696,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/DeleteRange',
-            v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
-            v1_dot_datastore__pb2.DeleteResponse.FromString,
+            v1_dot_indexeddb__pb2.ObjectStoreRangeRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.DeleteResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -723,8 +723,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/IndexGet',
-            v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-            v1_dot_datastore__pb2.RecordResponse.FromString,
+            v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.RecordResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -750,8 +750,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/IndexGetKey',
-            v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-            v1_dot_datastore__pb2.KeyResponse.FromString,
+            v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.KeyResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -777,8 +777,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/IndexGetAll',
-            v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-            v1_dot_datastore__pb2.RecordsResponse.FromString,
+            v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.RecordsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -804,8 +804,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/IndexGetAllKeys',
-            v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-            v1_dot_datastore__pb2.KeysResponse.FromString,
+            v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.KeysResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -831,8 +831,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/IndexCount',
-            v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-            v1_dot_datastore__pb2.CountResponse.FromString,
+            v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.CountResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -858,8 +858,8 @@ class IndexedDB(object):
             request,
             target,
             '/gestalt.provider.v1.IndexedDB/IndexDelete',
-            v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
-            v1_dot_datastore__pb2.DeleteResponse.FromString,
+            v1_dot_indexeddb__pb2.IndexQueryRequest.SerializeToString,
+            v1_dot_indexeddb__pb2.DeleteResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -885,8 +885,8 @@ class IndexedDB(object):
             request_iterator,
             target,
             '/gestalt.provider.v1.IndexedDB/OpenCursor',
-            v1_dot_datastore__pb2.CursorClientMessage.SerializeToString,
-            v1_dot_datastore__pb2.CursorResponse.FromString,
+            v1_dot_indexeddb__pb2.CursorClientMessage.SerializeToString,
+            v1_dot_indexeddb__pb2.CursorResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -912,8 +912,8 @@ class IndexedDB(object):
             request_iterator,
             target,
             '/gestalt.provider.v1.IndexedDB/Transaction',
-            v1_dot_datastore__pb2.TransactionClientMessage.SerializeToString,
-            v1_dot_datastore__pb2.TransactionServerMessage.FromString,
+            v1_dot_indexeddb__pb2.TransactionClientMessage.SerializeToString,
+            v1_dot_indexeddb__pb2.TransactionServerMessage.FromString,
             options,
             channel_credentials,
             insecure,
