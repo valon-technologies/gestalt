@@ -22,6 +22,7 @@ provider "google" {
 locals {
   www_domain                = "www.${var.domain}"
   docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
+  docs_cert_with_www_name   = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(local.www_domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
   github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
   sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
   sdk_api_docs_backend_name = "${var.resource_prefix}-sdk-api-docs-backend"
@@ -161,17 +162,28 @@ resource "google_compute_managed_ssl_certificate" "docs" {
 
   lifecycle {
     create_before_destroy = true
-    # A newly-created Google-managed certificate can be provisioned in Terraform
-    # before it is actually served at the edge. Refuse certificate replacement
-    # plans so domain changes cannot detach the active certificate first.
-    prevent_destroy = true
+  }
+}
+
+resource "google_compute_managed_ssl_certificate" "docs_with_www" {
+  name = local.docs_cert_with_www_name
+
+  managed {
+    domains = [var.domain, local.www_domain, var.registry_domain]
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
 resource "google_compute_target_https_proxy" "docs" {
-  name             = "${var.resource_prefix}-https-proxy"
-  url_map          = google_compute_url_map.docs.id
-  ssl_certificates = [google_compute_managed_ssl_certificate.docs.id]
+  name    = "${var.resource_prefix}-https-proxy"
+  url_map = google_compute_url_map.docs.id
+  ssl_certificates = [
+    google_compute_managed_ssl_certificate.docs.id,
+    google_compute_managed_ssl_certificate.docs_with_www.id,
+  ]
 }
 
 resource "google_compute_global_address" "docs" {
