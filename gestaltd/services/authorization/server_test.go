@@ -27,14 +27,13 @@ func TestProviderServerLeavesGatewaySourceInternalByDefault(t *testing.T) {
 	}
 }
 
-func TestProviderServerAppliesConfiguredGatewayContext(t *testing.T) {
+func TestProviderServerAppliesConfiguredGatewaySource(t *testing.T) {
 	t.Parallel()
 
 	provider := &sourceRecordingAuthorizationProvider{}
 	server := NewProviderServer(
 		provider,
 		WithGatewaySource(providergateway.GatewaySourceSDKGRPC),
-		WithInvokingSubjectID("caller-app"),
 	)
 
 	_, err := server.CheckAccess(context.Background(), &proto.CheckAccessRequest{})
@@ -44,8 +43,8 @@ func TestProviderServerAppliesConfiguredGatewayContext(t *testing.T) {
 	if provider.source != providergateway.GatewaySourceSDKGRPC {
 		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceSDKGRPC)
 	}
-	if provider.invokingSubjectID != "caller-app" {
-		t.Fatalf("invoking subject ID = %q, want caller-app", provider.invokingSubjectID)
+	if provider.invokingSubjectID != "" {
+		t.Fatalf("invoking subject ID = %q, want empty", provider.invokingSubjectID)
 	}
 }
 

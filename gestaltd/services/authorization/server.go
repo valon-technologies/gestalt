@@ -2,7 +2,6 @@ package authorization
 
 import (
 	"context"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
@@ -14,9 +13,8 @@ import (
 
 type providerServer struct {
 	proto.UnimplementedAuthorizationServer
-	provider          core.AuthorizationProvider
-	gatewaySource     providergateway.GatewaySource
-	invokingSubjectID string
+	provider      core.AuthorizationProvider
+	gatewaySource providergateway.GatewaySource
 }
 
 type ProviderServerOption func(*providerServer)
@@ -24,12 +22,6 @@ type ProviderServerOption func(*providerServer)
 func WithGatewaySource(source providergateway.GatewaySource) ProviderServerOption {
 	return func(s *providerServer) {
 		s.gatewaySource = source
-	}
-}
-
-func WithInvokingSubjectID(subjectID string) ProviderServerOption {
-	return func(s *providerServer) {
-		s.invokingSubjectID = strings.TrimSpace(subjectID)
 	}
 }
 
@@ -110,9 +102,7 @@ func (s *providerServer) providerGatewayContext(ctx context.Context) context.Con
 	if s == nil {
 		return ctx
 	}
-	ctx = providergateway.WithSource(ctx, s.gatewaySource)
-	ctx = providergateway.WithInvokingSubjectID(ctx, s.invokingSubjectID)
-	return ctx
+	return providergateway.WithSource(ctx, s.gatewaySource)
 }
 
 func (s *providerServer) requireProvider() error {
