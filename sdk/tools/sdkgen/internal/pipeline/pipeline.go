@@ -116,9 +116,9 @@ func generate(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emi
 		return err
 	}
 	for _, e := range emitters {
-		set, err := e.Emit(schema)
+		set, err := EmitFormatted(e, schema, scratch)
 		if err != nil {
-			return fmt.Errorf("emit %s: %w", e.Target(), err)
+			return err
 		}
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
 		report, err := fileset.Reconcile(root, set, e.HeaderStyle())
@@ -137,9 +137,9 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 		return err
 	}
 	for _, e := range emitters {
-		set, err := e.Emit(schema)
+		set, err := EmitFormatted(e, schema, scratch)
 		if err != nil {
-			return fmt.Errorf("emit %s: %w", e.Target(), err)
+			return err
 		}
 		root := filepath.Join(opts.RepoRoot, filepath.FromSlash(e.OutputRoot()))
 		d, err := fileset.Check(root, set, e.HeaderStyle())
@@ -158,6 +158,47 @@ func check(bufTool, rustfmtTool *toolchain.Tool, opts Options, emitters []emit.E
 		_, _ = fmt.Fprintf(opts.Stderr, "%-9s %s\n", entry.Kind, entry.Path)
 	}
 	return fmt.Errorf("%w: %d files; run `sdkgen` to regenerate", ErrDrift, len(drift))
+}
+
+// EmitFormatted renders an emitter's file set and runs its formatter over the
+// contents via a scratch round-trip, so reconcile and check always see final
+// bytes. The generated-by header is injected later, at write time; leading
+// comments are stable under gofmt and rustfmt.
+func EmitFormatted(e emit.Emitter, schema *model.Schema, scratch string) (*fileset.FileSet, error) {
+	set, err := e.Emit(schema)
+	if err != nil {
+		return nil, fmt.Errorf("emit %s: %w", e.Target(), err)
+	}
+	tool := e.Formatter()
+	if tool == nil || set.Len() == 0 {
+		return set, nil
+	}
+	dir := filepath.Join(scratch, "format", string(e.Target()))
+	args := append([]string{}, tool.FormatArgs...)
+	for _, f := range set.Files() {
+		abs := filepath.Join(dir, filepath.FromSlash(f.Path))
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(abs, f.Content, 0o644); err != nil {
+			return nil, err
+		}
+		args = append(args, abs)
+	}
+	if err := tool.Run(dir, args...); err != nil {
+		return nil, fmt.Errorf("format %s: %w", e.Target(), err)
+	}
+	formatted := fileset.New()
+	for _, f := range set.Files() {
+		content, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(f.Path)))
+		if err != nil {
+			return nil, err
+		}
+		if err := formatted.Add(f.Path, content); err != nil {
+			return nil, err
+		}
+	}
+	return formatted, nil
 }
 
 // Emitters returns every registered emitter in canonical target order.

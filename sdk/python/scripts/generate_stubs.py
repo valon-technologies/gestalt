@@ -10,6 +10,7 @@ PROTO_MODULES = (
     "authorization",
     "cache",
     "datastore",
+    "external_credential",
     "app",
     "runtime_provider",
     "runtime",

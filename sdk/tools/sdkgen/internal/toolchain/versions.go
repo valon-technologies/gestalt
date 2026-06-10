@@ -22,6 +22,16 @@ func Buf() *Tool {
 func Rustfmt() *Tool {
 	return &Tool{
 		Name:        "rustfmt",
+		FormatArgs:  []string{"--edition", "2024"},
 		InstallHint: "rustup component add rustfmt",
+	}
+}
+
+// Gofmt returns the gofmt tool, which ships with the Go toolchain.
+func Gofmt() *Tool {
+	return &Tool{
+		Name:        "gofmt",
+		FormatArgs:  []string{"-w"},
+		InstallHint: "install the Go toolchain",
 	}
 }

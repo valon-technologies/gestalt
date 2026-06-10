@@ -3,16 +3,30 @@
 
 mod agent;
 mod agent_access;
+/// Generated Agent client and native types.
+pub mod agent_client;
 mod api;
 mod app_access;
+/// Generated App and AppProvider client and native types.
+pub mod app_client;
 mod app_decode;
 mod auth;
 mod auth_server;
+/// Generated Authentication client and native types.
+pub mod authentication_client;
+/// Generated Authorization client and native types.
+pub mod authorization_client;
 mod cache;
+/// Generated Cache client and native types.
+pub mod cache_client;
 mod cache_server;
 mod catalog;
+/// Generated IndexedDB client and native types.
+pub mod datastore_client;
 mod env;
 mod error;
+/// Generated ExternalCredentials client and native types.
+pub mod external_credential_client;
 mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
@@ -20,19 +34,33 @@ mod protocol;
 mod provider_server;
 mod router;
 mod rpc_status;
+/// Generated shared runtime for the sdkgen clients.
+pub mod rpc_support;
 /// Runtime entrypoints for serving Gestalt provider surfaces over Unix sockets.
 pub mod runtime;
+/// Generated ProviderLifecycle client and native types.
+pub mod runtime_client;
 mod runtime_log_host;
 mod runtime_provider;
+/// Generated Runtime and RuntimeLogHost client and native types.
+pub mod runtime_provider_client;
 mod runtime_server;
 /// S3-compatible client and provider helpers.
 pub mod s3;
+/// Generated S3 client and native types.
+pub mod s3_client;
 mod secrets;
+/// Generated Secrets client and native types.
+pub mod secrets_client;
 mod secrets_server;
 /// OpenTelemetry helpers for provider-authored GenAI instrumentation.
 pub mod telemetry;
+/// Generated Test client and native types.
+pub mod test_client;
 pub mod workflow;
 mod workflow_access;
+/// Generated Workflow client and native types.
+pub mod workflow_client;
 
 #[doc(hidden)]
 pub mod proto {

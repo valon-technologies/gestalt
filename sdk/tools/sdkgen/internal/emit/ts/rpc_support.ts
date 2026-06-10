@@ -1,0 +1,146 @@
+import { create, fromJson, toJson } from "@bufbuild/protobuf";
+import type { JsonValue } from "@bufbuild/protobuf";
+import {
+  DurationSchema,
+  ValueSchema,
+  timestampDate,
+  timestampFromDate,
+} from "@bufbuild/protobuf/wkt";
+import type { Duration, Timestamp, Value } from "@bufbuild/protobuf/wkt";
+import { ConnectError } from "@connectrpc/connect";
+
+import { StatusSchema } from "./internal/gen/google/rpc/status_pb.ts";
+import type { Status } from "./internal/gen/google/rpc/status_pb.ts";
+
+/**
+ * Milliseconds, the native representation of google.protobuf.Duration.
+ */
+export type DurationMs = number;
+
+/**
+ * The native representation of a google.protobuf.Empty oneof variant.
+ */
+export type Unit = Record<string, never>;
+
+/**
+ * The native representation of google.rpc.Status carried in response
+ * payloads, mirroring the canonical error model.
+ */
+export interface RpcStatus {
+  code: GestaltErrorCode;
+  message: string;
+}
+
+/**
+ * Canonical SDK error codes, drawn from the standard gRPC status codes.
+ */
+export const GestaltErrorCode = {
+  Canceled: 1,
+  Unknown: 2,
+  InvalidArgument: 3,
+  DeadlineExceeded: 4,
+  NotFound: 5,
+  AlreadyExists: 6,
+  PermissionDenied: 7,
+  ResourceExhausted: 8,
+  FailedPrecondition: 9,
+  Aborted: 10,
+  OutOfRange: 11,
+  Unimplemented: 12,
+  Internal: 13,
+  Unavailable: 14,
+  DataLoss: 15,
+  Unauthenticated: 16,
+} as const;
+
+export type GestaltErrorCode = number;
+
+/**
+ * Canonical SDK error: one code, a message, and the underlying cause.
+ * Transport error types never appear in the public SDK surface.
+ */
+export class GestaltError extends Error {
+  readonly code: GestaltErrorCode;
+
+  constructor(code: GestaltErrorCode, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "GestaltError";
+    this.code = code;
+  }
+}
+
+export function toGestaltError(error: unknown): GestaltError {
+  if (error instanceof GestaltError) {
+    return error;
+  }
+  if (error instanceof ConnectError) {
+    return new GestaltError(error.code as number, error.rawMessage, { cause: error });
+  }
+  return new GestaltError(GestaltErrorCode.Unknown, String(error), { cause: error });
+}
+
+export async function callUnary<T>(call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error) {
+    throw toGestaltError(error);
+  }
+}
+
+export async function* mapRecv<W, N>(
+  stream: AsyncIterable<W>,
+  convert: (frame: W) => N,
+): AsyncIterable<N> {
+  try {
+    for await (const frame of stream) {
+      yield convert(frame);
+    }
+  } catch (error) {
+    throw toGestaltError(error);
+  }
+}
+
+export async function* mapSend<N, W>(
+  stream: AsyncIterable<N>,
+  convert: (frame: N) => W,
+): AsyncIterable<W> {
+  for await (const frame of stream) {
+    yield convert(frame);
+  }
+}
+
+export function toWireDuration(value: DurationMs): Duration {
+  const seconds = Math.trunc(value / 1000);
+  return create(DurationSchema, {
+    seconds: BigInt(seconds),
+    nanos: Math.round((value - seconds * 1000) * 1e6),
+  });
+}
+
+export function fromWireDuration(value: Duration): DurationMs {
+  return Number(value.seconds) * 1000 + value.nanos / 1e6;
+}
+
+export function toWireTimestamp(value: Date): Timestamp {
+  return timestampFromDate(value);
+}
+
+export function fromWireTimestamp(value: Timestamp): Date {
+  return timestampDate(value);
+}
+
+export function toWireValue(value: JsonValue): Value {
+  return fromJson(ValueSchema, value);
+}
+
+export function fromWireValue(value: Value): JsonValue {
+  return toJson(ValueSchema, value);
+}
+
+export function toWireStatus(value: RpcStatus): Status {
+  return create(StatusSchema, { code: value.code, message: value.message });
+}
+
+export function fromWireStatus(value: Status): RpcStatus {
+  return { code: value.code, message: value.message };
+}
