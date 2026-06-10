@@ -435,12 +435,14 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 	if resourceName == "" {
 		return invocation.AccessContext{}, false, nil
 	}
-	subjectID := principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))
-	if strings.TrimSpace(subjectID) == "" {
+	canonicalPrincipal := principal.Canonicalized(p)
+	subjectID := principal.EffectiveCredentialSubjectID(canonicalPrincipal)
+	invokingSubjectID := invokingPrincipalSubjectID(canonicalPrincipal)
+	if strings.TrimSpace(subjectID) == "" || strings.TrimSpace(invokingSubjectID) == "" {
 		return invocation.AccessContext{}, false, nil
 	}
 
-	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, resourceName)
+	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, invokingSubjectID, resourceName)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
@@ -477,8 +479,8 @@ func mountedUIRequiresAuthorization(mounted MountedUI) bool {
 	return strings.TrimSpace(mounted.AppName) != "" && len(mounted.Routes) > 0
 }
 
-func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
-	ctx = providergateway.WithInvokingSubjectID(ctx, strings.TrimSpace(subjectID))
+func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, invokingSubjectID, resourceName string) (map[string]struct{}, error) {
+	ctx = providergateway.WithInvokingSubjectID(ctx, strings.TrimSpace(invokingSubjectID))
 	roles := map[string]struct{}{}
 	pageToken := ""
 	for {
