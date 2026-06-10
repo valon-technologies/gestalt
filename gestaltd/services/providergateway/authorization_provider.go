@@ -139,7 +139,7 @@ func (p *AuthorizationProvider) invoke(ctx context.Context, operation string, in
 		ProviderID:        p.providerID,
 		ProviderKind:      ProviderKindAuthorization,
 		FullMethod:        "/" + proto.Authorization_ServiceDesc.ServiceName + "/" + operation,
-		InvokingSubjectID: invokingSubjectID(ctx, in),
+		InvokingSubjectID: InvokingSubjectIDFromContext(ctx),
 		RequestContext:    RequestContextFromContext(ctx),
 		Source:            SourceFromContext(ctx),
 		Payload:           payload,
@@ -154,19 +154,4 @@ func (p *AuthorizationProvider) invoke(ctx context.Context, operation string, in
 		return fmt.Errorf("provider gateway: decode %s response: %w", operation, err)
 	}
 	return nil
-}
-
-func invokingSubjectID(ctx context.Context, msg gproto.Message) string {
-	if subjectID := InvokingSubjectIDFromContext(ctx); subjectID != "" {
-		return subjectID
-	}
-	switch req := msg.(type) {
-	case *proto.CheckAccessRequest:
-		return req.GetSubject().GetId()
-	case *proto.CheckAccessManyRequest:
-		if len(req.GetRequests()) > 0 {
-			return req.GetRequests()[0].GetSubject().GetId()
-		}
-	}
-	return ""
 }

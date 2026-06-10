@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
 )
@@ -477,6 +478,7 @@ func mountedUIRequiresAuthorization(mounted MountedUI) bool {
 }
 
 func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
+	ctx = providergateway.WithInvokingSubjectID(ctx, strings.TrimSpace(subjectID))
 	roles := map[string]struct{}{}
 	pageToken := ""
 	for {
@@ -513,6 +515,7 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, res
 }
 
 func (s *Server) mountedUIResourceDefaultAllows(ctx context.Context, resourceName string) (bool, error) {
+	ctx = providergateway.WithInvokingSubjectID(ctx, invokingPrincipalSubjectID(PrincipalFromContext(ctx)))
 	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
 		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(resourceName)},
 		PageSize: 1,

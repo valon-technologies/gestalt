@@ -86,6 +86,25 @@ func TestGatewayInvokesAuthorizationProvider(t *testing.T) {
 	}
 }
 
+func TestAuthorizationProviderDoesNotInferInvokingSubjectFromPayload(t *testing.T) {
+	gateway := &recordingGateway{
+		response: mustMarshal(t, &proto.CheckAccessResponse{Allowed: true}),
+	}
+	provider := NewAuthorizationProvider("authz", gateway, nil)
+
+	_, err := provider.CheckAccess(context.Background(), &proto.CheckAccessRequest{
+		Subject:  &proto.Subject{Type: "subject", Id: "user:checked"},
+		Action:   &proto.Action{Name: "view"},
+		Resource: &proto.Resource{Type: "team", Id: "servicing"},
+	})
+	if err != nil {
+		t.Fatalf("CheckAccess: %v", err)
+	}
+	if gateway.request.InvokingSubjectID != "" {
+		t.Fatalf("InvokingSubjectID = %q, want empty", gateway.request.InvokingSubjectID)
+	}
+}
+
 type recordingGateway struct {
 	request  ProviderGatewayRequest
 	response []byte
