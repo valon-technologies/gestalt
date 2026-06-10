@@ -207,35 +207,10 @@ resource "google_compute_global_forwarding_rule" "docs" {
 resource "google_compute_url_map" "docs_http_redirect" {
   name = "${var.resource_prefix}-http-redirect"
 
-  host_rule {
-    hosts        = [local.www_domain]
-    path_matcher = "www_to_apex_https"
-  }
-
-  host_rule {
-    hosts        = ["*"]
-    path_matcher = "https_redirect"
-  }
-
-  path_matcher {
-    name = "www_to_apex_https"
-
-    default_url_redirect {
-      host_redirect          = var.domain
-      https_redirect         = true
-      strip_query            = false
-      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
-    }
-  }
-
-  path_matcher {
-    name = "https_redirect"
-
-    default_url_redirect {
-      https_redirect         = true
-      strip_query            = false
-      redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
-    }
+  default_url_redirect {
+    https_redirect         = true
+    strip_query            = false
+    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
   }
 }
 

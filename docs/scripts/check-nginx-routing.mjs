@@ -44,18 +44,6 @@ try {
     location: "/latest/",
   });
   await assertResponse({
-    url: `${baseUrl}/`,
-    host: "www.gestaltd.ai",
-    status: 301,
-    location: "https://gestaltd.ai/",
-  });
-  await assertResponse({
-    url: `${baseUrl}/getting-started`,
-    host: "www.gestaltd.ai",
-    status: 301,
-    location: "https://gestaltd.ai/getting-started",
-  });
-  await assertResponse({
     url: `${baseUrl}/getting-started`,
     host: "gestaltd.ai",
     status: 301,
