@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/protobuf/encoding/protojson"
 	gproto "google.golang.org/protobuf/proto"
 )
@@ -20,7 +22,7 @@ func (s *Server) checkAuthorizationAccess(w http.ResponseWriter, r *http.Request
 	if !decodeProtoJSONBody(w, r, &req) {
 		return
 	}
-	resp, err := s.authorization.CheckAccess(r.Context(), &req)
+	resp, err := s.authorization.CheckAccess(providerGatewayHTTPContext(r), &req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -36,7 +38,7 @@ func (s *Server) listAuthorizationRelationships(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	resp, err := s.authorization.ListRelationships(r.Context(), req)
+	resp, err := s.authorization.ListRelationships(providerGatewayHTTPContext(r), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -52,7 +54,7 @@ func (s *Server) addAuthorizationRelationship(w http.ResponseWriter, r *http.Req
 	if !decodeProtoJSONBody(w, r, &req) {
 		return
 	}
-	resp, err := s.authorization.AddRelationship(r.Context(), &req)
+	resp, err := s.authorization.AddRelationship(providerGatewayHTTPContext(r), &req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -68,7 +70,7 @@ func (s *Server) deleteAuthorizationRelationship(w http.ResponseWriter, r *http.
 	if !decodeProtoJSONBody(w, r, &req) {
 		return
 	}
-	resp, err := s.authorization.DeleteRelationship(r.Context(), &req)
+	resp, err := s.authorization.DeleteRelationship(providerGatewayHTTPContext(r), &req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -80,7 +82,7 @@ func (s *Server) getAuthorizationActiveModelRef(w http.ResponseWriter, r *http.R
 	if !s.requireAuthorizationProvider(w) {
 		return
 	}
-	resp, err := s.authorization.GetActiveModelRef(r.Context())
+	resp, err := s.authorization.GetActiveModelRef(providerGatewayHTTPContext(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -96,12 +98,20 @@ func (s *Server) listAuthorizationActiveModelResourceTypes(w http.ResponseWriter
 	if !ok {
 		return
 	}
-	resp, err := s.authorization.ListActiveModelResourceTypes(r.Context(), req)
+	resp, err := s.authorization.ListActiveModelResourceTypes(providerGatewayHTTPContext(r), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeProtoJSON(w, http.StatusOK, resp)
+}
+
+func providerGatewayHTTPContext(r *http.Request) context.Context {
+	ctx := providergateway.WithSource(r.Context(), providergateway.GatewaySourceHTTP)
+	if subjectID := invokingPrincipalSubjectID(PrincipalFromContext(r.Context())); subjectID != "" {
+		ctx = providergateway.WithInvokingSubjectID(ctx, subjectID)
+	}
+	return ctx
 }
 
 func (s *Server) requireAuthorizationProvider(w http.ResponseWriter) bool {

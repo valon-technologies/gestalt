@@ -34,6 +34,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -975,6 +976,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
+	authorizationProviders = providergateway.WrapAuthorizationProviders(authorizationProviders)
 	closeAuthorizationOnError := true
 	defer func() {
 		if closeAuthorizationOnError {
