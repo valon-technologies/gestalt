@@ -49,6 +49,11 @@ jobs:
         run: npm ci
 
       - name: Build current docs
+        env:
+          # Deployed shape: the registry serves from its own origin and
+          # cross-half links are absolute (see docs/components/shell/site-bases.ts).
+          NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
+          NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build
 
       - name: Check SDK docs
@@ -61,6 +66,11 @@ jobs:
         run: git fetch origin main
 
       - name: Build versioned docs smoke site
+        env:
+          # Deployed shape: the registry serves from its own origin and
+          # cross-half links are absolute (see docs/components/shell/site-bases.ts).
+          NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
+          NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build:versioned:test
 
       - name: Test static docs routing

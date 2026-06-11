@@ -619,17 +619,3 @@ footer hr {
     height: 6rem;
   }
 }
-
-/* Legacy aliases for the pre-rehome registry stylesheet
-   (app/registry/registry.module.css). Light values only — that file
-   defines its own dark values under .darkShell. Removed together with
-   the old stylesheet when the registry adopts the shell tokens. */
-:root {
-  --valon-ink: 35, 24, 16;
-  --valon-line: rgba(35, 24, 16, 0.1);
-  --valon-line-strong: rgba(35, 24, 16, 0.2);
-  --valon-muted: rgba(35, 24, 16, 0.6);
-  --valon-secondary: rgba(35, 24, 16, 0.8);
-  --valon-gold: #e19614;
-  --valon-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-}

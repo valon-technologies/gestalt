@@ -1,0 +1,818 @@
+.shell {
+  --registry-surface: rgba(248, 246, 243, 0.9);
+  --registry-surface-hover: rgba(248, 246, 243, 0.98);
+  --registry-surface-focus: rgba(255, 255, 255, 0.92);
+  --registry-surface-subtle: rgba(255, 255, 255, 0.66);
+  --registry-icon-surface: rgba(236, 228, 221, 0.62);
+  --registry-selected-surface: rgba(255, 247, 233, 0.8);
+  --registry-selected-hover: rgba(255, 247, 233, 0.92);
+  --registry-table-surface: rgba(248, 246, 243, 0.72);
+  --registry-row-hover: rgba(35, 24, 16, 0.05);
+  --registry-shadow: rgba(35, 24, 16, 0.08);
+  --registry-solid-border: rgba(var(--gst-color-fg-rgb), 1);
+  --registry-solid-surface: rgba(var(--gst-color-fg-rgb), 1);
+  --registry-solid-text: #ffffff;
+  --registry-solid-muted: rgba(255, 255, 255, 0.68);
+  --registry-solid-muted-strong: rgba(255, 255, 255, 0.74);
+  --registry-code-surface: var(--shell-code-surface);
+  --registry-inline-code-border: rgba(35, 24, 16, 0.08);
+
+  min-height: 100vh;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  color-scheme: light;
+  overflow-x: clip;
+}
+
+/* Color tokens flip on html.dark (see the token block in shell.css); only the module's
+   own surfaces are re-scoped here. */
+:global(html.dark) .shell {
+  --registry-surface: rgba(30, 25, 22, 0.9);
+  --registry-surface-hover: rgba(38, 31, 27, 0.96);
+  --registry-surface-focus: rgba(38, 31, 27, 0.96);
+  --registry-surface-subtle: rgba(232, 222, 212, 0.06);
+  --registry-icon-surface: rgba(232, 222, 212, 0.08);
+  --registry-selected-surface: color-mix(in oklab, var(--gst-color-accent-300) 10%, transparent);
+  --registry-selected-hover: color-mix(in oklab, var(--gst-color-accent-300) 14%, transparent);
+  --registry-table-surface: rgba(30, 25, 22, 0.72);
+  --registry-row-hover: rgba(232, 222, 212, 0.06);
+  --registry-shadow: rgba(0, 0, 0, 0.34);
+  --registry-solid-border: color-mix(in oklab, var(--gst-color-accent-300) 32%, transparent);
+  --registry-solid-surface: color-mix(in oklab, var(--gst-color-accent-300) 12%, transparent);
+  --registry-solid-text: rgba(232, 222, 212, 1);
+  --registry-solid-muted: rgba(232, 222, 212, 0.58);
+  --registry-solid-muted-strong: rgba(232, 222, 212, 0.66);
+  --registry-inline-code-border: rgba(232, 222, 212, 0.12);
+  color-scheme: dark;
+}
+
+.shell,
+.shell * {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+
+.pageHeader {
+  width: 100%;
+  max-width: var(--shell-content-width);
+  margin: 0 auto;
+  padding-top: 40px;
+  padding-bottom: 8px;
+  padding-left: max(env(safe-area-inset-left), var(--shell-page-margin));
+  padding-right: max(env(safe-area-inset-right), var(--shell-page-margin));
+}
+
+/* Size, tracking, and color come from the global h1 rule (shell.css). */
+.pageHeader h1 {
+  margin: 0 0 12px;
+  font-family: "Season Serif", Georgia, serif;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.pageHeader p {
+  max-width: 65ch;
+  margin: 0;
+  color: var(--gst-color-fg-secondary);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.pageHeader code {
+  border-radius: 6px;
+  background: var(--shell-card-bg);
+  color: var(--shell-code-fg);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 0.1rem 0.28rem;
+}
+
+/* Chips take the full row; the filter input sits on its own row below,
+   justified to the end. */
+.toolbar {
+  display: grid;
+  width: 100%;
+  max-width: var(--shell-content-width);
+  margin: 0 auto;
+  gap: 16px;
+  grid-template-columns: 1fr;
+  padding-top: 24px;
+  padding-bottom: 24px;
+  padding-left: max(env(safe-area-inset-left), var(--shell-page-margin));
+  padding-right: max(env(safe-area-inset-right), var(--shell-page-margin));
+}
+
+.toolbar .searchInput {
+  width: min(300px, 100%);
+  justify-self: end;
+}
+
+/* The install label and meta keys are .shell-eyebrow (global class, set in
+   the JSX); only the results count keeps a local microtype style. */
+.resultsBar {
+  color: rgba(var(--gst-color-fg-rgb), 0.5);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.searchInput {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--gst-color-border);
+  border-radius: 8px;
+  background: var(--registry-surface);
+  box-shadow: none;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0 12px;
+}
+
+.searchInput::placeholder {
+  color: var(--gst-color-fg-muted);
+}
+
+.searchInput:focus {
+  border-color: var(--gst-color-border-strong);
+  background: var(--registry-surface-focus);
+}
+
+.kindTabs {
+  display: flex;
+  min-width: 0;
+  align-content: end;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Filter chips share the button tiers (guidelines/buttons.md): secondary
+   when unselected, primary when selected — never the static card tone. */
+.kindTabs button {
+  max-width: 100%;
+  height: 36px;
+  cursor: pointer;
+  border: 1px solid var(--shell-button-border);
+  border-radius: 8px;
+  background: var(--shell-button-bg);
+  color: rgba(var(--gst-color-fg-rgb), 0.8);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0 12px;
+}
+
+.kindTabs button:hover {
+  background: var(--shell-button-bg-hover);
+  color: rgba(var(--gst-color-fg-rgb), 1);
+}
+
+.kindTabs button:active {
+  background: var(--shell-button-bg-active);
+  color: rgba(var(--gst-color-fg-rgb), 1);
+}
+
+.kindTabs button span {
+  color: var(--gst-color-fg-muted);
+  margin-left: 5px;
+}
+
+.kindTabs .activeTab,
+.kindTabs .activeTab:hover {
+  border-color: transparent;
+  background: var(--shell-button-primary-bg);
+  color: var(--shell-button-primary-fg);
+}
+
+.kindTabs .activeTab span,
+.kindTabs .activeTab:hover span {
+  color: color-mix(in oklab, var(--shell-button-primary-fg) 65%, transparent);
+}
+
+.browse {
+  width: 100%;
+  max-width: var(--shell-content-width);
+  padding-left: max(env(safe-area-inset-left), var(--shell-page-margin));
+  padding-right: max(env(safe-area-inset-right), var(--shell-page-margin));
+  min-height: calc(100vh - 165px);
+  margin: 0 auto;
+  padding-bottom: 56px;
+}
+
+/* Divider drawn inside the padding box so it aligns with the content,
+   not the container edges. */
+.browse::before {
+  content: "";
+  display: block;
+  border-top: 1px solid var(--gst-color-border);
+}
+
+.resultsBar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0 0;
+}
+
+.providerGrid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 16px;
+}
+
+.emptyState {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 16px;
+  color: var(--gst-color-fg-secondary);
+}
+
+.emptyState h2 {
+  margin: 0;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.emptyState p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+/* Button styled by the global .shell-button convention. */
+.emptyState button {
+  margin-top: 4px;
+}
+
+/* Surface, hover, and radius come from the shared .shell-card convention. */
+.providerCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  color: inherit;
+  padding: 20px; /* matches the grid gap between cards */
+  text-align: left;
+  text-decoration: none;
+}
+
+.cardHead {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.cardDescription {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--gst-color-fg-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.providerText {
+  min-width: 0;
+}
+
+.providerText strong {
+  display: block;
+  overflow: hidden;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.providerText small {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--gst-color-fg-muted);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Visuals come from the global .shell-pill convention. Next to the display
+   title the pill is flex-centered on the title line, then nudged down a
+   touch: the serif's lowercase mass sits below the geometric middle, and
+   optical centering follows it (RES-20260610-016). */
+.kindBadge {
+  max-width: 100%;
+}
+
+.detailHeading .kindBadge {
+  transform: translateY(0.18em);
+}
+
+.detailPage {
+  width: 100%;
+  max-width: var(--shell-content-width);
+  margin: 0 auto;
+  padding-bottom: 64px;
+  padding-left: max(env(safe-area-inset-left), var(--shell-page-margin));
+  padding-right: max(env(safe-area-inset-right), var(--shell-page-margin));
+}
+
+.detailPage::before {
+  content: "";
+  display: block;
+  border-top: 1px solid var(--gst-color-border);
+  margin-bottom: 24px;
+}
+
+.detailColumn {
+  display: grid;
+  width: 100%;
+  justify-items: start;
+  gap: 20px;
+}
+
+.detail {
+  display: grid;
+  max-width: var(--shell-content-width);
+  gap: 24px;
+}
+
+/* Page-header lockup (guidelines/page-header.md): the leading visual
+   centers on the title row — never on the header's top edge — and the
+   kind tag rides the title line immediately after the text (Polaris
+   titleMetadata). The description spans the text column below. */
+.detailTitle {
+  display: grid;
+  align-items: center;
+  grid-template-columns: 64px minmax(0, 1fr);
+  column-gap: 18px;
+  row-gap: 10px;
+}
+
+.detailHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.detailTitle > p {
+  grid-column: 2;
+}
+
+/* Size, tracking, and color come from the global h1 rule (shell.css). */
+.detailTitle .providerName {
+  margin: 0;
+  font-family: "Season Serif", Georgia, serif;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.detailTitle p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--gst-color-fg-secondary);
+  font-size: 1.125rem;
+  line-height: 1.5;
+}
+
+.icon,
+.fallbackIcon,
+.largeIcon,
+.largeFallbackIcon {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  /* Bare logo: no border or surface — a logo with its own solid
+     background fills the bounding box; the radius just clips it. */
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.largeIcon,
+.largeFallbackIcon {
+  width: 64px;
+  height: 64px;
+}
+
+/* Interim dark-mode legibility chip (GitHub avatar pattern): black brand
+   marks vanish on the dark surface; a 10% white tile keeps them readable
+   until the catalog grows per-brand dark variants (ISS-20260610-007). */
+:global(html.dark) .icon,
+:global(html.dark) .largeIcon {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px;
+}
+
+.fallbackIcon,
+.largeFallbackIcon {
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-family: "Season Serif", Georgia, serif;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.largeFallbackIcon {
+  font-size: 2rem;
+}
+
+.installBlock {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  border-radius: 12px;
+  background: var(--registry-code-surface);
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  padding: 18px;
+}
+
+.installBlock code {
+  overflow-wrap: anywhere;
+  color: rgba(var(--gst-color-fg-rgb), 0.92);
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.metaGrid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 16px;
+  /* 4x the dt→dd gap (8px), so rows group key+value, not value+next-key. */
+  row-gap: 32px;
+  margin: 0;
+}
+
+/* Package ids run long — give the first pair the full row; the remaining
+   three (Config target / Latest / Manifest) share the row below. */
+.metaGrid > div:first-child {
+  grid-column: 1 / -1;
+}
+
+.metaGrid dd {
+  margin: 8px 0 0;
+  color: rgba(var(--gst-color-fg-rgb), 0.88);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* Metadata sits adjacent to the title it describes — chips and counts
+   left-packed next to the text, never justified to the far edge
+   (RES-20260610-014: no registry detaches labels across the row). */
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.panelTitle h2 {
+  margin: 0;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.panelTitle span:not(:global(.shell-pill)) {
+  color: var(--gst-color-fg-muted);
+  font-size: 0.8125rem;
+}
+
+.platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.versionList {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+}
+
+.versionRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.versionRow a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.versionRow small {
+  flex-shrink: 0;
+  color: var(--gst-color-fg-muted);
+}
+
+/* Anchors styled by the global .shell-button convention. */
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.docsPanel {
+  display: grid;
+  gap: 16px;
+  /* The divider gets air on both sides (margin adds to the .detail gap). */
+  margin-top: 16px;
+  border-top: 1px solid var(--gst-color-border);
+  padding-top: 24px;
+}
+
+.docsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.docsHeader h2 {
+  margin: 0;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.docsHeader a {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.docsNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.docsNav a {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.docsState {
+  border: 1px solid var(--gst-color-border);
+  border-radius: 12px;
+  background: var(--registry-surface);
+  color: var(--gst-color-fg-secondary);
+  padding: 18px;
+}
+
+.docsState h3 {
+  margin: 0 0 8px;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.docsState p {
+  margin: 0;
+}
+
+.markdownBody {
+  color: var(--gst-color-fg-secondary);
+  font-size: 0.96rem;
+  line-height: 1.7;
+}
+
+.markdownBody h2,
+.markdownBody h3,
+.markdownBody h4 {
+  margin: 1.6em 0 0.55em;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.markdownBody h2:first-child,
+.markdownBody h3:first-child,
+.markdownBody h4:first-child {
+  margin-top: 0;
+}
+
+.markdownBody h2 {
+  font-family: "Season Serif", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.markdownBody h3 {
+  font-size: 1.15rem;
+}
+
+.markdownBody h4 {
+  font-size: 1rem;
+}
+
+.markdownBody p,
+.markdownBody ul,
+.markdownBody ol,
+.markdownBody blockquote,
+.markdownBody pre,
+.markdownBody :global(.registry-markdown-table) {
+  margin: 0 0 1rem;
+}
+
+.markdownBody ul,
+.markdownBody ol {
+  padding-left: 1.25rem;
+}
+
+.markdownBody li + li {
+  margin-top: 0.35rem;
+}
+
+.markdownBody a {
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-weight: 500;
+  text-decoration-color: var(--shell-link-underline);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.markdownBody a:hover {
+  color: var(--shell-link-hover);
+  text-decoration-color: var(--shell-link-underline);
+  text-decoration-thickness: 2px;
+}
+
+.markdownBody :not(pre) > code {
+  border-radius: 6px;
+  background: var(--shell-card-bg) !important;
+  color: var(--shell-code-fg) !important;
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.86em;
+  padding: 0.12rem 0.28rem;
+}
+
+.markdownBody pre {
+  overflow-x: auto !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: var(--registry-code-surface) !important;
+  box-shadow: none !important;
+  padding: 6px 0 !important;
+}
+
+.markdownBody pre code {
+  display: block !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: rgba(var(--gst-color-fg-rgb), 0.92) !important;
+  padding: 10px 16px !important;
+  white-space: pre !important;
+}
+
+/* Shiki dual-theme output (defaultColor: false → per-token CSS vars). */
+.markdownBody :global(pre.shiki) span {
+  color: var(--shiki-light);
+}
+
+:global(html.dark) .markdownBody :global(pre.shiki) span {
+  color: var(--shiki-dark);
+}
+
+.markdownBody blockquote {
+  border-left: 3px solid var(--gst-color-accent);
+  color: rgba(var(--gst-color-fg-rgb), 0.72);
+  padding-left: 1rem;
+}
+
+.markdownBody :global(.registry-markdown-table) {
+  overflow-x: auto;
+}
+
+.markdownBody table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--gst-color-border);
+  background: var(--registry-table-surface);
+}
+
+.markdownBody th,
+.markdownBody td {
+  border-bottom: 1px solid var(--gst-color-border);
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdownBody th {
+  color: rgba(var(--gst-color-fg-rgb), 0.62);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.markdownBody td {
+  color: var(--gst-color-fg-secondary);
+}
+
+.statePanel {
+  margin: 24px;
+  border: 1px solid var(--gst-color-border);
+  border-radius: 12px;
+  background: var(--registry-surface);
+  padding: 24px;
+}
+
+.shell > .statePanel {
+  width: 100%;
+  max-width: var(--shell-content-width);
+  padding-left: max(env(safe-area-inset-left), var(--shell-page-margin));
+  padding-right: max(env(safe-area-inset-right), var(--shell-page-margin));
+  margin: 24px auto;
+}
+
+.statePanel h1 {
+  margin: 0 0 10px;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-family: "Season Serif", Georgia, serif;
+  font-size: 2.5rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.statePanel p {
+  margin: 0;
+  color: var(--gst-color-fg-secondary);
+}
+
+@media (max-width: 1023px) {
+  .detailPage {
+    padding-bottom: 48px;
+  }
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
+  .kindTabs {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .kindTabs button {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .providerGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cardHead {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .cardHead .kindBadge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .detailTitle {
+    grid-template-columns: 1fr;
+  }
+
+  .detailTitle > p {
+    grid-column: 1;
+  }
+
+  .detailTitle .providerName {
+    font-size: 2.75rem;
+  }
+
+  .detailTitle p {
+    font-size: 1rem;
+  }
+
+  .metaGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

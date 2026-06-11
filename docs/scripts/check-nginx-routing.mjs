@@ -190,6 +190,18 @@ try {
     cacheControlIncludes: "no-cache",
     includes: "data-registry-shell",
   });
+  await assertResponse({
+    url: `${baseUrl}/registry`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "https://registry.gestaltd.ai/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/registry/providers/app/slack/`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "https://registry.gestaltd.ai/providers/app/slack/",
+  });
 } finally {
   if (container) {
     spawnSync("docker", ["stop", container], { stdio: "ignore" });

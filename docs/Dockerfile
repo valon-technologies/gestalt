@@ -96,12 +96,14 @@ server {
         try_files $uri $uri.html $uri/ =404;
     }
 
+    # The registry's canonical home is its own origin; the old apex mount
+    # redirects there path-for-path so existing links keep working.
     location = /registry {
-        try_files /registry.html =404;
+        return 301 https://registry.gestaltd.ai/;
     }
 
-    location /registry/ {
-        try_files /registry.html =404;
+    location ~ ^/registry/(.*)$ {
+        return 301 https://registry.gestaltd.ai/$1;
     }
 
     location ^~ /api/ {

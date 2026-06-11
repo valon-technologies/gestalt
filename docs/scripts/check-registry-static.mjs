@@ -228,16 +228,22 @@ try {
     includes: "Install Gestalt",
   });
   await assertResponse({
+    url: `${baseUrl}/registry`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "https://registry.gestaltd.ai/",
+  });
+  await assertResponse({
     url: `${baseUrl}/registry/providers/app/slack/`,
     host: "gestaltd.ai",
-    status: 200,
-    includes: registryMarker,
+    status: 301,
+    location: "https://registry.gestaltd.ai/providers/app/slack/",
   });
   await assertResponse({
     url: `${baseUrl}/registry/providers/app/slack/events/`,
     host: "gestaltd.ai",
-    status: 200,
-    includes: registryMarker,
+    status: 301,
+    location: "https://registry.gestaltd.ai/providers/app/slack/events/",
   });
   await assertResponse({
     url: `${baseUrl}/providers/app/slack/`,
@@ -315,8 +321,15 @@ async function serveDocsHost(pathname, response) {
   ) {
     return serveFile(pathname, response, true, null);
   }
-  if (pathname === "/registry" || pathname.startsWith("/registry/")) {
-    return serveFile("/registry.html", response, false);
+  if (pathname === "/registry") {
+    return redirect(response, "https://registry.gestaltd.ai/");
+  }
+  const registryPath = pathname.match(/^\/registry\/(.*)$/);
+  if (registryPath) {
+    return redirect(
+      response,
+      `https://registry.gestaltd.ai/${registryPath[1]}`,
+    );
   }
   if (
     pathname.startsWith("/api/") ||

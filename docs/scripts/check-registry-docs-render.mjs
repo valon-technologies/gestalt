@@ -188,7 +188,7 @@ function renderFixtureMarkdown(renderMarkdown, source) {
 }
 
 async function loadRegistryMarkdownRenderer() {
-  const sourcePath = path.resolve("app/registry/registry-markdown.tsx");
+  const sourcePath = path.resolve("app/(registry)/registry/registry-markdown.tsx");
   const source = await readFile(sourcePath, "utf8");
   const transpiled = ts.transpileModule(source, {
     compilerOptions: {

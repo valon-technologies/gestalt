@@ -1,4 +1,6 @@
 export default {
+  // App-router page; lives in the navbar, not the docs sidebar.
+  registry: { display: "hidden" },
   index: "Overview",
   install: "Install",
   "getting-started": "Getting Started",
