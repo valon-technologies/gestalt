@@ -5,19 +5,21 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc"
 )
 
 type Options struct {
 	UnaryTimeout time.Duration
+	ProviderID   string
 }
 
-func NewClient(grpcClient proto.AuthorizationClient, opts Options) *Client {
-	return &Client{grpc: grpcClient, opts: opts}
+func NewClient(grpcClient proto.AuthorizationClient, opts Options, gateway providergateway.ProviderGateway) *Client {
+	return &Client{grpc: grpcClient, opts: opts, gateway: gateway}
 }
 
-func NewConn(conn grpc.ClientConnInterface, opts Options) *Client {
-	return NewClient(proto.NewAuthorizationClient(conn), opts)
+func NewConn(conn grpc.ClientConnInterface, opts Options, gateway providergateway.ProviderGateway) *Client {
+	return NewClient(proto.NewAuthorizationClient(conn), opts, gateway)
 }
 
 func attachTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
