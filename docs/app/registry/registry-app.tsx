@@ -251,7 +251,7 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
       : `${styles.shell} ${styles.lightShell}`;
 
   return (
-    <main className={shellClassName}>
+    <main className={shellClassName} data-registry-shell="true">
       <header className={styles.header}>
         <a className={styles.brand} href={routePrefix || "/"}>
           <span className={styles.brandWord}>Gestalt</span>
