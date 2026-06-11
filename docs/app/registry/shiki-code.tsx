@@ -90,6 +90,10 @@ export default function ShikiCode({
 
   useEffect(() => {
     let cancelled = false;
+    // Reset before highlighting: when language/text change on a mounted
+    // instance, the previous block's markup must not linger while (or if)
+    // the new highlight resolves.
+    setHtml(null);
     void highlight(language, text).then((result) => {
       if (!cancelled) {
         setHtml(result);
