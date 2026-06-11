@@ -1,0 +1,927 @@
+/*
+ * Shared shell conventions: surface, link states, motion, selects.
+ * Lives outside globals.css because versioned builds overlay globals.css
+ * from the release tag while the app shell always builds from the working
+ * tree — and because this file is imported after globals.css, its rules win
+ * over the literals baked into old tags' globals at equal specificity.
+ */
+
+
+/* ---------- Tokens ----------
+
+   The docs have one style; these custom properties exist so every color
+   has one canonical name and so dark mode can flip the semantic roles.
+   Ramps carry their values directly (round-trip-exact OKLCH for the hex
+   in the comments); semantic tokens reference ramp steps, never raw
+   values. */
+
+:root {
+  color-scheme: light;
+
+  /* Neutral ramp (warm). 50 and 150 are OKLab interpolations between
+     the neighboring steps. */
+  --gst-color-neutral-0: oklch(100% 0 0); /* #ffffff */
+  --gst-color-neutral-50: oklch(98.56% 0.0017 67.8); /* #fbfaf9 */
+  --gst-color-neutral-100: oklch(97.38% 0.0045 78.3); /* #f8f6f3 */
+  --gst-color-neutral-150: oklch(94.86% 0.0086 67.7); /* #f2ede8 */
+  --gst-color-neutral-200: oklch(92.32% 0.0129 63.9); /* #ece4dd */
+  --gst-color-neutral-300: oklch(86.85% 0.0197 72.6); /* #dcd2c6 */
+  --gst-color-neutral-400: oklch(71.06% 0.0350 74.6); /* #af9f8a */
+  --gst-color-neutral-500: oklch(55.54% 0.0431 75.8); /* #827057 */
+  --gst-color-neutral-600: oklch(44.69% 0.0382 91.8); /* #5c543c */
+  --gst-color-neutral-700: oklch(37.61% 0.0346 84.3); /* #4a402c */
+  --gst-color-neutral-800: oklch(27.04% 0.0259 51.0); /* #31231b */
+  --gst-color-neutral-900: oklch(21.87% 0.0213 76.1); /* #20190f */
+  --gst-color-neutral-950: oklch(22.04% 0.0231 57.2); /* #231810 */
+
+  /* Accent (gold) ramp. */
+  --gst-color-accent-50: oklch(99.47% 0.0045 78.3); /* #fffdfa */
+  --gst-color-accent-100: oklch(97.86% 0.0203 81.8); /* #fff7e9 */
+  --gst-color-accent-200: oklch(93.56% 0.0534 81.8); /* #fce7c2 */
+  --gst-color-accent-300: oklch(85.94% 0.1118 82.4); /* #f5ca78 */
+  --gst-color-accent-400: oklch(79.26% 0.1438 80.3); /* #ebb03c */
+  --gst-color-accent-500: oklch(73.06% 0.1519 72.6); /* #e19614 */
+  --gst-color-accent-600: oklch(64.37% 0.1336 72.6); /* #be7e10 */
+  --gst-color-accent-700: oklch(54.88% 0.1131 70.8); /* #9a6410 */
+  --gst-color-accent-800: oklch(46.52% 0.0933 70.5); /* #7a4f10 */
+  --gst-color-accent-900: oklch(38.46% 0.0750 71.9); /* #5c3c0c */
+  --gst-color-accent-950: oklch(29.58% 0.0548 73.6); /* #3d2808 */
+
+  /* Ink — the base of the alpha/overlay system, kept as a channel
+     triplet for rgba() composition. Flips with dark mode. */
+  --gst-color-fg-rgb: 35, 24, 16; /* #231810 */
+
+  /* Semantic roles. Page surface is white (the ramp's own top step). */
+  --gst-color-bg: var(--gst-color-neutral-0);
+  --gst-color-surface: var(--gst-color-neutral-100);
+  --gst-color-surface-strong: var(--gst-color-neutral-200);
+  --gst-color-border: rgba(var(--gst-color-fg-rgb), 0.1);
+  --gst-color-border-strong: rgba(var(--gst-color-fg-rgb), 0.2);
+  --gst-color-fg-muted: rgba(var(--gst-color-fg-rgb), 0.6);
+  --gst-color-fg-secondary: rgba(var(--gst-color-fg-rgb), 0.8);
+  --gst-color-accent: var(--gst-color-accent-500);
+
+  /* Nextra's chrome derives its primary scale from these knobs. */
+  --nextra-primary-hue: 37deg;
+  --nextra-primary-saturation: 84%;
+
+  /* Code foreground pairs with the Vitesse highlighter theme. */
+  --shell-code-fg: oklch(34.54% 0.0103 114.6); /* #393a34, vitesse-light */
+
+  /* Interaction surfaces: rest is neutral-150 (via --shell-card-bg);
+     hover/pressed composite 5%/10% ink over it. color-mix resolves to
+     solid colors, so these also work as background-color under the
+     select's caret background-image. Mixed in sRGB to reproduce the
+     hand-approved #e8e2dd / #ddd8d2 exactly. */
+  --shell-control-bg-hover: color-mix(
+    in srgb,
+    rgb(var(--gst-color-fg-rgb)) 5%,
+    var(--gst-color-neutral-150)
+  );
+  --shell-control-bg-active: color-mix(
+    in srgb,
+    rgb(var(--gst-color-fg-rgb)) 10%,
+    var(--gst-color-neutral-150)
+  );
+
+  /* Pills: translucent ink that composites to neutral-150 on the page,
+     one shade darker on a card. */
+  --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.045);
+}
+
+.dark {
+  color-scheme: dark;
+
+  /* Dark surface ramp — warm browns below neutral-950. */
+  --gst-color-dark-50: oklch(18.35% 0.0086 31.2); /* #161110 */
+  --gst-color-dark-100: oklch(21.82% 0.0098 52.9); /* #1e1916 */
+  --gst-color-dark-150: oklch(24.63% 0.0123 44.5); /* #261f1c */
+  --gst-color-dark-200: oklch(27.62% 0.0141 48.2); /* #2e2622 */
+  --gst-color-dark-250: oklch(28.73% 0.0127 51.7); /* #302925 */
+
+  --gst-color-fg-rgb: 232, 222, 212; /* #e8ded4 */
+  --gst-color-bg: var(--gst-color-dark-50);
+  --gst-color-surface: var(--gst-color-dark-100);
+  --gst-color-surface-strong: var(--gst-color-dark-200);
+  --gst-color-border: rgba(var(--gst-color-fg-rgb), 0.12);
+  --gst-color-border-strong: rgba(var(--gst-color-fg-rgb), 0.2);
+  --gst-color-fg-muted: rgba(var(--gst-color-fg-rgb), 0.55);
+  --gst-color-fg-secondary: rgba(var(--gst-color-fg-rgb), 0.78);
+  --gst-color-accent: var(--gst-color-accent-300);
+
+  --shell-code-fg: oklch(87.87% 0.0181 92.7); /* #dbd7ca, vitesse-dark */
+
+  /* Code surfaces sit flat on dark-100 (the alpha mix the shell derives
+     reads darker than the cards here). */
+  --shell-code-surface: var(--gst-color-dark-100);
+
+  /* Dark cards rest just above the page; hover/pressed step the ramp. */
+  --shell-card-bg: var(--gst-color-dark-100);
+  --shell-control-bg-hover: var(--gst-color-dark-150);
+  --shell-control-bg-active: var(--gst-color-dark-200);
+  --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.075);
+
+  /* Secondary buttons rest one step above the cards (Primer-style) so the
+     fill, not just the hairline, separates them from static tiles. */
+  --shell-button-bg: var(--gst-color-dark-150);
+  --shell-button-bg-hover: var(--gst-color-dark-200);
+  --shell-button-bg-active: var(--gst-color-dark-250);
+}
+
+/* ---------- System and component tiers ---------- */
+:root {
+  /* Link states — color carries every state; never vary font-weight
+     (bold glyphs are wider and shift layout). */
+  --shell-link: var(--gst-color-fg-muted);
+  --shell-link-hover: var(--gst-color-accent-500);
+  --shell-link-pressed: var(--gst-color-accent-600); /* one step darker than hover */
+  --shell-link-disabled: rgba(var(--gst-color-fg-rgb), 0.35);
+  --shell-link-current: var(--gst-color-accent-700); /* lightest AA shade on the light bg */
+  /* Resting underline for links inside prose: one ramp step lighter than
+     the hover text — a 2px rule reads denser than glyph strokes, so an
+     equal-shade underline looks darker than the text it sits under. One
+     knob for every content-link recipe. */
+  --shell-link-underline: var(--gst-color-accent-400);
+
+  /* Motion — the PR #2374 convention; interactive color changes are
+     instant, eased motion only for
+     genuine movement. */
+  --shell-ease: var(--gst-ease-out-quart);
+  --shell-motion-instant: 0s;
+  --shell-motion-fast: 100ms;
+  --shell-motion-out: 200ms;
+
+  /* One content measure for registry browse and provider detail pages
+     (50rem keeps README prose lines from running long). */
+  --shell-content-width: 50rem;
+
+  /* Breathing room between shell content and the viewport edge (navbar,
+     docs row, footer, registry containers). Mobile keeps Nextra's 1.5rem. */
+  --shell-page-margin: 1.5rem;
+
+  /* Cards and control surfaces (selects, muted buttons): one family.
+     Rest is the card tile; hover/pressed values are theme-supplied. */
+  --shell-card-bg: var(--gst-color-neutral-150);
+  --shell-control-bg: var(--shell-card-bg);
+
+  /* Code surfaces: the card tone at 70% alpha, both themes (inline tiles
+     keep the solid card token). One surface for docs and registry. */
+  --shell-code-surface: color-mix(in srgb, var(--shell-card-bg) 70%, transparent);
+
+  /* Buttons: actionable surfaces must not share
+     the static card/code tone. Secondary = page-colored fill behind a
+     visible hairline (the Primer/Radix "surface" pattern); selects share
+     it. Primary = strong accent fill with an ink label (ink stays
+     AA-readable on gold in both themes). */
+  --shell-button-bg: var(--gst-color-bg);
+  --shell-button-bg-hover: var(--gst-color-surface);
+  --shell-button-bg-active: var(--shell-card-bg);
+  --shell-button-border: var(--gst-color-border-strong);
+  --shell-button-primary-bg: var(--gst-color-accent);
+  --shell-button-primary-bg-hover: var(--gst-color-accent-600);
+  --shell-button-primary-bg-active: var(--gst-color-accent-700);
+  --shell-button-primary-fg: var(--gst-color-neutral-950);
+}
+
+.dark {
+  --shell-link-current: var(--gst-color-accent-300); /* on the dark surface */
+  --shell-link-hover: var(--gst-color-accent-200); /* brighter than current */
+  --shell-link-pressed: var(--gst-color-accent-300); /* one step darker than hover */
+
+  /* Primary buttons rest on the dark accent (gold-300); deeper into the
+     inverted ramp = lighter. */
+  --shell-button-primary-bg-hover: var(--gst-color-accent-200);
+  --shell-button-primary-bg-active: var(--gst-color-accent-100);
+
+  /* One step toward the bg from the dark hover text (gold-200). */
+  --shell-link-underline: var(--gst-color-accent-300);
+}
+
+@media (min-width: 48rem) {
+  :root {
+    --shell-page-margin: 2rem;
+  }
+}
+
+/* ---------- Page margins ---------- */
+
+/* Navbar and footer trade Nextra's compiled 1.5rem inset for the token. */
+.nextra-navbar nav,
+footer {
+  padding-inline: max(env(safe-area-inset-left), var(--shell-page-margin))
+    max(env(safe-area-inset-right), var(--shell-page-margin)) !important;
+}
+
+/* The docs row (sidebar | article | TOC) otherwise touches the viewport
+   edge on both sides. Desktop only — mobile keeps Nextra's own paddings.
+   Registry pages have no sidebar; their containers carry the token
+   themselves (registry.module.css). */
+@media (min-width: 48rem) {
+  body > div:has(> aside.nextra-sidebar) {
+    padding-inline: max(env(safe-area-inset-left), var(--shell-page-margin))
+      max(env(safe-area-inset-right), var(--shell-page-margin));
+  }
+
+  /* The sidebar insets its content 1rem inside the row, so the visible
+     content edge sits at margin + 1rem; the navbar logo aligns with that
+     edge (the right side already aligns: search box ↔ TOC). */
+  .nextra-navbar nav {
+    padding-left: max(
+      env(safe-area-inset-left),
+      calc(var(--shell-page-margin) + 1rem)
+    ) !important;
+  }
+}
+
+/* Flat base-50 page surface (replaces the white→cream body gradient). */
+body,
+.dark body {
+  background: var(--gst-color-bg);
+}
+
+/* Scrollbars: base-200 thumb on a transparent track. Inherits to all
+   scroll containers (sidebar, code blocks). Safari ignores scrollbar-color
+   and keeps its overlay scrollbars. */
+html {
+  scrollbar-color: var(--gst-color-neutral-200) transparent;
+}
+
+html.dark {
+  scrollbar-color: var(--gst-color-surface-strong) transparent;
+}
+
+/* h1 typography is owned by the global rule in globals.css. */
+
+/* Buttons carry medium weight across the shell. */
+button {
+  font-weight: 500;
+}
+
+/* ---------- Buttons ---------- */
+
+/* The shell button: borderless control fill matching the select and the
+   card behavior (darken on hover, darken again pressed), radius matched to
+   the search input. !important outranks the literal .docs-header-repo-link
+   rules baked into tagged globals.css. */
+.shell-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid var(--shell-button-border) !important;
+  border-radius: 8px !important;
+  background: var(--shell-button-bg) !important;
+  color: rgba(var(--gst-color-fg-rgb), 0.8) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0.45rem 0.75rem;
+  text-decoration: none;
+}
+
+.shell-button:hover {
+  background: var(--shell-button-bg-hover) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
+}
+
+.shell-button:active {
+  background: var(--shell-button-bg-active) !important;
+}
+
+/* Primary variant: the one strong accent action in a view. */
+.shell-button.shell-button-primary {
+  border-color: transparent !important;
+  background: var(--shell-button-primary-bg) !important;
+  color: var(--shell-button-primary-fg) !important;
+}
+
+.shell-button.shell-button-primary:hover {
+  background: var(--shell-button-primary-bg-hover) !important;
+  color: var(--shell-button-primary-fg) !important;
+}
+
+.shell-button.shell-button-primary:active {
+  background: var(--shell-button-primary-bg-active) !important;
+}
+
+/* Copy-page split button (Nextra's article widget): secondary-button
+   chrome with ink text, a divider between the copy trigger and the caret
+   trigger, a thicker caret, and an opaque menu matching the select picker
+   flyout (the shipped one is transparent + backdrop blur). */
+article div.nextra-border[class*='float-end'] {
+  border: 1px solid var(--shell-button-border) !important;
+  border-radius: 8px !important;
+  background: var(--shell-button-bg);
+}
+
+article div.nextra-border[class*='float-end'] > button {
+  color: rgba(var(--gst-color-fg-rgb), 0.8) !important;
+  transition: none !important;
+}
+
+article div.nextra-border[class*='float-end'] > button:hover {
+  background: var(--shell-button-bg-hover);
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
+}
+
+article div.nextra-border[class*='float-end'] > button:active {
+  background: var(--shell-button-bg-active);
+}
+
+article div.nextra-border[class*='float-end'] > button + button {
+  border-left: 1px solid var(--shell-button-border) !important;
+}
+
+article div.nextra-border[class*='float-end'] > button + button svg {
+  stroke-width: 2.5;
+}
+
+/* The dropdown panel (ul sized via --button-width) joins the flyout
+   convention set by the select picker. */
+ul[class*='--button-width'] {
+  border: 1px solid var(--gst-color-border) !important;
+  border-radius: 6px !important;
+  background: var(--gst-color-bg) !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 8px 24px rgba(35, 24, 16, 0.12) !important;
+  color: rgba(var(--gst-color-fg-rgb), 0.8);
+  padding: 4px;
+}
+
+.dark ul[class*='--button-width'] {
+  background: var(--gst-color-surface) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34) !important;
+}
+
+/* Menu items share the select option recipe:
+   quiet ink fill, instant states. Headless UI marks the pointer/keyboard
+   focused item with data-focus. */
+ul[class*='--button-width'] > li {
+  border-radius: 6px;
+  color: rgba(var(--gst-color-fg-rgb), 0.88) !important;
+  font-size: 0.875rem;
+  transition: none !important;
+}
+
+ul[class*='--button-width'] > li:hover,
+ul[class*='--button-width'] > li[data-focus] {
+  background: rgba(var(--gst-color-fg-rgb), 0.06) !important;
+}
+
+/* ---------- Pills ---------- */
+
+.shell-pill {
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--shell-pill-bg);
+  color: rgba(var(--gst-color-fg-rgb), 0.7);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 7px;
+  white-space: nowrap;
+}
+
+/* ---------- Cards ---------- */
+
+.shell-card {
+  border: 0;
+  border-radius: 12px;
+  background: var(--shell-card-bg);
+  box-shadow: none;
+}
+
+.shell-card:hover {
+  background: var(--shell-control-bg-hover);
+}
+
+.shell-card:active {
+  background: var(--shell-control-bg-active);
+}
+
+/* Nextra's link cards (docs "Start here" grids) join the same family:
+   borderless card tint, 12px radius, instant fill-step hover — replacing
+   the framework's bordered tile + shadow + 75ms arrow nudge. */
+.nextra-card {
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: var(--shell-card-bg) !important;
+  box-shadow: none !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
+  transition: none !important;
+}
+
+.nextra-card:hover {
+  background: var(--shell-control-bg-hover) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.nextra-card:active {
+  background: var(--shell-control-bg-active) !important;
+}
+
+.nextra-card * {
+  transition: none !important;
+}
+
+/* ---------- Eyebrows ---------- */
+
+/* Small all-caps label above a heading or value (a.k.a. overline/kicker).
+   Metadata flavor: muted so the value carries the
+   emphasis; caps come from text-transform (keep real case in markup), and
+   uppercase needs tracking the shell otherwise resets to 0. */
+.shell-eyebrow.shell-eyebrow {
+  color: rgba(var(--gst-color-fg-rgb), 0.5);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* ---------- Links ---------- */
+
+/* Doubled class: the base state must outrank literal navbar rules like
+   `.nextra-navbar nav a` that persist in tagged globals.css. */
+.shell-link.shell-link {
+  color: var(--shell-link) !important;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.shell-link:hover {
+  color: var(--shell-link-hover) !important;
+}
+
+.shell-link:active {
+  color: var(--shell-link-pressed) !important;
+}
+
+.shell-link[aria-disabled='true'] {
+  color: var(--shell-link-disabled) !important;
+  pointer-events: none;
+}
+
+.shell-link[aria-current] {
+  color: var(--shell-link-current) !important;
+}
+
+.shell-nav-link {
+  flex-shrink: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1;
+  margin-inline: 0.4rem;
+}
+
+/* The current page in the navbar takes .shell-link[aria-current] above —
+   the persistent gold state must be the AA-safe current token, gold-700 on
+   light / gold-300 on dark (lightest AA-passing shades); hover stays the brighter,
+   transient gold-500. */
+
+/* Sidebar, TOC, pagination, and tab links: no transitions. Nextra bakes a
+   Tailwind transition-colors utility into these in its compiled style.css
+   (node_modules), so stripping at source isn't possible — this rule is
+   the strip. The navbar links themselves carry no transition. */
+.nextra-sidebar a,
+.nextra-sidebar button,
+.nextra-mobile-nav a,
+.nextra-toc a,
+article a[class*='text-gray-600'],
+article [role='tablist'] [role='tab'] {
+  transition: none !important;
+}
+
+/* Nextra tabs ship slate text with border-current underlines (cool blue on
+   the warm palette): remap to the ink scale, with the underline on the
+   accent ramp for hover and selected. */
+article [role='tablist'] [role='tab'] {
+  color: var(--gst-color-fg-muted) !important;
+  border-bottom-color: transparent !important;
+}
+
+article [role='tablist'] [role='tab']:hover {
+  color: var(--gst-color-fg-secondary) !important;
+  border-bottom-color: var(--gst-color-accent-300) !important;
+}
+
+article [role='tablist'] [role='tab'][aria-selected='true'] {
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
+  border-bottom-color: var(--gst-color-accent) !important;
+}
+
+.dark article [role='tablist'] [role='tab']:hover {
+  border-bottom-color: var(--gst-color-accent-700) !important;
+}
+
+.nextra-sidebar li > a:hover,
+.nextra-mobile-nav li > a:hover {
+  background: var(--gst-color-neutral-100) !important;
+}
+
+.dark .nextra-sidebar li > a:hover,
+.dark .nextra-mobile-nav li > a:hover {
+  background: var(--gst-color-surface) !important;
+}
+
+/* Breathing room between the nav links and the GitHub button. */
+.docs-header-search .docs-header-repo-link {
+  margin-left: 0.5rem;
+}
+
+/* The registry is a navbar destination; keep it out of the docs sidebar
+   (covers tagged builds whose _meta.ts predates the hidden entry). */
+.nextra-sidebar li:has(> a[href$='/registry']),
+.nextra-mobile-nav li:has(> a[href$='/registry']) {
+  display: none !important;
+}
+
+/* Custom 404 (app/not-found.tsx). */
+.shell-not-found {
+  display: grid;
+  min-height: 75vh;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.shell-not-found h1 {
+  margin: 0;
+  font-family: 'Season Serif', Georgia, serif;
+}
+
+.shell-not-found p {
+  margin: 0;
+  color: var(--gst-color-fg-secondary);
+  font-weight: 500;
+}
+
+.shell-not-found .shell-link {
+  margin-inline: 0.75rem;
+}
+
+/* Docs prose links (MDX content): ink text with a quiet gold underline at
+   rest — the two-tone pattern, text never leaves full-contrast ink — then
+   gold with a full-strength underline on hover. Sole
+   owner of the recipe (the globals.css copy is gone; tagged builds keep
+   their own). The broad rule covers every content link and, being
+   unimportant, correctly loses to the pagination rules below; the p/li/td
+   repeats reassert the colors against Nextra's compiled utilities. */
+article a:not(.nextra-card):not(.subheading-anchor) {
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font-weight: 500;
+  text-decoration-color: var(--shell-link-underline);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+article p a,
+article li a,
+article td a {
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
+  font-weight: 500 !important;
+  text-decoration-color: var(--shell-link-underline) !important;
+}
+
+/* Hover: the underline stays and thickens (the Tailwind-docs pattern;
+   Nextra's compiled hover:no-underline utility would hide it). Pressed
+   text turns gold-600 via the :active rules below, and the currentColor
+   decoration darkens one shade with it. */
+article a:not(.nextra-card):not(.subheading-anchor):hover {
+  color: var(--shell-link-hover);
+  text-decoration-line: underline;
+  text-decoration-color: var(--shell-link-underline);
+  text-decoration-thickness: 2px;
+}
+
+article p a:hover,
+article li a:hover,
+article td a:hover {
+  color: var(--shell-link-hover) !important;
+  text-decoration-line: underline !important;
+  text-decoration-color: var(--shell-link-underline) !important;
+  text-decoration-thickness: 2px !important;
+}
+
+
+/* Nextra's cool grays/slates read blue on the warm palette — remap to the
+   ink scale. Covers "Last updated on …" (div.text-gray-600), gray-500
+   metadata, and the slate-700 content wrapper. Links are excluded: the
+   more specific rules below own them. */
+article [class*='text-gray-500'],
+.nextra-toc [class*='text-gray-500'],
+article div[class*='text-gray-600'] {
+  color: var(--gst-color-fg-muted) !important;
+}
+
+main [class*='text-slate-700'] {
+  color: var(--gst-color-fg-secondary) !important;
+}
+
+/* Pagination (prev/next page links) joins the link convention — standalone
+   links carry no underline (position is the signifier). */
+article a[class*='text-gray-600'] {
+  color: var(--shell-link) !important;
+  font-weight: 500 !important;
+  text-decoration-line: none !important;
+}
+
+article a[class*='text-gray-600']:hover {
+  color: var(--shell-link-hover) !important;
+}
+
+/* Pressed state — after the hover rules so it wins while both match.
+   (The broad selector also matches pagination links; both resolve to the
+   same pressed token, so there is no conflict.) */
+article a:not(.nextra-card):not(.subheading-anchor):active,
+article p a:active,
+article li a:active,
+article td a:active,
+article a[class*='text-gray-600']:active {
+  color: var(--shell-link-pressed) !important;
+}
+
+/* The same convention applied to Nextra's chrome (sidebar, TOC, breadcrumbs).
+   Nextra 4 class names: aside.nextra-sidebar, .nextra-toc, .nextra-mobile-nav
+   (the v3-era .nextra-sidebar-container/.nextra-toc-footer rules in
+   globals.css were already dead). */
+.nextra-sidebar a,
+.nextra-sidebar button,
+.nextra-mobile-nav a,
+.nextra-toc a,
+.nextra-breadcrumb,
+.nextra-breadcrumb span {
+  color: var(--shell-link) !important;
+}
+
+.nextra-sidebar a:hover,
+.nextra-sidebar button:hover,
+.nextra-mobile-nav a:hover,
+.nextra-toc a:hover {
+  color: var(--shell-link-hover) !important;
+}
+
+.nextra-sidebar a:active,
+.nextra-mobile-nav a:active,
+.nextra-toc a:active {
+  color: var(--shell-link-pressed) !important;
+}
+
+/* Nextra 4 marks the current page with li.active inside the sidebar/mobile
+   nav (the v3-era .nextra-menu-* wrappers no longer exist). */
+.nextra-sidebar li.active > a,
+.nextra-mobile-nav li.active > a {
+  background: color-mix(in oklab, var(--gst-color-accent-500) 14%, transparent) !important;
+  color: var(--shell-link-current) !important;
+  font-weight: inherit !important;
+}
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Links, cards, pills, and buttons change state instantly — no
+     transitions in either direction (Giovanni, 2026-06-10). */
+  .nextra-navbar input[type='search'] {
+    transition:
+      border-color var(--shell-motion-out) var(--shell-ease),
+      background-color var(--shell-motion-out) var(--shell-ease) !important;
+  }
+
+  .nextra-navbar input[type='search']:hover,
+  .nextra-navbar input[type='search']:focus {
+    transition: none !important;
+  }
+}
+
+.nextra-navbar input[type='search']:hover {
+  border-color: var(--gst-color-border-strong) !important;
+}
+
+.nextra-navbar input[type='search']:focus {
+  border-color: rgba(var(--gst-color-fg-rgb), 0.45) !important;
+}
+
+/* ---------- Version picker placement ---------- */
+
+/* The mobile drawer has no sidebar to host the version picker. */
+.shell-mobile-version {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .shell-mobile-version {
+    display: block;
+  }
+}
+
+.docs-sidebar-version {
+  padding: 1rem 1rem 0.25rem;
+}
+
+.docs-sidebar-version .docs-version-picker,
+.docs-sidebar-version select {
+  display: flex;
+  width: 100%;
+  max-width: none;
+}
+
+/* ---------- Footer ---------- */
+
+footer.shell-footer {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+  /* Tagged globals.css paints footers with a translucent band — the footer
+     sits on the page surface, full stop. Nextra's hr is the only separator. */
+  background: transparent !important;
+  border-top: 0 !important;
+}
+
+.shell-theme-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--gst-color-fg-secondary);
+  font-size: 0.875rem;
+}
+
+.shell-theme-select-label {
+  color: var(--gst-color-fg-muted);
+}
+
+.shell-theme-select-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.shell-theme-select-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.6rem;
+  display: inline-flex;
+  color: var(--gst-color-fg-muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.shell-theme-select-control select.shell-select {
+  padding-left: 2rem;
+}
+
+/* Nextra's footer wrapper paints its own gray band; keep the valon surface. */
+div:has(> footer.shell-footer) {
+  background: transparent !important;
+}
+
+/* ---------- Selects ---------- */
+
+/* Trigger styled after the production sidebar select: borderless, subtle
+   ink fill, radius 8; caret is a Phosphor-style stroked chevron (the native
+   filled triangle is suppressed via appearance + a background image). */
+select.shell-select {
+  min-height: 2rem;
+  appearance: none;
+  border: 1px solid var(--shell-button-border);
+  border-radius: 8px;
+  background-color: var(--shell-button-bg);
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23231810" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/></svg>');
+  background-position: right 0.6rem center;
+  background-repeat: no-repeat;
+  background-size: 12px;
+  color: rgba(var(--gst-color-fg-rgb), 1);
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.35rem 1.9rem 0.35rem 0.75rem;
+}
+
+select.shell-select:hover {
+  background-color: var(--shell-button-bg-hover);
+}
+
+select.shell-select:active {
+  background-color: var(--shell-button-bg-active);
+}
+
+.dark select.shell-select {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23e8ded4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/></svg>');
+}
+
+@media (max-width: 767px) {
+  select.shell-select {
+    min-height: 2.75rem; /* 44px touch target */
+  }
+}
+
+/* Customizable Select API (Chromium 135+): styled face and picker panel.
+   Other engines keep the styled native select above. */
+@supports (appearance: base-select) {
+  select.shell-select,
+  select.shell-select::picker(select) {
+    appearance: base-select;
+  }
+
+  select.shell-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  /* The chevron comes from the background image on the trigger. */
+  select.shell-select::picker-icon {
+    display: none;
+  }
+
+  select.shell-select::picker(select) {
+    margin-top: 6px;
+    border: 1px solid var(--gst-color-border);
+    border-radius: 6px;
+    background: var(--gst-color-bg);
+    box-shadow: 0 8px 24px rgba(35, 24, 16, 0.12);
+    padding: 4px;
+  }
+
+  .dark select.shell-select::picker(select) {
+    background: var(--gst-color-surface);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+  }
+
+  select.shell-select option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 6px;
+    color: rgba(var(--gst-color-fg-rgb), 0.88);
+    font-size: 0.875rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  select.shell-select option:hover,
+  select.shell-select option:focus-visible {
+    background: rgba(var(--gst-color-fg-rgb), 0.06);
+  }
+
+  select.shell-select option:checked {
+    color: var(--shell-link-current);
+  }
+
+  /* Phosphor-style check, right-aligned (default checkmark sits left);
+     centered on the flex row so it shares the text's optical baseline. */
+  select.shell-select option::checkmark {
+    order: 1;
+    margin-left: auto;
+    display: inline-flex;
+    align-self: center;
+    line-height: 1;
+    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="14" height="14"><polyline points="40 144 96 200 224 72" fill="none" stroke="%239a6410" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  }
+
+  .dark select.shell-select option::checkmark {
+    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="14" height="14"><polyline points="40 144 96 200 224 72" fill="none" stroke="%23f5ca78" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  }
+
+  /* Per-option icons (sun/moon/monitor), Phosphor stroke style. */
+  select.shell-select option::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    background: center / contain no-repeat;
+  }
+
+  select.shell-select option[value='system']::before {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23231810" stroke-opacity="0.7" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="48" width="192" height="144" rx="16"/><line x1="96" y1="224" x2="160" y2="224"/></g></svg>');
+  }
+
+  select.shell-select option[value='light']::before {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23231810" stroke-opacity="0.7" stroke-width="24" stroke-linecap="round"><circle cx="128" cy="128" r="52"/><line x1="128" y1="20" x2="128" y2="44"/><line x1="128" y1="212" x2="128" y2="236"/><line x1="20" y1="128" x2="44" y2="128"/><line x1="212" y1="128" x2="236" y2="128"/><line x1="52" y1="52" x2="69" y2="69"/><line x1="187" y1="187" x2="204" y2="204"/><line x1="52" y1="204" x2="69" y2="187"/><line x1="187" y1="69" x2="204" y2="52"/></g></svg>');
+  }
+
+  select.shell-select option[value='dark']::before {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path d="M216.7 152.6A91.9 91.9 0 0 1 103.4 39.3 92 92 0 1 0 216.7 152.6Z" fill="none" stroke="%23231810" stroke-opacity="0.7" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  }
+
+  .dark select.shell-select option[value='system']::before {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23e8ded4" stroke-opacity="0.75" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="48" width="192" height="144" rx="16"/><line x1="96" y1="224" x2="160" y2="224"/></g></svg>');
+  }
+
+  .dark select.shell-select option[value='light']::before {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23e8ded4" stroke-opacity="0.75" stroke-width="24" stroke-linecap="round"><circle cx="128" cy="128" r="52"/><line x1="128" y1="20" x2="128" y2="44"/><line x1="128" y1="212" x2="128" y2="236"/><line x1="20" y1="128" x2="44" y2="128"/><line x1="212" y1="128" x2="236" y2="128"/><line x1="52" y1="52" x2="69" y2="69"/><line x1="187" y1="187" x2="204" y2="204"/><line x1="52" y1="204" x2="69" y2="187"/><line x1="187" y1="69" x2="204" y2="52"/></g></svg>');
+  }
+
+  .dark select.shell-select option[value='dark']::before {
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path d="M216.7 152.6A91.9 91.9 0 0 1 103.4 39.3 92 92 0 1 0 216.7 152.6Z" fill="none" stroke="%23e8ded4" stroke-opacity="0.75" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+  }
+}
+

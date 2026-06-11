@@ -54,68 +54,40 @@
   font-display: swap;
 }
 
+/* Color tokens are defined at the top of shell.css (working-tree-owned
+   across all doc versions); structural tokens live here. */
 :root {
-  --valon-ink: 35, 24, 16;
-  --valon-bg: #ffffff;
-  --valon-surface: #f8f6f3;
-  --valon-surface-strong: #ece4dd;
-  --valon-line: rgba(35, 24, 16, 0.1);
-  --valon-line-strong: rgba(35, 24, 16, 0.2);
-  --valon-muted: rgba(35, 24, 16, 0.6);
-  --valon-secondary: rgba(35, 24, 16, 0.8);
-  --valon-gold: #e19614;
-  --valon-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-  --valon-content-width: 46rem;
-  --nextra-primary-hue: 37deg;
-  --nextra-primary-saturation: 84%;
+  --gst-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --gst-content-width: 46rem;
   /* nextra's Head component normally injects this; without it the shell has no max-width */
   --nextra-content-width: 90rem;
 }
 
-.dark {
-  --valon-ink: 232, 222, 212;
-  --valon-bg: #161110;
-  --valon-surface: #1e1916;
-  --valon-surface-strong: #2e2622;
-  --valon-line: rgba(232, 222, 212, 0.12);
-  --valon-line-strong: rgba(232, 222, 212, 0.2);
-  --valon-muted: rgba(232, 222, 212, 0.55);
-  --valon-secondary: rgba(232, 222, 212, 0.78);
-  --valon-gold: #f5ca78;
-}
-
 html {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
-  background: var(--valon-bg);
+  background: var(--gst-color-bg);
 }
 
 body {
-  color: var(--valon-secondary);
-  background: linear-gradient(180deg, #ffffff 0%, #fdfcf9 100%);
+  color: var(--gst-color-fg-secondary);
+  background: var(--gst-color-bg);
 }
 
-.dark body {
-  background: linear-gradient(180deg, #161110 0%, #1a1510 100%);
-}
-
+/* Interactive color changes are instant (no transition) by convention. */
 a {
   color: inherit;
-  transition:
-    color 150ms ease,
-    opacity 150ms ease,
-    background-color 150ms ease,
-    border-color 150ms ease,
-    transform 150ms ease;
 }
 
 h1,
 article h1 {
   font-family: 'Season Serif', Georgia, serif;
   font-weight: 400 !important;
-  font-size: clamp(2.75rem, 6vw, 4.25rem) !important;
+  font-size: clamp(2.25rem, 5vw, 3.5rem) !important;
   line-height: 0.98 !important;
-  letter-spacing: -0.75px !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  /* relative tracking so it scales with the clamp */
+  letter-spacing: -0.02em !important;
+  /* base palette 950 in light; flips with the ink token in dark */
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 h2,
@@ -123,9 +95,11 @@ h3,
 article h2,
 article h3 {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
+  /* 700 until a face with a real 500 weight ships (the variable-font
+     swap); 500 with only 400/700 faces would resolve to 400. */
   font-weight: 700 !important;
   letter-spacing: -0.4px !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 h4,
@@ -135,13 +109,13 @@ article h4 {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
   font-weight: 400 !important;
   letter-spacing: -0.2px !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 article h2 {
   font-size: clamp(1.75rem, 3vw, 2rem) !important;
   line-height: 1.15 !important;
-  border-bottom-color: var(--valon-line) !important;
+  border-bottom-color: var(--gst-color-border) !important;
   padding-bottom: 0.75rem !important;
 }
 
@@ -154,7 +128,7 @@ article p,
 article li,
 article td,
 article th {
-  color: var(--valon-secondary);
+  color: var(--gst-color-fg-secondary);
 }
 
 article p,
@@ -165,7 +139,7 @@ article li {
 
 /* Wider gutters between sidebar, article, and TOC on large screens.
    Ramps 3rem→7.5rem between 1280px and the 90rem shell cap, where the
-   text column lands at --valon-content-width (46rem ≈ Notion/Substack
+   text column lands at --gst-content-width (46rem ≈ Notion/Substack
    reading measure). */
 @media (min-width: 80rem) {
   article {
@@ -173,16 +147,9 @@ article li {
   }
 }
 
-article a:not(.nextra-card):not(.subheading-anchor) {
-  color: rgba(var(--valon-ink), 1);
-  text-decoration-color: rgba(var(--valon-ink), 0.24);
-  text-underline-offset: 0.18em;
-}
-
-article a:not(.nextra-card):not(.subheading-anchor):hover {
-  color: var(--valon-gold);
-  text-decoration-color: rgba(225, 150, 20, 0.5);
-}
+/* Content-link colors and the quiet-underline recipe live in shell.css
+   (working-tree-owned, wins by import order); tagged builds keep their
+   own era's rules here. */
 
 code,
 pre,
@@ -192,34 +159,28 @@ samp,
   font-family: 'Geist Mono', monospace !important;
 }
 
+/* Code blocks match the registry's treatment: borderless, card tone at
+   70% (--shell-code-surface flips with the theme). */
 pre {
-  border: 1px solid var(--valon-line);
+  border: 0 !important;
   border-radius: 12px !important;
-  background: rgba(248, 246, 243, 0.88) !important;
+  background: var(--shell-code-surface) !important;
   padding: 6px 0 !important;
   box-shadow: none !important;
 }
 
-.dark pre {
-  background: rgba(30, 25, 22, 0.88) !important;
-}
-
+/* Inline code: borderless base-150 tile; foreground follows the Vitesse
+   theme. Tokens live in shell.css and flip with the theme. */
 :not(pre) > code.nextra-code,
 p code,
 li code,
 td code {
-  border: 1px solid rgba(35, 24, 16, 0.08);
-  border-radius: 6px;
-  background: rgba(248, 246, 243, 0.9) !important;
-  color: rgba(var(--valon-ink), 1) !important;
-}
-
-.dark :not(pre) > code.nextra-code,
-.dark p code,
-.dark li code,
-.dark td code {
-  border-color: rgba(232, 222, 212, 0.12);
-  background: rgba(30, 25, 22, 0.9) !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: var(--shell-card-bg) !important;
+  color: var(--shell-code-fg) !important;
+  font-size: 0.86em !important;
+  padding: 0.12rem 0.28rem !important;
 }
 
 pre code {
@@ -236,13 +197,15 @@ pre code > span {
 }
 
 .nextra-navbar {
-  background: rgba(255, 255, 255, 0.84) !important;
-  border-bottom: 1px solid var(--valon-line);
+  /* Same base-50 shade as the page surface, kept translucent for the blur. */
+  background: color-mix(in oklab, var(--gst-color-bg) 84%, transparent) !important;
+  border-bottom: 1px solid var(--gst-color-border);
   backdrop-filter: blur(16px);
 }
 
-.dark .nextra-navbar {
-  background: rgba(22, 17, 16, 0.84) !important;
+/* Nextra's blur child draws its own border-b — one border is enough. */
+.nextra-navbar .nextra-navbar-blur {
+  border-bottom: 0 !important;
 }
 
 .nextra-navbar + div {
@@ -263,19 +226,19 @@ footer > div {
 
 .nextra-navbar nav a,
 .nextra-navbar nav button {
-  color: var(--valon-secondary) !important;
+  color: var(--gst-color-fg-secondary) !important;
 }
 
 .nextra-navbar nav a:hover,
 .nextra-navbar nav button:hover {
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 .nextra-navbar input[type='search'] {
-  border: 1px solid var(--valon-line) !important;
+  border: 1px solid var(--gst-color-border) !important;
   border-radius: 8px !important;
   background: rgba(248, 246, 243, 0.9) !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
   box-shadow: none !important;
 }
 
@@ -284,13 +247,13 @@ footer > div {
 }
 
 .nextra-navbar input[type='search']::placeholder {
-  color: var(--valon-muted) !important;
+  color: var(--gst-color-fg-muted) !important;
 }
 
 .nextra-search kbd {
-  border-color: var(--valon-line) !important;
+  border-color: var(--gst-color-border) !important;
   background: rgba(248, 246, 243, 0.96) !important;
-  color: var(--valon-muted) !important;
+  color: var(--gst-color-fg-muted) !important;
 }
 
 .dark .nextra-search kbd {
@@ -298,9 +261,9 @@ footer > div {
 }
 
 .nextra-search-results {
-  border-color: var(--valon-line) !important;
+  border-color: var(--gst-color-border) !important;
   background: rgba(248, 246, 243, 0.96) !important;
-  color: var(--valon-secondary) !important;
+  color: var(--gst-color-fg-secondary) !important;
   box-shadow: 0 16px 40px rgba(35, 24, 16, 0.12) !important;
 }
 
@@ -310,38 +273,38 @@ footer > div {
 }
 
 .nextra-search-results > div {
-  color: var(--valon-secondary) !important;
-  border-color: var(--valon-line) !important;
+  color: var(--gst-color-fg-secondary) !important;
+  border-color: var(--gst-color-border) !important;
 }
 
 .nextra-search-results a {
-  color: rgba(var(--valon-ink), 0.92) !important;
+  color: rgba(var(--gst-color-fg-rgb), 0.92) !important;
 }
 
 .nextra-search-results a > div:first-child {
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 .nextra-search-results a > div:last-child {
-  color: var(--valon-secondary) !important;
+  color: var(--gst-color-fg-secondary) !important;
 }
 
 .nextra-search-results a:hover,
 .nextra-search-results a[aria-selected='true'],
 .nextra-search-results a[data-headlessui-state~='active'] {
-  background: rgba(var(--valon-ink), 0.08) !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  background: rgba(var(--gst-color-fg-rgb), 0.08) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 .nextra-search-results mark {
   border-radius: 0.2rem;
-  background: rgba(225, 150, 20, 0.22) !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  background: color-mix(in oklab, var(--gst-color-accent-500) 22%, transparent) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
   padding: 0 0.12rem;
 }
 
 .dark .nextra-search-results mark {
-  background: rgba(245, 202, 120, 0.26) !important;
+  background: color-mix(in oklab, var(--gst-color-accent-300) 26%, transparent) !important;
 }
 
 .docs-header-search {
@@ -350,28 +313,8 @@ footer > div {
   gap: 0.75rem;
 }
 
-.docs-header-repo-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-shrink: 0;
-  padding: 0.45rem 0.65rem;
-  border: 1px solid var(--valon-line);
-  border-radius: 999px;
-  background: rgba(248, 246, 243, 0.9);
-  color: rgba(var(--valon-ink), 0.88) !important;
-  font-size: 0.875rem;
-  line-height: 1;
-}
-
-.dark .docs-header-repo-link {
-  background: rgba(30, 25, 22, 0.9);
-}
-
-.docs-header-repo-link:hover {
-  border-color: var(--valon-line-strong);
-  color: rgba(var(--valon-ink), 1) !important;
-}
+/* GitHub header button styling comes from the .shell-button convention
+   (shell.css). */
 
 .nextra-sidebar-container {
   background: transparent !important;
@@ -383,37 +326,16 @@ footer > div {
   }
 
   .nextra-sidebar-container > div {
-    border-right: 1px solid var(--valon-line);
+    border-right: 1px solid var(--gst-color-border);
     background: transparent;
   }
 }
 
-.nextra-sidebar-container a,
-.nextra-sidebar-container button,
-.nextra-toc a,
-.nextra-breadcrumb,
-.nextra-breadcrumb span,
-.nextra-toc-footer a {
-  color: var(--valon-muted) !important;
-}
-
-.nextra-sidebar-container a:hover,
-.nextra-sidebar-container button:hover,
-.nextra-toc a:hover,
-.nextra-toc-footer a:hover {
-  color: rgba(var(--valon-ink), 1) !important;
-}
-
-.nextra-menu-desktop li.active > a,
-.nextra-menu-mobile li.active > a {
-  background: rgba(var(--valon-ink), 0.08) !important;
-  color: rgba(var(--valon-ink), 1) !important;
-  font-weight: 700 !important;
-}
+/* Sidebar/TOC/breadcrumb link colors live in shell.css (link-state tokens). */
 
 .nextra-menu-desktop ul::before,
 .nextra-menu-mobile ul::before {
-  background: var(--valon-line) !important;
+  background: var(--gst-color-border) !important;
 }
 
 nav[aria-label='table of contents'] li:has(> a._ms-8),
@@ -428,7 +350,7 @@ nav[aria-label='table of contents'] li:has(> a._ms-16) {
 
 .nextra-toc p,
 .nextra-toc strong {
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
 
 article.nextra-content {
@@ -469,7 +391,7 @@ article.nextra-content main::before {
 }
 
 .nextra-content main > p:first-of-type {
-  max-width: var(--valon-content-width);
+  max-width: var(--gst-content-width);
   font-size: 1.125rem;
   line-height: 1.5;
 }
@@ -480,24 +402,24 @@ article.nextra-content main::before {
 
 .gestalt-footnote-ref {
   margin-left: 0.08em;
-  color: var(--valon-gold);
+  color: var(--gst-color-accent);
   font-size: 0.78em;
   font-weight: 700;
   line-height: 0;
 }
 
 article .gestalt-footnote {
-  max-width: var(--valon-content-width);
+  max-width: var(--gst-content-width);
   margin-top: 2rem !important;
   padding-top: 0.7rem;
-  border-top: 1px solid var(--valon-line);
-  color: var(--valon-muted);
+  border-top: 1px solid var(--gst-color-border);
+  color: var(--gst-color-fg-muted);
   font-size: 0.875rem;
   line-height: 1.55;
 }
 
 article .gestalt-footnote sup {
-  color: var(--valon-gold);
+  color: var(--gst-color-accent);
   font-weight: 700;
 }
 
@@ -508,7 +430,7 @@ article .gestalt-footnote sup {
 }
 
 .nextra-card {
-  border: 1px solid var(--valon-line) !important;
+  border: 1px solid var(--gst-color-border) !important;
   border-radius: 12px !important;
   background: rgba(248, 246, 243, 0.9) !important;
   box-shadow: none !important;
@@ -520,7 +442,7 @@ article .gestalt-footnote sup {
 }
 
 .nextra-card:hover {
-  border-color: var(--valon-line-strong) !important;
+  border-color: var(--gst-color-border-strong) !important;
   background: rgba(248, 246, 243, 0.98) !important;
   box-shadow: 0 8px 24px rgba(35, 24, 16, 0.08) !important;
   transform: translateY(-1px);
@@ -538,7 +460,7 @@ article .gestalt-footnote sup {
 
 .nextra-card p {
   margin-top: 0 !important;
-  color: var(--valon-secondary) !important;
+  color: var(--gst-color-fg-secondary) !important;
   line-height: 1.6;
   order: 2;
 }
@@ -549,7 +471,7 @@ article .gestalt-footnote sup {
   gap: 0.5rem;
   padding: 0 0 0.75rem !important;
   font-weight: 600 !important;
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
   order: 1;
 }
 
@@ -610,7 +532,7 @@ article table {
   border-spacing: 0;
   width: 100%;
   overflow: hidden;
-  border: 1px solid var(--valon-line);
+  border: 1px solid var(--gst-color-border);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.78);
 }
@@ -631,27 +553,18 @@ tbody tr:nth-child(even) {
 
 th,
 td {
-  border-color: var(--valon-line) !important;
+  border-color: var(--gst-color-border) !important;
   padding: 1rem 1.25rem !important;
 }
 
 th {
-  color: rgba(var(--valon-ink), 1) !important;
+  color: rgba(var(--gst-color-fg-rgb), 1) !important;
   font-weight: 700 !important;
 }
 
 hr,
 footer hr {
-  border-color: var(--valon-line) !important;
-}
-
-footer {
-  background: rgba(248, 246, 243, 0.72) !important;
-  border-top: 1px solid var(--valon-line);
-}
-
-.dark footer {
-  background: rgba(22, 17, 16, 0.72) !important;
+  border-color: var(--gst-color-border) !important;
 }
 
 :focus-visible {
@@ -680,7 +593,7 @@ footer {
     display: flex !important;
     flex-direction: column;
     padding-left: 1.5rem;
-    border-left: 1px solid var(--valon-line);
+    border-left: 1px solid var(--gst-color-border);
   }
 }
 
@@ -692,7 +605,7 @@ footer {
   display: block;
   width: 100%;
   margin: 1.25rem 0 2rem;
-  border: 1px solid var(--valon-line);
+  border: 1px solid var(--gst-color-border);
   border-radius: 12px;
   background: #060b1a;
 }
@@ -706,4 +619,18 @@ footer {
   article.nextra-content main::before {
     height: 6rem;
   }
+}
+
+/* Legacy aliases for the pre-rehome registry stylesheet
+   (app/registry/registry.module.css). Light values only — that file
+   defines its own dark values under .darkShell. Removed together with
+   the old stylesheet when the registry adopts the shell tokens. */
+:root {
+  --valon-ink: 35, 24, 16;
+  --valon-line: rgba(35, 24, 16, 0.1);
+  --valon-line-strong: rgba(35, 24, 16, 0.2);
+  --valon-muted: rgba(35, 24, 16, 0.6);
+  --valon-secondary: rgba(35, 24, 16, 0.8);
+  --valon-gold: #e19614;
+  --valon-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
