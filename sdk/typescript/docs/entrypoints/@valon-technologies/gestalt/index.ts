@@ -77,6 +77,18 @@ export {
   type SubjectContext,
   type SubjectPermissionContext,
 } from "../../../../src/app.ts";
+export { InvokeError } from "../../../../src/invoke-error.ts";
+export {
+  decodeAppResult,
+  decodeGraphQLResult,
+  type DecodableOperationResult,
+} from "../../../../src/app-decode.ts";
+export {
+  invokeGraphQLJson,
+  invokeJson,
+  type AppInvokeGraphQLOptions,
+  type AppInvokeOptions,
+} from "../../../../src/app-invoke.ts";
 export {
   Agent,
   type AgentWorkspace,

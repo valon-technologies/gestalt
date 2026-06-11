@@ -1,6 +1,16 @@
 import type { OperationResult } from "./api.ts";
 import { InvokeError } from "./invoke-error.ts";
 
+/**
+ * The slice of an app invocation result the decode helpers read. Both the
+ * provider-side {@link OperationResult} and the generated App client's result
+ * satisfy it.
+ */
+export interface DecodableOperationResult {
+  status: number;
+  body: Uint8Array;
+}
+
 export function operationResult(
   input: Omit<OperationResult, "ok" | "bytes" | "text" | "json" | "requireOk">,
 ): OperationResult {
@@ -32,17 +42,28 @@ export function operationResult(
   };
 }
 
+/**
+ * Decodes one app operation result with the standard envelope semantics:
+ * `{status:"success",data}` envelopes return `data`, `{status:"error"}`
+ * envelopes and HTTP-error statuses throw {@link InvokeError}, and any other
+ * JSON body is returned as-is.
+ */
 export function decodeAppResult<T = unknown>(
   app: string,
   operation: string,
-  result: OperationResult,
+  result: DecodableOperationResult,
 ): T {
   return decodeAppBody(app, operation, result.status, result.body) as T;
 }
 
+/**
+ * Decodes one GraphQL invocation result like {@link decodeAppResult} and also
+ * throws {@link InvokeError} when the response carries a GraphQL `errors`
+ * array.
+ */
 export function decodeGraphQLResult<T = unknown>(
   app: string,
-  result: OperationResult,
+  result: DecodableOperationResult,
 ): T {
   const decoded = decodeAppResult<unknown>(app, "graphql", result);
   throwGraphQLErrors(app, result.body, parseOperationResultJson(result.body));

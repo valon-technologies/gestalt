@@ -94,6 +94,17 @@ export {
 } from "./app.ts";
 export { InvokeError } from "./invoke-error.ts";
 export {
+  decodeAppResult,
+  decodeGraphQLResult,
+  type DecodableOperationResult,
+} from "./app-decode.ts";
+export {
+  invokeGraphQLJson,
+  invokeJson,
+  type AppInvokeGraphQLOptions,
+  type AppInvokeOptions,
+} from "./app-invoke.ts";
+export {
   Agent,
   type AgentWorkspace,
   type AgentWorkspaceGitCheckout,
