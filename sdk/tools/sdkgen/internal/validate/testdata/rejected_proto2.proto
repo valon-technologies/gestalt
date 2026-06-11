@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+package sdkgen.test.v2;
+
+message LegacyRequest {
+  optional string id = 1;
+}
+
+service LegacyService {
+  rpc Get(LegacyRequest) returns (LegacyRequest);
+}

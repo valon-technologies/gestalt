@@ -1,0 +1,14 @@
+// Test mirror of google/rpc/status.proto: protocompile's standard imports
+// cover only google.protobuf, and sdkgen treats google.rpc.Status as a
+// terminal kind, so only its name matters here.
+syntax = "proto3";
+
+package google.rpc;
+
+import "google/protobuf/any.proto";
+
+message Status {
+  int32 code = 1;
+  string message = 2;
+  repeated google.protobuf.Any details = 3;
+}
