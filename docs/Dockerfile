@@ -4,7 +4,9 @@ COPY out /usr/share/nginx/html
 # `gestaltd provider repo add` has a consumer-neutral URL. Baked at image
 # build from the same source the registry catalog is baked from at site
 # build, so the browsable registry and the index deploy as one snapshot.
-ADD https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml /usr/share/nginx/html/provider-index.yaml
+# --chmod: ADD from a URL defaults to 0600, which nginx's worker (user
+# nginx) cannot read — it serves 403 instead of the index.
+ADD --chmod=644 https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml /usr/share/nginx/html/provider-index.yaml
 COPY <<'EOF' /etc/nginx/conf.d/default.conf
 server {
     listen 8080;
