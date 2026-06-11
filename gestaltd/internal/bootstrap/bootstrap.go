@@ -29,6 +29,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -156,6 +157,7 @@ type Deps struct {
 	RuntimeRelayBaseURL   string
 	SecretManager         core.SecretManager
 	Services              *coredata.Services
+	MCPOAuthRegistrations *mcpoauth.Store
 	SelectedIndexedDBName string
 	IndexedDBs            map[string]indexeddb.IndexedDB
 	IndexedDBDefs         map[string]*config.ProviderEntry
@@ -885,6 +887,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
 	}
+	mcpOAuthRegs, err := mcpoauth.NewStore(ctx, store, encKey)
+	if err != nil {
+		_ = svc.Close()
+		return nil, fmt.Errorf("bootstrap: oauth registrations store: %w", err)
+	}
+	deps.MCPOAuthRegistrations = mcpOAuthRegs
 	indexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
 	for name, entry := range cfg.Providers.IndexedDB {

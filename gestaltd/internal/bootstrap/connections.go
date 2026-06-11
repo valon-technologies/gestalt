@@ -320,7 +320,7 @@ func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConf
 		if mcpURL == "" {
 			return nil, fmt.Errorf("mcp_oauth auth requires mcp_url")
 		}
-		return buildMCPOAuthHandler(conn, mcpURL, buildRegistrationStore(deps), deps), nil
+		return buildMCPOAuthHandler(conn, mcpURL, deps), nil
 	default:
 		return nil, nil
 	}

@@ -39,23 +39,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"gopkg.in/yaml.v3"
 )
-
-func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
-	if deps.Services == nil {
-		return nil
-	}
-	if store, ok := metricutil.UnwrapIndexedDB(deps.Services.DB).(mcpoauth.RegistrationStore); ok {
-		return store
-	}
-	return nil
-}
 
 type pendingProviderBuild struct {
 	name  string
@@ -1924,7 +1913,7 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mcpURL string, deps Deps) []de
 		return nil
 	}
 	return []declarative.BuildOption{
-		declarative.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, buildRegistrationStore(deps), deps)),
+		declarative.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, deps)),
 	}
 }
 
@@ -2198,14 +2187,14 @@ func buildOAuthHandlerFromDefinition(def *declarative.Definition, conn config.Co
 	return WrapUpstreamHandler(upstream), nil
 }
 
-func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoauth.RegistrationStore, deps Deps) *mcpoauth.Handler {
+func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, deps Deps) *mcpoauth.Handler {
 	redirectURL := conn.Auth.RedirectURL
 	if redirectURL == "" {
 		redirectURL = deps.BaseURL + config.IntegrationCallbackPath
 	}
 	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
 		MCPURL:       mcpURL,
-		Store:        store,
+		Store:        deps.MCPOAuthRegistrations,
 		RedirectURL:  redirectURL,
 		ClientID:     conn.Auth.ClientID,
 		ClientSecret: conn.Auth.ClientSecret,

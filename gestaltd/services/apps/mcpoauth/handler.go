@@ -2,21 +2,21 @@ package mcpoauth
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
+	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 )
 
-const discoveryCacheTTL = 24 * time.Hour
+const ensureTimeout = 30 * time.Second
 
 type HandlerConfig struct {
 	MCPURL      string
-	Store       RegistrationStore // nil for non-SQL deployments
+	Store       *Store
 	RedirectURL string
 
 	// Static overrides: if set, skip DCR and use these directly.
@@ -24,13 +24,11 @@ type HandlerConfig struct {
 	ClientSecret string
 }
 
+// Handler is stateless: every call discovers the authorization server and
+// resolves the registered client from the shared Store, so all server
+// instances present the same client_id across an OAuth flow.
 type Handler struct {
 	cfg HandlerConfig
-
-	mu           sync.Mutex
-	upstream     *oauth.UpstreamHandler
-	metadata     *DiscoveredMetadata
-	discoveredAt time.Time
 }
 
 func NewHandler(cfg HandlerConfig) *Handler {
@@ -39,47 +37,24 @@ func NewHandler(cfg HandlerConfig) *Handler {
 
 func (h *Handler) IsManual() bool { return false }
 
-func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.upstream != nil && time.Since(h.discoveredAt) < discoveryCacheTTL {
-		return h.upstream, nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (h *Handler) ensure(ctx context.Context) (*oauth.UpstreamHandler, error) {
+	ctx, cancel := context.WithTimeout(ctx, ensureTimeout)
 	defer cancel()
 
 	md, err := Discover(ctx, h.cfg.MCPURL)
 	if err != nil {
-		if h.upstream != nil {
-			return h.upstream, nil
-		}
 		return nil, fmt.Errorf("mcp oauth discovery failed for %s: %w", h.cfg.MCPURL, err)
 	}
 
 	clientID := h.cfg.ClientID
 	clientSecret := h.cfg.ClientSecret
-
 	if clientID == "" {
 		reg, err := h.resolveRegistration(ctx, md)
 		if err != nil {
-			if h.upstream != nil {
-				return h.upstream, nil
-			}
 			return nil, err
 		}
-		if reg != nil {
-			clientID = reg.ClientID
-			clientSecret = reg.ClientSecret
-		}
-	}
-
-	if clientID == "" {
-		if h.upstream != nil {
-			return h.upstream, nil
-		}
-		return nil, fmt.Errorf("mcp oauth: no client_id available for %s (no static config and DCR failed or unavailable)", h.cfg.MCPURL)
+		clientID = reg.ClientID
+		clientSecret = reg.ClientSecret
 	}
 
 	authMethod := oauth.ClientAuthNone
@@ -97,7 +72,7 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 		authMethod = oauth.ClientAuthBody
 	}
 
-	upstream := oauth.NewUpstream(oauth.UpstreamConfig{
+	return oauth.NewUpstream(oauth.UpstreamConfig{
 		ClientID:         clientID,
 		ClientSecret:     clientSecret,
 		AuthorizationURL: md.AuthorizationEndpoint,
@@ -106,25 +81,14 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 		ClientAuthMethod: authMethod,
 		PKCE:             md.SupportsPKCE(),
 		DefaultScopes:    md.ScopesSupported,
-	})
-
-	h.upstream = upstream
-	h.metadata = md
-	h.discoveredAt = time.Now()
-	return upstream, nil
+	}), nil
 }
 
 func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadata) (*Registration, error) {
-	authServerURL := md.AuthServerURL
-	var existing *Registration
-	if h.cfg.Store != nil {
-		var err error
-		existing, err = h.cfg.Store.GetRegistration(ctx, authServerURL, h.cfg.RedirectURL)
-		if err != nil {
-			slog.Warn("mcpoauth: reading registration failed", "auth_server", authServerURL, "error", err)
-		}
+	existing, err := h.cfg.Store.Get(ctx, md.AuthServerURL, h.cfg.RedirectURL)
+	if err != nil {
+		return nil, err
 	}
-
 	if existing != nil && !existing.Expired() {
 		return existing, nil
 	}
@@ -133,68 +97,38 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 		if existing != nil {
 			return existing, nil
 		}
-		return nil, nil
-	}
-
-	if existing != nil {
-		slog.Info("mcpoauth: re-registering (expired)", "auth_server", authServerURL)
+		return nil, fmt.Errorf("mcp oauth: no client_id available for %s (no static config and no registration endpoint)", h.cfg.MCPURL)
 	}
 
 	reg, err := RegisterClient(ctx, md.RegistrationEndpoint, h.cfg.RedirectURL, "Gestalt", md.PreferredAuthMethod())
 	if err != nil {
-		if existing != nil {
-			slog.Warn("mcpoauth: re-registration failed, using existing", "auth_server", authServerURL, "error", err)
-			return existing, nil
-		}
 		return nil, fmt.Errorf("mcp oauth DCR for %s: %w", h.cfg.MCPURL, err)
 	}
 
-	reg.AuthServerURL = authServerURL
-	reg.RedirectURI = h.cfg.RedirectURL
-	reg.AuthorizationEndpoint = md.AuthorizationEndpoint
-	reg.TokenEndpoint = md.TokenEndpoint
-
-	if scopesJSON, err := json.Marshal(md.ScopesSupported); err == nil {
-		reg.ScopesSupported = string(scopesJSON)
-	}
-
-	if h.cfg.Store != nil {
-		if err := h.cfg.Store.StoreRegistration(ctx, reg); err != nil {
-			slog.Warn("mcpoauth: storing registration failed", "auth_server", authServerURL, "error", err)
+	if existing != nil {
+		if err := h.cfg.Store.Put(ctx, md.AuthServerURL, h.cfg.RedirectURL, reg); err != nil {
+			return nil, err
 		}
+		return reg, nil
 	}
-
+	if err := h.cfg.Store.Add(ctx, md.AuthServerURL, h.cfg.RedirectURL, reg); err != nil {
+		if errors.Is(err, idb.ErrAlreadyExists) {
+			// Lost the registration race: discard our client and adopt the
+			// winner's so concurrent flows use one client end-to-end.
+			winner, getErr := h.cfg.Store.Get(ctx, md.AuthServerURL, h.cfg.RedirectURL)
+			if getErr == nil && winner != nil {
+				return winner, nil
+			}
+		}
+		return nil, err
+	}
 	return reg, nil
-}
-
-func (h *Handler) ClearRegistration() {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	var authServerURL string
-	if h.metadata != nil {
-		authServerURL = h.metadata.AuthServerURL
-	}
-	h.upstream = nil
-	h.metadata = nil
-	h.discoveredAt = time.Time{}
-
-	if h.cfg.Store == nil || authServerURL == "" {
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if err := h.cfg.Store.DeleteRegistration(ctx, authServerURL, h.cfg.RedirectURL); err != nil {
-		slog.Warn("mcpoauth: deleting registration failed", "auth_server", authServerURL, "error", err)
-	}
 }
 
 // AuthorizationURL discards the PKCE verifier. Use StartOAuth when the
 // verifier is needed for code exchange.
 func (h *Handler) AuthorizationURL(state string, scopes []string) string {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(context.Background())
 	if err != nil {
 		slog.Error("mcpoauth: ensure failed", "method", "AuthorizationURL", "error", err)
 		return ""
@@ -204,7 +138,7 @@ func (h *Handler) AuthorizationURL(state string, scopes []string) string {
 }
 
 func (h *Handler) StartOAuth(state string, scopes []string) (string, string) {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(context.Background())
 	if err != nil {
 		slog.Error("mcpoauth: ensure failed", "method", "StartOAuth", "error", err)
 		return "", ""
@@ -213,7 +147,7 @@ func (h *Handler) StartOAuth(state string, scopes []string) (string, string) {
 }
 
 func (h *Handler) StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string) {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(context.Background())
 	if err != nil {
 		slog.Error("mcpoauth: ensure failed", "method", "StartOAuthWithOverride", "error", err)
 		return "", ""
@@ -222,7 +156,7 @@ func (h *Handler) StartOAuthWithOverride(authBaseURL, state string, scopes []str
 }
 
 func (h *Handler) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +164,7 @@ func (h *Handler) ExchangeCode(ctx context.Context, code string) (*core.TokenRes
 }
 
 func (h *Handler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +177,7 @@ func (h *Handler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier s
 }
 
 func (h *Handler) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +185,7 @@ func (h *Handler) RefreshToken(ctx context.Context, refreshToken string) (*core.
 }
 
 func (h *Handler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +193,7 @@ func (h *Handler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenUR
 }
 
 func (h *Handler) TokenURL() string {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(context.Background())
 	if err != nil {
 		return ""
 	}
@@ -267,7 +201,7 @@ func (h *Handler) TokenURL() string {
 }
 
 func (h *Handler) AuthorizationBaseURL() string {
-	upstream, err := h.ensure()
+	upstream, err := h.ensure(context.Background())
 	if err != nil {
 		return ""
 	}

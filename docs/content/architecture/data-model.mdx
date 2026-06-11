@@ -1,8 +1,6 @@
 # Data Model
 
-Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, and managed subject metadata. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
-
-MCP OAuth client registrations (`oauth_registrations`) are stored separately in a raw SQL table managed outside the IndexedDB provider.
+Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, managed subject metadata, and MCP OAuth client registrations. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
 
 For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a provider, see [Configuration](/reference/configuration).
 
@@ -10,11 +8,10 @@ For encryption mechanics, see [Security Internals](/architecture/security-intern
 
 | Owner | Persistent state |
 | --- | --- |
-| `gestaltd` core | `users`, `managed_subjects`, `api_tokens` |
+| `gestaltd` core | `users`, `managed_subjects`, `api_tokens`, `oauth_registrations` |
 | External credentials provider | `external_credentials` |
 | Agent provider | Provider-defined agent session, turn, interaction, event, and idempotency state |
 | Workflow provider | Provider-defined schedule, event trigger, run, execution ref, and idempotency state |
-| MCP OAuth support | `oauth_registrations` raw SQL table |
 
 ## Object stores
 
@@ -96,24 +93,17 @@ Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way 
 
 ### `oauth_registrations`
 
-Caches dynamic OAuth client registrations for `mcp_oauth` connections, so Gestalt doesn't re-register on every request.
+Dynamic OAuth client registrations for `mcp_oauth` connections. One client per
+(authorization server, redirect URI) pair, shared by every server instance so
+the authorize URL and the token exchange always present the same `client_id`
+regardless of which instance serves each request.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `id` | string, PK | |
-| `auth_server_url` | string | Upstream authorization server. |
-| `redirect_uri` | string | Callback URI. |
+| `id` | string, PK | `auth_server_url` + `"\n"` + `redirect_uri`. |
 | `client_id` | string | Dynamically registered client ID. |
-| `client_secret_encrypted` | string | **Encrypted.** AES-256-GCM. |
-| `expires_at` | time | |
-| `authorization_endpoint` | string | Discovered URL. |
-| `token_endpoint` | string | Discovered URL. |
-| `scopes_supported` | string | |
-| `discovered_at` | time | |
-| `created_at` | time | |
-| `updated_at` | time | |
-
-Unique index on `(auth_server_url, redirect_uri)`.
+| `client_secret_encrypted` | string | **Encrypted.** AES-256-GCM. Empty for public clients. |
+| `expires_at` | time | Null when the registration does not expire. |
 
 ## Encryption summary
 
