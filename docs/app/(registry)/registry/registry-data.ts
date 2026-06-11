@@ -62,9 +62,12 @@ export const catalogSchemaVersion = 1;
 // registry serves from its own origin (the deployed registry subdomain),
 // /registry when mounted on a shared origin (dev). The parse base is the
 // canonical registry origin; it only anchors relative-URL parsing.
-import { registryRoutePrefix } from "../../../components/shell/site-bases";
+import {
+  registryBrowsePath,
+  registryRoutePrefix,
+} from "../../../components/shell/site-bases";
 
-export { registryRoutePrefix };
+export { registryBrowsePath, registryRoutePrefix };
 export const urlParseBase = "https://registry.gestaltd.ai";
 
 // Raw GitHub SVG responses include a sandboxing CSP, so render fetched SVGs as data URLs.

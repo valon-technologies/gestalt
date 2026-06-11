@@ -40,7 +40,7 @@ const server = createServer(async (request, response) => {
     if (host === "registry.gestaltd.ai") {
       await serveRegistryHost(pathname, response);
     } else {
-      await serveDocsHost(pathname, response);
+      await serveDocsHost(pathname, response, url.search);
     }
   } catch (error) {
     response.writeHead(500, { "content-type": "text/plain" });
@@ -246,6 +246,12 @@ try {
     location: "https://registry.gestaltd.ai/providers/app/slack/events/",
   });
   await assertResponse({
+    url: `${baseUrl}/registry?kind=app&q=slack`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "https://registry.gestaltd.ai/?kind=app&q=slack",
+  });
+  await assertResponse({
     url: `${baseUrl}/providers/app/slack/`,
     host: "gestaltd.ai",
     status: 404,
@@ -286,7 +292,7 @@ async function serveRegistryHost(pathname, response) {
   return serveFile("/registry.html", response, false);
 }
 
-async function serveDocsHost(pathname, response) {
+async function serveDocsHost(pathname, response, search = "") {
   if (pathname === "/") {
     return redirect(response, "/latest/");
   }
@@ -322,13 +328,13 @@ async function serveDocsHost(pathname, response) {
     return serveFile(pathname, response, true, null);
   }
   if (pathname === "/registry") {
-    return redirect(response, "https://registry.gestaltd.ai/");
+    return redirect(response, `https://registry.gestaltd.ai/${search}`);
   }
   const registryPath = pathname.match(/^\/registry\/(.*)$/);
   if (registryPath) {
     return redirect(
       response,
-      `https://registry.gestaltd.ai/${registryPath[1]}`,
+      `https://registry.gestaltd.ai/${registryPath[1]}${search}`,
     );
   }
   if (

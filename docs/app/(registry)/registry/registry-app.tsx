@@ -15,7 +15,7 @@ import {
   normalizeDocPath,
   providerDocHref,
   providerHref,
-  registryRoutePrefix,
+  registryBrowsePath,
   selectionFromPath,
   shouldHandleNavigationClick,
 } from "./registry-data";
@@ -69,7 +69,7 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
       params.set("q", query.trim());
     }
     const search = params.toString();
-    const next = `${registryRoutePrefix}${search ? `?${search}` : ""}`;
+    const next = `${registryBrowsePath}${search ? `?${search}` : ""}`;
     if (`${window.location.pathname}${window.location.search}` !== next) {
       window.history.replaceState(null, "", next);
     }
@@ -147,7 +147,7 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
   }
 
   function backToBrowse() {
-    window.history.pushState(null, "", registryRoutePrefix);
+    window.history.pushState(null, "", registryBrowsePath);
     setSelectedRoute(null);
     setKind(allKinds);
     setQuery("");
@@ -187,7 +187,7 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
         <p>
           <a
             className="shell-link"
-            href={registryRoutePrefix}
+            href={registryBrowsePath}
             onClick={(event) => {
               if (!shouldHandleNavigationClick(event)) {
                 return;

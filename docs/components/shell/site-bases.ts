@@ -15,6 +15,11 @@ export const registryRoutePrefix = registryBaseUrl.startsWith("/")
   ? registryBaseUrl
   : "";
 
+// The browse page's own URL — the prefix when mounted under one, the
+// origin root otherwise. History APIs and hrefs treat an empty string as
+// "stay where you are", so the root must be spelled "/".
+export const registryBrowsePath = registryRoutePrefix || "/";
+
 // Prefix for links from the registry origin back to docs routes; empty
 // when both halves share an origin.
 export const docsBaseUrl = process.env.NEXT_PUBLIC_DOCS_BASE_URL || "";

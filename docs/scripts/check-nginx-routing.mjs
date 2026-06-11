@@ -202,6 +202,12 @@ try {
     status: 301,
     location: "https://registry.gestaltd.ai/providers/app/slack/",
   });
+  await assertResponse({
+    url: `${baseUrl}/registry?kind=app&q=slack`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "https://registry.gestaltd.ai/?kind=app&q=slack",
+  });
 } finally {
   if (container) {
     spawnSync("docker", ["stop", container], { stdio: "ignore" });

@@ -99,11 +99,11 @@ server {
     # The registry's canonical home is its own origin; the old apex mount
     # redirects there path-for-path so existing links keep working.
     location = /registry {
-        return 301 https://registry.gestaltd.ai/;
+        return 301 https://registry.gestaltd.ai/$is_args$args;
     }
 
     location ~ ^/registry/(.*)$ {
-        return 301 https://registry.gestaltd.ai/$1;
+        return 301 https://registry.gestaltd.ai/$1$is_args$args;
     }
 
     location ^~ /api/ {

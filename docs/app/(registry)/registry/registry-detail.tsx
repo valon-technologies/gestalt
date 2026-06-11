@@ -12,6 +12,7 @@ import {
   normalizeDocPath,
   pluralize,
   providerDocHref,
+  registryBrowsePath,
   registryRoutePrefix,
   shouldHandleNavigationClick,
 } from "./registry-data";
@@ -63,7 +64,7 @@ export default function RegistryDetail({
       <div className={styles.detailColumn}>
         <a
           className="shell-link"
-          href={registryRoutePrefix}
+          href={registryBrowsePath}
           onClick={(event) => {
             if (!shouldHandleNavigationClick(event)) {
               return;
