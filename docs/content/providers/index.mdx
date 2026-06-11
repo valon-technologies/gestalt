@@ -300,7 +300,7 @@ Search matches the package address, display name, and description. The output
 prints repository name, package address, and display name:
 
 ```text
-valon  github.com/valon-technologies/gestalt-providers/app/github  GitHub
+gestalt  github.com/valon-technologies/gestalt-providers/app/github  GitHub
 ```
 
 Use `provider info` to see the versions published for one package:
@@ -321,13 +321,13 @@ gestaltd provider repo list --config ./gestalt.yaml
 Add a repository to your user-level store:
 
 ```sh
-gestaltd provider repo add valon https://registry.gestaltd.ai/provider-index.yaml
+gestaltd provider repo add gestalt https://registry.gestaltd.ai/provider-index.yaml
 ```
 
 Add a repository to project config:
 
 ```sh
-gestaltd provider repo add valon https://registry.gestaltd.ai/provider-index.yaml \
+gestaltd provider repo add gestalt https://registry.gestaltd.ai/provider-index.yaml \
   --config ./gestalt.yaml
 ```
 
@@ -335,7 +335,7 @@ The project form writes:
 
 ```yaml
 providerRepositories:
-  valon:
+  gestalt:
     url: https://registry.gestaltd.ai/provider-index.yaml
 ```
 
