@@ -8,6 +8,10 @@ type LinkTarget = {
 
 export type MarkdownRenderContext = {
   resolveLink: (href: string) => LinkTarget | null;
+  // Optional code-block renderer (e.g. a syntax highlighter); plain
+  // <pre><code> when absent. This file stays dependency-free because the
+  // docs-render check transpiles it standalone.
+  renderCode?: (language: string, text: string, key: number) => ReactNode;
 };
 
 type Block =
@@ -219,6 +223,9 @@ function renderBlock(block: Block, context: MarkdownRenderContext, index: number
         </blockquote>
       );
     case "code":
+      if (context.renderCode) {
+        return context.renderCode(block.language, block.text, index);
+      }
       return (
         <pre key={index}>
           <code data-language={block.language || undefined}>{block.text}</code>

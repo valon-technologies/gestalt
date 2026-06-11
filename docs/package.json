@@ -20,12 +20,15 @@
     "test:registry-docs": "node scripts/check-registry-docs-render.mjs"
   },
   "dependencies": {
+    "@shikijs/langs": "^3.23.0",
+    "@shikijs/themes": "^3.23.0",
     "@types/react-dom": "^19.2.3",
     "next": "^16.2.6",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "^19.2.4",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "shiki": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "25.9.1",

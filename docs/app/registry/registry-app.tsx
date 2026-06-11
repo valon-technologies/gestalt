@@ -3,6 +3,7 @@
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { renderMarkdown } from "./registry-markdown";
+import ShikiCode from "./shiki-code";
 import styles from "./registry.module.css";
 
 type ConfigTarget = {
@@ -602,6 +603,9 @@ function ProviderDocBody({
       {renderMarkdown(loadState.source, {
         resolveLink: (href) =>
           resolveProviderDocLink(href, provider, docs, selectedDoc, routePrefix),
+        renderCode: (language, text, key) => (
+          <ShikiCode key={key} language={language} text={text} />
+        ),
       })}
     </div>
   );
