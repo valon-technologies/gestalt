@@ -143,14 +143,13 @@ func (c *Client) invoke(ctx context.Context, operation string, in gproto.Message
 		return fmt.Errorf("provider gateway: encode %s request: %w", operation, err)
 	}
 	resp, err := c.gateway.Invoke(ctx, providergateway.ProviderGatewayRequest{
-		ProviderID:        c.opts.ProviderID,
-		ProviderKind:      providergateway.ProviderKindAuthorization,
-		ServiceName:       proto.Authorization_ServiceDesc.ServiceName,
-		Operation:         operation,
-		InvokingSubjectID: providergateway.InvokingSubjectIDFromContext(ctx),
-		RequestContext:    providergateway.RequestContextFromContext(ctx),
-		Source:            providergateway.SourceFromContext(ctx),
-		Payload:           payload,
+		ProviderID:     c.opts.ProviderID,
+		ProviderKind:   providergateway.ProviderKindAuthorization,
+		ServiceName:    proto.Authorization_ServiceDesc.ServiceName,
+		Operation:      operation,
+		RequestContext: providergateway.RequestContextFromContext(ctx),
+		Source:         providergateway.SourceFromContext(ctx),
+		Payload:        payload,
 	}, func(ctx context.Context, _ providergateway.ProviderGatewayRequest) (providergateway.ProviderGatewayResponse, error) {
 		msg, err := call(ctx)
 		if err != nil {

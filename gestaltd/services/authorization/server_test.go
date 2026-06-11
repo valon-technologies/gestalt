@@ -22,9 +22,6 @@ func TestProviderServerLeavesGatewaySourceInternalByDefault(t *testing.T) {
 	if provider.source != providergateway.GatewaySourceInternal {
 		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceInternal)
 	}
-	if provider.invokingSubjectID != "" {
-		t.Fatalf("invoking subject ID = %q, want empty", provider.invokingSubjectID)
-	}
 }
 
 func TestProviderServerAppliesConfiguredGatewaySource(t *testing.T) {
@@ -43,19 +40,14 @@ func TestProviderServerAppliesConfiguredGatewaySource(t *testing.T) {
 	if provider.source != providergateway.GatewaySourceSDKGRPC {
 		t.Fatalf("source = %q, want %q", provider.source, providergateway.GatewaySourceSDKGRPC)
 	}
-	if provider.invokingSubjectID != "" {
-		t.Fatalf("invoking subject ID = %q, want empty", provider.invokingSubjectID)
-	}
 }
 
 type sourceRecordingAuthorizationProvider struct {
 	core.AuthorizationProvider
-	source            providergateway.GatewaySource
-	invokingSubjectID string
+	source providergateway.GatewaySource
 }
 
 func (p *sourceRecordingAuthorizationProvider) CheckAccess(ctx context.Context, _ *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
 	p.source = providergateway.SourceFromContext(ctx)
-	p.invokingSubjectID = providergateway.InvokingSubjectIDFromContext(ctx)
 	return &proto.CheckAccessResponse{Allowed: true}, nil
 }

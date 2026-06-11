@@ -5,9 +5,8 @@ import "context"
 type contextKey string
 
 const (
-	sourceContextKey            contextKey = "provider_gateway_source"
-	invokingSubjectIDContextKey contextKey = "provider_gateway_invoking_subject_id"
-	requestContextContextKey    contextKey = "provider_gateway_request_context"
+	sourceContextKey         contextKey = "provider_gateway_source"
+	requestContextContextKey contextKey = "provider_gateway_request_context"
 )
 
 func WithSource(ctx context.Context, source GatewaySource) context.Context {
@@ -23,18 +22,6 @@ func SourceFromContext(ctx context.Context) GatewaySource {
 		return GatewaySourceInternal
 	}
 	return source
-}
-
-func WithInvokingSubjectID(ctx context.Context, subjectID string) context.Context {
-	if subjectID == "" {
-		return ctx
-	}
-	return context.WithValue(ctx, invokingSubjectIDContextKey, subjectID)
-}
-
-func InvokingSubjectIDFromContext(ctx context.Context) string {
-	subjectID, _ := ctx.Value(invokingSubjectIDContextKey).(string)
-	return subjectID
 }
 
 func WithRequestContext(ctx context.Context, reqCtx *RequestContext) context.Context {

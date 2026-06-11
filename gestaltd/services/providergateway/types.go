@@ -28,14 +28,13 @@ type ProviderGateway interface {
 type Next func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error)
 
 type ProviderGatewayRequest struct {
-	ProviderID        string
-	ProviderKind      ProviderKind
-	ServiceName       string
-	Operation         string
-	InvokingSubjectID string
-	RequestContext    *RequestContext
-	Source            GatewaySource
-	Payload           []byte
+	ProviderID     string
+	ProviderKind   ProviderKind
+	ServiceName    string
+	Operation      string
+	RequestContext *RequestContext
+	Source         GatewaySource
+	Payload        []byte
 }
 
 type ProviderGatewayResponse struct {

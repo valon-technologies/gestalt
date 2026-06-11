@@ -49,9 +49,6 @@ func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
 	if got.Operation != "CheckAccess" {
 		t.Fatalf("Operation = %q", got.Operation)
 	}
-	if got.InvokingSubjectID != "" {
-		t.Fatalf("InvokingSubjectID = %q, want empty", got.InvokingSubjectID)
-	}
 	var payload proto.CheckAccessRequest
 	if err := gproto.Unmarshal(got.Payload, &payload); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
