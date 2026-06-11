@@ -55,6 +55,7 @@ func newIndexServer(t *testing.T) *httptest.Server {
 // the built-in default) — resolution must succeed and prefer the first
 // repository in order, not report an ambiguity.
 func TestResolveCollapsesMirroredRepositories(t *testing.T) {
+	t.Parallel()
 	server := newIndexServer(t)
 	resolver := &Resolver{Client: server.Client()}
 	resolved, err := resolver.Resolve(context.Background(), ResolveRequest{
@@ -78,6 +79,7 @@ func TestResolveCollapsesMirroredRepositories(t *testing.T) {
 // Repositories whose answers genuinely diverge stay ambiguous: picking one
 // silently would mean resolving a package from the wrong publisher.
 func TestResolveRejectsDivergentRepositories(t *testing.T) {
+	t.Parallel()
 	server := newIndexServer(t)
 	resolver := &Resolver{Client: server.Client()}
 	_, err := resolver.Resolve(context.Background(), ResolveRequest{
@@ -97,6 +99,7 @@ func TestResolveRejectsDivergentRepositories(t *testing.T) {
 
 // An explicit --repo selection bypasses the ambiguity question entirely.
 func TestResolveHonorsExplicitRepositorySelection(t *testing.T) {
+	t.Parallel()
 	server := newIndexServer(t)
 	resolver := &Resolver{Client: server.Client()}
 	resolved, err := resolver.Resolve(context.Background(), ResolveRequest{

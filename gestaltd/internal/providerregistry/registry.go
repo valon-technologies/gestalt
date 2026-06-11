@@ -198,9 +198,9 @@ func (r *Resolver) Resolve(ctx context.Context, req ResolveRequest) (*ResolvedPa
 		// default repository first. Only genuinely divergent answers are
 		// ambiguous.
 		distinct := matches[:1]
-		for _, m := range matches[1:] {
-			if m.Version != matches[0].Version || m.MetadataURL != matches[0].MetadataURL {
-				distinct = append(distinct, m)
+		for i := 1; i < len(matches); i++ {
+			if matches[i].Version != matches[0].Version || matches[i].MetadataURL != matches[0].MetadataURL {
+				distinct = append(distinct, matches[i])
 			}
 		}
 		matches = distinct
