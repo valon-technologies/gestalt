@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -36,7 +37,7 @@ func (providerBuildOrderingAgentProvider) SupportsWorkspaceRequests() bool { ret
 
 func (providerBuildOrderingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	return &coreagent.Session{
-		ID:                 req.GetSessionId(),
+		ID:                 uuid.NewString(),
 		ProviderName:       "managed",
 		Model:              req.GetModel(),
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),

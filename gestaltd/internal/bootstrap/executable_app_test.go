@@ -1619,7 +1619,7 @@ func (p *stubAgentTurnManagerProvider) CreateSession(_ context.Context, req *pro
 	now := time.Now().UTC().Truncate(time.Second)
 	p.createSessionRequests = append(p.createSessionRequests, req)
 	session := &coreagent.Session{
-		ID:                 req.GetSessionId(),
+		ID:                 fmt.Sprintf("managed-session-%d", len(p.sessions)+1),
 		ProviderName:       "managed",
 		Model:              req.GetModel(),
 		ClientRef:          req.GetClientRef(),

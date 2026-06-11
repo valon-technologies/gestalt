@@ -510,6 +510,11 @@ class AgentProvider(AppProvider):
     def create_session(
         self, request: CreateAgentProviderSessionRequest
     ) -> AgentSession:
+        """Create a session, minting its id.
+
+        Must be idempotent on ``request.idempotency_key`` scoped per subject
+        (``request.created_by_subject_id``); an empty key always creates.
+        """
         self._unimplemented("create_session")
 
     def get_session(self, request: GetAgentProviderSessionRequest) -> AgentSession:

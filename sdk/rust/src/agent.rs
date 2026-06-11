@@ -453,9 +453,9 @@ pub struct AgentSession {
     pub last_turn_at: Option<SystemTime>,
 }
 
+/// Request passed to [`AgentProvider::create_session`].
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CreateAgentProviderSessionRequest {
-    pub session_id: String,
     pub idempotency_key: String,
     pub model: String,
     pub client_ref: String,
@@ -1276,7 +1276,6 @@ fn create_session_request_from_proto(
     value: pb::CreateAgentProviderSessionRequest,
 ) -> CreateAgentProviderSessionRequest {
     CreateAgentProviderSessionRequest {
-        session_id: value.session_id,
         idempotency_key: value.idempotency_key,
         model: value.model,
         client_ref: value.client_ref,
@@ -1465,6 +1464,10 @@ pub trait AgentProvider: Send + Sync + 'static {
     }
 
     /// Creates or idempotently returns an agent session.
+    ///
+    /// Mints the session id returned on the [`AgentSession`]. Must be
+    /// idempotent on `idempotency_key` scoped per subject
+    /// (`created_by_subject_id`); an empty key always creates.
     async fn create_session(
         &self,
         _request: CreateAgentProviderSessionRequest,

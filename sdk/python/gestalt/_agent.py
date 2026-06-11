@@ -335,7 +335,8 @@ class AgentPreparedWorkspace:
 
 @dataclass(slots=True)
 class CreateAgentProviderSessionRequest:
-    session_id: str = ""
+    """Request passed to ``AgentProvider.create_session``."""
+
     idempotency_key: str = ""
     model: str = ""
     client_ref: str = ""
@@ -607,7 +608,6 @@ def create_agent_provider_session_request_from_proto(
     request: Any,
 ) -> CreateAgentProviderSessionRequest:
     return CreateAgentProviderSessionRequest(
-        session_id=request.session_id,
         idempotency_key=request.idempotency_key,
         model=request.model,
         client_ref=request.client_ref,

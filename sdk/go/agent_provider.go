@@ -16,7 +16,9 @@ import (
 // transport attachment.
 type AgentProvider interface {
 	Provider
-	// CreateSession creates or idempotently returns an agent session.
+	// CreateSession mints the session id returned on the AgentSession.
+	// Creation must be idempotent on IdempotencyKey scoped per subject
+	// (CreatedBySubjectID); an empty key always creates a new session.
 	CreateSession(ctx context.Context, req *CreateAgentProviderSessionRequest) (*AgentSession, error)
 	// GetSession returns one agent session by ID.
 	GetSession(ctx context.Context, req *GetAgentProviderSessionRequest) (*AgentSession, error)
@@ -201,7 +203,6 @@ type AgentSession struct {
 
 type CreateAgentProviderSessionRequest struct {
 	ProviderName       string
-	SessionID          string
 	IdempotencyKey     string
 	Model              string
 	ClientRef          string

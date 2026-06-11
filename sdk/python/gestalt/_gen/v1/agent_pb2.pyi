@@ -248,7 +248,6 @@ class AgentSession(_message.Message):
 
 class CreateAgentProviderSessionRequest(_message.Message):
     __slots__ = ()
-    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
     CLIENT_REF_FIELD_NUMBER: _ClassVar[int]
@@ -261,7 +260,6 @@ class CreateAgentProviderSessionRequest(_message.Message):
     WORKSPACE_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
     TOOLS_FIELD_NUMBER: _ClassVar[int]
-    session_id: str
     idempotency_key: str
     model: str
     client_ref: str
@@ -274,7 +272,7 @@ class CreateAgentProviderSessionRequest(_message.Message):
     workspace: AgentWorkspace
     context: _app_pb2.RequestContext
     tools: AgentToolConfig
-    def __init__(self, session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., tools: _Optional[_Union[AgentToolConfig, _Mapping]] = ...) -> None: ...
+    def __init__(self, idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., client_ref: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by_subject_id: _Optional[str] = ..., subject: _Optional[_Union[_app_pb2.SubjectContext, _Mapping]] = ..., session_start: _Optional[_Union[AgentSessionStartConfig, _Mapping]] = ..., prepared_workspace: _Optional[_Union[PreparedAgentWorkspace, _Mapping]] = ..., provider_name: _Optional[str] = ..., workspace: _Optional[_Union[AgentWorkspace, _Mapping]] = ..., context: _Optional[_Union[_app_pb2.RequestContext, _Mapping]] = ..., tools: _Optional[_Union[AgentToolConfig, _Mapping]] = ...) -> None: ...
 
 class AgentToolConfig(_message.Message):
     __slots__ = ()

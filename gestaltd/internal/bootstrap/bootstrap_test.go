@@ -419,10 +419,7 @@ func (p *recordingAgentProvider) CreateSession(_ context.Context, req *proto.Cre
 		return cloneBootstrapAgentSession(session), nil
 	}
 	p.createSessionRequests = append(p.createSessionRequests, gproto.Clone(req).(*proto.CreateAgentProviderSessionRequest))
-	sessionID := strings.TrimSpace(req.GetSessionId())
-	if sessionID == "" {
-		sessionID = fmt.Sprintf("session-%d", len(p.sessions)+1)
-	}
+	sessionID := fmt.Sprintf("session-%d", len(p.sessions)+1)
 	now := time.Now().UTC().Truncate(time.Second)
 	session := &coreagent.Session{
 		ID:                 sessionID,
@@ -2593,16 +2590,16 @@ func TestBootstrapAgentProviderSupportsDirectTurnInteractionLifecycle(t *testing
 		t.Fatalf("ResolveProvider: %v", err)
 	}
 	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
-	if _, err := selected.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:          "agent-session-plain",
+	createdSession, err := selected.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	turn, err := selected.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
 		TurnId:             "agent-turn-plain",
-		SessionId:          "agent-session-plain",
+		SessionId:          createdSession.ID,
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
@@ -4675,7 +4672,7 @@ func TestBootstrapConfigManagedAgentStepsPreserveWorkflowSystemToolRefs(t *testi
 	}
 }
 
-func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *testing.T) {
+func TestBootstrapAgentProviderAcceptsMintedSessionIDAndRejectsMismatchedTurnID(t *testing.T) {
 	t.Parallel()
 
 	cfg := validConfig()
@@ -4725,30 +4722,19 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	}
 
 	startCtx := principal.WithPrincipal(context.Background(), &principal.Principal{SubjectID: "system:config"})
-	if _, err := provider.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
-		SessionId: "agent-session-1",
-		Model:     "gpt-test",
-	}); err == nil {
-		t.Fatal("CreateSession error = nil, want mismatched session id failure")
-	} else if !strings.Contains(err.Error(), `returned session id "generated-session-1" for requested session id "agent-session-1"`) {
-		t.Fatalf("CreateSession error = %v, want mismatched session id failure", err)
-	}
-
-	replayedSession, err := provider.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
-		SessionId:      "agent-session-1",
-		IdempotencyKey: "workflow:github:run-1:session",
-		Model:          "gpt-test",
+	createdSession, err := provider.CreateSession(startCtx, &proto.CreateAgentProviderSessionRequest{
+		Model: "gpt-test",
 	})
 	if err != nil {
-		t.Fatalf("CreateSession idempotent replay: %v", err)
+		t.Fatalf("CreateSession: %v", err)
 	}
-	if replayedSession.ID != "generated-session-1" {
-		t.Fatalf("CreateSession idempotent replay ID = %q, want generated-session-1", replayedSession.ID)
+	if createdSession.ID != "generated-session-1" {
+		t.Fatalf("CreateSession ID = %q, want the provider-minted generated-session-1", createdSession.ID)
 	}
 
 	if _, err := provider.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
 		TurnId:             "agent-turn-1",
-		SessionId:          "agent-session-1",
+		SessionId:          createdSession.ID,
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",
 		Output:             bootstrapTextAgentOutput(),
@@ -4772,7 +4758,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 
 	replayedTurn, err := provider.CreateTurn(startCtx, &proto.CreateAgentProviderTurnRequest{
 		TurnId:             "agent-turn-1",
-		SessionId:          "agent-session-1",
+		SessionId:          createdSession.ID,
 		IdempotencyKey:     "workflow:github:run-1:turn",
 		Model:              "gpt-test",
 		CreatedBySubjectId: "system:config",

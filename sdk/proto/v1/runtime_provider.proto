@@ -70,6 +70,9 @@ message StopRuntimeSessionRequest {
 
 message PrepareRuntimeWorkspaceRequest {
   string session_id = 1;
+  // Opaque, path-safe workspace key minted by the host. Despite the name it
+  // is not required to match any agent session id; it only identifies the
+  // prepared workspace directory for later removal.
   string agent_session_id = 2;
   AgentWorkspace workspace = 3;
 }
@@ -80,6 +83,8 @@ message PrepareRuntimeWorkspaceResponse {
 
 message RemoveRuntimeWorkspaceRequest {
   string session_id = 1;
+  // The workspace key the workspace was prepared under; see
+  // PrepareRuntimeWorkspaceRequest.agent_session_id.
   string agent_session_id = 2;
 }
 

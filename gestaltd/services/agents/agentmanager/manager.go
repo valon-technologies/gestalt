@@ -495,17 +495,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		return nil, err
 	}
 	idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey())
-	sessionID := newAgentSessionID(providerName, subjectID, idempotencyKey, workspace != nil)
-	deterministicSession := workspace != nil && idempotencyKey != ""
-	if deterministicSession && sessionTools.set {
-		if err := m.validateExistingSessionToolScope(ctx, p, providerName, provider, sessionID, providerReqContext, sessionTools); err != nil {
-			return nil, err
-		}
-	} else if deterministicSession {
-		if err := m.validateExistingSessionWithoutSessionTools(ctx, p, providerName, provider, sessionID, providerReqContext); err != nil {
-			return nil, err
-		}
-	}
 	providerMetadata := req.GetMetadata()
 	if sessionTools.set {
 		providerMetadata, err = agentSessionMetadataWithToolScope(metadata, sessionTools)
@@ -514,7 +503,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		}
 	}
 	providerReq := cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{})
-	providerReq.SessionId = sessionID
 	providerReq.IdempotencyKey = idempotencyKey
 	providerReq.ProviderName = providerName
 	providerReq.Model = strings.TrimSpace(req.GetModel())
@@ -529,20 +517,11 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	providerReq.Context = providerReqContext
 	session, err = provider.CreateSession(ctx, providerReq)
 	if err != nil {
-		if sessionStart != nil || workspace != nil {
-			return nil, err
-		}
-		session, err = m.getCreatedSessionAfterCreateError(ctx, p, providerName, provider, sessionID, providerReq.Context)
-		if err != nil {
-			return nil, err
-		}
-	}
-	normalized, err := normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey, session)
-	if err != nil {
 		return nil, err
 	}
-	if workspace != nil && idempotencyKey != "" && strings.TrimSpace(normalized.ID) != sessionID {
-		return nil, fmt.Errorf("agent provider returned session id %q, want workspace idempotency id %q", normalized.ID, sessionID)
+	normalized, err := normalizeProviderSessionForCreate(providerName, session)
+	if err != nil {
+		return nil, err
 	}
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
@@ -551,7 +530,7 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		if persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
 			return nil, err
 		} else if !ok {
-			return nil, fmt.Errorf("%w: existing agent session is missing tool scope metadata", invocation.ErrInvalidInvocation)
+			return nil, fmt.Errorf("%w: agent session is missing tool scope metadata", invocation.ErrInvalidInvocation)
 		} else if !agentSessionScopeMatchesTools(persistedScope, sessionTools) {
 			return nil, fmt.Errorf("%w: agent session tool scope does not match existing session", invocation.ErrInvalidInvocation)
 		}
@@ -562,20 +541,11 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 		if persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
 			return nil, err
 		} else if ok && !agentSessionScopeIsNoTools(persistedScope) {
-			return nil, fmt.Errorf("%w: existing agent session has tool scope metadata", invocation.ErrInvalidInvocation)
+			return nil, fmt.Errorf("%w: agent session has tool scope metadata", invocation.ErrInvalidInvocation)
 		}
 		m.deleteSessionScope(providerName, normalized.ID)
 	}
 	return normalized, nil
-}
-
-func (m *Manager) getCreatedSessionAfterCreateError(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, sessionID string, reqContext *proto.RequestContext) (*coreagent.Session, error) {
-	return provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-		SessionId:    sessionID,
-		ProviderName: strings.TrimSpace(providerName),
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		Context:      reqContext,
-	})
 }
 
 func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, req *proto.GetAgentProviderSessionRequest) (session *coreagent.Session, err error) {
@@ -1664,75 +1634,6 @@ func (m *Manager) hydrateSessionScopeListedTools(ctx context.Context, p *princip
 	}
 	scope.ListedTools = listed
 	return scope, nil
-}
-
-func (m *Manager) validateExistingSessionToolScope(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, sessionID string, reqContext *proto.RequestContext, tools agentSessionTools) error {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return nil
-	}
-	existing, err := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-		SessionId:    sessionID,
-		ProviderName: strings.TrimSpace(providerName),
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		Context:      reqContext,
-	})
-	if err != nil {
-		if agentProviderReturnedNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	normalized, err := normalizeProviderSession(providerName, sessionID, existing)
-	if err != nil {
-		return err
-	}
-	if !providerSessionOwnedBy(normalized, p) {
-		return core.ErrNotFound
-	}
-	persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return fmt.Errorf("%w: existing agent session is missing tool scope metadata", invocation.ErrInvalidInvocation)
-	}
-	if !agentSessionScopeMatchesTools(persistedScope, tools) {
-		return fmt.Errorf("%w: agent session tool scope does not match existing session", invocation.ErrInvalidInvocation)
-	}
-	return nil
-}
-
-func (m *Manager) validateExistingSessionWithoutSessionTools(ctx context.Context, p *principal.Principal, providerName string, provider coreagent.Provider, sessionID string, reqContext *proto.RequestContext) error {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return nil
-	}
-	existing, err := provider.GetSession(ctx, &proto.GetAgentProviderSessionRequest{
-		SessionId:    sessionID,
-		ProviderName: strings.TrimSpace(providerName),
-		Subject:      agentSubjectToProto(agentSubjectFromPrincipal(p)),
-		Context:      reqContext,
-	})
-	if err != nil {
-		if agentProviderReturnedNotFound(err) {
-			return nil
-		}
-		return err
-	}
-	normalized, err := normalizeProviderSession(providerName, sessionID, existing)
-	if err != nil {
-		return err
-	}
-	if !providerSessionOwnedBy(normalized, p) {
-		return core.ErrNotFound
-	}
-	if persistedScope, ok, err := agentSessionScopeFromMetadata(providerName, normalized); err != nil {
-		return err
-	} else if ok && !agentSessionScopeIsNoTools(persistedScope) {
-		return fmt.Errorf("%w: existing agent session has tool scope metadata", invocation.ErrInvalidInvocation)
-	}
-	return nil
 }
 
 func (m *Manager) deleteSessionScope(providerName, sessionID string) {
@@ -3111,10 +3012,7 @@ func normalizeProviderSession(providerName, sessionID string, session *coreagent
 	return &cloned, nil
 }
 
-func normalizeProviderSessionForCreate(providerName, sessionID, idempotencyKey string, session *coreagent.Session) (*coreagent.Session, error) {
-	if strings.TrimSpace(idempotencyKey) == "" {
-		return normalizeProviderSession(providerName, sessionID, session)
-	}
+func normalizeProviderSessionForCreate(providerName string, session *coreagent.Session) (*coreagent.Session, error) {
 	if session == nil {
 		return nil, core.ErrNotFound
 	}
@@ -3186,15 +3084,6 @@ func newAgentTurnID(sessionID, idempotencyKey string) string {
 		return uuid.NewString()
 	}
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt:agent-turn:"+strings.TrimSpace(sessionID)+":"+idempotencyKey)).String()
-}
-
-func newAgentSessionID(providerName, subjectID, idempotencyKey string, workspace bool) string {
-	idempotencyKey = strings.TrimSpace(idempotencyKey)
-	if !workspace || idempotencyKey == "" {
-		return uuid.NewString()
-	}
-	scope := "gestalt:agent-session-workspace:" + strings.TrimSpace(providerName) + ":" + strings.TrimSpace(subjectID) + ":" + idempotencyKey
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String()
 }
 
 func sessionSortTime(session *coreagent.Session) *time.Time {

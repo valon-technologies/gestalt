@@ -255,9 +255,9 @@ export interface AgentPreparedWorkspace {
   cwd?: string | undefined;
 }
 
+/** Request passed to {@link AgentProviderOptions.createSession}. */
 export interface CreateAgentProviderSessionRequest {
   providerName?: string | undefined;
-  sessionId: string;
   idempotencyKey: string;
   model: string;
   clientRef: string;
@@ -488,6 +488,11 @@ export interface ListedAgentTool {
 
 /** Handlers and runtime metadata for an agent provider. */
 export interface AgentProviderOptions extends ProviderBaseOptions {
+  /**
+   * Creates a session, minting its id. Must be idempotent on
+   * `idempotencyKey` scoped per subject (`createdBySubjectId`); an empty key
+   * always creates.
+   */
   createSession?: (
     request: CreateAgentProviderSessionRequest,
   ) => MaybePromise<AgentSession>;
@@ -705,7 +710,6 @@ function createAgentProviderSessionRequestFromProto(
 ): CreateAgentProviderSessionRequest {
   return {
     providerName: request.providerName,
-    sessionId: request.sessionId,
     idempotencyKey: request.idempotencyKey,
     model: request.model,
     clientRef: request.clientRef,

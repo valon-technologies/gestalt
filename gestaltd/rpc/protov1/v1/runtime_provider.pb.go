@@ -644,10 +644,13 @@ func (x *StopRuntimeSessionRequest) GetSessionId() string {
 }
 
 type PrepareRuntimeWorkspaceRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	AgentSessionId string                 `protobuf:"bytes,2,opt,name=agent_session_id,json=agentSessionId,proto3" json:"agent_session_id,omitempty"`
-	Workspace      *AgentWorkspace        `protobuf:"bytes,3,opt,name=workspace,proto3" json:"workspace,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Opaque, path-safe workspace key minted by the host. Despite the name it
+	// is not required to match any agent session id; it only identifies the
+	// prepared workspace directory for later removal.
+	AgentSessionId string          `protobuf:"bytes,2,opt,name=agent_session_id,json=agentSessionId,proto3" json:"agent_session_id,omitempty"`
+	Workspace      *AgentWorkspace `protobuf:"bytes,3,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -748,9 +751,11 @@ func (x *PrepareRuntimeWorkspaceResponse) GetWorkspace() *PreparedAgentWorkspace
 }
 
 type RemoveRuntimeWorkspaceRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SessionId      string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	AgentSessionId string                 `protobuf:"bytes,2,opt,name=agent_session_id,json=agentSessionId,proto3" json:"agent_session_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// The workspace key the workspace was prepared under; see
+	// PrepareRuntimeWorkspaceRequest.agent_session_id.
+	AgentSessionId string `protobuf:"bytes,2,opt,name=agent_session_id,json=agentSessionId,proto3" json:"agent_session_id,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }

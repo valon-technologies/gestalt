@@ -100,7 +100,7 @@ impl AgentProvider for TestAgentProvider {
             },
         );
         Ok(AgentSession {
-            id: request.session_id,
+            id: "session-1".to_string(),
             provider_name: configured_name(self),
             model: request.model,
             client_ref: request.client_ref,
@@ -416,7 +416,6 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     let mut client = AgentClient::new(channel);
     let session = client
         .create_session(pb::CreateAgentProviderSessionRequest {
-            session_id: "session-1".to_string(),
             idempotency_key: "session-req-1".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),

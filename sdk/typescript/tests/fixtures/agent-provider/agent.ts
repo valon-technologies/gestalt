@@ -18,6 +18,7 @@ import {
 } from "../../../src/index.ts";
 
 const sessions = new Map<string, AgentSession>();
+const sessionIdsByIdempotencyKey = new Map<string, string>();
 const turns = new Map<string, AgentTurn>();
 const turnEvents = new Map<string, AgentTurnEvent[]>();
 const interactions = new Map<string, AgentInteraction>();
@@ -28,14 +29,15 @@ export const provider = defineAgentProvider({
   description: "Agent provider fixture used by SDK tests",
   configure() {
     sessions.clear();
+    sessionIdsByIdempotencyKey.clear();
     turns.clear();
     turnEvents.clear();
     interactions.clear();
     canceledTurns = 0;
   },
   async createSession(request) {
-    return upsertSession({
-      sessionId: request.sessionId,
+    return createCanonicalSession({
+      idempotencyKey: request.idempotencyKey,
       model: request.model,
       clientRef: request.clientRef,
       metadata: request.metadata,
@@ -126,29 +128,40 @@ export const provider = defineAgentProvider({
   },
 });
 
-async function upsertSession(request: {
-  sessionId: string;
+async function createCanonicalSession(request: {
+  idempotencyKey: string;
   model: string;
   clientRef: string | undefined;
   metadata: object | undefined;
   createdBySubjectId: AgentSession["createdBySubjectId"] | undefined;
 }): Promise<AgentSession> {
-  const existing = sessions.get(request.sessionId);
+  // Idempotency keys are scoped per subject: a replayed key returns the
+  // existing session with its persisted metadata, while an empty key always
+  // creates a new session.
+  const idempotencyScope = request.idempotencyKey
+    ? `${request.createdBySubjectId ?? ""}\n${request.idempotencyKey}`
+    : undefined;
+  if (idempotencyScope !== undefined) {
+    const existingId = sessionIdsByIdempotencyKey.get(idempotencyScope);
+    if (existingId !== undefined) {
+      return requireSessionByID(existingId);
+    }
+  }
   const session: AgentSession = {
-    id: request.sessionId || `session-${sessions.size + 1}`,
+    id: `session-${sessions.size + 1}`,
     providerName: "fixture-agent",
     model: request.model,
     ...(request.clientRef !== undefined ? { clientRef: request.clientRef } : {}),
-    state: existing?.state || AgentSessionState.ACTIVE,
+    state: AgentSessionState.ACTIVE,
     ...(request.metadata !== undefined ? { metadata: request.metadata } : {}),
     ...(request.createdBySubjectId !== undefined ? { createdBySubjectId: request.createdBySubjectId } : {}),
-    ...(existing?.createdAt
-      ? { createdAt: existing.createdAt }
-      : { createdAt: timestampNow() }),
+    createdAt: timestampNow(),
     updatedAt: timestampNow(),
-    ...(existing?.lastTurnAt ? { lastTurnAt: existing.lastTurnAt } : {}),
   };
   sessions.set(session.id ?? "", session);
+  if (idempotencyScope !== undefined) {
+    sessionIdsByIdempotencyKey.set(idempotencyScope, session.id ?? "");
+  }
   return session;
 }
 

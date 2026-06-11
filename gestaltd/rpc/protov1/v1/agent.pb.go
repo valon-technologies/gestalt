@@ -1236,8 +1236,11 @@ func (x *AgentSession) GetLastTurnAt() *timestamppb.Timestamp {
 }
 
 type CreateAgentProviderSessionRequest struct {
-	state              protoimpl.MessageState   `protogen:"open.v1"`
-	SessionId          string                   `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The provider mints the session id returned on AgentSession. Creation is
+	// idempotent on idempotency_key scoped per subject (created_by_subject_id):
+	// a replayed key returns the existing session, an empty key always creates.
+	// Idempotency is scoped to the provider's session store.
 	IdempotencyKey     string                   `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	Model              string                   `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
 	ClientRef          string                   `protobuf:"bytes,4,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
@@ -1282,13 +1285,6 @@ func (x *CreateAgentProviderSessionRequest) ProtoReflect() protoreflect.Message 
 // Deprecated: Use CreateAgentProviderSessionRequest.ProtoReflect.Descriptor instead.
 func (*CreateAgentProviderSessionRequest) Descriptor() ([]byte, []int) {
 	return file_v1_agent_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *CreateAgentProviderSessionRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
 }
 
 func (x *CreateAgentProviderSessionRequest) GetIdempotencyKey() string {
@@ -3741,10 +3737,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12<\n" +
 	"\flast_turn_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastTurnAt\"\x87\x06\n" +
-	"!CreateAgentProviderSessionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
+	"lastTurnAt\"\xfa\x05\n" +
+	"!CreateAgentProviderSessionRequest\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12\x14\n" +
 	"\x05model\x18\x03 \x01(\tR\x05model\x12\x1d\n" +
 	"\n" +
@@ -3758,7 +3752,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\rprovider_name\x18\v \x01(\tR\fproviderName\x12A\n" +
 	"\tworkspace\x18\r \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspace\x12=\n" +
 	"\acontext\x18\x0f \x01(\v2#.gestalt.provider.v1.RequestContextR\acontext\x12:\n" +
-	"\x05tools\x18\x10 \x01(\v2$.gestalt.provider.v1.AgentToolConfigR\x05toolsJ\x04\b\x06\x10\aJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\x10provider_optionsR\bworkflow\"\x9d\x01\n" +
+	"\x05tools\x18\x10 \x01(\v2$.gestalt.provider.v1.AgentToolConfigR\x05toolsJ\x04\b\x01\x10\x02J\x04\b\x06\x10\aJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fR\n" +
+	"session_idR\x10provider_optionsR\bworkflow\"\x9d\x01\n" +
 	"\x0fAgentToolConfig\x127\n" +
 	"\x04none\x18\x01 \x01(\v2!.gestalt.provider.v1.AgentNoToolsH\x00R\x04none\x12G\n" +
 	"\acatalog\x18\x02 \x01(\v2+.gestalt.provider.v1.AgentCatalogToolConfigH\x00R\acatalogB\b\n" +

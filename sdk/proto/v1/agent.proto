@@ -151,10 +151,13 @@ message AgentSession {
 }
 
 message CreateAgentProviderSessionRequest {
-  reserved 6, 12, 14;
-  reserved "provider_options", "workflow";
+  reserved 1, 6, 12, 14;
+  reserved "session_id", "provider_options", "workflow";
 
-  string session_id = 1;
+  // The provider mints the session id returned on AgentSession. Creation is
+  // idempotent on idempotency_key scoped per subject (created_by_subject_id):
+  // a replayed key returns the existing session, an empty key always creates.
+  // Idempotency is scoped to the provider's session store.
   string idempotency_key = 2;
   string model = 3;
   string client_ref = 4;

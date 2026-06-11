@@ -203,26 +203,27 @@ func (c *routeCountingAgentControl) ProviderNames() []string {
 
 type routeCountingAgentProvider struct {
 	coreagent.UnimplementedProvider
-	name              string
-	sessions          map[string]*coreagent.Session
-	turns             map[string]*coreagent.Turn
-	capabilities      *coreagent.ProviderCapabilities
-	capabilitiesErr   error
-	supportsWorkspace bool
-	createSessionReqs []*proto.CreateAgentProviderSessionRequest
-	createTurnReqs    []*proto.CreateAgentProviderTurnRequest
-	listSessionReqs   []*proto.ListAgentProviderSessionsRequest
-	listTurnReqs      []*proto.ListAgentProviderTurnsRequest
-	turnIDOverride    string
-	createTurnStatus  coreagent.ExecutionStatus
-	createTurnOutput  coreagent.TurnOutput
-	cancelStatus      coreagent.ExecutionStatus
-	getSessionErr     error
-	listSessionsErr   error
-	getTurnErr        error
-	listTurnsErr      error
-	getSessionCalls   int
-	getTurnCalls      int
+	name               string
+	sessions           map[string]*coreagent.Session
+	turns              map[string]*coreagent.Turn
+	capabilities       *coreagent.ProviderCapabilities
+	capabilitiesErr    error
+	supportsWorkspace  bool
+	sessionIdempotency map[string]string
+	createSessionReqs  []*proto.CreateAgentProviderSessionRequest
+	createTurnReqs     []*proto.CreateAgentProviderTurnRequest
+	listSessionReqs    []*proto.ListAgentProviderSessionsRequest
+	listTurnReqs       []*proto.ListAgentProviderTurnsRequest
+	turnIDOverride     string
+	createTurnStatus   coreagent.ExecutionStatus
+	createTurnOutput   coreagent.TurnOutput
+	cancelStatus       coreagent.ExecutionStatus
+	getSessionErr      error
+	listSessionsErr    error
+	getTurnErr         error
+	listTurnsErr       error
+	getSessionCalls    int
+	getTurnCalls       int
 }
 
 func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
@@ -235,8 +236,15 @@ func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
 
 func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
 	p.createSessionReqs = append(p.createSessionReqs, cloneAgentRequest(req, &proto.CreateAgentProviderSessionRequest{}))
+	key := ""
+	if idempotencyKey := strings.TrimSpace(req.GetIdempotencyKey()); idempotencyKey != "" {
+		key = strings.TrimSpace(req.GetCreatedBySubjectId()) + "\x1f" + idempotencyKey
+		if sessionID, ok := p.sessionIdempotency[key]; ok {
+			return cloneRouteSession(p.sessions[sessionID]), nil
+		}
+	}
 	session := &coreagent.Session{
-		ID:                 req.GetSessionId(),
+		ID:                 fmt.Sprintf("%s-session-%d", p.name, len(p.sessions)+1),
 		ProviderName:       p.name,
 		Model:              req.GetModel(),
 		ClientRef:          req.GetClientRef(),
@@ -245,6 +253,12 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto
 		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectId()),
 	}
 	p.sessions[session.ID] = session
+	if key != "" {
+		if p.sessionIdempotency == nil {
+			p.sessionIdempotency = map[string]string{}
+		}
+		p.sessionIdempotency[key] = session.ID
+	}
 	return cloneRouteSession(session), nil
 }
 
@@ -652,7 +666,7 @@ func TestCreateSessionValidatesWorkspaceBeforeProviderCreate(t *testing.T) {
 	}
 }
 
-func TestCreateSessionUsesStableWorkspaceSessionIDWithIdempotencyKey(t *testing.T) {
+func TestCreateSessionReplaysExistingSessionForIdempotencyKey(t *testing.T) {
 	t.Parallel()
 
 	provider := newRouteCountingAgentProvider("alpha")
@@ -693,8 +707,13 @@ func TestCreateSessionUsesStableWorkspaceSessionIDWithIdempotencyKey(t *testing.
 	if len(provider.createSessionReqs) != 2 {
 		t.Fatalf("CreateSession calls = %d, want 2", len(provider.createSessionReqs))
 	}
-	if provider.createSessionReqs[0].GetSessionId() != provider.createSessionReqs[1].GetSessionId() {
-		t.Fatalf("provider session IDs = %q, %q, want stable", provider.createSessionReqs[0].GetSessionId(), provider.createSessionReqs[1].GetSessionId())
+	for i, providerReq := range provider.createSessionReqs {
+		if providerReq.GetIdempotencyKey() != "workspace-create-1" {
+			t.Fatalf("provider request %d idempotency key = %q, want workspace-create-1", i, providerReq.GetIdempotencyKey())
+		}
+	}
+	if len(provider.sessions) != 1 {
+		t.Fatalf("provider sessions = %d, want the replay deduped to one", len(provider.sessions))
 	}
 	if provider.createSessionReqs[0].Workspace == nil {
 		t.Fatal("provider did not receive manager workspace")
@@ -850,7 +869,7 @@ func TestCreateSessionHydratesAndStoresSessionTools(t *testing.T) {
 	}
 }
 
-func TestCreateSessionRejectsIdempotentToolScopeMismatchBeforeProviderCreate(t *testing.T) {
+func TestCreateSessionRejectsIdempotentToolScopeMismatch(t *testing.T) {
 	t.Parallel()
 
 	slack := agentCatalogTestProvider("slack", "Slack", "chat.postMessage")
@@ -909,8 +928,8 @@ func TestCreateSessionRejectsIdempotentToolScopeMismatchBeforeProviderCreate(t *
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("CreateSession error = %v, want invalid invocation", err)
 	}
-	if len(alpha.createSessionReqs) != 1 {
-		t.Fatalf("CreateSession calls = %d, want only the initial create", len(alpha.createSessionReqs))
+	if len(alpha.sessions) != 1 {
+		t.Fatalf("provider sessions = %d, want the mismatched replay to create nothing", len(alpha.sessions))
 	}
 }
 
@@ -969,8 +988,8 @@ func TestCreateSessionRejectsExistingSessionMissingToolScopeMetadata(t *testing.
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("CreateSession error = %v, want invalid invocation", err)
 	}
-	if len(alpha.createSessionReqs) != 1 {
-		t.Fatalf("CreateSession calls = %d, want only the initial create", len(alpha.createSessionReqs))
+	if len(alpha.sessions) != 1 {
+		t.Fatalf("provider sessions = %d, want the mismatched replay to create nothing", len(alpha.sessions))
 	}
 }
 
@@ -1224,8 +1243,8 @@ func TestCreateSessionWithoutToolsRejectsExistingScopedSession(t *testing.T) {
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("CreateSession without tools error = %v, want invalid invocation", err)
 	}
-	if len(alpha.createSessionReqs) != 1 {
-		t.Fatalf("CreateSession calls = %d, want only the initial create", len(alpha.createSessionReqs))
+	if len(alpha.sessions) != 1 {
+		t.Fatalf("provider sessions = %d, want the mismatched replay to create nothing", len(alpha.sessions))
 	}
 	if _, ok := scopes.GetSession("alpha", session.ID); !ok {
 		t.Fatal("existing scoped session scope was deleted")

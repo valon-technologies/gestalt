@@ -15,6 +15,10 @@ import (
 // when the provider has durable state but cannot attach to the execution
 // runtime.
 type Provider interface {
+	// CreateSession mints the session id: the returned Session carries a
+	// non-empty, stable id of the provider's choosing. Creation must be
+	// idempotent on the request's idempotency_key scoped per subject
+	// (created_by_subject_id); an empty key always creates a new session.
 	CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*Session, error)
 	ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) ([]*Session, error)

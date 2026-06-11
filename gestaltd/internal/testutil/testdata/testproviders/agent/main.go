@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -19,21 +20,23 @@ import (
 type agentProvider struct {
 	gestalt.UnimplementedAgentProvider
 
-	mu                  sync.Mutex
-	configuredName      string
-	sessions            map[string]*gestalt.AgentSession
-	turns               map[string]*gestalt.AgentTurn
-	turnEvents          map[string][]*gestalt.AgentTurnEvent
-	interactions        map[string]*gestalt.AgentInteraction
-	sessionCatalogTools map[string]bool
+	mu                         sync.Mutex
+	configuredName             string
+	sessions                   map[string]*gestalt.AgentSession
+	sessionIDsByIdempotencyKey map[string]string
+	turns                      map[string]*gestalt.AgentTurn
+	turnEvents                 map[string][]*gestalt.AgentTurnEvent
+	interactions               map[string]*gestalt.AgentInteraction
+	sessionCatalogTools        map[string]bool
 }
 
 func newAgentProvider() *agentProvider {
 	return &agentProvider{
-		sessions:     make(map[string]*gestalt.AgentSession),
-		turns:        make(map[string]*gestalt.AgentTurn),
-		turnEvents:   make(map[string][]*gestalt.AgentTurnEvent),
-		interactions: make(map[string]*gestalt.AgentInteraction),
+		sessions:                   make(map[string]*gestalt.AgentSession),
+		sessionIDsByIdempotencyKey: make(map[string]string),
+		turns:                      make(map[string]*gestalt.AgentTurn),
+		turnEvents:                 make(map[string][]*gestalt.AgentTurnEvent),
+		interactions:               make(map[string]*gestalt.AgentInteraction),
 	}
 }
 
@@ -47,13 +50,25 @@ func (p *agentProvider) Configure(_ context.Context, name string, _ map[string]a
 func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	scopedKey := ""
+	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
+		scopedKey = strings.TrimSpace(req.CreatedBySubjectID) + "\x00" + idempotencyKey
+		if sessionID, ok := p.sessionIDsByIdempotencyKey[scopedKey]; ok {
+			if existing, ok := p.sessions[sessionID]; ok {
+				return cloneSession(existing), nil
+			}
+		}
+	}
 	session := p.createOrUpdateSessionLocked(
-		strings.TrimSpace(req.SessionID),
+		"agent-session-"+uuid.NewString(),
 		strings.TrimSpace(req.Model),
 		strings.TrimSpace(req.ClientRef),
 		req.CreatedBySubjectID,
 		req.Metadata,
 	)
+	if scopedKey != "" {
+		p.sessionIDsByIdempotencyKey[scopedKey] = session.ID
+	}
 	if config, ok := req.Tools.(*gestalt.AgentCatalogToolConfig); ok && len(config.Tools) > 0 {
 		if p.sessionCatalogTools == nil {
 			p.sessionCatalogTools = map[string]bool{}
@@ -423,9 +438,6 @@ func (p *agentProvider) createOrUpdateSessionLocked(
 	createdBySubjectID string,
 	metadata map[string]any,
 ) *gestalt.AgentSession {
-	if sessionID == "" {
-		sessionID = "agent-session-1"
-	}
 	if existing, ok := p.sessions[sessionID]; ok {
 		if model != "" {
 			existing.Model = model
