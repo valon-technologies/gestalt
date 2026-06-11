@@ -2,7 +2,9 @@
  * Common request and response types shared across authored Gestalt providers.
  */
 import type { AgentToolRef } from "./providers/agent.ts";
+import { Agent } from "./agent.ts";
 import { App, type RequestContext } from "./app.ts";
+import { Workflow } from "./workflow.ts";
 
 export interface Subject {
   id: string;
@@ -75,7 +77,12 @@ export interface Request {
   toolRefs: AgentToolRef[];
   toolRefsSet: boolean;
   __requestContext?: RequestContext | undefined;
-  app(): Promise<App>;
+  /** Returns the generated App client carrying this request's context. */
+  app(options?: { timeoutMs?: number | undefined }): Promise<App>;
+  /** Returns the generated Agent client carrying this request's context. */
+  agent(options?: { timeoutMs?: number | undefined }): Promise<Agent>;
+  /** Returns the generated Workflow client carrying this request's context. */
+  workflows(options?: { timeoutMs?: number | undefined }): Promise<Workflow>;
 }
 
 /**
@@ -180,7 +187,7 @@ export function request(
   toolRefsSet = false,
   requestContext?: RequestContext,
 ): Request {
-  const req: Omit<Request, "app"> = {
+  const req: Omit<Request, "app" | "agent" | "workflows"> = {
     token,
     connectionParams: {
       ...connectionParams,
@@ -232,9 +239,16 @@ export function request(
   return attachRequestHelpers(req);
 }
 
-export function attachRequestHelpers<T extends Omit<Request, "app">>(input: T): Request {
+export function attachRequestHelpers<T extends Omit<Request, "app" | "agent" | "workflows">>(
+  input: T,
+): Request {
   const req = input as unknown as Request;
-  req.app = async () => App.connect({ context: req.__requestContext });
+  req.app = async (options) =>
+    App.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
+  req.agent = async (options) =>
+    Agent.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
+  req.workflows = async (options) =>
+    Workflow.connect({ context: req.__requestContext, timeoutMs: options?.timeoutMs });
   return req;
 }
 
