@@ -13,7 +13,13 @@ export const generateStaticParams = generateStaticParamsFor("mdxPath");
 // in composed production output) must 404 before reaching importPage, which
 // logs a module-resolution error for unknown routes.
 async function loadPage(mdxPath: string[] = []) {
-  const requested = decodeURIComponent(mdxPath.join("/"));
+  let requested: string;
+  try {
+    requested = decodeURIComponent(mdxPath.join("/"));
+  } catch {
+    // Malformed percent-escapes cannot name a known route.
+    notFound();
+  }
   const params = await generateStaticParams();
   const known = params.some(
     (param) => [param.mdxPath ?? []].flat().join("/") === requested,
