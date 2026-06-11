@@ -67,6 +67,52 @@ func ServiceClient[C any](ctx context.Context, serviceName, target, token, bindi
 	return client, nil
 }
 
+// ConnPool caches one client connection per dial identity (target, token,
+// binding). Connections are shared across clients and live for the life of
+// the process, mirroring the shared transports of the handwritten clients
+// the generated constructors replaced; the pool stays bounded by the set of
+// distinct bindings a process uses.
+type ConnPool struct {
+	mu    sync.Mutex
+	conns map[connKey]*grpc.ClientConn
+}
+
+type connKey struct {
+	target  string
+	token   string
+	binding string
+}
+
+// Conn returns the pooled connection for the dial identity, dialing on first
+// use. Concurrent first calls may dial in parallel; losers close their extra
+// connection and share the winner's.
+func (p *ConnPool) Conn(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
+	key := connKey{target: target, token: token, binding: binding}
+	p.mu.Lock()
+	if conn, ok := p.conns[key]; ok {
+		p.mu.Unlock()
+		return conn, nil
+	}
+	p.mu.Unlock()
+
+	conn, err := DialService(ctx, serviceName, target, token, binding)
+	if err != nil {
+		return nil, err
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if existing, ok := p.conns[key]; ok {
+		_ = conn.Close()
+		return existing, nil
+	}
+	if p.conns == nil {
+		p.conns = map[connKey]*grpc.ClientConn{}
+	}
+	p.conns[key] = conn
+	return conn, nil
+}
+
 func DialService(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
 	return dialTarget(ctx, serviceName, target, dialOptions(token, binding)...)
 }

@@ -5,7 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::agent::{AgentToolRef, agent_tool_ref_from_proto};
+use crate::agent_provider::{AgentToolRef, agent_tool_ref_from_proto};
 use crate::api::{
     Access, Credential, HTTPSubjectRequest, Request, Response, Subject, scope_request_context,
 };
@@ -59,9 +59,14 @@ impl OperationResult {
     }
 
     /// Decodes the raw body as JSON without app invocation envelope handling.
-    pub fn json(&self) -> std::result::Result<Value, Box<crate::InvokeError>> {
-        crate::app_decode::parse_operation_result_json(&self.body).map_err(|_| {
-            Box::new(crate::InvokeError {
+    pub fn json(&self) -> std::result::Result<Value, Box<crate::InvokeResultError>> {
+        let parsed = if self.body.iter().all(u8::is_ascii_whitespace) {
+            Ok(serde_json::json!({}))
+        } else {
+            serde_json::from_slice(&self.body)
+        };
+        parsed.map_err(|_| {
+            Box::new(crate::InvokeResultError {
                 app: String::new(),
                 operation: String::new(),
                 status: None,
@@ -74,11 +79,11 @@ impl OperationResult {
     }
 
     /// Returns an invoke error when the status is outside the HTTP 2xx range.
-    pub fn require_ok(&self) -> std::result::Result<(), Box<crate::InvokeError>> {
+    pub fn require_ok(&self) -> std::result::Result<(), Box<crate::InvokeResultError>> {
         if self.ok() {
             return Ok(());
         }
-        Err(Box::new(crate::InvokeError {
+        Err(Box::new(crate::InvokeResultError {
             app: String::new(),
             operation: String::new(),
             status: Some(self.status),

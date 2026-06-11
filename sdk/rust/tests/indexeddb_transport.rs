@@ -6,7 +6,7 @@ use std::net::TcpListener;
 use std::process::{Command, Stdio};
 
 use gestalt::ENV_HOST_SERVICE_SOCKET;
-use gestalt::indexeddb::{
+use gestalt::{
     CursorDirection, IndexSchema, IndexedDB, IndexedDBError, KeyRange, ObjectStoreSchema, Record,
     TransactionMode, TransactionOptions,
 };

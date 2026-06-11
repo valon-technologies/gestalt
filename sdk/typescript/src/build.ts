@@ -145,7 +145,7 @@ function writeBundledWrapper(
 ): string {
   const wrapperPath = join(workDir, "bundled-runtime.ts");
   const modulePath = JSON.stringify(resolveProviderModulePath(root, target));
-  const runtimePath = JSON.stringify(resolve(import.meta.dir, "runtime.ts"));
+  const runtimePath = JSON.stringify(resolve(import.meta.dir, "providers", "runtime.ts"));
   const exportName = target.exportName ? JSON.stringify(target.exportName) : "undefined";
   const source = `
 import * as bundledModule from ${modulePath};

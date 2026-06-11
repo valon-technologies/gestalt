@@ -1,0 +1,94 @@
+//! Shared generated runtime for sdkgen clients: the canonical error model
+//! and the native representation of `google.rpc.Status`.
+
+/// Canonical SDK error codes, drawn from the standard gRPC status codes.
+pub mod gestalt_error_code {
+    /// The operation was cancelled.
+    pub const CANCELLED: i32 = 1;
+    /// The cause of the error is unknown.
+    pub const UNKNOWN: i32 = 2;
+    /// The client specified an invalid argument.
+    pub const INVALID_ARGUMENT: i32 = 3;
+    /// The deadline expired before the operation could complete.
+    pub const DEADLINE_EXCEEDED: i32 = 4;
+    /// The requested entity was not found.
+    pub const NOT_FOUND: i32 = 5;
+    /// The entity the client attempted to create already exists.
+    pub const ALREADY_EXISTS: i32 = 6;
+    /// The caller does not have permission to execute the operation.
+    pub const PERMISSION_DENIED: i32 = 7;
+    /// A resource has been exhausted.
+    pub const RESOURCE_EXHAUSTED: i32 = 8;
+    /// The system is not in a state required for the operation.
+    pub const FAILED_PRECONDITION: i32 = 9;
+    /// The operation was aborted.
+    pub const ABORTED: i32 = 10;
+    /// The operation was attempted past the valid range.
+    pub const OUT_OF_RANGE: i32 = 11;
+    /// The operation is not implemented or supported.
+    pub const UNIMPLEMENTED: i32 = 12;
+    /// An internal error occurred.
+    pub const INTERNAL: i32 = 13;
+    /// The service is currently unavailable.
+    pub const UNAVAILABLE: i32 = 14;
+    /// Unrecoverable data loss or corruption.
+    pub const DATA_LOSS: i32 = 15;
+    /// The request lacks valid authentication credentials.
+    pub const UNAUTHENTICATED: i32 = 16;
+}
+
+/// Canonical SDK error: one numeric gRPC status code, a human-readable
+/// message, and the underlying cause. Transport error types never appear in
+/// public client signatures.
+#[derive(Debug, thiserror::Error)]
+#[error("{message}")]
+pub struct GestaltError {
+    /// Numeric gRPC status code, one of the gestalt_error_code constants.
+    pub code: i32,
+    /// Human-readable error message.
+    pub message: String,
+    // Boxed so the error stays small in every client Result.
+    #[source]
+    source: Option<Box<tonic::Status>>,
+}
+
+impl GestaltError {
+    /// Creates an error with no underlying cause.
+    pub fn new(code: i32, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            source: None,
+        }
+    }
+}
+
+impl From<tonic::Status> for GestaltError {
+    fn from(status: tonic::Status) -> Self {
+        // tonic reports an expired grpc-timeout as CANCELLED carrying the
+        // TimeoutExpired message; the gRPC spec assigns deadline expiry
+        // DEADLINE_EXCEEDED, so the canonical code is restored here.
+        let timeout_expired = tonic::TimeoutExpired(()).to_string();
+        let code = if status.code() == tonic::Code::Cancelled && status.message() == timeout_expired
+        {
+            gestalt_error_code::DEADLINE_EXCEEDED
+        } else {
+            status.code() as i32
+        };
+        Self {
+            code,
+            message: status.message().to_string(),
+            source: Some(Box::new(status)),
+        }
+    }
+}
+
+/// Native representation of google.rpc.Status carried in response payloads,
+/// mirroring the canonical error model.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RpcStatus {
+    /// Numeric gRPC status code, one of the gestalt_error_code constants.
+    pub code: i32,
+    /// Human-readable error message.
+    pub message: String,
+}

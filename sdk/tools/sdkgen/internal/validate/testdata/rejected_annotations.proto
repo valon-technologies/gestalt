@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package sdkgen.test.v1;
+
+import "provider_annotations.proto";
+
+message BadResponse {
+  option (gestalt.provider.v1.optional_result) = {
+    guard: "missing"
+    value: "payload"
+  };
+
+  bytes payload = 1;
+}
+
+service BadService {
+  rpc Get(BadResponse) returns (BadResponse) {
+    option (gestalt.provider.v1.signature) = "nope";
+  }
+}

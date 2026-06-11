@@ -340,10 +340,10 @@ func cloneCatalogDefault(value any) any {
 	if value == nil {
 		return nil
 	}
-	if pb, ok := value.(*structpb.Value); ok {
+	switch pb := value.(type) {
+	case *structpb.Value:
 		return cloneProtoValue(pb)
-	}
-	if pb, ok := value.(structpb.Value); ok {
+	case structpb.Value:
 		return *cloneProtoValue(&pb)
 	}
 	return value
@@ -433,10 +433,10 @@ func operationAnnotationsToProto(annotations *OperationAnnotations) *proto.Opera
 }
 
 func catalogDefaultToProto(value any) (*structpb.Value, error) {
-	if pb, ok := value.(*structpb.Value); ok {
+	switch pb := value.(type) {
+	case *structpb.Value:
 		return cloneProtoValue(pb), nil
-	}
-	if pb, ok := value.(structpb.Value); ok {
+	case structpb.Value:
 		return cloneProtoValue(&pb), nil
 	}
 	return structpb.NewValue(value)

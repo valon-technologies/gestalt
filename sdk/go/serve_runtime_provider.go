@@ -261,25 +261,6 @@ func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *AgentWorkspace {
 	return out
 }
 
-func agentWorkspaceToProto(workspace *AgentWorkspace) *proto.AgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &proto.AgentWorkspace{
-		Checkouts: make([]*proto.AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
-		Cwd:       workspace.CWD,
-	}
-	for i := range workspace.Checkouts {
-		checkout := workspace.Checkouts[i]
-		out.Checkouts = append(out.Checkouts, &proto.AgentWorkspaceGitCheckout{
-			Url:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
-		})
-	}
-	return out
-}
-
 func prepareRuntimeWorkspaceResponseToProto(resp PrepareRuntimeWorkspaceResponse) *proto.PrepareRuntimeWorkspaceResponse {
 	return &proto.PrepareRuntimeWorkspaceResponse{
 		Workspace: preparedAgentWorkspaceToProto(resp.Workspace),

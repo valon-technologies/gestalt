@@ -60,21 +60,11 @@
 // Workflow and agent provider surfaces use native Go structs. The SDK owns the
 // generated provider protocol conversion at the transport boundary.
 //
-// Host-service capabilities include [Cache], [Workflow], [Agent], and [App].
-// Apps reach IndexedDB and S3 through [IndexedDB] and [S3], which return the
-// capability interfaces rather than transport-specific client types.
-//
-// # App invocation migration
-//
-// App.Invoke and App.InvokeGraphQL now decode JSON responses and unwrap only
-// Gestalt success envelopes shaped as {"status":"success","data":...}. Use
-// InvokeAs or InvokeGraphQLAs when you want a concrete Go result type:
-//
-//	var issue Issue
-//	issue, err = gestalt.InvokeAs[Issue](ctx, app, "github", "get_issue", params, nil)
-//
-// Use App.InvokeRaw and App.InvokeGraphQLRaw when a caller needs the transport
-// OperationResult for custom classification or status handling.
+// Host-service client capabilities live in the generated sdk/go/client
+// package: use client.ConnectCache, client.ConnectS3, client.ConnectApp,
+// client.ConnectAgent, and client.ConnectWorkflow to call sibling services
+// exposed by gestaltd. The handwritten [IndexedDB] driver remains in this
+// package for the bidi-stream transaction and cursor protocol.
 //
 // Runtime and telemetry helpers include [ServeProvider], [ProviderMetadata],
 // [TelemetryInstrumentationName], and the provider telemetry helpers.
@@ -93,14 +83,13 @@
 // AuthenticationProvider, CacheProvider, IndexedDBProvider, S3Provider,
 // SecretsProvider, WorkflowProvider, AgentProvider, and RuntimeProvider.
 //
-// Use the host-service capabilities when provider code needs to call sibling
-// services exposed by gestaltd. These include Cache, Workflow, Agent, and App.
-// Apps use
-// [IndexedDB] and [S3] for record and object storage bindings.
+// Use the generated sdk/go/client package when provider code needs to call
+// sibling services exposed by gestaltd. Apps use [IndexedDB] for record
+// storage bindings and the generated S3 client for object storage bindings.
 //
-// Workflow and Agent use native Go request and response structs at provider
-// boundaries. Generated protocol messages stay inside the SDK transport
-// adapter.
+// Workflow and Agent provider surfaces use native Go request and response
+// structs at provider boundaries. Generated protocol messages stay inside the
+// SDK transport adapter.
 //
 // See https://gestaltd.ai/reference/sdk for the SDK overview.
 // See https://gestaltd.ai/providers/apps for the typed app authoring flow.

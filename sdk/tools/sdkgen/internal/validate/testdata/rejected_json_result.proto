@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package sdkgen.test.v1;
+
+import "provider_annotations.proto";
+
+message JsonCallRequest {
+  string id = 1;
+}
+
+message JsonCallResult {
+  int32 status = 1;
+  bytes body = 2;
+}
+
+message StringStatusResult {
+  string status = 1;
+  bytes body = 2;
+}
+
+message NoBytesBodyResult {
+  int32 status = 1;
+  string body = 2;
+}
+
+message UnwrappedResult {
+  option (gestalt.provider.v1.unwrap) = "body";
+
+  int32 status = 1;
+  bytes body = 2;
+}
+
+service JsonResultService {
+  rpc StringStatus(JsonCallRequest) returns (StringStatusResult) {
+    option (gestalt.provider.v1.json_result) = {
+      status: "status"
+      body: "body"
+    };
+  }
+  rpc NoBytesBody(JsonCallRequest) returns (NoBytesBodyResult) {
+    option (gestalt.provider.v1.json_result) = {
+      status: "status"
+      body: "body"
+    };
+  }
+  rpc Streaming(JsonCallRequest) returns (stream JsonCallResult) {
+    option (gestalt.provider.v1.json_result) = {
+      status: "status"
+      body: "body"
+    };
+  }
+  rpc BadOptions(JsonCallRequest) returns (JsonCallResult) {
+    option (gestalt.provider.v1.signature) = "id";
+    option (gestalt.provider.v1.optional_signature) = "id";
+    option (gestalt.provider.v1.optional_signature) = "nope";
+  }
+  rpc Collapsed(JsonCallRequest) returns (UnwrappedResult) {
+    option (gestalt.provider.v1.json_result) = {
+      status: "status"
+      body: "body"
+    };
+  }
+}

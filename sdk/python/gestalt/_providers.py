@@ -7,11 +7,13 @@ without requiring provider code to import transport modules.
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import dataclass
 from enum import Enum
 from http import HTTPStatus
 from typing import (
     TYPE_CHECKING,
     Any,
+    BinaryIO,
     Callable,
     Iterable,
     NoReturn,
@@ -44,32 +46,6 @@ if TYPE_CHECKING:
         UpdateAgentProviderSessionRequest,
     )
     from ._api import Error
-    from ._authentication import (
-        AuthenticatedUser,
-        BeginLoginRequest,
-        BeginLoginResponse,
-        CompleteLoginRequest,
-    )
-    from ._authorization import (
-        AddRelationshipRequest,
-        AddRelationshipResponse,
-        CheckAccessManyRequest,
-        CheckAccessManyResponse,
-        CheckAccessRequest,
-        CheckAccessResponse,
-        DeleteRelationshipRequest,
-        DeleteRelationshipResponse,
-        GetActiveModelRefResponse,
-        ListActiveModelResourceTypesRequest,
-        ListActiveModelResourceTypesResponse,
-        ListRelationshipsRequest,
-        ListRelationshipsResponse,
-        SetActiveModelRequest,
-        SetActiveModelResponse,
-        SetAuthorizationStateRequest,
-        SetAuthorizationStateResponse,
-    )
-    from ._cache import CacheEntry
     from ._runtime_provider import (
         GetRuntimeSessionRequest,
         GetRuntimeSupportRequest,
@@ -84,18 +60,6 @@ if TYPE_CHECKING:
         StartHostedAppRequest,
         StartRuntimeSessionRequest,
         StopRuntimeSessionRequest,
-    )
-    from ._s3 import (
-        CopyOptions,
-        ListOptions,
-        ListPage,
-        ObjectMeta,
-        ObjectRef,
-        PresignOptions,
-        PresignResult,
-        ProviderReadResult,
-        ReadOptions,
-        WriteOptions,
     )
     from ._workflow import (
         ApplyWorkflowProviderDefinitionRequest,
@@ -122,9 +86,80 @@ if TYPE_CHECKING:
         WorkflowEvent,
         WorkflowRun,
     )
+    from .authentication import (
+        AuthenticatedUser,
+        BeginLoginRequest,
+        BeginLoginResponse,
+        CompleteLoginRequest,
+    )
+    from .authorization import (
+        AddRelationshipRequest,
+        AddRelationshipResponse,
+        CheckAccessManyRequest,
+        CheckAccessManyResponse,
+        CheckAccessRequest,
+        CheckAccessResponse,
+        DeleteRelationshipRequest,
+        DeleteRelationshipResponse,
+        GetActiveModelRefResponse,
+        ListActiveModelResourceTypesRequest,
+        ListActiveModelResourceTypesResponse,
+        ListRelationshipsRequest,
+        ListRelationshipsResponse,
+        SetActiveModelRequest,
+        SetActiveModelResponse,
+        SetAuthorizationStateRequest,
+        SetAuthorizationStateResponse,
+    )
+    from .cache import CacheSetEntry
+    from .s3 import (
+        CopyObjectRequest,
+        CopyObjectResponse,
+        DeleteObjectRequest,
+        HeadObjectRequest,
+        HeadObjectResponse,
+        ListObjectsRequest,
+        ListObjectsResponse,
+        PresignObjectRequest,
+        PresignObjectResponse,
+        ReadObjectRequest,
+        S3ObjectMeta,
+        WriteObjectOpen,
+        WriteObjectResponse,
+    )
 
 else:
     from ._api import Error
+
+
+#: Object body shapes an authored S3 provider may return from ``read_object``.
+ObjectBody = bytes | bytearray | memoryview | BinaryIO | Iterable[bytes] | None
+
+
+class S3NotFoundError(Exception):
+    """Raised by S3 providers when the requested object does not exist."""
+
+    pass
+
+
+class S3PreconditionFailedError(Exception):
+    """Raised by S3 providers when conditional request headers fail."""
+
+    pass
+
+
+class S3InvalidRangeError(Exception):
+    """Raised by S3 providers when a requested byte range is invalid."""
+
+    pass
+
+
+@dataclass
+class ProviderReadResult:
+    """Object metadata and body returned by an authored S3 provider."""
+
+    meta: S3ObjectMeta
+    body: ObjectBody = None
 
 
 class ProviderKind(str, Enum):
@@ -396,7 +431,7 @@ class CacheProvider(AppProvider):
         raise NotImplementedError
 
     def set_many(
-        self, entries: list[CacheEntry], ttl: dt.timedelta | None = None
+        self, entries: list[CacheSetEntry], ttl: dt.timedelta | None = None
     ) -> None:
         """Store multiple cache entries using repeated :meth:`set` calls."""
 
@@ -435,57 +470,47 @@ class CacheProvider(AppProvider):
 
 
 class S3Provider(AppProvider):
-    """Base class for S3-compatible object store runtimes."""
+    """Base class for S3-compatible object store runtimes.
 
-    def head_object(self, ref: ObjectRef) -> ObjectMeta:
+    Handler methods accept and return the generated native request and
+    response models from :mod:`gestalt.s3`.
+    """
+
+    def head_object(self, request: HeadObjectRequest) -> HeadObjectResponse:
         """Return object metadata without reading the object body."""
 
         self._unimplemented("head_object")
 
-    def read_object(
-        self,
-        ref: ObjectRef,
-        opts: ReadOptions | None = None,
-    ) -> ProviderReadResult:
+    def read_object(self, request: ReadObjectRequest) -> ProviderReadResult:
         """Return metadata and a streaming body for an object."""
 
         self._unimplemented("read_object")
 
     def write_object(
         self,
-        ref: ObjectRef,
+        open: WriteObjectOpen,
         body: Iterable[bytes],
-        opts: WriteOptions | None = None,
-    ) -> ObjectMeta:
+    ) -> WriteObjectResponse:
         """Consume an object body stream and return committed metadata."""
 
         self._unimplemented("write_object")
 
-    def delete_object(self, ref: ObjectRef) -> None:
+    def delete_object(self, request: DeleteObjectRequest) -> None:
         """Delete one object or object version."""
 
         self._unimplemented("delete_object")
 
-    def list_objects(self, opts: ListOptions) -> ListPage:
+    def list_objects(self, request: ListObjectsRequest) -> ListObjectsResponse:
         """List objects using S3-style pagination and delimiters."""
 
         self._unimplemented("list_objects")
 
-    def copy_object(
-        self,
-        source: ObjectRef,
-        destination: ObjectRef,
-        opts: CopyOptions | None = None,
-    ) -> ObjectMeta:
+    def copy_object(self, request: CopyObjectRequest) -> CopyObjectResponse:
         """Copy one object to another object reference."""
 
         self._unimplemented("copy_object")
 
-    def presign_object(
-        self,
-        ref: ObjectRef,
-        opts: PresignOptions | None = None,
-    ) -> PresignResult:
+    def presign_object(self, request: PresignObjectRequest) -> PresignObjectResponse:
         """Return a presigned request URL for one object operation."""
 
         self._unimplemented("presign_object")

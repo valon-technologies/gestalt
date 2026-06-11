@@ -1,7 +1,8 @@
 package gestalt
 
-import proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-
+// AgentCreateSession is the native input for creating an agent session
+// through the host agent service. The workflow executor uses it as the
+// fakeable agent-step contract.
 type AgentCreateSession struct {
 	ProviderName   string
 	Model          string
@@ -12,26 +13,8 @@ type AgentCreateSession struct {
 	Tools          AgentToolConfig
 }
 
-type AgentGetSession struct {
-	ProviderName string
-	SessionID    string
-}
-
-type AgentListSessions struct {
-	ProviderName string
-	State        AgentSessionState
-	Limit        int32
-	SummaryOnly  bool
-}
-
-type AgentUpdateSession struct {
-	ProviderName string
-	SessionID    string
-	ClientRef    string
-	State        AgentSessionState
-	Metadata     any
-}
-
+// AgentCreateTurn is the native input for creating an agent turn through the
+// host agent service.
 type AgentCreateTurn struct {
 	ProviderName   string
 	SessionID      string
@@ -44,193 +27,17 @@ type AgentCreateTurn struct {
 	TimeoutSeconds int32
 }
 
+// AgentGetTurn is the native input for fetching one agent turn through the
+// host agent service.
 type AgentGetTurn struct {
 	ProviderName string
 	TurnID       string
 }
 
-type AgentListTurns struct {
-	ProviderName string
-	SessionID    string
-	Status       AgentExecutionStatus
-	Limit        int32
-	SummaryOnly  bool
-}
-
+// AgentCancelTurn is the native input for canceling an agent turn through the
+// host agent service.
 type AgentCancelTurn struct {
 	ProviderName string
 	TurnID       string
 	Reason       string
-}
-
-type AgentListTurnEvents struct {
-	ProviderName string
-	TurnID       string
-	AfterSeq     int64
-	Limit        int32
-}
-
-type AgentListInteractions struct {
-	ProviderName string
-	TurnID       string
-}
-
-type AgentResolveInteraction struct {
-	ProviderName  string
-	TurnID        string
-	InteractionID string
-	Resolution    any
-}
-
-type ListAgentSessionsResponse struct {
-	Sessions []AgentSession
-}
-
-type ListAgentTurnsResponse struct {
-	Turns []AgentTurn
-}
-
-type ListAgentTurnEventsResponse struct {
-	Events []AgentTurnEvent
-}
-
-type ListAgentInteractionsResponse struct {
-	Interactions []AgentInteraction
-}
-
-func newAgentCreateSessionRequest(input AgentCreateSession) (*proto.CreateAgentProviderSessionRequest, error) {
-	metadata, err := structFromAny(input.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	var workspace *proto.AgentWorkspace
-	if input.Workspace != nil {
-		workspace = agentWorkspaceToProto(input.Workspace)
-	}
-	return &proto.CreateAgentProviderSessionRequest{
-		ProviderName:   input.ProviderName,
-		Model:          input.Model,
-		ClientRef:      input.ClientRef,
-		Metadata:       metadata,
-		IdempotencyKey: input.IdempotencyKey,
-		Workspace:      workspace,
-		Tools:          agentToolConfigToProto(input.Tools),
-	}, nil
-}
-
-func newAgentGetSessionRequest(input AgentGetSession) *proto.GetAgentProviderSessionRequest {
-	return &proto.GetAgentProviderSessionRequest{
-		ProviderName: input.ProviderName,
-		SessionId:    input.SessionID,
-	}
-}
-
-func newAgentListSessionsRequest(input AgentListSessions) *proto.ListAgentProviderSessionsRequest {
-	return &proto.ListAgentProviderSessionsRequest{
-		ProviderName: input.ProviderName,
-		State:        proto.AgentSessionState(input.State),
-		Limit:        input.Limit,
-		SummaryOnly:  input.SummaryOnly,
-	}
-}
-
-func newAgentUpdateSessionRequest(input AgentUpdateSession) (*proto.UpdateAgentProviderSessionRequest, error) {
-	metadata, err := structFromAny(input.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.UpdateAgentProviderSessionRequest{
-		ProviderName: input.ProviderName,
-		SessionId:    input.SessionID,
-		ClientRef:    input.ClientRef,
-		State:        proto.AgentSessionState(input.State),
-		Metadata:     metadata,
-	}, nil
-}
-
-func newAgentCreateTurnRequest(input AgentCreateTurn) (*proto.CreateAgentProviderTurnRequest, error) {
-	if input.TimeoutSeconds < 0 {
-		return nil, InvalidArgument("agent create turn timeout_seconds must not be negative")
-	}
-	messages, err := agentMessagesToProto(input.Messages)
-	if err != nil {
-		return nil, err
-	}
-	output, err := agentOutputToProto(input.Output)
-	if err != nil {
-		return nil, err
-	}
-	metadata, err := structFromAny(input.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	modelOptions, err := structFromAny(input.ModelOptions)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.CreateAgentProviderTurnRequest{
-		ProviderName:   input.ProviderName,
-		SessionId:      input.SessionID,
-		Model:          input.Model,
-		Messages:       messages,
-		Output:         output,
-		Metadata:       metadata,
-		IdempotencyKey: input.IdempotencyKey,
-		ModelOptions:   modelOptions,
-		TimeoutSeconds: input.TimeoutSeconds,
-	}, nil
-}
-
-func newAgentGetTurnRequest(input AgentGetTurn) *proto.GetAgentProviderTurnRequest {
-	return &proto.GetAgentProviderTurnRequest{
-		ProviderName: input.ProviderName,
-		TurnId:       input.TurnID,
-	}
-}
-
-func newAgentListTurnsRequest(input AgentListTurns) *proto.ListAgentProviderTurnsRequest {
-	return &proto.ListAgentProviderTurnsRequest{
-		ProviderName: input.ProviderName,
-		SessionId:    input.SessionID,
-		Status:       proto.AgentExecutionStatus(input.Status),
-		Limit:        input.Limit,
-		SummaryOnly:  input.SummaryOnly,
-	}
-}
-
-func newAgentCancelTurnRequest(input AgentCancelTurn) *proto.CancelAgentProviderTurnRequest {
-	return &proto.CancelAgentProviderTurnRequest{
-		ProviderName: input.ProviderName,
-		TurnId:       input.TurnID,
-		Reason:       input.Reason,
-	}
-}
-
-func newAgentListTurnEventsRequest(input AgentListTurnEvents) *proto.ListAgentProviderTurnEventsRequest {
-	return &proto.ListAgentProviderTurnEventsRequest{
-		ProviderName: input.ProviderName,
-		TurnId:       input.TurnID,
-		AfterSeq:     input.AfterSeq,
-		Limit:        input.Limit,
-	}
-}
-
-func newAgentListInteractionsRequest(input AgentListInteractions) *proto.ListAgentProviderInteractionsRequest {
-	return &proto.ListAgentProviderInteractionsRequest{
-		ProviderName: input.ProviderName,
-		TurnId:       input.TurnID,
-	}
-}
-
-func newAgentResolveInteractionRequest(input AgentResolveInteraction) (*proto.ResolveAgentProviderInteractionRequest, error) {
-	resolution, err := structFromAny(input.Resolution)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.ResolveAgentProviderInteractionRequest{
-		ProviderName:  input.ProviderName,
-		TurnId:        input.TurnID,
-		InteractionId: input.InteractionID,
-		Resolution:    resolution,
-	}, nil
 }

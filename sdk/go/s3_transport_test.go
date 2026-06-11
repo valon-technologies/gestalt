@@ -2,6 +2,7 @@ package gestalt_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -11,31 +12,73 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+func s3WriteBytes(t *testing.T, s *client.S3, key string, body []byte, open *client.WriteObjectOpen) (*client.S3ObjectMeta, error) {
+	t.Helper()
+	if open == nil {
+		open = &client.WriteObjectOpen{}
+	}
+	open.Ref = &client.S3ObjectRef{Key: key}
+	stream, err := s.WriteObject(context.Background(), open)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > 0 {
+		if err := stream.Send(body); err != nil && !errors.Is(err, io.EOF) {
+			_, recvErr := stream.CloseAndRecv()
+			if recvErr != nil {
+				return nil, recvErr
+			}
+			return nil, err
+		}
+	}
+	resp, err := stream.CloseAndRecv()
+	if err != nil {
+		return nil, err
+	}
+	return resp.Meta, nil
+}
+
+func s3ReadAll(t *testing.T, s *client.S3, request *client.ReadObjectRequest) (*client.S3ObjectMeta, []byte, error) {
+	t.Helper()
+	meta, data, err := s.ReadObject(context.Background(), request)
+	if err != nil {
+		return nil, nil, err
+	}
+	body, err := data.ReadAll()
+	return meta, body, err
+}
+
+func gestaltErrorCode(err error) (client.GestaltErrorCode, bool) {
+	var gerr *client.GestaltError
+	if errors.As(err, &gerr) {
+		return gerr.Code, true
+	}
+	return 0, false
+}
+
 func TestS3Transport_NamedSocketEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "unix://"+testS3Socket)
-	client, err := gestalt.S3(context.Background(), "test")
+	s, err := client.ConnectS3(context.Background(), "test")
 	if err != nil {
 		t.Fatalf("connect named s3: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	ctx := context.Background()
-	obj := s3sdk.Object(client, "checks/ok.txt")
-	if _, err := obj.WriteString(ctx, "ok", nil); err != nil {
-		t.Fatalf("WriteString: %v", err)
+	if _, err := s3WriteBytes(t, s, "checks/ok.txt", []byte("ok"), nil); err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
-	got, err := obj.Text(ctx, nil)
+	_, body, err := s3ReadAll(t, s, &client.ReadObjectRequest{Ref: &client.S3ObjectRef{Key: "checks/ok.txt"}})
 	if err != nil {
-		t.Fatalf("Text: %v", err)
+		t.Fatalf("ReadObject: %v", err)
 	}
-	if got != "ok" {
-		t.Fatalf("Text = %q, want ok", got)
+	if string(body) != "ok" {
+		t.Fatalf("body = %q, want ok", body)
 	}
 }
 
@@ -51,18 +94,17 @@ func TestS3TransportNamedBindingMetadata(t *testing.T) {
 	t.Cleanup(srv.Stop)
 
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+lis.Addr().String())
-	client, err := gestalt.S3(context.Background(), "archive")
+	s, err := client.ConnectS3(context.Background(), "archive")
 	if err != nil {
 		t.Fatalf("connect s3: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
 	ctx := context.Background()
-	if err := client.DeleteObject(ctx, gestalt.ObjectRef{Key: "old.txt"}); err != nil {
+	if err := s.DeleteObject(ctx, &client.S3ObjectRef{Key: "old.txt"}); err != nil {
 		t.Fatalf("DeleteObject: %v", err)
 	}
-	if _, err := s3sdk.Object(client, "new.txt").WriteString(ctx, "body", nil); err != nil {
-		t.Fatalf("WriteString: %v", err)
+	if _, err := s3WriteBytes(t, s, "new.txt", []byte("body"), nil); err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
 	if got := <-harness.bindings; got != "archive" {
 		t.Fatalf("unary binding metadata = %q, want archive", got)
@@ -107,23 +149,20 @@ func TestS3Transport_TCPTargetEnv(t *testing.T) {
 	})
 
 	t.Setenv(gestalt.EnvHostServiceSocket, target)
-	client, err := gestalt.S3(context.Background(), "tcp")
+	s, err := client.ConnectS3(context.Background(), "tcp")
 	if err != nil {
 		t.Fatalf("connect tcp s3: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	ctx := context.Background()
-	obj := s3sdk.Object(client, "checks/ok.txt")
-	if _, err := obj.WriteString(ctx, "ok", nil); err != nil {
-		t.Fatalf("WriteString: %v", err)
+	if _, err := s3WriteBytes(t, s, "checks/ok.txt", []byte("ok"), nil); err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
-	got, err := obj.Text(ctx, nil)
+	_, body, err := s3ReadAll(t, s, &client.ReadObjectRequest{Ref: &client.S3ObjectRef{Key: "checks/ok.txt"}})
 	if err != nil {
-		t.Fatalf("Text: %v", err)
+		t.Fatalf("ReadObject: %v", err)
 	}
-	if got != "ok" {
-		t.Fatalf("Text = %q, want ok", got)
+	if string(body) != "ok" {
+		t.Fatalf("body = %q, want ok", body)
 	}
 }
 
@@ -138,50 +177,55 @@ func TestS3Transport_TCPTargetTokenEnv(t *testing.T) {
 
 	t.Setenv(gestalt.EnvHostServiceSocket, target)
 	t.Setenv(gestalt.EnvHostServiceToken, token)
-	client, err := gestalt.S3(context.Background(), "tcp-token")
+	s, err := client.ConnectS3(context.Background(), "tcp-token")
 	if err != nil {
 		t.Fatalf("connect tcp s3 with token: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	ctx := context.Background()
-	obj := s3sdk.Object(client, "checks/token.txt")
-	if _, err := obj.WriteString(ctx, "relay", nil); err != nil {
-		t.Fatalf("WriteString: %v", err)
+	if _, err := s3WriteBytes(t, s, "checks/token.txt", []byte("relay"), nil); err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
-	got, err := obj.Text(ctx, nil)
+	_, body, err := s3ReadAll(t, s, &client.ReadObjectRequest{Ref: &client.S3ObjectRef{Key: "checks/token.txt"}})
 	if err != nil {
-		t.Fatalf("Text: %v", err)
+		t.Fatalf("ReadObject: %v", err)
 	}
-	if got != "relay" {
-		t.Fatalf("Text = %q, want relay", got)
+	if string(body) != "relay" {
+		t.Fatalf("body = %q, want relay", body)
 	}
 }
 
 func TestS3Transport_CreateObjectAccessURL(t *testing.T) {
+	conn, err := grpc.NewClient("unix://"+testS3Socket, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial s3 socket: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	objectAccess := client.NewS3ObjectAccess(conn)
+
 	ctx := context.Background()
-	url, err := s3sdk.Object(testS3Client, "access/"+t.Name()+".txt").CreateAccessURL(ctx, &gestalt.PresignRequest{
-		Method:      gestalt.PresignMethodPut,
-		Expires:     time.Minute,
-		ContentType: "text/plain",
-		Headers:     map[string]string{"Content-Length": "5"},
+	url, err := objectAccess.CreateObjectAccessURLRaw(ctx, &client.CreateObjectAccessURLRequest{
+		Ref:            &client.S3ObjectRef{Key: "access/" + t.Name() + ".txt"},
+		Method:         client.PresignMethodPut,
+		ExpiresSeconds: 60,
+		ContentType:    "text/plain",
+		Headers:        map[string]string{"Content-Length": "5"},
 	})
 	if err != nil {
-		t.Fatalf("CreateAccessURL: %v", err)
+		t.Fatalf("CreateObjectAccessURL: %v", err)
 	}
-	if url.Method != gestalt.PresignMethodPut {
-		t.Fatalf("method = %q, want PUT", url.Method)
+	if url.Method != client.PresignMethodPut {
+		t.Fatalf("method = %v, want PUT", url.Method)
 	}
-	if !strings.HasPrefix(url.URL, "https://gestalt.example.test/api/v1/s3/object-access/") {
-		t.Fatalf("url = %q, want hosted object access URL", url.URL)
+	if !strings.HasPrefix(url.Url, "https://gestalt.example.test/api/v1/s3/object-access/") {
+		t.Fatalf("url = %q, want hosted object access URL", url.Url)
 	}
-	if strings.Contains(url.URL, "access/"+t.Name()) {
-		t.Fatalf("url leaks object key: %q", url.URL)
+	if strings.Contains(url.Url, "access/"+t.Name()) {
+		t.Fatalf("url leaks object key: %q", url.Url)
 	}
 	if url.Headers["Content-Length"] != "5" {
 		t.Fatalf("Content-Length header = %q, want 5", url.Headers["Content-Length"])
 	}
-	if url.ExpiresAt.IsZero() {
+	if url.ExpiresAt == nil || url.ExpiresAt.IsZero() {
 		t.Fatal("ExpiresAt is zero")
 	}
 }
@@ -189,161 +233,157 @@ func TestS3Transport_CreateObjectAccessURL(t *testing.T) {
 func TestS3Transport_WriteReadAndStat(t *testing.T) {
 	ctx := context.Background()
 	key := "docs/" + t.Name() + ".json"
-	obj := s3sdk.Object(testS3Client, key)
 
-	wrote, err := obj.WriteJSON(ctx, map[string]any{
+	payload, err := json.Marshal(map[string]any{
 		"ok":   true,
 		"name": t.Name(),
-	}, &gestalt.WriteRequest{
-		Metadata: map[string]string{"env": "test"},
 	})
 	if err != nil {
-		t.Fatalf("WriteJSON: %v", err)
+		t.Fatalf("marshal payload: %v", err)
+	}
+	wrote, err := s3WriteBytes(t, testS3Client, key, payload, &client.WriteObjectOpen{
+		ContentType: "application/json",
+		Metadata:    map[string]string{"env": "test"},
+	})
+	if err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
 	if wrote.Ref.Key != key {
-		t.Fatalf("WriteJSON key = %q, want %q", wrote.Ref.Key, key)
+		t.Fatalf("WriteObject key = %q, want %q", wrote.Ref.Key, key)
 	}
 	if wrote.ContentType != "application/json" {
-		t.Fatalf("WriteJSON content type = %q, want application/json", wrote.ContentType)
+		t.Fatalf("WriteObject content type = %q, want application/json", wrote.ContentType)
 	}
 
-	meta, err := obj.Stat(ctx)
+	head, err := testS3Client.HeadObject(ctx, &client.S3ObjectRef{Key: key})
 	if err != nil {
-		t.Fatalf("Stat: %v", err)
+		t.Fatalf("HeadObject: %v", err)
 	}
+	meta := head.Meta
 	if meta.Metadata["env"] != "test" {
-		t.Fatalf("Stat metadata env = %q, want test", meta.Metadata["env"])
+		t.Fatalf("HeadObject metadata env = %q, want test", meta.Metadata["env"])
 	}
 	if meta.Size <= 0 {
-		t.Fatalf("Stat size = %d, want > 0", meta.Size)
+		t.Fatalf("HeadObject size = %d, want > 0", meta.Size)
 	}
-	if meta.LastModified.IsZero() {
-		t.Fatal("Stat last modified is zero")
+	if meta.LastModified == nil || meta.LastModified.IsZero() {
+		t.Fatal("HeadObject last modified is zero")
 	}
 
-	got, err := obj.JSON(ctx, nil)
+	_, body, err := s3ReadAll(t, testS3Client, &client.ReadObjectRequest{Ref: &client.S3ObjectRef{Key: key}})
 	if err != nil {
-		t.Fatalf("JSON: %v", err)
+		t.Fatalf("ReadObject: %v", err)
 	}
-	payload, ok := got.(map[string]any)
-	if !ok {
-		t.Fatalf("JSON type = %T, want map[string]any", got)
+	var got map[string]any
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal body: %v", err)
 	}
-	if payload["name"] != t.Name() {
-		t.Fatalf("JSON name = %v, want %q", payload["name"], t.Name())
+	if got["name"] != t.Name() {
+		t.Fatalf("JSON name = %v, want %q", got["name"], t.Name())
 	}
 }
 
 func TestS3Transport_StreamedReadAndEmptyObject(t *testing.T) {
-	ctx := context.Background()
 	blobKey := "chunks/" + t.Name() + ".bin"
 	blob := strings.Repeat("abcdef0123456789", 8192)
-	obj := s3sdk.Object(testS3Client, blobKey)
-	if _, err := obj.WriteString(ctx, blob, &gestalt.WriteRequest{
+	if _, err := s3WriteBytes(t, testS3Client, blobKey, []byte(blob), &client.WriteObjectOpen{
 		ContentType: "application/octet-stream",
 	}); err != nil {
-		t.Fatalf("WriteString: %v", err)
+		t.Fatalf("WriteObject: %v", err)
 	}
 
-	readResult, err := testS3Client.ReadObject(ctx, gestalt.ReadRequest{
-		Ref: gestalt.ObjectRef{Key: blobKey},
+	meta, body, err := s3ReadAll(t, testS3Client, &client.ReadObjectRequest{
+		Ref: &client.S3ObjectRef{Key: blobKey},
 	})
 	if err != nil {
 		t.Fatalf("ReadObject: %v", err)
 	}
-	meta, body := readResult.Meta, readResult.Body
-	defer func() { _ = body.Close() }()
 	if meta.Size != int64(len(blob)) {
 		t.Fatalf("ReadObject size = %d, want %d", meta.Size, len(blob))
 	}
-	data, err := io.ReadAll(body)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
-	}
-	if string(data) != blob {
-		t.Fatalf("ReadObject body mismatch: got %d bytes", len(data))
+	if string(body) != blob {
+		t.Fatalf("ReadObject body mismatch: got %d bytes", len(body))
 	}
 
-	empty := s3sdk.Object(testS3Client, "empty/"+t.Name())
-	meta, err = empty.WriteBytes(ctx, nil, &gestalt.WriteRequest{
+	emptyKey := "empty/" + t.Name()
+	wrote, err := s3WriteBytes(t, testS3Client, emptyKey, nil, &client.WriteObjectOpen{
 		ContentType: "text/plain",
 	})
 	if err != nil {
-		t.Fatalf("WriteBytes(empty): %v", err)
+		t.Fatalf("WriteObject(empty): %v", err)
 	}
-	if meta.Size != 0 {
-		t.Fatalf("empty size = %d, want 0", meta.Size)
+	if wrote.Size != 0 {
+		t.Fatalf("empty size = %d, want 0", wrote.Size)
 	}
-	text, err := empty.Text(ctx, nil)
+	_, emptyBody, err := s3ReadAll(t, testS3Client, &client.ReadObjectRequest{
+		Ref: &client.S3ObjectRef{Key: emptyKey},
+	})
 	if err != nil {
-		t.Fatalf("Text(empty): %v", err)
+		t.Fatalf("ReadObject(empty): %v", err)
 	}
-	if text != "" {
-		t.Fatalf("Text(empty) = %q, want empty", text)
+	if len(emptyBody) != 0 {
+		t.Fatalf("ReadObject(empty) = %q, want empty", emptyBody)
 	}
 }
 
-func TestS3Transport_EarlyCloseCancelsRead(t *testing.T) {
-	ctx := context.Background()
+func TestS3Transport_CancelStopsRead(t *testing.T) {
 	key := "streams/" + t.Name() + ".txt"
 	payload := strings.Repeat("abcdef0123456789", 4096)
-	obj := s3sdk.Object(testS3Client, key)
-	if _, err := obj.WriteString(ctx, payload, nil); err != nil {
-		t.Fatalf("WriteString: %v", err)
+	if _, err := s3WriteBytes(t, testS3Client, key, []byte(payload), nil); err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
 
-	readResult, err := testS3Client.ReadObject(ctx, gestalt.ReadRequest{
-		Ref: gestalt.ObjectRef{Key: key},
+	ctx, cancel := context.WithCancel(context.Background())
+	_, data, err := testS3Client.ReadObject(ctx, &client.ReadObjectRequest{
+		Ref: &client.S3ObjectRef{Key: key},
 	})
 	if err != nil {
 		t.Fatalf("ReadObject: %v", err)
 	}
-	body := readResult.Body
-
-	buf := make([]byte, 1024)
-	n, err := body.Read(buf)
+	chunk, err := data.Recv()
 	if err != nil {
-		t.Fatalf("Read(first): %v", err)
+		t.Fatalf("Recv(first): %v", err)
 	}
-	if n == 0 {
-		t.Fatal("Read(first) returned 0 bytes")
+	if len(chunk) == 0 {
+		t.Fatal("Recv(first) returned 0 bytes")
 	}
-	if err := body.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	n, err = body.Read(buf)
-	if err != io.EOF {
-		t.Fatalf("Read(after close) error = %v, want EOF", err)
-	}
-	if n != 0 {
-		t.Fatalf("Read(after close) bytes = %d, want 0", n)
+	cancel()
+	// The stream terminates after cancellation: either with the cancellation
+	// error, or with io.EOF when every frame was already buffered.
+	for {
+		_, err = data.Recv()
+		if err != nil {
+			break
+		}
 	}
 
-	got, err := obj.Text(ctx, nil)
+	_, body, err := s3ReadAll(t, testS3Client, &client.ReadObjectRequest{
+		Ref: &client.S3ObjectRef{Key: key},
+	})
 	if err != nil {
-		t.Fatalf("Text(after close): %v", err)
+		t.Fatalf("ReadObject(after cancel): %v", err)
 	}
-	if got != payload {
-		t.Fatalf("Text(after close) length = %d, want %d", len(got), len(payload))
+	if string(body) != payload {
+		t.Fatalf("ReadObject(after cancel) length = %d, want %d", len(body), len(payload))
 	}
 }
 
 func TestS3Transport_RangeRead(t *testing.T) {
-	ctx := context.Background()
-	obj := s3sdk.Object(testS3Client, "ranges/"+t.Name()+".txt")
-	if _, err := obj.WriteString(ctx, "0123456789", nil); err != nil {
-		t.Fatalf("WriteString: %v", err)
+	key := "ranges/" + t.Name() + ".txt"
+	if _, err := s3WriteBytes(t, testS3Client, key, []byte("0123456789"), nil); err != nil {
+		t.Fatalf("WriteObject: %v", err)
 	}
 
 	start, end := int64(2), int64(5)
-	got, err := obj.Text(ctx, &gestalt.ReadRequest{
-		Range: &gestalt.ByteRange{Start: &start, End: &end},
+	_, body, err := s3ReadAll(t, testS3Client, &client.ReadObjectRequest{
+		Ref:   &client.S3ObjectRef{Key: key},
+		Range: &client.ByteRange{Start: &start, End: &end},
 	})
 	if err != nil {
-		t.Fatalf("Text(range): %v", err)
+		t.Fatalf("ReadObject(range): %v", err)
 	}
-	if got != "2345" {
-		t.Fatalf("Text(range) = %q, want 2345", got)
+	if string(body) != "2345" {
+		t.Fatalf("ReadObject(range) = %q, want 2345", body)
 	}
 }
 
@@ -355,16 +395,13 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		"list/" + t.Name() + "/nested/c.txt",
 		"list/" + t.Name() + "/z.txt",
 	} {
-		if _, err := s3sdk.Object(testS3Client, key).WriteString(ctx, key, nil); err != nil {
+		if _, err := s3WriteBytes(t, testS3Client, key, []byte(key), nil); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
 		}
 	}
 
 	basePrefix := "list/" + t.Name() + "/"
-	page, err := testS3Client.ListObjects(ctx, gestalt.ListRequest{
-		Prefix:    basePrefix,
-		Delimiter: "/",
-	})
+	page, err := testS3Client.ListObjects(ctx, basePrefix, "/", "", "", 0)
 	if err != nil {
 		t.Fatalf("ListObjects(delimiter): %v", err)
 	}
@@ -375,10 +412,7 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		t.Fatalf("Objects(delimiter) len = %d, want 2", len(page.Objects))
 	}
 
-	first, err := testS3Client.ListObjects(ctx, gestalt.ListRequest{
-		Prefix:  basePrefix,
-		MaxKeys: 2,
-	})
+	first, err := testS3Client.ListObjects(ctx, basePrefix, "", "", "", 2)
 	if err != nil {
 		t.Fatalf("ListObjects(first page): %v", err)
 	}
@@ -388,11 +422,7 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 	if len(first.Objects) != 2 {
 		t.Fatalf("first page len = %d, want 2", len(first.Objects))
 	}
-	second, err := testS3Client.ListObjects(ctx, gestalt.ListRequest{
-		Prefix:            basePrefix,
-		MaxKeys:           2,
-		ContinuationToken: first.NextContinuationToken,
-	})
+	second, err := testS3Client.ListObjects(ctx, basePrefix, "", first.NextContinuationToken, "", 2)
 	if err != nil {
 		t.Fatalf("ListObjects(second page): %v", err)
 	}
@@ -406,11 +436,7 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 		t.Fatalf("pagination order regressed: first=%q second=%q", first.Objects[len(first.Objects)-1].Ref.Key, second.Objects[0].Ref.Key)
 	}
 
-	delimitedFirst, err := testS3Client.ListObjects(ctx, gestalt.ListRequest{
-		Prefix:    basePrefix,
-		Delimiter: "/",
-		MaxKeys:   1,
-	})
+	delimitedFirst, err := testS3Client.ListObjects(ctx, basePrefix, "/", "", "", 1)
 	if err != nil {
 		t.Fatalf("ListObjects(delimited first page): %v", err)
 	}
@@ -423,12 +449,7 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 	if len(delimitedFirst.CommonPrefixes) != 0 {
 		t.Fatalf("delimited first page prefixes = %v, want none", delimitedFirst.CommonPrefixes)
 	}
-	delimitedSecond, err := testS3Client.ListObjects(ctx, gestalt.ListRequest{
-		Prefix:            basePrefix,
-		Delimiter:         "/",
-		MaxKeys:           1,
-		ContinuationToken: delimitedFirst.NextContinuationToken,
-	})
+	delimitedSecond, err := testS3Client.ListObjects(ctx, basePrefix, "/", delimitedFirst.NextContinuationToken, "", 1)
 	if err != nil {
 		t.Fatalf("ListObjects(delimited second page): %v", err)
 	}
@@ -438,12 +459,7 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 	if !delimitedSecond.HasMore {
 		t.Fatal("delimited second page HasMore = false, want true")
 	}
-	delimitedThird, err := testS3Client.ListObjects(ctx, gestalt.ListRequest{
-		Prefix:            basePrefix,
-		Delimiter:         "/",
-		MaxKeys:           1,
-		ContinuationToken: delimitedSecond.NextContinuationToken,
-	})
+	delimitedThird, err := testS3Client.ListObjects(ctx, basePrefix, "/", delimitedSecond.NextContinuationToken, "", 1)
 	if err != nil {
 		t.Fatalf("ListObjects(delimited third page): %v", err)
 	}
@@ -459,136 +475,127 @@ func TestS3Transport_ListPrefixDelimiterAndPagination(t *testing.T) {
 
 func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 	ctx := context.Background()
-	source := s3sdk.Object(testS3Client, "copy/"+t.Name()+"/source.txt")
-	sourceMeta, err := source.WriteString(ctx, "copied", &gestalt.WriteRequest{
+	sourceKey := "copy/" + t.Name() + "/source.txt"
+	sourceMeta, err := s3WriteBytes(t, testS3Client, sourceKey, []byte("copied"), &client.WriteObjectOpen{
 		ContentType: "text/plain",
 		Metadata:    map[string]string{"copied": "true"},
 	})
 	if err != nil {
-		t.Fatalf("WriteString(source): %v", err)
+		t.Fatalf("WriteObject(source): %v", err)
 	}
 
-	destRef := gestalt.ObjectRef{Key: "copy/" + t.Name() + "/dest.txt"}
-	meta, err := testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Key: "copy/" + t.Name() + "/source.txt"},
-		Destination: destRef,
-	})
+	destKey := "copy/" + t.Name() + "/dest.txt"
+	copied, err := testS3Client.CopyObject(ctx, "", "",
+		&client.S3ObjectRef{Key: sourceKey},
+		&client.S3ObjectRef{Key: destKey},
+	)
 	if err != nil {
 		t.Fatalf("CopyObject: %v", err)
 	}
-	if meta.Ref.Key != destRef.Key {
-		t.Fatalf("CopyObject key = %q, want %q", meta.Ref.Key, destRef.Key)
+	if copied.Meta.Ref.Key != destKey {
+		t.Fatalf("CopyObject key = %q, want %q", copied.Meta.Ref.Key, destKey)
 	}
 
-	dest := s3sdk.Object(testS3Client, destRef.Key)
-	exists, err := dest.Exists(ctx)
+	if _, err := testS3Client.HeadObject(ctx, &client.S3ObjectRef{Key: destKey}); err != nil {
+		t.Fatalf("HeadObject(dest): %v", err)
+	}
+
+	_, body, err := s3ReadAll(t, testS3Client, &client.ReadObjectRequest{Ref: &client.S3ObjectRef{Key: destKey}})
 	if err != nil {
-		t.Fatalf("Exists: %v", err)
+		t.Fatalf("ReadObject(dest): %v", err)
 	}
-	if !exists {
-		t.Fatal("Exists = false, want true")
-	}
-
-	got, err := dest.Text(ctx, nil)
-	if err != nil {
-		t.Fatalf("Text(dest): %v", err)
-	}
-	if got != "copied" {
-		t.Fatalf("Text(dest) = %q, want copied", got)
+	if string(body) != "copied" {
+		t.Fatalf("ReadObject(dest) = %q, want copied", body)
 	}
 
-	etagCopyRef := gestalt.ObjectRef{Key: "copy/" + t.Name() + "/etag-copy.txt"}
-	etagMeta, err := testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Key: "copy/" + t.Name() + "/source.txt"},
-		Destination: etagCopyRef,
-		IfMatch:     sourceMeta.ETag,
-	})
+	etagCopyKey := "copy/" + t.Name() + "/etag-copy.txt"
+	etagCopied, err := testS3Client.CopyObject(ctx, sourceMeta.Etag, "",
+		&client.S3ObjectRef{Key: sourceKey},
+		&client.S3ObjectRef{Key: etagCopyKey},
+	)
 	if err != nil {
 		t.Fatalf("CopyObject(source etag): %v", err)
 	}
-	if etagMeta.Ref.Key != etagCopyRef.Key {
-		t.Fatalf("CopyObject(source etag) key = %q, want %q", etagMeta.Ref.Key, etagCopyRef.Key)
+	if etagCopied.Meta.Ref.Key != etagCopyKey {
+		t.Fatalf("CopyObject(source etag) key = %q, want %q", etagCopied.Meta.Ref.Key, etagCopyKey)
 	}
 
-	presigned, err := dest.Presign(ctx, &gestalt.PresignRequest{
-		Method:      gestalt.PresignMethodPut,
-		Expires:     15 * time.Minute,
-		ContentType: "text/plain",
-		Headers:     map[string]string{"x-test": "true"},
+	presigned, err := testS3Client.PresignObjectRaw(ctx, &client.PresignObjectRequest{
+		Ref:            &client.S3ObjectRef{Key: destKey},
+		Method:         client.PresignMethodPut,
+		ExpiresSeconds: int64((15 * time.Minute).Seconds()),
+		ContentType:    "text/plain",
+		Headers:        map[string]string{"x-test": "true"},
 	})
 	if err != nil {
-		t.Fatalf("Presign: %v", err)
+		t.Fatalf("PresignObject: %v", err)
 	}
-	if presigned.Method != gestalt.PresignMethodPut {
-		t.Fatalf("Presign method = %q, want PUT", presigned.Method)
+	if presigned.Method != client.PresignMethodPut {
+		t.Fatalf("Presign method = %v, want PUT", presigned.Method)
 	}
-	if !strings.Contains(presigned.URL, "method=PUT") {
-		t.Fatalf("Presign URL = %q, want method=PUT", presigned.URL)
+	if !strings.Contains(presigned.Url, "method=PUT") {
+		t.Fatalf("Presign URL = %q, want method=PUT", presigned.Url)
 	}
 	if presigned.Headers["x-test"] != "true" {
 		t.Fatalf("Presign headers = %v", presigned.Headers)
 	}
 
-	if err := dest.Delete(ctx); err != nil {
-		t.Fatalf("Delete: %v", err)
+	if err := testS3Client.DeleteObject(ctx, &client.S3ObjectRef{Key: destKey}); err != nil {
+		t.Fatalf("DeleteObject: %v", err)
 	}
-	exists, err = dest.Exists(ctx)
-	if err != nil {
-		t.Fatalf("Exists(after delete): %v", err)
-	}
-	if exists {
-		t.Fatal("Exists(after delete) = true, want false")
+	_, err = testS3Client.HeadObject(ctx, &client.S3ObjectRef{Key: destKey})
+	if code, ok := gestaltErrorCode(err); !ok || code != client.GestaltErrorCodeNotFound {
+		t.Fatalf("HeadObject(after delete) error = %v, want not-found GestaltError", err)
 	}
 }
 
 func TestS3Transport_ErrorMapping(t *testing.T) {
 	ctx := context.Background()
-	missing := s3sdk.Object(testS3Client, "missing/"+t.Name())
 
-	_, err := missing.Stat(ctx)
-	if !errors.Is(err, gestalt.ErrS3NotFound) {
-		t.Fatalf("Stat missing error = %v, want ErrS3NotFound", err)
+	_, err := testS3Client.HeadObject(ctx, &client.S3ObjectRef{Key: "missing/" + t.Name()})
+	if code, ok := gestaltErrorCode(err); !ok || code != client.GestaltErrorCodeNotFound {
+		t.Fatalf("HeadObject missing error = %v, want not-found GestaltError", err)
 	}
 
-	existing := s3sdk.Object(testS3Client, "errors/"+t.Name()+".txt")
-	meta, err := existing.WriteString(ctx, "abc", nil)
+	existingKey := "errors/" + t.Name() + ".txt"
+	meta, err := s3WriteBytes(t, testS3Client, existingKey, []byte("abc"), nil)
 	if err != nil {
-		t.Fatalf("WriteString(existing): %v", err)
+		t.Fatalf("WriteObject(existing): %v", err)
 	}
 
-	_, err = existing.WriteString(ctx, "overwrite", &gestalt.WriteRequest{
+	_, err = s3WriteBytes(t, testS3Client, existingKey, []byte("overwrite"), &client.WriteObjectOpen{
 		IfNoneMatch: "*",
 	})
-	if !errors.Is(err, gestalt.ErrS3PreconditionFailed) {
-		t.Fatalf("IfNoneMatch error = %v, want ErrS3PreconditionFailed", err)
+	if code, ok := gestaltErrorCode(err); !ok || code != client.GestaltErrorCodeFailedPrecondition {
+		t.Fatalf("IfNoneMatch error = %v, want failed-precondition GestaltError", err)
 	}
 
 	start, end := int64(9), int64(1)
-	_, err = existing.Text(ctx, &gestalt.ReadRequest{
-		Range: &gestalt.ByteRange{Start: &start, End: &end},
+	_, _, err = s3ReadAll(t, testS3Client, &client.ReadObjectRequest{
+		Ref:   &client.S3ObjectRef{Key: existingKey},
+		Range: &client.ByteRange{Start: &start, End: &end},
 	})
-	if !errors.Is(err, gestalt.ErrS3InvalidRange) {
-		t.Fatalf("range error = %v, want ErrS3InvalidRange", err)
+	if code, ok := gestaltErrorCode(err); !ok || code != client.GestaltErrorCodeOutOfRange {
+		t.Fatalf("range error = %v, want out-of-range GestaltError", err)
 	}
 
-	_, err = testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Key: "errors/" + t.Name() + ".txt"},
-		Destination: gestalt.ObjectRef{Key: "errors/" + t.Name() + "-copy.txt"},
-		IfMatch:     "wrong-etag",
-	})
-	if !errors.Is(err, gestalt.ErrS3PreconditionFailed) {
-		t.Fatalf("CopyObject IfMatch error = %v, want ErrS3PreconditionFailed", err)
+	_, err = testS3Client.CopyObject(ctx, "wrong-etag", "",
+		&client.S3ObjectRef{Key: existingKey},
+		&client.S3ObjectRef{Key: "errors/" + t.Name() + "-copy.txt"},
+	)
+	if code, ok := gestaltErrorCode(err); !ok || code != client.GestaltErrorCodeFailedPrecondition {
+		t.Fatalf("CopyObject IfMatch error = %v, want failed-precondition GestaltError", err)
 	}
 
-	_, err = testS3Client.CopyObject(ctx, gestalt.CopyRequest{
-		Source:      gestalt.ObjectRef{Key: "errors/absent-" + t.Name()},
-		Destination: gestalt.ObjectRef{Key: "errors/" + t.Name() + "-copy-2.txt"},
-	})
-	if !errors.Is(err, gestalt.ErrS3NotFound) {
-		t.Fatalf("CopyObject missing error = %v, want ErrS3NotFound", err)
+	_, err = testS3Client.CopyObject(ctx, "", "",
+		&client.S3ObjectRef{Key: "errors/absent-" + t.Name()},
+		&client.S3ObjectRef{Key: "errors/" + t.Name() + "-copy-2.txt"},
+	)
+	if code, ok := gestaltErrorCode(err); !ok || code != client.GestaltErrorCodeNotFound {
+		t.Fatalf("CopyObject missing error = %v, want not-found GestaltError", err)
 	}
 
-	if meta.ETag == "" {
-		t.Fatal("WriteString(existing) ETag is empty")
+	if meta.Etag == "" {
+		t.Fatal("WriteObject(existing) ETag is empty")
 	}
 }

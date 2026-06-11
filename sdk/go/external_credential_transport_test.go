@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -290,16 +291,15 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	client, err := gestalt.ExternalCredentials()
+	externalCredentials, err := gestalt.ExternalCredentials(context.Background())
 	if err != nil {
 		t.Fatalf("ExternalCredentials: %v", err)
 	}
-	defer func() { _ = client.Close() }()
 
-	credential, err := client.UpsertCredential(context.Background(), &gestalt.UpsertExternalCredentialRequest{
-		Credential: &gestalt.ExternalCredential{
-			SubjectID:    "user:user-123",
-			ConnectionID: "slack:default",
+	credential, err := externalCredentials.UpsertCredentialRaw(context.Background(), &sdkclient.UpsertExternalCredentialRequest{
+		Credential: &sdkclient.ExternalCredential{
+			SubjectId:    "user:user-123",
+			ConnectionId: "slack:default",
 			Instance:     "workspace-1",
 			AccessToken:  "xoxb-123",
 		},
@@ -307,8 +307,8 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertCredential: %v", err)
 	}
-	if credential.GetId() != "cred-transport-1" {
-		t.Fatalf("credential id = %q, want %q", credential.GetId(), "cred-transport-1")
+	if credential.Id != "cred-transport-1" {
+		t.Fatalf("credential id = %q, want %q", credential.Id, "cred-transport-1")
 	}
 
 	harness.mu.Lock()
