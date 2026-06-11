@@ -1,17 +1,19 @@
-// Versioned builds serve this page under /dev, /latest, or /versions/*;
-// recovery links must stay inside that tree (plain anchors skip Next's
-// basePath prefixing). The registry is unversioned at the root.
-const docsHref = `${process.env.GESTALT_DOCS_BASE_PATH || ""}/`;
+import Link from "next/link";
 
+// Versioned builds serve this page under /dev, /latest, or /versions/*.
+// The docs link is a next/link so basePath keeps recovery inside the
+// current tree while the payload stays unprefixed (the versioned-build
+// audit forbids base-prefixed internal links). The registry is
+// unversioned at the root, so it stays a plain anchor.
 export default function NotFound() {
   return (
     <main className="shell-not-found">
       <h1>404</h1>
       <p>This page could not be found.</p>
       <p>
-        <a className="shell-link" href={docsHref}>
+        <Link className="shell-link" href="/">
           Documentation
-        </a>{" "}
+        </Link>{" "}
         ·{" "}
         <a className="shell-link" href="/registry">
           Provider registry
