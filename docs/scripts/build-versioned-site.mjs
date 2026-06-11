@@ -429,6 +429,16 @@ async function overlayDocsFromRef(buildDir, ref) {
     path.join(docsRoot, "components", "VersionPicker.tsx"),
     path.join(buildDir, "components", "VersionPicker.tsx"),
   );
+  // Like VersionPicker, the shell components belong to the app shell (built
+  // from the working tree), not to the tagged docs content.
+  const shellComponents = path.join(docsRoot, "components", "shell");
+  await rm(path.join(buildDir, "components", "shell"), {
+    force: true,
+    recursive: true,
+  });
+  await cp(shellComponents, path.join(buildDir, "components", "shell"), {
+    recursive: true,
+  });
 }
 
 async function runNextBuild(buildDir, { basePath, label, repositoryRef, tag }) {

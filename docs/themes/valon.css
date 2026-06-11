@@ -1,0 +1,166 @@
+/*
+ * Valon — gestalt's bundled default theme (valon.ai/style).
+ * Every brand value lives here and only here; the shell consumes the
+ * gst token contract (see workdocs guidelines/theming.md). To rebrand,
+ * replace this file (or override these tokens after it).
+ *
+ * Structure: brand constants first (--valon-*, private to this file,
+ * OKLCH, round-trip-exact to the published hex), then the token
+ * mappings. Tokens reference palette names, never raw color values.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ——— Valon brand constants ——— */
+
+  /* Base palette. 50 and 150 are OKLab interpolations between the
+     published steps. */
+  --valon-white: oklch(100% 0 0); /* #ffffff */
+  --valon-base-50: oklch(98.56% 0.0017 67.8); /* #fbfaf9 */
+  --valon-base-100: oklch(97.38% 0.0045 78.3); /* #f8f6f3 */
+  --valon-base-150: oklch(94.86% 0.0086 67.7); /* #f2ede8 */
+  --valon-base-200: oklch(92.32% 0.0129 63.9); /* #ece4dd */
+  --valon-base-300: oklch(86.85% 0.0197 72.6); /* #dcd2c6 */
+  --valon-base-400: oklch(71.06% 0.0350 74.6); /* #af9f8a */
+  --valon-base-500: oklch(55.54% 0.0431 75.8); /* #827057 */
+  --valon-base-600: oklch(44.69% 0.0382 91.8); /* #5c543c */
+  --valon-base-700: oklch(37.61% 0.0346 84.3); /* #4a402c */
+  --valon-base-800: oklch(27.04% 0.0259 51.0); /* #31231b */
+  --valon-base-900: oklch(21.87% 0.0213 76.1); /* #20190f */
+  --valon-base-950: oklch(22.04% 0.0231 57.2); /* #231810 */
+
+  /* Brand gold. */
+  --valon-gold-50: oklch(99.47% 0.0045 78.3); /* #fffdfa */
+  --valon-gold-100: oklch(97.86% 0.0203 81.8); /* #fff7e9 */
+  --valon-gold-200: oklch(93.56% 0.0534 81.8); /* #fce7c2 */
+  --valon-gold-300: oklch(85.94% 0.1118 82.4); /* #f5ca78 */
+  --valon-gold-400: oklch(79.26% 0.1438 80.3); /* #ebb03c */
+  --valon-gold-500: oklch(73.06% 0.1519 72.6); /* #e19614 */
+  --valon-gold-600: oklch(64.37% 0.1336 72.6); /* #be7e10 */
+  --valon-gold-700: oklch(54.88% 0.1131 70.8); /* #9a6410 */
+  --valon-gold-800: oklch(46.52% 0.0933 70.5); /* #7a4f10 */
+  --valon-gold-900: oklch(38.46% 0.0750 71.9); /* #5c3c0c */
+  --valon-gold-950: oklch(29.58% 0.0548 73.6); /* #3d2808 */
+
+  /* Ink — the base of the published alpha/overlay system,
+     rgba(35, 24, 16, …). Kept as a channel triplet for rgba()
+     composition; its dark companion is this theme's own. */
+  --valon-ink-rgb: 35, 24, 16; /* #231810 */
+  --valon-ink-dark-rgb: 232, 222, 212; /* #e8ded4 */
+
+  /* Dark surface ramp — this theme's dark companion to the base
+     palette (not published): warm browns below base-950. */
+  --valon-dark-50: oklch(18.35% 0.0086 31.2); /* #161110 */
+  --valon-dark-100: oklch(21.82% 0.0098 52.9); /* #1e1916 */
+  --valon-dark-150: oklch(24.63% 0.0123 44.5); /* #261f1c */
+  --valon-dark-200: oklch(27.62% 0.0141 48.2); /* #2e2622 */
+  --valon-dark-250: oklch(28.73% 0.0127 51.7); /* #302925 */
+  --valon-dark-300: oklch(32.32% 0.0123 51.7); /* #39322e */
+
+  /* Vitesse highlighter foregrounds — third-party constants this
+     theme pairs with (RES-20260610-007). */
+  --valon-code-ink: oklch(34.54% 0.0103 114.6); /* #393a34, vitesse-light */
+  --valon-code-ink-dark: oklch(87.87% 0.0181 92.7); /* #dbd7ca, vitesse-dark */
+
+  /* ——— Token mapping ——— */
+
+  /* Tier 1 — neutral ramp. */
+  --gst-color-neutral-0: var(--valon-white);
+  --gst-color-neutral-50: var(--valon-base-50);
+  --gst-color-neutral-100: var(--valon-base-100);
+  --gst-color-neutral-150: var(--valon-base-150);
+  --gst-color-neutral-200: var(--valon-base-200);
+  --gst-color-neutral-300: var(--valon-base-300);
+  --gst-color-neutral-400: var(--valon-base-400);
+  --gst-color-neutral-500: var(--valon-base-500);
+  --gst-color-neutral-600: var(--valon-base-600);
+  --gst-color-neutral-700: var(--valon-base-700);
+  --gst-color-neutral-800: var(--valon-base-800);
+  --gst-color-neutral-900: var(--valon-base-900);
+  --gst-color-neutral-950: var(--valon-base-950);
+
+  /* Tier 1 — accent ramp. */
+  --gst-color-accent-50: var(--valon-gold-50);
+  --gst-color-accent-100: var(--valon-gold-100);
+  --gst-color-accent-200: var(--valon-gold-200);
+  --gst-color-accent-300: var(--valon-gold-300);
+  --gst-color-accent-400: var(--valon-gold-400);
+  --gst-color-accent-500: var(--valon-gold-500);
+  --gst-color-accent-600: var(--valon-gold-600);
+  --gst-color-accent-700: var(--valon-gold-700);
+  --gst-color-accent-800: var(--valon-gold-800);
+  --gst-color-accent-900: var(--valon-gold-900);
+  --gst-color-accent-950: var(--valon-gold-950);
+
+  /* Tier 2 — semantic roles. Page surface is white (the base
+     palette's own top step). */
+  --gst-color-fg-rgb: var(--valon-ink-rgb);
+  --gst-color-bg: var(--gst-color-neutral-0);
+  --gst-color-surface: var(--gst-color-neutral-100);
+  --gst-color-surface-strong: var(--gst-color-neutral-200);
+  --gst-color-border: rgba(var(--gst-color-fg-rgb), 0.1);
+  --gst-color-border-strong: rgba(var(--gst-color-fg-rgb), 0.2);
+  --gst-color-fg-muted: rgba(var(--gst-color-fg-rgb), 0.6);
+  --gst-color-fg-secondary: rgba(var(--gst-color-fg-rgb), 0.8);
+  --gst-color-accent: var(--gst-color-accent-500);
+
+  /* Nextra's chrome derives its primary scale from these knobs. */
+  --nextra-primary-hue: 37deg;
+  --nextra-primary-saturation: 84%;
+
+  /* Code foreground pairs with the Vitesse highlighter theme. */
+  --shell-code-fg: var(--valon-code-ink);
+
+  /* Interaction surfaces: rest is base-150 (via --shell-card-bg);
+     hover/pressed composite 5%/10% ink over it. color-mix resolves to
+     solid colors, so these also work as background-color under the
+     select's caret background-image. Mixed in sRGB to reproduce the
+     hand-approved #e8e2dd / #ddd8d2 exactly. */
+  --shell-control-bg-hover: color-mix(
+    in srgb,
+    rgb(var(--valon-ink-rgb)) 5%,
+    var(--valon-base-150)
+  );
+  --shell-control-bg-active: color-mix(
+    in srgb,
+    rgb(var(--valon-ink-rgb)) 10%,
+    var(--valon-base-150)
+  );
+
+  /* Pills: translucent ink that composites to neutral-150 on the page,
+     one shade darker on a card. */
+  --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.045);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --gst-color-fg-rgb: var(--valon-ink-dark-rgb);
+  --gst-color-bg: var(--valon-dark-50);
+  --gst-color-surface: var(--valon-dark-100);
+  --gst-color-surface-strong: var(--valon-dark-200);
+  --gst-color-border: rgba(var(--gst-color-fg-rgb), 0.12);
+  --gst-color-border-strong: rgba(var(--gst-color-fg-rgb), 0.2);
+  --gst-color-fg-muted: rgba(var(--gst-color-fg-rgb), 0.55);
+  --gst-color-fg-secondary: rgba(var(--gst-color-fg-rgb), 0.78);
+  --gst-color-accent: var(--gst-color-accent-300);
+
+  --shell-code-fg: var(--valon-code-ink-dark);
+
+  /* Code surfaces sit flat on dark-100 (the alpha mix the shell derives
+     reads darker than the cards here). */
+  --shell-code-surface: var(--valon-dark-100);
+
+  /* Dark cards rest just above the page; hover/pressed step the ramp. */
+  --shell-card-bg: var(--valon-dark-100);
+  --shell-control-bg-hover: var(--valon-dark-150);
+  --shell-control-bg-active: var(--valon-dark-200);
+  --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.075);
+
+  /* Secondary buttons rest one step above the cards (Primer-style) so the
+     fill, not just the hairline, separates them from static tiles. */
+  --shell-button-bg: var(--valon-dark-150);
+  --shell-button-bg-hover: var(--valon-dark-200);
+  --shell-button-bg-active: var(--valon-dark-250);
+}

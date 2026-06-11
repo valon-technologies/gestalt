@@ -27,7 +27,7 @@ const sdkReferenceTargets = {
   go: "https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go",
   rust: "https://docs.rs/gestalt-sdk/latest/gestalt/",
 };
-const registryMarker = "registry_shell__";
+const registryMarker = "data-registry-shell";
 
 const server = createServer(async (request, response) => {
   try {
@@ -39,6 +39,8 @@ const server = createServer(async (request, response) => {
     const pathname = decodeURIComponent(url.pathname);
     if (host === "registry.gestaltd.ai") {
       await serveRegistryHost(pathname, response);
+    } else if (host === "www.gestaltd.ai") {
+      redirect(response, `https://gestaltd.ai${pathname}`);
     } else {
       await serveDocsHost(pathname, response);
     }
@@ -62,35 +64,49 @@ try {
   if (!exactVersionPrefix) {
     throw new Error("/versions.json did not contain any exact versions");
   }
-  await assertResponse({
+  await assertRedirect({
     url: `${baseUrl}/`,
     host: "registry.gestaltd.ai",
-    status: 200,
-    includes: registryMarker,
+    location: "https://gestaltd.ai/registry",
   });
-  await assertResponse({
+  await assertRedirect({
     url: `${baseUrl}/providers`,
     host: "registry.gestaltd.ai",
-    status: 200,
-    includes: registryMarker,
+    location: "https://gestaltd.ai/registry/providers",
   });
-  await assertResponse({
+  await assertRedirect({
     url: `${baseUrl}/providers/app/slack/`,
     host: "registry.gestaltd.ai",
-    status: 200,
-    includes: registryMarker,
+    location: "https://gestaltd.ai/registry/providers/app/slack/",
   });
-  await assertResponse({
+  await assertRedirect({
     url: `${baseUrl}/providers/app/slack/events/`,
     host: "registry.gestaltd.ai",
+    location: "https://gestaltd.ai/registry/providers/app/slack/events/",
+  });
+  await assertRedirect({
+    url: `${baseUrl}/`,
+    host: "www.gestaltd.ai",
+    location: "https://gestaltd.ai/",
+  });
+  await assertRedirect({
+    url: `${baseUrl}/latest/getting-started`,
+    host: "www.gestaltd.ai",
+    location: "https://gestaltd.ai/latest/getting-started",
+  });
+  await assertResponse({
+    url: `${baseUrl}/registry`,
+    host: "gestaltd.ai",
     status: 200,
     includes: registryMarker,
   });
+  // Linking discipline: the registry shell links into docs through the
+  // /latest/ rolling alias, never a pinned or unversioned doc path.
   await assertResponse({
-    url: `${baseUrl}/_next/static/chunks/does-not-exist.js`,
-    host: "registry.gestaltd.ai",
-    status: 404,
-    excludes: registryMarker,
+    url: `${baseUrl}/registry`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: 'href="/latest/"',
   });
   await assertResponse({
     url: `${baseUrl}/providers`,
@@ -267,17 +283,10 @@ try {
 }
 
 async function serveRegistryHost(pathname, response) {
-  if (
-    pathname.startsWith("/_next/") ||
-    pathname.startsWith("/_pagefind/") ||
-    pathname === "/favicon.svg" ||
-    pathname.startsWith("/images/") ||
-    pathname.startsWith("/fonts/") ||
-    pathname === "/404.html"
-  ) {
-    return serveFile(pathname, response, false);
+  if (pathname === "/") {
+    return redirect(response, "https://gestaltd.ai/registry");
   }
-  return serveFile("/registry.html", response, false);
+  return redirect(response, `https://gestaltd.ai/registry${pathname}`);
 }
 
 async function serveDocsHost(pathname, response) {

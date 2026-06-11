@@ -1,13 +1,11 @@
 import { Layout, Navbar } from "nextra-theme-docs";
-import { getPageMap } from "nextra/page-map";
 import ShellFooter from "../../components/shell/footer";
 import ShellHeaderActions from "../../components/shell/header-actions";
 import ShellLogo from "../../components/shell/logo";
-import SidebarVersionPicker from "../../components/shell/sidebar-version-picker";
 
-const repositoryRef = process.env.GESTALT_DOCS_REPOSITORY_REF || "main";
-
-export default async function DocsLayout({
+// The registry is unversioned and has no page map: it gets the shared shell
+// (navbar, search, theme, footer) but no docs sidebar, TOC, or version picker.
+export default function RegistryLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -18,24 +16,15 @@ export default async function DocsLayout({
       footer={<ShellFooter />}
       search={<ShellHeaderActions />}
       darkMode={false}
-      pageMap={await getPageMap()}
-      docsRepositoryBase={`https://github.com/valon-technologies/gestalt/tree/${repositoryRef}/docs`}
+      // One empty meta entry: nextra's normalize-pages crashes on a truly
+      // empty page map, and the registry must not list docs routes (their
+      // hrefs would bypass the version base path).
+      pageMap={[{ data: {} }]}
       nextThemes={{
         defaultTheme: "system",
         storageKey: "gestalt-docs-theme",
       }}
-      sidebar={{
-        defaultMenuCollapseLevel: 1,
-      }}
-      toc={{
-        float: true,
-      }}
-      navigation={{
-        prev: true,
-        next: true,
-      }}
     >
-      <SidebarVersionPicker />
       {children}
     </Layout>
   );

@@ -1,45 +1,30 @@
 FROM nginx:1.31.0-alpine@sha256:2f07d83bf561b506400dc183b1b2003803e39efbd22451f848adaba14d28c7c7
 COPY out /usr/share/nginx/html
 COPY <<'EOF' /etc/nginx/conf.d/default.conf
+# The registry UI lives at gestaltd.ai/registry; this host serves
+# path-preserving redirects indefinitely so old links keep working.
 server {
     listen 8080;
     server_name registry.gestaltd.ai;
-    absolute_redirect off;
     port_in_redirect off;
-    root /usr/share/nginx/html;
-    index index.html;
-    add_header Cache-Control "no-cache, max-age=0, must-revalidate" always;
 
-    location /_next/ {
-        add_header Cache-Control "public, max-age=31536000, immutable" always;
-        try_files $uri =404;
-    }
-
-    location /_pagefind/ {
-        try_files $uri =404;
-    }
-
-    location /favicon.svg {
-        try_files $uri =404;
-    }
-
-    location /images/ {
-        try_files $uri =404;
-    }
-
-    location /fonts/ {
-        try_files $uri =404;
-    }
-
-    location = /404.html {
-        try_files /404.html =404;
+    location = / {
+        return 301 https://gestaltd.ai/registry;
     }
 
     location / {
-        try_files /registry.html =404;
+        return 301 https://gestaltd.ai/registry$request_uri;
     }
+}
 
-    error_page 404 /404.html;
+server {
+    listen 8080;
+    server_name www.gestaltd.ai;
+    port_in_redirect off;
+
+    location / {
+        return 301 https://gestaltd.ai$request_uri;
+    }
 }
 
 server {

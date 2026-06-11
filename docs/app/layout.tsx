@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "nextra-theme-docs/style.css";
 import "../globals.css";
 import "../versioning.css";
+import "../shell.css";
+// The theme imports last: its token values override the system defaults
+// (and a consumer's rebrand stylesheet would slot in after it).
+import "../themes/valon.css";
 
 export const metadata: Metadata = {
   title: {
@@ -14,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#FDFCF9",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({

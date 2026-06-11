@@ -62,7 +62,7 @@ try {
     status: 200,
     cacheControlIncludes: "no-cache",
     includes: "Gestalt",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/dev/providers`,
@@ -70,7 +70,7 @@ try {
     status: 200,
     cacheControlIncludes: "no-cache",
     includes: "Providers",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/dev/providers.txt`,
@@ -78,7 +78,7 @@ try {
     status: 200,
     cacheControlIncludes: "no-cache",
     includes: "What Providers Do",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}${devAssetPath}`,
@@ -96,7 +96,7 @@ try {
     url: `${baseUrl}/dev/does-not-exist`,
     host: "gestaltd.ai",
     status: 404,
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/latest/`,
@@ -104,7 +104,7 @@ try {
     status: 200,
     cacheControlIncludes: "no-cache",
     includes: "Gestalt",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/latest/providers`,
@@ -112,7 +112,7 @@ try {
     status: 200,
     cacheControlIncludes: "no-cache",
     includes: "Providers",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/latest/providers.txt`,
@@ -120,7 +120,7 @@ try {
     status: 200,
     cacheControlIncludes: "no-cache",
     includes: "What Providers Do",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}${latestAssetPath}`,
@@ -139,7 +139,7 @@ try {
     host: "gestaltd.ai",
     status: 200,
     includes: "Server CLI",
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}${exactVersionPrefix}/reference/cli/`,
@@ -163,19 +163,19 @@ try {
     url: `${baseUrl}/versions/v9.9.9/`,
     host: "gestaltd.ai",
     status: 404,
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/api/does-not-exist`,
     host: "gestaltd.ai",
     status: 404,
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/providers/app/slack/`,
     host: "gestaltd.ai",
     status: 404,
-    excludes: "registry_shell__",
+    excludes: "data-registry-shell",
   });
   await assertResponse({
     url: `${baseUrl}/reference/sdk/python`,
@@ -184,11 +184,42 @@ try {
     location: "/api/python/index.html",
   });
   await assertResponse({
-    url: `${baseUrl}/providers/app/slack/`,
-    host: "registry.gestaltd.ai",
+    url: `${baseUrl}/registry`,
+    host: "gestaltd.ai",
     status: 200,
     cacheControlIncludes: "no-cache",
-    includes: "registry_shell__",
+    includes: "data-registry-shell",
+  });
+  await assertResponse({
+    url: `${baseUrl}/registry/providers/app/slack/`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "no-cache",
+    includes: "data-registry-shell",
+  });
+  await assertResponse({
+    url: `${baseUrl}/`,
+    host: "registry.gestaltd.ai",
+    status: 301,
+    location: "https://gestaltd.ai/registry",
+  });
+  await assertResponse({
+    url: `${baseUrl}/providers/app/slack/`,
+    host: "registry.gestaltd.ai",
+    status: 301,
+    location: "https://gestaltd.ai/registry/providers/app/slack/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/`,
+    host: "www.gestaltd.ai",
+    status: 301,
+    location: "https://gestaltd.ai/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/getting-started`,
+    host: "www.gestaltd.ai",
+    status: 301,
+    location: "https://gestaltd.ai/latest/getting-started",
   });
 } finally {
   if (container) {

@@ -2,23 +2,13 @@
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  color: var(--valon-secondary);
+  color: var(--gst-color-fg-secondary);
   font-size: 0.875rem;
 }
 
+/* Visual styling comes from .shell-select (shell.css); only width here. */
 .docs-version-picker select {
   max-width: min(13rem, 36vw);
-  min-height: 2rem;
-  border: 1px solid var(--valon-line-strong);
-  border-radius: 6px;
-  background: var(--valon-bg);
-  color: rgba(var(--valon-ink), 1);
-  font: inherit;
-  padding: 0.2rem 1.9rem 0.2rem 0.55rem;
-}
-
-.dark .docs-version-picker select {
-  background: var(--valon-surface);
 }
 
 @media (max-width: 720px) {
