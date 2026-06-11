@@ -1030,3 +1030,12 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Shiki dual-theme output (defaultColor: false → per-token CSS vars). */
+.markdownBody :global(pre.shiki) span {
+  color: var(--shiki-light);
+}
+
+.darkShell .markdownBody :global(pre.shiki) span {
+  color: var(--shiki-dark);
+}
