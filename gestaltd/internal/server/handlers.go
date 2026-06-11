@@ -24,7 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -183,7 +182,6 @@ func (s *Server) authorizeServiceAccountCredentialManagement(ctx context.Context
 	if subjectID == "" {
 		return fmt.Errorf("not authenticated")
 	}
-	ctx = providergateway.WithInvokingSubjectID(ctx, subjectID)
 	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
 			Type: "subject",

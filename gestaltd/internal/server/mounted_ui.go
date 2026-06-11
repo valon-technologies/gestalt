@@ -18,7 +18,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
 )
@@ -435,14 +434,12 @@ func (s *Server) authorizeMountedUIRoute(ctx context.Context, p *principal.Princ
 	if resourceName == "" {
 		return invocation.AccessContext{}, false, nil
 	}
-	canonicalPrincipal := principal.Canonicalized(p)
-	subjectID := principal.EffectiveCredentialSubjectID(canonicalPrincipal)
-	invokingSubjectID := invokingPrincipalSubjectID(canonicalPrincipal)
-	if strings.TrimSpace(subjectID) == "" || strings.TrimSpace(invokingSubjectID) == "" {
+	subjectID := principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))
+	if strings.TrimSpace(subjectID) == "" {
 		return invocation.AccessContext{}, false, nil
 	}
 
-	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, invokingSubjectID, resourceName)
+	roles, err := s.mountedUIAuthorizationRoles(ctx, subjectID, resourceName)
 	if err != nil {
 		return invocation.AccessContext{}, false, err
 	}
@@ -479,8 +476,7 @@ func mountedUIRequiresAuthorization(mounted MountedUI) bool {
 	return strings.TrimSpace(mounted.AppName) != "" && len(mounted.Routes) > 0
 }
 
-func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, invokingSubjectID, resourceName string) (map[string]struct{}, error) {
-	ctx = providergateway.WithInvokingSubjectID(ctx, strings.TrimSpace(invokingSubjectID))
+func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, resourceName string) (map[string]struct{}, error) {
 	roles := map[string]struct{}{}
 	pageToken := ""
 	for {
@@ -517,7 +513,6 @@ func (s *Server) mountedUIAuthorizationRoles(ctx context.Context, subjectID, inv
 }
 
 func (s *Server) mountedUIResourceDefaultAllows(ctx context.Context, resourceName string) (bool, error) {
-	ctx = providergateway.WithInvokingSubjectID(ctx, invokingPrincipalSubjectID(PrincipalFromContext(ctx)))
 	resp, err := s.authorization.ListActiveModelResourceTypes(ctx, &proto.ListActiveModelResourceTypesRequest{
 		Filter:   &proto.AuthorizationModelResourceTypeFilter{Name: strings.TrimSpace(resourceName)},
 		PageSize: 1,

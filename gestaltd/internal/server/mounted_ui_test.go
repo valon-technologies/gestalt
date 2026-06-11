@@ -10,7 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 )
 
-func TestAuthorizeMountedUIRouteAttributesGatewayCallsToPrincipalSubject(t *testing.T) {
+func TestAuthorizeMountedUIRouteLeavesGatewayInvokingSubjectEmpty(t *testing.T) {
 	t.Parallel()
 
 	authz := &mountedUIRecordingAuthorizationProvider{}
@@ -40,11 +40,11 @@ func TestAuthorizeMountedUIRouteAttributesGatewayCallsToPrincipalSubject(t *test
 	if access.Policy != "dealHub" || access.Role != "viewer" {
 		t.Fatalf("access = %+v, want dealHub viewer", access)
 	}
-	if got := authz.listRelationshipsInvokingSubjectID; got != "user:subject" {
-		t.Fatalf("ListRelationships invoking subject = %q, want user:subject", got)
+	if got := authz.listRelationshipsInvokingSubjectID; got != "" {
+		t.Fatalf("ListRelationships invoking subject = %q, want empty", got)
 	}
-	if got := authz.listActiveModelResourceTypesInvokingSubjectID; got != "user:subject" {
-		t.Fatalf("ListActiveModelResourceTypes invoking subject = %q, want user:subject", got)
+	if got := authz.listActiveModelResourceTypesInvokingSubjectID; got != "" {
+		t.Fatalf("ListActiveModelResourceTypes invoking subject = %q, want empty", got)
 	}
 	if got := authz.listRelationshipsTargetSubjectID; got != "service_account:credential" {
 		t.Fatalf("ListRelationships target subject = %q, want service_account:credential", got)

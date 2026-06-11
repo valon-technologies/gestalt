@@ -298,7 +298,6 @@ func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestI
 	if s == nil || s.authorization == nil {
 		return status.Error(codes.FailedPrecondition, "authorization provider is required for app invocation")
 	}
-	ctx = providergateway.WithInvokingSubjectID(ctx, callCtx.callerName)
 	ctx = providergateway.WithRequestContext(ctx, callCtx.requestContext)
 	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject: &proto.Subject{

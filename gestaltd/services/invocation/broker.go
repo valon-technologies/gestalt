@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -532,7 +531,6 @@ func (b *Broker) checkAuthorizationAccess(ctx context.Context, p *principal.Prin
 		return nil
 	}
 	req := authorizationAccessRequest(p, providerName, operationID)
-	ctx = providergateway.WithInvokingSubjectID(ctx, req.GetSubject().GetId())
 	resp, err := b.authorization.CheckAccess(ctx, req)
 	if err != nil {
 		return fmt.Errorf("%w: %s.%s: %v", ErrAuthorizationDenied, providerName, operationID, err)
