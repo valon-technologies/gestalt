@@ -87,6 +87,12 @@ try {
     cacheControlIncludes: "immutable",
   });
   await assertResponse({
+    url: `${baseUrl}/dev/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 200,
+    contentTypeIncludes: "javascript",
+  });
+  await assertResponse({
     url: `${baseUrl}/dev/providers/`,
     host: "gestaltd.ai",
     status: 301,
@@ -129,10 +135,34 @@ try {
     cacheControlIncludes: "immutable",
   });
   await assertResponse({
+    url: `${baseUrl}/latest/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 200,
+    contentTypeIncludes: "javascript",
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/_pagefind/pagefind-entry.json`,
+    host: "gestaltd.ai",
+    status: 200,
+    contentTypeIncludes: "json",
+  });
+  await assertResponse({
+    url: `${baseUrl}/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "/latest/_pagefind/pagefind.js",
+  });
+  await assertResponse({
     url: `${baseUrl}/latest/getting-started/`,
     host: "gestaltd.ai",
     status: 301,
     location: "/latest/getting-started",
+  });
+  await assertResponse({
+    url: `${baseUrl}${exactVersionPrefix}/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 200,
+    contentTypeIncludes: "javascript",
   });
   await assertResponse({
     url: `${baseUrl}${exactVersionPrefix}/reference/cli`,
@@ -224,6 +254,7 @@ async function assertResponse({
   excludes,
   location,
   cacheControlIncludes,
+  contentTypeIncludes,
 }) {
   const response = await httpGet(url, host);
   const body = response.body;
@@ -234,6 +265,14 @@ async function assertResponse({
     const actualLocation = response.headers.location;
     if (actualLocation !== location) {
       throw new Error(`${host} ${url} redirected to ${actualLocation}, want ${location}`);
+    }
+  }
+  if (contentTypeIncludes) {
+    const contentType = response.headers["content-type"] ?? "";
+    if (!contentType.includes(contentTypeIncludes)) {
+      throw new Error(
+        `${host} ${url} returned Content-Type ${contentType}, want ${contentTypeIncludes}`,
+      );
     }
   }
   if (cacheControlIncludes) {

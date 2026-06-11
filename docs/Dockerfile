@@ -15,10 +15,6 @@ server {
         try_files $uri =404;
     }
 
-    location /_pagefind/ {
-        try_files $uri =404;
-    }
-
     location /favicon.svg {
         try_files $uri =404;
     }
@@ -130,10 +126,6 @@ server {
 
     location /_next/ {
         add_header Cache-Control "public, max-age=31536000, immutable" always;
-        try_files $uri =404;
-    }
-
-    location /_pagefind/ {
         try_files $uri =404;
     }
 
