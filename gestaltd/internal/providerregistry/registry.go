@@ -24,8 +24,12 @@ const (
 	IndexSchemaVersion = 1
 	MaxIndexBytes      = 10 << 20
 
-	DefaultRepositoryName = "valon"
-	DefaultRepositoryURL  = "https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml"
+	// The project's provider index at its canonical, consumer-neutral
+	// home. Provider entries installed from the default repository omit
+	// the repo name in config, so renaming the default re-resolves them
+	// here transparently.
+	DefaultRepositoryName = "gestalt"
+	DefaultRepositoryURL  = "https://registry.gestaltd.ai/provider-index.yaml"
 )
 
 var (
