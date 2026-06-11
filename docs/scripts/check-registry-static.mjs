@@ -27,7 +27,7 @@ const sdkReferenceTargets = {
   go: "https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go",
   rust: "https://docs.rs/gestalt-sdk/latest/gestalt/",
 };
-const registryMarker = "registry_shell__";
+const registryMarker = "data-registry-shell";
 
 const server = createServer(async (request, response) => {
   try {
