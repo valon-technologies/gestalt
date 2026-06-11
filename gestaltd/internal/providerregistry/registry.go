@@ -190,6 +190,21 @@ func (r *Resolver) Resolve(ctx context.Context, req ResolveRequest) (*ResolvedPa
 		}
 		return nil, fmt.Errorf("%w: %s", errNoPackageMatch, pkg)
 	}
+	if len(matches) > 1 {
+		// Repositories that resolve the package to the same version and
+		// metadata URL are mirrors or aliases of one index (e.g. a legacy
+		// explicit "valon" entry alongside the built-in default), not an
+		// ambiguity. Keep the first match — repository order puts the
+		// default repository first. Only genuinely divergent answers are
+		// ambiguous.
+		distinct := matches[:1]
+		for _, m := range matches[1:] {
+			if m.Version != matches[0].Version || m.MetadataURL != matches[0].MetadataURL {
+				distinct = append(distinct, m)
+			}
+		}
+		matches = distinct
+	}
 	if len(matches) > 1 && strings.TrimSpace(req.RepositoryName) == "" {
 		names := make([]string, 0, len(matches))
 		for i := range matches {
