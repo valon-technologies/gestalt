@@ -125,6 +125,7 @@ export default function VersionPicker() {
   return (
     <label className="docs-version-picker">
       <select
+        className="shell-select"
         aria-label="Docs version"
         value={selected}
         onChange={(event) => {
