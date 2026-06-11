@@ -1,61 +1,6 @@
-@font-face {
-  font-family: 'Season Serif';
-  src: url('/fonts/SeasonSerif_Regular.woff') format('woff');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Season Serif';
-  src: url('/fonts/SeasonSerif_RegularItalic.woff') format('woff');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'KMR Melange Grotesk';
-  src: url('/fonts/KMRMelangeGrotesk_Regular.woff') format('woff');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'KMR Melange Grotesk';
-  src: url('/fonts/KMRMelangeGrotesk_Bold.woff') format('woff');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'KMR Melange Grotesk';
-  src: url('/fonts/KMRMelangeGrotesk_Italic.woff') format('woff');
-  font-weight: 400;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'KMR Melange Grotesk';
-  src: url('/fonts/KMRMelangeGrotesk_BoldItalic.woff') format('woff');
-  font-weight: 700;
-  font-style: italic;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('/fonts/GeistMono_Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Color tokens are defined at the top of shell.css (working-tree-owned
-   across all doc versions); structural tokens live here. */
+/* Color and font tokens (and the @font-face blocks behind them) are
+   defined at the top of shell.css, which builds from the working tree
+   into every doc version; structural tokens live here. */
 :root {
   --gst-content-width: 46rem;
   /* nextra's Head component normally injects this; without it the shell has no max-width */
@@ -63,7 +8,7 @@
 }
 
 html {
-  font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
+  font-family: var(--gst-font-sans);
   background: var(--gst-color-bg);
 }
 
@@ -79,7 +24,7 @@ a {
 
 h1,
 article h1 {
-  font-family: 'Season Serif', Georgia, serif;
+  font-family: var(--gst-font-serif);
   font-weight: 400 !important;
   font-size: clamp(2.25rem, 5vw, 3.5rem) !important;
   line-height: 0.98 !important;
@@ -93,10 +38,8 @@ h2,
 h3,
 article h2,
 article h3 {
-  font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
-  /* 700 until a face with a real 500 weight ships (the variable-font
-     swap); 500 with only 400/700 faces would resolve to 400. */
-  font-weight: 700 !important;
+  font-family: var(--gst-font-sans);
+  font-weight: 500 !important;
   letter-spacing: -0.4px !important;
   color: rgba(var(--gst-color-fg-rgb), 1) !important;
 }
@@ -105,7 +48,7 @@ h4,
 h5,
 h6,
 article h4 {
-  font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
+  font-family: var(--gst-font-sans);
   font-weight: 400 !important;
   letter-spacing: -0.2px !important;
   color: rgba(var(--gst-color-fg-rgb), 1) !important;
@@ -155,7 +98,7 @@ pre,
 kbd,
 samp,
 .nextra-code {
-  font-family: 'Geist Mono', monospace !important;
+  font-family: var(--gst-font-mono) !important;
 }
 
 /* Code blocks match the registry's treatment: borderless, card tone at
@@ -236,13 +179,11 @@ footer > div {
 .nextra-navbar input[type='search'] {
   border: 1px solid var(--gst-color-border) !important;
   border-radius: 8px !important;
-  background: rgba(248, 246, 243, 0.9) !important;
+  /* Surface at 90% so the navbar blur reads through; the token flips with
+     the theme, so no .dark companion is needed. */
+  background: color-mix(in srgb, var(--gst-color-surface) 90%, transparent) !important;
   color: rgba(var(--gst-color-fg-rgb), 1) !important;
   box-shadow: none !important;
-}
-
-.dark .nextra-navbar input[type='search'] {
-  background: rgba(30, 25, 22, 0.9) !important;
 }
 
 .nextra-navbar input[type='search']::placeholder {
@@ -251,24 +192,15 @@ footer > div {
 
 .nextra-search kbd {
   border-color: var(--gst-color-border) !important;
-  background: rgba(248, 246, 243, 0.96) !important;
+  background: color-mix(in srgb, var(--gst-color-surface) 96%, transparent) !important;
   color: var(--gst-color-fg-muted) !important;
-}
-
-.dark .nextra-search kbd {
-  background: rgba(30, 25, 22, 0.96) !important;
 }
 
 .nextra-search-results {
   border-color: var(--gst-color-border) !important;
-  background: rgba(248, 246, 243, 0.96) !important;
+  background: color-mix(in srgb, var(--gst-color-surface) 96%, transparent) !important;
   color: var(--gst-color-fg-secondary) !important;
-  box-shadow: 0 16px 40px rgba(35, 24, 16, 0.12) !important;
-}
-
-.dark .nextra-search-results {
-  background: rgba(30, 25, 22, 0.96) !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34) !important;
+  box-shadow: var(--shell-shadow-pop) !important;
 }
 
 .nextra-search-results > div {
@@ -363,6 +295,8 @@ article.nextra-content main {
   padding-top: 1.5rem !important;
 }
 
+/* Header wash: a quiet accent-tinted gradient fading into the page —
+   drawn from the accent ramp so it follows the theme. */
 article.nextra-content main::before {
   content: '';
   position: absolute;
@@ -372,8 +306,8 @@ article.nextra-content main::before {
   height: 7rem;
   background: linear-gradient(
     to bottom,
-    rgba(243, 233, 221, 0.45) 0%,
-    rgba(238, 213, 174, 0.15) 50%,
+    color-mix(in oklab, var(--gst-color-accent-100) 45%, transparent) 0%,
+    color-mix(in oklab, var(--gst-color-accent-200) 15%, transparent) 50%,
     transparent 100%
   );
   z-index: -1;
@@ -383,8 +317,8 @@ article.nextra-content main::before {
 .dark article.nextra-content main::before {
   background: linear-gradient(
     to bottom,
-    rgba(61, 40, 8, 0.3) 0%,
-    rgba(61, 40, 8, 0.1) 50%,
+    color-mix(in oklab, var(--gst-color-accent-950) 30%, transparent) 0%,
+    color-mix(in oklab, var(--gst-color-accent-950) 10%, transparent) 50%,
     transparent 100%
   );
 }
@@ -428,28 +362,21 @@ article .gestalt-footnote sup {
   text-transform: uppercase;
 }
 
+/* Surfaces and shadows are owned by the .nextra-card rules in shell.css
+   (later import, equal specificity); only structure remains live here. */
 .nextra-card {
   border: 1px solid var(--gst-color-border) !important;
   border-radius: 12px !important;
-  background: rgba(248, 246, 243, 0.9) !important;
+  background: color-mix(in srgb, var(--gst-color-surface) 90%, transparent) !important;
   box-shadow: none !important;
   padding: 2rem !important;
 }
 
-.dark .nextra-card {
-  background: rgba(30, 25, 22, 0.9) !important;
-}
-
 .nextra-card:hover {
   border-color: var(--gst-color-border-strong) !important;
-  background: rgba(248, 246, 243, 0.98) !important;
-  box-shadow: 0 8px 24px rgba(35, 24, 16, 0.08) !important;
+  background: color-mix(in srgb, var(--gst-color-surface) 98%, transparent) !important;
+  box-shadow: none !important;
   transform: translateY(-1px);
-}
-
-.dark .nextra-card:hover {
-  background: rgba(30, 25, 22, 0.98) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
 }
 
 .nextra-card {
@@ -533,21 +460,22 @@ article table {
   overflow: hidden;
   border: 1px solid var(--gst-color-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
+  background: color-mix(in srgb, var(--gst-color-bg) 78%, transparent);
 }
 
 .dark article table {
-  background: rgba(30, 25, 22, 0.78);
+  background: color-mix(in srgb, var(--gst-color-surface) 78%, transparent);
 }
 
+/* Zebra stripes: translucent ink, so they follow the flipped fg triplet. */
 thead tr,
 tbody tr:nth-child(even) {
-  background: rgba(35, 24, 16, 0.03) !important;
+  background: rgba(var(--gst-color-fg-rgb), 0.03) !important;
 }
 
 .dark thead tr,
 .dark tbody tr:nth-child(even) {
-  background: rgba(232, 222, 212, 0.04) !important;
+  background: rgba(var(--gst-color-fg-rgb), 0.04) !important;
 }
 
 th,
@@ -567,12 +495,12 @@ footer hr {
 }
 
 :focus-visible {
-  outline: 2px solid #231810;
+  outline: 2px solid rgba(var(--gst-color-fg-rgb), 1);
   outline-offset: 2px;
 }
 
 .dark :focus-visible {
-  outline-color: rgba(232, 222, 212, 0.6);
+  outline-color: rgba(var(--gst-color-fg-rgb), 0.6);
 }
 
 @media (min-width: 768px) {
