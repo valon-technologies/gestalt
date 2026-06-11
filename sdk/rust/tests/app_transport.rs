@@ -377,12 +377,31 @@ async fn app_invokes_graphql_surface() {
         })
     );
 
+    // The generated decode helper composes with the raw graphql method; the
+    // echoed body has no envelope, so it passes through unchanged.
+    let raw_graphql = app
+        .invoke_graphql(
+            "linear".to_string(),
+            "query Viewer($team: String!) { viewer(team: $team) { id } }".to_string(),
+            gestalt::app::AppInvokeGraphQLOptions {
+                idempotency_key: "graphql-call-43".to_string(),
+                variables: Some(variables.as_object().expect("variables object").clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("invoke graphql raw");
+    let decoded = gestalt::decode_graphql_result("linear", raw_graphql.status, &raw_graphql.body)
+        .expect("decode graphql");
+    assert_eq!(decoded["app"], "linear");
+    assert_eq!(decoded["idempotency_key"], "graphql-call-43");
+
     let seen = server
         .seen_graphql_invokes
         .lock()
         .expect("lock seen graphql invokes")
         .clone();
-    assert_eq!(seen.len(), 1);
+    assert_eq!(seen.len(), 2);
     assert_eq!(
         seen[0],
         SeenGraphQlRequest {

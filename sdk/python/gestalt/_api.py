@@ -128,21 +128,21 @@ class Request:
 
         return self.connection_params.get(name)
 
-    def app(self) -> "App":
+    def app(self, *, timeout: float | None = None) -> "App":
         """Return a generated :class:`gestalt.app.App` client bound to this
         request's ambient context."""
 
         from .app import App
 
-        return App.connect(context=self._native_context())
+        return App.connect(context=self._native_context(), timeout=timeout)
 
-    def agent(self) -> "Agent":
+    def agent(self, *, timeout: float | None = None) -> "Agent":
         """Return a generated :class:`gestalt.agent.Agent` client bound to this
         request's ambient context."""
 
         from .agent import Agent
 
-        return Agent.connect(context=self._native_context())
+        return Agent.connect(context=self._native_context(), timeout=timeout)
 
     def workflows(self) -> "Workflow":
         from ._workflow import Workflow
@@ -156,16 +156,23 @@ class Request:
         return _shared_authorization_client()
 
     def _native_context(self) -> "RequestContext | None":
-        if self.context is None:
-            return None
-        from ._codec.app import from_wire_request_context
-
-        return from_wire_request_context(self.context)
+        return native_request_context(self.context)
 
     def workflow_run_context(self) -> "WorkflowRunContext":
         from ._workflow import parse_workflow_run_context
 
         return parse_workflow_run_context(self.workflow)
+
+
+def native_request_context(context: Any | None) -> "RequestContext | None":
+    """Convert a provider-protocol wire request context into the native
+    :class:`RequestContext` accepted by the generated clients."""
+
+    if context is None:
+        return None
+    from ._codec.app import from_wire_request_context
+
+    return from_wire_request_context(context)
 
 
 @dataclasses.dataclass(slots=True)
