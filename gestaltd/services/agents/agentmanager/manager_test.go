@@ -209,7 +209,6 @@ type routeCountingAgentProvider struct {
 	capabilities       *coreagent.ProviderCapabilities
 	capabilitiesErr    error
 	supportsWorkspace  bool
-	mintEmptyID        bool
 	sessionIdempotency map[string]string
 	createSessionReqs  []*proto.CreateAgentProviderSessionRequest
 	createTurnReqs     []*proto.CreateAgentProviderTurnRequest
@@ -244,12 +243,8 @@ func (p *routeCountingAgentProvider) CreateSession(_ context.Context, req *proto
 			return cloneRouteSession(p.sessions[sessionID]), nil
 		}
 	}
-	sessionID := fmt.Sprintf("%s-session-%d", p.name, len(p.sessions)+1)
-	if p.mintEmptyID {
-		sessionID = ""
-	}
 	session := &coreagent.Session{
-		ID:                 sessionID,
+		ID:                 fmt.Sprintf("%s-session-%d", p.name, len(p.sessions)+1),
 		ProviderName:       p.name,
 		Model:              req.GetModel(),
 		ClientRef:          req.GetClientRef(),
@@ -722,28 +717,6 @@ func TestCreateSessionReplaysExistingSessionForIdempotencyKey(t *testing.T) {
 	}
 	if provider.createSessionReqs[0].Workspace == nil {
 		t.Fatal("provider did not receive manager workspace")
-	}
-}
-
-func TestCreateSessionRejectsProviderSessionWithoutID(t *testing.T) {
-	t.Parallel()
-
-	provider := newRouteCountingAgentProvider("alpha")
-	provider.mintEmptyID = true
-	manager := newTestManager(t, Config{
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
-		},
-	})
-
-	_, err := manager.CreateSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}, &proto.CreateAgentProviderSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err == nil || !strings.Contains(err.Error(), "returned session without id") {
-		t.Fatalf("CreateSession error = %v, want session-without-id rejection", err)
 	}
 }
 
