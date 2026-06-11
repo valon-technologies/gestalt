@@ -68,6 +68,8 @@
   --valon-content-width: 46rem;
   --nextra-primary-hue: 37deg;
   --nextra-primary-saturation: 84%;
+  /* nextra's Head component normally injects this; without it the shell has no max-width */
+  --nextra-content-width: 90rem;
 }
 
 .dark {
@@ -161,6 +163,16 @@ article li {
   margin-top: 0.75rem !important;
 }
 
+/* Wider gutters between sidebar, article, and TOC on large screens.
+   Ramps 3rem→7.5rem between 1280px and the 90rem shell cap, where the
+   text column lands at --valon-content-width (46rem ≈ Notion/Substack
+   reading measure). */
+@media (min-width: 80rem) {
+  article {
+    padding-inline: clamp(3rem, 45vw - 33rem, 7.5rem) !important;
+  }
+}
+
 article a:not(.nextra-card):not(.subheading-anchor) {
   color: rgba(var(--valon-ink), 1);
   text-decoration-color: rgba(var(--valon-ink), 0.24);
@@ -221,12 +233,6 @@ pre code {
 
 pre code > span {
   white-space: pre !important;
-}
-
-.nextra-navbar > nav,
-body > .nextra-skip-nav ~ div,
-footer {
-  max-width: 100% !important;
 }
 
 .nextra-navbar {
