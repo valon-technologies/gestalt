@@ -94,6 +94,8 @@ import {
 } from "./agent.ts";
 import { agentToolRefFromProto } from "../agent-conversions.ts";
 import { fromWireRequestContext } from "../internal/codec/app.ts";
+import type { RequestContext as WireRequestContext } from "../internal/gen/v1/app_pb.ts";
+import type { RequestContext } from "../app.ts";
 import {
   AuthenticationProvider,
   isAuthenticationProvider,
@@ -1109,4 +1111,15 @@ if (import.meta.main) {
       process.exitCode = 1;
     },
   );
+}
+
+/**
+ * Converts a protocol-level wire request context into the generated clients'
+ * native form, for providers that receive contexts through their own protocol
+ * surfaces and need to hand them to `connect(..., { context })`.
+ */
+export function nativeRequestContext(
+  context: WireRequestContext | undefined,
+): RequestContext | undefined {
+  return context === undefined ? undefined : fromWireRequestContext(context);
 }

@@ -54,7 +54,7 @@ func (h *pluginAppTransportHarness) InvokeGraphQL(ctx context.Context, req *prot
 
 	return &proto.OperationResult{
 		Status: 208,
-		Body:   []byte("graphql-ok"),
+		Body:   []byte(`{"data":{"viewer":"graphql-ok"},"errors":[]}`),
 	}, nil
 }
 
@@ -137,14 +137,34 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InvokeGraphQL: %v", err)
 	}
-	if graphQLResult.Status != 208 || string(graphQLResult.Body) != "graphql-ok" {
-		t.Fatalf("InvokeGraphQL result = %+v, want status=208 body=graphql-ok", graphQLResult)
+	if graphQLResult.Status != 208 || string(graphQLResult.Body) != `{"data":{"viewer":"graphql-ok"},"errors":[]}` {
+		t.Fatalf("InvokeGraphQL result = %+v, want the raw graphql envelope", graphQLResult)
+	}
+
+	rawGraphQL, err := app.InvokeGraphQL(context.Background(), "linear", "query { viewer { id } }", &client.AppInvokeGraphQLOptions{
+		IdempotencyKey: "graphql-call-43",
+		Variables:      map[string]any{"team": "eng"},
+	})
+	if err != nil {
+		t.Fatalf("InvokeGraphQL: %v", err)
+	}
+	decodedGraphQL, err := client.DecodeGraphQLResult("linear", rawGraphQL.Status, rawGraphQL.Body)
+	if err != nil {
+		t.Fatalf("DecodeGraphQLResult: %v", err)
+	}
+	if got := decodedGraphQL.(map[string]any)["data"].(map[string]any)["viewer"]; got != "graphql-ok" {
+		t.Fatalf("decoded graphql = %#v, want viewer graphql-ok", decodedGraphQL)
 	}
 
 	harness.mu.Lock()
 	defer harness.mu.Unlock()
-	if len(harness.tokens) != 3 || harness.tokens[0] != "relay-token-go" || harness.tokens[1] != "relay-token-go" || harness.tokens[2] != "relay-token-go" {
-		t.Fatalf("relay tokens = %#v, want three relay-token-go entries", harness.tokens)
+	if len(harness.tokens) != 4 {
+		t.Fatalf("relay tokens = %#v, want four entries", harness.tokens)
+	}
+	for _, token := range harness.tokens {
+		if token != "relay-token-go" {
+			t.Fatalf("relay tokens = %#v, want only relay-token-go entries", harness.tokens)
+		}
 	}
 	if len(harness.requests) != 2 {
 		t.Fatalf("invoke requests len = %d, want 2", len(harness.requests))
@@ -170,8 +190,11 @@ func TestTransport_AppTCPTargetTokenEnv(t *testing.T) {
 	if got := harness.requests[1].GetParams().AsMap(); len(got) != 1 || got["issue_number"] != float64(43) {
 		t.Fatalf("flattened invoke params = %#v, want only issue_number=43", got)
 	}
-	if len(harness.graphQL) != 1 {
-		t.Fatalf("graphql requests len = %d, want 1", len(harness.graphQL))
+	if len(harness.graphQL) != 2 {
+		t.Fatalf("graphql requests len = %d, want 2", len(harness.graphQL))
+	}
+	if harness.graphQL[1].GetIdempotencyKey() != "graphql-call-43" || harness.graphQL[1].GetDocument() != "query { viewer { id } }" {
+		t.Fatalf("helper graphql request = %+v, want trimmed key and document", harness.graphQL[1])
 	}
 	if got := harness.graphQL[0].GetContext().GetSubject().GetId(); got != "user:transport" {
 		t.Fatalf("graphql subject = %q, want user:transport", got)
