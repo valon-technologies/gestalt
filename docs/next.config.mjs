@@ -10,6 +10,11 @@ const withNextra = nextra({
         light: "vitesse-light",
         dark: "vitesse-dark",
       },
+      // Same comment-color lift as the registry renderer: vitesse-light's
+      // #a0ada0 comments are 2.3:1 on our cream pre background.
+      colorReplacements: {
+        "vitesse-light": { "#a0ada0": "#76705f" },
+      },
     },
   },
 });

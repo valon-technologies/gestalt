@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -360,7 +361,7 @@ config:
 	var capturedName string
 	var capturedHostServices []runtimehost.HostService
 	factories := &FactoryRegistry{
-		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService) (core.AuthorizationProvider, error) {
+		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, _ providergateway.ProviderGateway) (core.AuthorizationProvider, error) {
 			capturedName = name
 			capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 			return &recordingAuthorizationProvider{}, nil
