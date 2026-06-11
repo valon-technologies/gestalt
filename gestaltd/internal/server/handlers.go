@@ -836,6 +836,12 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		Surface:        metricutil.InvocationSurfaceHTTP,
 	})
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
+	ctx, err = s.withProviderGatewayCallerToken(ctx, p)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "issue provider gateway caller token", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to prepare invocation context")
+		return
+	}
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
 	if err != nil {
