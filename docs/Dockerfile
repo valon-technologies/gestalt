@@ -1,5 +1,10 @@
 FROM nginx:1.31.0-alpine@sha256:2f07d83bf561b506400dc183b1b2003803e39efbd22451f848adaba14d28c7c7
 COPY out /usr/share/nginx/html
+# The machine-consumed provider index is published with the registry so
+# `gestaltd provider repo add` has a consumer-neutral URL. Baked at image
+# build from the same source the registry catalog is baked from at site
+# build, so the browsable registry and the index deploy as one snapshot.
+ADD https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml /usr/share/nginx/html/provider-index.yaml
 COPY <<'EOF' /etc/nginx/conf.d/default.conf
 server {
     listen 8080;
@@ -33,6 +38,12 @@ server {
 
     location = /404.html {
         try_files /404.html =404;
+    }
+
+    location = /provider-index.yaml {
+        types { }
+        default_type application/yaml;
+        try_files /provider-index.yaml =404;
     }
 
     location / {

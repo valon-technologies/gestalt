@@ -212,7 +212,7 @@ gestaltd serve --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd provider search github
 gestaltd provider info github.com/valon-technologies/gestalt-providers/app/github
 gestaltd provider repo list
-gestaltd provider repo add valon https://registry.gestaltd.ai/provider-index.yaml --config ./config.yaml
+gestaltd provider repo add gestalt https://registry.gestaltd.ai/provider-index.yaml --config ./config.yaml
 gestaltd provider repo update --config ./config.yaml
 gestaltd provider add github.com/valon-technologies/gestalt-providers/app/github --config ./config.yaml --name github
 gestaltd provider add github.com/valon-technologies/gestalt-providers/auth/oidc --config ./config.yaml --kind authentication --name oidc --version '^1.4.0'
