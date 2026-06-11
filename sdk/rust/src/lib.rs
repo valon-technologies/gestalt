@@ -7,6 +7,8 @@ mod agent_provider;
 mod api;
 /// Generated App and AppProvider client and native types.
 pub mod app;
+/// Generated shared runtime for the sdkgen clients.
+pub mod app_invoke;
 mod auth;
 mod auth_server;
 /// Generated Authentication client and native types.
@@ -27,7 +29,6 @@ mod generated;
 /// Generated IndexedDB client and native types.
 pub mod indexeddb;
 mod indexeddb_provider;
-/// Generated shared runtime for the sdkgen clients.
 pub mod invoke_support;
 mod protocol;
 mod provider_server;
@@ -93,6 +94,7 @@ pub use api::{
     Subject, current_native_request_context, current_request_context, ok, with_request_context,
 };
 pub use app::App;
+pub use app_invoke::invoke_graphql;
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
     BeginLoginResponse, CompleteLoginRequest,

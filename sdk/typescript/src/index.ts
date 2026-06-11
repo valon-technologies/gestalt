@@ -100,6 +100,10 @@ export {
   requireOk,
 } from "./invoke_support.ts";
 export {
+  invokeGraphQL,
+  type InvokeGraphQLOptions,
+} from "./app-invoke.ts";
+export {
   Agent,
   agentOutputKindStructured,
   agentOutputKindText,

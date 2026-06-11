@@ -377,12 +377,34 @@ async fn app_invokes_graphql_surface() {
         })
     );
 
+    // The handwritten helper invokes through the same generated method and
+    // decodes the JSON result; the echoed body has no envelope, so it passes
+    // through unchanged.
+    let decoded = gestalt::invoke_graphql(
+        &mut app,
+        "linear",
+        " query Viewer($team: String!) { viewer(team: $team) { id } } ",
+        gestalt::app::AppInvokeGraphQLOptions {
+            idempotency_key: " graphql-call-43 ".to_string(),
+            variables: Some(variables.as_object().expect("variables object").clone()),
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("invoke graphql helper");
+    assert_eq!(decoded["app"], "linear");
+    assert_eq!(decoded["idempotency_key"], "graphql-call-43");
+
+    gestalt::invoke_graphql(&mut app, "linear", "   ", Default::default())
+        .await
+        .expect_err("empty graphql document should fail");
+
     let seen = server
         .seen_graphql_invokes
         .lock()
         .expect("lock seen graphql invokes")
         .clone();
-    assert_eq!(seen.len(), 1);
+    assert_eq!(seen.len(), 2);
     assert_eq!(
         seen[0],
         SeenGraphQlRequest {

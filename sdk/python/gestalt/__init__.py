@@ -37,6 +37,7 @@ from ._api import (
     field,
     parse_subject_id,
 )
+from ._app_invoke import invoke_graphql
 from .invoke_support import (
     InvokeError,
     decode_app_result,
@@ -513,6 +514,7 @@ def __getattr__(name: str):
 
 __all__ = [
     "InvokeError",
+    "invoke_graphql",
     "decode_app_result",
     "decode_graphql_result",
     "ok",
