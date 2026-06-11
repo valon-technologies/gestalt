@@ -1,9 +1,9 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { Search } from "nextra/components";
 import { GitHubIcon } from "nextra/icons";
 import VersionPicker from "../VersionPicker";
+import { docsBaseUrl, registryBaseUrl } from "./site-bases";
 
 const repositoryUrl = "https://github.com/valon-technologies/gestalt";
 
@@ -11,12 +11,18 @@ const repositoryUrl = "https://github.com/valon-technologies/gestalt";
 // the /latest/ rolling alias (production trees live under /latest, /dev,
 // /versions/*), and the registry lives outside every version tree. Dev
 // serves the docs unversioned at the root.
-const docsHref = process.env.NODE_ENV === "development" ? "/" : "/latest/";
+const docsHref =
+  process.env.NODE_ENV === "development" ? "/" : `${docsBaseUrl}/latest/`;
 
-export default function ShellHeaderActions() {
-  const pathname = usePathname();
-  const onRegistry =
-    pathname === "/registry" || pathname.startsWith("/registry/");
+// Which half of the site the navbar belongs to is layout knowledge — the
+// pathname can't answer it once the registry serves from its own origin —
+// so the layouts declare it.
+export default function ShellHeaderActions({
+  side = "docs",
+}: {
+  side?: "docs" | "registry";
+}) {
+  const onRegistry = side === "registry";
   return (
     <div className="docs-header-search">
       <a
@@ -28,7 +34,7 @@ export default function ShellHeaderActions() {
       </a>
       <a
         className="shell-link shell-nav-link"
-        href="/registry"
+        href={registryBaseUrl}
         aria-current={onRegistry ? "true" : undefined}
       >
         Registry

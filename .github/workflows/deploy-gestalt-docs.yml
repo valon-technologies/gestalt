@@ -83,6 +83,11 @@ jobs:
 
       - name: Build current docs
         working-directory: docs
+        env:
+          # Deployed shape: the registry serves from its own origin and
+          # cross-half links are absolute (see docs/components/shell/site-bases.ts).
+          NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
+          NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build
 
       - name: Check docs SDK links
@@ -94,6 +99,11 @@ jobs:
 
       - name: Build versioned docs
         working-directory: docs
+        env:
+          # Deployed shape: the registry serves from its own origin and
+          # cross-half links are absolute (see docs/components/shell/site-bases.ts).
+          NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
+          NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build:versioned
 
       - name: Test static docs routing
