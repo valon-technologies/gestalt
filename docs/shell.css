@@ -647,11 +647,26 @@ article [role='tablist'] [role='tab'][aria-selected='true'] {
 .nextra-sidebar li > a:hover,
 .nextra-mobile-nav li > a:hover {
   background: var(--gst-color-neutral-100) !important;
+  /* One step darker than the standalone hover gold: on the silver pill
+     the 500 loses too much contrast. Pressed steps once more below. */
+  color: var(--gst-color-accent-600) !important;
+}
+
+.nextra-sidebar li > a:active,
+.nextra-mobile-nav li > a:active {
+  color: var(--gst-color-accent-700) !important;
 }
 
 .dark .nextra-sidebar li > a:hover,
 .dark .nextra-mobile-nav li > a:hover {
   background: var(--gst-color-surface) !important;
+  /* The dark hover gold already reads on the dark pill. */
+  color: var(--shell-link-hover) !important;
+}
+
+.dark .nextra-sidebar li > a:active,
+.dark .nextra-mobile-nav li > a:active {
+  color: var(--shell-link-pressed) !important;
 }
 
 /* Breathing room between the nav links and the GitHub button. */
