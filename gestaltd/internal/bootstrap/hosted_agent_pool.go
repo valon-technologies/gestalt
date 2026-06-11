@@ -196,10 +196,18 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 	if err != nil {
 		return nil, err
 	}
-	// Recorded before the provider call: an ambiguous failure may still have
-	// created the session, and a retry with the same key must land on the
-	// backend whose provider can dedup it.
-	p.recordCreateKeyBackend(createKey, backend)
+	// Claimed before the provider call: an ambiguous failure may still have
+	// created the session, and every other create with the same key —
+	// concurrent or a later retry — must land on the one backend whose
+	// provider can dedup it. When another call claimed the key first, follow
+	// its claim instead of retargeting.
+	for owner := p.claimCreateKeyBackend(createKey, backend); owner != backend; owner = p.claimCreateKeyBackend(createKey, backend) {
+		release()
+		backend, release, err = p.acquireBackend(ctx, owner, true)
+		if err != nil {
+			return nil, err
+		}
+	}
 	providerReq := protobuf.Clone(req).(*proto.CreateAgentProviderSessionRequest)
 	workspaceRef := ""
 	if req.GetWorkspace() != nil {
@@ -1429,15 +1437,21 @@ func (p *hostedAgentProviderPool) createKeyBackend(createKey string) *hostedAgen
 	return p.createKeyBackends[createKey]
 }
 
-func (p *hostedAgentProviderPool) recordCreateKeyBackend(createKey string, backend *hostedAgentPoolBackend) {
+// claimCreateKeyBackend records the backend for a create key unless another
+// backend already owns the key, and returns the owning backend. The
+// lookup-and-record is atomic so concurrent creates with the same key cannot
+// each claim a different backend.
+func (p *hostedAgentProviderPool) claimCreateKeyBackend(createKey string, backend *hostedAgentPoolBackend) *hostedAgentPoolBackend {
 	if createKey == "" || backend == nil {
-		return
+		return backend
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.backendAvailableLocked(backend, true) {
-		p.createKeyBackends[createKey] = backend
+	if existing := p.createKeyBackends[createKey]; existing != nil {
+		return existing
 	}
+	p.createKeyBackends[createKey] = backend
+	return backend
 }
 
 func (p *hostedAgentProviderPool) deleteCreateKeyBackend(createKey string) {

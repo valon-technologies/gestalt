@@ -1855,6 +1855,113 @@ func TestHostedAgentProviderPoolRoutesIdempotentCreateToOwningBackend(t *testing
 	}
 }
 
+func TestHostedAgentProviderPoolClaimDoesNotRetargetOwnedKey(t *testing.T) {
+	t.Parallel()
+
+	first := &hostedAgentPoolBackend{id: 1, liveTurns: map[string]struct{}{}}
+	second := &hostedAgentPoolBackend{id: 2, liveTurns: map[string]struct{}{}}
+	pool := &hostedAgentProviderPool{
+		name:              "simple",
+		ctx:               context.Background(),
+		createKeyBackends: map[string]*hostedAgentPoolBackend{},
+		backends:          []*hostedAgentPoolBackend{first, second},
+	}
+
+	if got := pool.claimCreateKeyBackend("key-1", first); got != first {
+		t.Fatalf("initial claim = %#v, want first backend", got)
+	}
+	if got := pool.claimCreateKeyBackend("key-1", second); got != first {
+		t.Fatalf("competing claim = %#v, want the original owner", got)
+	}
+	if got := pool.createKeyBackend("key-1"); got != first {
+		t.Fatalf("create key backend = %#v, want the original owner", got)
+	}
+}
+
+func TestHostedAgentProviderPoolConcurrentKeyedCreatesConvergeOnOneBackend(t *testing.T) {
+	t.Parallel()
+
+	type backendState struct {
+		mu       sync.Mutex
+		calls    int
+		sessions map[string]*coreagent.Session
+	}
+	newBackend := func(id int, name string, state *backendState) *hostedAgentPoolBackend {
+		return &hostedAgentPoolBackend{
+			id: id,
+			provider: &routingAgentProvider{
+				createSession: func(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
+					state.mu.Lock()
+					defer state.mu.Unlock()
+					state.calls++
+					key := strings.TrimSpace(req.GetCreatedBySubjectId()) + "\x1f" + strings.TrimSpace(req.GetIdempotencyKey())
+					if existing, ok := state.sessions[key]; ok {
+						return existing, nil
+					}
+					session := &coreagent.Session{ID: fmt.Sprintf("%s-session-%d", name, len(state.sessions)+1), State: coreagent.SessionStateActive}
+					state.sessions[key] = session
+					return session, nil
+				},
+			},
+			liveTurns: map[string]struct{}{},
+		}
+	}
+	firstState := &backendState{sessions: map[string]*coreagent.Session{}}
+	secondState := &backendState{sessions: map[string]*coreagent.Session{}}
+	pool := &hostedAgentProviderPool{
+		name:              "simple",
+		ctx:               context.Background(),
+		sessionBackends:   map[string]*hostedAgentPoolBackend{},
+		turnBackends:      map[string]*hostedAgentPoolBackend{},
+		createKeyBackends: map[string]*hostedAgentPoolBackend{},
+		sessionWorkspaces: map[string]string{},
+		backends: []*hostedAgentPoolBackend{
+			newBackend(1, "first", firstState),
+			newBackend(2, "second", secondState),
+		},
+	}
+
+	const racers = 8
+	ids := make([]string, racers)
+	errs := make([]error, racers)
+	var wg sync.WaitGroup
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			session, err := pool.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
+				IdempotencyKey:     "race-key",
+				CreatedBySubjectId: "user:user-1",
+			})
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			ids[i] = session.ID
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("CreateSession(%d): %v", i, err)
+		}
+	}
+	for i := 1; i < racers; i++ {
+		if ids[i] != ids[0] {
+			t.Fatalf("session ids diverged: %q vs %q", ids[0], ids[i])
+		}
+	}
+	firstState.mu.Lock()
+	firstSessions := len(firstState.sessions)
+	firstState.mu.Unlock()
+	secondState.mu.Lock()
+	secondSessions := len(secondState.sessions)
+	secondState.mu.Unlock()
+	if firstSessions+secondSessions != 1 {
+		t.Fatalf("sessions created across backends = %d + %d, want exactly 1", firstSessions, secondSessions)
+	}
+}
+
 func TestHostedAgentProviderPoolGetTurnRetriesAfterPreferredTimeout(t *testing.T) {
 	t.Parallel()
 
