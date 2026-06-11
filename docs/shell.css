@@ -724,6 +724,12 @@ article a[class*='text-gray-600']:active {
   .shell-mobile-version {
     display: block;
   }
+
+  /* The sidebar IS the drawer on mobile; with the header copy visible,
+     the sidebar-portaled picker would double up when the drawer opens. */
+  .docs-sidebar-version {
+    display: none;
+  }
 }
 
 .docs-sidebar-version {

@@ -7,6 +7,7 @@ import ShikiCode from "./shiki-code";
 import {
   type Provider,
   type ProviderDoc,
+  docsBaseUrl,
   kindLabel,
   loadProviderDocText,
   normalizeDocPath,
@@ -338,7 +339,9 @@ function resolveProviderDocLink(
     return { href: `${registryRoutePrefix}${trimmed}`, external: false };
   }
   if (trimmed.startsWith("/")) {
-    return { href: `https://gestaltd.ai${trimmed}`, external: true };
+    // Absolute site paths are docs links; docsBaseUrl is the deployed
+    // docs origin (empty in dev, where both halves share one origin).
+    return { href: `${docsBaseUrl}${trimmed}`, external: docsBaseUrl !== "" };
   }
 
   const [withoutHash, hash = ""] = trimmed.split("#", 2);

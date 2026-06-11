@@ -34,6 +34,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -179,12 +180,13 @@ type Deps struct {
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
+	ProviderGateway       providergateway.ProviderGateway
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
-type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService) (core.AuthorizationProvider, error)
+type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, gateway providergateway.ProviderGateway) (core.AuthorizationProvider, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -959,6 +961,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 	deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
+	deps.ProviderGateway = providergateway.New()
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1857,7 +1860,7 @@ func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *co
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
-	provider, err := factories.Authorization(ctx, logicalName, node, hostServices)
+	provider, err := factories.Authorization(ctx, logicalName, node, hostServices, deps.ProviderGateway)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}

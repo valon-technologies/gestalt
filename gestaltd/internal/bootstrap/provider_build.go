@@ -282,28 +282,25 @@ func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (appserv
 	if err != nil {
 		return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
-	if spec.Catalog != nil {
-		return spec, startupOperationRouting{connections: operationConnectionsForCatalog(spec.Catalog, plan, restConnections)}, nil
+	if spec.Catalog == nil && manifestApp.IsDeclarative() {
+		declarative, err := appservice.NewDeclarativeProvider(
+			manifest,
+			nil,
+			appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+			appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+		)
+		if err != nil {
+			return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
+		}
+		spec.Catalog = declarative.Catalog()
+		return spec, startupOperationRouting{
+			connections:    operationConnectionsForCatalog(spec.Catalog, plan, restConnections),
+			resolver:       declarative,
+			overridePolicy: declarative,
+		}, nil
 	}
-	if !manifestApp.IsDeclarative() && !manifestApp.IsSpecLoaded() {
-		return spec, startupOperationRouting{connections: map[string]string{}}, nil
-	}
-	declarative, err := appservice.NewDeclarativeProvider(
-		manifest,
-		nil,
-		appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-		appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-		appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
-	)
-	if err != nil {
-		return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
-	}
-	spec.Catalog = declarative.Catalog()
-	return spec, startupOperationRouting{
-		connections:    operationConnectionsForCatalog(spec.Catalog, plan, restConnections),
-		resolver:       declarative,
-		overridePolicy: declarative,
-	}, nil
+	return spec, startupOperationRouting{connections: operationConnectionsForCatalog(spec.Catalog, plan, restConnections)}, nil
 }
 
 func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConnectionPlan, restConnections map[string]string) map[string]string {

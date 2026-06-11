@@ -144,6 +144,11 @@ try {
     host: "gestaltd.ai",
     status: 200,
   });
+  await assertResponse({
+    url: `${baseUrl}/dev/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
   await assertRedirect({
     url: `${baseUrl}/dev/providers/`,
     host: "gestaltd.ai",
@@ -169,6 +174,21 @@ try {
     includes: "Getting Started",
     excludes: registryMarker,
   });
+  await assertResponse({
+    url: `${baseUrl}/latest/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/_pagefind/pagefind-entry.json`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
+  await assertRedirect({
+    url: `${baseUrl}/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    location: "/latest/_pagefind/pagefind.js",
+  });
   await assertRedirect({
     url: `${baseUrl}/latest/getting-started/`,
     host: "gestaltd.ai",
@@ -185,6 +205,11 @@ try {
     status: 200,
     includes: "Gestalt",
     excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}${exactVersionPrefix}/_pagefind/pagefind.js`,
+    host: "gestaltd.ai",
+    status: 200,
   });
   await assertResponse({
     url: `${baseUrl}${exactVersionPrefix}/reference/cli`,
@@ -281,7 +306,6 @@ try {
 async function serveRegistryHost(pathname, response) {
   if (
     pathname.startsWith("/_next/") ||
-    pathname.startsWith("/_pagefind/") ||
     pathname === "/favicon.svg" ||
     pathname.startsWith("/images/") ||
     pathname.startsWith("/fonts/") ||
@@ -340,7 +364,6 @@ async function serveDocsHost(pathname, response, search = "") {
   if (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
-    pathname.startsWith("/_pagefind/") ||
     pathname === "/favicon.svg" ||
     pathname.startsWith("/images/") ||
     pathname.startsWith("/fonts/") ||

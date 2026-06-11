@@ -39,6 +39,13 @@ function getHighlighter() {
       engine: engine.createJavaScriptRegexEngine({ forgiving: true }),
     }),
   );
+  // A failed init (e.g. a transient chunk-load error) must not poison
+  // every later attempt: drop the rejected promise so the next call
+  // retries, and rethrow for the per-snippet catch below.
+  highlighterPromise = highlighterPromise.catch((error) => {
+    highlighterPromise = null;
+    throw error;
+  });
   return highlighterPromise;
 }
 
@@ -63,7 +70,11 @@ function highlight(language: string, text: string) {
         colorReplacements,
       });
     })
-    .catch(() => null);
+    .catch(() => {
+      // Do not cache failures — the same block retries on its next render.
+      htmlCache.delete(key);
+      return null;
+    });
   htmlCache.set(key, promise);
   return promise;
 }
@@ -79,6 +90,10 @@ export default function ShikiCode({
 
   useEffect(() => {
     let cancelled = false;
+    // Reset before highlighting: when language/text change on a mounted
+    // instance, the previous block's markup must not linger while (or if)
+    // the new highlight resolves.
+    setHtml(null);
     void highlight(language, text).then((result) => {
       if (!cancelled) {
         setHtml(result);
