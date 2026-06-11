@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RegistryBrowse from "./registry-browse";
 import RegistryDetail from "./registry-detail";
 import {
@@ -56,8 +56,18 @@ export default function RegistryApp({ catalogUrl }: { catalogUrl: string }) {
     return () => window.removeEventListener("popstate", updateFromLocation);
   }, []);
 
-  // Browse filters are shareable URL state (?kind=…&q=…).
+  // Browse filters are shareable URL state (?kind=…&q=…). This effect
+  // syncs state back INTO the URL, so it must skip its first run: on
+  // mount the state was just hydrated FROM the URL, and the route state
+  // queued by the location effect above is not visible to this closure
+  // yet — syncing here would rewrite a deep provider URL to the browse
+  // path before React re-renders.
+  const syncedFiltersOnce = useRef(false);
   useEffect(() => {
+    if (!syncedFiltersOnce.current) {
+      syncedFiltersOnce.current = true;
+      return;
+    }
     if (selectedRoute !== null) {
       return;
     }
