@@ -20,6 +20,7 @@ import (
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -76,7 +77,10 @@ func authorizationHostServiceFromDeps(deps Deps) (runtimehost.HostService, bool)
 		Name:           "authorization",
 		MethodPrefixes: []string{grpcMethodPrefix(proto.Authorization_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAuthorizationServer(srv, authorizationservice.NewProviderServer(deps.Authorization))
+			proto.RegisterAuthorizationServer(srv, authorizationservice.NewProviderServer(
+				deps.Authorization,
+				authorizationservice.WithGatewaySource(providergateway.GatewaySourceSDKGRPC),
+			))
 		},
 	}, true
 }

@@ -3115,6 +3115,37 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	}
 }
 
+func TestBuildStartupProviderSpecMCPOnlyManifestHasNoStartupCatalog(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Source:      "mcponly",
+		DisplayName: "MCP Only",
+		Spec: &providermanifestv1.Spec{
+			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+				"mcp": {
+					Mode: providermanifestv1.ConnectionModeSubject,
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeMCPOAuth},
+				},
+			},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				MCP: &providermanifestv1.MCPSurface{URL: "https://example.invalid/mcp", Connection: "mcp"},
+			},
+		},
+	}
+
+	spec, operationRouting, err := buildStartupProviderSpec("mcponly", &config.ProviderEntry{ResolvedManifest: manifest})
+	if err != nil {
+		t.Fatalf("buildStartupProviderSpec: %v", err)
+	}
+	if spec.Catalog != nil {
+		t.Fatalf("unexpected startup catalog for MCP-only manifest: %+v", spec.Catalog)
+	}
+	if len(operationRouting.connections) != 0 {
+		t.Fatalf("unexpected operation connections: %+v", operationRouting.connections)
+	}
+}
+
 func TestStartupProviderProxyResolvesDeclarativeConnectionSelectorBeforeProviderReady(t *testing.T) {
 	t.Parallel()
 

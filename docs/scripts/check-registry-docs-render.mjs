@@ -36,7 +36,6 @@ const server = createServer(async (request, response) => {
     }
     if (
       pathname.startsWith("/_next/") ||
-      pathname.startsWith("/_pagefind/") ||
       pathname === "/favicon.svg" ||
       pathname.startsWith("/images/") ||
       pathname.startsWith("/fonts/")

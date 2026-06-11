@@ -13,6 +13,7 @@ import {
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { gunzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -32,7 +33,6 @@ const globalPrefixes = [
   "/registry",
   "/videos/",
   "/versions.json",
-  "/_pagefind/",
 ];
 const unversionedApiPathPattern = /^\/(?:dev|latest|versions\/v[^/]+)(\/api\/.*)$/;
 
@@ -625,7 +625,7 @@ async function assertNoUnversionedDocLinks(finalOut) {
   }
   const bad = [];
   const patterns = [
-    /\b(?:href|src|action)=["']\/(?!dev(?:\/|["'])|latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|videos\/|versions\.json|_pagefind\/)/g,
+    /\b(?:href|src|action)=["']\/(?!dev(?:\/|["'])|latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|videos\/|versions\.json)/g,
   ];
   for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
     const body = await readFile(file, "utf8");
@@ -711,7 +711,53 @@ async function versionedOutputRoots(finalOut) {
 }
 
 async function runPagefind(finalOut) {
-  run("npx", ["pagefind", "--site", finalOut, "--output-subdir", "_pagefind"], docsRoot);
+  // Each channel owns its search index: Nextra requests
+  // `${basePath}/_pagefind/pagefind.js` and Next.js prepends the basePath to
+  // result links, so the index must live at the channel root and contain only
+  // that channel's pages. A site-wide index would 404 under every channel
+  // prefix and store already-prefixed URLs that Next.js would prefix again.
+  const channels = await versionedOutputRoots(finalOut);
+  for (const { root } of channels) {
+    run("npx", ["pagefind", "--site", root, "--output-subdir", "_pagefind"], docsRoot);
+  }
+  const missing = channels
+    .filter(
+      ({ root }) =>
+        !existsSync(path.join(root, "_pagefind", "pagefind.js")) ||
+        !existsSync(path.join(root, "_pagefind", "pagefind-entry.json")),
+    )
+    .map(({ prefix }) => prefix);
+  if (missing.length > 0) {
+    throw new Error(
+      `pagefind did not emit a search index for: ${missing.join(", ")}`,
+    );
+  }
+  for (const { prefix, root } of channels) {
+    await assertChannelRelativeSearchUrls(prefix, root);
+  }
+}
+
+async function assertChannelRelativeSearchUrls(prefix, root) {
+  // Result links must be channel-relative: Next.js prepends the basePath, so
+  // a stored URL that already carries the channel prefix would render as
+  // /latest/latest/… even though the index files themselves load fine.
+  const fragmentDir = path.join(root, "_pagefind", "fragment");
+  if (!existsSync(fragmentDir)) {
+    throw new Error(`search index for ${prefix} contains no pages`);
+  }
+  for (const name of await readdir(fragmentDir)) {
+    const raw = await readFile(path.join(fragmentDir, name));
+    const gzipStart = raw.indexOf(Buffer.from([0x1f, 0x8b]));
+    const decoded = gunzipSync(gzipStart > 0 ? raw.subarray(gzipStart) : raw);
+    const { url } = JSON.parse(
+      decoded.subarray(decoded.indexOf(0x7b)).toString("utf8"),
+    );
+    if (url === prefix || url.startsWith(`${prefix}/`)) {
+      throw new Error(
+        `search index for ${prefix} stores the prefixed URL ${url}; index each channel from its own root so result links stay channel-relative`,
+      );
+    }
+  }
 }
 
 async function walk(root) {
