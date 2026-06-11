@@ -91,10 +91,6 @@ jobs:
         run: npm run build
 
 
-      - name: Check docs SDK links
-        working-directory: docs
-        run: npm run test:sdk-docs
-
       - name: Fetch main docs source
         run: git fetch origin main
 
@@ -106,6 +102,12 @@ jobs:
           NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
           NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build:versioned
+
+      # After the versioned build: it rebuilds out/ wholesale, and the
+      # leak gate must validate the tree the image actually ships.
+      - name: Check docs SDK links
+        working-directory: docs
+        run: npm run test:sdk-docs
 
       - name: Test static docs routing
         working-directory: docs

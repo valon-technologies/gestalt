@@ -56,9 +56,6 @@ jobs:
           NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build
 
-      - name: Check SDK docs
-        run: npm run test:sdk-docs
-
       - name: Check SDK API docs publish contract
         run: npm run test:sdk-api-docs
 
@@ -72,6 +69,11 @@ jobs:
           NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
           NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build:versioned:test
+
+      # After the versioned build: it rebuilds out/ wholesale, and the
+      # leak gate must validate the tree that actually ships.
+      - name: Check SDK docs
+        run: npm run test:sdk-docs
 
       - name: Test static docs routing
         run: npm run test:registry
