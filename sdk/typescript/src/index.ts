@@ -98,6 +98,10 @@ export {
   decodeGraphQLResult,
 } from "./invoke_support.ts";
 export {
+  invokeGraphQL,
+  type InvokeGraphQLOptions,
+} from "./app-invoke.ts";
+export {
   Agent,
   type AgentWorkspace,
   type AgentWorkspaceGitCheckout,
