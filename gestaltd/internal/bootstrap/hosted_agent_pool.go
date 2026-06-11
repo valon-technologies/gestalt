@@ -196,11 +196,9 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 	if err != nil {
 		return nil, err
 	}
-	// Claimed before the provider call: an ambiguous failure may still have
-	// created the session, and every other create with the same key —
-	// concurrent or a later retry — must land on the one backend whose
-	// provider can dedup it. When another call claimed the key first, follow
-	// its claim instead of retargeting.
+	// Claimed before the provider call so every create with the same key —
+	// concurrent or a retry after an ambiguous failure — lands on the one
+	// backend whose provider can dedup it.
 	for owner := p.claimCreateKeyBackend(createKey, backend); owner != backend; owner = p.claimCreateKeyBackend(createKey, backend) {
 		release()
 		backend, release, err = p.acquireBackend(ctx, owner, true)
@@ -229,10 +227,8 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 		err = fmt.Errorf("agent provider returned session without id")
 	}
 	if err != nil && providerReq.GetPreparedWorkspace() != nil && idempotencyKey == "" {
-		// Un-keyed creates can never dedup, so the prepared workspace is
-		// unreachable after a failure. Keyed creates keep theirs: the
-		// deterministic ref may be the live workspace of a session a retry
-		// will dedup to.
+		// Keyed creates keep their workspace: the deterministic ref may be
+		// the live workspace of a session a retry will dedup to.
 		if cleanupErr := p.removeAgentWorkspace(ctx, backend, workspaceRef); cleanupErr != nil {
 			slog.Warn("failed to clean up prepared hosted agent workspace after create-session error", "provider", p.name, "workspace", workspaceRef, "error", cleanupErr)
 		}
@@ -249,8 +245,8 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 	return session, nil
 }
 
-// hostedAgentCreateKey scopes idempotent-create routing per subject; an empty
-// idempotency key yields no routing key because such creates never dedup.
+// hostedAgentCreateKey scopes idempotent-create routing per subject; an
+// empty idempotency key never dedups, so it gets no routing key.
 func hostedAgentCreateKey(subjectID, idempotencyKey string) string {
 	if strings.TrimSpace(idempotencyKey) == "" {
 		return ""
@@ -258,10 +254,9 @@ func hostedAgentCreateKey(subjectID, idempotencyKey string) string {
 	return strings.TrimSpace(subjectID) + "\x1f" + strings.TrimSpace(idempotencyKey)
 }
 
-// hostedAgentWorkspaceRef names the prepared workspace directory. Keyed
-// creates get a deterministic ref so a retry re-prepares the same directory
-// (idempotent in the runtime provider) and a deduped session keeps pointing at
-// its live workspace; un-keyed creates get a fresh ref.
+// hostedAgentWorkspaceRef names the prepared workspace directory —
+// deterministic for keyed creates so a retry re-prepares the same directory
+// and a deduped session keeps its live workspace.
 func hostedAgentWorkspaceRef(poolName, subjectID, idempotencyKey string) string {
 	if strings.TrimSpace(idempotencyKey) == "" {
 		return uuid.NewString()
@@ -1437,10 +1432,8 @@ func (p *hostedAgentProviderPool) createKeyBackend(createKey string) *hostedAgen
 	return p.createKeyBackends[createKey]
 }
 
-// claimCreateKeyBackend records the backend for a create key unless another
-// backend already owns the key, and returns the owning backend. The
-// lookup-and-record is atomic so concurrent creates with the same key cannot
-// each claim a different backend.
+// claimCreateKeyBackend atomically records the backend for a create key
+// unless another backend already owns it, returning the owner.
 func (p *hostedAgentProviderPool) claimCreateKeyBackend(createKey string, backend *hostedAgentPoolBackend) *hostedAgentPoolBackend {
 	if createKey == "" || backend == nil {
 		return backend
@@ -1474,8 +1467,7 @@ func (p *hostedAgentProviderPool) recordSessionWorkspace(sessionID, workspaceRef
 }
 
 // takeSessionWorkspace returns and forgets the workspace ref a session was
-// prepared under, or "" when unknown (for example after a restart, where the
-// runtime directories did not survive either).
+// prepared under, or "" when unknown.
 func (p *hostedAgentProviderPool) takeSessionWorkspace(sessionID string) string {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {

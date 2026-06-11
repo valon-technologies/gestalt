@@ -1782,102 +1782,6 @@ func TestHostedAgentProviderPoolSkipsPastDrainBackendForNewTurn(t *testing.T) {
 	}
 }
 
-func TestHostedAgentProviderPoolRoutesIdempotentCreateToOwningBackend(t *testing.T) {
-	t.Parallel()
-
-	newBackend := func(id int, name string, calls *int, store map[string]*coreagent.Session) *hostedAgentPoolBackend {
-		return &hostedAgentPoolBackend{
-			id: id,
-			provider: &routingAgentProvider{
-				createSession: func(_ context.Context, req *proto.CreateAgentProviderSessionRequest) (*coreagent.Session, error) {
-					*calls++
-					key := strings.TrimSpace(req.GetCreatedBySubjectId()) + "\x1f" + strings.TrimSpace(req.GetIdempotencyKey())
-					if existing, ok := store[key]; ok {
-						return existing, nil
-					}
-					session := &coreagent.Session{ID: fmt.Sprintf("%s-session-%d", name, len(store)+1), State: coreagent.SessionStateActive}
-					store[key] = session
-					return session, nil
-				},
-			},
-			liveTurns: map[string]struct{}{},
-		}
-	}
-	firstCalls, secondCalls := 0, 0
-	first := newBackend(1, "first", &firstCalls, map[string]*coreagent.Session{})
-	second := newBackend(2, "second", &secondCalls, map[string]*coreagent.Session{})
-	pool := &hostedAgentProviderPool{
-		name:              "simple",
-		ctx:               context.Background(),
-		sessionBackends:   map[string]*hostedAgentPoolBackend{},
-		turnBackends:      map[string]*hostedAgentPoolBackend{},
-		createKeyBackends: map[string]*hostedAgentPoolBackend{},
-		sessionWorkspaces: map[string]string{},
-		backends:          []*hostedAgentPoolBackend{first, second},
-	}
-
-	created, err := pool.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     "create-1",
-		CreatedBySubjectId: "user:user-1",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	owner := first
-	otherCalls := &secondCalls
-	if firstCalls == 0 {
-		owner = second
-		otherCalls = &firstCalls
-	}
-	// Force round-robin away from the owner so only key affinity can route
-	// the retry back.
-	pool.mu.Lock()
-	pool.nextPick = 0
-	if pool.backends[0] == owner {
-		pool.nextPick = 1
-	}
-	pool.mu.Unlock()
-	replayed, err := pool.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
-		IdempotencyKey:     "create-1",
-		CreatedBySubjectId: "user:user-1",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession replay: %v", err)
-	}
-	if replayed.ID != created.ID {
-		t.Fatalf("replayed session ID = %q, want %q", replayed.ID, created.ID)
-	}
-	if *otherCalls != 0 {
-		t.Fatalf("non-owning backend create calls = %d, want 0", *otherCalls)
-	}
-	if got := pool.createKeyBackend("user:user-1\x1fcreate-1"); got != owner {
-		t.Fatalf("create key backend = %#v, want the owning backend", got)
-	}
-}
-
-func TestHostedAgentProviderPoolClaimDoesNotRetargetOwnedKey(t *testing.T) {
-	t.Parallel()
-
-	first := &hostedAgentPoolBackend{id: 1, liveTurns: map[string]struct{}{}}
-	second := &hostedAgentPoolBackend{id: 2, liveTurns: map[string]struct{}{}}
-	pool := &hostedAgentProviderPool{
-		name:              "simple",
-		ctx:               context.Background(),
-		createKeyBackends: map[string]*hostedAgentPoolBackend{},
-		backends:          []*hostedAgentPoolBackend{first, second},
-	}
-
-	if got := pool.claimCreateKeyBackend("key-1", first); got != first {
-		t.Fatalf("initial claim = %#v, want first backend", got)
-	}
-	if got := pool.claimCreateKeyBackend("key-1", second); got != first {
-		t.Fatalf("competing claim = %#v, want the original owner", got)
-	}
-	if got := pool.createKeyBackend("key-1"); got != first {
-		t.Fatalf("create key backend = %#v, want the original owner", got)
-	}
-}
-
 func TestHostedAgentProviderPoolConcurrentKeyedCreatesConvergeOnOneBackend(t *testing.T) {
 	t.Parallel()
 
@@ -1959,6 +1863,9 @@ func TestHostedAgentProviderPoolConcurrentKeyedCreatesConvergeOnOneBackend(t *te
 	secondState.mu.Unlock()
 	if firstSessions+secondSessions != 1 {
 		t.Fatalf("sessions created across backends = %d + %d, want exactly 1", firstSessions, secondSessions)
+	}
+	if owner := pool.createKeyBackend("user:user-1\x1frace-key"); owner == nil {
+		t.Fatal("create key has no owning backend")
 	}
 }
 

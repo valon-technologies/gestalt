@@ -454,14 +454,6 @@ pub struct AgentSession {
 }
 
 /// Request passed to [`AgentProvider::create_session`].
-///
-/// The provider mints a non-empty, stable session id and returns it on the
-/// created [`AgentSession`]; the host treats it as opaque. Creation must be
-/// idempotent on `idempotency_key` scoped per subject
-/// (`created_by_subject_id`): replaying a key the provider has already
-/// honored for the same subject returns the existing session, including its
-/// persisted metadata, instead of creating a new one. Keys from different
-/// subjects never collide, and an empty key always creates a new session.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CreateAgentProviderSessionRequest {
     pub idempotency_key: String,
@@ -1473,11 +1465,9 @@ pub trait AgentProvider: Send + Sync + 'static {
 
     /// Creates or idempotently returns an agent session.
     ///
-    /// The provider mints a non-empty, stable session id and returns it on
-    /// the [`AgentSession`]. Creation must be idempotent on
-    /// `idempotency_key` scoped per subject (`created_by_subject_id`): a
-    /// replayed key returns the existing session with its persisted
-    /// metadata, while an empty key always creates a new session.
+    /// Mints the session id returned on the [`AgentSession`]. Must be
+    /// idempotent on `idempotency_key` scoped per subject
+    /// (`created_by_subject_id`); an empty key always creates.
     async fn create_session(
         &self,
         _request: CreateAgentProviderSessionRequest,

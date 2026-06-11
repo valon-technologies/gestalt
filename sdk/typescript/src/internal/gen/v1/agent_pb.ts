@@ -455,13 +455,10 @@ export const AgentSessionSchema: GenMessage<AgentSession> = /*@__PURE__*/
  */
 export type CreateAgentProviderSessionRequest = Message<"gestalt.provider.v1.CreateAgentProviderSessionRequest"> & {
   /**
-   * The provider mints the session id and returns it on the created
-   * AgentSession; the host treats it as opaque. When a create arrives with an
-   * idempotency_key the provider has already honored for the same subject
-   * (created_by_subject_id), the provider must return the existing session,
-   * including its persisted metadata, instead of creating a new one. Keys
-   * from different subjects never collide, and an empty key always creates a
-   * new session. Idempotency is scoped to the provider's session store.
+   * The provider mints the session id returned on AgentSession. Creation is
+   * idempotent on idempotency_key scoped per subject (created_by_subject_id):
+   * a replayed key returns the existing session, an empty key always creates.
+   * Idempotency is scoped to the provider's session store.
    *
    * @generated from field: string idempotency_key = 2;
    */

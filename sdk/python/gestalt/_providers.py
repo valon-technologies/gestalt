@@ -510,14 +510,10 @@ class AgentProvider(AppProvider):
     def create_session(
         self, request: CreateAgentProviderSessionRequest
     ) -> AgentSession:
-        """Create a session.
+        """Create a session, minting its id.
 
-        The provider mints a non-empty, stable session id and returns it on
-        the ``AgentSession``. Creation must be idempotent on
-        ``request.idempotency_key`` scoped per subject
-        (``request.created_by_subject_id``): a replayed key returns the
-        existing session with its persisted metadata, while an empty key
-        always creates a new session.
+        Must be idempotent on ``request.idempotency_key`` scoped per subject
+        (``request.created_by_subject_id``); an empty key always creates.
         """
         self._unimplemented("create_session")
 

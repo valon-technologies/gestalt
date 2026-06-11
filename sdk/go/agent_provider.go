@@ -16,12 +16,9 @@ import (
 // transport attachment.
 type AgentProvider interface {
 	Provider
-	// CreateSession creates or idempotently returns an agent session. The
-	// provider mints a non-empty, stable session id and returns it on the
-	// AgentSession; the host treats it as opaque. Creation must be idempotent
-	// on IdempotencyKey scoped per subject (CreatedBySubjectID): a replayed
-	// key returns the existing session with its persisted metadata, while an
-	// empty key always creates a new session.
+	// CreateSession mints the session id returned on the AgentSession.
+	// Creation must be idempotent on IdempotencyKey scoped per subject
+	// (CreatedBySubjectID); an empty key always creates a new session.
 	CreateSession(ctx context.Context, req *CreateAgentProviderSessionRequest) (*AgentSession, error)
 	// GetSession returns one agent session by ID.
 	GetSession(ctx context.Context, req *GetAgentProviderSessionRequest) (*AgentSession, error)
