@@ -130,6 +130,11 @@
 
 /* ---------- System and component tiers ---------- */
 :root {
+  /* Defined here, not in globals.css: shell.css consumes it and builds
+     from the working tree in every versioned build, while globals.css is
+     overlaid from release tags (old tags only know --valon-ease-*). */
+  --gst-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+
   /* Link states — color carries every state; never vary font-weight
      (bold glyphs are wider and shift layout). */
   --shell-link: var(--gst-color-fg-muted);

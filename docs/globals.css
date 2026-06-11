@@ -57,7 +57,6 @@
 /* Color tokens are defined at the top of shell.css (working-tree-owned
    across all doc versions); structural tokens live here. */
 :root {
-  --gst-ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --gst-content-width: 46rem;
   /* nextra's Head component normally injects this; without it the shell has no max-width */
   --nextra-content-width: 90rem;
