@@ -9,6 +9,8 @@ import (
 )
 
 func TestCallerTokenIssueVerify(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret")
 	now := time.Now().UTC()
 	claims, err := GenerateCallerTokenClaims("user:123", now)
@@ -31,6 +33,8 @@ func TestCallerTokenIssueVerify(t *testing.T) {
 }
 
 func TestCallerTokenGenerateClaims(t *testing.T) {
+	t.Parallel()
+
 	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
 
 	claims, err := GenerateCallerTokenClaims(" user:abc ", now)
@@ -59,6 +63,8 @@ func TestCallerTokenGenerateClaims(t *testing.T) {
 }
 
 func TestCallerTokenGenerateClaimsRequiresSubjectID(t *testing.T) {
+	t.Parallel()
+
 	_, err := GenerateCallerTokenClaims(" ", time.Now())
 	if err == nil {
 		t.Fatal("GenerateCallerTokenClaims error = nil, want error")
@@ -66,6 +72,8 @@ func TestCallerTokenGenerateClaimsRequiresSubjectID(t *testing.T) {
 }
 
 func TestCallerTokenVerifyRejectsTamperedClaims(t *testing.T) {
+	t.Parallel()
+
 	secret := []byte("test-secret")
 	claims, err := GenerateCallerTokenClaims("user:123", time.Now().UTC())
 	if err != nil {
@@ -94,6 +102,8 @@ func TestCallerTokenVerifyRejectsTamperedClaims(t *testing.T) {
 }
 
 func TestCallerTokenVerifyRejectsWrongSecret(t *testing.T) {
+	t.Parallel()
+
 	claims, err := GenerateCallerTokenClaims("user:123", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("GenerateCallerTokenClaims: %v", err)
@@ -109,6 +119,8 @@ func TestCallerTokenVerifyRejectsWrongSecret(t *testing.T) {
 }
 
 func TestCallerTokenVerifyRejectsExpiredToken(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now().UTC()
 	claims := CallerTokenClaims{
 		SubjectID: "user:123",
@@ -129,6 +141,8 @@ func TestCallerTokenVerifyRejectsExpiredToken(t *testing.T) {
 }
 
 func TestCallerTokenVerifyRejectsLifetimeAboveMaximum(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now().UTC()
 	claims := CallerTokenClaims{
 		SubjectID: "user:123",
@@ -149,6 +163,8 @@ func TestCallerTokenVerifyRejectsLifetimeAboveMaximum(t *testing.T) {
 }
 
 func TestCallerTokenVerifyRejectsInvalidIssuerAndAudience(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now().UTC()
 	base := CallerTokenClaims{
 		SubjectID: "user:123",
@@ -186,7 +202,10 @@ func TestCallerTokenVerifyRejectsInvalidIssuerAndAudience(t *testing.T) {
 			},
 		},
 	} {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			token, err := issueCallerTokenWithoutValidation(t, tc.claims, []byte("test-secret"))
 			if err != nil {
 				t.Fatalf("issueCallerTokenWithoutValidation: %v", err)
