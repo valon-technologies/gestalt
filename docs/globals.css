@@ -9,6 +9,7 @@
 
 html {
   font-family: var(--gst-font-sans);
+  font-weight: 435;
   background: var(--gst-color-bg);
 }
 
@@ -26,7 +27,9 @@ h1,
 article h1 {
   font-family: var(--gst-font-serif);
   font-weight: 400 !important;
-  font-size: clamp(2.25rem, 5vw, 3.5rem) !important;
+  /* ~10% over the previous clamp: Newsreader's old-style proportions read
+     smaller at equal size than the face this replaced. */
+  font-size: clamp(2.5rem, 5.5vw, 3.875rem) !important;
   line-height: 0.98 !important;
   /* relative tracking so it scales with the clamp */
   letter-spacing: -0.02em !important;

@@ -31,17 +31,20 @@
   font-display: swap;
 }
 
+/* Newsreader pinned at optical size 72: the serif only renders display
+   text (h1, wordmark), and the 72 cut carries the sharp near-unbracketed
+   serifs and contrast the role calls for. */
 @font-face {
-  font-family: 'Instrument Serif';
-  src: url('/fonts/instrument-serif-latin-400-normal.woff2') format('woff2');
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-opsz72-latin-400-normal.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Instrument Serif';
-  src: url('/fonts/instrument-serif-latin-400-italic.woff2') format('woff2');
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-opsz72-latin-400-italic.woff2') format('woff2');
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -67,42 +70,42 @@
 
   /* Font tiers — the shell never names a family directly. */
   --gst-font-sans: 'Instrument Sans', system-ui, sans-serif;
-  --gst-font-serif: 'Instrument Serif', Georgia, serif;
+  --gst-font-serif: 'Newsreader', Georgia, serif;
   --gst-font-mono: 'Geist Mono', monospace;
 
-  /* Neutral ramp: cool grays (hue 260, near-zero chroma). */
+  /* Neutral ramp: silver — cool gray with a faint blue cast (hue 245). */
   --gst-color-neutral-0: oklch(100% 0 0); /* #ffffff */
-  --gst-color-neutral-50: oklch(98.5% 0.002 260); /* #f9fafb */
-  --gst-color-neutral-100: oklch(96.7% 0.003 260); /* #f3f4f6 */
-  --gst-color-neutral-150: oklch(94.5% 0.004 260); /* #ebedef */
-  --gst-color-neutral-200: oklch(92% 0.005 260); /* #e3e5e8 */
-  --gst-color-neutral-300: oklch(87% 0.006 260); /* #d2d4d8 */
-  --gst-color-neutral-400: oklch(71% 0.01 260); /* #9ea2a8 */
-  --gst-color-neutral-500: oklch(55% 0.014 260); /* #6d727a */
-  --gst-color-neutral-600: oklch(44.5% 0.015 260); /* #4f545c */
-  --gst-color-neutral-700: oklch(37% 0.013 260); /* #3c4047 */
-  --gst-color-neutral-800: oklch(27.5% 0.008 260); /* #25282c */
-  --gst-color-neutral-900: oklch(21% 0.008 260); /* #16181c */
-  --gst-color-neutral-950: oklch(14.5% 0.006 260); /* #090a0d */
+  --gst-color-neutral-50: oklch(98.6% 0.0025 245); /* #f9fbfc */
+  --gst-color-neutral-100: oklch(96.8% 0.004 245); /* #f2f5f7 */
+  --gst-color-neutral-150: oklch(94.6% 0.005 245); /* #eaedf0 */
+  --gst-color-neutral-200: oklch(92.2% 0.006 245); /* #e2e6e9 */
+  --gst-color-neutral-300: oklch(87% 0.008 245); /* #d0d5d9 */
+  --gst-color-neutral-400: oklch(71% 0.012 245); /* #9ca2a9 */
+  --gst-color-neutral-500: oklch(55% 0.014 245); /* #6b7379 */
+  --gst-color-neutral-600: oklch(44.5% 0.014 245); /* #4e555b */
+  --gst-color-neutral-700: oklch(37% 0.012 245); /* #3b4146 */
+  --gst-color-neutral-800: oklch(27.5% 0.008 245); /* #24282b */
+  --gst-color-neutral-900: oklch(21% 0.007 245); /* #16191b */
+  --gst-color-neutral-950: oklch(14.5% 0.005 245); /* #080a0c */
 
-  /* Accent ramp: steel blue. 700 is the lightest AA shade on the white
-     page (6.94:1); 300 is the dark-mode accent. */
-  --gst-color-accent-50: oklch(97.5% 0.012 240); /* #f0f8fe */
-  --gst-color-accent-100: oklch(94.5% 0.025 240); /* #dff0fc */
-  --gst-color-accent-200: oklch(89% 0.05 242); /* #bfe0fa */
-  --gst-color-accent-300: oklch(81% 0.08 243); /* #94c8f1 */
-  --gst-color-accent-400: oklch(71.5% 0.105 244); /* #66aae0 */
-  --gst-color-accent-500: oklch(62% 0.12 245); /* #3e8cc9 */
-  --gst-color-accent-600: oklch(54% 0.125 246); /* #1e74b2 */
-  --gst-color-accent-700: oklch(46.5% 0.115 247); /* #0f5d96 */
-  --gst-color-accent-800: oklch(40% 0.095 247); /* #104b78 */
-  --gst-color-accent-900: oklch(34% 0.075 248); /* #123a5d */
-  --gst-color-accent-950: oklch(25% 0.055 248); /* #08233a */
+  /* Accent ramp: gold (matches the favicon mark). 700 is the lightest
+     AA shade on the white page (4.99:1); 300 is the dark-mode accent. */
+  --gst-color-accent-50: oklch(99.47% 0.0045 78.3); /* #fffdfa */
+  --gst-color-accent-100: oklch(97.86% 0.0203 81.8); /* #fff7e9 */
+  --gst-color-accent-200: oklch(93.56% 0.0534 81.8); /* #fce7c2 */
+  --gst-color-accent-300: oklch(85.94% 0.1118 82.4); /* #f5ca78 */
+  --gst-color-accent-400: oklch(79.26% 0.1438 80.3); /* #ebb03c */
+  --gst-color-accent-500: oklch(73.06% 0.1519 72.6); /* #e19614 */
+  --gst-color-accent-600: oklch(64.37% 0.1336 72.6); /* #be7e10 */
+  --gst-color-accent-700: oklch(54.88% 0.1131 70.8); /* #9a6410 */
+  --gst-color-accent-800: oklch(46.52% 0.0933 70.5); /* #7a4f10 */
+  --gst-color-accent-900: oklch(38.46% 0.0750 71.9); /* #5c3c0c */
+  --gst-color-accent-950: oklch(29.58% 0.0548 73.6); /* #3d2808 */
 
   /* Ink — the base of the alpha/overlay system, kept as a channel
      triplet for rgba() composition (neutral-900 in sRGB channels).
      Flips with dark mode. */
-  --gst-color-fg-rgb: 22, 24, 28; /* #16181c */
+  --gst-color-fg-rgb: 22, 25, 27; /* #16191b */
 
   /* Semantic roles. Page surface is white (the ramp's own top step). */
   --gst-color-bg: var(--gst-color-neutral-0);
@@ -115,9 +118,9 @@
   --gst-color-accent: var(--gst-color-accent-500);
 
   /* Nextra's chrome derives its primary scale from these knobs
-     (HSL terms; the steel-blue 500 lands near 206deg/56%). */
-  --nextra-primary-hue: 206deg;
-  --nextra-primary-saturation: 56%;
+     (HSL terms; the gold 500 lands near 37deg/84%). */
+  --nextra-primary-hue: 37deg;
+  --nextra-primary-saturation: 84%;
 
   /* Code foreground pairs with the Vitesse highlighter theme. */
   --shell-code-fg: oklch(34.54% 0.0103 114.6); /* #393a34, vitesse-light */
@@ -144,25 +147,25 @@
   /* Select caret — a stroked chevron. A custom property because
      background-image can't take currentColor, so the stroke is a baked
      color following the ink. */
-  --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%2316181c" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/></svg>');
+  --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%2316191b" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/></svg>');
 
   /* Popover shadow (select pickers, menus, search results): ink-tinted in
      light, deeper plain black in dark — a flipped fg triplet can't express
      that, so both literals live here. */
-  --shell-shadow-pop: 0 8px 24px rgba(22, 24, 28, 0.12);
+  --shell-shadow-pop: 0 8px 24px rgba(22, 25, 27, 0.12);
 }
 
 .dark {
   color-scheme: dark;
 
   /* Dark surface ramp — cool near-blacks below neutral-950. */
-  --gst-color-dark-50: oklch(18.5% 0.005 260); /* #111315 */
-  --gst-color-dark-100: oklch(21.5% 0.006 260); /* #181a1c */
-  --gst-color-dark-150: oklch(24.5% 0.007 260); /* #1e2124 */
-  --gst-color-dark-200: oklch(27.5% 0.008 260); /* #25282c */
-  --gst-color-dark-250: oklch(29% 0.008 260); /* #292b2f */
+  --gst-color-dark-50: oklch(18.5% 0.006 245); /* #111315 */
+  --gst-color-dark-100: oklch(21.5% 0.007 245); /* #171a1d */
+  --gst-color-dark-150: oklch(24.5% 0.008 245); /* #1d2124 */
+  --gst-color-dark-200: oklch(27.5% 0.008 245); /* #24282b */
+  --gst-color-dark-250: oklch(29% 0.008 245); /* #282c2f */
 
-  --gst-color-fg-rgb: 224, 225, 228; /* #e0e1e4 */
+  --gst-color-fg-rgb: 223, 225, 228; /* #dfe1e4 */
   --gst-color-bg: var(--gst-color-dark-50);
   --gst-color-surface: var(--gst-color-dark-100);
   --gst-color-surface-strong: var(--gst-color-dark-200);
@@ -190,7 +193,7 @@
   --shell-button-bg-hover: var(--gst-color-dark-200);
   --shell-button-bg-active: var(--gst-color-dark-250);
 
-  --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23e0e1e4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/></svg>');
+  --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23dfe1e4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/></svg>');
 
   --shell-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.34);
 }
@@ -285,6 +288,9 @@
    tagged rule carries it). */
 html {
   font-family: var(--gst-font-sans);
+  /* The variable axis darkens body text slightly past 400 — the brand
+     font this replaced had a darker regular, and plain 400 reads thin. */
+  font-weight: 435;
 }
 
 h1,
