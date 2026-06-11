@@ -7,34 +7,89 @@
  */
 
 
+/* ---------- Fonts ----------
+
+   All bundled faces are OFL (licenses in public/fonts/OFL-*.txt) — the
+   only kind that may live in this public repo; commercially licensed
+   fonts may not. @font-face lives here rather than in globals.css
+   because this file builds from the working tree into every doc
+   version. */
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-wght-normal.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/instrument-sans-latin-wght-italic.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Newsreader pinned at optical size 72: the serif only renders display
+   text (h1, wordmark), and the 72 cut carries the sharp near-unbracketed
+   serifs and contrast the role calls for. */
+@font-face {
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-opsz72-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  src: url('/fonts/newsreader-opsz72-latin-400-italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMono_Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ---------- Tokens ----------
 
    The docs have one style; these custom properties exist so every color
    has one canonical name and so dark mode can flip the semantic roles.
-   Ramps carry their values directly (round-trip-exact OKLCH for the hex
-   in the comments); semantic tokens reference ramp steps, never raw
-   values. */
+   Ramps carry their values directly (OKLCH with sRGB round-trips in the
+   comments); semantic tokens reference ramp steps, never raw values. */
 
 :root {
   color-scheme: light;
 
-  /* Neutral ramp (warm). 50 and 150 are OKLab interpolations between
-     the neighboring steps. */
-  --gst-color-neutral-0: oklch(100% 0 0); /* #ffffff */
-  --gst-color-neutral-50: oklch(98.56% 0.0017 67.8); /* #fbfaf9 */
-  --gst-color-neutral-100: oklch(97.38% 0.0045 78.3); /* #f8f6f3 */
-  --gst-color-neutral-150: oklch(94.86% 0.0086 67.7); /* #f2ede8 */
-  --gst-color-neutral-200: oklch(92.32% 0.0129 63.9); /* #ece4dd */
-  --gst-color-neutral-300: oklch(86.85% 0.0197 72.6); /* #dcd2c6 */
-  --gst-color-neutral-400: oklch(71.06% 0.0350 74.6); /* #af9f8a */
-  --gst-color-neutral-500: oklch(55.54% 0.0431 75.8); /* #827057 */
-  --gst-color-neutral-600: oklch(44.69% 0.0382 91.8); /* #5c543c */
-  --gst-color-neutral-700: oklch(37.61% 0.0346 84.3); /* #4a402c */
-  --gst-color-neutral-800: oklch(27.04% 0.0259 51.0); /* #31231b */
-  --gst-color-neutral-900: oklch(21.87% 0.0213 76.1); /* #20190f */
-  --gst-color-neutral-950: oklch(22.04% 0.0231 57.2); /* #231810 */
+  /* Font tiers — the shell never names a family directly. */
+  --gst-font-sans: 'Instrument Sans', system-ui, sans-serif;
+  --gst-font-serif: 'Newsreader', Georgia, serif;
+  --gst-font-mono: 'Geist Mono', monospace;
 
-  /* Accent (gold) ramp. */
+  /* Neutral ramp: silver — cool gray with a faint blue cast (hue 245). */
+  --gst-color-neutral-0: oklch(100% 0 0); /* #ffffff */
+  --gst-color-neutral-50: oklch(98.6% 0.0025 245); /* #f9fbfc */
+  --gst-color-neutral-100: oklch(96.8% 0.004 245); /* #f2f5f7 */
+  --gst-color-neutral-150: oklch(94.6% 0.005 245); /* #eaedf0 */
+  --gst-color-neutral-200: oklch(92.2% 0.006 245); /* #e2e6e9 */
+  --gst-color-neutral-300: oklch(87% 0.008 245); /* #d0d5d9 */
+  --gst-color-neutral-400: oklch(71% 0.012 245); /* #9ca2a9 */
+  --gst-color-neutral-500: oklch(55% 0.014 245); /* #6b7379 */
+  --gst-color-neutral-600: oklch(44.5% 0.014 245); /* #4e555b */
+  --gst-color-neutral-700: oklch(37% 0.012 245); /* #3b4146 */
+  --gst-color-neutral-800: oklch(27.5% 0.008 245); /* #24282b */
+  --gst-color-neutral-900: oklch(21% 0.007 245); /* #16191b */
+  --gst-color-neutral-950: oklch(14.5% 0.005 245); /* #080a0c */
+
+  /* Accent ramp: gold (matches the favicon mark). 700 is the lightest
+     AA shade on the white page (4.99:1); 300 is the dark-mode accent. */
   --gst-color-accent-50: oklch(99.47% 0.0045 78.3); /* #fffdfa */
   --gst-color-accent-100: oklch(97.86% 0.0203 81.8); /* #fff7e9 */
   --gst-color-accent-200: oklch(93.56% 0.0534 81.8); /* #fce7c2 */
@@ -48,8 +103,9 @@
   --gst-color-accent-950: oklch(29.58% 0.0548 73.6); /* #3d2808 */
 
   /* Ink — the base of the alpha/overlay system, kept as a channel
-     triplet for rgba() composition. Flips with dark mode. */
-  --gst-color-fg-rgb: 35, 24, 16; /* #231810 */
+     triplet for rgba() composition (neutral-900 in sRGB channels).
+     Flips with dark mode. */
+  --gst-color-fg-rgb: 22, 25, 27; /* #16191b */
 
   /* Semantic roles. Page surface is white (the ramp's own top step). */
   --gst-color-bg: var(--gst-color-neutral-0);
@@ -61,7 +117,8 @@
   --gst-color-fg-secondary: rgba(var(--gst-color-fg-rgb), 0.8);
   --gst-color-accent: var(--gst-color-accent-500);
 
-  /* Nextra's chrome derives its primary scale from these knobs. */
+  /* Nextra's chrome derives its primary scale from these knobs
+     (HSL terms; the gold 500 lands near 37deg/84%). */
   --nextra-primary-hue: 37deg;
   --nextra-primary-saturation: 84%;
 
@@ -71,8 +128,7 @@
   /* Interaction surfaces: rest is neutral-150 (via --shell-card-bg);
      hover/pressed composite 5%/10% ink over it. color-mix resolves to
      solid colors, so these also work as background-color under the
-     select's caret background-image. Mixed in sRGB to reproduce the
-     hand-approved #e8e2dd / #ddd8d2 exactly. */
+     select's caret background-image. */
   --shell-control-bg-hover: color-mix(
     in srgb,
     rgb(var(--gst-color-fg-rgb)) 5%,
@@ -87,19 +143,29 @@
   /* Pills: translucent ink that composites to neutral-150 on the page,
      one shade darker on a card. */
   --shell-pill-bg: rgba(var(--gst-color-fg-rgb), 0.045);
+
+  /* Select caret — a stroked chevron. A custom property because
+     background-image can't take currentColor, so the stroke is a baked
+     color following the ink. */
+  --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%2316191b" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/></svg>');
+
+  /* Popover shadow (select pickers, menus, search results): ink-tinted in
+     light, deeper plain black in dark — a flipped fg triplet can't express
+     that, so both literals live here. */
+  --shell-shadow-pop: 0 8px 24px rgba(22, 25, 27, 0.12);
 }
 
 .dark {
   color-scheme: dark;
 
-  /* Dark surface ramp — warm browns below neutral-950. */
-  --gst-color-dark-50: oklch(18.35% 0.0086 31.2); /* #161110 */
-  --gst-color-dark-100: oklch(21.82% 0.0098 52.9); /* #1e1916 */
-  --gst-color-dark-150: oklch(24.63% 0.0123 44.5); /* #261f1c */
-  --gst-color-dark-200: oklch(27.62% 0.0141 48.2); /* #2e2622 */
-  --gst-color-dark-250: oklch(28.73% 0.0127 51.7); /* #302925 */
+  /* Dark surface ramp — cool near-blacks below neutral-950. */
+  --gst-color-dark-50: oklch(18.5% 0.006 245); /* #111315 */
+  --gst-color-dark-100: oklch(21.5% 0.007 245); /* #171a1d */
+  --gst-color-dark-150: oklch(24.5% 0.008 245); /* #1d2124 */
+  --gst-color-dark-200: oklch(27.5% 0.008 245); /* #24282b */
+  --gst-color-dark-250: oklch(29% 0.008 245); /* #282c2f */
 
-  --gst-color-fg-rgb: 232, 222, 212; /* #e8ded4 */
+  --gst-color-fg-rgb: 223, 225, 228; /* #dfe1e4 */
   --gst-color-bg: var(--gst-color-dark-50);
   --gst-color-surface: var(--gst-color-dark-100);
   --gst-color-surface-strong: var(--gst-color-dark-200);
@@ -126,6 +192,10 @@
   --shell-button-bg: var(--gst-color-dark-150);
   --shell-button-bg-hover: var(--gst-color-dark-200);
   --shell-button-bg-active: var(--gst-color-dark-250);
+
+  --shell-icon-caret: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23dfe1e4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/></svg>');
+
+  --shell-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.34);
 }
 
 /* ---------- System and component tiers ---------- */
@@ -206,6 +276,49 @@
   :root {
     --shell-page-margin: 2rem;
   }
+}
+
+/* ---------- Typography across versions ---------- */
+
+/* Versioned builds overlay globals.css from each release tag, and old
+   tags bake retired brand font families in as literals. These re-declares
+   mirror the current globals.css rules at the same selectors: shell.css
+   imports after every era's globals.css, so at equal specificity the
+   theme's font tiers win across all versions (!important only where the
+   tagged rule carries it). */
+html {
+  font-family: var(--gst-font-sans);
+  /* The variable axis darkens body text slightly past 400 — the brand
+     font this replaced had a darker regular, and plain 400 reads thin. */
+  font-weight: 435;
+}
+
+h1,
+article h1 {
+  font-family: var(--gst-font-serif);
+}
+
+h2,
+h3,
+article h2,
+article h3 {
+  font-family: var(--gst-font-sans);
+  font-weight: 500 !important;
+}
+
+h4,
+h5,
+h6,
+article h4 {
+  font-family: var(--gst-font-sans);
+}
+
+code,
+pre,
+kbd,
+samp,
+.nextra-code {
+  font-family: var(--gst-font-mono) !important;
 }
 
 /* ---------- Page margins ---------- */
@@ -351,14 +464,13 @@ ul[class*='--button-width'] {
   border-radius: 6px !important;
   background: var(--gst-color-bg) !important;
   backdrop-filter: none !important;
-  box-shadow: 0 8px 24px rgba(35, 24, 16, 0.12) !important;
+  box-shadow: var(--shell-shadow-pop) !important;
   color: rgba(var(--gst-color-fg-rgb), 0.8);
   padding: 4px;
 }
 
 .dark ul[class*='--button-width'] {
   background: var(--gst-color-surface) !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34) !important;
 }
 
 /* Menu items share the select option recipe:
@@ -486,6 +598,12 @@ ul[class*='--button-width'] > li[data-focus] {
   margin-inline: 0.4rem;
 }
 
+/* The navbar wordmark (components/shell/logo.tsx) sets the serif here so
+   the component carries no font-family literal. */
+.shell-logo-word {
+  font-family: var(--gst-font-serif);
+}
+
 /* The current page in the navbar takes .shell-link[aria-current] above —
    the persistent gold state must be the AA-safe current token, gold-700 on
    light / gold-300 on dark (lightest AA-passing shades); hover stays the brighter,
@@ -529,11 +647,26 @@ article [role='tablist'] [role='tab'][aria-selected='true'] {
 .nextra-sidebar li > a:hover,
 .nextra-mobile-nav li > a:hover {
   background: var(--gst-color-neutral-100) !important;
+  /* One step darker than the standalone hover gold: on the silver pill
+     the 500 loses too much contrast. Pressed steps once more below. */
+  color: var(--gst-color-accent-600) !important;
+}
+
+.nextra-sidebar li > a:active,
+.nextra-mobile-nav li > a:active {
+  color: var(--gst-color-accent-700) !important;
 }
 
 .dark .nextra-sidebar li > a:hover,
 .dark .nextra-mobile-nav li > a:hover {
   background: var(--gst-color-surface) !important;
+  /* The dark hover gold already reads on the dark pill. */
+  color: var(--shell-link-hover) !important;
+}
+
+.dark .nextra-sidebar li > a:active,
+.dark .nextra-mobile-nav li > a:active {
+  color: var(--shell-link-pressed) !important;
 }
 
 /* Breathing room between the nav links and the GitHub button. */
@@ -559,7 +692,7 @@ article [role='tablist'] [role='tab'][aria-selected='true'] {
 
 .shell-not-found h1 {
   margin: 0;
-  font-family: 'Season Serif', Georgia, serif;
+  font-family: var(--gst-font-serif);
 }
 
 .shell-not-found p {
@@ -791,7 +924,7 @@ footer.shell-footer {
   padding-left: 2rem;
 }
 
-/* Nextra's footer wrapper paints its own gray band; keep the valon surface. */
+/* Nextra's footer wrapper paints its own gray band; keep the theme surface. */
 div:has(> footer.shell-footer) {
   background: transparent !important;
 }
@@ -807,7 +940,9 @@ select.shell-select {
   border: 1px solid var(--shell-button-border);
   border-radius: 8px;
   background-color: var(--shell-button-bg);
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23231810" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/></svg>');
+  /* The chevron data-URI bakes a stroke color, so the theme owns it
+     (light and dark variants flip with --shell-icon-caret). */
+  background-image: var(--shell-icon-caret);
   background-position: right 0.6rem center;
   background-repeat: no-repeat;
   background-size: 12px;
@@ -823,10 +958,6 @@ select.shell-select:hover {
 
 select.shell-select:active {
   background-color: var(--shell-button-bg-active);
-}
-
-.dark select.shell-select {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="48 96 128 176 208 96" fill="none" stroke="%23e8ded4" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.75"/></svg>');
 }
 
 @media (max-width: 767px) {
@@ -859,13 +990,12 @@ select.shell-select:active {
     border: 1px solid var(--gst-color-border);
     border-radius: 6px;
     background: var(--gst-color-bg);
-    box-shadow: 0 8px 24px rgba(35, 24, 16, 0.12);
+    box-shadow: var(--shell-shadow-pop);
     padding: 4px;
   }
 
   .dark select.shell-select::picker(select) {
     background: var(--gst-color-surface);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
   }
 
   select.shell-select option {
@@ -888,51 +1018,45 @@ select.shell-select:active {
   }
 
   /* Phosphor-style check, right-aligned (default checkmark sits left);
-     centered on the flex row so it shares the text's optical baseline. */
+     centered on the flex row so it shares the text's optical baseline.
+     The glyph is a mask, so the data-URI's stroke color is irrelevant —
+     the fill comes from background-color and flips with the theme. */
   select.shell-select option::checkmark {
+    content: "";
     order: 1;
     margin-left: auto;
     display: inline-flex;
     align-self: center;
+    width: 14px;
+    height: 14px;
     line-height: 1;
-    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="14" height="14"><polyline points="40 144 96 200 224 72" fill="none" stroke="%239a6410" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    background-color: var(--shell-link-current);
+    mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><polyline points="40 144 96 200 224 72" fill="none" stroke="black" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>')
+      center / contain no-repeat;
   }
 
-  .dark select.shell-select option::checkmark {
-    content: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="14" height="14"><polyline points="40 144 96 200 224 72" fill="none" stroke="%23f5ca78" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
-  }
-
-  /* Per-option icons (sun/moon/monitor), Phosphor stroke style. */
+  /* Per-option icons (sun/moon/monitor), Phosphor stroke style. Masks
+     like the checkmark: ink at 75% via background-color, so one rule set
+     serves both themes (no .dark duplicates). */
   select.shell-select option::before {
     content: "";
     width: 14px;
     height: 14px;
     flex-shrink: 0;
-    background: center / contain no-repeat;
+    background-color: rgba(var(--gst-color-fg-rgb), 0.75);
+    mask: center / contain no-repeat;
   }
 
   select.shell-select option[value='system']::before {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23231810" stroke-opacity="0.7" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="48" width="192" height="144" rx="16"/><line x1="96" y1="224" x2="160" y2="224"/></g></svg>');
+    mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="black" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="48" width="192" height="144" rx="16"/><line x1="96" y1="224" x2="160" y2="224"/></g></svg>');
   }
 
   select.shell-select option[value='light']::before {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23231810" stroke-opacity="0.7" stroke-width="24" stroke-linecap="round"><circle cx="128" cy="128" r="52"/><line x1="128" y1="20" x2="128" y2="44"/><line x1="128" y1="212" x2="128" y2="236"/><line x1="20" y1="128" x2="44" y2="128"/><line x1="212" y1="128" x2="236" y2="128"/><line x1="52" y1="52" x2="69" y2="69"/><line x1="187" y1="187" x2="204" y2="204"/><line x1="52" y1="204" x2="69" y2="187"/><line x1="187" y1="69" x2="204" y2="52"/></g></svg>');
+    mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="black" stroke-width="24" stroke-linecap="round"><circle cx="128" cy="128" r="52"/><line x1="128" y1="20" x2="128" y2="44"/><line x1="128" y1="212" x2="128" y2="236"/><line x1="20" y1="128" x2="44" y2="128"/><line x1="212" y1="128" x2="236" y2="128"/><line x1="52" y1="52" x2="69" y2="69"/><line x1="187" y1="187" x2="204" y2="204"/><line x1="52" y1="204" x2="69" y2="187"/><line x1="187" y1="69" x2="204" y2="52"/></g></svg>');
   }
 
   select.shell-select option[value='dark']::before {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path d="M216.7 152.6A91.9 91.9 0 0 1 103.4 39.3 92 92 0 1 0 216.7 152.6Z" fill="none" stroke="%23231810" stroke-opacity="0.7" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
-  }
-
-  .dark select.shell-select option[value='system']::before {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23e8ded4" stroke-opacity="0.75" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"><rect x="32" y="48" width="192" height="144" rx="16"/><line x1="96" y1="224" x2="160" y2="224"/></g></svg>');
-  }
-
-  .dark select.shell-select option[value='light']::before {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><g fill="none" stroke="%23e8ded4" stroke-opacity="0.75" stroke-width="24" stroke-linecap="round"><circle cx="128" cy="128" r="52"/><line x1="128" y1="20" x2="128" y2="44"/><line x1="128" y1="212" x2="128" y2="236"/><line x1="20" y1="128" x2="44" y2="128"/><line x1="212" y1="128" x2="236" y2="128"/><line x1="52" y1="52" x2="69" y2="69"/><line x1="187" y1="187" x2="204" y2="204"/><line x1="52" y1="204" x2="69" y2="187"/><line x1="187" y1="69" x2="204" y2="52"/></g></svg>');
-  }
-
-  .dark select.shell-select option[value='dark']::before {
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path d="M216.7 152.6A91.9 91.9 0 0 1 103.4 39.3 92 92 0 1 0 216.7 152.6Z" fill="none" stroke="%23e8ded4" stroke-opacity="0.75" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><path d="M216.7 152.6A91.9 91.9 0 0 1 103.4 39.3 92 92 0 1 0 216.7 152.6Z" fill="none" stroke="black" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/></svg>');
   }
 }
 

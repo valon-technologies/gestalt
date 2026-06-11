@@ -1,21 +1,9 @@
 .shell {
-  --registry-surface: rgba(248, 246, 243, 0.9);
-  --registry-surface-hover: rgba(248, 246, 243, 0.98);
-  --registry-surface-focus: rgba(255, 255, 255, 0.92);
-  --registry-surface-subtle: rgba(255, 255, 255, 0.66);
-  --registry-icon-surface: rgba(236, 228, 221, 0.62);
-  --registry-selected-surface: rgba(255, 247, 233, 0.8);
-  --registry-selected-hover: rgba(255, 247, 233, 0.92);
-  --registry-table-surface: rgba(248, 246, 243, 0.72);
-  --registry-row-hover: rgba(35, 24, 16, 0.05);
-  --registry-shadow: rgba(35, 24, 16, 0.08);
-  --registry-solid-border: rgba(var(--gst-color-fg-rgb), 1);
-  --registry-solid-surface: rgba(var(--gst-color-fg-rgb), 1);
-  --registry-solid-text: #ffffff;
-  --registry-solid-muted: rgba(255, 255, 255, 0.68);
-  --registry-solid-muted-strong: rgba(255, 255, 255, 0.74);
+  /* Module surfaces, expressed over theme tokens (no brand literals). */
+  --registry-surface: color-mix(in srgb, var(--gst-color-surface) 90%, transparent);
+  --registry-surface-focus: color-mix(in srgb, var(--gst-color-bg) 92%, transparent);
+  --registry-table-surface: color-mix(in srgb, var(--gst-color-surface) 72%, transparent);
   --registry-code-surface: var(--shell-code-surface);
-  --registry-inline-code-border: rgba(35, 24, 16, 0.08);
 
   min-height: 100vh;
   color: rgba(var(--gst-color-fg-rgb), 1);
@@ -23,25 +11,12 @@
   overflow-x: clip;
 }
 
-/* Color tokens flip on html.dark (see the token block in shell.css); only the module's
-   own surfaces are re-scoped here. */
+/* Color tokens flip on html.dark (the token block in shell.css); only the module's
+   own surfaces are re-scoped here. Surface and table tones follow the
+   flipped tokens already — focus steps one shade above the dark cards
+   instead of toward the (now near-black) page. */
 :global(html.dark) .shell {
-  --registry-surface: rgba(30, 25, 22, 0.9);
-  --registry-surface-hover: rgba(38, 31, 27, 0.96);
-  --registry-surface-focus: rgba(38, 31, 27, 0.96);
-  --registry-surface-subtle: rgba(232, 222, 212, 0.06);
-  --registry-icon-surface: rgba(232, 222, 212, 0.08);
-  --registry-selected-surface: color-mix(in oklab, var(--gst-color-accent-300) 10%, transparent);
-  --registry-selected-hover: color-mix(in oklab, var(--gst-color-accent-300) 14%, transparent);
-  --registry-table-surface: rgba(30, 25, 22, 0.72);
-  --registry-row-hover: rgba(232, 222, 212, 0.06);
-  --registry-shadow: rgba(0, 0, 0, 0.34);
-  --registry-solid-border: color-mix(in oklab, var(--gst-color-accent-300) 32%, transparent);
-  --registry-solid-surface: color-mix(in oklab, var(--gst-color-accent-300) 12%, transparent);
-  --registry-solid-text: rgba(232, 222, 212, 1);
-  --registry-solid-muted: rgba(232, 222, 212, 0.58);
-  --registry-solid-muted-strong: rgba(232, 222, 212, 0.66);
-  --registry-inline-code-border: rgba(232, 222, 212, 0.12);
+  --registry-surface-focus: color-mix(in srgb, var(--shell-control-bg-hover) 96%, transparent);
   color-scheme: dark;
 }
 
@@ -64,7 +39,7 @@
 /* Size, tracking, and color come from the global h1 rule (shell.css). */
 .pageHeader h1 {
   margin: 0 0 12px;
-  font-family: "Season Serif", Georgia, serif;
+  font-family: var(--gst-font-serif);
   font-weight: 400;
   line-height: 1;
 }
@@ -81,7 +56,7 @@
   border-radius: 6px;
   background: var(--shell-card-bg);
   color: var(--shell-code-fg);
-  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--gst-font-mono);
   font-size: 0.86em;
   padding: 0.1rem 0.28rem;
 }
@@ -371,7 +346,7 @@
 /* Size, tracking, and color come from the global h1 rule (shell.css). */
 .detailTitle .providerName {
   margin: 0;
-  font-family: "Season Serif", Georgia, serif;
+  font-family: var(--gst-font-serif);
   font-weight: 400;
   line-height: 1;
 }
@@ -417,7 +392,7 @@
 .fallbackIcon,
 .largeFallbackIcon {
   color: rgba(var(--gst-color-fg-rgb), 1);
-  font-family: "Season Serif", Georgia, serif;
+  font-family: var(--gst-font-serif);
   font-size: 1.25rem;
   line-height: 1;
 }
@@ -439,7 +414,7 @@
 .installBlock code {
   overflow-wrap: anywhere;
   color: rgba(var(--gst-color-fg-rgb), 0.92);
-  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--gst-font-mono);
   font-size: 0.875rem;
   line-height: 1.55;
 }
@@ -612,7 +587,7 @@
 }
 
 .markdownBody h2 {
-  font-family: "Season Serif", Georgia, serif;
+  font-family: var(--gst-font-serif);
   font-size: 2rem;
   font-weight: 400;
 }
@@ -661,7 +636,7 @@
   border-radius: 6px;
   background: var(--shell-card-bg) !important;
   color: var(--shell-code-fg) !important;
-  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--gst-font-mono);
   font-size: 0.86em;
   padding: 0.12rem 0.28rem;
 }
@@ -749,7 +724,7 @@
 .statePanel h1 {
   margin: 0 0 10px;
   color: rgba(var(--gst-color-fg-rgb), 1);
-  font-family: "Season Serif", Georgia, serif;
+  font-family: var(--gst-font-serif);
   font-size: 2.5rem;
   font-weight: 400;
   line-height: 1;
