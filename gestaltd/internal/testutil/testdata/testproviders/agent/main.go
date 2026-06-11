@@ -50,9 +50,6 @@ func (p *agentProvider) Configure(_ context.Context, name string, _ map[string]a
 func (p *agentProvider) CreateSession(_ context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// Idempotency keys are scoped per subject: a replayed key returns the
-	// previously created session with its persisted metadata, while an empty
-	// key always creates a new session.
 	scopedKey := ""
 	if idempotencyKey := strings.TrimSpace(req.IdempotencyKey); idempotencyKey != "" {
 		scopedKey = strings.TrimSpace(req.CreatedBySubjectID) + "\x00" + idempotencyKey

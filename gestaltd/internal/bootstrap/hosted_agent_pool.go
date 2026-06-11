@@ -245,8 +245,7 @@ func (p *hostedAgentProviderPool) CreateSession(ctx context.Context, req *proto.
 	return session, nil
 }
 
-// hostedAgentCreateKey scopes idempotent-create routing per subject; an
-// empty idempotency key never dedups, so it gets no routing key.
+// An empty idempotency key never dedups, so it yields no routing key.
 func hostedAgentCreateKey(subjectID, idempotencyKey string) string {
 	if strings.TrimSpace(idempotencyKey) == "" {
 		return ""
@@ -1432,8 +1431,6 @@ func (p *hostedAgentProviderPool) createKeyBackend(createKey string) *hostedAgen
 	return p.createKeyBackends[createKey]
 }
 
-// claimCreateKeyBackend atomically records the backend for a create key
-// unless another backend already owns it, returning the owner.
 func (p *hostedAgentProviderPool) claimCreateKeyBackend(createKey string, backend *hostedAgentPoolBackend) *hostedAgentPoolBackend {
 	if createKey == "" || backend == nil {
 		return backend
@@ -1466,8 +1463,6 @@ func (p *hostedAgentProviderPool) recordSessionWorkspace(sessionID, workspaceRef
 	p.sessionWorkspaces[sessionID] = workspaceRef
 }
 
-// takeSessionWorkspace returns and forgets the workspace ref a session was
-// prepared under, or "" when unknown.
 func (p *hostedAgentProviderPool) takeSessionWorkspace(sessionID string) string {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
