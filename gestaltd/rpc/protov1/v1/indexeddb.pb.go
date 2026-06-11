@@ -2940,7 +2940,7 @@ var File_v1_indexeddb_proto protoreflect.FileDescriptor
 
 const file_v1_indexeddb_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/indexeddb.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\"\xf2\x02\n" +
+	"\x12v1/indexeddb.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17google/rpc/status.proto\x1a\x14v1/annotations.proto\"\xf2\x02\n" +
 	"\n" +
 	"TypedValue\x12;\n" +
 	"\n" +
@@ -3127,31 +3127,31 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x19TransactionDurabilityHint\x12\"\n" +
 	"\x1eTRANSACTION_DURABILITY_DEFAULT\x10\x00\x12!\n" +
 	"\x1dTRANSACTION_DURABILITY_STRICT\x10\x01\x12\"\n" +
-	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xfb\r\n" +
-	"\tIndexedDB\x12Z\n" +
-	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
-	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
-	"\x03Get\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\x12S\n" +
-	"\x06GetKey\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a .gestalt.provider.v1.KeyResponse\x12A\n" +
-	"\x03Add\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
-	"\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12I\n" +
-	"\x06Delete\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12L\n" +
-	"\x05Clear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\x12\\\n" +
-	"\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12]\n" +
+	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xcd\x11\n" +
+	"\tIndexedDB\x12n\n" +
+	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\x12\x8a\xb5\x18\x04name\x8a\xb5\x18\x06schema\x12d\n" +
+	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\b\x8a\xb5\x18\x04name\x12d\n" +
+	"\x03Get\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\"\x0f\x8a\xb5\x18\x05store\x8a\xb5\x18\x02id\x12d\n" +
+	"\x06GetKey\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a .gestalt.provider.v1.KeyResponse\"\x0f\x8a\xb5\x18\x05store\x8a\xb5\x18\x02id\x12V\n" +
+	"\x03Add\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\"\x13\x8a\xb5\x18\x05store\x8a\xb5\x18\x06record\x12V\n" +
+	"\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\"\x13\x8a\xb5\x18\x05store\x8a\xb5\x18\x06record\x12Z\n" +
+	"\x06Delete\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\x0f\x8a\xb5\x18\x05store\x8a\xb5\x18\x02id\x12W\n" +
+	"\x05Clear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\"\t\x8a\xb5\x18\x05store\x12p\n" +
+	"\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12q\n" +
 	"\n" +
-	"GetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\x12Y\n" +
-	"\x05Count\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\x12`\n" +
-	"\vDeleteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12W\n" +
-	"\bIndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\x12W\n" +
-	"\vIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\x12[\n" +
-	"\vIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12\\\n" +
-	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\x12X\n" +
+	"GetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12m\n" +
+	"\x05Count\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12t\n" +
+	"\vDeleteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12~\n" +
+	"\bIndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12~\n" +
+	"\vIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x82\x01\n" +
+	"\vIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x83\x01\n" +
+	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x7f\n" +
 	"\n" +
-	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\x12Z\n" +
-	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12_\n" +
+	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x81\x01\n" +
+	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12_\n" +
 	"\n" +
 	"OpenCursor\x12(.gestalt.provider.v1.CursorClientMessage\x1a#.gestalt.provider.v1.CursorResponse(\x010\x01\x12o\n" +
-	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01B\xda\x01\n" +
+	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01\x1a\r\x8a\xb5\x18\tindexeddbB\xda\x01\n" +
 	"\x17com.gestalt.provider.v1B\x0eIndexeddbProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -3335,6 +3335,7 @@ func file_v1_indexeddb_proto_init() {
 	if File_v1_indexeddb_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	file_v1_indexeddb_proto_msgTypes[0].OneofWrappers = []any{
 		(*TypedValue_NullValue)(nil),
 		(*TypedValue_StringValue)(nil),

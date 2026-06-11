@@ -4,13 +4,14 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_v1_annotations } from "./annotations_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/test.proto.
  */
 export const file_v1_test: GenFile = /*@__PURE__*/
-  fileDesc("Cg12MS90ZXN0LnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIhMKEUhlbGxvV29ybGRSZXF1ZXN0IiUKEkhlbGxvV29ybGRSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJMmUKBFRlc3QSXQoKSGVsbG9Xb3JsZBImLmdlc3RhbHQucHJvdmlkZXIudjEuSGVsbG9Xb3JsZFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkhlbGxvV29ybGRSZXNwb25zZWIGcHJvdG8z");
+  fileDesc("Cg12MS90ZXN0LnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIhMKEUhlbGxvV29ybGRSZXF1ZXN0IjIKEkhlbGxvV29ybGRSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJOguatRgHbWVzc2FnZTJlCgRUZXN0El0KCkhlbGxvV29ybGQSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkhlbGxvV29ybGRSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5IZWxsb1dvcmxkUmVzcG9uc2ViBnByb3RvMw", [file_v1_annotations]);
 
 /**
  * HelloWorldRequest carries no input fields. It exists to exercise the

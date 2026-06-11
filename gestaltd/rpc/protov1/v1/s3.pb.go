@@ -1394,7 +1394,7 @@ var File_v1_s3_proto protoreflect.FileDescriptor
 
 const file_v1_s3_proto_rawDesc = "" +
 	"\n" +
-	"\vv1/s3.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"L\n" +
+	"\vv1/s3.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x14v1/annotations.proto\"L\n" +
 	"\vS3ObjectRef\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1d\n" +
 	"\n" +
@@ -1514,20 +1514,22 @@ const file_v1_s3_proto_rawDesc = "" +
 	"\x12PRESIGN_METHOD_GET\x10\x01\x12\x16\n" +
 	"\x12PRESIGN_METHOD_PUT\x10\x02\x12\x19\n" +
 	"\x15PRESIGN_METHOD_DELETE\x10\x03\x12\x17\n" +
-	"\x13PRESIGN_METHOD_HEAD\x10\x042\xa0\x05\n" +
-	"\x02S3\x12]\n" +
+	"\x13PRESIGN_METHOD_HEAD\x10\x042\xb0\a\n" +
+	"\x02S3\x12f\n" +
 	"\n" +
-	"HeadObject\x12&.gestalt.provider.v1.HeadObjectRequest\x1a'.gestalt.provider.v1.HeadObjectResponse\x12\\\n" +
+	"HeadObject\x12&.gestalt.provider.v1.HeadObjectRequest\x1a'.gestalt.provider.v1.HeadObjectResponse\"\a\x8a\xb5\x18\x03ref\x12n\n" +
 	"\n" +
-	"ReadObject\x12&.gestalt.provider.v1.ReadObjectRequest\x1a$.gestalt.provider.v1.ReadObjectChunk0\x01\x12b\n" +
-	"\vWriteObject\x12'.gestalt.provider.v1.WriteObjectRequest\x1a(.gestalt.provider.v1.WriteObjectResponse(\x01\x12P\n" +
-	"\fDeleteObject\x12(.gestalt.provider.v1.DeleteObjectRequest\x1a\x16.google.protobuf.Empty\x12`\n" +
-	"\vListObjects\x12'.gestalt.provider.v1.ListObjectsRequest\x1a(.gestalt.provider.v1.ListObjectsResponse\x12]\n" +
+	"ReadObject\x12&.gestalt.provider.v1.ReadObjectRequest\x1a$.gestalt.provider.v1.ReadObjectChunk\"\x10\x92\xb5\x18\f\n" +
+	"\x04meta\x12\x04data0\x01\x12t\n" +
+	"\vWriteObject\x12'.gestalt.provider.v1.WriteObjectRequest\x1a(.gestalt.provider.v1.WriteObjectResponse\"\x10\x92\xb5\x18\f\n" +
+	"\x04open\x12\x04data(\x01\x12Y\n" +
+	"\fDeleteObject\x12(.gestalt.provider.v1.DeleteObjectRequest\x1a\x16.google.protobuf.Empty\"\a\x8a\xb5\x18\x03ref\x12\xaa\x01\n" +
+	"\vListObjects\x12'.gestalt.provider.v1.ListObjectsRequest\x1a(.gestalt.provider.v1.ListObjectsResponse\"H\x8a\xb5\x18\x06prefix\x8a\xb5\x18\tdelimiter\x8a\xb5\x18\x12continuation_token\x8a\xb5\x18\vstart_after\x8a\xb5\x18\bmax_keys\x12\x95\x01\n" +
 	"\n" +
-	"CopyObject\x12&.gestalt.provider.v1.CopyObjectRequest\x1a'.gestalt.provider.v1.CopyObjectResponse\x12f\n" +
-	"\rPresignObject\x12).gestalt.provider.v1.PresignObjectRequest\x1a*.gestalt.provider.v1.PresignObjectResponse2\x90\x01\n" +
-	"\x0eS3ObjectAccess\x12~\n" +
-	"\x15CreateObjectAccessURL\x121.gestalt.provider.v1.CreateObjectAccessURLRequest\x1a2.gestalt.provider.v1.CreateObjectAccessURLResponseB\xd3\x01\n" +
+	"CopyObject\x12&.gestalt.provider.v1.CopyObjectRequest\x1a'.gestalt.provider.v1.CopyObjectResponse\"6\x8a\xb5\x18\bif_match\x8a\xb5\x18\rif_none_match\x8a\xb5\x18\x06source\x8a\xb5\x18\vdestination\x12\xb3\x01\n" +
+	"\rPresignObject\x12).gestalt.provider.v1.PresignObjectRequest\x1a*.gestalt.provider.v1.PresignObjectResponse\"K\x8a\xb5\x18\x06method\x8a\xb5\x18\x0fexpires_seconds\x8a\xb5\x18\x03ref\xa2\xb5\x18\fcontent_type\xa2\xb5\x18\x13content_disposition\x1a\x06\x8a\xb5\x18\x02s32\xde\x01\n" +
+	"\x0eS3ObjectAccess\x12\xcb\x01\n" +
+	"\x15CreateObjectAccessURL\x121.gestalt.provider.v1.CreateObjectAccessURLRequest\x1a2.gestalt.provider.v1.CreateObjectAccessURLResponse\"K\x8a\xb5\x18\x06method\x8a\xb5\x18\x0fexpires_seconds\x8a\xb5\x18\x03ref\xa2\xb5\x18\fcontent_type\xa2\xb5\x18\x13content_dispositionB\xd3\x01\n" +
 	"\x17com.gestalt.provider.v1B\aS3ProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -1634,6 +1636,7 @@ func file_v1_s3_proto_init() {
 	if File_v1_s3_proto != nil {
 		return
 	}
+	file_v1_annotations_proto_init()
 	file_v1_s3_proto_msgTypes[2].OneofWrappers = []any{}
 	file_v1_s3_proto_msgTypes[5].OneofWrappers = []any{}
 	file_v1_s3_proto_msgTypes[6].OneofWrappers = []any{

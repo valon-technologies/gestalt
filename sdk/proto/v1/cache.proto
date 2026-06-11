@@ -4,6 +4,7 @@ package gestalt.provider.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
+import "v1/annotations.proto";
 
 // CacheSetEntry is one key/value pair written by SetMany.
 message CacheSetEntry {
@@ -25,6 +26,11 @@ message CacheGetRequest {
 
 // CacheGetResponse is the result of looking up one cache key.
 message CacheGetResponse {
+  option (optional_result) = {
+    guard: "found"
+    value: "value"
+  };
+
   bool found = 1;
   bytes value = 2;
 }
@@ -36,6 +42,13 @@ message CacheGetManyRequest {
 
 // CacheGetManyResponse returns every lookup result for GetMany.
 message CacheGetManyResponse {
+  option (keyed) = {
+    entries: "entries"
+    key: "key"
+    present: "found"
+    value: "value"
+  };
+
   repeated CacheResult entries = 1;
 }
 
@@ -60,6 +73,8 @@ message CacheDeleteRequest {
 
 // CacheDeleteResponse reports whether one key existed and was deleted.
 message CacheDeleteResponse {
+  option (unwrap) = "deleted";
+
   bool deleted = 1;
 }
 
@@ -70,6 +85,8 @@ message CacheDeleteManyRequest {
 
 // CacheDeleteManyResponse reports how many keys were deleted.
 message CacheDeleteManyResponse {
+  option (unwrap) = "deleted";
+
   int64 deleted = 1;
 }
 
@@ -81,16 +98,38 @@ message CacheTouchRequest {
 
 // CacheTouchResponse reports whether a key existed and had its TTL updated.
 message CacheTouchResponse {
+  option (unwrap) = "touched";
+
   bool touched = 1;
 }
 
 // Cache models the shared Gestalt cache-provider protocol.
 service Cache {
-  rpc Get(CacheGetRequest) returns (CacheGetResponse);
-  rpc GetMany(CacheGetManyRequest) returns (CacheGetManyResponse);
-  rpc Set(CacheSetRequest) returns (google.protobuf.Empty);
-  rpc SetMany(CacheSetManyRequest) returns (google.protobuf.Empty);
-  rpc Delete(CacheDeleteRequest) returns (CacheDeleteResponse);
-  rpc DeleteMany(CacheDeleteManyRequest) returns (CacheDeleteManyResponse);
-  rpc Touch(CacheTouchRequest) returns (CacheTouchResponse);
+  option (host_binding) = "cache";
+
+  rpc Get(CacheGetRequest) returns (CacheGetResponse) {
+    option (signature) = "key";
+  }
+  rpc GetMany(CacheGetManyRequest) returns (CacheGetManyResponse) {
+    option (signature) = "keys";
+  }
+  rpc Set(CacheSetRequest) returns (google.protobuf.Empty) {
+    option (signature) = "key";
+    option (signature) = "value";
+    option (signature) = "ttl";
+  }
+  rpc SetMany(CacheSetManyRequest) returns (google.protobuf.Empty) {
+    option (signature) = "entries";
+    option (signature) = "ttl";
+  }
+  rpc Delete(CacheDeleteRequest) returns (CacheDeleteResponse) {
+    option (signature) = "key";
+  }
+  rpc DeleteMany(CacheDeleteManyRequest) returns (CacheDeleteManyResponse) {
+    option (signature) = "keys";
+  }
+  rpc Touch(CacheTouchRequest) returns (CacheTouchResponse) {
+    option (signature) = "key";
+    option (signature) = "ttl";
+  }
 }
