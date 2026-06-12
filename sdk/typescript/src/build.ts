@@ -1,5 +1,15 @@
 #!/usr/bin/env bun
 
+/**
+ * Build-time helpers for producing standalone Gestalt provider binaries.
+ *
+ * `gestaltd provider release` uses this entrypoint for TypeScript source
+ * providers. It loads the configured provider target, bundles it with Bun, and
+ * writes the executable artifact for the requested target platform.
+ *
+ * @module build
+ */
+
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";

@@ -900,6 +900,9 @@ func (r *renderer) renderFaithfulMethod(m *model.Method, rawSuffix bool) {
 // assemble prepends the import header derived from the rendered body.
 func (r *renderer) assemble() string {
 	var b strings.Builder
+	if r.kind == modulePublic {
+		fmt.Fprintf(&b, "/**\n * Generated native types and client for %s.proto.\n *\n * @module services/%s\n */\n\n", r.base, r.base)
+	}
 	if r.features.create {
 		b.WriteString("import { create } from \"@bufbuild/protobuf\";\n")
 	}

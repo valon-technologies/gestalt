@@ -32,7 +32,6 @@ export {
   connectionParam,
   ok,
   response,
-  responseBrand,
   request,
   type Access,
   type Host,
@@ -70,12 +69,6 @@ export {
   type CatalogSchema,
   type OperationAnnotations,
 } from "./catalog.ts";
-export {
-  buildProviderBinary,
-  bunBuildCommand,
-  bunTarget,
-  parseBuildArgs,
-} from "./build.ts";
 export {
   App,
   type AccessContext,
@@ -284,37 +277,7 @@ export {
   type Schema,
   type SchemaOptions,
 } from "./schema.ts";
-export {
-  CURRENT_PROTOCOL_VERSION,
-  ENV_PROVIDER_PARENT_PID,
-  ENV_PROVIDER_SOCKET,
-  ENV_WRITE_CATALOG,
-  createAuthenticationService,
-  createCacheService,
-  createSecretsService,
-  createProviderService,
-  createRuntimeService,
-  loadProviderFromTarget,
-  main as runtimeMain,
-  parseRuntimeArgs,
-  runBundledProvider,
-  runLoadedProvider,
-  serve,
-} from "./providers/runtime.ts";
-export {
-  defaultProviderName,
-  formatModuleTarget,
-  formatProviderTarget,
-  parseModuleTarget,
-  parseProviderTarget,
-  readPackageConfig,
-  readPackageProviderTarget,
-  resolveProviderImportUrl,
-  resolveProviderModulePath,
-  type ModuleTarget,
-  type PackageConfig,
-  type ProviderTarget,
-} from "./target.ts";
+export { serve } from "./providers/runtime-public.ts";
 export {
   IndexedDB,
   CursorDirection,
@@ -375,7 +338,6 @@ export {
   S3InvalidRangeError,
   S3NotFoundError,
   S3PreconditionFailedError,
-  createS3Service,
   defineS3Provider,
   isS3Provider,
   type CopyOptions,
