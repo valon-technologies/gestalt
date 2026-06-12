@@ -1,3 +1,11 @@
+/**
+ * Utilities for parsing plugin and provider targets.
+ *
+ * Targets identify the provider kind, source file, and optional export name
+ * that the runtime or build entrypoint should load.
+ *
+ * @module target
+ */
 import { readFileSync } from "node:fs";
 import { isAbsolute, normalize, resolve } from "node:path";
 import { pathToFileURL } from "node:url";

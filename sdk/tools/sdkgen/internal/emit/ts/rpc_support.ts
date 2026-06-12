@@ -1,3 +1,9 @@
+/**
+ * Shared runtime support types for the generated service clients.
+ *
+ * @module services/rpc_support
+ */
+
 import { ConnectError } from "@connectrpc/connect";
 
 /**

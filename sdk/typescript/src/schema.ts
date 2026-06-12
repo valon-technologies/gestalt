@@ -1,4 +1,13 @@
 /**
+ * Schema builders for operation inputs, outputs, and catalog metadata.
+ *
+ * TypeScript types disappear at runtime. Use these builders to describe the
+ * payloads that Gestalt should validate, dispatch to handlers, and publish in
+ * generated operation catalogs.
+ *
+ * @module schema
+ */
+/**
  * Catalog schema kinds supported by the TypeScript SDK.
  */
 export type CatalogType = "string" | "integer" | "number" | "boolean" | "object" | "array";
