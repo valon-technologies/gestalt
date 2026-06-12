@@ -16,7 +16,7 @@ import (
 const CallerTokenPublicKeyEnv = "GESTALTD_CALLER_TOKEN_ED25519_PUBLIC_KEY"
 
 type AuthorizationDeps struct {
-	Gateway              providergateway.ProviderGateway
+	Transport            providergateway.Transport
 	CallerTokenPublicKey string
 }
 
@@ -48,7 +48,7 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
 		Name:         name,
-		Gateway:      deps.Gateway,
+		Transport:    deps.Transport,
 	})
 }
 

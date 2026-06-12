@@ -180,7 +180,7 @@ type Deps struct {
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
-	ProviderGateway       providergateway.ProviderGateway
+	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 
 	hostedAgentPoolClock hostedAgentPoolClock
@@ -979,14 +979,19 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, fmt.Errorf("bootstrap: caller token private key: %w", err)
 	}
-	providerGateway := providergateway.New(providergateway.WithCallerTokenIssuer(callerTokenIssuer))
-	deps.ProviderGateway = providerGateway
+	providerTransport := providergateway.DirectTransport{}
 	callerTokenPublicKey, err := resolveCallerTokenPublicKey(ctx, sm)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
 	deps.CallerTokenPublicKey = callerTokenPublicKey
+	providerGatewayTransport := providergateway.NewProviderGatewayTransport(providerTransport)
+	providerGateway := providergateway.New(
+		providergateway.WithTransport(providerGatewayTransport),
+		providergateway.WithCallerTokenIssuer(callerTokenIssuer),
+	)
+	deps.ProviderTransport = providerGateway
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1002,10 +1007,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	if _, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders); err != nil {
+	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders)
+	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
-	} else {
+	}
+	if authorizationProvider != nil {
 		deps.Authorization = authorizationProvider
 	}
 	closeExternalCredentialsOnError := true

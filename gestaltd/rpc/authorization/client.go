@@ -14,9 +14,9 @@ import (
 var _ core.AuthorizationProvider = (*Client)(nil)
 
 type Client struct {
-	grpc    proto.AuthorizationClient
-	opts    Options
-	gateway providergateway.ProviderGateway
+	grpc      proto.AuthorizationClient
+	opts      Options
+	transport providergateway.Transport
 }
 
 func (c *Client) CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -135,14 +135,14 @@ func (c *Client) invoke(ctx context.Context, operation string, in gproto.Message
 	if c == nil {
 		return fmt.Errorf("authorization client is nil")
 	}
-	if c.gateway == nil {
+	if c.transport == nil {
 		return fmt.Errorf("provider gateway is required")
 	}
 	payload, err := gproto.Marshal(in)
 	if err != nil {
 		return fmt.Errorf("provider gateway: encode %s request: %w", operation, err)
 	}
-	resp, err := c.gateway.Invoke(ctx, providergateway.ProviderGatewayRequest{
+	resp, err := c.transport.Invoke(ctx, providergateway.ProviderGatewayRequest{
 		ProviderID:     c.opts.ProviderID,
 		ProviderKind:   providergateway.ProviderKindAuthorization,
 		ServiceName:    proto.Authorization_ServiceDesc.ServiceName,

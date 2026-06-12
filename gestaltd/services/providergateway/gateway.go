@@ -8,6 +8,7 @@ import (
 
 type Gateway struct {
 	callerTokenIssuer *CallerTokenIssuer
+	transport         Transport
 }
 
 type GatewayOption func(*Gateway)
@@ -18,8 +19,14 @@ func WithCallerTokenIssuer(issuer *CallerTokenIssuer) GatewayOption {
 	}
 }
 
+func WithTransport(transport Transport) GatewayOption {
+	return func(g *Gateway) {
+		g.transport = transport
+	}
+}
+
 func New(opts ...GatewayOption) *Gateway {
-	g := &Gateway{}
+	g := &Gateway{transport: DirectTransport{}}
 	for _, opt := range opts {
 		if opt != nil {
 			opt(g)
@@ -43,9 +50,37 @@ func (g *Gateway) IssueCallerToken(subjectID string, now time.Time) (string, boo
 	return token, true, nil
 }
 
-func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
+type DirectTransport struct{}
+
+func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
 	if next == nil {
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: next handler is required")
 	}
 	return next(ctx, req)
+}
+
+type ProviderGatewayTransport struct {
+	next Transport
+}
+
+func NewProviderGatewayTransport(next Transport) *ProviderGatewayTransport {
+	if next == nil {
+		next = DirectTransport{}
+	}
+	return &ProviderGatewayTransport{next: next}
+}
+
+func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
+	if t == nil {
+		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: transport is nil")
+	}
+	return t.next.Invoke(ctx, req, next)
+}
+
+func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
+	transport := Transport(DirectTransport{})
+	if g != nil && g.transport != nil {
+		transport = g.transport
+	}
+	return transport.Invoke(ctx, req, next)
 }

@@ -44,6 +44,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -1348,6 +1349,52 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
+type bootstrapTransportRecordingAuthorizationProvider struct {
+	transport             providergateway.Transport
+	setAuthorizationState *proto.SetAuthorizationStateRequest
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	return &proto.CheckAccessManyResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return &proto.AddRelationshipResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return &proto.DeleteRelationshipResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) SetAuthorizationState(_ context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	p.setAuthorizationState = req
+	return &proto.SetAuthorizationStateResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return &proto.SetActiveModelResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return &proto.ListActiveModelResourceTypesResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) Ping(context.Context) error { return nil }
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) Close() error { return nil }
+
 func requireHostService(t *testing.T, hostServices []runtimehost.HostService, name string) runtimehost.HostService {
 	t.Helper()
 	for _, hostService := range hostServices {
@@ -1878,6 +1925,48 @@ func TestBootstrap(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Server.Providers.Authorization = "authz"
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"authz": {Config: yaml.Node{Kind: yaml.MappingNode}},
+	}
+
+	var built []*bootstrapTransportRecordingAuthorizationProvider
+	factories := validFactories()
+	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthorizationProvider, error) {
+		provider := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
+		built = append(built, provider)
+		return provider, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+
+	if len(built) != 1 {
+		t.Fatalf("authorization providers built = %d, want 1", len(built))
+	}
+	provider := built[0]
+	transportGateway, ok := provider.transport.(*providergateway.Gateway)
+	if !ok {
+		t.Fatalf("authorization provider transport = %T, want *providergateway.Gateway", provider.transport)
+	}
+	if transportGateway != result.ProviderGateway {
+		t.Fatal("authorization provider was not built with the runtime provider gateway")
+	}
+	if provider.setAuthorizationState == nil {
+		t.Fatal("runtime authorization provider did not receive SetAuthorizationState")
+	}
+	if result.Authorization["authz"] != provider {
+		t.Fatal("bootstrapped authorization provider is not the runtime authorization provider")
+	}
 }
 
 func TestBootstrapResultClosesExtraCaches(t *testing.T) {
