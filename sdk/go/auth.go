@@ -3,8 +3,6 @@ package gestalt
 import (
 	"context"
 	"time"
-
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 // AuthenticatedUser is the authenticated principal returned by an
@@ -192,49 +190,3 @@ type SessionTTLProvider interface {
 	SessionTTL() time.Duration
 }
 
-func authenticatedUserToProto(user *AuthenticatedUser) *proto.AuthenticatedUser {
-	if user == nil {
-		return nil
-	}
-	return &proto.AuthenticatedUser{
-		Subject:       user.Subject,
-		Email:         user.Email,
-		EmailVerified: user.EmailVerified,
-		DisplayName:   user.DisplayName,
-		AvatarUrl:     user.AvatarUrl,
-		Claims:        cloneStringMap(user.Claims),
-	}
-}
-
-func beginLoginRequestFromProto(req *proto.BeginLoginRequest) *BeginLoginRequest {
-	if req == nil {
-		return nil
-	}
-	return &BeginLoginRequest{
-		CallbackUrl: req.GetCallbackUrl(),
-		HostState:   req.GetHostState(),
-		Scopes:      append([]string(nil), req.GetScopes()...),
-		Options:     cloneStringMap(req.GetOptions()),
-	}
-}
-
-func beginLoginResponseToProto(resp *BeginLoginResponse) *proto.BeginLoginResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.BeginLoginResponse{
-		AuthorizationUrl: resp.AuthorizationUrl,
-		ProviderState:    append([]byte(nil), resp.ProviderState...),
-	}
-}
-
-func completeLoginRequestFromProto(req *proto.CompleteLoginRequest) *CompleteLoginRequest {
-	if req == nil {
-		return nil
-	}
-	return &CompleteLoginRequest{
-		Query:         cloneStringMap(req.GetQuery()),
-		ProviderState: append([]byte(nil), req.GetProviderState()...),
-		CallbackUrl:   req.GetCallbackUrl(),
-	}
-}

@@ -4,56 +4,59 @@ import (
 	"context"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type authServer struct {
-	proto.UnimplementedAuthenticationServer
+// authenticationHandler bridges the ergonomic [AuthenticationProvider] facade
+// onto the generated transport handler; wire conversion lives in the generated
+// adapter. providerRPCError preserves root sentinel-error mapping.
+type authenticationHandler struct {
+	client.UnimplementedAuthenticationProvider
 	auth AuthenticationProvider
 }
 
-func newAuthenticationProviderServer(auth AuthenticationProvider) *authServer {
-	return &authServer{auth: auth}
-}
-
-func (s *authServer) BeginLogin(ctx context.Context, req *proto.BeginLoginRequest) (*proto.BeginLoginResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
+func (h authenticationHandler) BeginLogin(ctx context.Context, req *client.BeginLoginRequest) (*client.BeginLoginResponse, error) {
+	rootReq := &BeginLoginRequest{
+		CallbackUrl: req.GetCallbackURL(),
+		HostState:   req.GetHostState(),
+		Scopes:      append([]string(nil), req.GetScopes()...),
+		Options:     cloneStringMap(req.GetOptions()),
 	}
-	resp, err := s.auth.BeginLogin(ctx, beginLoginRequestFromProto(req))
+	resp, err := h.auth.BeginLogin(ctx, rootReq)
 	if err != nil {
 		return nil, providerRPCError("begin login", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
-	return beginLoginResponseToProto(resp), nil
+	return &client.BeginLoginResponse{
+		AuthorizationURL: resp.AuthorizationUrl,
+		ProviderState:    append([]byte(nil), resp.ProviderState...),
+	}, nil
 }
 
-func (s *authServer) CompleteLogin(ctx context.Context, req *proto.CompleteLoginRequest) (*proto.AuthenticatedUser, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
+func (h authenticationHandler) CompleteLogin(ctx context.Context, req *client.CompleteLoginRequest) (*client.AuthenticatedUser, error) {
+	rootReq := &CompleteLoginRequest{
+		Query:         cloneStringMap(req.GetQuery()),
+		ProviderState: append([]byte(nil), req.GetProviderState()...),
+		CallbackUrl:   req.GetCallbackURL(),
 	}
-	user, err := s.auth.CompleteLogin(ctx, completeLoginRequestFromProto(req))
+	user, err := h.auth.CompleteLogin(ctx, rootReq)
 	if err != nil {
 		return nil, providerRPCError("complete login", err)
 	}
 	if user == nil {
 		return nil, status.Error(codes.Internal, "authentication provider returned nil user")
 	}
-	return authenticatedUserToProto(user), nil
+	return rootAuthenticatedUserToClient(user), nil
 }
 
-func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.ValidateExternalTokenRequest) (*proto.AuthenticatedUser, error) {
-	validator, ok := s.auth.(ExternalTokenValidator)
+func (h authenticationHandler) ValidateExternalToken(ctx context.Context, req *client.ValidateExternalTokenRequest) (*client.AuthenticatedUser, error) {
+	validator, ok := h.auth.(ExternalTokenValidator)
 	if !ok {
 		return nil, providerRPCError("validate external token", ErrExternalTokenValidationUnsupported)
-	}
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	user, err := validator.ValidateExternalToken(ctx, req.GetToken())
 	if err != nil {
@@ -62,11 +65,11 @@ func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.Valid
 	if user == nil {
 		return nil, status.Error(codes.NotFound, "token not recognized")
 	}
-	return authenticatedUserToProto(user), nil
+	return rootAuthenticatedUserToClient(user), nil
 }
 
-func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
-	provider, ok := s.auth.(SessionTTLProvider)
+func (h authenticationHandler) GetSessionSettings(ctx context.Context) (*client.AuthSessionSettings, error) {
+	provider, ok := h.auth.(SessionTTLProvider)
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "authentication provider does not expose session settings")
 	}
@@ -74,7 +77,21 @@ func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto
 	if ttl < 0 {
 		ttl = 0
 	}
-	return &proto.AuthSessionSettings{
-		SessionTtlSeconds: int64(ttl / time.Second),
+	return &client.AuthSessionSettings{
+		SessionTTLSeconds: int64(ttl / time.Second),
 	}, nil
+}
+
+func rootAuthenticatedUserToClient(user *AuthenticatedUser) *client.AuthenticatedUser {
+	if user == nil {
+		return nil
+	}
+	return &client.AuthenticatedUser{
+		Subject:       user.Subject,
+		Email:         user.Email,
+		EmailVerified: user.EmailVerified,
+		DisplayName:   user.DisplayName,
+		AvatarURL:     user.AvatarUrl,
+		Claims:        cloneStringMap(user.Claims),
+	}
 }
