@@ -2349,7 +2349,13 @@ class Workflow:
     include one.
     """
 
-    def __init__(self, request: Request, *, idempotency_key: str = "") -> None:
+    def __init__(
+        self,
+        request: Request,
+        *,
+        idempotency_key: str = "",
+        timeout: float | None = None,
+    ) -> None:
         target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(f"workflow: {ENV_HOST_SERVICE_SOCKET} is not set")
@@ -2357,6 +2363,7 @@ class Workflow:
 
         self._channel = host_service_channel("workflow", target, token=relay_token)
         self._stub = pb_grpc.WorkflowStub(self._channel)
+        self._timeout = timeout
         self._context = request.context
         if not idempotency_key.strip():
             idempotency_key = request.idempotency_key
@@ -2376,7 +2383,7 @@ class Workflow:
         self._attach_context(request)
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
-        return workflow_run_from_proto(_grpc_call(self._stub.StartRun, request))
+        return workflow_run_from_proto(_grpc_call(self._stub.StartRun, request, timeout=self._timeout))
 
     def signal_run(
         self, request: WorkflowSignalRunInput = None, **kwargs: object
@@ -2385,7 +2392,7 @@ class Workflow:
 
         request = _workflow_signal_run_request(request, **kwargs)
         self._attach_context(request)
-        return workflow_run_signal_from_proto(_grpc_call(self._stub.SignalRun, request))
+        return workflow_run_signal_from_proto(_grpc_call(self._stub.SignalRun, request, timeout=self._timeout))
 
     def signal_or_start_run(
         self, request: WorkflowSignalOrStartRunInput = None, **kwargs: object
@@ -2397,7 +2404,7 @@ class Workflow:
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
         return workflow_run_signal_from_proto(
-            _grpc_call(self._stub.SignalOrStartRun, request)
+            _grpc_call(self._stub.SignalOrStartRun, request, timeout=self._timeout)
         )
 
     def apply_definition(
@@ -2410,7 +2417,7 @@ class Workflow:
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
         return workflow_definition_from_proto(
-            _grpc_call(self._stub.ApplyDefinition, request)
+            _grpc_call(self._stub.ApplyDefinition, request, timeout=self._timeout)
         )
 
     def get_definition(
@@ -2421,7 +2428,7 @@ class Workflow:
         request = _workflow_get_definition_request(request, **kwargs)
         self._attach_context(request)
         return workflow_definition_from_proto(
-            _grpc_call(self._stub.GetDefinition, request)
+            _grpc_call(self._stub.GetDefinition, request, timeout=self._timeout)
         )
 
     def list_definitions(self) -> list[WorkflowDefinition]:
@@ -2429,7 +2436,7 @@ class Workflow:
 
         request = pb.ListWorkflowProviderDefinitionsRequest()
         self._attach_context(request)
-        response = _grpc_call(self._stub.ListDefinitions, request)
+        response = _grpc_call(self._stub.ListDefinitions, request, timeout=self._timeout)
         return [workflow_definition_from_proto(item) for item in response.definitions]
 
     def set_definition_paused(
@@ -2440,7 +2447,7 @@ class Workflow:
         request = _workflow_set_definition_paused_request(request, **kwargs)
         self._attach_context(request)
         return workflow_definition_from_proto(
-            _grpc_call(self._stub.SetDefinitionPaused, request)
+            _grpc_call(self._stub.SetDefinitionPaused, request, timeout=self._timeout)
         )
 
     def set_activation_paused(
@@ -2451,7 +2458,7 @@ class Workflow:
         request = _workflow_set_activation_paused_request(request, **kwargs)
         self._attach_context(request)
         return workflow_definition_from_proto(
-            _grpc_call(self._stub.SetActivationPaused, request)
+            _grpc_call(self._stub.SetActivationPaused, request, timeout=self._timeout)
         )
 
     def delete_definition(
@@ -2461,7 +2468,7 @@ class Workflow:
 
         request = _workflow_delete_definition_request(request, **kwargs)
         self._attach_context(request)
-        _grpc_call(self._stub.DeleteDefinition, request)
+        _grpc_call(self._stub.DeleteDefinition, request, timeout=self._timeout)
         return None
 
     def get_run_events(
@@ -2471,7 +2478,7 @@ class Workflow:
 
         request = _workflow_get_run_events_request(request, **kwargs)
         self._attach_context(request)
-        response = _grpc_call(self._stub.GetRunEvents, request)
+        response = _grpc_call(self._stub.GetRunEvents, request, timeout=self._timeout)
         return GetWorkflowProviderRunEventsResponse(
             events=[
                 cast(WorkflowRunEvent, workflow_run_event_input_from_event(item))
@@ -2486,7 +2493,7 @@ class Workflow:
 
         request = _workflow_get_run_output_request(request, **kwargs)
         self._attach_context(request)
-        response = _grpc_call(self._stub.GetRunOutput, request)
+        response = _grpc_call(self._stub.GetRunOutput, request, timeout=self._timeout)
         return GetWorkflowProviderRunOutputResponse(
             output=cast(WorkflowJsonValue, value_to_json(response.output))
             if has_field(response, "output")
@@ -2501,7 +2508,7 @@ class Workflow:
         request = _workflow_deliver_event_request(request, **kwargs)
         self._attach_context(request)
         return workflow_event_input_from_event(
-            _grpc_call(self._stub.DeliverEvent, request)
+            _grpc_call(self._stub.DeliverEvent, request, timeout=self._timeout)
         )
 
     def _attach_context(self, request: Any) -> None:
@@ -2519,9 +2526,9 @@ class Workflow:
         self.close()
 
 
-def _grpc_call(method: Any, request: Any) -> Any:
+def _grpc_call(method: Any, request: Any, timeout: float | None = None) -> Any:
     try:
-        return method(request)
+        return method(request, timeout=timeout)
     except grpc.RpcError:
         raise
 

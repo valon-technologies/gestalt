@@ -62,6 +62,36 @@ Core authoring types
 
 .. _python-app-authoring:
 
+Invocation results and request context
+--------------------------------------
+
+These helpers decode app invocation results carrying the standard JSON
+operation envelope, report and enforce HTTP statuses on raw results, and
+convert a protocol-level request context into the generated clients' native
+form.
+
+.. autosummary::
+   :nosignatures:
+
+   InvokeError
+   decode_app_result
+   decode_graphql_result
+   ok
+   raise_for_status
+   native_request_context
+
+.. autoexception:: InvokeError
+
+.. autofunction:: decode_app_result
+
+.. autofunction:: decode_graphql_result
+
+.. autofunction:: ok
+
+.. autofunction:: raise_for_status
+
+.. autofunction:: native_request_context
+
 App authoring
 ----------------
 

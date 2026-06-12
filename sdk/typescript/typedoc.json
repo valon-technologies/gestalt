@@ -4,6 +4,7 @@
     "docs/entrypoints/@valon-technologies/gestalt",
     "docs/entrypoints/schema",
     "docs/entrypoints/telemetry",
+    "docs/entrypoints/runtime",
     "docs/entrypoints/services/agent",
     "docs/entrypoints/services/app",
     "docs/entrypoints/services/authentication",

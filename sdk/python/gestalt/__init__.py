@@ -35,6 +35,7 @@ from ._api import (
     Subject,
     SubjectPermission,
     field,
+    native_request_context,
     parse_subject_id,
 )
 from .invoke_support import (
@@ -636,6 +637,7 @@ __all__ = [
     "indexeddb_range_bounds",
     "new_indexeddb_cursor_snapshot",
     "operation",
+    "native_request_context",
     "parse_subject_id",
     "session_catalog",
     "telemetry",

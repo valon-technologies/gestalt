@@ -1,10 +1,11 @@
 /**
- * Runtime helpers for loading and serving TypeScript providers locally.
+ * Provider-protocol bridges for code that receives Gestalt requests through
+ * its own protocol surface.
  *
- * The runtime entrypoint reads the configured provider target, starts the
- * matching gRPC provider server, and connects back to the `gestaltd` host over
- * the socket supplied by the provider process environment.
+ * Import from `@valon-technologies/gestalt/runtime`. The provider-serving
+ * loader that this entrypoint also hosts at runtime is internal and
+ * intentionally undocumented.
  *
  * @module
  */
-export * from "../../../src/providers/runtime.ts";
+export { nativeRequestContext } from "../../../src/providers/runtime.ts";
