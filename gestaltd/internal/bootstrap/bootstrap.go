@@ -999,17 +999,18 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = closeAuthorizationProviders(authorizationProviders)
 		}
 	}()
-	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
-		_ = closeAuthProviders(authProviders)
-		return nil, err
-	}
 	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
 	if authorizationProvider != nil {
+		providerGatewayTransport.SetAuthorizationProvider(authorizationProvider)
 		deps.Authorization = authorizationProvider
+	}
+	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
 	}
 	closeExternalCredentialsOnError := true
 	defer func() {

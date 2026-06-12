@@ -25,7 +25,8 @@ func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, n
 }
 
 type ProviderGatewayTransport struct {
-	next Transport
+	next          Transport
+	authorization AuthorizationProvider
 }
 
 func NewProviderGatewayTransport(next Transport) *ProviderGatewayTransport {
@@ -33,6 +34,13 @@ func NewProviderGatewayTransport(next Transport) *ProviderGatewayTransport {
 		next = DirectTransport{}
 	}
 	return &ProviderGatewayTransport{next: next}
+}
+
+func (t *ProviderGatewayTransport) SetAuthorizationProvider(authorization AuthorizationProvider) {
+	if t == nil {
+		return
+	}
+	t.authorization = authorization
 }
 
 func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {

@@ -3,6 +3,8 @@ package providergateway
 import (
 	"context"
 	"testing"
+
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func TestAuthorizeAllowsRequests(t *testing.T) {
@@ -52,6 +54,19 @@ func TestProviderGatewayTransportAuthorizesThenInvokesNext(t *testing.T) {
 	}
 }
 
+func TestProviderGatewayTransportStoresAuthorizationProvider(t *testing.T) {
+	t.Parallel()
+
+	authorization := &stubAuthorizationProvider{}
+	transport := NewProviderGatewayTransport(nil)
+
+	transport.SetAuthorizationProvider(authorization)
+
+	if transport.authorization != authorization {
+		t.Fatal("authorization provider was not stored")
+	}
+}
+
 func TestDirectTransportInvokesNext(t *testing.T) {
 	t.Parallel()
 
@@ -81,4 +96,10 @@ func (t *recordingTransport) Invoke(ctx context.Context, req ProviderGatewayRequ
 	t.called = true
 	t.request = req
 	return next(ctx, req)
+}
+
+type stubAuthorizationProvider struct{}
+
+func (p *stubAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{Allowed: true}, nil
 }

@@ -25,6 +25,10 @@ type Transport interface {
 	Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error)
 }
 
+type AuthorizationProvider interface {
+	CheckAccess(ctx context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error)
+}
+
 type Next func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error)
 
 type ProviderGatewayRequest struct {
