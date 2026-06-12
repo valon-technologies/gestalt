@@ -22,29 +22,43 @@ type S3RpcReadObjectStream =
 #[derive(Clone, Debug, PartialEq)]
 /// One frame in a provider-authored object read stream.
 pub enum S3ReadObjectFrame {
+    /// The `Meta` variant.
     Meta(ObjectMeta),
+    /// The `Data` variant.
     Data(Vec<u8>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// One frame in a provider-backed object write stream.
 pub enum S3WriteObjectFrame {
+    /// The `Open` variant.
     Open(Box<S3WriteObjectOpen>),
+    /// The `Data` variant.
     Data(Vec<u8>),
+    /// The `Empty` variant.
     Empty,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 /// Metadata frame that starts an object write stream.
 pub struct S3WriteObjectOpen {
+    /// The `reference` field.
     pub reference: Option<ObjectRef>,
+    /// The `content_type` field.
     pub content_type: String,
+    /// The `cache_control` field.
     pub cache_control: String,
+    /// The `content_disposition` field.
     pub content_disposition: String,
+    /// The `content_encoding` field.
     pub content_encoding: String,
+    /// The `content_language` field.
     pub content_language: String,
+    /// The `metadata` field.
     pub metadata: BTreeMap<String, String>,
+    /// The `if_match` field.
     pub if_match: String,
+    /// The `if_none_match` field.
     pub if_none_match: String,
 }
 
@@ -125,89 +139,123 @@ pub enum PresignMethod {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Fetches metadata for one object.
 pub struct HeadObjectRequest {
+    /// The `reference` field.
     pub reference: Option<ObjectRef>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Returns object metadata.
 pub struct HeadObjectResponse {
+    /// The `meta` field.
     pub meta: Option<ObjectMeta>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Opens a streaming object read.
 pub struct ReadObjectRequest {
+    /// The `reference` field.
     pub reference: Option<ObjectRef>,
+    /// The `range` field.
     pub range: Option<ByteRange>,
+    /// The `if_match` field.
     pub if_match: String,
+    /// The `if_none_match` field.
     pub if_none_match: String,
+    /// The `if_modified_since` field.
     pub if_modified_since: Option<SystemTime>,
+    /// The `if_unmodified_since` field.
     pub if_unmodified_since: Option<SystemTime>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Returns metadata for a committed object write.
 pub struct WriteObjectResponse {
+    /// The `meta` field.
     pub meta: Option<ObjectMeta>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Deletes one object.
 pub struct DeleteObjectRequest {
+    /// The `reference` field.
     pub reference: Option<ObjectRef>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Lists objects in the provider's configured bucket.
 pub struct ListObjectsRequest {
+    /// The `prefix` field.
     pub prefix: String,
+    /// The `delimiter` field.
     pub delimiter: String,
+    /// The `continuation_token` field.
     pub continuation_token: String,
+    /// The `start_after` field.
     pub start_after: String,
+    /// The `max_keys` field.
     pub max_keys: i32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// One page of list-objects results.
 pub struct ListObjectsResponse {
+    /// The `objects` field.
     pub objects: Vec<ObjectMeta>,
+    /// The `common_prefixes` field.
     pub common_prefixes: Vec<String>,
+    /// The `next_continuation_token` field.
     pub next_continuation_token: String,
+    /// The `has_more` field.
     pub has_more: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Copies one object to another location.
 pub struct CopyObjectRequest {
+    /// The `source` field.
     pub source: Option<ObjectRef>,
+    /// The `destination` field.
     pub destination: Option<ObjectRef>,
+    /// The `if_match` field.
     pub if_match: String,
+    /// The `if_none_match` field.
     pub if_none_match: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Returns metadata for a copied object.
 pub struct CopyObjectResponse {
+    /// The `meta` field.
     pub meta: Option<ObjectMeta>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Asks the provider to mint a presigned URL.
 pub struct PresignObjectRequest {
+    /// The `reference` field.
     pub reference: Option<ObjectRef>,
+    /// The `method` field.
     pub method: PresignMethod,
+    /// The `expires` field.
     pub expires: Duration,
+    /// The `content_type` field.
     pub content_type: String,
+    /// The `content_disposition` field.
     pub content_disposition: String,
+    /// The `headers` field.
     pub headers: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Returns a presigned URL plus required headers.
 pub struct PresignObjectResponse {
+    /// The `url` field.
     pub url: String,
+    /// The `method` field.
     pub method: PresignMethod,
+    /// The `expires_at` field.
     pub expires_at: Option<SystemTime>,
+    /// The `headers` field.
     pub headers: BTreeMap<String, String>,
 }
 

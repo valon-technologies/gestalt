@@ -7,12 +7,19 @@ use crate::rpc_support::GestaltError;
 #[derive(Clone, Debug, thiserror::Error)]
 #[error("{message}")]
 pub struct InvokeResultError {
+    /// The invoked app.
     pub app: String,
+    /// The invoked operation.
     pub operation: String,
+    /// The HTTP status when the result carried one.
     pub status: Option<u16>,
+    /// The error envelope's code when present.
     pub code: Option<String>,
+    /// The failure message.
     pub message: String,
+    /// The decoded result body when it parsed as JSON.
     pub body: Option<Box<Value>>,
+    /// The raw result body bytes.
     pub raw_body: Vec<u8>,
 }
 
@@ -20,8 +27,10 @@ pub struct InvokeResultError {
 /// result carried a payload failure.
 #[derive(Debug, thiserror::Error)]
 pub enum InvokeError {
+    /// The transport failed before a result decoded.
     #[error(transparent)]
     Transport(#[from] GestaltError),
+    /// The decoded result carried a payload failure.
     #[error(transparent)]
     Result(#[from] Box<InvokeResultError>),
 }

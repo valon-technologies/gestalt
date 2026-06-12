@@ -10,48 +10,76 @@ use crate::generated::v1;
 /// Catalog schema used by the provider runtime.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Catalog {
+    /// The `name` field.
     pub name: String,
+    /// The `display_name` field.
     pub display_name: String,
+    /// The `description` field.
     pub description: String,
+    /// The `icon_svg` field.
     pub icon_svg: String,
+    /// The `operations` field.
     pub operations: Vec<CatalogOperation>,
 }
 
 /// One operation exposed by a catalog.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CatalogOperation {
+    /// The `id` field.
     pub id: String,
+    /// The `method` field.
     pub method: String,
+    /// The `title` field.
     pub title: String,
+    /// The `description` field.
     pub description: String,
+    /// The `input_schema` field.
     pub input_schema: String,
+    /// The `output_schema` field.
     pub output_schema: String,
+    /// The `annotations` field.
     pub annotations: Option<OperationAnnotations>,
+    /// The `parameters` field.
     pub parameters: Vec<CatalogParameter>,
+    /// The `required_scopes` field.
     pub required_scopes: Vec<String>,
+    /// The `tags` field.
     pub tags: Vec<String>,
+    /// The `read_only` field.
     pub read_only: bool,
+    /// The `visible` field.
     pub visible: Option<bool>,
+    /// The `transport` field.
     pub transport: String,
+    /// The `allowed_roles` field.
     pub allowed_roles: Vec<String>,
 }
 
 /// One input parameter surfaced in a generated catalog operation.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CatalogParameter {
+    /// The `name` field.
     pub name: String,
+    /// The `type` field.
     pub r#type: String,
+    /// The `description` field.
     pub description: String,
+    /// The `required` field.
     pub required: bool,
+    /// The `default` field.
     pub default: Option<JsonValue>,
 }
 
 /// Optional host hints attached to a catalog operation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OperationAnnotations {
+    /// The `read_only_hint` field.
     pub read_only_hint: Option<bool>,
+    /// The `idempotent_hint` field.
     pub idempotent_hint: Option<bool>,
+    /// The `destructive_hint` field.
     pub destructive_hint: Option<bool>,
+    /// The `open_world_hint` field.
     pub open_world_hint: Option<bool>,
 }
 

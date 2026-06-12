@@ -17,21 +17,31 @@ pub type AgentJson = serde_json::Value;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
+/// Native enum for `gestalt.provider.v1.AgentMessagePartType`.
 pub enum AgentMessagePartType {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Text` variant.
     Text = 1,
+    /// The `Json` variant.
     Json = 2,
+    /// The `ToolCall` variant.
     ToolCall = 3,
+    /// The `ToolResult` variant.
     ToolResult = 4,
+    /// The `ImageRef` variant.
     ImageRef = 5,
 }
 
 impl AgentMessagePartType {
+    /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
+    /// Converts a wire integer, mapping unknown values to the unspecified
+    /// variant.
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             1 => Self::Text,
@@ -64,18 +74,25 @@ impl TryFrom<i32> for AgentMessagePartType {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
+/// Native enum for `gestalt.provider.v1.AgentToolSourceMode`.
 pub enum AgentToolSourceMode {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Catalog` variant.
     Catalog = 2,
+    /// The `None` variant.
     None = 3,
 }
 
 impl AgentToolSourceMode {
+    /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
+    /// Converts a wire integer, mapping unknown values to the unspecified
+    /// variant.
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             2 => Self::Catalog,
@@ -102,22 +119,33 @@ impl TryFrom<i32> for AgentToolSourceMode {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
+/// Native enum for `gestalt.provider.v1.AgentExecutionStatus`.
 pub enum AgentExecutionStatus {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Pending` variant.
     Pending = 1,
+    /// The `Running` variant.
     Running = 2,
+    /// The `Succeeded` variant.
     Succeeded = 3,
+    /// The `Failed` variant.
     Failed = 4,
+    /// The `Canceled` variant.
     Canceled = 5,
+    /// The `WaitingForInput` variant.
     WaitingForInput = 6,
 }
 
 impl AgentExecutionStatus {
+    /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
+    /// Converts a wire integer, mapping unknown values to the unspecified
+    /// variant.
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             1 => Self::Pending,
@@ -152,18 +180,25 @@ impl TryFrom<i32> for AgentExecutionStatus {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
+/// Native enum for `gestalt.provider.v1.AgentSessionState`.
 pub enum AgentSessionState {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Active` variant.
     Active = 1,
+    /// The `Archived` variant.
     Archived = 2,
 }
 
 impl AgentSessionState {
+    /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
+    /// Converts a wire integer, mapping unknown values to the unspecified
+    /// variant.
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             1 => Self::Active,
@@ -190,19 +225,27 @@ impl TryFrom<i32> for AgentSessionState {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
+/// Native enum for `gestalt.provider.v1.AgentInteractionType`.
 pub enum AgentInteractionType {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Approval` variant.
     Approval = 1,
+    /// The `Clarification` variant.
     Clarification = 2,
+    /// The `Input` variant.
     Input = 3,
 }
 
 impl AgentInteractionType {
+    /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
+    /// Converts a wire integer, mapping unknown values to the unspecified
+    /// variant.
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             1 => Self::Approval,
@@ -231,19 +274,27 @@ impl TryFrom<i32> for AgentInteractionType {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[repr(i32)]
+/// Native enum for `gestalt.provider.v1.AgentInteractionState`.
 pub enum AgentInteractionState {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Pending` variant.
     Pending = 1,
+    /// The `Resolved` variant.
     Resolved = 2,
+    /// The `Canceled` variant.
     Canceled = 3,
 }
 
 impl AgentInteractionState {
+    /// Returns the wire integer for this value.
     pub const fn as_i32(self) -> i32 {
         self as i32
     }
 
+    /// Converts a wire integer, mapping unknown values to the unspecified
+    /// variant.
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             1 => Self::Pending,
@@ -271,71 +322,113 @@ impl TryFrom<i32> for AgentInteractionState {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentMessage`.
 pub struct AgentMessage {
+    /// The `role` field.
     pub role: String,
+    /// The `text` field.
     pub text: String,
+    /// The `parts` field.
     pub parts: Vec<AgentMessagePart>,
+    /// The `metadata` field.
     pub metadata: Option<AgentJson>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentMessagePartToolCall`.
 pub struct AgentMessagePartToolCall {
+    /// The `id` field.
     pub id: String,
+    /// The `tool_id` field.
     pub tool_id: String,
+    /// The `arguments` field.
     pub arguments: Option<AgentJson>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentMessagePartToolResult`.
 pub struct AgentMessagePartToolResult {
+    /// The `tool_call_id` field.
     pub tool_call_id: String,
+    /// The `status` field.
     pub status: i32,
+    /// The `content` field.
     pub content: String,
+    /// The `output` field.
     pub output: Option<AgentJson>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentMessagePartImageRef`.
 pub struct AgentMessagePartImageRef {
+    /// The `uri` field.
     pub uri: String,
+    /// The `mime_type` field.
     pub mime_type: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentMessagePart`.
 pub struct AgentMessagePart {
+    /// The `type` field.
     pub r#type: AgentMessagePartType,
+    /// The `text` field.
     pub text: String,
+    /// The `json` field.
     pub json: Option<AgentJson>,
+    /// The `tool_call` field.
     pub tool_call: Option<AgentMessagePartToolCall>,
+    /// The `tool_result` field.
     pub tool_result: Option<AgentMessagePartToolResult>,
+    /// The `image_ref` field.
     pub image_ref: Option<AgentMessagePartImageRef>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Describes the workspace a provider prepared for a session.
 pub struct AgentPreparedWorkspace {
+    /// The `root` field.
     pub root: String,
+    /// The `cwd` field.
     pub cwd: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentToolRef`.
 pub struct AgentToolRef {
+    /// The `app` field.
     pub app: String,
+    /// The `operation` field.
     pub operation: String,
+    /// The `connection` field.
     pub connection: String,
+    /// The `instance` field.
     pub instance: String,
+    /// The `title` field.
     pub title: String,
+    /// The `description` field.
     pub description: String,
+    /// The `credential_mode` field.
     pub credential_mode: String,
+    /// The `system` field.
     pub system: String,
+    /// The `run_as` field.
     pub run_as: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentToolConfig`.
 pub struct AgentToolConfig {
+    /// The `source` field.
     pub source: Option<AgentToolConfigSource>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Selects where a session's tools come from.
 pub enum AgentToolConfigSource {
+    /// The `None` variant.
     None(AgentNoTools),
+    /// The `Catalog` variant.
     Catalog(AgentCatalogToolConfig),
 }
 
@@ -343,8 +436,11 @@ pub enum AgentToolConfigSource {
 pub struct AgentNoTools {}
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentCatalogToolConfig`.
 pub struct AgentCatalogToolConfig {
+    /// The `refs` field.
     pub refs: Vec<AgentToolRef>,
+    /// The `tools` field.
     pub tools: Vec<ListedAgentTool>,
 }
 
@@ -395,211 +491,349 @@ impl AgentMessagePartToolResult {
 /// Native agent workspace request data.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentWorkspace {
+    /// The `checkouts` field.
     pub checkouts: Vec<AgentWorkspaceGitCheckout>,
+    /// The `cwd` field.
     pub cwd: String,
 }
 
 /// Native agent workspace git checkout data.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentWorkspaceGitCheckout {
+    /// The `url` field.
     pub url: String,
+    /// The `reference` field.
     pub reference: String,
+    /// The `path` field.
     pub path: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentProviderCapabilities`.
 pub struct AgentProviderCapabilities {
+    /// The `streaming_text` field.
     pub streaming_text: bool,
+    /// The `tool_calls` field.
     pub tool_calls: bool,
+    /// The `parallel_tool_calls` field.
     pub parallel_tool_calls: bool,
+    /// The `interactions` field.
     pub interactions: bool,
+    /// The `resumable_turns` field.
     pub resumable_turns: bool,
+    /// The `reasoning_summaries` field.
     pub reasoning_summaries: bool,
+    /// The `bounded_list_hydration` field.
     pub bounded_list_hydration: bool,
+    /// The `supported_tool_sources` field.
     pub supported_tool_sources: Vec<AgentToolSourceMode>,
+    /// The `supports_session_start` field.
     pub supports_session_start: bool,
+    /// The `supports_prepared_workspace` field.
     pub supports_prepared_workspace: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.GetAgentProviderCapabilitiesRequest`.
 pub struct GetAgentProviderCapabilitiesRequest {}
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentInteraction`.
 pub struct AgentInteraction {
+    /// The `id` field.
     pub id: String,
+    /// The `type` field.
     pub r#type: AgentInteractionType,
+    /// The `state` field.
     pub state: AgentInteractionState,
+    /// The `title` field.
     pub title: String,
+    /// The `prompt` field.
     pub prompt: String,
+    /// The `request` field.
     pub request: Option<AgentJson>,
+    /// The `resolution` field.
     pub resolution: Option<AgentJson>,
+    /// The `created_at` field.
     pub created_at: Option<SystemTime>,
+    /// The `resolved_at` field.
     pub resolved_at: Option<SystemTime>,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `session_id` field.
     pub session_id: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentSession`.
 pub struct AgentSession {
+    /// The `id` field.
     pub id: String,
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `model` field.
     pub model: String,
+    /// The `client_ref` field.
     pub client_ref: String,
+    /// The `state` field.
     pub state: AgentSessionState,
+    /// The `metadata` field.
     pub metadata: Option<AgentJson>,
+    /// The `created_by_subject_id` field.
     pub created_by_subject_id: Option<String>,
+    /// The `created_at` field.
     pub created_at: Option<SystemTime>,
+    /// The `updated_at` field.
     pub updated_at: Option<SystemTime>,
+    /// The `last_turn_at` field.
     pub last_turn_at: Option<SystemTime>,
 }
 
 /// Request passed to [`AgentProvider::create_session`].
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct CreateAgentProviderSessionRequest {
+    /// The `idempotency_key` field.
     pub idempotency_key: String,
+    /// The `model` field.
     pub model: String,
+    /// The `client_ref` field.
     pub client_ref: String,
+    /// The `metadata` field.
     pub metadata: Option<AgentJson>,
+    /// The `created_by_subject_id` field.
     pub created_by_subject_id: Option<String>,
+    /// The `subject` field.
     pub subject: Option<Subject>,
+    /// The `session_start` field.
     pub session_start: Option<AgentSessionStartConfig>,
+    /// The `prepared_workspace` field.
     pub prepared_workspace: Option<AgentPreparedWorkspace>,
+    /// The `tools` field.
     pub tools: Option<AgentToolConfig>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentSessionStartConfig`.
 pub struct AgentSessionStartConfig {
+    /// The `hooks` field.
     pub hooks: Vec<AgentSessionStartHook>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentSessionStartHook`.
 pub struct AgentSessionStartHook {
+    /// The `id` field.
     pub id: String,
+    /// The `type` field.
     pub r#type: String,
+    /// The `command` field.
     pub command: Vec<String>,
+    /// The `cwd` field.
     pub cwd: String,
+    /// The `timeout` field.
     pub timeout: String,
+    /// The `env` field.
     pub env: std::collections::HashMap<String, String>,
+    /// The `output` field.
     pub output: Option<AgentSessionStartHookOutput>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentSessionStartHookOutput`.
 pub struct AgentSessionStartHookOutput {
+    /// The `additional_context` field.
     pub additional_context: bool,
+    /// The `metadata` field.
     pub metadata: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.GetAgentProviderSessionRequest`.
 pub struct GetAgentProviderSessionRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `session_id` field.
     pub session_id: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderSessionsRequest`.
 pub struct ListAgentProviderSessionsRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
+    /// The `session_ids` field.
     pub session_ids: Vec<String>,
+    /// The `state` field.
     pub state: AgentSessionState,
+    /// The `limit` field.
     pub limit: i32,
+    /// The `summary_only` field.
     pub summary_only: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderSessionsResponse`.
 pub struct ListAgentProviderSessionsResponse {
+    /// The `sessions` field.
     pub sessions: Vec<AgentSession>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.UpdateAgentProviderSessionRequest`.
 pub struct UpdateAgentProviderSessionRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `session_id` field.
     pub session_id: String,
+    /// The `client_ref` field.
     pub client_ref: String,
+    /// The `state` field.
     pub state: AgentSessionState,
+    /// The `metadata` field.
     pub metadata: Option<AgentJson>,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentTurn`.
 pub struct AgentTurn {
+    /// The `id` field.
     pub id: String,
+    /// The `session_id` field.
     pub session_id: String,
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `model` field.
     pub model: String,
+    /// The `status` field.
     pub status: AgentExecutionStatus,
+    /// The `messages` field.
     pub messages: Vec<AgentMessage>,
+    /// The `output` field.
     pub output: Option<AgentTurnOutput>,
+    /// The `status_message` field.
     pub status_message: String,
+    /// The `created_by_subject_id` field.
     pub created_by_subject_id: Option<String>,
+    /// The `created_at` field.
     pub created_at: Option<SystemTime>,
+    /// The `started_at` field.
     pub started_at: Option<SystemTime>,
+    /// The `completed_at` field.
     pub completed_at: Option<SystemTime>,
+    /// The `execution_ref` field.
     pub execution_ref: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// The structured-or-text output of a finished turn.
 pub enum AgentTurnOutput {
+    /// The `Text` variant.
     Text(AgentTurnTextOutput),
+    /// The `Structured` variant.
     Structured(AgentTurnStructuredOutput),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentTurnTextOutput`.
 pub struct AgentTurnTextOutput {
+    /// The `text` field.
     pub text: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentTurnStructuredOutput`.
 pub struct AgentTurnStructuredOutput {
+    /// The `text` field.
     pub text: String,
+    /// The `value` field.
     pub value: Option<AgentJson>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentTurnDisplay`.
 pub struct AgentTurnDisplay {
+    /// The `kind` field.
     pub kind: String,
+    /// The `phase` field.
     pub phase: String,
+    /// The `text` field.
     pub text: String,
+    /// The `label` field.
     pub label: String,
+    /// The `ref` field.
     pub r#ref: String,
+    /// The `parent_ref` field.
     pub parent_ref: String,
+    /// The `input` field.
     pub input: Option<AgentJson>,
+    /// The `output` field.
     pub output: Option<AgentJson>,
+    /// The `error` field.
     pub error: Option<AgentJson>,
+    /// The `action` field.
     pub action: String,
+    /// The `format` field.
     pub format: String,
+    /// The `language` field.
     pub language: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Native message type for `gestalt.provider.v1.CreateAgentProviderTurnRequest`.
 pub struct CreateAgentProviderTurnRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `session_id` field.
     pub session_id: String,
+    /// The `idempotency_key` field.
     pub idempotency_key: String,
+    /// The `model` field.
     pub model: String,
+    /// The `messages` field.
     pub messages: Vec<AgentMessage>,
+    /// The `output` field.
     pub output: AgentOutput,
+    /// The `metadata` field.
     pub metadata: Option<AgentJson>,
+    /// The `created_by_subject_id` field.
     pub created_by_subject_id: Option<String>,
+    /// The `execution_ref` field.
     pub execution_ref: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
+    /// The `model_options` field.
     pub model_options: Option<AgentJson>,
+    /// The `timeout_seconds` field.
     pub timeout_seconds: i32,
+    /// The `context` field.
     pub context: Option<pb::RequestContext>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Native enum for `gestalt.provider.v1.AgentOutput`.
 pub enum AgentOutput {
+    /// The `Text` variant.
     Text(AgentTextOutput),
+    /// The `Structured` variant.
     Structured(AgentStructuredOutput),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.AgentTextOutput`.
 pub struct AgentTextOutput {}
 
 #[derive(Debug, Clone, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentStructuredOutput`.
 pub struct AgentStructuredOutput {
+    /// The `schema` field.
     pub schema: AgentJson,
 }
 
@@ -618,108 +852,175 @@ impl AgentOutput {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.GetAgentProviderTurnRequest`.
 pub struct GetAgentProviderTurnRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderTurnsRequest`.
 pub struct ListAgentProviderTurnsRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `session_id` field.
     pub session_id: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
+    /// The `turn_ids` field.
     pub turn_ids: Vec<String>,
+    /// The `status` field.
     pub status: AgentExecutionStatus,
+    /// The `limit` field.
     pub limit: i32,
+    /// The `summary_only` field.
     pub summary_only: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderTurnsResponse`.
 pub struct ListAgentProviderTurnsResponse {
+    /// The `turns` field.
     pub turns: Vec<AgentTurn>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.CancelAgentProviderTurnRequest`.
 pub struct CancelAgentProviderTurnRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `reason` field.
     pub reason: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.AgentTurnEvent`.
 pub struct AgentTurnEvent {
+    /// The `id` field.
     pub id: String,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `seq` field.
     pub seq: i64,
+    /// The `type` field.
     pub r#type: String,
+    /// The `source` field.
     pub source: String,
+    /// The `visibility` field.
     pub visibility: String,
+    /// The `data` field.
     pub data: Option<AgentJson>,
+    /// The `created_at` field.
     pub created_at: Option<SystemTime>,
+    /// The `display` field.
     pub display: Option<AgentTurnDisplay>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderTurnEventsRequest`.
 pub struct ListAgentProviderTurnEventsRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `after_seq` field.
     pub after_seq: i64,
+    /// The `limit` field.
     pub limit: i32,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderTurnEventsResponse`.
 pub struct ListAgentProviderTurnEventsResponse {
+    /// The `events` field.
     pub events: Vec<AgentTurnEvent>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.GetAgentProviderInteractionRequest`.
 pub struct GetAgentProviderInteractionRequest {
+    /// The `interaction_id` field.
     pub interaction_id: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsRequest`.
 pub struct ListAgentProviderInteractionsRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `turn_id` field.
     pub turn_id: String,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.ListAgentProviderInteractionsResponse`.
 pub struct ListAgentProviderInteractionsResponse {
+    /// The `interactions` field.
     pub interactions: Vec<AgentInteraction>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.ResolveAgentProviderInteractionRequest`.
 pub struct ResolveAgentProviderInteractionRequest {
+    /// The `provider_name` field.
     pub provider_name: String,
+    /// The `interaction_id` field.
     pub interaction_id: String,
+    /// The `resolution` field.
     pub resolution: Option<AgentJson>,
+    /// The `subject` field.
     pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// MCP-style behavior hints of a tool.
 pub struct AgentToolAnnotations {
+    /// The `read_only_hint` field.
     pub read_only_hint: Option<bool>,
+    /// The `idempotent_hint` field.
     pub idempotent_hint: Option<bool>,
+    /// The `destructive_hint` field.
     pub destructive_hint: Option<bool>,
+    /// The `open_world_hint` field.
     pub open_world_hint: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Native message type for `gestalt.provider.v1.ListedAgentTool`.
 pub struct ListedAgentTool {
+    /// The `id` field.
     pub id: String,
+    /// The `mcp_name` field.
     pub mcp_name: String,
+    /// The `title` field.
     pub title: String,
+    /// The `description` field.
     pub description: String,
+    /// The `input_schema` field.
     pub input_schema: String,
+    /// The `output_schema` field.
     pub output_schema: String,
+    /// The `annotations` field.
     pub annotations: Option<AgentToolAnnotations>,
+    /// The `ref` field.
     pub r#ref: Option<AgentToolRef>,
+    /// The `tags` field.
     pub tags: Vec<String>,
+    /// The `search_text` field.
     pub search_text: String,
 }
 
