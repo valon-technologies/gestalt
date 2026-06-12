@@ -310,7 +310,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
 		result, err := workflow.ApplyDefinition(ctx, input.ProviderName, gestalt.IdempotencyKeyFromContext(ctx), &client.WorkflowDefinitionSpec{
-			Id:          input.DefinitionID,
+			ID:          input.DefinitionID,
 			Target:      target,
 			Activations: activations,
 			Paused:      input.Paused,
@@ -590,7 +590,7 @@ func decodeJSONParams[T any](params map[string]any) (T, error) {
 func workflowDefinitionTargetInput(target workflowDefinitionStepInput) (*client.BoundWorkflowTarget, error) {
 	return &client.BoundWorkflowTarget{
 		Steps: []*client.WorkflowStep{{
-			Id: strings.TrimSpace(target.Operation),
+			ID: strings.TrimSpace(target.Operation),
 			Action: &client.WorkflowStepActionApp{Value: &client.WorkflowStepAppCall{
 				Name:       target.App,
 				Operation:  target.Operation,
@@ -617,7 +617,7 @@ func workflowActivationsInput(values []workflowActivationInput) ([]*client.Workf
 	out := make([]*client.WorkflowActivation, 0, len(values))
 	for _, value := range values {
 		activation := &client.WorkflowActivation{
-			Id:     value.ID,
+			ID:     value.ID,
 			Paused: value.Paused,
 		}
 		switch {
@@ -642,7 +642,7 @@ func workflowActivationsInput(values []workflowActivationInput) ([]*client.Workf
 
 func workflowEvent(input deliverWorkflowEventInput) (*client.WorkflowEvent, error) {
 	event := &client.WorkflowEvent{
-		Id:              input.ID,
+		ID:              input.ID,
 		Source:          input.Source,
 		SpecVersion:     input.SpecVersion,
 		Type:            input.Type,
@@ -669,7 +669,7 @@ func workflowDefinitionBody(value *client.WorkflowDefinition) map[string]any {
 		"provider_name": value.ProviderName,
 	}
 	definition := map[string]any{
-		"id":          value.Id,
+		"id":          value.ID,
 		"generation":  value.Generation,
 		"paused":      value.Paused,
 		"created_at":  timeBody(value.CreatedAt),
@@ -706,7 +706,7 @@ func workflowActivationBodies(values []*client.WorkflowActivation) []map[string]
 			continue
 		}
 		body := map[string]any{
-			"id":     activation.Id,
+			"id":     activation.ID,
 			"paused": activation.Paused,
 		}
 		switch trigger := activation.Trigger.(type) {
@@ -819,7 +819,7 @@ func workflowEventBody(value *client.WorkflowEvent) map[string]any {
 		return map[string]any{}
 	}
 	return map[string]any{
-		"id":                value.Id,
+		"id":                value.ID,
 		"source":            value.Source,
 		"spec_version":      value.SpecVersion,
 		"type":              value.Type,

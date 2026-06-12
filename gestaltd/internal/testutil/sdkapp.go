@@ -669,7 +669,7 @@ func (p *Provider) DeleteCredential(ctx context.Context, req *gestalt.DeleteExte
 	if hostClient, ok, err := externalCredentialHostClient(ctx); err != nil {
 		return err
 	} else if ok {
-		return hostClient.DeleteCredentialRaw(ctx, &sdkclient.DeleteExternalCredentialRequest{Id: req.GetId()})
+		return hostClient.DeleteCredentialRaw(ctx, &sdkclient.DeleteExternalCredentialRequest{ID: req.GetId()})
 	}
 	if req == nil || req.GetId() == "" {
 		return fmt.Errorf("credential id is required")
@@ -694,7 +694,7 @@ func (p *Provider) ValidateCredentialConfig(ctx context.Context, req *gestalt.Va
 		if err := hostClient.ValidateCredentialConfigRaw(ctx, &sdkclient.ValidateExternalCredentialConfigRequest{
 			Provider:         req.GetProvider(),
 			Connection:       req.GetConnection(),
-			ConnectionId:     req.GetConnectionId(),
+			ConnectionID:     req.GetConnectionId(),
 			Mode:             req.GetMode(),
 			Auth:             externalCredentialAuthConfigToClient(req.GetAuth()),
 			ConnectionParams: req.GetConnectionParams(),
@@ -715,10 +715,10 @@ func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveEx
 		resp, err := hostClient.ResolveCredentialRaw(ctx, &sdkclient.ResolveExternalCredentialRequest{
 			Provider:            req.GetProvider(),
 			Connection:          req.GetConnection(),
-			ConnectionId:        req.GetConnectionId(),
+			ConnectionID:        req.GetConnectionId(),
 			Mode:                req.GetMode(),
-			CredentialSubjectId: req.GetCredentialSubjectId(),
-			ActorSubjectId:      req.GetActorSubjectId(),
+			CredentialSubjectID: req.GetCredentialSubjectId(),
+			ActorSubjectID:      req.GetActorSubjectId(),
 			Instance:            req.GetInstance(),
 			Auth:                externalCredentialAuthConfigToClient(req.GetAuth()),
 			ConnectionParams:    req.GetConnectionParams(),
@@ -732,7 +732,7 @@ func (p *Provider) ResolveCredential(ctx context.Context, req *gestalt.ResolveEx
 		return &gestalt.ResolveExternalCredentialResponse{
 			Token:        resp.Token,
 			ExpiresAt:    cloneTime(resp.ExpiresAt),
-			MetadataJSON: resp.MetadataJson,
+			MetadataJSON: resp.MetadataJSON,
 			Params:       resp.Params,
 			Credential:   externalCredentialFromClient(resp.Credential),
 		}, nil
@@ -784,12 +784,12 @@ func (p *Provider) ExchangeCredential(ctx context.Context, req *gestalt.Exchange
 		resp, err := hostClient.ExchangeCredentialRaw(ctx, &sdkclient.ExchangeExternalCredentialRequest{
 			Provider:            req.GetProvider(),
 			Connection:          req.GetConnection(),
-			ConnectionId:        req.GetConnectionId(),
-			CredentialSubjectId: req.GetCredentialSubjectId(),
-			ActorSubjectId:      req.GetActorSubjectId(),
+			ConnectionID:        req.GetConnectionId(),
+			CredentialSubjectID: req.GetCredentialSubjectId(),
+			ActorSubjectID:      req.GetActorSubjectId(),
 			Instance:            req.GetInstance(),
 			Auth:                externalCredentialAuthConfigToClient(req.GetAuth()),
-			CredentialJson:      req.GetCredentialJson(),
+			CredentialJSON:      req.GetCredentialJson(),
 			ConnectionParams:    req.GetConnectionParams(),
 		})
 		if err != nil {
@@ -802,7 +802,7 @@ func (p *Provider) ExchangeCredential(ctx context.Context, req *gestalt.Exchange
 				RefreshToken:  resp.TokenResponse.RefreshToken,
 				ExpiresIn:     resp.TokenResponse.ExpiresIn,
 				TokenType:     resp.TokenResponse.TokenType,
-				ExtraJSON:     resp.TokenResponse.ExtraJson,
+				ExtraJSON:     resp.TokenResponse.ExtraJSON,
 				RefreshSource: resp.TokenResponse.RefreshSource,
 			}
 		}
@@ -892,11 +892,11 @@ func externalCredentialToClient(value *gestalt.ExternalCredential) *sdkclient.Ex
 		return nil
 	}
 	out := &sdkclient.ExternalCredential{
-		Id:           value.ID,
+		ID:           value.ID,
 		Subject:      value.Subject,
 		Audience:     value.Audience,
 		Qualifier:    value.Qualifier,
-		MetadataJson: value.MetadataJSON,
+		MetadataJSON: value.MetadataJSON,
 		CreatedAt:    cloneTime(value.CreatedAt),
 		UpdatedAt:    cloneTime(value.UpdatedAt),
 	}
@@ -912,7 +912,7 @@ func externalCredentialToClient(value *gestalt.ExternalCredential) *sdkclient.Ex
 		}}
 	case value.Client != nil:
 		out.Credential = &sdkclient.ExternalCredentialCredentialClient{Value: &sdkclient.ExternalCredentialClientInfo{
-			ClientId:              value.Client.ClientID,
+			ClientID:              value.Client.ClientID,
 			ClientSecret:          value.Client.ClientSecret,
 			ClientSecretExpiresAt: cloneTime(value.Client.ClientSecretExpiresAt),
 		}}
@@ -929,11 +929,11 @@ func externalCredentialFromClient(value *sdkclient.ExternalCredential) *gestalt.
 		return nil
 	}
 	out := &gestalt.ExternalCredential{
-		ID:           value.Id,
+		ID:           value.ID,
 		Subject:      value.Subject,
 		Audience:     value.Audience,
 		Qualifier:    value.Qualifier,
-		MetadataJSON: value.MetadataJson,
+		MetadataJSON: value.MetadataJSON,
 		CreatedAt:    cloneTime(value.CreatedAt),
 		UpdatedAt:    cloneTime(value.UpdatedAt),
 	}
@@ -952,7 +952,7 @@ func externalCredentialFromClient(value *sdkclient.ExternalCredential) *gestalt.
 	case *sdkclient.ExternalCredentialCredentialClient:
 		if credential.Value != nil {
 			out.Client = &gestalt.ExternalCredentialClientInfo{
-				ClientID:              credential.Value.ClientId,
+				ClientID:              credential.Value.ClientID,
 				ClientSecret:          credential.Value.ClientSecret,
 				ClientSecretExpiresAt: cloneTime(credential.Value.ClientSecretExpiresAt),
 			}
@@ -974,8 +974,8 @@ func externalCredentialAuthConfigToClient(auth *gestalt.ExternalCredentialAuthCo
 		Token:           auth.Token,
 		TokenPrefix:     auth.TokenPrefix,
 		GrantType:       auth.GrantType,
-		TokenUrl:        auth.TokenURL,
-		ClientId:        auth.ClientID,
+		TokenURL:        auth.TokenURL,
+		ClientID:        auth.ClientID,
 		ClientSecret:    auth.ClientSecret,
 		ClientAuth:      auth.ClientAuth,
 		TokenExchange:   auth.TokenExchange,
