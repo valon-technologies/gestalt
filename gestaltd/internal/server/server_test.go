@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -63,6 +67,7 @@ import (
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -685,6 +690,24 @@ func (i *relayTestInvoker) snapshot() relayTestInvokerCall {
 		idempotencyKey: i.idempotencyKey,
 		params:         maps.Clone(i.params),
 	}
+}
+
+type callerTokenRecordingInvoker struct {
+	mu          sync.Mutex
+	callerToken string
+}
+
+func (i *callerTokenRecordingInvoker) Invoke(ctx context.Context, _ *principal.Principal, _, _, _ string, _ map[string]any) (*core.OperationResult, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.callerToken = providergateway.CallerTokenFromContext(ctx)
+	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{"ok":true}`)}, nil
+}
+
+func (i *callerTokenRecordingInvoker) token() string {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.callerToken
 }
 
 type relayAllowAuthorizationProvider struct {
@@ -14554,6 +14577,92 @@ func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
+}
+
+func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "cli-provider", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
+	}
+
+	svc := testutil.NewStubServices(t)
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	user := seedAPITokenWithPermissions(t, svc, plaintext, hashed, "cli-user", nil)
+	invoker := &callerTokenRecordingInvoker{}
+	now := time.Now().UTC()
+	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
+	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Invoker = invoker
+		cfg.Now = func() time.Time { return now }
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.ProviderGateway = providergateway.New(providergateway.WithCallerTokenIssuer(issuer))
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/cli-provider/do_thing", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	token := invoker.token()
+	if token == "" {
+		t.Fatalf("expected provider gateway caller token")
+	}
+	claims, err := providergateway.Verify(token, publicKeyPEM)
+	if err != nil {
+		t.Fatalf("Verify caller token: %v", err)
+	}
+	if claims.SubjectID != principal.UserSubjectID(user.ID) {
+		t.Fatalf("SubjectID = %q, want %q", claims.SubjectID, principal.UserSubjectID(user.ID))
+	}
+	if claims.IssuedAt != now.Unix() {
+		t.Fatalf("IssuedAt = %d, want %d", claims.IssuedAt, now.Unix())
+	}
+	if claims.ExpiresAt != now.Add(5*time.Minute).Unix() {
+		t.Fatalf("ExpiresAt = %d, want %d", claims.ExpiresAt, now.Add(5*time.Minute).Unix())
+	}
+}
+
+func testProviderGatewayCallerTokenKeyPair(t testing.TB) (string, string) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatalf("MarshalPKIXPublicKey: %v", err)
+	}
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
+	return string(privateKeyPEM), string(publicKeyPEM)
 }
 
 func TestCreateAPIToken_InvalidScope(t *testing.T) {

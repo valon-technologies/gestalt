@@ -23,6 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -94,6 +95,7 @@ type Server struct {
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
 	providers              *registry.ProviderMap[core.Provider]
+	providerGateway        *providergateway.Gateway
 	workflow               bootstrap.WorkflowControl
 	pluginRuntimes         bootstrap.RuntimeInspector
 	resolver               *principal.Resolver
@@ -152,6 +154,7 @@ type Config struct {
 	AuditSink            core.AuditSink
 	Services             *coredata.Services
 	Providers            *registry.ProviderMap[core.Provider]
+	ProviderGateway      *providergateway.Gateway
 	Agent                bootstrap.AgentControl
 	AgentManager         agentmanager.Service
 	Workflow             bootstrap.WorkflowControl
@@ -348,6 +351,7 @@ func New(cfg Config) (*Server, error) {
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		providers:              cfg.Providers,
+		providerGateway:        cfg.ProviderGateway,
 		workflow:               cfg.Workflow,
 		pluginRuntimes:         cfg.Runtimes,
 		resolver:               resolver,

@@ -34,6 +34,7 @@ type ProviderGatewayRequest struct {
 	Operation      string
 	RequestContext *RequestContext
 	Source         GatewaySource
+	CallerToken    string
 	Payload        []byte
 }
 
