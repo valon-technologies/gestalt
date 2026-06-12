@@ -181,12 +181,13 @@ type Deps struct {
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
 	ProviderGateway       providergateway.ProviderGateway
+	CallerTokenPublicKey  string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
-type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, gateway providergateway.ProviderGateway) (core.AuthorizationProvider, error)
+type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.AuthorizationProvider, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -197,6 +198,11 @@ type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostSer
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (runtimeprovider.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
+
+const (
+	callerTokenPrivateKeySecretName = "gestaltd-caller-token-ed25519-private-key"
+	callerTokenPublicKeySecretName  = "gestaltd-caller-token-ed25519-public-key"
+)
 
 type FactoryRegistry struct {
 	Auth                AuthFactory
@@ -961,7 +967,18 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 	deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
-	deps.ProviderGateway = providergateway.New()
+	callerTokenPrivateKey, err := resolveCallerTokenPrivateKey(ctx, sm)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	deps.ProviderGateway = providergateway.New(providergateway.WithCallerTokenPrivateKey(callerTokenPrivateKey))
+	callerTokenPublicKey, err := resolveCallerTokenPublicKey(ctx, sm)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	deps.CallerTokenPublicKey = callerTokenPublicKey
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1860,11 +1877,37 @@ func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *co
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
-	provider, err := factories.Authorization(ctx, logicalName, node, hostServices, deps.ProviderGateway)
+	provider, err := factories.Authorization(ctx, logicalName, node, hostServices, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
 	return provider, nil
+}
+
+func resolveCallerTokenPrivateKey(ctx context.Context, sm core.SecretManager) (string, error) {
+	return resolveCallerTokenKey(ctx, sm, callerTokenPrivateKeySecretName)
+}
+
+func resolveCallerTokenPublicKey(ctx context.Context, sm core.SecretManager) (string, error) {
+	return resolveCallerTokenKey(ctx, sm, callerTokenPublicKeySecretName)
+}
+
+func resolveCallerTokenKey(ctx context.Context, sm core.SecretManager, name string) (string, error) {
+	if sm == nil {
+		return "", nil
+	}
+	value, err := sm.GetSecret(ctx, name)
+	if err != nil {
+		if errors.Is(err, core.ErrSecretNotFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("bootstrap: resolve %s: %w", name, err)
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("bootstrap: secret %q resolved to empty value", name)
+	}
+	return value, nil
 }
 
 func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
