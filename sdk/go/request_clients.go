@@ -31,12 +31,6 @@ func WorkflowFromContext(ctx context.Context) (*client.Workflow, error) {
 	return client.ConnectWorkflow(ctx, "", requestContextClientOptions(ctx)...)
 }
 
-// ExternalCredentials returns the generated client for the host-managed
-// external credential service exposed by gestaltd, connected over the
-// pooled host-service transport.
-func ExternalCredentials(ctx context.Context) (*client.ExternalCredentials, error) {
-	return client.ConnectExternalCredentials(ctx, "")
-}
 
 func requestContextClientOptions(ctx context.Context) []client.ClientOption {
 	reqCtx := clientRequestContext(requestContextFromContext(ctx))

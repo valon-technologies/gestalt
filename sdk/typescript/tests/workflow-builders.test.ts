@@ -7,10 +7,10 @@ import {
   workflowRun,
   workflowSignal,
   workflowStepWhen,
-  workflowStepWhenToProto,
   workflowValue,
   type WorkflowValue,
 } from "../src/index.ts";
+import { workflowStepWhenToProto } from "../src/providers/workflow.ts";
 
 test("workflow builders accept native JSON objects and Dates", () => {
   const createdAt = new Date("2026-05-08T12:00:00.000Z");

@@ -822,7 +822,7 @@ func externalCredentialHostClient(ctx context.Context) (*sdkclient.ExternalCrede
 	if os.Getenv(gestalt.EnvHostServiceSocket) == "" {
 		return nil, false, nil
 	}
-	hostClient, err := gestalt.ExternalCredentials(ctx)
+	hostClient, err := sdkclient.ConnectExternalCredentials(ctx, "")
 	if err != nil {
 		return nil, false, err
 	}

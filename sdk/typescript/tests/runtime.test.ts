@@ -99,12 +99,12 @@ import {
   PresignMethod,
   RuntimeEgressMode,
   WorkflowRunStatus,
-  boundWorkflowTargetToProto,
   defineCacheProvider,
   defineApp,
   defineRuntimeProvider,
   defineS3Provider,
 } from "../src/index.ts";
+import { boundWorkflowTargetToProto } from "../src/providers/workflow.ts";
 import { createS3Service } from "../src/providers/s3.ts";
 import {
   captureChildStderr,

@@ -25,6 +25,10 @@ import type { MessageInitShape } from "@valon-technologies/gestalt";
 import { connectionModeToProtoValue } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose provider metadata wire helpers.
 import { connectionParamToProto } from "@valon-technologies/gestalt";
+// @ts-expect-error Root package must not expose workflow proto conversion helpers.
+import { workflowEventTriggerInvocationToProto } from "@valon-technologies/gestalt";
+// @ts-expect-error Root package must not expose workflow proto conversion helpers.
+import { workflowRunFromProto } from "@valon-technologies/gestalt";
 // @ts-expect-error Protocol helper subpath is not public.
 import type { Struct as ProtocolStruct } from "@valon-technologies/gestalt/protocol";
 // @ts-expect-error Generated protocol subpath is not public.
@@ -55,3 +59,5 @@ void (undefined as unknown as ProtocolRequest);
 void (undefined as unknown as typeof agentContractSchemas);
 void connectionModeToProtoValue;
 void connectionParamToProto;
+void workflowEventTriggerInvocationToProto;
+void workflowRunFromProto;

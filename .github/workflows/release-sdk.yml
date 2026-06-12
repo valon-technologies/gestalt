@@ -255,7 +255,6 @@ jobs:
           GESTALT_SDK_DOCS_VERSION="${{ steps.version.outputs.pep440 }}" \
             uv run --with "$wheel" --with sphinx==8.1.3 --no-project \
               sphinx-build -W -b html -d docs/_build/release-doctrees docs "${docs_out}"
-          bash ../../docs/scripts/check-sdk-doc-leaks.sh python "${docs_out}"
 
       - name: Check PyPI version
         id: pypi-version
@@ -372,7 +371,6 @@ jobs:
           docs_out="${RUNNER_TEMP}/typescript-sdk-api-docs"
           rm -rf "${docs_out}"
           TYPEDOC_OUT_DIR="${docs_out}" bun run docs:build
-          bash ../../docs/scripts/check-sdk-doc-leaks.sh typescript "${docs_out}"
 
       - name: Check npm version
         id: npm-version

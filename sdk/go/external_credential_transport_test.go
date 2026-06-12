@@ -291,7 +291,7 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
 	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
-	externalCredentials, err := gestalt.ExternalCredentials(context.Background())
+	externalCredentials, err := sdkclient.ConnectExternalCredentials(context.Background(), "")
 	if err != nil {
 		t.Fatalf("ExternalCredentials: %v", err)
 	}

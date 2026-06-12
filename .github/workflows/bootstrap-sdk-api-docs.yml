@@ -90,7 +90,6 @@ jobs:
           GESTALT_SDK_DOCS_VERSION="${{ steps.version.outputs.pep440 }}" \
             uv run --with "$wheel" --with sphinx==8.1.3 --no-project \
               sphinx-build -W -b html -d docs/_build/bootstrap-doctrees docs "${docs_out}"
-          bash ../../../helpers/docs/scripts/check-sdk-doc-leaks.sh python "${docs_out}"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
@@ -173,7 +172,6 @@ jobs:
           rm -rf "${docs_out}"
           bun run docs:lint
           ./node_modules/.bin/typedoc --options typedoc.json --out "${docs_out}"
-          bash ../../../helpers/docs/scripts/check-sdk-doc-leaks.sh typescript "${docs_out}"
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2

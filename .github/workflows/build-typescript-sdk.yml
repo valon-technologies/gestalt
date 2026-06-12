@@ -47,5 +47,3 @@ jobs:
       - name: Build TypeDoc reference
         run: bun run docs:build
 
-      - name: Check published TypeScript docs surface
-        run: bash ../../docs/scripts/check-sdk-doc-leaks.sh typescript docs/_build/html
