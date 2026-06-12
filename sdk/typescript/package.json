@@ -14,7 +14,21 @@
     "./schema": "./src/schema.ts",
     "./telemetry": "./src/telemetry.ts",
     "./target": "./src/target.ts",
-    "./workflow": "./src/providers/workflow.ts"
+    "./workflow": "./src/providers/workflow-public.ts",
+    "./services/agent": "./src/agent.ts",
+    "./services/app": "./src/app.ts",
+    "./services/authentication": "./src/authentication.ts",
+    "./services/authorization": "./src/authorization.ts",
+    "./services/cache": "./src/cache.ts",
+    "./services/external_credential": "./src/external_credential.ts",
+    "./services/indexeddb": "./src/indexeddb.ts",
+    "./services/rpc_support": "./src/rpc_support.ts",
+    "./services/runtime": "./src/runtime.ts",
+    "./services/runtime_provider": "./src/runtime_provider.ts",
+    "./services/s3": "./src/s3.ts",
+    "./services/secrets": "./src/secrets.ts",
+    "./services/test": "./src/test.ts",
+    "./services/workflow": "./src/workflow.ts"
   },
   "bin": {
     "gestalt-ts-build": "src/build.ts",

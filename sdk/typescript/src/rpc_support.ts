@@ -93,8 +93,9 @@ type InitAtom =
 
 /**
  * Sparse-construction input for a native request value: every field is
- * optional, unset fields read as their defaults, and nested message values
- * recurse. Atoms (`Date`, `Uint8Array`, `bigint`, and primitives) are never
+ * optional, accepts an explicit `undefined` (so callers holding optional
+ * values can pass fields through under `exactOptionalPropertyTypes`),
+ * unset fields read as their defaults, and nested message values recurse. Atoms (`Date`, `Uint8Array`, `bigint`, and primitives) are never
  * recursed, arrays accept sparse elements, and map values stay required.
  * Variant unions distribute across their members with `case` kept required
  * and the payload made sparse, so a chosen variant stays well-formed.
@@ -112,7 +113,7 @@ export type Init<T> = T extends InitAtom
         : number extends keyof T
           ? { [K in keyof T]: Init<T[K]> }
           : T extends object
-            ? { [K in keyof T]?: Init<T[K]> }
+            ? { [K in keyof T]?: Init<T[K]> | undefined }
             : T;
 
 /**

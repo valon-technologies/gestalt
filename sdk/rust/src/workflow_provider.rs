@@ -6,7 +6,7 @@ use serde_json::Value;
 use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{RuntimeMetadata, Subject};
+use crate::api::RuntimeMetadata;
 use crate::error::Result as ProviderResult;
 use crate::generated::v1 as pb;
 use crate::protocol;
@@ -73,25 +73,6 @@ pub type CancelWorkflowProviderRunRequest = pb::CancelWorkflowProviderRunRequest
 pub type SignalWorkflowProviderRunRequest = pb::SignalWorkflowProviderRunRequest;
 pub type SignalOrStartWorkflowProviderRunRequest = pb::SignalOrStartWorkflowProviderRunRequest;
 pub type DeliverWorkflowProviderEventRequest = pb::DeliverWorkflowProviderEventRequest;
-
-pub fn workflow_subject_from_proto(input: pb::SubjectContext) -> Subject {
-    Subject {
-        id: input.id,
-        credential_subject_id: input.credential_subject_id,
-        email: input.email,
-        display_name: input.display_name,
-    }
-}
-
-pub fn workflow_subject_to_proto(input: Subject) -> pb::SubjectContext {
-    pb::SubjectContext {
-        id: input.id,
-        credential_subject_id: input.credential_subject_id,
-        email: input.email,
-        display_name: input.display_name,
-        ..Default::default()
-    }
-}
 
 pub fn new_bound_workflow_target(
     input: BoundWorkflowTarget,
@@ -277,62 +258,6 @@ pub fn workflow_value_input_from_value(input: &WorkflowValue) -> WorkflowValue {
 
 pub fn workflow_run_trigger_input_from_trigger(input: &WorkflowRunTrigger) -> WorkflowRunTrigger {
     input.clone()
-}
-
-pub fn workflow_definition_spec_from_proto(
-    input: pb::WorkflowDefinitionSpec,
-) -> ProviderResult<WorkflowDefinitionSpec> {
-    Ok(input)
-}
-
-pub fn workflow_definition_spec_to_proto(
-    input: WorkflowDefinitionSpec,
-) -> ProviderResult<pb::WorkflowDefinitionSpec> {
-    Ok(input)
-}
-
-pub fn workflow_definition_from_proto(
-    input: pb::WorkflowDefinition,
-) -> ProviderResult<WorkflowDefinition> {
-    Ok(input)
-}
-
-pub fn workflow_definition_to_proto(
-    input: WorkflowDefinition,
-) -> ProviderResult<pb::WorkflowDefinition> {
-    Ok(input)
-}
-
-pub fn workflow_run_from_proto(input: pb::WorkflowRun) -> ProviderResult<WorkflowRun> {
-    Ok(input)
-}
-
-pub fn workflow_run_to_proto(input: WorkflowRun) -> ProviderResult<pb::WorkflowRun> {
-    Ok(input)
-}
-
-pub fn workflow_run_signal_from_proto(
-    input: pb::SignalWorkflowRunResponse,
-) -> ProviderResult<SignalWorkflowRunResponse> {
-    Ok(input)
-}
-
-pub fn workflow_run_signal_to_proto(
-    input: SignalWorkflowRunResponse,
-) -> ProviderResult<pb::SignalWorkflowRunResponse> {
-    Ok(input)
-}
-
-pub fn workflow_event_from_proto(input: pb::WorkflowEvent) -> ProviderResult<WorkflowEvent> {
-    Ok(input)
-}
-
-pub fn workflow_event_to_proto(input: WorkflowEvent) -> ProviderResult<pb::WorkflowEvent> {
-    Ok(input)
-}
-
-pub fn workflow_signal_to_proto(input: WorkflowSignal) -> ProviderResult<pb::WorkflowSignal> {
-    Ok(input)
 }
 
 #[async_trait]

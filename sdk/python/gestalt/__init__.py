@@ -308,7 +308,6 @@ _WORKFLOW_AUTHORED_EXPORTS = (
     "workflow_run",
     "workflow_run_event",
     "workflow_run_event_input_from_event",
-    "workflow_run_from_proto",
     "workflow_run_from_run",
     "workflow_run_input_from_run",
     "workflow_run_status_name",
