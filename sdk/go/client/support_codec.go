@@ -6,6 +6,8 @@
 package client
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
@@ -67,12 +69,26 @@ func fromWireStruct(value *structpb.Struct) map[string]any {
 }
 
 // toWireValue converts a native JSON value to its wire form. Absent and JSON
-// null conflate: nil becomes JSON null. Values with no JSON representation
-// also become JSON null, keeping conversion total.
+// null conflate: nil becomes JSON null. Typed Go containers (e.g.
+// []map[string]any) normalize through JSON before conversion. Values with no
+// JSON representation are caller bugs and panic rather than silently
+// corrupting the payload.
 func toWireValue(value any) *structpb.Value {
 	v, err := structpb.NewValue(value)
+	if err == nil {
+		return v
+	}
+	data, jsonErr := json.Marshal(value)
+	if jsonErr != nil {
+		panic(fmt.Sprintf("codec: value of type %T is not JSON-representable: %v", value, jsonErr))
+	}
+	var normalized any
+	if err := json.Unmarshal(data, &normalized); err != nil {
+		panic(fmt.Sprintf("codec: normalize value of type %T: %v", value, err))
+	}
+	v, err = structpb.NewValue(normalized)
 	if err != nil {
-		return structpb.NewNullValue()
+		panic(fmt.Sprintf("codec: convert value of type %T: %v", value, err))
 	}
 	return v
 }
