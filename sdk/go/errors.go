@@ -30,6 +30,7 @@ type operationError struct {
 // StatusCode is a transport-independent provider error category.
 type StatusCode string
 
+// The provider error categories, mirroring the canonical gRPC codes.
 const (
 	CodeCanceled           StatusCode = "canceled"
 	CodeUnknown            StatusCode = "unknown"
@@ -66,17 +67,39 @@ func StatusError(code StatusCode, message string) error {
 	return statusError{code: code, message: message}
 }
 
-func Canceled(message string) error           { return StatusError(CodeCanceled, message) }
-func InvalidArgument(message string) error    { return StatusError(CodeInvalidArgument, message) }
-func NotFound(message string) error           { return StatusError(CodeNotFound, message) }
-func AlreadyExists(message string) error      { return StatusError(CodeAlreadyExists, message) }
+// Canceled through Internal construct a provider error of the matching
+// status code with the given message.
+func Canceled(message string) error { return StatusError(CodeCanceled, message) }
+
+// InvalidArgument constructs a invalid argument provider error with the message.
+func InvalidArgument(message string) error { return StatusError(CodeInvalidArgument, message) }
+
+// NotFound constructs a not found provider error with the message.
+func NotFound(message string) error { return StatusError(CodeNotFound, message) }
+
+// AlreadyExists constructs a already exists provider error with the message.
+func AlreadyExists(message string) error { return StatusError(CodeAlreadyExists, message) }
+
+// FailedPrecondition constructs a failed precondition provider error with the message.
 func FailedPrecondition(message string) error { return StatusError(CodeFailedPrecondition, message) }
-func OutOfRange(message string) error         { return StatusError(CodeOutOfRange, message) }
-func Unauthenticated(message string) error    { return StatusError(CodeUnauthenticated, message) }
-func PermissionDenied(message string) error   { return StatusError(CodePermissionDenied, message) }
-func Unavailable(message string) error        { return StatusError(CodeUnavailable, message) }
-func Unimplemented(message string) error      { return StatusError(CodeUnimplemented, message) }
-func Internal(message string) error           { return StatusError(CodeInternal, message) }
+
+// OutOfRange constructs a out of range provider error with the message.
+func OutOfRange(message string) error { return StatusError(CodeOutOfRange, message) }
+
+// Unauthenticated constructs a unauthenticated provider error with the message.
+func Unauthenticated(message string) error { return StatusError(CodeUnauthenticated, message) }
+
+// PermissionDenied constructs a permission denied provider error with the message.
+func PermissionDenied(message string) error { return StatusError(CodePermissionDenied, message) }
+
+// Unavailable constructs a unavailable provider error with the message.
+func Unavailable(message string) error { return StatusError(CodeUnavailable, message) }
+
+// Unimplemented constructs a unimplemented provider error with the message.
+func Unimplemented(message string) error { return StatusError(CodeUnimplemented, message) }
+
+// Internal constructs a internal provider error with the message.
+func Internal(message string) error { return StatusError(CodeInternal, message) }
 
 func (e *operationError) Error() string {
 	if e.cause != nil {

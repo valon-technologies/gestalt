@@ -15,6 +15,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// SharedTransport caches one client over one connection for a fixed dial
+// identity, redialing only when the identity changes.
 type SharedTransport[C any] struct {
 	mu      sync.Mutex
 	target  string
@@ -24,10 +26,14 @@ type SharedTransport[C any] struct {
 	client  C
 }
 
+// ManagerClient returns the shared client for an unbound (manager-level)
+// host service, dialing it on first use.
 func ManagerClient[C any](ctx context.Context, serviceName, target, token string, transport *SharedTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
 	return ServiceClient(ctx, serviceName, target, token, "", transport, newClient)
 }
 
+// ServiceClient returns the shared client for a host service binding,
+// dialing it on first use and redialing when the dial identity changes.
 func ServiceClient[C any](ctx context.Context, serviceName, target, token, binding string, transport *SharedTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
 	var zero C
 	if transport == nil {
@@ -113,6 +119,8 @@ func (p *ConnPool) Conn(ctx context.Context, serviceName, target, token, binding
 	return conn, nil
 }
 
+// DialService opens a new client connection to a host service binding;
+// callers own the connection's lifetime.
 func DialService(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
 	return dialTarget(ctx, serviceName, target, dialOptions(token, binding)...)
 }
@@ -162,6 +170,8 @@ func dialTarget(ctx context.Context, serviceName, target string, extraOpts ...gr
 	}
 }
 
+// Target reads the host service endpoint and relay token the daemon
+// advertised through the environment.
 func Target(serviceName string) (string, string, error) {
 	target := strings.TrimSpace(os.Getenv(EnvHostServiceSocket))
 	if target == "" {

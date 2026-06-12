@@ -10,11 +10,15 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// AuthSessionSettings is the native message type for gestalt.provider.v1.AuthSessionSettings.
+//
 // AuthSessionSettings configures how the host persists authenticated sessions.
 type AuthSessionSettings struct {
 	SessionTtlSeconds int64
 }
 
+// AuthenticatedUser is the native message type for gestalt.provider.v1.AuthenticatedUser.
+//
 // AuthenticatedUser is the normalized user identity returned by an authentication
 // provider after a login or token-validation flow.
 type AuthenticatedUser struct {
@@ -26,6 +30,8 @@ type AuthenticatedUser struct {
 	Claims        map[string]string
 }
 
+// BeginLoginRequest is the native message type for gestalt.provider.v1.BeginLoginRequest.
+//
 // BeginLoginRequest starts an interactive login flow.
 type BeginLoginRequest struct {
 	// callback_url is the host-managed URL the provider should redirect back to.
@@ -39,6 +45,8 @@ type BeginLoginRequest struct {
 	Options map[string]string
 }
 
+// BeginLoginResponse is the native message type for gestalt.provider.v1.BeginLoginResponse.
+//
 // BeginLoginResponse returns the provider-managed authorization URL and opaque
 // provider state that must be preserved until completion.
 type BeginLoginResponse struct {
@@ -46,6 +54,8 @@ type BeginLoginResponse struct {
 	ProviderState    []byte
 }
 
+// CompleteLoginRequest is the native message type for gestalt.provider.v1.CompleteLoginRequest.
+//
 // CompleteLoginRequest finishes an interactive login flow.
 type CompleteLoginRequest struct {
 	// query contains the callback URL query parameters returned by the identity
@@ -57,16 +67,18 @@ type CompleteLoginRequest struct {
 	CallbackUrl string
 }
 
+// ValidateExternalTokenRequest is the native message type for gestalt.provider.v1.ValidateExternalTokenRequest.
+//
 // ValidateExternalTokenRequest asks the provider to validate a token minted
 // outside the interactive login flow.
 type ValidateExternalTokenRequest struct {
 	Token string
 }
 
-// Authentication models the shared Gestalt authentication protocol.
-//
 // Authentication is the generated client for gestalt.provider.v1.Authentication.
 // Every transport error is converted to *GestaltError.
+//
+// Authentication models the shared Gestalt authentication protocol.
 type Authentication struct {
 	client proto.AuthenticationClient
 }
@@ -133,6 +145,7 @@ func (c *Authentication) ValidateExternalTokenRaw(ctx context.Context, request *
 	return fromWireAuthenticatedUser(response), nil
 }
 
+// GetSessionSettings calls the GetSessionSettings RPC of Authentication.
 func (c *Authentication) GetSessionSettings(ctx context.Context) (*AuthSessionSettings, error) {
 	response, err := c.client.GetSessionSettings(ctx, &emptypb.Empty{})
 	if err != nil {

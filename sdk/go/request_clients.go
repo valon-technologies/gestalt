@@ -31,7 +31,6 @@ func WorkflowFromContext(ctx context.Context) (*client.Workflow, error) {
 	return client.ConnectWorkflow(ctx, "", requestContextClientOptions(ctx)...)
 }
 
-
 func requestContextClientOptions(ctx context.Context) []client.ClientOption {
 	reqCtx := clientRequestContext(requestContextFromContext(ctx))
 	if reqCtx == nil {

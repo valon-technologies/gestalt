@@ -9,20 +9,24 @@ import (
 	"google.golang.org/grpc"
 )
 
+// GetSecretRequest is the native message type for gestalt.provider.v1.GetSecretRequest.
+//
 // GetSecretRequest looks up one named secret.
 type GetSecretRequest struct {
 	Name string
 }
 
+// GetSecretResponse is the native message type for gestalt.provider.v1.GetSecretResponse.
+//
 // GetSecretResponse returns the secret value.
 type GetSecretResponse struct {
 	Value string
 }
 
-// Secrets models the shared Gestalt secrets protocol.
-//
 // Secrets is the generated client for gestalt.provider.v1.Secrets.
 // Every transport error is converted to *GestaltError.
+//
+// Secrets models the shared Gestalt secrets protocol.
 type Secrets struct {
 	client proto.SecretsClient
 }

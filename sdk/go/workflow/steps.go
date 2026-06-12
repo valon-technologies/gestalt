@@ -262,8 +262,13 @@ type workflowStepsResult struct {
 	Error       *workflowStepError   `json:"error,omitempty"`
 }
 
+// StepResult is one step's recorded outcome.
 type StepResult = workflowStepResult
+
+// StepError is one step's recorded failure.
 type StepError = workflowStepError
+
+// StepsResult aggregates the outcomes of a callback's steps.
 type StepsResult = workflowStepsResult
 
 func workflowFailedStepResponse(result workflowStepsResult, stepID, code, message string) (*Response, error) {
@@ -280,6 +285,8 @@ func workflowFailedStepResponse(result workflowStepsResult, stepID, code, messag
 	return &Response{Status: http.StatusInternalServerError, Body: string(body)}, nil
 }
 
+// WorkflowAppOutputEnvelope shapes an app step result into the envelope
+// recorded as the step output.
 func WorkflowAppOutputEnvelope(result *AppResult) map[string]any {
 	status := 0
 	body := ""
@@ -315,6 +322,8 @@ func WorkflowAppOutputEnvelope(result *AppResult) map[string]any {
 	}
 }
 
+// WorkflowAgentOutputEnvelope shapes an agent step result into the envelope
+// recorded as the step output.
 func WorkflowAgentOutputEnvelope(session *gestalt.AgentSession, turn *gestalt.AgentTurn) map[string]any {
 	agent := map[string]any{}
 	if session != nil {

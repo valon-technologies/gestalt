@@ -11,47 +11,65 @@ import (
 	"google.golang.org/grpc"
 )
 
+// CacheDeleteManyRequest is the native message type for gestalt.provider.v1.CacheDeleteManyRequest.
+//
 // CacheDeleteManyRequest removes multiple cache keys in one RPC.
 type CacheDeleteManyRequest struct {
 	Keys []string
 }
 
+// CacheDeleteManyResponse is the native message type for gestalt.provider.v1.CacheDeleteManyResponse.
+//
 // CacheDeleteManyResponse reports how many keys were deleted.
 type CacheDeleteManyResponse struct {
 	Deleted int64
 }
 
+// CacheDeleteRequest is the native message type for gestalt.provider.v1.CacheDeleteRequest.
+//
 // CacheDeleteRequest removes one cache key.
 type CacheDeleteRequest struct {
 	Key string
 }
 
+// CacheDeleteResponse is the native message type for gestalt.provider.v1.CacheDeleteResponse.
+//
 // CacheDeleteResponse reports whether one key existed and was deleted.
 type CacheDeleteResponse struct {
 	Deleted bool
 }
 
+// CacheGetManyRequest is the native message type for gestalt.provider.v1.CacheGetManyRequest.
+//
 // CacheGetManyRequest loads multiple cache keys in one RPC.
 type CacheGetManyRequest struct {
 	Keys []string
 }
 
+// CacheGetManyResponse is the native message type for gestalt.provider.v1.CacheGetManyResponse.
+//
 // CacheGetManyResponse returns every lookup result for GetMany.
 type CacheGetManyResponse struct {
 	Entries []*CacheResult
 }
 
+// CacheGetRequest is the native message type for gestalt.provider.v1.CacheGetRequest.
+//
 // CacheGetRequest loads one cache key.
 type CacheGetRequest struct {
 	Key string
 }
 
+// CacheGetResponse is the native message type for gestalt.provider.v1.CacheGetResponse.
+//
 // CacheGetResponse is the result of looking up one cache key.
 type CacheGetResponse struct {
 	Found bool
 	Value []byte
 }
 
+// CacheResult is the native message type for gestalt.provider.v1.CacheResult.
+//
 // CacheResult is one lookup result returned by GetMany.
 type CacheResult struct {
 	Key   string
@@ -59,18 +77,24 @@ type CacheResult struct {
 	Value []byte
 }
 
+// CacheSetEntry is the native message type for gestalt.provider.v1.CacheSetEntry.
+//
 // CacheSetEntry is one key/value pair written by SetMany.
 type CacheSetEntry struct {
 	Key   string
 	Value []byte
 }
 
+// CacheSetManyRequest is the native message type for gestalt.provider.v1.CacheSetManyRequest.
+//
 // CacheSetManyRequest writes multiple cache keys in one RPC.
 type CacheSetManyRequest struct {
 	Entries []*CacheSetEntry
 	Ttl     *time.Duration
 }
 
+// CacheSetRequest is the native message type for gestalt.provider.v1.CacheSetRequest.
+//
 // CacheSetRequest writes one cache key.
 type CacheSetRequest struct {
 	Key   string
@@ -79,21 +103,25 @@ type CacheSetRequest struct {
 	Ttl *time.Duration
 }
 
+// CacheTouchRequest is the native message type for gestalt.provider.v1.CacheTouchRequest.
+//
 // CacheTouchRequest extends the TTL for one cache key.
 type CacheTouchRequest struct {
 	Key string
 	Ttl *time.Duration
 }
 
+// CacheTouchResponse is the native message type for gestalt.provider.v1.CacheTouchResponse.
+//
 // CacheTouchResponse reports whether a key existed and had its TTL updated.
 type CacheTouchResponse struct {
 	Touched bool
 }
 
-// Cache models the shared Gestalt cache-provider protocol.
-//
 // Cache is the generated client for gestalt.provider.v1.Cache.
 // Every transport error is converted to *GestaltError.
+//
+// Cache models the shared Gestalt cache-provider protocol.
 type Cache struct {
 	client proto.CacheClient
 }

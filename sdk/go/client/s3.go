@@ -13,26 +13,35 @@ import (
 	"google.golang.org/grpc"
 )
 
-// PresignMethod identifies the HTTP verb encoded into a presigned URL.
-//
 // PresignMethod is the gestalt.provider.v1.PresignMethod enum. It is open:
 // numeric values outside the named constants are preserved.
+//
+// PresignMethod identifies the HTTP verb encoded into a presigned URL.
 type PresignMethod int32
 
 const (
+	// PresignMethodUnspecified is the PRESIGN_METHOD_UNSPECIFIED value of PresignMethod.
 	PresignMethodUnspecified PresignMethod = 0
-	PresignMethodGet         PresignMethod = 1
-	PresignMethodPut         PresignMethod = 2
-	PresignMethodDelete      PresignMethod = 3
-	PresignMethodHead        PresignMethod = 4
+	// PresignMethodGet is the PRESIGN_METHOD_GET value of PresignMethod.
+	PresignMethodGet PresignMethod = 1
+	// PresignMethodPut is the PRESIGN_METHOD_PUT value of PresignMethod.
+	PresignMethodPut PresignMethod = 2
+	// PresignMethodDelete is the PRESIGN_METHOD_DELETE value of PresignMethod.
+	PresignMethodDelete PresignMethod = 3
+	// PresignMethodHead is the PRESIGN_METHOD_HEAD value of PresignMethod.
+	PresignMethodHead PresignMethod = 4
 )
 
+// ByteRange is the native message type for gestalt.provider.v1.ByteRange.
+//
 // ByteRange requests a half-open slice of an object's bytes.
 type ByteRange struct {
 	Start *int64
 	End   *int64
 }
 
+// CopyObjectRequest is the native message type for gestalt.provider.v1.CopyObjectRequest.
+//
 // CopyObjectRequest copies one object to another location.
 type CopyObjectRequest struct {
 	Source      *S3ObjectRef
@@ -41,11 +50,15 @@ type CopyObjectRequest struct {
 	IfNoneMatch string
 }
 
+// CopyObjectResponse is the native message type for gestalt.provider.v1.CopyObjectResponse.
+//
 // CopyObjectResponse returns metadata for the copied object.
 type CopyObjectResponse struct {
 	Meta *S3ObjectMeta
 }
 
+// CreateObjectAccessURLRequest is the native message type for gestalt.provider.v1.CreateObjectAccessURLRequest.
+//
 // CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
 // for a plugin-scoped S3 binding. The host authorizes and scopes the URL, then
 // streams object bytes through the backing S3 provider.
@@ -58,6 +71,8 @@ type CreateObjectAccessURLRequest struct {
 	Headers            map[string]string
 }
 
+// CreateObjectAccessURLResponse is the native message type for gestalt.provider.v1.CreateObjectAccessURLResponse.
+//
 // CreateObjectAccessURLResponse returns a hosted object-access URL plus any
 // headers the caller must include when using it.
 type CreateObjectAccessURLResponse struct {
@@ -67,21 +82,29 @@ type CreateObjectAccessURLResponse struct {
 	Headers   map[string]string
 }
 
+// DeleteObjectRequest is the native message type for gestalt.provider.v1.DeleteObjectRequest.
+//
 // DeleteObjectRequest removes one object.
 type DeleteObjectRequest struct {
 	Ref *S3ObjectRef
 }
 
+// HeadObjectRequest is the native message type for gestalt.provider.v1.HeadObjectRequest.
+//
 // HeadObjectRequest fetches metadata for one object.
 type HeadObjectRequest struct {
 	Ref *S3ObjectRef
 }
 
+// HeadObjectResponse is the native message type for gestalt.provider.v1.HeadObjectResponse.
+//
 // HeadObjectResponse returns object metadata.
 type HeadObjectResponse struct {
 	Meta *S3ObjectMeta
 }
 
+// ListObjectsRequest is the native message type for gestalt.provider.v1.ListObjectsRequest.
+//
 // ListObjectsRequest lists objects in the provider's configured bucket.
 type ListObjectsRequest struct {
 	Prefix            string
@@ -91,6 +114,8 @@ type ListObjectsRequest struct {
 	MaxKeys           int32
 }
 
+// ListObjectsResponse is the native message type for gestalt.provider.v1.ListObjectsResponse.
+//
 // ListObjectsResponse is one page of list-objects results.
 type ListObjectsResponse struct {
 	Objects               []*S3ObjectMeta
@@ -99,6 +124,8 @@ type ListObjectsResponse struct {
 	HasMore               bool
 }
 
+// PresignObjectRequest is the native message type for gestalt.provider.v1.PresignObjectRequest.
+//
 // PresignObjectRequest asks the provider to mint a presigned URL.
 type PresignObjectRequest struct {
 	Ref                *S3ObjectRef
@@ -109,6 +136,8 @@ type PresignObjectRequest struct {
 	Headers            map[string]string
 }
 
+// PresignObjectResponse is the native message type for gestalt.provider.v1.PresignObjectResponse.
+//
 // PresignObjectResponse returns a presigned URL plus any required headers.
 type PresignObjectResponse struct {
 	Url       string
@@ -137,11 +166,15 @@ type ReadObjectChunkResultData struct {
 
 func (*ReadObjectChunkResultData) isReadObjectChunkResult() {}
 
+// ReadObjectChunk is the native message type for gestalt.provider.v1.ReadObjectChunk.
+//
 // ReadObjectChunk is one frame in a streaming object read.
 type ReadObjectChunk struct {
 	Result ReadObjectChunkResult
 }
 
+// ReadObjectRequest is the native message type for gestalt.provider.v1.ReadObjectRequest.
+//
 // ReadObjectRequest opens a streaming object read.
 type ReadObjectRequest struct {
 	Ref               *S3ObjectRef
@@ -152,6 +185,8 @@ type ReadObjectRequest struct {
 	IfUnmodifiedSince *time.Time
 }
 
+// S3ObjectMeta is the native message type for gestalt.provider.v1.S3ObjectMeta.
+//
 // S3ObjectMeta describes one object returned by the provider.
 type S3ObjectMeta struct {
 	Ref          *S3ObjectRef
@@ -163,12 +198,16 @@ type S3ObjectMeta struct {
 	StorageClass string
 }
 
+// S3ObjectRef is the native message type for gestalt.provider.v1.S3ObjectRef.
+//
 // S3ObjectRef identifies one object or object version.
 type S3ObjectRef struct {
 	Key       string
 	VersionId string
 }
 
+// WriteObjectOpen is the native message type for gestalt.provider.v1.WriteObjectOpen.
+//
 // WriteObjectOpen carries the metadata frame that must be sent first in a
 // write-object stream.
 type WriteObjectOpen struct {
@@ -203,20 +242,24 @@ type WriteObjectRequestMsgData struct {
 
 func (*WriteObjectRequestMsgData) isWriteObjectRequestMsg() {}
 
+// WriteObjectRequest is the native message type for gestalt.provider.v1.WriteObjectRequest.
+//
 // WriteObjectRequest is one frame in a write-object stream.
 type WriteObjectRequest struct {
 	Msg WriteObjectRequestMsg
 }
 
+// WriteObjectResponse is the native message type for gestalt.provider.v1.WriteObjectResponse.
+//
 // WriteObjectResponse returns metadata for the committed object.
 type WriteObjectResponse struct {
 	Meta *S3ObjectMeta
 }
 
-// S3 models the shared Gestalt S3-provider protocol.
-//
 // S3 is the generated client for gestalt.provider.v1.S3.
 // Every transport error is converted to *GestaltError.
+//
+// S3 models the shared Gestalt S3-provider protocol.
 type S3 struct {
 	client proto.S3Client
 }
@@ -265,12 +308,12 @@ func (c *S3) HeadObjectRaw(ctx context.Context, request *HeadObjectRequest) (*He
 	return fromWireHeadObjectResponse(response), nil
 }
 
-// The first response frame carries object metadata. All subsequent frames
-// carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-//
 // ReadObject is the ergonomic form of [S3.ReadObjectRaw]: it consumes the
 // leading meta header frame and returns it beside the data payload
 // stream.
+//
+// The first response frame carries object metadata. All subsequent frames
+// carry byte chunks. Zero-byte objects therefore emit exactly one frame.
 func (c *S3) ReadObject(ctx context.Context, request *ReadObjectRequest) (*S3ObjectMeta, *S3ReadObjectDataStream, error) {
 	frames, err := c.ReadObjectRaw(ctx, request)
 	if err != nil {
@@ -290,10 +333,10 @@ func (c *S3) ReadObject(ctx context.Context, request *ReadObjectRequest) (*S3Obj
 	return header.Value, &S3ReadObjectDataStream{frames: frames}, nil
 }
 
+// ReadObjectRaw is the faithful form of [S3.ReadObject].
+//
 // The first response frame carries object metadata. All subsequent frames
 // carry byte chunks. Zero-byte objects therefore emit exactly one frame.
-//
-// ReadObjectRaw is the faithful form of [S3.ReadObject].
 func (c *S3) ReadObjectRaw(ctx context.Context, request *ReadObjectRequest) (*S3ReadObjectStream, error) {
 	stream, err := c.client.ReadObject(ctx, toWireReadObjectRequest(request))
 	if err != nil {
@@ -302,12 +345,12 @@ func (c *S3) ReadObjectRaw(ctx context.Context, request *ReadObjectRequest) (*S3
 	return &S3ReadObjectStream{stream: stream}, nil
 }
 
+// WriteObject is the ergonomic form of [S3.WriteObjectRaw]: it sends the open
+// header frame and returns the data payload stream.
+//
 // The first request frame must carry WriteObjectOpen metadata. All
 // subsequent frames carry raw bytes. The response is emitted only after the
 // object has been durably committed by the provider.
-//
-// WriteObject is the ergonomic form of [S3.WriteObjectRaw]: it sends the open
-// header frame and returns the data payload stream.
 func (c *S3) WriteObject(ctx context.Context, open *WriteObjectOpen) (*S3WriteObjectDataStream, error) {
 	frames, err := c.WriteObjectRaw(ctx)
 	if err != nil {
@@ -323,11 +366,11 @@ func (c *S3) WriteObject(ctx context.Context, open *WriteObjectOpen) (*S3WriteOb
 	return &S3WriteObjectDataStream{frames: frames}, nil
 }
 
+// WriteObjectRaw is the faithful form of [S3.WriteObject].
+//
 // The first request frame must carry WriteObjectOpen metadata. All
 // subsequent frames carry raw bytes. The response is emitted only after the
 // object has been durably committed by the provider.
-//
-// WriteObjectRaw is the faithful form of [S3.WriteObject].
 func (c *S3) WriteObjectRaw(ctx context.Context) (*S3WriteObjectStream, error) {
 	stream, err := c.client.WriteObject(ctx)
 	if err != nil {
@@ -518,12 +561,12 @@ func (s *S3WriteObjectDataStream) CloseAndRecv() (*WriteObjectResponse, error) {
 	return s.frames.CloseAndRecv()
 }
 
+// S3ObjectAccess is the generated client for gestalt.provider.v1.S3ObjectAccess.
+// Every transport error is converted to *GestaltError.
+//
 // S3ObjectAccess models host-mediated object access for plugin-scoped S3
 // bindings. It is registered by gestaltd for apps and is not implemented by
 // S3 providers.
-//
-// S3ObjectAccess is the generated client for gestalt.provider.v1.S3ObjectAccess.
-// Every transport error is converted to *GestaltError.
 type S3ObjectAccess struct {
 	client proto.S3ObjectAccessClient
 }

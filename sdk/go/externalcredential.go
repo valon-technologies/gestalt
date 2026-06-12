@@ -57,6 +57,7 @@ type DeleteExternalCredentialRequest struct {
 	ID string
 }
 
+// ExternalCredentialTokenExchangeDriver is the native message type for gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.
 type ExternalCredentialTokenExchangeDriver struct {
 	Type            string
 	TargetPrincipal string
@@ -66,6 +67,7 @@ type ExternalCredentialTokenExchangeDriver struct {
 	Params          map[string]string
 }
 
+// ExternalCredentialAuthConfig is the native message type for gestalt.provider.v1.ExternalCredentialAuthConfig.
 type ExternalCredentialAuthConfig struct {
 	Type                 string
 	Token                string
@@ -87,6 +89,7 @@ type ExternalCredentialAuthConfig struct {
 	RefreshToken         string
 }
 
+// ValidateExternalCredentialConfigRequest is the native message type for gestalt.provider.v1.ValidateExternalCredentialConfigRequest.
 type ValidateExternalCredentialConfigRequest struct {
 	Provider         string
 	Connection       string
@@ -96,6 +99,7 @@ type ValidateExternalCredentialConfigRequest struct {
 	ConnectionParams map[string]string
 }
 
+// ResolveExternalCredentialRequest is the native message type for gestalt.provider.v1.ResolveExternalCredentialRequest.
 type ResolveExternalCredentialRequest struct {
 	Provider            string
 	Connection          string
@@ -108,6 +112,7 @@ type ResolveExternalCredentialRequest struct {
 	ConnectionParams    map[string]string
 }
 
+// ResolveExternalCredentialResponse is the native message type for gestalt.provider.v1.ResolveExternalCredentialResponse.
 type ResolveExternalCredentialResponse struct {
 	Token        string
 	ExpiresAt    *time.Time
@@ -116,6 +121,7 @@ type ResolveExternalCredentialResponse struct {
 	Credential   *ExternalCredential
 }
 
+// ExternalCredentialTokenResponse is the native message type for gestalt.provider.v1.ExternalCredentialTokenResponse.
 type ExternalCredentialTokenResponse struct {
 	AccessToken   string
 	RefreshToken  string
@@ -125,6 +131,7 @@ type ExternalCredentialTokenResponse struct {
 	RefreshSource string
 }
 
+// ExchangeExternalCredentialRequest is the native message type for gestalt.provider.v1.ExchangeExternalCredentialRequest.
 type ExchangeExternalCredentialRequest struct {
 	Provider            string
 	Connection          string
@@ -137,10 +144,12 @@ type ExchangeExternalCredentialRequest struct {
 	ConnectionParams    map[string]string
 }
 
+// ExchangeExternalCredentialResponse is the native message type for gestalt.provider.v1.ExchangeExternalCredentialResponse.
 type ExchangeExternalCredentialResponse struct {
 	TokenResponse *ExternalCredentialTokenResponse
 }
 
+// GetId returns the id field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetId() string {
 	if c == nil {
 		return ""
@@ -148,6 +157,7 @@ func (c *ExternalCredential) GetId() string {
 	return c.ID
 }
 
+// GetSubjectId returns the subject id field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetSubjectId() string {
 	if c == nil {
 		return ""
@@ -155,6 +165,7 @@ func (c *ExternalCredential) GetSubjectId() string {
 	return c.SubjectID
 }
 
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetInstance() string {
 	if c == nil {
 		return ""
@@ -162,6 +173,7 @@ func (c *ExternalCredential) GetInstance() string {
 	return c.Instance
 }
 
+// GetAccessToken returns the access token field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetAccessToken() string {
 	if c == nil {
 		return ""
@@ -169,6 +181,7 @@ func (c *ExternalCredential) GetAccessToken() string {
 	return c.AccessToken
 }
 
+// GetRefreshToken returns the refresh token field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetRefreshToken() string {
 	if c == nil {
 		return ""
@@ -176,6 +189,7 @@ func (c *ExternalCredential) GetRefreshToken() string {
 	return c.RefreshToken
 }
 
+// GetScopes returns the scopes field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetScopes() string {
 	if c == nil {
 		return ""
@@ -183,6 +197,7 @@ func (c *ExternalCredential) GetScopes() string {
 	return c.Scopes
 }
 
+// GetExpiresAt returns the expires at field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetExpiresAt() *time.Time {
 	if c == nil {
 		return nil
@@ -190,6 +205,7 @@ func (c *ExternalCredential) GetExpiresAt() *time.Time {
 	return c.ExpiresAt
 }
 
+// GetLastRefreshedAt returns the last refreshed at field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetLastRefreshedAt() *time.Time {
 	if c == nil {
 		return nil
@@ -197,6 +213,7 @@ func (c *ExternalCredential) GetLastRefreshedAt() *time.Time {
 	return c.LastRefreshedAt
 }
 
+// GetRefreshErrorCount returns the refresh error count field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetRefreshErrorCount() int32 {
 	if c == nil {
 		return 0
@@ -204,6 +221,7 @@ func (c *ExternalCredential) GetRefreshErrorCount() int32 {
 	return c.RefreshErrorCount
 }
 
+// GetMetadataJson returns the metadata json field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetMetadataJson() string {
 	if c == nil {
 		return ""
@@ -211,6 +229,7 @@ func (c *ExternalCredential) GetMetadataJson() string {
 	return c.MetadataJSON
 }
 
+// GetCreatedAt returns the created at field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetCreatedAt() *time.Time {
 	if c == nil {
 		return nil
@@ -218,6 +237,7 @@ func (c *ExternalCredential) GetCreatedAt() *time.Time {
 	return c.CreatedAt
 }
 
+// GetUpdatedAt returns the updated at field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetUpdatedAt() *time.Time {
 	if c == nil {
 		return nil
@@ -225,6 +245,7 @@ func (c *ExternalCredential) GetUpdatedAt() *time.Time {
 	return c.UpdatedAt
 }
 
+// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
 func (c *ExternalCredential) GetConnectionId() string {
 	if c == nil {
 		return ""
@@ -232,6 +253,7 @@ func (c *ExternalCredential) GetConnectionId() string {
 	return c.ConnectionID
 }
 
+// GetSubjectId returns the subject id field; it is safe to call on a nil receiver.
 func (l *ExternalCredentialLookup) GetSubjectId() string {
 	if l == nil {
 		return ""
@@ -239,6 +261,7 @@ func (l *ExternalCredentialLookup) GetSubjectId() string {
 	return l.SubjectID
 }
 
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
 func (l *ExternalCredentialLookup) GetInstance() string {
 	if l == nil {
 		return ""
@@ -246,6 +269,7 @@ func (l *ExternalCredentialLookup) GetInstance() string {
 	return l.Instance
 }
 
+// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
 func (l *ExternalCredentialLookup) GetConnectionId() string {
 	if l == nil {
 		return ""
@@ -253,6 +277,7 @@ func (l *ExternalCredentialLookup) GetConnectionId() string {
 	return l.ConnectionID
 }
 
+// GetCredential returns the credential field; it is safe to call on a nil receiver.
 func (r *UpsertExternalCredentialRequest) GetCredential() *ExternalCredential {
 	if r == nil {
 		return nil
@@ -260,6 +285,7 @@ func (r *UpsertExternalCredentialRequest) GetCredential() *ExternalCredential {
 	return r.Credential
 }
 
+// GetPreserveTimestamps returns the preserve timestamps field; it is safe to call on a nil receiver.
 func (r *UpsertExternalCredentialRequest) GetPreserveTimestamps() bool {
 	if r == nil {
 		return false
@@ -267,6 +293,7 @@ func (r *UpsertExternalCredentialRequest) GetPreserveTimestamps() bool {
 	return r.PreserveTimestamps
 }
 
+// GetLookup returns the lookup field; it is safe to call on a nil receiver.
 func (r *GetExternalCredentialRequest) GetLookup() *ExternalCredentialLookup {
 	if r == nil {
 		return nil
@@ -274,6 +301,7 @@ func (r *GetExternalCredentialRequest) GetLookup() *ExternalCredentialLookup {
 	return r.Lookup
 }
 
+// GetSubjectId returns the subject id field; it is safe to call on a nil receiver.
 func (r *ListExternalCredentialsRequest) GetSubjectId() string {
 	if r == nil {
 		return ""
@@ -281,6 +309,7 @@ func (r *ListExternalCredentialsRequest) GetSubjectId() string {
 	return r.SubjectID
 }
 
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
 func (r *ListExternalCredentialsRequest) GetInstance() string {
 	if r == nil {
 		return ""
@@ -288,6 +317,7 @@ func (r *ListExternalCredentialsRequest) GetInstance() string {
 	return r.Instance
 }
 
+// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
 func (r *ListExternalCredentialsRequest) GetConnectionId() string {
 	if r == nil {
 		return ""
@@ -295,6 +325,7 @@ func (r *ListExternalCredentialsRequest) GetConnectionId() string {
 	return r.ConnectionID
 }
 
+// GetCredentials returns the credentials field; it is safe to call on a nil receiver.
 func (r *ListExternalCredentialsResponse) GetCredentials() []*ExternalCredential {
 	if r == nil {
 		return nil
@@ -302,6 +333,7 @@ func (r *ListExternalCredentialsResponse) GetCredentials() []*ExternalCredential
 	return r.Credentials
 }
 
+// GetId returns the id field; it is safe to call on a nil receiver.
 func (r *DeleteExternalCredentialRequest) GetId() string {
 	if r == nil {
 		return ""
@@ -309,6 +341,7 @@ func (r *DeleteExternalCredentialRequest) GetId() string {
 	return r.ID
 }
 
+// GetType returns the type field; it is safe to call on a nil receiver.
 func (d *ExternalCredentialTokenExchangeDriver) GetType() string {
 	if d == nil {
 		return ""
@@ -316,6 +349,7 @@ func (d *ExternalCredentialTokenExchangeDriver) GetType() string {
 	return d.Type
 }
 
+// GetTargetPrincipal returns the target principal field; it is safe to call on a nil receiver.
 func (d *ExternalCredentialTokenExchangeDriver) GetTargetPrincipal() string {
 	if d == nil {
 		return ""
@@ -323,6 +357,7 @@ func (d *ExternalCredentialTokenExchangeDriver) GetTargetPrincipal() string {
 	return d.TargetPrincipal
 }
 
+// GetScopes returns the scopes field; it is safe to call on a nil receiver.
 func (d *ExternalCredentialTokenExchangeDriver) GetScopes() []string {
 	if d == nil {
 		return nil
@@ -330,6 +365,7 @@ func (d *ExternalCredentialTokenExchangeDriver) GetScopes() []string {
 	return d.Scopes
 }
 
+// GetLifetimeSeconds returns the lifetime seconds field; it is safe to call on a nil receiver.
 func (d *ExternalCredentialTokenExchangeDriver) GetLifetimeSeconds() int32 {
 	if d == nil {
 		return 0
@@ -337,6 +373,7 @@ func (d *ExternalCredentialTokenExchangeDriver) GetLifetimeSeconds() int32 {
 	return d.LifetimeSeconds
 }
 
+// GetEndpoint returns the endpoint field; it is safe to call on a nil receiver.
 func (d *ExternalCredentialTokenExchangeDriver) GetEndpoint() string {
 	if d == nil {
 		return ""
@@ -344,6 +381,7 @@ func (d *ExternalCredentialTokenExchangeDriver) GetEndpoint() string {
 	return d.Endpoint
 }
 
+// GetParams returns the params field; it is safe to call on a nil receiver.
 func (d *ExternalCredentialTokenExchangeDriver) GetParams() map[string]string {
 	if d == nil {
 		return nil
@@ -351,6 +389,7 @@ func (d *ExternalCredentialTokenExchangeDriver) GetParams() map[string]string {
 	return d.Params
 }
 
+// GetType returns the type field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetType() string {
 	if a == nil {
 		return ""
@@ -358,6 +397,7 @@ func (a *ExternalCredentialAuthConfig) GetType() string {
 	return a.Type
 }
 
+// GetToken returns the token field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetToken() string {
 	if a == nil {
 		return ""
@@ -365,6 +405,7 @@ func (a *ExternalCredentialAuthConfig) GetToken() string {
 	return a.Token
 }
 
+// GetTokenPrefix returns the token prefix field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetTokenPrefix() string {
 	if a == nil {
 		return ""
@@ -372,6 +413,7 @@ func (a *ExternalCredentialAuthConfig) GetTokenPrefix() string {
 	return a.TokenPrefix
 }
 
+// GetGrantType returns the grant type field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetGrantType() string {
 	if a == nil {
 		return ""
@@ -379,6 +421,7 @@ func (a *ExternalCredentialAuthConfig) GetGrantType() string {
 	return a.GrantType
 }
 
+// GetTokenUrl returns the token url field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetTokenUrl() string {
 	if a == nil {
 		return ""
@@ -386,6 +429,7 @@ func (a *ExternalCredentialAuthConfig) GetTokenUrl() string {
 	return a.TokenURL
 }
 
+// GetClientId returns the client id field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetClientId() string {
 	if a == nil {
 		return ""
@@ -393,6 +437,7 @@ func (a *ExternalCredentialAuthConfig) GetClientId() string {
 	return a.ClientID
 }
 
+// GetClientSecret returns the client secret field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetClientSecret() string {
 	if a == nil {
 		return ""
@@ -400,6 +445,7 @@ func (a *ExternalCredentialAuthConfig) GetClientSecret() string {
 	return a.ClientSecret
 }
 
+// GetClientAuth returns the client auth field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetClientAuth() string {
 	if a == nil {
 		return ""
@@ -407,6 +453,7 @@ func (a *ExternalCredentialAuthConfig) GetClientAuth() string {
 	return a.ClientAuth
 }
 
+// GetTokenExchange returns the token exchange field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetTokenExchange() string {
 	if a == nil {
 		return ""
@@ -414,6 +461,7 @@ func (a *ExternalCredentialAuthConfig) GetTokenExchange() string {
 	return a.TokenExchange
 }
 
+// GetScopes returns the scopes field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetScopes() []string {
 	if a == nil {
 		return nil
@@ -421,6 +469,7 @@ func (a *ExternalCredentialAuthConfig) GetScopes() []string {
 	return a.Scopes
 }
 
+// GetScopeParam returns the scope param field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetScopeParam() string {
 	if a == nil {
 		return ""
@@ -428,6 +477,7 @@ func (a *ExternalCredentialAuthConfig) GetScopeParam() string {
 	return a.ScopeParam
 }
 
+// GetScopeSeparator returns the scope separator field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetScopeSeparator() string {
 	if a == nil {
 		return ""
@@ -435,6 +485,7 @@ func (a *ExternalCredentialAuthConfig) GetScopeSeparator() string {
 	return a.ScopeSeparator
 }
 
+// GetTokenParams returns the token params field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetTokenParams() map[string]string {
 	if a == nil {
 		return nil
@@ -442,6 +493,7 @@ func (a *ExternalCredentialAuthConfig) GetTokenParams() map[string]string {
 	return a.TokenParams
 }
 
+// GetRefreshParams returns the refresh params field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetRefreshParams() map[string]string {
 	if a == nil {
 		return nil
@@ -449,6 +501,7 @@ func (a *ExternalCredentialAuthConfig) GetRefreshParams() map[string]string {
 	return a.RefreshParams
 }
 
+// GetAcceptHeader returns the accept header field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetAcceptHeader() string {
 	if a == nil {
 		return ""
@@ -456,6 +509,7 @@ func (a *ExternalCredentialAuthConfig) GetAcceptHeader() string {
 	return a.AcceptHeader
 }
 
+// GetAccessTokenPath returns the access token path field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetAccessTokenPath() string {
 	if a == nil {
 		return ""
@@ -463,6 +517,7 @@ func (a *ExternalCredentialAuthConfig) GetAccessTokenPath() string {
 	return a.AccessTokenPath
 }
 
+// GetTokenExchangeDrivers returns the token exchange drivers field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetTokenExchangeDrivers() []*ExternalCredentialTokenExchangeDriver {
 	if a == nil {
 		return nil
@@ -470,6 +525,7 @@ func (a *ExternalCredentialAuthConfig) GetTokenExchangeDrivers() []*ExternalCred
 	return a.TokenExchangeDrivers
 }
 
+// GetRefreshToken returns the refresh token field; it is safe to call on a nil receiver.
 func (a *ExternalCredentialAuthConfig) GetRefreshToken() string {
 	if a == nil {
 		return ""
@@ -477,6 +533,7 @@ func (a *ExternalCredentialAuthConfig) GetRefreshToken() string {
 	return a.RefreshToken
 }
 
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
 func (r *ValidateExternalCredentialConfigRequest) GetProvider() string {
 	if r == nil {
 		return ""
@@ -484,6 +541,7 @@ func (r *ValidateExternalCredentialConfigRequest) GetProvider() string {
 	return r.Provider
 }
 
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
 func (r *ValidateExternalCredentialConfigRequest) GetConnection() string {
 	if r == nil {
 		return ""
@@ -491,6 +549,7 @@ func (r *ValidateExternalCredentialConfigRequest) GetConnection() string {
 	return r.Connection
 }
 
+// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
 func (r *ValidateExternalCredentialConfigRequest) GetConnectionId() string {
 	if r == nil {
 		return ""
@@ -498,6 +557,7 @@ func (r *ValidateExternalCredentialConfigRequest) GetConnectionId() string {
 	return r.ConnectionID
 }
 
+// GetMode returns the mode field; it is safe to call on a nil receiver.
 func (r *ValidateExternalCredentialConfigRequest) GetMode() string {
 	if r == nil {
 		return ""
@@ -505,6 +565,7 @@ func (r *ValidateExternalCredentialConfigRequest) GetMode() string {
 	return r.Mode
 }
 
+// GetAuth returns the auth field; it is safe to call on a nil receiver.
 func (r *ValidateExternalCredentialConfigRequest) GetAuth() *ExternalCredentialAuthConfig {
 	if r == nil {
 		return nil
@@ -512,6 +573,7 @@ func (r *ValidateExternalCredentialConfigRequest) GetAuth() *ExternalCredentialA
 	return r.Auth
 }
 
+// GetConnectionParams returns the connection params field; it is safe to call on a nil receiver.
 func (r *ValidateExternalCredentialConfigRequest) GetConnectionParams() map[string]string {
 	if r == nil {
 		return nil
@@ -519,6 +581,7 @@ func (r *ValidateExternalCredentialConfigRequest) GetConnectionParams() map[stri
 	return r.ConnectionParams
 }
 
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetProvider() string {
 	if r == nil {
 		return ""
@@ -526,6 +589,7 @@ func (r *ResolveExternalCredentialRequest) GetProvider() string {
 	return r.Provider
 }
 
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetConnection() string {
 	if r == nil {
 		return ""
@@ -533,6 +597,7 @@ func (r *ResolveExternalCredentialRequest) GetConnection() string {
 	return r.Connection
 }
 
+// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetConnectionId() string {
 	if r == nil {
 		return ""
@@ -540,6 +605,7 @@ func (r *ResolveExternalCredentialRequest) GetConnectionId() string {
 	return r.ConnectionID
 }
 
+// GetMode returns the mode field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetMode() string {
 	if r == nil {
 		return ""
@@ -547,6 +613,7 @@ func (r *ResolveExternalCredentialRequest) GetMode() string {
 	return r.Mode
 }
 
+// GetCredentialSubjectId returns the credential subject id field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetCredentialSubjectId() string {
 	if r == nil {
 		return ""
@@ -554,6 +621,7 @@ func (r *ResolveExternalCredentialRequest) GetCredentialSubjectId() string {
 	return r.CredentialSubjectID
 }
 
+// GetActorSubjectId returns the actor subject id field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetActorSubjectId() string {
 	if r == nil {
 		return ""
@@ -561,6 +629,7 @@ func (r *ResolveExternalCredentialRequest) GetActorSubjectId() string {
 	return r.ActorSubjectID
 }
 
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetInstance() string {
 	if r == nil {
 		return ""
@@ -568,6 +637,7 @@ func (r *ResolveExternalCredentialRequest) GetInstance() string {
 	return r.Instance
 }
 
+// GetAuth returns the auth field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConfig {
 	if r == nil {
 		return nil
@@ -575,6 +645,7 @@ func (r *ResolveExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConf
 	return r.Auth
 }
 
+// GetConnectionParams returns the connection params field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialRequest) GetConnectionParams() map[string]string {
 	if r == nil {
 		return nil
@@ -582,6 +653,7 @@ func (r *ResolveExternalCredentialRequest) GetConnectionParams() map[string]stri
 	return r.ConnectionParams
 }
 
+// GetToken returns the token field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialResponse) GetToken() string {
 	if r == nil {
 		return ""
@@ -589,6 +661,7 @@ func (r *ResolveExternalCredentialResponse) GetToken() string {
 	return r.Token
 }
 
+// GetExpiresAt returns the expires at field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialResponse) GetExpiresAt() *time.Time {
 	if r == nil {
 		return nil
@@ -596,6 +669,7 @@ func (r *ResolveExternalCredentialResponse) GetExpiresAt() *time.Time {
 	return r.ExpiresAt
 }
 
+// GetMetadataJson returns the metadata json field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialResponse) GetMetadataJson() string {
 	if r == nil {
 		return ""
@@ -603,6 +677,7 @@ func (r *ResolveExternalCredentialResponse) GetMetadataJson() string {
 	return r.MetadataJSON
 }
 
+// GetParams returns the params field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialResponse) GetParams() map[string]string {
 	if r == nil {
 		return nil
@@ -610,6 +685,7 @@ func (r *ResolveExternalCredentialResponse) GetParams() map[string]string {
 	return r.Params
 }
 
+// GetCredential returns the credential field; it is safe to call on a nil receiver.
 func (r *ResolveExternalCredentialResponse) GetCredential() *ExternalCredential {
 	if r == nil {
 		return nil
@@ -617,6 +693,7 @@ func (r *ResolveExternalCredentialResponse) GetCredential() *ExternalCredential 
 	return r.Credential
 }
 
+// GetAccessToken returns the access token field; it is safe to call on a nil receiver.
 func (r *ExternalCredentialTokenResponse) GetAccessToken() string {
 	if r == nil {
 		return ""
@@ -624,6 +701,7 @@ func (r *ExternalCredentialTokenResponse) GetAccessToken() string {
 	return r.AccessToken
 }
 
+// GetRefreshToken returns the refresh token field; it is safe to call on a nil receiver.
 func (r *ExternalCredentialTokenResponse) GetRefreshToken() string {
 	if r == nil {
 		return ""
@@ -631,6 +709,7 @@ func (r *ExternalCredentialTokenResponse) GetRefreshToken() string {
 	return r.RefreshToken
 }
 
+// GetExpiresIn returns the expires in field; it is safe to call on a nil receiver.
 func (r *ExternalCredentialTokenResponse) GetExpiresIn() int32 {
 	if r == nil {
 		return 0
@@ -638,6 +717,7 @@ func (r *ExternalCredentialTokenResponse) GetExpiresIn() int32 {
 	return r.ExpiresIn
 }
 
+// GetTokenType returns the token type field; it is safe to call on a nil receiver.
 func (r *ExternalCredentialTokenResponse) GetTokenType() string {
 	if r == nil {
 		return ""
@@ -645,6 +725,7 @@ func (r *ExternalCredentialTokenResponse) GetTokenType() string {
 	return r.TokenType
 }
 
+// GetExtraJson returns the extra json field; it is safe to call on a nil receiver.
 func (r *ExternalCredentialTokenResponse) GetExtraJson() string {
 	if r == nil {
 		return ""
@@ -652,6 +733,7 @@ func (r *ExternalCredentialTokenResponse) GetExtraJson() string {
 	return r.ExtraJSON
 }
 
+// GetRefreshSource returns the refresh source field; it is safe to call on a nil receiver.
 func (r *ExternalCredentialTokenResponse) GetRefreshSource() string {
 	if r == nil {
 		return ""
@@ -659,6 +741,7 @@ func (r *ExternalCredentialTokenResponse) GetRefreshSource() string {
 	return r.RefreshSource
 }
 
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetProvider() string {
 	if r == nil {
 		return ""
@@ -666,6 +749,7 @@ func (r *ExchangeExternalCredentialRequest) GetProvider() string {
 	return r.Provider
 }
 
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetConnection() string {
 	if r == nil {
 		return ""
@@ -673,6 +757,7 @@ func (r *ExchangeExternalCredentialRequest) GetConnection() string {
 	return r.Connection
 }
 
+// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetConnectionId() string {
 	if r == nil {
 		return ""
@@ -680,6 +765,7 @@ func (r *ExchangeExternalCredentialRequest) GetConnectionId() string {
 	return r.ConnectionID
 }
 
+// GetCredentialSubjectId returns the credential subject id field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetCredentialSubjectId() string {
 	if r == nil {
 		return ""
@@ -687,6 +773,7 @@ func (r *ExchangeExternalCredentialRequest) GetCredentialSubjectId() string {
 	return r.CredentialSubjectID
 }
 
+// GetActorSubjectId returns the actor subject id field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetActorSubjectId() string {
 	if r == nil {
 		return ""
@@ -694,6 +781,7 @@ func (r *ExchangeExternalCredentialRequest) GetActorSubjectId() string {
 	return r.ActorSubjectID
 }
 
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetInstance() string {
 	if r == nil {
 		return ""
@@ -701,6 +789,7 @@ func (r *ExchangeExternalCredentialRequest) GetInstance() string {
 	return r.Instance
 }
 
+// GetAuth returns the auth field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConfig {
 	if r == nil {
 		return nil
@@ -708,6 +797,7 @@ func (r *ExchangeExternalCredentialRequest) GetAuth() *ExternalCredentialAuthCon
 	return r.Auth
 }
 
+// GetCredentialJson returns the credential json field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetCredentialJson() string {
 	if r == nil {
 		return ""
@@ -715,6 +805,7 @@ func (r *ExchangeExternalCredentialRequest) GetCredentialJson() string {
 	return r.CredentialJSON
 }
 
+// GetConnectionParams returns the connection params field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialRequest) GetConnectionParams() map[string]string {
 	if r == nil {
 		return nil
@@ -722,6 +813,7 @@ func (r *ExchangeExternalCredentialRequest) GetConnectionParams() map[string]str
 	return r.ConnectionParams
 }
 
+// GetTokenResponse returns the token response field; it is safe to call on a nil receiver.
 func (r *ExchangeExternalCredentialResponse) GetTokenResponse() *ExternalCredentialTokenResponse {
 	if r == nil {
 		return nil

@@ -1,8 +1,8 @@
 package gestalt
 
 import (
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func recordFromProto(record *proto.Record) (Record, error) {

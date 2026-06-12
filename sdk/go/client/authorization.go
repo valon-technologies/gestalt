@@ -17,7 +17,9 @@ import (
 type DefaultAccessPolicy int32
 
 const (
-	DefaultAccessPolicyDeny  DefaultAccessPolicy = 0
+	// DefaultAccessPolicyDeny is the DEFAULT_ACCESS_POLICY_DENY value of DefaultAccessPolicy.
+	DefaultAccessPolicyDeny DefaultAccessPolicy = 0
+	// DefaultAccessPolicyAllow is the DEFAULT_ACCESS_POLICY_ALLOW value of DefaultAccessPolicy.
 	DefaultAccessPolicyAllow DefaultAccessPolicy = 1
 )
 
@@ -26,10 +28,14 @@ const (
 type RelationshipTargetType int32
 
 const (
+	// RelationshipTargetTypeUnspecified is the RELATIONSHIP_TARGET_TYPE_UNSPECIFIED value of RelationshipTargetType.
 	RelationshipTargetTypeUnspecified RelationshipTargetType = 0
-	RelationshipTargetTypeSubject     RelationshipTargetType = 1
-	RelationshipTargetTypeResource    RelationshipTargetType = 2
-	RelationshipTargetTypeSubjectSet  RelationshipTargetType = 3
+	// RelationshipTargetTypeSubject is the RELATIONSHIP_TARGET_TYPE_SUBJECT value of RelationshipTargetType.
+	RelationshipTargetTypeSubject RelationshipTargetType = 1
+	// RelationshipTargetTypeResource is the RELATIONSHIP_TARGET_TYPE_RESOURCE value of RelationshipTargetType.
+	RelationshipTargetTypeResource RelationshipTargetType = 2
+	// RelationshipTargetTypeSubjectSet is the RELATIONSHIP_TARGET_TYPE_SUBJECT_SET value of RelationshipTargetType.
+	RelationshipTargetTypeSubjectSet RelationshipTargetType = 3
 )
 
 // SourceLayer is the gestalt.provider.v1.SourceLayer enum. It is open:
@@ -37,36 +43,45 @@ const (
 type SourceLayer int32
 
 const (
-	SourceLayerUnspecified  SourceLayer = 0
+	// SourceLayerUnspecified is the SOURCE_LAYER_UNSPECIFIED value of SourceLayer.
+	SourceLayerUnspecified SourceLayer = 0
+	// SourceLayerStaticConfig is the SOURCE_LAYER_STATIC_CONFIG value of SourceLayer.
 	SourceLayerStaticConfig SourceLayer = 1
-	SourceLayerRuntime      SourceLayer = 2
+	// SourceLayerRuntime is the SOURCE_LAYER_RUNTIME value of SourceLayer.
+	SourceLayerRuntime SourceLayer = 2
 )
 
+// Action is the native message type for gestalt.provider.v1.Action.
 type Action struct {
 	Name       string
 	Properties map[string]any
 }
 
+// AddRelationshipRequest is the native message type for gestalt.provider.v1.AddRelationshipRequest.
 type AddRelationshipRequest struct {
 	Relationship *Relationship
 }
 
+// AddRelationshipResponse is the native message type for gestalt.provider.v1.AddRelationshipResponse.
 type AddRelationshipResponse struct {
 	Relationship *Relationship
 }
 
+// AuthorizationModel is the native message type for gestalt.provider.v1.AuthorizationModel.
 type AuthorizationModel struct {
 	Id            string
 	Version       string
 	ResourceTypes []*AuthorizationModelResourceType
 }
 
+// AuthorizationModelRef is the native message type for gestalt.provider.v1.AuthorizationModelRef.
 type AuthorizationModelRef struct {
 	Id        string
 	Version   string
 	CreatedAt *time.Time
 }
 
+// AuthorizationModelResourceType is the native message type for gestalt.provider.v1.AuthorizationModelResourceType.
 type AuthorizationModelResourceType struct {
 	Name                string
 	Relations           []*ModelRelation
@@ -75,63 +90,76 @@ type AuthorizationModelResourceType struct {
 	DefaultAccessPolicy DefaultAccessPolicy
 }
 
+// AuthorizationModelResourceTypeFilter is the native message type for gestalt.provider.v1.AuthorizationModelResourceTypeFilter.
 type AuthorizationModelResourceTypeFilter struct {
 	Name        string
 	SourceLayer SourceLayer
 }
 
+// CheckAccessManyRequest is the native message type for gestalt.provider.v1.CheckAccessManyRequest.
 type CheckAccessManyRequest struct {
 	Requests []*CheckAccessRequest
 }
 
+// CheckAccessManyResponse is the native message type for gestalt.provider.v1.CheckAccessManyResponse.
 type CheckAccessManyResponse struct {
 	Decisions []*CheckAccessResponse
 }
 
+// CheckAccessRequest is the native message type for gestalt.provider.v1.CheckAccessRequest.
 type CheckAccessRequest struct {
 	Subject  *Subject
 	Action   *Action
 	Resource *Resource
 }
 
+// CheckAccessResponse is the native message type for gestalt.provider.v1.CheckAccessResponse.
 type CheckAccessResponse struct {
 	Allowed bool
 	ModelId string
 }
 
+// DeleteRelationshipRequest is the native message type for gestalt.provider.v1.DeleteRelationshipRequest.
 type DeleteRelationshipRequest struct {
 	RelationshipTuple *RelationshipTuple
 }
 
+// DeleteRelationshipResponse is the native message type for gestalt.provider.v1.DeleteRelationshipResponse.
 type DeleteRelationshipResponse struct{}
 
+// GetActiveModelRefResponse is the native message type for gestalt.provider.v1.GetActiveModelRefResponse.
 type GetActiveModelRefResponse struct {
 	Model *AuthorizationModelRef
 }
 
+// ListActiveModelResourceTypesRequest is the native message type for gestalt.provider.v1.ListActiveModelResourceTypesRequest.
 type ListActiveModelResourceTypesRequest struct {
 	Filter    *AuthorizationModelResourceTypeFilter
 	PageSize  int32
 	PageToken string
 }
 
+// ListActiveModelResourceTypesResponse is the native message type for gestalt.provider.v1.ListActiveModelResourceTypesResponse.
 type ListActiveModelResourceTypesResponse struct {
 	ResourceTypes []*AuthorizationModelResourceType
 	NextPageToken string
 	ModelId       string
 }
 
+// ListRelationshipsRequest is the native message type for gestalt.provider.v1.ListRelationshipsRequest.
 type ListRelationshipsRequest struct {
 	Filter    *RelationshipFilter
 	PageSize  int32
 	PageToken string
 }
 
+// ListRelationshipsResponse is the native message type for gestalt.provider.v1.ListRelationshipsResponse.
 type ListRelationshipsResponse struct {
 	Relationships []*Relationship
 	NextPageToken string
 }
 
+// ModelAction is the native message type for gestalt.provider.v1.ModelAction.
 type ModelAction struct {
 	Name      string
 	Relations []string
@@ -164,21 +192,25 @@ type ModelAllowedTargetKindSubjectSetType struct {
 
 func (*ModelAllowedTargetKindSubjectSetType) isModelAllowedTargetKind() {}
 
+// ModelAllowedTarget is the native message type for gestalt.provider.v1.ModelAllowedTarget.
 type ModelAllowedTarget struct {
 	Kind ModelAllowedTargetKind
 }
 
+// ModelRelation is the native message type for gestalt.provider.v1.ModelRelation.
 type ModelRelation struct {
 	Name           string
 	AllowedTargets []*ModelAllowedTarget
 }
 
+// Relationship is the native message type for gestalt.provider.v1.Relationship.
 type Relationship struct {
 	Tuple       *RelationshipTuple
 	Properties  map[string]any
 	SourceLayer SourceLayer
 }
 
+// RelationshipFilter is the native message type for gestalt.provider.v1.RelationshipFilter.
 type RelationshipFilter struct {
 	Target           *RelationshipTarget
 	Relation         string
@@ -216,50 +248,60 @@ type RelationshipTargetKindSubjectSet struct {
 
 func (*RelationshipTargetKindSubjectSet) isRelationshipTargetKind() {}
 
+// RelationshipTarget is the native message type for gestalt.provider.v1.RelationshipTarget.
 type RelationshipTarget struct {
 	Kind RelationshipTargetKind
 }
 
+// RelationshipTuple is the native message type for gestalt.provider.v1.RelationshipTuple.
 type RelationshipTuple struct {
 	Target   *RelationshipTarget
 	Relation string
 	Resource *Resource
 }
 
+// Resource is the native message type for gestalt.provider.v1.Resource.
 type Resource struct {
 	Type       string
 	Id         string
 	Properties map[string]any
 }
 
+// SetActiveModelRequest is the native message type for gestalt.provider.v1.SetActiveModelRequest.
 type SetActiveModelRequest struct {
 	Model *AuthorizationModel
 }
 
+// SetActiveModelResponse is the native message type for gestalt.provider.v1.SetActiveModelResponse.
 type SetActiveModelResponse struct {
 	Model *AuthorizationModelRef
 }
 
+// SetAuthorizationStateRequest is the native message type for gestalt.provider.v1.SetAuthorizationStateRequest.
 type SetAuthorizationStateRequest struct {
 	Model         *AuthorizationModel
 	Relationships []*Relationship
 }
 
+// SetAuthorizationStateResponse is the native message type for gestalt.provider.v1.SetAuthorizationStateResponse.
 type SetAuthorizationStateResponse struct {
 	ActiveModel *AuthorizationModelRef
 }
 
+// Subject is the native message type for gestalt.provider.v1.Subject.
 type Subject struct {
 	Type       string
 	Id         string
 	Properties map[string]any
 }
 
+// SubjectSet is the native message type for gestalt.provider.v1.SubjectSet.
 type SubjectSet struct {
 	Resource *Resource
 	Relation string
 }
 
+// SubjectSetType is the native message type for gestalt.provider.v1.SubjectSetType.
 type SubjectSetType struct {
 	ResourceType string
 	Relation     string

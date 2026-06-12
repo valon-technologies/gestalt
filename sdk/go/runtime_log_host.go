@@ -27,6 +27,7 @@ var sharedRuntimeLogHostTransport sharedManagerTransport[proto.RuntimeLogHostCli
 // RuntimeLogStream identifies the stream that produced a runtime log entry.
 type RuntimeLogStream string
 
+// The runtime log streams.
 const (
 	RuntimeLogStreamRuntime RuntimeLogStream = "runtime"
 	RuntimeLogStreamStdout  RuntimeLogStream = "stdout"

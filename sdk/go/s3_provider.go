@@ -6,8 +6,10 @@ import (
 	"github.com/valon-technologies/gestalt/sdk/go/s3"
 )
 
-// Native S3 types shared by the S3 provider surface. The canonical
-// definitions live in the sdk/go/s3 subpackage.
+// Aliases to the native S3 types in sdk/go/s3, shared by the S3 provider
+// surface.
+//
+//nolint:revive // grouped aliases documented at their canonical definitions
 type (
 	ObjectRef      = s3.ObjectRef
 	ObjectMeta     = s3.ObjectMeta

@@ -44,6 +44,7 @@ func NewProviderServer[P any, PP interface {
 	}
 }
 
+// StartProvider boots the provider and reports its catalog.
 func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -63,6 +64,7 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 	}, nil
 }
 
+// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	_, ok := s.sessionCat()
 	return &proto.ProviderMetadata{
@@ -72,6 +74,7 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	}, nil
 }
 
+// Execute routes one operation invocation to its handler.
 func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -91,6 +94,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	return operationResultProto(result), nil
 }
 
+// ResolveHTTPSubject resolves the acting subject of a hosted HTTP request.
 func (s *ProviderServer) ResolveHTTPSubject(ctx context.Context, req *proto.ResolveHTTPSubjectRequest) (resp *proto.ResolveHTTPSubjectResponse, err error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
@@ -198,6 +202,7 @@ func cloneVerifiedClaims(values map[string]string) map[string]string {
 	return out
 }
 
+// GetSessionCatalog returns the session catalog field; it is safe to call on a nil receiver.
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
 	scp, ok := s.sessionCat()
 	if !ok {

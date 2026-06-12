@@ -13,10 +13,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Record is the JSON-like value stored in an object store row.
 type Record = map[string]any
 
 var timeType = reflect.TypeOf(time.Time{})
 
+// TypedValueFromAny converts a native value to its wire TypedValue.
 func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 	if v == nil {
 		return &proto.TypedValue{
@@ -95,6 +97,7 @@ func TypedValueFromAny(v any) (*proto.TypedValue, error) {
 	return &proto.TypedValue{Kind: &proto.TypedValue_JsonValue{JsonValue: jsonValue}}, nil
 }
 
+// AnyFromTypedValue converts a wire TypedValue to its native value.
 func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	if v == nil || v.GetKind() == nil {
 		return nil, nil
@@ -131,6 +134,7 @@ func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
 	}
 }
 
+// TypedValuesFromAny converts a native value slice to wire TypedValues.
 func TypedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
 	out := make([]*proto.TypedValue, len(values))
 	for i, value := range values {
@@ -143,6 +147,7 @@ func TypedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
 	return out, nil
 }
 
+// AnyFromTypedValues converts wire TypedValues to native values.
 func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	out := make([]any, len(values))
 	for i, value := range values {
@@ -155,6 +160,7 @@ func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	return out, nil
 }
 
+// RecordToProto converts a native record to its wire form.
 func RecordToProto(record Record) (*proto.Record, error) {
 	fields := make(map[string]*proto.TypedValue, len(record))
 	for key, value := range record {
@@ -167,6 +173,7 @@ func RecordToProto(record Record) (*proto.Record, error) {
 	return &proto.Record{Fields: fields}, nil
 }
 
+// RecordFromProto converts a wire record to its native form.
 func RecordFromProto(record *proto.Record) (Record, error) {
 	if record == nil {
 		return nil, nil
@@ -183,6 +190,7 @@ func RecordFromProto(record *proto.Record) (Record, error) {
 	return out, nil
 }
 
+// RecordsFromProto converts wire records to native records.
 func RecordsFromProto(records []*proto.Record) ([]Record, error) {
 	out := make([]Record, len(records))
 	for i, record := range records {
@@ -195,6 +203,7 @@ func RecordsFromProto(records []*proto.Record) ([]Record, error) {
 	return out, nil
 }
 
+// RecordsToProto converts native records to wire records.
 func RecordsToProto(records []Record) ([]*proto.Record, error) {
 	out := make([]*proto.Record, len(records))
 	for i, record := range records {
@@ -207,6 +216,7 @@ func RecordsToProto(records []Record) ([]*proto.Record, error) {
 	return out, nil
 }
 
+// KeyValuesToAny converts wire key values to native key parts.
 func KeyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
 	parts := make([]any, len(kvs))
 	for i, kv := range kvs {
@@ -219,6 +229,7 @@ func KeyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
 	return parts, nil
 }
 
+// KeyValueToAny converts one wire key value to its native key part.
 func KeyValueToAny(kv *proto.KeyValue) (any, error) {
 	switch v := kv.GetKind().(type) {
 	case *proto.KeyValue_Scalar:
@@ -230,6 +241,7 @@ func KeyValueToAny(kv *proto.KeyValue) (any, error) {
 	}
 }
 
+// AnyToKeyValue converts one native key part to its wire key value.
 func AnyToKeyValue(v any) (*proto.KeyValue, error) {
 	if arr, ok := KeyValueArrayParts(v); ok {
 		elems := make([]*proto.KeyValue, len(arr))
@@ -249,6 +261,8 @@ func AnyToKeyValue(v any) (*proto.KeyValue, error) {
 	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}, nil
 }
 
+// CursorKeyToProto converts a native cursor key to its wire key values,
+// splitting composite index keys into their parts.
 func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 	if indexCursor {
 		if parts, ok := KeyValueArrayParts(key); ok {
@@ -270,6 +284,7 @@ func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 	return []*proto.KeyValue{kv}, nil
 }
 
+// EncodeKey serializes a native key for storage.
 func EncodeKey(value any) ([]byte, error) {
 	kv, err := AnyToKeyValue(value)
 	if err != nil {
@@ -278,6 +293,7 @@ func EncodeKey(value any) ([]byte, error) {
 	return gproto.Marshal(kv)
 }
 
+// DecodeKey deserializes a stored key to its native value.
 func DecodeKey(data []byte) (any, error) {
 	kv := &proto.KeyValue{}
 	if err := gproto.Unmarshal(data, kv); err != nil {
@@ -286,6 +302,7 @@ func DecodeKey(data []byte) (any, error) {
 	return KeyValueToAny(kv)
 }
 
+// EncodeRecord serializes a native record for storage.
 func EncodeRecord(record Record) ([]byte, error) {
 	pbRecord, err := RecordToProto(record)
 	if err != nil {
@@ -294,6 +311,7 @@ func EncodeRecord(record Record) ([]byte, error) {
 	return gproto.Marshal(pbRecord)
 }
 
+// DecodeRecord deserializes a stored record to its native form.
 func DecodeRecord(data []byte) (Record, error) {
 	pbRecord := &proto.Record{}
 	if err := gproto.Unmarshal(data, pbRecord); err != nil {
@@ -302,6 +320,7 @@ func DecodeRecord(data []byte) (Record, error) {
 	return RecordFromProto(pbRecord)
 }
 
+// EncodeIndexValues serializes the extracted index key values for storage.
 func EncodeIndexValues(values []any) ([]byte, error) {
 	typedValues, err := TypedValuesFromAny(values)
 	if err != nil {
@@ -314,6 +333,8 @@ func EncodeIndexValues(values []any) ([]byte, error) {
 	return gproto.MarshalOptions{Deterministic: true}.Marshal(record)
 }
 
+// DecodeIndexValues deserializes stored index key values, keyParts of which
+// form the index key.
 func DecodeIndexValues(data []byte, keyParts int) ([]any, error) {
 	record := &proto.Record{}
 	if err := gproto.Unmarshal(data, record); err != nil {
@@ -334,6 +355,8 @@ func DecodeIndexValues(data []byte, keyParts int) ([]any, error) {
 	return out, nil
 }
 
+// KeyValueArrayParts reports a native composite key's parts when the value
+// is an array-shaped key.
 func KeyValueArrayParts(v any) ([]any, bool) {
 	if arr, ok := v.([]any); ok {
 		return append([]any(nil), arr...), true

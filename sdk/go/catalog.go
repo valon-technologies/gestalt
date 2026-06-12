@@ -17,6 +17,7 @@ type Catalog struct {
 	Operations  []*CatalogOperation `json:"operations,omitempty"`
 }
 
+// GetName returns the name field; it is safe to call on a nil receiver.
 func (c *Catalog) GetName() string {
 	if c == nil {
 		return ""
@@ -24,6 +25,7 @@ func (c *Catalog) GetName() string {
 	return c.Name
 }
 
+// GetDisplayName returns the display name field; it is safe to call on a nil receiver.
 func (c *Catalog) GetDisplayName() string {
 	if c == nil {
 		return ""
@@ -31,6 +33,7 @@ func (c *Catalog) GetDisplayName() string {
 	return c.DisplayName
 }
 
+// GetDescription returns the description field; it is safe to call on a nil receiver.
 func (c *Catalog) GetDescription() string {
 	if c == nil {
 		return ""
@@ -38,6 +41,7 @@ func (c *Catalog) GetDescription() string {
 	return c.Description
 }
 
+// GetIconSvg returns the icon svg field; it is safe to call on a nil receiver.
 func (c *Catalog) GetIconSvg() string {
 	if c == nil {
 		return ""
@@ -45,6 +49,7 @@ func (c *Catalog) GetIconSvg() string {
 	return c.IconSvg
 }
 
+// GetOperations returns the operations field; it is safe to call on a nil receiver.
 func (c *Catalog) GetOperations() []*CatalogOperation {
 	if c == nil {
 		return nil
@@ -70,6 +75,7 @@ type CatalogOperation struct {
 	AllowedRoles   []string              `json:"allowedRoles,omitempty"`
 }
 
+// GetId returns the id field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetId() string {
 	if o == nil {
 		return ""
@@ -77,6 +83,7 @@ func (o *CatalogOperation) GetId() string {
 	return o.Id
 }
 
+// GetMethod returns the method field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetMethod() string {
 	if o == nil {
 		return ""
@@ -84,6 +91,7 @@ func (o *CatalogOperation) GetMethod() string {
 	return o.Method
 }
 
+// GetTitle returns the title field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetTitle() string {
 	if o == nil {
 		return ""
@@ -91,6 +99,7 @@ func (o *CatalogOperation) GetTitle() string {
 	return o.Title
 }
 
+// GetDescription returns the description field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetDescription() string {
 	if o == nil {
 		return ""
@@ -98,6 +107,7 @@ func (o *CatalogOperation) GetDescription() string {
 	return o.Description
 }
 
+// GetInputSchema returns the input schema field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetInputSchema() string {
 	if o == nil {
 		return ""
@@ -105,6 +115,7 @@ func (o *CatalogOperation) GetInputSchema() string {
 	return o.InputSchema
 }
 
+// GetOutputSchema returns the output schema field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetOutputSchema() string {
 	if o == nil {
 		return ""
@@ -112,6 +123,7 @@ func (o *CatalogOperation) GetOutputSchema() string {
 	return o.OutputSchema
 }
 
+// GetAnnotations returns the annotations field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetAnnotations() *OperationAnnotations {
 	if o == nil {
 		return nil
@@ -119,6 +131,7 @@ func (o *CatalogOperation) GetAnnotations() *OperationAnnotations {
 	return o.Annotations
 }
 
+// GetParameters returns the parameters field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetParameters() []*CatalogParameter {
 	if o == nil {
 		return nil
@@ -126,6 +139,7 @@ func (o *CatalogOperation) GetParameters() []*CatalogParameter {
 	return o.Parameters
 }
 
+// GetRequiredScopes returns the required scopes field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetRequiredScopes() []string {
 	if o == nil {
 		return nil
@@ -133,6 +147,7 @@ func (o *CatalogOperation) GetRequiredScopes() []string {
 	return o.RequiredScopes
 }
 
+// GetTags returns the tags field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetTags() []string {
 	if o == nil {
 		return nil
@@ -140,6 +155,7 @@ func (o *CatalogOperation) GetTags() []string {
 	return o.Tags
 }
 
+// GetReadOnly returns the read only field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetReadOnly() bool {
 	if o == nil {
 		return false
@@ -147,6 +163,7 @@ func (o *CatalogOperation) GetReadOnly() bool {
 	return o.ReadOnly
 }
 
+// GetVisible returns the visible field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetVisible() bool {
 	if o == nil || o.Visible == nil {
 		return false
@@ -154,6 +171,7 @@ func (o *CatalogOperation) GetVisible() bool {
 	return *o.Visible
 }
 
+// GetTransport returns the transport field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetTransport() string {
 	if o == nil {
 		return ""
@@ -161,6 +179,7 @@ func (o *CatalogOperation) GetTransport() string {
 	return o.Transport
 }
 
+// GetAllowedRoles returns the allowed roles field; it is safe to call on a nil receiver.
 func (o *CatalogOperation) GetAllowedRoles() []string {
 	if o == nil {
 		return nil
@@ -178,6 +197,7 @@ type CatalogParameter struct {
 	HasDefault  bool   `json:"-"`
 }
 
+// GetName returns the name field; it is safe to call on a nil receiver.
 func (p *CatalogParameter) GetName() string {
 	if p == nil {
 		return ""
@@ -185,6 +205,7 @@ func (p *CatalogParameter) GetName() string {
 	return p.Name
 }
 
+// GetType returns the type field; it is safe to call on a nil receiver.
 func (p *CatalogParameter) GetType() string {
 	if p == nil {
 		return ""
@@ -192,6 +213,7 @@ func (p *CatalogParameter) GetType() string {
 	return p.Type
 }
 
+// GetDescription returns the description field; it is safe to call on a nil receiver.
 func (p *CatalogParameter) GetDescription() string {
 	if p == nil {
 		return ""
@@ -199,6 +221,7 @@ func (p *CatalogParameter) GetDescription() string {
 	return p.Description
 }
 
+// GetRequired returns the required field; it is safe to call on a nil receiver.
 func (p *CatalogParameter) GetRequired() bool {
 	if p == nil {
 		return false
@@ -206,6 +229,7 @@ func (p *CatalogParameter) GetRequired() bool {
 	return p.Required
 }
 
+// GetDefault returns the default field; it is safe to call on a nil receiver.
 func (p *CatalogParameter) GetDefault() any {
 	if p == nil {
 		return nil
@@ -213,6 +237,7 @@ func (p *CatalogParameter) GetDefault() any {
 	return p.Default
 }
 
+// GetHasDefault returns the has default field; it is safe to call on a nil receiver.
 func (p *CatalogParameter) GetHasDefault() bool {
 	if p == nil {
 		return false
@@ -228,6 +253,7 @@ type OperationAnnotations struct {
 	OpenWorldHint   *bool `json:"openWorldHint,omitempty"`
 }
 
+// GetReadOnlyHint returns the read only hint field; it is safe to call on a nil receiver.
 func (a *OperationAnnotations) GetReadOnlyHint() bool {
 	if a == nil || a.ReadOnlyHint == nil {
 		return false
@@ -235,6 +261,7 @@ func (a *OperationAnnotations) GetReadOnlyHint() bool {
 	return *a.ReadOnlyHint
 }
 
+// GetIdempotentHint returns the idempotent hint field; it is safe to call on a nil receiver.
 func (a *OperationAnnotations) GetIdempotentHint() bool {
 	if a == nil || a.IdempotentHint == nil {
 		return false
@@ -242,6 +269,7 @@ func (a *OperationAnnotations) GetIdempotentHint() bool {
 	return *a.IdempotentHint
 }
 
+// GetDestructiveHint returns the destructive hint field; it is safe to call on a nil receiver.
 func (a *OperationAnnotations) GetDestructiveHint() bool {
 	if a == nil || a.DestructiveHint == nil {
 		return false
@@ -249,6 +277,7 @@ func (a *OperationAnnotations) GetDestructiveHint() bool {
 	return *a.DestructiveHint
 }
 
+// GetOpenWorldHint returns the open world hint field; it is safe to call on a nil receiver.
 func (a *OperationAnnotations) GetOpenWorldHint() bool {
 	if a == nil || a.OpenWorldHint == nil {
 		return false

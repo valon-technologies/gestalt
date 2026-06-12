@@ -189,7 +189,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"LastModified *time.Time",
 		"Start *int64",
 		"type ByteRange struct",
-		"PresignMethodGet         PresignMethod = 1",
+		"PresignMethodGet PresignMethod = 1",
 		// optional_signature after a non-empty signature: positional
 		// parameters first, then the trailing options struct.
 		"func (c *S3) PresignObject(ctx context.Context, method PresignMethod, expiresSeconds int64, ref *S3ObjectRef, opts *S3PresignObjectOptions) (*PresignObjectResponse, error) {",
@@ -210,7 +210,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"func (s *IndexedDBTransactionStream) Recv() (*TransactionServerMessage, error) {",
 		"Error *RpcStatus",
 		"Range *KeyRange",
-		"CursorDirectionCursorNext       CursorDirection = 0",
+		"CursorDirectionCursorNext CursorDirection = 0",
 	)
 	assertContains(t, files, "client/indexeddb_codec.go",
 		"func toWireTypedValue(value *TypedValue) *proto.TypedValue {",

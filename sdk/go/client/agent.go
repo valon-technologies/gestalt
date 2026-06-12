@@ -16,12 +16,19 @@ import (
 type AgentExecutionStatus int32
 
 const (
-	AgentExecutionStatusUnspecified     AgentExecutionStatus = 0
-	AgentExecutionStatusPending         AgentExecutionStatus = 1
-	AgentExecutionStatusRunning         AgentExecutionStatus = 2
-	AgentExecutionStatusSucceeded       AgentExecutionStatus = 3
-	AgentExecutionStatusFailed          AgentExecutionStatus = 4
-	AgentExecutionStatusCanceled        AgentExecutionStatus = 5
+	// AgentExecutionStatusUnspecified is the AGENT_EXECUTION_STATUS_UNSPECIFIED value of AgentExecutionStatus.
+	AgentExecutionStatusUnspecified AgentExecutionStatus = 0
+	// AgentExecutionStatusPending is the AGENT_EXECUTION_STATUS_PENDING value of AgentExecutionStatus.
+	AgentExecutionStatusPending AgentExecutionStatus = 1
+	// AgentExecutionStatusRunning is the AGENT_EXECUTION_STATUS_RUNNING value of AgentExecutionStatus.
+	AgentExecutionStatusRunning AgentExecutionStatus = 2
+	// AgentExecutionStatusSucceeded is the AGENT_EXECUTION_STATUS_SUCCEEDED value of AgentExecutionStatus.
+	AgentExecutionStatusSucceeded AgentExecutionStatus = 3
+	// AgentExecutionStatusFailed is the AGENT_EXECUTION_STATUS_FAILED value of AgentExecutionStatus.
+	AgentExecutionStatusFailed AgentExecutionStatus = 4
+	// AgentExecutionStatusCanceled is the AGENT_EXECUTION_STATUS_CANCELED value of AgentExecutionStatus.
+	AgentExecutionStatusCanceled AgentExecutionStatus = 5
+	// AgentExecutionStatusWaitingForInput is the AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT value of AgentExecutionStatus.
 	AgentExecutionStatusWaitingForInput AgentExecutionStatus = 6
 )
 
@@ -30,10 +37,14 @@ const (
 type AgentInteractionState int32
 
 const (
+	// AgentInteractionStateUnspecified is the AGENT_INTERACTION_STATE_UNSPECIFIED value of AgentInteractionState.
 	AgentInteractionStateUnspecified AgentInteractionState = 0
-	AgentInteractionStatePending     AgentInteractionState = 1
-	AgentInteractionStateResolved    AgentInteractionState = 2
-	AgentInteractionStateCanceled    AgentInteractionState = 3
+	// AgentInteractionStatePending is the AGENT_INTERACTION_STATE_PENDING value of AgentInteractionState.
+	AgentInteractionStatePending AgentInteractionState = 1
+	// AgentInteractionStateResolved is the AGENT_INTERACTION_STATE_RESOLVED value of AgentInteractionState.
+	AgentInteractionStateResolved AgentInteractionState = 2
+	// AgentInteractionStateCanceled is the AGENT_INTERACTION_STATE_CANCELED value of AgentInteractionState.
+	AgentInteractionStateCanceled AgentInteractionState = 3
 )
 
 // AgentInteractionType is the gestalt.provider.v1.AgentInteractionType enum. It is open:
@@ -41,10 +52,14 @@ const (
 type AgentInteractionType int32
 
 const (
-	AgentInteractionTypeUnspecified   AgentInteractionType = 0
-	AgentInteractionTypeApproval      AgentInteractionType = 1
+	// AgentInteractionTypeUnspecified is the AGENT_INTERACTION_TYPE_UNSPECIFIED value of AgentInteractionType.
+	AgentInteractionTypeUnspecified AgentInteractionType = 0
+	// AgentInteractionTypeApproval is the AGENT_INTERACTION_TYPE_APPROVAL value of AgentInteractionType.
+	AgentInteractionTypeApproval AgentInteractionType = 1
+	// AgentInteractionTypeClarification is the AGENT_INTERACTION_TYPE_CLARIFICATION value of AgentInteractionType.
 	AgentInteractionTypeClarification AgentInteractionType = 2
-	AgentInteractionTypeInput         AgentInteractionType = 3
+	// AgentInteractionTypeInput is the AGENT_INTERACTION_TYPE_INPUT value of AgentInteractionType.
+	AgentInteractionTypeInput AgentInteractionType = 3
 )
 
 // AgentMessagePartType is the gestalt.provider.v1.AgentMessagePartType enum. It is open:
@@ -52,12 +67,18 @@ const (
 type AgentMessagePartType int32
 
 const (
+	// AgentMessagePartTypeUnspecified is the AGENT_MESSAGE_PART_TYPE_UNSPECIFIED value of AgentMessagePartType.
 	AgentMessagePartTypeUnspecified AgentMessagePartType = 0
-	AgentMessagePartTypeText        AgentMessagePartType = 1
-	AgentMessagePartTypeJson        AgentMessagePartType = 2
-	AgentMessagePartTypeToolCall    AgentMessagePartType = 3
-	AgentMessagePartTypeToolResult  AgentMessagePartType = 4
-	AgentMessagePartTypeImageRef    AgentMessagePartType = 5
+	// AgentMessagePartTypeText is the AGENT_MESSAGE_PART_TYPE_TEXT value of AgentMessagePartType.
+	AgentMessagePartTypeText AgentMessagePartType = 1
+	// AgentMessagePartTypeJson is the AGENT_MESSAGE_PART_TYPE_JSON value of AgentMessagePartType.
+	AgentMessagePartTypeJson AgentMessagePartType = 2
+	// AgentMessagePartTypeToolCall is the AGENT_MESSAGE_PART_TYPE_TOOL_CALL value of AgentMessagePartType.
+	AgentMessagePartTypeToolCall AgentMessagePartType = 3
+	// AgentMessagePartTypeToolResult is the AGENT_MESSAGE_PART_TYPE_TOOL_RESULT value of AgentMessagePartType.
+	AgentMessagePartTypeToolResult AgentMessagePartType = 4
+	// AgentMessagePartTypeImageRef is the AGENT_MESSAGE_PART_TYPE_IMAGE_REF value of AgentMessagePartType.
+	AgentMessagePartTypeImageRef AgentMessagePartType = 5
 )
 
 // AgentSessionState is the gestalt.provider.v1.AgentSessionState enum. It is open:
@@ -65,9 +86,12 @@ const (
 type AgentSessionState int32
 
 const (
+	// AgentSessionStateUnspecified is the AGENT_SESSION_STATE_UNSPECIFIED value of AgentSessionState.
 	AgentSessionStateUnspecified AgentSessionState = 0
-	AgentSessionStateActive      AgentSessionState = 1
-	AgentSessionStateArchived    AgentSessionState = 2
+	// AgentSessionStateActive is the AGENT_SESSION_STATE_ACTIVE value of AgentSessionState.
+	AgentSessionStateActive AgentSessionState = 1
+	// AgentSessionStateArchived is the AGENT_SESSION_STATE_ARCHIVED value of AgentSessionState.
+	AgentSessionStateArchived AgentSessionState = 2
 )
 
 // AgentToolSourceMode is the gestalt.provider.v1.AgentToolSourceMode enum. It is open:
@@ -75,16 +99,21 @@ const (
 type AgentToolSourceMode int32
 
 const (
+	// AgentToolSourceModeUnspecified is the AGENT_TOOL_SOURCE_MODE_UNSPECIFIED value of AgentToolSourceMode.
 	AgentToolSourceModeUnspecified AgentToolSourceMode = 0
-	AgentToolSourceModeCatalog     AgentToolSourceMode = 2
-	AgentToolSourceModeNone        AgentToolSourceMode = 3
+	// AgentToolSourceModeCatalog is the AGENT_TOOL_SOURCE_MODE_CATALOG value of AgentToolSourceMode.
+	AgentToolSourceModeCatalog AgentToolSourceMode = 2
+	// AgentToolSourceModeNone is the AGENT_TOOL_SOURCE_MODE_NONE value of AgentToolSourceMode.
+	AgentToolSourceModeNone AgentToolSourceMode = 3
 )
 
+// AgentCatalogToolConfig is the native message type for gestalt.provider.v1.AgentCatalogToolConfig.
 type AgentCatalogToolConfig struct {
 	Refs  []*AgentToolRef
 	Tools []*ListedAgentTool
 }
 
+// AgentInteraction is the native message type for gestalt.provider.v1.AgentInteraction.
 type AgentInteraction struct {
 	Id         string
 	Type       AgentInteractionType
@@ -99,6 +128,7 @@ type AgentInteraction struct {
 	SessionId  string
 }
 
+// AgentMessage is the native message type for gestalt.provider.v1.AgentMessage.
 type AgentMessage struct {
 	Role     string
 	Text     string
@@ -106,6 +136,7 @@ type AgentMessage struct {
 	Metadata map[string]any
 }
 
+// AgentMessagePart is the native message type for gestalt.provider.v1.AgentMessagePart.
 type AgentMessagePart struct {
 	Type       AgentMessagePartType
 	Text       string
@@ -115,17 +146,20 @@ type AgentMessagePart struct {
 	ImageRef   *AgentMessagePartImageRef
 }
 
+// AgentMessagePartImageRef is the native message type for gestalt.provider.v1.AgentMessagePartImageRef.
 type AgentMessagePartImageRef struct {
 	Uri      string
 	MimeType string
 }
 
+// AgentMessagePartToolCall is the native message type for gestalt.provider.v1.AgentMessagePartToolCall.
 type AgentMessagePartToolCall struct {
 	Id        string
 	ToolId    string
 	Arguments map[string]any
 }
 
+// AgentMessagePartToolResult is the native message type for gestalt.provider.v1.AgentMessagePartToolResult.
 type AgentMessagePartToolResult struct {
 	ToolCallId string
 	Status     int32
@@ -133,6 +167,7 @@ type AgentMessagePartToolResult struct {
 	Output     map[string]any
 }
 
+// AgentNoTools is the native message type for gestalt.provider.v1.AgentNoTools.
 type AgentNoTools struct{}
 
 // AgentOutputKind selects one variant of the kind oneof of AgentOutput.
@@ -155,10 +190,12 @@ type AgentOutputKindStructured struct {
 
 func (*AgentOutputKindStructured) isAgentOutputKind() {}
 
+// AgentOutput is the native message type for gestalt.provider.v1.AgentOutput.
 type AgentOutput struct {
 	Kind AgentOutputKind
 }
 
+// AgentProviderCapabilities is the native message type for gestalt.provider.v1.AgentProviderCapabilities.
 type AgentProviderCapabilities struct {
 	StreamingText      bool
 	ToolCalls          bool
@@ -175,6 +212,7 @@ type AgentProviderCapabilities struct {
 	SupportsPreparedWorkspace bool
 }
 
+// AgentSession is the native message type for gestalt.provider.v1.AgentSession.
 type AgentSession struct {
 	Id                 string
 	ProviderName       string
@@ -188,10 +226,12 @@ type AgentSession struct {
 	LastTurnAt         *time.Time
 }
 
+// AgentSessionStartConfig is the native message type for gestalt.provider.v1.AgentSessionStartConfig.
 type AgentSessionStartConfig struct {
 	Hooks []*AgentSessionStartHook
 }
 
+// AgentSessionStartHook is the native message type for gestalt.provider.v1.AgentSessionStartHook.
 type AgentSessionStartHook struct {
 	Id      string
 	Type    string
@@ -202,15 +242,18 @@ type AgentSessionStartHook struct {
 	Output  *AgentSessionStartHookOutput
 }
 
+// AgentSessionStartHookOutput is the native message type for gestalt.provider.v1.AgentSessionStartHookOutput.
 type AgentSessionStartHookOutput struct {
 	AdditionalContext bool
 	Metadata          bool
 }
 
+// AgentStructuredOutput is the native message type for gestalt.provider.v1.AgentStructuredOutput.
 type AgentStructuredOutput struct {
 	Schema map[string]any
 }
 
+// AgentTextOutput is the native message type for gestalt.provider.v1.AgentTextOutput.
 type AgentTextOutput struct{}
 
 // AgentToolConfigSource selects one variant of the source oneof of AgentToolConfig.
@@ -233,6 +276,7 @@ type AgentToolConfigSourceCatalog struct {
 
 func (*AgentToolConfigSourceCatalog) isAgentToolConfigSource() {}
 
+// AgentToolConfig is the native message type for gestalt.provider.v1.AgentToolConfig.
 type AgentToolConfig struct {
 	Source AgentToolConfigSource
 }
@@ -257,6 +301,7 @@ type AgentTurnOutputStructured struct {
 
 func (*AgentTurnOutputStructured) isAgentTurnOutput() {}
 
+// AgentTurn is the native message type for gestalt.provider.v1.AgentTurn.
 type AgentTurn struct {
 	Id                 string
 	SessionId          string
@@ -273,6 +318,7 @@ type AgentTurn struct {
 	Output             AgentTurnOutput
 }
 
+// AgentTurnDisplay is the native message type for gestalt.provider.v1.AgentTurnDisplay.
 type AgentTurnDisplay struct {
 	Kind      string
 	Phase     string
@@ -288,6 +334,7 @@ type AgentTurnDisplay struct {
 	Language  string
 }
 
+// AgentTurnEvent is the native message type for gestalt.provider.v1.AgentTurnEvent.
 type AgentTurnEvent struct {
 	Id         string
 	TurnId     string
@@ -300,26 +347,31 @@ type AgentTurnEvent struct {
 	Display    *AgentTurnDisplay
 }
 
+// AgentTurnStructuredOutput is the native message type for gestalt.provider.v1.AgentTurnStructuredOutput.
 type AgentTurnStructuredOutput struct {
 	Text  string
 	Value map[string]any
 }
 
+// AgentTurnTextOutput is the native message type for gestalt.provider.v1.AgentTurnTextOutput.
 type AgentTurnTextOutput struct {
 	Text string
 }
 
+// AgentWorkspace is the native message type for gestalt.provider.v1.AgentWorkspace.
 type AgentWorkspace struct {
 	Checkouts []*AgentWorkspaceGitCheckout
 	Cwd       string
 }
 
+// AgentWorkspaceGitCheckout is the native message type for gestalt.provider.v1.AgentWorkspaceGitCheckout.
 type AgentWorkspaceGitCheckout struct {
 	Url  string
 	Ref  string
 	Path string
 }
 
+// CancelAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CancelAgentProviderTurnRequest.
 type CancelAgentProviderTurnRequest struct {
 	TurnId       string
 	Reason       string
@@ -328,6 +380,7 @@ type CancelAgentProviderTurnRequest struct {
 	ProviderName string
 }
 
+// CreateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.CreateAgentProviderSessionRequest.
 type CreateAgentProviderSessionRequest struct {
 	// The provider mints the session id returned on AgentSession. Creation is
 	// idempotent on idempotency_key scoped per subject (created_by_subject_id):
@@ -347,6 +400,7 @@ type CreateAgentProviderSessionRequest struct {
 	Tools              *AgentToolConfig
 }
 
+// CreateAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CreateAgentProviderTurnRequest.
 type CreateAgentProviderTurnRequest struct {
 	TurnId             string
 	SessionId          string
@@ -367,14 +421,17 @@ type CreateAgentProviderTurnRequest struct {
 	ProviderName   string
 }
 
+// GetAgentProviderCapabilitiesRequest is the native message type for gestalt.provider.v1.GetAgentProviderCapabilitiesRequest.
 type GetAgentProviderCapabilitiesRequest struct{}
 
+// GetAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.GetAgentProviderInteractionRequest.
 type GetAgentProviderInteractionRequest struct {
 	InteractionId string
 	Subject       *SubjectContext
 	Context       *RequestContext
 }
 
+// GetAgentProviderSessionRequest is the native message type for gestalt.provider.v1.GetAgentProviderSessionRequest.
 type GetAgentProviderSessionRequest struct {
 	SessionId    string
 	Subject      *SubjectContext
@@ -382,6 +439,7 @@ type GetAgentProviderSessionRequest struct {
 	ProviderName string
 }
 
+// GetAgentProviderTurnRequest is the native message type for gestalt.provider.v1.GetAgentProviderTurnRequest.
 type GetAgentProviderTurnRequest struct {
 	TurnId       string
 	Subject      *SubjectContext
@@ -389,6 +447,7 @@ type GetAgentProviderTurnRequest struct {
 	ProviderName string
 }
 
+// ListAgentProviderInteractionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsRequest.
 type ListAgentProviderInteractionsRequest struct {
 	TurnId       string
 	Subject      *SubjectContext
@@ -396,10 +455,12 @@ type ListAgentProviderInteractionsRequest struct {
 	ProviderName string
 }
 
+// ListAgentProviderInteractionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsResponse.
 type ListAgentProviderInteractionsResponse struct {
 	Interactions []*AgentInteraction
 }
 
+// ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
 	Subject    *SubjectContext
 	SessionIds []string
@@ -414,10 +475,12 @@ type ListAgentProviderSessionsRequest struct {
 	Context      *RequestContext
 }
 
+// ListAgentProviderSessionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderSessionsResponse.
 type ListAgentProviderSessionsResponse struct {
 	Sessions []*AgentSession
 }
 
+// ListAgentProviderTurnEventsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsRequest.
 type ListAgentProviderTurnEventsRequest struct {
 	TurnId       string
 	AfterSeq     int64
@@ -427,10 +490,12 @@ type ListAgentProviderTurnEventsRequest struct {
 	ProviderName string
 }
 
+// ListAgentProviderTurnEventsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsResponse.
 type ListAgentProviderTurnEventsResponse struct {
 	Events []*AgentTurnEvent
 }
 
+// ListAgentProviderTurnsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnsRequest.
 type ListAgentProviderTurnsRequest struct {
 	SessionId string
 	Subject   *SubjectContext
@@ -447,10 +512,12 @@ type ListAgentProviderTurnsRequest struct {
 	ProviderName string
 }
 
+// ListAgentProviderTurnsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnsResponse.
 type ListAgentProviderTurnsResponse struct {
 	Turns []*AgentTurn
 }
 
+// ListedAgentTool is the native message type for gestalt.provider.v1.ListedAgentTool.
 type ListedAgentTool struct {
 	Id           string
 	McpName      string
@@ -464,11 +531,13 @@ type ListedAgentTool struct {
 	SearchText   string
 }
 
+// PreparedAgentWorkspace is the native message type for gestalt.provider.v1.PreparedAgentWorkspace.
 type PreparedAgentWorkspace struct {
 	Root string
 	Cwd  string
 }
 
+// ResolveAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.ResolveAgentProviderInteractionRequest.
 type ResolveAgentProviderInteractionRequest struct {
 	InteractionId string
 	Resolution    map[string]any
@@ -478,6 +547,7 @@ type ResolveAgentProviderInteractionRequest struct {
 	ProviderName  string
 }
 
+// UpdateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.UpdateAgentProviderSessionRequest.
 type UpdateAgentProviderSessionRequest struct {
 	SessionId    string
 	ClientRef    string
@@ -488,13 +558,13 @@ type UpdateAgentProviderSessionRequest struct {
 	ProviderName string
 }
 
+// Agent is the generated client for gestalt.provider.v1.Agent.
+// Every transport error is converted to *GestaltError.
+//
 // Agent is the authoritative agent data boundary. Read RPCs for
 // sessions, turns, turn events, and interactions should use provider-owned
 // control-plane state and should not require a live execution sandbox,
 // pod-level transport, or cached tunnel.
-//
-// Agent is the generated client for gestalt.provider.v1.Agent.
-// Every transport error is converted to *GestaltError.
 type Agent struct {
 	client  proto.AgentClient
 	context *RequestContext
@@ -955,6 +1025,7 @@ func (c *Agent) ResolveInteractionRaw(ctx context.Context, request *ResolveAgent
 	return fromWireAgentInteraction(response), nil
 }
 
+// GetCapabilities calls the GetCapabilities RPC of Agent.
 func (c *Agent) GetCapabilities(ctx context.Context, request *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
 	response, err := c.client.GetCapabilities(ctx, toWireGetAgentProviderCapabilitiesRequest(request))
 	if err != nil {

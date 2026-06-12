@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// The workflow trigger kinds recorded on telemetry.
 const (
 	WorkflowTriggerKindManual   = "manual"
 	WorkflowTriggerKindSchedule = "schedule"
@@ -54,6 +55,8 @@ const (
 	workflowTelemetrySourceProvider = "provider"
 )
 
+// WorkflowOperationOptions configures the span a workflow operation
+// records.
 type WorkflowOperationOptions struct {
 	ProviderName  string
 	OperationName string
@@ -62,6 +65,7 @@ type WorkflowOperationOptions struct {
 	RunStatus     string
 }
 
+// WorkflowTelemetryOperation is one in-flight workflow operation span.
 type WorkflowTelemetryOperation struct {
 	ctx       context.Context
 	span      trace.Span
@@ -89,6 +93,7 @@ var (
 	workflowTelemetryRecords workflowTelemetryMetrics
 )
 
+// WorkflowOperation starts a telemetry span for one workflow operation.
 func WorkflowOperation(ctx context.Context, opts WorkflowOperationOptions) (context.Context, *WorkflowTelemetryOperation) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -108,6 +113,7 @@ func WorkflowOperation(ctx context.Context, opts WorkflowOperationOptions) (cont
 	}
 }
 
+// End completes the operation span, recording the error when present.
 func (op *WorkflowTelemetryOperation) End(err error) {
 	if op == nil {
 		return
@@ -138,6 +144,7 @@ func (op *WorkflowTelemetryOperation) End(err error) {
 	op.span.End()
 }
 
+// RecordWorkflowRunStarted counts a workflow run start.
 func RecordWorkflowRunStarted(ctx context.Context, opts WorkflowOperationOptions) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -145,6 +152,7 @@ func RecordWorkflowRunStarted(ctx context.Context, opts WorkflowOperationOptions
 	workflowMetrics().runStartedCount.Add(ctx, 1, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 
+// RecordWorkflowRunCompleted counts a workflow run completion by outcome.
 func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, opts WorkflowOperationOptions) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -155,6 +163,7 @@ func RecordWorkflowRunCompleted(ctx context.Context, startedAt time.Time, opts W
 	metrics.runDuration.Record(ctx, time.Since(startedAt).Seconds(), metric.WithAttributes(attrs...))
 }
 
+// RecordWorkflowEventDelivered counts a delivered workflow event.
 func RecordWorkflowEventDelivered(ctx context.Context, err error, opts WorkflowOperationOptions) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -167,6 +176,8 @@ func RecordWorkflowEventDelivered(ctx context.Context, err error, opts WorkflowO
 	}
 }
 
+// RecordWorkflowEventMatchedActivations records how many activations an
+// event matched.
 func RecordWorkflowEventMatchedActivations(ctx context.Context, count int64, opts WorkflowOperationOptions) {
 	if count <= 0 {
 		return
@@ -177,6 +188,7 @@ func RecordWorkflowEventMatchedActivations(ctx context.Context, count int64, opt
 	workflowMetrics().eventMatchedActivationsCount.Add(ctx, count, metric.WithAttributes(workflowTelemetryAttrs(opts, nil)...))
 }
 
+// RecordWorkflowActivationFired counts an activation firing.
 func RecordWorkflowActivationFired(ctx context.Context, opts WorkflowOperationOptions) {
 	if ctx == nil {
 		ctx = context.Background()

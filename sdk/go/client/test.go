@@ -9,20 +9,24 @@ import (
 	"google.golang.org/grpc"
 )
 
+// HelloWorldRequest is the native message type for gestalt.provider.v1.HelloWorldRequest.
+//
 // HelloWorldRequest carries no input fields. It exists to exercise the
 // provider-kind-specific request/response path.
 type HelloWorldRequest struct{}
 
+// HelloWorldResponse is the native message type for gestalt.provider.v1.HelloWorldResponse.
+//
 // HelloWorldResponse returns the fixed test-provider message.
 type HelloWorldResponse struct {
 	Message string
 }
 
-// Test models a minimal provider-kind-specific protocol used to verify new
-// provider kind registration and lifecycle wiring.
-//
 // Test is the generated client for gestalt.provider.v1.Test.
 // Every transport error is converted to *GestaltError.
+//
+// Test models a minimal provider-kind-specific protocol used to verify new
+// provider kind registration and lifecycle wiring.
 type Test struct {
 	client proto.TestClient
 }

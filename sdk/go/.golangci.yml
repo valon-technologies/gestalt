@@ -1,0 +1,33 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+# This configuration enforces exactly one thing: every exported identifier
+# and package carries a godoc comment, so the rendered API reference is
+# total. Broader linting is owned elsewhere.
+linters:
+  default: none
+  enable:
+    - revive
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+        - name: package-comments
+
+  exclusions:
+    # Generated code complies through the emitter's identifier-first doc
+    # comments; nothing is exempted, so the surface and its docs stay total.
+    generated: disable
+    rules:
+      - path: _test\.go
+        linters:
+          - revive
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

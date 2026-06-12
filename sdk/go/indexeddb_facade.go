@@ -13,7 +13,9 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-// IndexedDB data types (aliases to sdk/go/indexeddb).
+// Aliases to the IndexedDB data types in sdk/go/indexeddb.
+//
+//nolint:revive // grouped aliases documented at their canonical definitions
 type (
 	Record                    = indexeddb.Record
 	KeyRange                  = indexeddb.KeyRange
@@ -27,6 +29,7 @@ type (
 	ObjectStoreOptions        = indexeddb.ObjectStoreOptions
 )
 
+// The cursor traversal directions.
 const (
 	CursorNext       = indexeddb.CursorNext
 	CursorNextUnique = indexeddb.CursorNextUnique
@@ -49,6 +52,9 @@ const (
 	TypeJSON   = indexeddb.TypeJSON
 )
 
+// Aliases to the IndexedDB sentinel errors in sdk/go/indexeddb.
+//
+//nolint:revive // grouped aliases documented at their canonical definitions
 var (
 	ErrNotFound           = indexeddb.ErrNotFound
 	ErrAlreadyExists      = indexeddb.ErrAlreadyExists
@@ -58,7 +64,10 @@ var (
 	ErrInvalidTransaction = indexeddb.ErrInvalidTransaction
 )
 
-// IndexedDB capability interfaces (provider-side types keep IndexedDB* names in indexeddb_provider.go).
+// Aliases to the IndexedDB capability interfaces; provider-side types keep
+// IndexedDB* names in indexeddb_provider.go.
+//
+//nolint:revive // grouped aliases documented at their canonical definitions
 type (
 	IndexedDBDatabase               = indexeddb.Database
 	IndexedDBObjectStore            = indexeddb.ObjectStore

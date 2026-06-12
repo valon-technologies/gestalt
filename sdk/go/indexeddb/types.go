@@ -6,6 +6,7 @@ type Record = map[string]any
 // CursorDirection controls IndexedDB cursor traversal order (maps to IDBCursorDirection).
 type CursorDirection string
 
+// The cursor traversal directions.
 const (
 	CursorNext       CursorDirection = "next"
 	CursorNextUnique CursorDirection = "nextunique"
@@ -16,6 +17,7 @@ const (
 // TransactionMode controls whether a transaction may mutate scoped stores.
 type TransactionMode string
 
+// The transaction modes.
 const (
 	TransactionReadonly  TransactionMode = "readonly"
 	TransactionReadwrite TransactionMode = "readwrite"
@@ -26,12 +28,14 @@ const (
 // TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a provider hint.
 type TransactionDurabilityHint string
 
+// The durability hints.
 const (
 	TransactionDurabilityDefault TransactionDurabilityHint = "default"
 	TransactionDurabilityStrict  TransactionDurabilityHint = "strict"
 	TransactionDurabilityRelaxed TransactionDurabilityHint = "relaxed"
 )
 
+// TransactionOptions carries per-transaction provider hints.
 type TransactionOptions struct {
 	DurabilityHint TransactionDurabilityHint
 }
@@ -46,6 +50,7 @@ type IndexSchema struct {
 // ColumnType describes a provider-preserved scalar column type.
 type ColumnType int32
 
+// The provider-preserved column types.
 const (
 	TypeString ColumnType = iota
 	TypeInt

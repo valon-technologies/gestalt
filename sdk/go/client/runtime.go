@@ -15,22 +15,38 @@ import (
 type ProviderKind int32
 
 const (
-	ProviderKindUnspecified        ProviderKind = 0
-	ProviderKindApp                ProviderKind = 1
-	ProviderKindAuthentication     ProviderKind = 2
-	ProviderKindIndexeddb          ProviderKind = 3
-	ProviderKindSecrets            ProviderKind = 4
-	ProviderKindTelemetry          ProviderKind = 5
-	ProviderKindCache              ProviderKind = 6
-	ProviderKindS3                 ProviderKind = 7
-	ProviderKindWorkflow           ProviderKind = 8
-	ProviderKindAuthorization      ProviderKind = 9
-	ProviderKindRuntime            ProviderKind = 10
-	ProviderKindAgent              ProviderKind = 11
+	// ProviderKindUnspecified is the PROVIDER_KIND_UNSPECIFIED value of ProviderKind.
+	ProviderKindUnspecified ProviderKind = 0
+	// ProviderKindApp is the PROVIDER_KIND_APP value of ProviderKind.
+	ProviderKindApp ProviderKind = 1
+	// ProviderKindAuthentication is the PROVIDER_KIND_AUTHENTICATION value of ProviderKind.
+	ProviderKindAuthentication ProviderKind = 2
+	// ProviderKindIndexeddb is the PROVIDER_KIND_INDEXEDDB value of ProviderKind.
+	ProviderKindIndexeddb ProviderKind = 3
+	// ProviderKindSecrets is the PROVIDER_KIND_SECRETS value of ProviderKind.
+	ProviderKindSecrets ProviderKind = 4
+	// ProviderKindTelemetry is the PROVIDER_KIND_TELEMETRY value of ProviderKind.
+	ProviderKindTelemetry ProviderKind = 5
+	// ProviderKindCache is the PROVIDER_KIND_CACHE value of ProviderKind.
+	ProviderKindCache ProviderKind = 6
+	// ProviderKindS3 is the PROVIDER_KIND_S3 value of ProviderKind.
+	ProviderKindS3 ProviderKind = 7
+	// ProviderKindWorkflow is the PROVIDER_KIND_WORKFLOW value of ProviderKind.
+	ProviderKindWorkflow ProviderKind = 8
+	// ProviderKindAuthorization is the PROVIDER_KIND_AUTHORIZATION value of ProviderKind.
+	ProviderKindAuthorization ProviderKind = 9
+	// ProviderKindRuntime is the PROVIDER_KIND_RUNTIME value of ProviderKind.
+	ProviderKindRuntime ProviderKind = 10
+	// ProviderKindAgent is the PROVIDER_KIND_AGENT value of ProviderKind.
+	ProviderKindAgent ProviderKind = 11
+	// ProviderKindExternalCredential is the PROVIDER_KIND_EXTERNAL_CREDENTIAL value of ProviderKind.
 	ProviderKindExternalCredential ProviderKind = 12
-	ProviderKindTest               ProviderKind = 13
+	// ProviderKindTest is the PROVIDER_KIND_TEST value of ProviderKind.
+	ProviderKindTest ProviderKind = 13
 )
 
+// ConfigureProviderRequest is the native message type for gestalt.provider.v1.ConfigureProviderRequest.
+//
 // ConfigureProviderRequest configures a non-integration provider for one
 // runtime session.
 type ConfigureProviderRequest struct {
@@ -39,18 +55,24 @@ type ConfigureProviderRequest struct {
 	ProtocolVersion int32
 }
 
+// ConfigureProviderResponse is the native message type for gestalt.provider.v1.ConfigureProviderResponse.
+//
 // ConfigureProviderResponse confirms the protocol version the provider is
 // serving.
 type ConfigureProviderResponse struct {
 	ProtocolVersion int32
 }
 
+// HealthCheckResponse is the native message type for gestalt.provider.v1.HealthCheckResponse.
+//
 // HealthCheckResponse reports runtime readiness for a provider surface.
 type HealthCheckResponse struct {
 	Ready   bool
 	Message string
 }
 
+// ProviderIdentity is the native message type for gestalt.provider.v1.ProviderIdentity.
+//
 // ProviderIdentity describes a provider surface and the protocol versions it
 // supports.
 type ProviderIdentity struct {
@@ -64,17 +86,19 @@ type ProviderIdentity struct {
 	MaxProtocolVersion int32
 }
 
+// StartRuntimeProviderResponse is the native message type for gestalt.provider.v1.StartRuntimeProviderResponse.
+//
 // StartRuntimeProviderResponse confirms the protocol version the provider is
 // serving after the optional runtime start phase.
 type StartRuntimeProviderResponse struct {
 	ProtocolVersion int32
 }
 
-// ProviderLifecycle is the common lifecycle protocol shared by every provider
-// kind.
-//
 // ProviderLifecycle is the generated client for gestalt.provider.v1.ProviderLifecycle.
 // Every transport error is converted to *GestaltError.
+//
+// ProviderLifecycle is the common lifecycle protocol shared by every provider
+// kind.
 type ProviderLifecycle struct {
 	client proto.ProviderLifecycleClient
 }
@@ -84,6 +108,7 @@ func NewProviderLifecycle(conn grpc.ClientConnInterface) *ProviderLifecycle {
 	return &ProviderLifecycle{client: proto.NewProviderLifecycleClient(conn)}
 }
 
+// GetProviderIdentity calls the GetProviderIdentity RPC of ProviderLifecycle.
 func (c *ProviderLifecycle) GetProviderIdentity(ctx context.Context) (*ProviderIdentity, error) {
 	response, err := c.client.GetProviderIdentity(ctx, &emptypb.Empty{})
 	if err != nil {
@@ -112,6 +137,7 @@ func (c *ProviderLifecycle) ConfigureProviderRaw(ctx context.Context, request *C
 	return fromWireConfigureProviderResponse(response), nil
 }
 
+// HealthCheck calls the HealthCheck RPC of ProviderLifecycle.
 func (c *ProviderLifecycle) HealthCheck(ctx context.Context) (*HealthCheckResponse, error) {
 	response, err := c.client.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {

@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// TLSConfig builds the client TLS configuration for a tls:// host service
+// target, trusting the CA the daemon advertises through the environment.
 func TLSConfig(serviceName, serverName string) (*tls.Config, error) {
 	cfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,

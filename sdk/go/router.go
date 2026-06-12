@@ -33,6 +33,7 @@ type Request struct {
 // service request. These values match the daemon invocation caller kinds.
 type RequestCallerKind string
 
+// The caller kinds a routed request can carry.
 const (
 	RequestCallerKindApp      RequestCallerKind = "app"
 	RequestCallerKindWorkflow RequestCallerKind = "workflow"
@@ -310,6 +311,7 @@ type Operation[In any, Out any] struct {
 	Visible      *bool
 }
 
+// Registration describes one provider registered with the router.
 type Registration[P any] struct {
 	catalogOp *CatalogOperation
 	execute   func(context.Context, *P, map[string]any, Request) (*OperationResult, error)

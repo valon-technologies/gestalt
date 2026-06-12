@@ -51,58 +51,86 @@ type AgentProvider interface {
 // of the agent surface.
 type UnimplementedAgentProvider struct{}
 
+// Configure returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
+// CreateSession returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) CreateSession(context.Context, *CreateAgentProviderSessionRequest) (*AgentSession, error) {
 	return nil, Unimplemented("agent create session is not implemented")
 }
 
+// GetSession returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) GetSession(context.Context, *GetAgentProviderSessionRequest) (*AgentSession, error) {
 	return nil, Unimplemented("agent get session is not implemented")
 }
 
+// ListSessions returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) ListSessions(context.Context, *ListAgentProviderSessionsRequest) (*ListAgentProviderSessionsResponse, error) {
 	return nil, Unimplemented("agent list sessions is not implemented")
 }
 
+// UpdateSession returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) UpdateSession(context.Context, *UpdateAgentProviderSessionRequest) (*AgentSession, error) {
 	return nil, Unimplemented("agent update session is not implemented")
 }
 
+// CreateTurn returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) CreateTurn(context.Context, *CreateAgentProviderTurnRequest) (*AgentTurn, error) {
 	return nil, Unimplemented("agent create turn is not implemented")
 }
 
+// GetTurn returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) GetTurn(context.Context, *GetAgentProviderTurnRequest) (*AgentTurn, error) {
 	return nil, Unimplemented("agent get turn is not implemented")
 }
 
+// ListTurns returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) ListTurns(context.Context, *ListAgentProviderTurnsRequest) (*ListAgentProviderTurnsResponse, error) {
 	return nil, Unimplemented("agent list turns is not implemented")
 }
 
+// CancelTurn returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) CancelTurn(context.Context, *CancelAgentProviderTurnRequest) (*AgentTurn, error) {
 	return nil, Unimplemented("agent cancel turn is not implemented")
 }
 
+// ListTurnEvents returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) ListTurnEvents(context.Context, *ListAgentProviderTurnEventsRequest) (*ListAgentProviderTurnEventsResponse, error) {
 	return nil, Unimplemented("agent list turn events is not implemented")
 }
 
+// GetInteraction returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) GetInteraction(context.Context, *GetAgentProviderInteractionRequest) (*AgentInteraction, error) {
 	return nil, Unimplemented("agent get interaction is not implemented")
 }
 
+// ListInteractions returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) ListInteractions(context.Context, *ListAgentProviderInteractionsRequest) (*ListAgentProviderInteractionsResponse, error) {
 	return nil, Unimplemented("agent list interactions is not implemented")
 }
 
+// ResolveInteraction returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) ResolveInteraction(context.Context, *ResolveAgentProviderInteractionRequest) (*AgentInteraction, error) {
 	return nil, Unimplemented("agent resolve interaction is not implemented")
 }
 
+// GetCapabilities returns Unimplemented; embed UnimplementedAgentProvider to default
+// unimplemented surface methods.
 func (UnimplementedAgentProvider) GetCapabilities(context.Context, *GetAgentProviderCapabilitiesRequest) (*AgentProviderCapabilities, error) {
 	return nil, Unimplemented("agent get capabilities is not implemented")
 }
@@ -115,12 +143,14 @@ type AgentMessage struct {
 	Metadata map[string]any
 }
 
+// AgentMessagePartToolCall is the native message type for gestalt.provider.v1.AgentMessagePartToolCall.
 type AgentMessagePartToolCall struct {
 	ID        string
 	ToolID    string
 	Arguments map[string]any
 }
 
+// AgentMessagePartToolResult is the native message type for gestalt.provider.v1.AgentMessagePartToolResult.
 type AgentMessagePartToolResult struct {
 	ToolCallID string
 	Status     int32
@@ -128,11 +158,13 @@ type AgentMessagePartToolResult struct {
 	Output     map[string]any
 }
 
+// AgentMessagePartImageRef is the native message type for gestalt.provider.v1.AgentMessagePartImageRef.
 type AgentMessagePartImageRef struct {
 	URI      string
 	MimeType string
 }
 
+// AgentMessagePart is the native message type for gestalt.provider.v1.AgentMessagePart.
 type AgentMessagePart struct {
 	Type       AgentMessagePartType
 	Text       string
@@ -142,11 +174,13 @@ type AgentMessagePart struct {
 	ImageRef   *AgentMessagePartImageRef
 }
 
+// AgentPreparedWorkspace describes the workspace a provider prepared for a session.
 type AgentPreparedWorkspace struct {
 	Root string
 	Cwd  string
 }
 
+// AgentToolRef is the native message type for gestalt.provider.v1.AgentToolRef.
 type AgentToolRef struct {
 	App            string
 	Operation      string
@@ -159,6 +193,7 @@ type AgentToolRef struct {
 	RunAs          *Subject
 }
 
+// AgentProviderCapabilities is the native message type for gestalt.provider.v1.AgentProviderCapabilities.
 type AgentProviderCapabilities struct {
 	StreamingText             bool
 	ToolCalls                 bool
@@ -172,8 +207,10 @@ type AgentProviderCapabilities struct {
 	SupportsPreparedWorkspace bool
 }
 
+// GetAgentProviderCapabilitiesRequest is the native message type for gestalt.provider.v1.GetAgentProviderCapabilitiesRequest.
 type GetAgentProviderCapabilitiesRequest struct{}
 
+// AgentInteraction is the native message type for gestalt.provider.v1.AgentInteraction.
 type AgentInteraction struct {
 	ID         string
 	Type       AgentInteractionType
@@ -188,6 +225,7 @@ type AgentInteraction struct {
 	SessionID  string
 }
 
+// AgentSession is the native message type for gestalt.provider.v1.AgentSession.
 type AgentSession struct {
 	ID                 string
 	ProviderName       string
@@ -201,6 +239,7 @@ type AgentSession struct {
 	LastTurnAt         *time.Time
 }
 
+// CreateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.CreateAgentProviderSessionRequest.
 type CreateAgentProviderSessionRequest struct {
 	ProviderName       string
 	IdempotencyKey     string
@@ -216,14 +255,17 @@ type CreateAgentProviderSessionRequest struct {
 	Tools              AgentToolConfig
 }
 
+// AgentToolConfig is the native message type for gestalt.provider.v1.AgentToolConfig.
 type AgentToolConfig interface {
 	agentToolConfig()
 }
 
+// AgentNoTools is the native message type for gestalt.provider.v1.AgentNoTools.
 type AgentNoTools struct{}
 
 func (*AgentNoTools) agentToolConfig() {}
 
+// AgentCatalogToolConfig is the native message type for gestalt.provider.v1.AgentCatalogToolConfig.
 type AgentCatalogToolConfig struct {
 	Refs  []AgentToolRef
 	Tools []ListedAgentTool
@@ -231,10 +273,12 @@ type AgentCatalogToolConfig struct {
 
 func (*AgentCatalogToolConfig) agentToolConfig() {}
 
+// AgentSessionStartConfig is the native message type for gestalt.provider.v1.AgentSessionStartConfig.
 type AgentSessionStartConfig struct {
 	Hooks []AgentSessionStartHook
 }
 
+// AgentSessionStartHook is the native message type for gestalt.provider.v1.AgentSessionStartHook.
 type AgentSessionStartHook struct {
 	ID      string
 	Type    string
@@ -245,11 +289,13 @@ type AgentSessionStartHook struct {
 	Output  *AgentSessionStartHookOutput
 }
 
+// AgentSessionStartHookOutput is the native message type for gestalt.provider.v1.AgentSessionStartHookOutput.
 type AgentSessionStartHookOutput struct {
 	AdditionalContext bool
 	Metadata          bool
 }
 
+// GetAgentProviderSessionRequest is the native message type for gestalt.provider.v1.GetAgentProviderSessionRequest.
 type GetAgentProviderSessionRequest struct {
 	ProviderName string
 	SessionID    string
@@ -257,6 +303,7 @@ type GetAgentProviderSessionRequest struct {
 	Context      *proto.RequestContext
 }
 
+// ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
 	ProviderName string
 	Subject      *Subject
@@ -267,10 +314,12 @@ type ListAgentProviderSessionsRequest struct {
 	SummaryOnly  bool
 }
 
+// ListAgentProviderSessionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderSessionsResponse.
 type ListAgentProviderSessionsResponse struct {
 	Sessions []AgentSession
 }
 
+// UpdateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.UpdateAgentProviderSessionRequest.
 type UpdateAgentProviderSessionRequest struct {
 	ProviderName string
 	SessionID    string
@@ -281,6 +330,7 @@ type UpdateAgentProviderSessionRequest struct {
 	Context      *proto.RequestContext
 }
 
+// AgentTurn is the native message type for gestalt.provider.v1.AgentTurn.
 type AgentTurn struct {
 	ID                 string
 	SessionID          string
@@ -297,20 +347,24 @@ type AgentTurn struct {
 	ExecutionRef       string
 }
 
+// AgentTurnOutput is the structured-or-text output of a finished turn.
 type AgentTurnOutput struct {
 	Text       *AgentTurnTextOutput
 	Structured *AgentTurnStructuredOutput
 }
 
+// AgentTurnTextOutput is the native message type for gestalt.provider.v1.AgentTurnTextOutput.
 type AgentTurnTextOutput struct {
 	Text string
 }
 
+// AgentTurnStructuredOutput is the native message type for gestalt.provider.v1.AgentTurnStructuredOutput.
 type AgentTurnStructuredOutput struct {
 	Text  string
 	Value map[string]any
 }
 
+// AgentTurnDisplay is the native message type for gestalt.provider.v1.AgentTurnDisplay.
 type AgentTurnDisplay struct {
 	Kind      string
 	Phase     string
@@ -326,6 +380,7 @@ type AgentTurnDisplay struct {
 	Language  string
 }
 
+// CreateAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CreateAgentProviderTurnRequest.
 type CreateAgentProviderTurnRequest struct {
 	ProviderName       string
 	TurnID             string
@@ -343,17 +398,21 @@ type CreateAgentProviderTurnRequest struct {
 	TimeoutSeconds     int32
 }
 
+// AgentOutput is the native message type for gestalt.provider.v1.AgentOutput.
 type AgentOutput struct {
 	Text       *AgentTextOutput
 	Structured *AgentStructuredOutput
 }
 
+// AgentTextOutput is the native message type for gestalt.provider.v1.AgentTextOutput.
 type AgentTextOutput struct{}
 
+// AgentStructuredOutput is the native message type for gestalt.provider.v1.AgentStructuredOutput.
 type AgentStructuredOutput struct {
 	Schema map[string]any
 }
 
+// GetAgentProviderTurnRequest is the native message type for gestalt.provider.v1.GetAgentProviderTurnRequest.
 type GetAgentProviderTurnRequest struct {
 	ProviderName string
 	TurnID       string
@@ -361,6 +420,7 @@ type GetAgentProviderTurnRequest struct {
 	Context      *proto.RequestContext
 }
 
+// ListAgentProviderTurnsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnsRequest.
 type ListAgentProviderTurnsRequest struct {
 	ProviderName string
 	SessionID    string
@@ -372,10 +432,12 @@ type ListAgentProviderTurnsRequest struct {
 	SummaryOnly  bool
 }
 
+// ListAgentProviderTurnsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnsResponse.
 type ListAgentProviderTurnsResponse struct {
 	Turns []AgentTurn
 }
 
+// CancelAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CancelAgentProviderTurnRequest.
 type CancelAgentProviderTurnRequest struct {
 	ProviderName string
 	TurnID       string
@@ -384,6 +446,7 @@ type CancelAgentProviderTurnRequest struct {
 	Context      *proto.RequestContext
 }
 
+// AgentTurnEvent is the native message type for gestalt.provider.v1.AgentTurnEvent.
 type AgentTurnEvent struct {
 	ID         string
 	TurnID     string
@@ -396,6 +459,7 @@ type AgentTurnEvent struct {
 	Display    *AgentTurnDisplay
 }
 
+// ListAgentProviderTurnEventsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsRequest.
 type ListAgentProviderTurnEventsRequest struct {
 	ProviderName string
 	TurnID       string
@@ -405,16 +469,19 @@ type ListAgentProviderTurnEventsRequest struct {
 	Context      *proto.RequestContext
 }
 
+// ListAgentProviderTurnEventsResponse is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsResponse.
 type ListAgentProviderTurnEventsResponse struct {
 	Events []AgentTurnEvent
 }
 
+// GetAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.GetAgentProviderInteractionRequest.
 type GetAgentProviderInteractionRequest struct {
 	InteractionID string
 	Subject       *Subject
 	Context       *proto.RequestContext
 }
 
+// ListAgentProviderInteractionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsRequest.
 type ListAgentProviderInteractionsRequest struct {
 	ProviderName string
 	TurnID       string
@@ -422,10 +489,12 @@ type ListAgentProviderInteractionsRequest struct {
 	Context      *proto.RequestContext
 }
 
+// ListAgentProviderInteractionsResponse is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsResponse.
 type ListAgentProviderInteractionsResponse struct {
 	Interactions []AgentInteraction
 }
 
+// ResolveAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.ResolveAgentProviderInteractionRequest.
 type ResolveAgentProviderInteractionRequest struct {
 	ProviderName  string
 	TurnID        string
@@ -435,6 +504,7 @@ type ResolveAgentProviderInteractionRequest struct {
 	Context       *proto.RequestContext
 }
 
+// AgentToolAnnotations carries the MCP-style behavior hints of a tool.
 type AgentToolAnnotations struct {
 	ReadOnlyHint    *bool
 	IdempotentHint  *bool
@@ -442,6 +512,7 @@ type AgentToolAnnotations struct {
 	OpenWorldHint   *bool
 }
 
+// ListedAgentTool is the native message type for gestalt.provider.v1.ListedAgentTool.
 type ListedAgentTool struct {
 	ID           string
 	MCPName      string
@@ -457,11 +528,16 @@ type ListedAgentTool struct {
 
 type (
 	// AgentMessagePartType identifies the payload kind in an agent message part.
-	AgentMessagePartType  int32
-	AgentToolSourceMode   int32
-	AgentExecutionStatus  int32
-	AgentSessionState     int32
-	AgentInteractionType  int32
+	AgentMessagePartType int32
+	// AgentToolSourceMode is the native message type for gestalt.provider.v1.AgentToolSourceMode.
+	AgentToolSourceMode int32
+	// AgentExecutionStatus is the native message type for gestalt.provider.v1.AgentExecutionStatus.
+	AgentExecutionStatus int32
+	// AgentSessionState is the native message type for gestalt.provider.v1.AgentSessionState.
+	AgentSessionState int32
+	// AgentInteractionType is the native message type for gestalt.provider.v1.AgentInteractionType.
+	AgentInteractionType int32
+	// AgentInteractionState is the native message type for gestalt.provider.v1.AgentInteractionState.
 	AgentInteractionState int32
 )
 

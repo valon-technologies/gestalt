@@ -19,6 +19,8 @@ const (
 	workflowSignalContextMaxStringBytes = 4096
 )
 
+// WorkflowStepInvocationScope derives the idempotency scope for one step
+// invocation of a run.
 func WorkflowStepInvocationScope(req Request) string {
 	if signal := LatestSignal(req.Signals); signal != nil {
 		if signalID := strings.TrimSpace(signal.ID); signalID != "" {
@@ -53,6 +55,8 @@ func WorkflowStepInvocationScope(req Request) string {
 	return ""
 }
 
+// WorkflowStepIdempotencyKey builds the idempotency key a step uses for a
+// side-effecting call.
 func WorkflowStepIdempotencyKey(req Request, invocationScope, stepID, suffix string) string {
 	parts := []string{
 		"workflow",
@@ -66,6 +70,8 @@ func WorkflowStepIdempotencyKey(req Request, invocationScope, stepID, suffix str
 	return strings.Join(parts, ":")
 }
 
+// WorkflowRunContext reads the run metadata from a workflow callback
+// request.
 func WorkflowRunContext(req Request) map[string]any {
 	ctxValue := map[string]any{}
 	if runID := strings.TrimSpace(req.RunID); runID != "" {
@@ -105,6 +111,8 @@ func WorkflowRunContext(req Request) map[string]any {
 	return ctxValue
 }
 
+// WorkflowStepContext reads the current step's metadata from a workflow
+// callback request.
 func WorkflowStepContext(req Request, stepIndex int, stepID string) map[string]any {
 	ctxValue := WorkflowRunContext(req)
 	stepID = strings.TrimSpace(stepID)
@@ -118,6 +126,8 @@ func WorkflowStepContext(req Request, stepIndex int, stepID string) map[string]a
 	return ctxValue
 }
 
+// StepInvocationRequest reconstructs the provider request a step invocation
+// carries.
 func StepInvocationRequest(req Request, stepIndex int, stepID, idempotencyKey string) (gestalt.Request, error) {
 	providerName := strings.TrimSpace(req.ProviderName)
 	if providerName == "" {
@@ -146,6 +156,8 @@ func StepInvocationRequest(req Request, stepIndex int, stepID, idempotencyKey st
 	})
 }
 
+// WorkflowTargetContext reads the run's target metadata from a workflow
+// callback request.
 func WorkflowTargetContext(target *gestalt.BoundWorkflowTarget) map[string]any {
 	value := map[string]any{}
 	if target == nil || len(target.Steps) == 0 {
@@ -183,6 +195,8 @@ func WorkflowTargetContext(target *gestalt.BoundWorkflowTarget) map[string]any {
 	return value
 }
 
+// WorkflowTriggerContext reads the activation trigger metadata from a
+// workflow callback request.
 func WorkflowTriggerContext(trigger *gestalt.WorkflowRunTrigger) map[string]any {
 	if trigger == nil {
 		return nil
@@ -207,6 +221,8 @@ func WorkflowTriggerContext(trigger *gestalt.WorkflowRunTrigger) map[string]any 
 	}
 }
 
+// WorkflowEventContext reads the triggering event from a workflow callback
+// request.
 func WorkflowEventContext(event *gestalt.WorkflowEvent) map[string]any {
 	value := map[string]any{}
 	if event == nil {
@@ -242,6 +258,8 @@ func WorkflowEventContext(event *gestalt.WorkflowEvent) map[string]any {
 	return value
 }
 
+// WorkflowSubjectContext reads the acting subject from a workflow callback
+// request.
 func WorkflowSubjectContext(subject *gestalt.Subject) map[string]any {
 	value := map[string]any{}
 	if subject == nil {
@@ -259,6 +277,8 @@ func WorkflowSubjectContext(subject *gestalt.Subject) map[string]any {
 	return value
 }
 
+// WorkflowSignalsContext reads the delivered signals from a workflow
+// callback request.
 func WorkflowSignalsContext(signals []gestalt.WorkflowSignal) []map[string]any {
 	if len(signals) == 0 {
 		return nil
