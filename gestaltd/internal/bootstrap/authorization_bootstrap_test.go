@@ -461,6 +461,22 @@ func TestResolveCallerTokenPublicKey(t *testing.T) {
 	}
 }
 
+func TestResolveCallerTokenPrivateKey(t *testing.T) {
+	t.Parallel()
+
+	got, err := resolveCallerTokenPrivateKey(context.Background(), &coretesting.StubSecretManager{
+		Secrets: map[string]string{
+			callerTokenPrivateKeySecretName: " private-key-pem ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolveCallerTokenPrivateKey: %v", err)
+	}
+	if got != "private-key-pem" {
+		t.Fatalf("private key = %q, want private-key-pem", got)
+	}
+}
+
 func assertAppInvocationRelationship(t *testing.T, relationship *proto.Relationship, resourceType string) {
 	t.Helper()
 	tuple := relationship.GetTuple()

@@ -200,7 +200,8 @@ type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 const (
-	callerTokenPublicKeySecretName = "gestaltd-caller-token-ed25519-public-key"
+	callerTokenPrivateKeySecretName = "gestaltd-caller-token-ed25519-private-key"
+	callerTokenPublicKeySecretName  = "gestaltd-caller-token-ed25519-public-key"
 )
 
 type FactoryRegistry struct {
@@ -966,7 +967,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
 	deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
-	deps.ProviderGateway = providergateway.New()
+	callerTokenPrivateKey, err := resolveCallerTokenPrivateKey(ctx, sm)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, err
+	}
+	deps.ProviderGateway = providergateway.New(providergateway.WithCallerTokenPrivateKey(callerTokenPrivateKey))
 	callerTokenPublicKey, err := resolveCallerTokenPublicKey(ctx, sm)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1878,20 +1884,28 @@ func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *co
 	return provider, nil
 }
 
+func resolveCallerTokenPrivateKey(ctx context.Context, sm core.SecretManager) (string, error) {
+	return resolveCallerTokenKey(ctx, sm, callerTokenPrivateKeySecretName)
+}
+
 func resolveCallerTokenPublicKey(ctx context.Context, sm core.SecretManager) (string, error) {
+	return resolveCallerTokenKey(ctx, sm, callerTokenPublicKeySecretName)
+}
+
+func resolveCallerTokenKey(ctx context.Context, sm core.SecretManager, name string) (string, error) {
 	if sm == nil {
 		return "", nil
 	}
-	value, err := sm.GetSecret(ctx, callerTokenPublicKeySecretName)
+	value, err := sm.GetSecret(ctx, name)
 	if err != nil {
 		if errors.Is(err, core.ErrSecretNotFound) {
 			return "", nil
 		}
-		return "", fmt.Errorf("bootstrap: resolve %s: %w", callerTokenPublicKeySecretName, err)
+		return "", fmt.Errorf("bootstrap: resolve %s: %w", name, err)
 	}
 	value = strings.TrimSpace(value)
 	if value == "" {
-		return "", fmt.Errorf("bootstrap: secret %q resolved to empty value", callerTokenPublicKeySecretName)
+		return "", fmt.Errorf("bootstrap: secret %q resolved to empty value", name)
 	}
 	return value, nil
 }
