@@ -90,7 +90,7 @@ type CacheSetEntry struct {
 // CacheSetManyRequest writes multiple cache keys in one RPC.
 type CacheSetManyRequest struct {
 	Entries []*CacheSetEntry
-	Ttl     *time.Duration
+	TTL     *time.Duration
 }
 
 // CacheSetRequest is the native message type for gestalt.provider.v1.CacheSetRequest.
@@ -100,7 +100,7 @@ type CacheSetRequest struct {
 	Key   string
 	Value []byte
 	// ttl applies an optional expiration to the entry.
-	Ttl *time.Duration
+	TTL *time.Duration
 }
 
 // CacheTouchRequest is the native message type for gestalt.provider.v1.CacheTouchRequest.
@@ -108,7 +108,7 @@ type CacheSetRequest struct {
 // CacheTouchRequest extends the TTL for one cache key.
 type CacheTouchRequest struct {
 	Key string
-	Ttl *time.Duration
+	TTL *time.Duration
 }
 
 // CacheTouchResponse is the native message type for gestalt.provider.v1.CacheTouchResponse.
@@ -203,7 +203,7 @@ func (c *Cache) GetManyRaw(ctx context.Context, request *CacheGetManyRequest) (*
 
 // Set is the ergonomic form of [Cache.SetRaw].
 func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl *time.Duration) error {
-	request := &CacheSetRequest{Key: key, Value: value, Ttl: ttl}
+	request := &CacheSetRequest{Key: key, Value: value, TTL: ttl}
 	if _, err := c.client.Set(ctx, toWireCacheSetRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -220,7 +220,7 @@ func (c *Cache) SetRaw(ctx context.Context, request *CacheSetRequest) error {
 
 // SetMany is the ergonomic form of [Cache.SetManyRaw].
 func (c *Cache) SetMany(ctx context.Context, entries []*CacheSetEntry, ttl *time.Duration) error {
-	request := &CacheSetManyRequest{Entries: entries, Ttl: ttl}
+	request := &CacheSetManyRequest{Entries: entries, TTL: ttl}
 	if _, err := c.client.SetMany(ctx, toWireCacheSetManyRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -278,7 +278,7 @@ func (c *Cache) DeleteManyRaw(ctx context.Context, request *CacheDeleteManyReque
 // Touch is the ergonomic form of [Cache.TouchRaw].
 // The response collapses to its touched field.
 func (c *Cache) Touch(ctx context.Context, key string, ttl *time.Duration) (bool, error) {
-	request := &CacheTouchRequest{Key: key, Ttl: ttl}
+	request := &CacheTouchRequest{Key: key, TTL: ttl}
 	response, err := c.client.Touch(ctx, toWireCacheTouchRequest(request))
 	if err != nil {
 		return false, toGestaltError(err)

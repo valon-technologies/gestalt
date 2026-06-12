@@ -141,7 +141,7 @@ func (c *generatedAgentClient) CreateTurn(ctx context.Context, input gestalt.Age
 	}
 	turn, err := c.agent.CreateTurnRaw(ctx, &client.CreateAgentProviderTurnRequest{
 		ProviderName:   input.ProviderName,
-		SessionId:      input.SessionID,
+		SessionID:      input.SessionID,
 		IdempotencyKey: input.IdempotencyKey,
 		Model:          input.Model,
 		Messages:       agentMessagesToClient(input.Messages),
@@ -159,7 +159,7 @@ func (c *generatedAgentClient) CreateTurn(ctx context.Context, input gestalt.Age
 
 func (c *generatedAgentClient) GetTurn(ctx context.Context, input gestalt.AgentGetTurn) (*gestalt.AgentTurn, error) {
 	turn, err := c.agent.GetTurnRaw(ctx, &client.GetAgentProviderTurnRequest{
-		TurnId:       input.TurnID,
+		TurnID:       input.TurnID,
 		ProviderName: input.ProviderName,
 		Context:      c.requestContext(ctx),
 	})
@@ -171,7 +171,7 @@ func (c *generatedAgentClient) GetTurn(ctx context.Context, input gestalt.AgentG
 
 func (c *generatedAgentClient) CancelTurn(ctx context.Context, input gestalt.AgentCancelTurn) (*gestalt.AgentTurn, error) {
 	turn, err := c.agent.CancelTurnRaw(ctx, &client.CancelAgentProviderTurnRequest{
-		TurnId:       input.TurnID,
+		TurnID:       input.TurnID,
 		Reason:       input.Reason,
 		ProviderName: input.ProviderName,
 		Context:      c.requestContext(ctx),
@@ -192,7 +192,7 @@ func clientRequestContext(req gestalt.Request) *client.RequestContext {
 	if req.Credential != (gestalt.Credential{}) {
 		out.Credential = &client.CredentialContext{
 			Mode:       req.Credential.Mode,
-			SubjectId:  req.Credential.SubjectID,
+			SubjectID:  req.Credential.SubjectID,
 			Connection: req.Credential.Connection,
 			Instance:   req.Credential.Instance,
 		}
@@ -201,7 +201,7 @@ func clientRequestContext(req gestalt.Request) *client.RequestContext {
 		out.Access = &client.AccessContext{Policy: req.Access.Policy, Role: req.Access.Role}
 	}
 	if req.Host.PublicBaseURL != "" {
-		out.Host = &client.HostContext{PublicBaseUrl: req.Host.PublicBaseURL}
+		out.Host = &client.HostContext{PublicBaseURL: req.Host.PublicBaseURL}
 	}
 	callerKind := strings.TrimSpace(string(req.Caller.Kind))
 	callerName := strings.TrimSpace(req.Caller.Name)
@@ -229,8 +229,8 @@ func subjectToClient(subject gestalt.Subject) *client.SubjectContext {
 		return nil
 	}
 	out := &client.SubjectContext{
-		Id:                  subject.ID,
-		CredentialSubjectId: subject.CredentialSubjectID,
+		ID:                  subject.ID,
+		CredentialSubjectID: subject.CredentialSubjectID,
 		Email:               subject.Email,
 		DisplayName:         subject.DisplayName,
 		Scopes:              append([]string(nil), subject.Scopes...),
@@ -297,7 +297,7 @@ func agentToolConfigToClient(config gestalt.AgentToolConfig) *client.AgentToolCo
 
 func listedAgentToolToClient(tool gestalt.ListedAgentTool) *client.ListedAgentTool {
 	out := &client.ListedAgentTool{
-		Id:           tool.ID,
+		ID:           tool.ID,
 		McpName:      tool.MCPName,
 		Title:        tool.Title,
 		Description:  tool.Description,
@@ -327,7 +327,7 @@ func agentWorkspaceToClient(workspace *gestalt.AgentWorkspace) *client.AgentWork
 	out := &client.AgentWorkspace{Cwd: workspace.CWD}
 	for _, checkout := range workspace.Checkouts {
 		out.Checkouts = append(out.Checkouts, &client.AgentWorkspaceGitCheckout{
-			Url:  checkout.URL,
+			URL:  checkout.URL,
 			Ref:  checkout.Ref,
 			Path: checkout.Path,
 		})
@@ -359,18 +359,18 @@ func agentMessagePartToClient(part gestalt.AgentMessagePart) *client.AgentMessag
 	out := &client.AgentMessagePart{
 		Type: client.AgentMessagePartType(part.Type),
 		Text: part.Text,
-		Json: part.JSON,
+		JSON: part.JSON,
 	}
 	if part.ToolCall != nil {
 		out.ToolCall = &client.AgentMessagePartToolCall{
-			Id:        part.ToolCall.ID,
-			ToolId:    part.ToolCall.ToolID,
+			ID:        part.ToolCall.ID,
+			ToolID:    part.ToolCall.ToolID,
 			Arguments: part.ToolCall.Arguments,
 		}
 	}
 	if part.ToolResult != nil {
 		out.ToolResult = &client.AgentMessagePartToolResult{
-			ToolCallId: part.ToolResult.ToolCallID,
+			ToolCallID: part.ToolResult.ToolCallID,
 			Status:     part.ToolResult.Status,
 			Content:    part.ToolResult.Content,
 			Output:     part.ToolResult.Output,
@@ -378,7 +378,7 @@ func agentMessagePartToClient(part gestalt.AgentMessagePart) *client.AgentMessag
 	}
 	if part.ImageRef != nil {
 		out.ImageRef = &client.AgentMessagePartImageRef{
-			Uri:      part.ImageRef.URI,
+			URI:      part.ImageRef.URI,
 			MimeType: part.ImageRef.MimeType,
 		}
 	}
@@ -414,18 +414,18 @@ func agentMessagePartFromClient(part *client.AgentMessagePart) gestalt.AgentMess
 	out := gestalt.AgentMessagePart{
 		Type: gestalt.AgentMessagePartType(part.Type),
 		Text: part.Text,
-		JSON: part.Json,
+		JSON: part.JSON,
 	}
 	if part.ToolCall != nil {
 		out.ToolCall = &gestalt.AgentMessagePartToolCall{
-			ID:        part.ToolCall.Id,
-			ToolID:    part.ToolCall.ToolId,
+			ID:        part.ToolCall.ID,
+			ToolID:    part.ToolCall.ToolID,
 			Arguments: part.ToolCall.Arguments,
 		}
 	}
 	if part.ToolResult != nil {
 		out.ToolResult = &gestalt.AgentMessagePartToolResult{
-			ToolCallID: part.ToolResult.ToolCallId,
+			ToolCallID: part.ToolResult.ToolCallID,
 			Status:     part.ToolResult.Status,
 			Content:    part.ToolResult.Content,
 			Output:     part.ToolResult.Output,
@@ -433,7 +433,7 @@ func agentMessagePartFromClient(part *client.AgentMessagePart) gestalt.AgentMess
 	}
 	if part.ImageRef != nil {
 		out.ImageRef = &gestalt.AgentMessagePartImageRef{
-			URI:      part.ImageRef.Uri,
+			URI:      part.ImageRef.URI,
 			MimeType: part.ImageRef.MimeType,
 		}
 	}
@@ -460,13 +460,13 @@ func agentSessionFromClient(session *client.AgentSession) *gestalt.AgentSession 
 		return nil
 	}
 	out := &gestalt.AgentSession{
-		ID:                 session.Id,
+		ID:                 session.ID,
 		ProviderName:       session.ProviderName,
 		Model:              session.Model,
 		ClientRef:          session.ClientRef,
 		State:              gestalt.AgentSessionState(session.State),
 		Metadata:           session.Metadata,
-		CreatedBySubjectID: session.CreatedBySubjectId,
+		CreatedBySubjectID: session.CreatedBySubjectID,
 		LastTurnAt:         session.LastTurnAt,
 	}
 	if session.CreatedAt != nil {
@@ -483,14 +483,14 @@ func agentTurnFromClient(turn *client.AgentTurn) *gestalt.AgentTurn {
 		return nil
 	}
 	out := &gestalt.AgentTurn{
-		ID:                 turn.Id,
-		SessionID:          turn.SessionId,
+		ID:                 turn.ID,
+		SessionID:          turn.SessionID,
 		ProviderName:       turn.ProviderName,
 		Model:              turn.Model,
 		Status:             gestalt.AgentExecutionStatus(turn.Status),
 		Messages:           agentMessagesFromClient(turn.Messages),
 		StatusMessage:      turn.StatusMessage,
-		CreatedBySubjectID: turn.CreatedBySubjectId,
+		CreatedBySubjectID: turn.CreatedBySubjectID,
 		StartedAt:          turn.StartedAt,
 		CompletedAt:        turn.CompletedAt,
 		ExecutionRef:       turn.ExecutionRef,

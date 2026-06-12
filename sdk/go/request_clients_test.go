@@ -93,8 +93,8 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 
 	want := &client.RequestContext{
 		Subject: &client.SubjectContext{
-			Id:                  "user:alice",
-			CredentialSubjectId: "user:alice-credential",
+			ID:                  "user:alice",
+			CredentialSubjectID: "user:alice-credential",
 			Email:               "alice@example.test",
 			DisplayName:         "Alice",
 			Scopes:              []string{"read", "write"},
@@ -108,7 +108,7 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 		},
 		Credential: &client.CredentialContext{
 			Mode:       "subject",
-			SubjectId:  "user:alice-credential",
+			SubjectID:  "user:alice-credential",
 			Connection: "github:default",
 			Instance:   "primary",
 		},
@@ -118,13 +118,13 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 			"runId":        "run-1",
 			"step":         map[string]any{"id": "review"},
 		},
-		Host: &client.HostContext{PublicBaseUrl: "https://gestalt.example.test"},
+		Host: &client.HostContext{PublicBaseURL: "https://gestalt.example.test"},
 		AgentSubject: &client.SubjectContext{
-			Id: "agent:tool-runner",
+			ID: "agent:tool-runner",
 		},
 		Caller: &client.ProviderContext{Kind: "workflow", Name: "temporal"},
 		Invocation: &client.InvocationContext{
-			RequestId:                "req-1",
+			RequestID:                "req-1",
 			Depth:                    2,
 			CallChain:                []string{"app-a", "app-b"},
 			Surface:                  "graphql",
@@ -140,7 +140,7 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 			Description:    "Fetch one issue",
 			CredentialMode: "subject",
 			System:         "catalog",
-			RunAs:          &client.SubjectContext{Id: "service_account:tools"},
+			RunAs:          &client.SubjectContext{ID: "service_account:tools"},
 		}},
 		ToolRefsSet: true,
 		RequestMeta: &client.RequestMetaContext{
@@ -150,8 +150,8 @@ func TestClientRequestContextFullFidelity(t *testing.T) {
 		},
 		Agent: &client.AgentInvocationContext{
 			ProviderName: "claude",
-			SessionId:    "session-1",
-			TurnId:       "turn-1",
+			SessionID:    "session-1",
+			TurnID:       "turn-1",
 		},
 	}
 	if !reflect.DeepEqual(got, want) {

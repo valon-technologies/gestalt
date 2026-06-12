@@ -56,7 +56,7 @@ type ApplyWorkflowProviderDefinitionRequest struct {
 	ProviderName         string
 	Spec                 *WorkflowDefinitionSpec
 	IdempotencyKey       string
-	RequestedBySubjectId string
+	RequestedBySubjectID string
 	Context              *RequestContext
 }
 
@@ -67,14 +67,14 @@ type BoundWorkflowTarget struct {
 
 // CancelWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.CancelWorkflowProviderRunRequest.
 type CancelWorkflowProviderRunRequest struct {
-	RunId   string
+	RunID   string
 	Reason  string
 	Context *RequestContext
 }
 
 // DeleteWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.
 type DeleteWorkflowProviderDefinitionRequest struct {
-	DefinitionId string
+	DefinitionID string
 	Context      *RequestContext
 }
 
@@ -82,20 +82,20 @@ type DeleteWorkflowProviderDefinitionRequest struct {
 type DeliverWorkflowProviderEventRequest struct {
 	AppName              string
 	Event                *WorkflowEvent
-	DeliveredBySubjectId string
+	DeliveredBySubjectID string
 	ProviderName         string
 	Context              *RequestContext
 }
 
 // GetWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.
 type GetWorkflowProviderDefinitionRequest struct {
-	DefinitionId string
+	DefinitionID string
 	Context      *RequestContext
 }
 
 // GetWorkflowProviderRunEventsRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.
 type GetWorkflowProviderRunEventsRequest struct {
-	RunId   string
+	RunID   string
 	Context *RequestContext
 }
 
@@ -106,7 +106,7 @@ type GetWorkflowProviderRunEventsResponse struct {
 
 // GetWorkflowProviderRunOutputRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.
 type GetWorkflowProviderRunOutputRequest struct {
-	RunId   string
+	RunID   string
 	Context *RequestContext
 }
 
@@ -117,7 +117,7 @@ type GetWorkflowProviderRunOutputResponse struct {
 
 // GetWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunRequest.
 type GetWorkflowProviderRunRequest struct {
-	RunId   string
+	RunID   string
 	Context *RequestContext
 }
 
@@ -148,18 +148,18 @@ type ListWorkflowProviderRunsResponse struct {
 
 // SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.
 type SetWorkflowProviderActivationPausedRequest struct {
-	DefinitionId         string
-	ActivationId         string
+	DefinitionID         string
+	ActivationID         string
 	Paused               bool
-	RequestedBySubjectId string
+	RequestedBySubjectID string
 	Context              *RequestContext
 }
 
 // SetWorkflowProviderDefinitionPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.
 type SetWorkflowProviderDefinitionPausedRequest struct {
-	DefinitionId         string
+	DefinitionID         string
 	Paused               bool
-	RequestedBySubjectId string
+	RequestedBySubjectID string
 	Context              *RequestContext
 }
 
@@ -167,10 +167,10 @@ type SetWorkflowProviderDefinitionPausedRequest struct {
 type SignalOrStartWorkflowProviderRunRequest struct {
 	WorkflowKey                  string
 	IdempotencyKey               string
-	CreatedBySubjectId           string
+	CreatedBySubjectID           string
 	Signal                       *WorkflowSignal
 	ProviderName                 string
-	DefinitionId                 string
+	DefinitionID                 string
 	RunAs                        *SubjectContext
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
@@ -179,7 +179,7 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 
 // SignalWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.SignalWorkflowProviderRunRequest.
 type SignalWorkflowProviderRunRequest struct {
-	RunId   string
+	RunID   string
 	Signal  *WorkflowSignal
 	Context *RequestContext
 }
@@ -195,10 +195,10 @@ type SignalWorkflowRunResponse struct {
 // StartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.StartWorkflowProviderRunRequest.
 type StartWorkflowProviderRunRequest struct {
 	IdempotencyKey               string
-	CreatedBySubjectId           string
+	CreatedBySubjectID           string
 	WorkflowKey                  string
 	ProviderName                 string
-	DefinitionId                 string
+	DefinitionID                 string
 	RunAs                        *SubjectContext
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
@@ -227,7 +227,7 @@ func (*WorkflowActivationTriggerEvent) isWorkflowActivationTrigger() {}
 
 // WorkflowActivation is the native message type for gestalt.provider.v1.WorkflowActivation.
 type WorkflowActivation struct {
-	Id      string
+	ID      string
 	Input   *WorkflowValue
 	Paused  bool
 	Trigger WorkflowActivationTrigger
@@ -247,12 +247,12 @@ type WorkflowArray struct {
 
 // WorkflowDefinition is the native message type for gestalt.provider.v1.WorkflowDefinition.
 type WorkflowDefinition struct {
-	Id                 string
+	ID                 string
 	Generation         int64
 	Target             *BoundWorkflowTarget
 	Activations        []*WorkflowActivation
 	Paused             bool
-	CreatedBySubjectId string
+	CreatedBySubjectID string
 	CreatedAt          *time.Time
 	UpdatedAt          *time.Time
 	ProviderName       string
@@ -261,7 +261,7 @@ type WorkflowDefinition struct {
 
 // WorkflowDefinitionSpec is the native message type for gestalt.provider.v1.WorkflowDefinitionSpec.
 type WorkflowDefinitionSpec struct {
-	Id          string
+	ID          string
 	Target      *BoundWorkflowTarget
 	Activations []*WorkflowActivation
 	Paused      bool
@@ -270,7 +270,7 @@ type WorkflowDefinitionSpec struct {
 
 // WorkflowEvent is the native message type for gestalt.provider.v1.WorkflowEvent.
 type WorkflowEvent struct {
-	Id              string
+	ID              string
 	Source          string
 	SpecVersion     string
 	Type            string
@@ -295,7 +295,7 @@ type WorkflowEventMatch struct {
 
 // WorkflowEventTriggerInvocation is the native message type for gestalt.provider.v1.WorkflowEventTriggerInvocation.
 type WorkflowEventTriggerInvocation struct {
-	ActivationId string
+	ActivationID string
 	Event        *WorkflowEvent
 }
 
@@ -314,7 +314,7 @@ type WorkflowPathSource struct {
 
 // WorkflowRun is the native message type for gestalt.provider.v1.WorkflowRun.
 type WorkflowRun struct {
-	Id                   string
+	ID                   string
 	Status               WorkflowRunStatus
 	Target               *BoundWorkflowTarget
 	Trigger              *WorkflowRunTrigger
@@ -323,22 +323,22 @@ type WorkflowRun struct {
 	CompletedAt          *time.Time
 	StatusMessage        string
 	Output               any
-	CreatedBySubjectId   string
+	CreatedBySubjectID   string
 	WorkflowKey          string
 	ProviderName         string
-	DefinitionId         string
+	DefinitionID         string
 	RunAs                *SubjectContext
 	Input                map[string]any
 	DefinitionGeneration int64
-	CurrentStepId        string
+	CurrentStepID        string
 	Steps                []*WorkflowStepExecution
 }
 
 // WorkflowRunEvent is the native message type for gestalt.provider.v1.WorkflowRunEvent.
 type WorkflowRunEvent struct {
-	Id        string
-	RunId     string
-	StepId    string
+	ID        string
+	RunID     string
+	StepID    string
 	Type      string
 	Data      map[string]any
 	CreatedAt *time.Time
@@ -384,17 +384,17 @@ type WorkflowScheduleActivation struct {
 
 // WorkflowScheduleTrigger is the native message type for gestalt.provider.v1.WorkflowScheduleTrigger.
 type WorkflowScheduleTrigger struct {
-	ActivationId string
+	ActivationID string
 	ScheduledFor *time.Time
 }
 
 // WorkflowSignal is the native message type for gestalt.provider.v1.WorkflowSignal.
 type WorkflowSignal struct {
-	Id                 string
+	ID                 string
 	Name               string
 	Payload            map[string]any
 	Metadata           map[string]any
-	CreatedBySubjectId string
+	CreatedBySubjectID string
 	CreatedAt          *time.Time
 	IdempotencyKey     string
 	Sequence           int64
@@ -422,7 +422,7 @@ func (*WorkflowStepActionAgent) isWorkflowStepAction() {}
 
 // WorkflowStep is the native message type for gestalt.provider.v1.WorkflowStep.
 type WorkflowStep struct {
-	Id             string
+	ID             string
 	Inputs         map[string]*WorkflowValue
 	When           *WorkflowStepWhen
 	TimeoutSeconds int32
@@ -454,7 +454,7 @@ type WorkflowStepAppCall struct {
 
 // WorkflowStepAttempt is the native message type for gestalt.provider.v1.WorkflowStepAttempt.
 type WorkflowStepAttempt struct {
-	Id             string
+	ID             string
 	Status         WorkflowStepStatus
 	IdempotencyKey string
 	Input          any
@@ -466,7 +466,7 @@ type WorkflowStepAttempt struct {
 
 // WorkflowStepExecution is the native message type for gestalt.provider.v1.WorkflowStepExecution.
 type WorkflowStepExecution struct {
-	StepId        string
+	StepID        string
 	Status        WorkflowStepStatus
 	Attempts      []*WorkflowStepAttempt
 	Input         any
@@ -479,13 +479,13 @@ type WorkflowStepExecution struct {
 
 // WorkflowStepInputSource is the native message type for gestalt.provider.v1.WorkflowStepInputSource.
 type WorkflowStepInputSource struct {
-	StepId string
+	StepID string
 	Path   string
 }
 
 // WorkflowStepOutputSource is the native message type for gestalt.provider.v1.WorkflowStepOutputSource.
 type WorkflowStepOutputSource struct {
-	StepId string
+	StepID string
 	Path   string
 }
 
@@ -628,7 +628,7 @@ func (c *Workflow) ApplyDefinitionRaw(ctx context.Context, request *ApplyWorkflo
 
 // GetDefinition is the ergonomic form of [Workflow.GetDefinitionRaw].
 func (c *Workflow) GetDefinition(ctx context.Context, definitionId string) (*WorkflowDefinition, error) {
-	request := &GetWorkflowProviderDefinitionRequest{DefinitionId: definitionId, Context: c.context}
+	request := &GetWorkflowProviderDefinitionRequest{DefinitionID: definitionId, Context: c.context}
 	response, err := c.client.GetDefinition(ctx, toWireGetWorkflowProviderDefinitionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -681,7 +681,7 @@ func (c *Workflow) ListDefinitionsRaw(ctx context.Context, request *ListWorkflow
 
 // SetDefinitionPaused is the ergonomic form of [Workflow.SetDefinitionPausedRaw].
 func (c *Workflow) SetDefinitionPaused(ctx context.Context, definitionId string, paused bool) (*WorkflowDefinition, error) {
-	request := &SetWorkflowProviderDefinitionPausedRequest{DefinitionId: definitionId, Paused: paused, Context: c.context}
+	request := &SetWorkflowProviderDefinitionPausedRequest{DefinitionID: definitionId, Paused: paused, Context: c.context}
 	response, err := c.client.SetDefinitionPaused(ctx, toWireSetWorkflowProviderDefinitionPausedRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -705,7 +705,7 @@ func (c *Workflow) SetDefinitionPausedRaw(ctx context.Context, request *SetWorkf
 
 // SetActivationPaused is the ergonomic form of [Workflow.SetActivationPausedRaw].
 func (c *Workflow) SetActivationPaused(ctx context.Context, definitionId string, activationId string, paused bool) (*WorkflowDefinition, error) {
-	request := &SetWorkflowProviderActivationPausedRequest{DefinitionId: definitionId, ActivationId: activationId, Paused: paused, Context: c.context}
+	request := &SetWorkflowProviderActivationPausedRequest{DefinitionID: definitionId, ActivationID: activationId, Paused: paused, Context: c.context}
 	response, err := c.client.SetActivationPaused(ctx, toWireSetWorkflowProviderActivationPausedRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -729,7 +729,7 @@ func (c *Workflow) SetActivationPausedRaw(ctx context.Context, request *SetWorkf
 
 // DeleteDefinition is the ergonomic form of [Workflow.DeleteDefinitionRaw].
 func (c *Workflow) DeleteDefinition(ctx context.Context, definitionId string) error {
-	request := &DeleteWorkflowProviderDefinitionRequest{DefinitionId: definitionId, Context: c.context}
+	request := &DeleteWorkflowProviderDefinitionRequest{DefinitionID: definitionId, Context: c.context}
 	if _, err := c.client.DeleteDefinition(ctx, toWireDeleteWorkflowProviderDefinitionRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -751,7 +751,7 @@ func (c *Workflow) DeleteDefinitionRaw(ctx context.Context, request *DeleteWorkf
 
 // StartRun is the ergonomic form of [Workflow.StartRunRaw].
 func (c *Workflow) StartRun(ctx context.Context, idempotencyKey string, workflowKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, runAs *SubjectContext, input map[string]any) (*WorkflowRun, error) {
-	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, RunAs: runAs, Input: input, Context: c.context}
+	request := &StartWorkflowProviderRunRequest{IdempotencyKey: idempotencyKey, WorkflowKey: workflowKey, ProviderName: providerName, DefinitionID: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, RunAs: runAs, Input: input, Context: c.context}
 	response, err := c.client.StartRun(ctx, toWireStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -799,7 +799,7 @@ func (c *Workflow) ListRunsRaw(ctx context.Context, request *ListWorkflowProvide
 
 // GetRun is the ergonomic form of [Workflow.GetRunRaw].
 func (c *Workflow) GetRun(ctx context.Context, runId string) (*WorkflowRun, error) {
-	request := &GetWorkflowProviderRunRequest{RunId: runId, Context: c.context}
+	request := &GetWorkflowProviderRunRequest{RunID: runId, Context: c.context}
 	response, err := c.client.GetRun(ctx, toWireGetWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -824,7 +824,7 @@ func (c *Workflow) GetRunRaw(ctx context.Context, request *GetWorkflowProviderRu
 // GetRunEvents is the ergonomic form of [Workflow.GetRunEventsRaw].
 // The response collapses to its events field.
 func (c *Workflow) GetRunEvents(ctx context.Context, runId string) ([]*WorkflowRunEvent, error) {
-	request := &GetWorkflowProviderRunEventsRequest{RunId: runId, Context: c.context}
+	request := &GetWorkflowProviderRunEventsRequest{RunID: runId, Context: c.context}
 	response, err := c.client.GetRunEvents(ctx, toWireGetWorkflowProviderRunEventsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -849,7 +849,7 @@ func (c *Workflow) GetRunEventsRaw(ctx context.Context, request *GetWorkflowProv
 // GetRunOutput is the ergonomic form of [Workflow.GetRunOutputRaw].
 // The response collapses to its output field.
 func (c *Workflow) GetRunOutput(ctx context.Context, runId string) (any, error) {
-	request := &GetWorkflowProviderRunOutputRequest{RunId: runId, Context: c.context}
+	request := &GetWorkflowProviderRunOutputRequest{RunID: runId, Context: c.context}
 	response, err := c.client.GetRunOutput(ctx, toWireGetWorkflowProviderRunOutputRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -873,7 +873,7 @@ func (c *Workflow) GetRunOutputRaw(ctx context.Context, request *GetWorkflowProv
 
 // CancelRun is the ergonomic form of [Workflow.CancelRunRaw].
 func (c *Workflow) CancelRun(ctx context.Context, runId string, reason string) (*WorkflowRun, error) {
-	request := &CancelWorkflowProviderRunRequest{RunId: runId, Reason: reason, Context: c.context}
+	request := &CancelWorkflowProviderRunRequest{RunID: runId, Reason: reason, Context: c.context}
 	response, err := c.client.CancelRun(ctx, toWireCancelWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -897,7 +897,7 @@ func (c *Workflow) CancelRunRaw(ctx context.Context, request *CancelWorkflowProv
 
 // SignalRun is the ergonomic form of [Workflow.SignalRunRaw].
 func (c *Workflow) SignalRun(ctx context.Context, runId string, signal *WorkflowSignal) (*SignalWorkflowRunResponse, error) {
-	request := &SignalWorkflowProviderRunRequest{RunId: runId, Signal: signal, Context: c.context}
+	request := &SignalWorkflowProviderRunRequest{RunID: runId, Signal: signal, Context: c.context}
 	response, err := c.client.SignalRun(ctx, toWireSignalWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -921,7 +921,7 @@ func (c *Workflow) SignalRunRaw(ctx context.Context, request *SignalWorkflowProv
 
 // SignalOrStartRun is the ergonomic form of [Workflow.SignalOrStartRunRaw].
 func (c *Workflow) SignalOrStartRun(ctx context.Context, workflowKey string, idempotencyKey string, providerName string, definitionId string, expectedDefinitionGeneration int64, signal *WorkflowSignal, runAs *SubjectContext, input map[string]any) (*SignalWorkflowRunResponse, error) {
-	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, ProviderName: providerName, DefinitionId: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, RunAs: runAs, Input: input, Context: c.context}
+	request := &SignalOrStartWorkflowProviderRunRequest{WorkflowKey: workflowKey, IdempotencyKey: idempotencyKey, ProviderName: providerName, DefinitionID: definitionId, ExpectedDefinitionGeneration: expectedDefinitionGeneration, Signal: signal, RunAs: runAs, Input: input, Context: c.context}
 	response, err := c.client.SignalOrStartRun(ctx, toWireSignalOrStartWorkflowProviderRunRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

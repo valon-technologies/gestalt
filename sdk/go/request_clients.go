@@ -70,8 +70,8 @@ func clientSubjectContext(subject *proto.SubjectContext) *client.SubjectContext 
 		return nil
 	}
 	out := &client.SubjectContext{
-		Id:                  subject.GetId(),
-		CredentialSubjectId: subject.GetCredentialSubjectId(),
+		ID:                  subject.GetId(),
+		CredentialSubjectID: subject.GetCredentialSubjectId(),
 		Email:               subject.GetEmail(),
 		DisplayName:         subject.GetDisplayName(),
 		Scopes:              append([]string(nil), subject.GetScopes()...),
@@ -95,7 +95,7 @@ func clientCredentialContext(credential *proto.CredentialContext) *client.Creden
 	}
 	return &client.CredentialContext{
 		Mode:       credential.GetMode(),
-		SubjectId:  credential.GetSubjectId(),
+		SubjectID:  credential.GetSubjectId(),
 		Connection: credential.GetConnection(),
 		Instance:   credential.GetInstance(),
 	}
@@ -112,7 +112,7 @@ func clientHostContext(host *proto.HostContext) *client.HostContext {
 	if host == nil {
 		return nil
 	}
-	return &client.HostContext{PublicBaseUrl: host.GetPublicBaseUrl()}
+	return &client.HostContext{PublicBaseURL: host.GetPublicBaseUrl()}
 }
 
 func clientProviderContext(caller *proto.ProviderContext) *client.ProviderContext {
@@ -127,7 +127,7 @@ func clientInvocationContext(invocation *proto.InvocationContext) *client.Invoca
 		return nil
 	}
 	return &client.InvocationContext{
-		RequestId:                invocation.GetRequestId(),
+		RequestID:                invocation.GetRequestId(),
 		Depth:                    invocation.GetDepth(),
 		CallChain:                append([]string(nil), invocation.GetCallChain()...),
 		Surface:                  invocation.GetSurface(),
@@ -177,7 +177,7 @@ func clientAgentInvocationContext(agent *proto.AgentInvocationContext) *client.A
 	}
 	return &client.AgentInvocationContext{
 		ProviderName: agent.GetProviderName(),
-		SessionId:    agent.GetSessionId(),
-		TurnId:       agent.GetTurnId(),
+		SessionID:    agent.GetSessionId(),
+		TurnID:       agent.GetTurnId(),
 	}
 }

@@ -69,14 +69,14 @@ type AddRelationshipResponse struct {
 
 // AuthorizationModel is the native message type for gestalt.provider.v1.AuthorizationModel.
 type AuthorizationModel struct {
-	Id            string
+	ID            string
 	Version       string
 	ResourceTypes []*AuthorizationModelResourceType
 }
 
 // AuthorizationModelRef is the native message type for gestalt.provider.v1.AuthorizationModelRef.
 type AuthorizationModelRef struct {
-	Id        string
+	ID        string
 	Version   string
 	CreatedAt *time.Time
 }
@@ -116,7 +116,7 @@ type CheckAccessRequest struct {
 // CheckAccessResponse is the native message type for gestalt.provider.v1.CheckAccessResponse.
 type CheckAccessResponse struct {
 	Allowed bool
-	ModelId string
+	ModelID string
 }
 
 // DeleteRelationshipRequest is the native message type for gestalt.provider.v1.DeleteRelationshipRequest.
@@ -143,7 +143,7 @@ type ListActiveModelResourceTypesRequest struct {
 type ListActiveModelResourceTypesResponse struct {
 	ResourceTypes []*AuthorizationModelResourceType
 	NextPageToken string
-	ModelId       string
+	ModelID       string
 }
 
 // ListRelationshipsRequest is the native message type for gestalt.provider.v1.ListRelationshipsRequest.
@@ -263,7 +263,7 @@ type RelationshipTuple struct {
 // Resource is the native message type for gestalt.provider.v1.Resource.
 type Resource struct {
 	Type       string
-	Id         string
+	ID         string
 	Properties map[string]any
 }
 
@@ -291,7 +291,7 @@ type SetAuthorizationStateResponse struct {
 // Subject is the native message type for gestalt.provider.v1.Subject.
 type Subject struct {
 	Type       string
-	Id         string
+	ID         string
 	Properties map[string]any
 }
 

@@ -124,8 +124,8 @@ func startAgentTransportHarness(t *testing.T) (*agentTransportHarness, string) {
 func agentTransportRequestContext() *client.RequestContext {
 	return &client.RequestContext{
 		Subject: &client.SubjectContext{
-			Id:                  "user:transport",
-			CredentialSubjectId: "user:transport",
+			ID:                  "user:transport",
+			CredentialSubjectID: "user:transport",
 			Email:               "transport@example.test",
 		},
 	}
@@ -152,7 +152,7 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 				Operation: "chat.postMessage",
 			}},
 			Tools: []*client.ListedAgentTool{{
-				Id:          "tool-slack",
+				ID:          "tool-slack",
 				McpName:     "slack__chat_post_message",
 				Title:       "Send Slack message",
 				Description: "Post a Slack message",
@@ -170,20 +170,20 @@ func TestTransport_AgentTCPTargetTokenEnv(t *testing.T) {
 	if session.ProviderName != "managed" {
 		t.Fatalf("provider_name = %q, want %q", session.ProviderName, "managed")
 	}
-	if session.Id != "session-1" {
-		t.Fatalf("session id = %q, want %q", session.Id, "session-1")
+	if session.ID != "session-1" {
+		t.Fatalf("session id = %q, want %q", session.ID, "session-1")
 	}
 
 	turn, err := agent.CreateTurnRaw(context.Background(), &client.CreateAgentProviderTurnRequest{
-		SessionId:      "session-1",
+		SessionID:      "session-1",
 		Model:          "gpt-test",
 		TimeoutSeconds: 120,
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn.Id != "turn-1" {
-		t.Fatalf("turn id = %q, want %q", turn.Id, "turn-1")
+	if turn.ID != "turn-1" {
+		t.Fatalf("turn id = %q, want %q", turn.ID, "turn-1")
 	}
 
 	harness.mu.Lock()
@@ -251,7 +251,7 @@ func TestTransport_AgentWorkflowContext(t *testing.T) {
 		t.Fatalf("CreateSession: %v", err)
 	}
 	if _, err := agent.CreateTurnRaw(ctx, &client.CreateAgentProviderTurnRequest{
-		SessionId:      "session-1",
+		SessionID:      "session-1",
 		Model:          "gpt-test",
 		TimeoutSeconds: 120,
 	}); err != nil {
@@ -316,8 +316,8 @@ func TestTransport_AgentCallerAndWorkflowContext(t *testing.T) {
 
 	agent, err := client.ConnectAgent(context.Background(), "", client.WithRequestContext(&client.RequestContext{
 		Subject: &client.SubjectContext{
-			Id:                  "service_account:workflow-runner",
-			CredentialSubjectId: "service_account:workflow-runner",
+			ID:                  "service_account:workflow-runner",
+			CredentialSubjectID: "service_account:workflow-runner",
 		},
 		Caller: &client.ProviderContext{Kind: "workflow", Name: "temporal"},
 		Workflow: map[string]any{
@@ -384,7 +384,7 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	}
 
 	turn, err := agent.CreateTurnRaw(context.Background(), &client.CreateAgentProviderTurnRequest{
-		SessionId: session.Id,
+		SessionID: session.ID,
 		Model:     "gpt-test",
 		Messages: []*client.AgentMessage{{
 			Role: "user",
@@ -405,8 +405,8 @@ func TestTransport_AgentCreateTurnNativeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn.Id != "turn-1" {
-		t.Fatalf("turn id = %q, want turn-1", turn.Id)
+	if turn.ID != "turn-1" {
+		t.Fatalf("turn id = %q, want turn-1", turn.ID)
 	}
 
 	harness.mu.Lock()

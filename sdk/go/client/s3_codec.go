@@ -109,7 +109,7 @@ func toWireCreateObjectAccessURLResponse(value *CreateObjectAccessURLResponse) *
 		return nil
 	}
 	out := &proto.CreateObjectAccessURLResponse{
-		Url:       value.Url,
+		Url:       value.URL,
 		Method:    proto.PresignMethod(value.Method),
 		ExpiresAt: toWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
@@ -122,7 +122,7 @@ func fromWireCreateObjectAccessURLResponse(value *proto.CreateObjectAccessURLRes
 		return nil
 	}
 	out := &CreateObjectAccessURLResponse{
-		Url:       value.Url,
+		URL:       value.Url,
 		Method:    PresignMethod(value.Method),
 		ExpiresAt: fromWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
@@ -283,7 +283,7 @@ func toWirePresignObjectResponse(value *PresignObjectResponse) *proto.PresignObj
 		return nil
 	}
 	out := &proto.PresignObjectResponse{
-		Url:       value.Url,
+		Url:       value.URL,
 		Method:    proto.PresignMethod(value.Method),
 		ExpiresAt: toWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
@@ -296,7 +296,7 @@ func fromWirePresignObjectResponse(value *proto.PresignObjectResponse) *PresignO
 		return nil
 	}
 	out := &PresignObjectResponse{
-		Url:       value.Url,
+		URL:       value.Url,
 		Method:    PresignMethod(value.Method),
 		ExpiresAt: fromWireTimestamp(value.ExpiresAt),
 		Headers:   value.Headers,
@@ -400,7 +400,7 @@ func toWireS3ObjectRef(value *S3ObjectRef) *proto.S3ObjectRef {
 	}
 	out := &proto.S3ObjectRef{
 		Key:       value.Key,
-		VersionId: value.VersionId,
+		VersionId: value.VersionID,
 	}
 	return out
 }
@@ -411,7 +411,7 @@ func fromWireS3ObjectRef(value *proto.S3ObjectRef) *S3ObjectRef {
 	}
 	out := &S3ObjectRef{
 		Key:       value.Key,
-		VersionId: value.VersionId,
+		VersionID: value.VersionId,
 	}
 	return out
 }

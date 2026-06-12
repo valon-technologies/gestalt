@@ -90,8 +90,50 @@ func enumValueConst(goEnumName, protoEnumName, valueName string) string {
 	return goEnumName + pascalCase(trimmed)
 }
 
+// goInitialisms maps camel words whose Go-idiomatic spelling is fully
+// capitalized, matching the handwritten sdk/go surface (DefinitionID,
+// HostBaseURL, MetadataJSON).
+var goInitialisms = map[string]string{
+	"Api": "API", "Http": "HTTP", "Https": "HTTPS", "Id": "ID", "Ids": "IDs",
+	"Json": "JSON", "Pid": "PID", "Sql": "SQL", "Tls": "TLS", "Ttl": "TTL",
+	"Uri": "URI", "Url": "URL", "Uuid": "UUID",
+}
+
+// camelWords splits a PascalCase identifier at its word boundaries; digits
+// bind to the preceding word.
+func camelWords(s string) []string {
+	var words []string
+	start := 0
+	for i := 1; i < len(s); i++ {
+		if s[i] >= 'A' && s[i] <= 'Z' {
+			words = append(words, s[start:i])
+			start = i
+		}
+	}
+	return append(words, s[start:])
+}
+
+// exportedName renders the exported Go identifier for a camelCase proto JSON
+// name, applying the initialism spellings the handwritten SDK uses. Wire-stub
+// names are protoc-gen-go's business and never pass through here.
+func exportedName(jsonName string) string {
+	words := camelWords(upperFirst(jsonName))
+	for i, w := range words {
+		if mapped, ok := goInitialisms[w]; ok {
+			words[i] = mapped
+		}
+	}
+	return strings.Join(words, "")
+}
+
 // fieldGoName renders the exported Go field name for a proto field.
 func fieldGoName(f *model.Field) string {
+	return exportedName(f.JSONName)
+}
+
+// wireFieldName renders the protoc-gen-go field name on the wire struct,
+// which never applies the SDK initialism table.
+func wireFieldName(f *model.Field) string {
 	return upperFirst(f.JSONName)
 }
 
@@ -195,7 +237,7 @@ func oneofTypeName(messageGoName string, o *model.Oneof) string {
 
 // variantTypeName renders the wrapper struct name for one oneof variant.
 func variantTypeName(oneofUnionName string, f *model.Field) string {
-	return oneofUnionName + upperFirst(f.JSONName)
+	return oneofUnionName + exportedName(f.JSONName)
 }
 
 func oneofFields(m *model.Message, o *model.Oneof) []*model.Field {

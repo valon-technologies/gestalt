@@ -18,19 +18,19 @@ type CreateExternalCredentialRequest struct {
 
 // DeleteExternalCredentialRequest is the native message type for gestalt.provider.v1.DeleteExternalCredentialRequest.
 type DeleteExternalCredentialRequest struct {
-	Id string
+	ID string
 }
 
 // ExchangeExternalCredentialRequest is the native message type for gestalt.provider.v1.ExchangeExternalCredentialRequest.
 type ExchangeExternalCredentialRequest struct {
 	Provider            string
 	Connection          string
-	ConnectionId        string
-	CredentialSubjectId string
-	ActorSubjectId      string
+	ConnectionID        string
+	CredentialSubjectID string
+	ActorSubjectID      string
 	Instance            string
 	Auth                *ExternalCredentialAuthConfig
-	CredentialJson      string
+	CredentialJSON      string
 	ConnectionParams    map[string]string
 }
 
@@ -68,11 +68,11 @@ func (*ExternalCredentialCredentialOpaque) isExternalCredentialCredential() {}
 
 // ExternalCredential is the native message type for gestalt.provider.v1.ExternalCredential.
 type ExternalCredential struct {
-	Id           string
+	ID           string
 	Subject      string
 	Audience     string
 	Qualifier    string
-	MetadataJson string
+	MetadataJSON string
 	CreatedAt    *time.Time
 	UpdatedAt    *time.Time
 	Credential   ExternalCredentialCredential
@@ -84,8 +84,8 @@ type ExternalCredentialAuthConfig struct {
 	Token                string
 	TokenPrefix          string
 	GrantType            string
-	TokenUrl             string
-	ClientId             string
+	TokenURL             string
+	ClientID             string
 	ClientSecret         string
 	ClientAuth           string
 	TokenExchange        string
@@ -102,7 +102,7 @@ type ExternalCredentialAuthConfig struct {
 
 // ExternalCredentialClientInfo is the native message type for gestalt.provider.v1.ExternalCredentialClientInfo.
 type ExternalCredentialClientInfo struct {
-	ClientId              string
+	ClientID              string
 	ClientSecret          string
 	ClientSecretExpiresAt *time.Time
 }
@@ -138,7 +138,7 @@ type ExternalCredentialTokenResponse struct {
 	RefreshToken  string
 	ExpiresIn     int32
 	TokenType     string
-	ExtraJson     string
+	ExtraJSON     string
 	RefreshSource string
 }
 
@@ -164,10 +164,10 @@ type ListExternalCredentialsResponse struct {
 type ResolveExternalCredentialRequest struct {
 	Provider            string
 	Connection          string
-	ConnectionId        string
+	ConnectionID        string
 	Mode                string
-	CredentialSubjectId string
-	ActorSubjectId      string
+	CredentialSubjectID string
+	ActorSubjectID      string
 	Instance            string
 	Auth                *ExternalCredentialAuthConfig
 	ConnectionParams    map[string]string
@@ -177,7 +177,7 @@ type ResolveExternalCredentialRequest struct {
 type ResolveExternalCredentialResponse struct {
 	Token        string
 	ExpiresAt    *time.Time
-	MetadataJson string
+	MetadataJSON string
 	Params       map[string]string
 	Credential   *ExternalCredential
 }
@@ -191,7 +191,7 @@ type UpsertExternalCredentialRequest struct {
 type ValidateExternalCredentialConfigRequest struct {
 	Provider         string
 	Connection       string
-	ConnectionId     string
+	ConnectionID     string
 	Mode             string
 	Auth             *ExternalCredentialAuthConfig
 	ConnectionParams map[string]string
@@ -316,7 +316,7 @@ func (c *ExternalCredentials) ListCredentialsRaw(ctx context.Context, request *L
 
 // DeleteCredential is the ergonomic form of [ExternalCredentials.DeleteCredentialRaw].
 func (c *ExternalCredentials) DeleteCredential(ctx context.Context, id string) error {
-	request := &DeleteExternalCredentialRequest{Id: id}
+	request := &DeleteExternalCredentialRequest{ID: id}
 	if _, err := c.client.DeleteCredential(ctx, toWireDeleteExternalCredentialRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -333,7 +333,7 @@ func (c *ExternalCredentials) DeleteCredentialRaw(ctx context.Context, request *
 
 // ValidateCredentialConfig is the ergonomic form of [ExternalCredentials.ValidateCredentialConfigRaw].
 func (c *ExternalCredentials) ValidateCredentialConfig(ctx context.Context, provider string, connection string, connectionId string, mode string, auth *ExternalCredentialAuthConfig) error {
-	request := &ValidateExternalCredentialConfigRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, Mode: mode, Auth: auth}
+	request := &ValidateExternalCredentialConfigRequest{Provider: provider, Connection: connection, ConnectionID: connectionId, Mode: mode, Auth: auth}
 	if _, err := c.client.ValidateCredentialConfig(ctx, toWireValidateExternalCredentialConfigRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -350,7 +350,7 @@ func (c *ExternalCredentials) ValidateCredentialConfigRaw(ctx context.Context, r
 
 // ResolveCredential is the ergonomic form of [ExternalCredentials.ResolveCredentialRaw].
 func (c *ExternalCredentials) ResolveCredential(ctx context.Context, provider string, connection string, connectionId string, mode string, credentialSubjectId string, actorSubjectId string, instance string, auth *ExternalCredentialAuthConfig) (*ResolveExternalCredentialResponse, error) {
-	request := &ResolveExternalCredentialRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, Mode: mode, CredentialSubjectId: credentialSubjectId, ActorSubjectId: actorSubjectId, Instance: instance, Auth: auth}
+	request := &ResolveExternalCredentialRequest{Provider: provider, Connection: connection, ConnectionID: connectionId, Mode: mode, CredentialSubjectID: credentialSubjectId, ActorSubjectID: actorSubjectId, Instance: instance, Auth: auth}
 	response, err := c.client.ResolveCredential(ctx, toWireResolveExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -370,7 +370,7 @@ func (c *ExternalCredentials) ResolveCredentialRaw(ctx context.Context, request 
 // ExchangeCredential is the ergonomic form of [ExternalCredentials.ExchangeCredentialRaw].
 // The response collapses to its tokenResponse field.
 func (c *ExternalCredentials) ExchangeCredential(ctx context.Context, provider string, connection string, connectionId string, credentialSubjectId string, actorSubjectId string, instance string, credentialJson string, auth *ExternalCredentialAuthConfig) (*ExternalCredentialTokenResponse, error) {
-	request := &ExchangeExternalCredentialRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, CredentialSubjectId: credentialSubjectId, ActorSubjectId: actorSubjectId, Instance: instance, CredentialJson: credentialJson, Auth: auth}
+	request := &ExchangeExternalCredentialRequest{Provider: provider, Connection: connection, ConnectionID: connectionId, CredentialSubjectID: credentialSubjectId, ActorSubjectID: actorSubjectId, Instance: instance, CredentialJSON: credentialJson, Auth: auth}
 	response, err := c.client.ExchangeCredential(ctx, toWireExchangeExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

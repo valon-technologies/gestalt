@@ -363,8 +363,8 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpsertCredential: %v", err)
 	}
-	if credential.Id != "cred-transport-1" {
-		t.Fatalf("credential id = %q, want %q", credential.Id, "cred-transport-1")
+	if credential.ID != "cred-transport-1" {
+		t.Fatalf("credential id = %q, want %q", credential.ID, "cred-transport-1")
 	}
 
 	harness.mu.Lock()

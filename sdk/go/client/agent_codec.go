@@ -39,7 +39,7 @@ func toWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
 		return nil
 	}
 	out := &proto.AgentInteraction{
-		Id:         value.Id,
+		Id:         value.ID,
 		Type:       proto.AgentInteractionType(value.Type),
 		State:      proto.AgentInteractionState(value.State),
 		Title:      value.Title,
@@ -48,8 +48,8 @@ func toWireAgentInteraction(value *AgentInteraction) *proto.AgentInteraction {
 		Resolution: toWireStruct(value.Resolution),
 		CreatedAt:  toWireTimestamp(value.CreatedAt),
 		ResolvedAt: toWireTimestamp(value.ResolvedAt),
-		TurnId:     value.TurnId,
-		SessionId:  value.SessionId,
+		TurnId:     value.TurnID,
+		SessionId:  value.SessionID,
 	}
 	return out
 }
@@ -59,7 +59,7 @@ func fromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
 		return nil
 	}
 	out := &AgentInteraction{
-		Id:         value.Id,
+		ID:         value.Id,
 		Type:       AgentInteractionType(value.Type),
 		State:      AgentInteractionState(value.State),
 		Title:      value.Title,
@@ -68,8 +68,8 @@ func fromWireAgentInteraction(value *proto.AgentInteraction) *AgentInteraction {
 		Resolution: fromWireStruct(value.Resolution),
 		CreatedAt:  fromWireTimestamp(value.CreatedAt),
 		ResolvedAt: fromWireTimestamp(value.ResolvedAt),
-		TurnId:     value.TurnId,
-		SessionId:  value.SessionId,
+		TurnID:     value.TurnId,
+		SessionID:  value.SessionId,
 	}
 	return out
 }
@@ -111,7 +111,7 @@ func toWireAgentMessagePart(value *AgentMessagePart) *proto.AgentMessagePart {
 	out := &proto.AgentMessagePart{
 		Type:       proto.AgentMessagePartType(value.Type),
 		Text:       value.Text,
-		Json:       toWireStruct(value.Json),
+		Json:       toWireStruct(value.JSON),
 		ToolCall:   toWireAgentMessagePartToolCall(value.ToolCall),
 		ToolResult: toWireAgentMessagePartToolResult(value.ToolResult),
 		ImageRef:   toWireAgentMessagePartImageRef(value.ImageRef),
@@ -126,7 +126,7 @@ func fromWireAgentMessagePart(value *proto.AgentMessagePart) *AgentMessagePart {
 	out := &AgentMessagePart{
 		Type:       AgentMessagePartType(value.Type),
 		Text:       value.Text,
-		Json:       fromWireStruct(value.Json),
+		JSON:       fromWireStruct(value.Json),
 		ToolCall:   fromWireAgentMessagePartToolCall(value.ToolCall),
 		ToolResult: fromWireAgentMessagePartToolResult(value.ToolResult),
 		ImageRef:   fromWireAgentMessagePartImageRef(value.ImageRef),
@@ -139,7 +139,7 @@ func toWireAgentMessagePartImageRef(value *AgentMessagePartImageRef) *proto.Agen
 		return nil
 	}
 	out := &proto.AgentMessagePartImageRef{
-		Uri:      value.Uri,
+		Uri:      value.URI,
 		MimeType: value.MimeType,
 	}
 	return out
@@ -150,7 +150,7 @@ func fromWireAgentMessagePartImageRef(value *proto.AgentMessagePartImageRef) *Ag
 		return nil
 	}
 	out := &AgentMessagePartImageRef{
-		Uri:      value.Uri,
+		URI:      value.Uri,
 		MimeType: value.MimeType,
 	}
 	return out
@@ -161,8 +161,8 @@ func toWireAgentMessagePartToolCall(value *AgentMessagePartToolCall) *proto.Agen
 		return nil
 	}
 	out := &proto.AgentMessagePartToolCall{
-		Id:        value.Id,
-		ToolId:    value.ToolId,
+		Id:        value.ID,
+		ToolId:    value.ToolID,
 		Arguments: toWireStruct(value.Arguments),
 	}
 	return out
@@ -173,8 +173,8 @@ func fromWireAgentMessagePartToolCall(value *proto.AgentMessagePartToolCall) *Ag
 		return nil
 	}
 	out := &AgentMessagePartToolCall{
-		Id:        value.Id,
-		ToolId:    value.ToolId,
+		ID:        value.Id,
+		ToolID:    value.ToolId,
 		Arguments: fromWireStruct(value.Arguments),
 	}
 	return out
@@ -185,7 +185,7 @@ func toWireAgentMessagePartToolResult(value *AgentMessagePartToolResult) *proto.
 		return nil
 	}
 	out := &proto.AgentMessagePartToolResult{
-		ToolCallId: value.ToolCallId,
+		ToolCallId: value.ToolCallID,
 		Status:     value.Status,
 		Content:    value.Content,
 		Output:     toWireStruct(value.Output),
@@ -198,7 +198,7 @@ func fromWireAgentMessagePartToolResult(value *proto.AgentMessagePartToolResult)
 		return nil
 	}
 	out := &AgentMessagePartToolResult{
-		ToolCallId: value.ToolCallId,
+		ToolCallID: value.ToolCallId,
 		Status:     value.Status,
 		Content:    value.Content,
 		Output:     fromWireStruct(value.Output),
@@ -297,13 +297,13 @@ func toWireAgentSession(value *AgentSession) *proto.AgentSession {
 		return nil
 	}
 	out := &proto.AgentSession{
-		Id:                 value.Id,
+		Id:                 value.ID,
 		ProviderName:       value.ProviderName,
 		Model:              value.Model,
 		ClientRef:          value.ClientRef,
 		State:              proto.AgentSessionState(value.State),
 		Metadata:           toWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectId: value.CreatedBySubjectID,
 		CreatedAt:          toWireTimestamp(value.CreatedAt),
 		UpdatedAt:          toWireTimestamp(value.UpdatedAt),
 		LastTurnAt:         toWireTimestamp(value.LastTurnAt),
@@ -316,13 +316,13 @@ func fromWireAgentSession(value *proto.AgentSession) *AgentSession {
 		return nil
 	}
 	out := &AgentSession{
-		Id:                 value.Id,
+		ID:                 value.Id,
 		ProviderName:       value.ProviderName,
 		Model:              value.Model,
 		ClientRef:          value.ClientRef,
 		State:              AgentSessionState(value.State),
 		Metadata:           fromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectID: value.CreatedBySubjectId,
 		CreatedAt:          fromWireTimestamp(value.CreatedAt),
 		UpdatedAt:          fromWireTimestamp(value.UpdatedAt),
 		LastTurnAt:         fromWireTimestamp(value.LastTurnAt),
@@ -357,7 +357,7 @@ func toWireAgentSessionStartHook(value *AgentSessionStartHook) *proto.AgentSessi
 		return nil
 	}
 	out := &proto.AgentSessionStartHook{
-		Id:      value.Id,
+		Id:      value.ID,
 		Type:    value.Type,
 		Command: value.Command,
 		Cwd:     value.Cwd,
@@ -373,7 +373,7 @@ func fromWireAgentSessionStartHook(value *proto.AgentSessionStartHook) *AgentSes
 		return nil
 	}
 	out := &AgentSessionStartHook{
-		Id:      value.Id,
+		ID:      value.Id,
 		Type:    value.Type,
 		Command: value.Command,
 		Cwd:     value.Cwd,
@@ -475,13 +475,13 @@ func toWireAgentTurn(value *AgentTurn) *proto.AgentTurn {
 		return nil
 	}
 	out := &proto.AgentTurn{
-		Id:                 value.Id,
-		SessionId:          value.SessionId,
+		Id:                 value.ID,
+		SessionId:          value.SessionID,
 		ProviderName:       value.ProviderName,
 		Model:              value.Model,
 		Status:             proto.AgentExecutionStatus(value.Status),
 		StatusMessage:      value.StatusMessage,
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectId: value.CreatedBySubjectID,
 		CreatedAt:          toWireTimestamp(value.CreatedAt),
 		StartedAt:          toWireTimestamp(value.StartedAt),
 		CompletedAt:        toWireTimestamp(value.CompletedAt),
@@ -504,13 +504,13 @@ func fromWireAgentTurn(value *proto.AgentTurn) *AgentTurn {
 		return nil
 	}
 	out := &AgentTurn{
-		Id:                 value.Id,
-		SessionId:          value.SessionId,
+		ID:                 value.Id,
+		SessionID:          value.SessionId,
 		ProviderName:       value.ProviderName,
 		Model:              value.Model,
 		Status:             AgentExecutionStatus(value.Status),
 		StatusMessage:      value.StatusMessage,
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectID: value.CreatedBySubjectId,
 		CreatedAt:          fromWireTimestamp(value.CreatedAt),
 		StartedAt:          fromWireTimestamp(value.StartedAt),
 		CompletedAt:        fromWireTimestamp(value.CompletedAt),
@@ -575,8 +575,8 @@ func toWireAgentTurnEvent(value *AgentTurnEvent) *proto.AgentTurnEvent {
 		return nil
 	}
 	out := &proto.AgentTurnEvent{
-		Id:         value.Id,
-		TurnId:     value.TurnId,
+		Id:         value.ID,
+		TurnId:     value.TurnID,
 		Seq:        value.Seq,
 		Type:       value.Type,
 		Source:     value.Source,
@@ -593,8 +593,8 @@ func fromWireAgentTurnEvent(value *proto.AgentTurnEvent) *AgentTurnEvent {
 		return nil
 	}
 	out := &AgentTurnEvent{
-		Id:         value.Id,
-		TurnId:     value.TurnId,
+		ID:         value.Id,
+		TurnID:     value.TurnId,
 		Seq:        value.Seq,
 		Type:       value.Type,
 		Source:     value.Source,
@@ -679,7 +679,7 @@ func toWireAgentWorkspaceGitCheckout(value *AgentWorkspaceGitCheckout) *proto.Ag
 		return nil
 	}
 	out := &proto.AgentWorkspaceGitCheckout{
-		Url:  value.Url,
+		Url:  value.URL,
 		Ref:  value.Ref,
 		Path: value.Path,
 	}
@@ -691,7 +691,7 @@ func fromWireAgentWorkspaceGitCheckout(value *proto.AgentWorkspaceGitCheckout) *
 		return nil
 	}
 	out := &AgentWorkspaceGitCheckout{
-		Url:  value.Url,
+		URL:  value.Url,
 		Ref:  value.Ref,
 		Path: value.Path,
 	}
@@ -703,7 +703,7 @@ func toWireCancelAgentProviderTurnRequest(value *CancelAgentProviderTurnRequest)
 		return nil
 	}
 	out := &proto.CancelAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
+		TurnId:       value.TurnID,
 		Reason:       value.Reason,
 		Subject:      toWireSubjectContext(value.Subject),
 		Context:      toWireRequestContext(value.Context),
@@ -717,7 +717,7 @@ func fromWireCancelAgentProviderTurnRequest(value *proto.CancelAgentProviderTurn
 		return nil
 	}
 	out := &CancelAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
+		TurnID:       value.TurnId,
 		Reason:       value.Reason,
 		Subject:      fromWireSubjectContext(value.Subject),
 		Context:      fromWireRequestContext(value.Context),
@@ -735,7 +735,7 @@ func toWireCreateAgentProviderSessionRequest(value *CreateAgentProviderSessionRe
 		Model:              value.Model,
 		ClientRef:          value.ClientRef,
 		Metadata:           toWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectId: value.CreatedBySubjectID,
 		Subject:            toWireSubjectContext(value.Subject),
 		SessionStart:       toWireAgentSessionStartConfig(value.SessionStart),
 		PreparedWorkspace:  toWirePreparedAgentWorkspace(value.PreparedWorkspace),
@@ -756,7 +756,7 @@ func fromWireCreateAgentProviderSessionRequest(value *proto.CreateAgentProviderS
 		Model:              value.Model,
 		ClientRef:          value.ClientRef,
 		Metadata:           fromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectID: value.CreatedBySubjectId,
 		Subject:            fromWireSubjectContext(value.Subject),
 		SessionStart:       fromWireAgentSessionStartConfig(value.SessionStart),
 		PreparedWorkspace:  fromWirePreparedAgentWorkspace(value.PreparedWorkspace),
@@ -773,12 +773,12 @@ func toWireCreateAgentProviderTurnRequest(value *CreateAgentProviderTurnRequest)
 		return nil
 	}
 	out := &proto.CreateAgentProviderTurnRequest{
-		TurnId:             value.TurnId,
-		SessionId:          value.SessionId,
+		TurnId:             value.TurnID,
+		SessionId:          value.SessionID,
 		IdempotencyKey:     value.IdempotencyKey,
 		Model:              value.Model,
 		Metadata:           toWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectId: value.CreatedBySubjectID,
 		ExecutionRef:       value.ExecutionRef,
 		Subject:            toWireSubjectContext(value.Subject),
 		ModelOptions:       toWireStruct(value.ModelOptions),
@@ -798,12 +798,12 @@ func fromWireCreateAgentProviderTurnRequest(value *proto.CreateAgentProviderTurn
 		return nil
 	}
 	out := &CreateAgentProviderTurnRequest{
-		TurnId:             value.TurnId,
-		SessionId:          value.SessionId,
+		TurnID:             value.TurnId,
+		SessionID:          value.SessionId,
 		IdempotencyKey:     value.IdempotencyKey,
 		Model:              value.Model,
 		Metadata:           fromWireStruct(value.Metadata),
-		CreatedBySubjectId: value.CreatedBySubjectId,
+		CreatedBySubjectID: value.CreatedBySubjectId,
 		ExecutionRef:       value.ExecutionRef,
 		Subject:            fromWireSubjectContext(value.Subject),
 		ModelOptions:       fromWireStruct(value.ModelOptions),
@@ -839,7 +839,7 @@ func toWireGetAgentProviderInteractionRequest(value *GetAgentProviderInteraction
 		return nil
 	}
 	out := &proto.GetAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
+		InteractionId: value.InteractionID,
 		Subject:       toWireSubjectContext(value.Subject),
 		Context:       toWireRequestContext(value.Context),
 	}
@@ -851,7 +851,7 @@ func fromWireGetAgentProviderInteractionRequest(value *proto.GetAgentProviderInt
 		return nil
 	}
 	out := &GetAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
+		InteractionID: value.InteractionId,
 		Subject:       fromWireSubjectContext(value.Subject),
 		Context:       fromWireRequestContext(value.Context),
 	}
@@ -863,7 +863,7 @@ func toWireGetAgentProviderSessionRequest(value *GetAgentProviderSessionRequest)
 		return nil
 	}
 	out := &proto.GetAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
+		SessionId:    value.SessionID,
 		Subject:      toWireSubjectContext(value.Subject),
 		Context:      toWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
@@ -876,7 +876,7 @@ func fromWireGetAgentProviderSessionRequest(value *proto.GetAgentProviderSession
 		return nil
 	}
 	out := &GetAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
+		SessionID:    value.SessionId,
 		Subject:      fromWireSubjectContext(value.Subject),
 		Context:      fromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
@@ -889,7 +889,7 @@ func toWireGetAgentProviderTurnRequest(value *GetAgentProviderTurnRequest) *prot
 		return nil
 	}
 	out := &proto.GetAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
+		TurnId:       value.TurnID,
 		Subject:      toWireSubjectContext(value.Subject),
 		Context:      toWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
@@ -902,7 +902,7 @@ func fromWireGetAgentProviderTurnRequest(value *proto.GetAgentProviderTurnReques
 		return nil
 	}
 	out := &GetAgentProviderTurnRequest{
-		TurnId:       value.TurnId,
+		TurnID:       value.TurnId,
 		Subject:      fromWireSubjectContext(value.Subject),
 		Context:      fromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
@@ -915,7 +915,7 @@ func toWireListAgentProviderInteractionsRequest(value *ListAgentProviderInteract
 		return nil
 	}
 	out := &proto.ListAgentProviderInteractionsRequest{
-		TurnId:       value.TurnId,
+		TurnId:       value.TurnID,
 		Subject:      toWireSubjectContext(value.Subject),
 		Context:      toWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
@@ -928,7 +928,7 @@ func fromWireListAgentProviderInteractionsRequest(value *proto.ListAgentProvider
 		return nil
 	}
 	out := &ListAgentProviderInteractionsRequest{
-		TurnId:       value.TurnId,
+		TurnID:       value.TurnId,
 		Subject:      fromWireSubjectContext(value.Subject),
 		Context:      fromWireRequestContext(value.Context),
 		ProviderName: value.ProviderName,
@@ -964,7 +964,7 @@ func toWireListAgentProviderSessionsRequest(value *ListAgentProviderSessionsRequ
 	}
 	out := &proto.ListAgentProviderSessionsRequest{
 		Subject:      toWireSubjectContext(value.Subject),
-		SessionIds:   value.SessionIds,
+		SessionIds:   value.SessionIDs,
 		State:        proto.AgentSessionState(value.State),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
@@ -980,7 +980,7 @@ func fromWireListAgentProviderSessionsRequest(value *proto.ListAgentProviderSess
 	}
 	out := &ListAgentProviderSessionsRequest{
 		Subject:      fromWireSubjectContext(value.Subject),
-		SessionIds:   value.SessionIds,
+		SessionIDs:   value.SessionIds,
 		State:        AgentSessionState(value.State),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
@@ -1017,7 +1017,7 @@ func toWireListAgentProviderTurnEventsRequest(value *ListAgentProviderTurnEvents
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnEventsRequest{
-		TurnId:       value.TurnId,
+		TurnId:       value.TurnID,
 		AfterSeq:     value.AfterSeq,
 		Limit:        value.Limit,
 		Subject:      toWireSubjectContext(value.Subject),
@@ -1032,7 +1032,7 @@ func fromWireListAgentProviderTurnEventsRequest(value *proto.ListAgentProviderTu
 		return nil
 	}
 	out := &ListAgentProviderTurnEventsRequest{
-		TurnId:       value.TurnId,
+		TurnID:       value.TurnId,
 		AfterSeq:     value.AfterSeq,
 		Limit:        value.Limit,
 		Subject:      fromWireSubjectContext(value.Subject),
@@ -1069,9 +1069,9 @@ func toWireListAgentProviderTurnsRequest(value *ListAgentProviderTurnsRequest) *
 		return nil
 	}
 	out := &proto.ListAgentProviderTurnsRequest{
-		SessionId:    value.SessionId,
+		SessionId:    value.SessionID,
 		Subject:      toWireSubjectContext(value.Subject),
-		TurnIds:      value.TurnIds,
+		TurnIds:      value.TurnIDs,
 		Status:       proto.AgentExecutionStatus(value.Status),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
@@ -1086,9 +1086,9 @@ func fromWireListAgentProviderTurnsRequest(value *proto.ListAgentProviderTurnsRe
 		return nil
 	}
 	out := &ListAgentProviderTurnsRequest{
-		SessionId:    value.SessionId,
+		SessionID:    value.SessionId,
 		Subject:      fromWireSubjectContext(value.Subject),
-		TurnIds:      value.TurnIds,
+		TurnIDs:      value.TurnIds,
 		Status:       AgentExecutionStatus(value.Status),
 		Limit:        value.Limit,
 		SummaryOnly:  value.SummaryOnly,
@@ -1125,7 +1125,7 @@ func toWireListedAgentTool(value *ListedAgentTool) *proto.ListedAgentTool {
 		return nil
 	}
 	out := &proto.ListedAgentTool{
-		Id:           value.Id,
+		Id:           value.ID,
 		McpName:      value.McpName,
 		Title:        value.Title,
 		Description:  value.Description,
@@ -1144,7 +1144,7 @@ func fromWireListedAgentTool(value *proto.ListedAgentTool) *ListedAgentTool {
 		return nil
 	}
 	out := &ListedAgentTool{
-		Id:           value.Id,
+		ID:           value.Id,
 		McpName:      value.McpName,
 		Title:        value.Title,
 		Description:  value.Description,
@@ -1185,10 +1185,10 @@ func toWireResolveAgentProviderInteractionRequest(value *ResolveAgentProviderInt
 		return nil
 	}
 	out := &proto.ResolveAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
+		InteractionId: value.InteractionID,
 		Resolution:    toWireStruct(value.Resolution),
 		Subject:       toWireSubjectContext(value.Subject),
-		TurnId:        value.TurnId,
+		TurnId:        value.TurnID,
 		Context:       toWireRequestContext(value.Context),
 		ProviderName:  value.ProviderName,
 	}
@@ -1200,10 +1200,10 @@ func fromWireResolveAgentProviderInteractionRequest(value *proto.ResolveAgentPro
 		return nil
 	}
 	out := &ResolveAgentProviderInteractionRequest{
-		InteractionId: value.InteractionId,
+		InteractionID: value.InteractionId,
 		Resolution:    fromWireStruct(value.Resolution),
 		Subject:       fromWireSubjectContext(value.Subject),
-		TurnId:        value.TurnId,
+		TurnID:        value.TurnId,
 		Context:       fromWireRequestContext(value.Context),
 		ProviderName:  value.ProviderName,
 	}
@@ -1215,7 +1215,7 @@ func toWireUpdateAgentProviderSessionRequest(value *UpdateAgentProviderSessionRe
 		return nil
 	}
 	out := &proto.UpdateAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
+		SessionId:    value.SessionID,
 		ClientRef:    value.ClientRef,
 		State:        proto.AgentSessionState(value.State),
 		Metadata:     toWireStruct(value.Metadata),
@@ -1231,7 +1231,7 @@ func fromWireUpdateAgentProviderSessionRequest(value *proto.UpdateAgentProviderS
 		return nil
 	}
 	out := &UpdateAgentProviderSessionRequest{
-		SessionId:    value.SessionId,
+		SessionID:    value.SessionId,
 		ClientRef:    value.ClientRef,
 		State:        AgentSessionState(value.State),
 		Metadata:     fromWireStruct(value.Metadata),

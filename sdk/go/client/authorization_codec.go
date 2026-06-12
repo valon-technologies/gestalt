@@ -73,7 +73,7 @@ func toWireAuthorizationModel(value *AuthorizationModel) *proto.AuthorizationMod
 		return nil
 	}
 	out := &proto.AuthorizationModel{
-		Id:      value.Id,
+		Id:      value.ID,
 		Version: value.Version,
 	}
 	for _, item := range value.ResourceTypes {
@@ -87,7 +87,7 @@ func fromWireAuthorizationModel(value *proto.AuthorizationModel) *AuthorizationM
 		return nil
 	}
 	out := &AuthorizationModel{
-		Id:      value.Id,
+		ID:      value.Id,
 		Version: value.Version,
 	}
 	for _, item := range value.ResourceTypes {
@@ -101,7 +101,7 @@ func toWireAuthorizationModelRef(value *AuthorizationModelRef) *proto.Authorizat
 		return nil
 	}
 	out := &proto.AuthorizationModelRef{
-		Id:        value.Id,
+		Id:        value.ID,
 		Version:   value.Version,
 		CreatedAt: toWireTimestamp(value.CreatedAt),
 	}
@@ -113,7 +113,7 @@ func fromWireAuthorizationModelRef(value *proto.AuthorizationModelRef) *Authoriz
 		return nil
 	}
 	out := &AuthorizationModelRef{
-		Id:        value.Id,
+		ID:        value.Id,
 		Version:   value.Version,
 		CreatedAt: fromWireTimestamp(value.CreatedAt),
 	}
@@ -252,7 +252,7 @@ func toWireCheckAccessResponse(value *CheckAccessResponse) *proto.CheckAccessRes
 	}
 	out := &proto.CheckAccessResponse{
 		Allowed: value.Allowed,
-		ModelId: value.ModelId,
+		ModelId: value.ModelID,
 	}
 	return out
 }
@@ -263,7 +263,7 @@ func fromWireCheckAccessResponse(value *proto.CheckAccessResponse) *CheckAccessR
 	}
 	out := &CheckAccessResponse{
 		Allowed: value.Allowed,
-		ModelId: value.ModelId,
+		ModelID: value.ModelId,
 	}
 	return out
 }
@@ -354,7 +354,7 @@ func toWireListActiveModelResourceTypesResponse(value *ListActiveModelResourceTy
 	}
 	out := &proto.ListActiveModelResourceTypesResponse{
 		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
+		ModelId:       value.ModelID,
 	}
 	for _, item := range value.ResourceTypes {
 		out.ResourceTypes = append(out.ResourceTypes, toWireAuthorizationModelResourceType(item))
@@ -368,7 +368,7 @@ func fromWireListActiveModelResourceTypesResponse(value *proto.ListActiveModelRe
 	}
 	out := &ListActiveModelResourceTypesResponse{
 		NextPageToken: value.NextPageToken,
-		ModelId:       value.ModelId,
+		ModelID:       value.ModelId,
 	}
 	for _, item := range value.ResourceTypes {
 		out.ResourceTypes = append(out.ResourceTypes, fromWireAuthorizationModelResourceType(item))
@@ -624,7 +624,7 @@ func toWireResource(value *Resource) *proto.Resource {
 	}
 	out := &proto.Resource{
 		Type:       value.Type,
-		Id:         value.Id,
+		Id:         value.ID,
 		Properties: toWireStruct(value.Properties),
 	}
 	return out
@@ -636,7 +636,7 @@ func fromWireResource(value *proto.Resource) *Resource {
 	}
 	out := &Resource{
 		Type:       value.Type,
-		Id:         value.Id,
+		ID:         value.Id,
 		Properties: fromWireStruct(value.Properties),
 	}
 	return out
@@ -734,7 +734,7 @@ func toWireSubject(value *Subject) *proto.Subject {
 	}
 	out := &proto.Subject{
 		Type:       value.Type,
-		Id:         value.Id,
+		Id:         value.ID,
 		Properties: toWireStruct(value.Properties),
 	}
 	return out
@@ -746,7 +746,7 @@ func fromWireSubject(value *proto.Subject) *Subject {
 	}
 	out := &Subject{
 		Type:       value.Type,
-		Id:         value.Id,
+		ID:         value.Id,
 		Properties: fromWireStruct(value.Properties),
 	}
 	return out

@@ -115,7 +115,7 @@ type AgentCatalogToolConfig struct {
 
 // AgentInteraction is the native message type for gestalt.provider.v1.AgentInteraction.
 type AgentInteraction struct {
-	Id         string
+	ID         string
 	Type       AgentInteractionType
 	State      AgentInteractionState
 	Title      string
@@ -124,8 +124,8 @@ type AgentInteraction struct {
 	Resolution map[string]any
 	CreatedAt  *time.Time
 	ResolvedAt *time.Time
-	TurnId     string
-	SessionId  string
+	TurnID     string
+	SessionID  string
 }
 
 // AgentMessage is the native message type for gestalt.provider.v1.AgentMessage.
@@ -140,7 +140,7 @@ type AgentMessage struct {
 type AgentMessagePart struct {
 	Type       AgentMessagePartType
 	Text       string
-	Json       map[string]any
+	JSON       map[string]any
 	ToolCall   *AgentMessagePartToolCall
 	ToolResult *AgentMessagePartToolResult
 	ImageRef   *AgentMessagePartImageRef
@@ -148,20 +148,20 @@ type AgentMessagePart struct {
 
 // AgentMessagePartImageRef is the native message type for gestalt.provider.v1.AgentMessagePartImageRef.
 type AgentMessagePartImageRef struct {
-	Uri      string
+	URI      string
 	MimeType string
 }
 
 // AgentMessagePartToolCall is the native message type for gestalt.provider.v1.AgentMessagePartToolCall.
 type AgentMessagePartToolCall struct {
-	Id        string
-	ToolId    string
+	ID        string
+	ToolID    string
 	Arguments map[string]any
 }
 
 // AgentMessagePartToolResult is the native message type for gestalt.provider.v1.AgentMessagePartToolResult.
 type AgentMessagePartToolResult struct {
-	ToolCallId string
+	ToolCallID string
 	Status     int32
 	Content    string
 	Output     map[string]any
@@ -214,13 +214,13 @@ type AgentProviderCapabilities struct {
 
 // AgentSession is the native message type for gestalt.provider.v1.AgentSession.
 type AgentSession struct {
-	Id                 string
+	ID                 string
 	ProviderName       string
 	Model              string
 	ClientRef          string
 	State              AgentSessionState
 	Metadata           map[string]any
-	CreatedBySubjectId string
+	CreatedBySubjectID string
 	CreatedAt          *time.Time
 	UpdatedAt          *time.Time
 	LastTurnAt         *time.Time
@@ -233,7 +233,7 @@ type AgentSessionStartConfig struct {
 
 // AgentSessionStartHook is the native message type for gestalt.provider.v1.AgentSessionStartHook.
 type AgentSessionStartHook struct {
-	Id      string
+	ID      string
 	Type    string
 	Command []string
 	Cwd     string
@@ -303,14 +303,14 @@ func (*AgentTurnOutputStructured) isAgentTurnOutput() {}
 
 // AgentTurn is the native message type for gestalt.provider.v1.AgentTurn.
 type AgentTurn struct {
-	Id                 string
-	SessionId          string
+	ID                 string
+	SessionID          string
 	ProviderName       string
 	Model              string
 	Status             AgentExecutionStatus
 	Messages           []*AgentMessage
 	StatusMessage      string
-	CreatedBySubjectId string
+	CreatedBySubjectID string
 	CreatedAt          *time.Time
 	StartedAt          *time.Time
 	CompletedAt        *time.Time
@@ -336,8 +336,8 @@ type AgentTurnDisplay struct {
 
 // AgentTurnEvent is the native message type for gestalt.provider.v1.AgentTurnEvent.
 type AgentTurnEvent struct {
-	Id         string
-	TurnId     string
+	ID         string
+	TurnID     string
 	Seq        int64
 	Type       string
 	Source     string
@@ -366,14 +366,14 @@ type AgentWorkspace struct {
 
 // AgentWorkspaceGitCheckout is the native message type for gestalt.provider.v1.AgentWorkspaceGitCheckout.
 type AgentWorkspaceGitCheckout struct {
-	Url  string
+	URL  string
 	Ref  string
 	Path string
 }
 
 // CancelAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CancelAgentProviderTurnRequest.
 type CancelAgentProviderTurnRequest struct {
-	TurnId       string
+	TurnID       string
 	Reason       string
 	Subject      *SubjectContext
 	Context      *RequestContext
@@ -390,7 +390,7 @@ type CreateAgentProviderSessionRequest struct {
 	Model              string
 	ClientRef          string
 	Metadata           map[string]any
-	CreatedBySubjectId string
+	CreatedBySubjectID string
 	Subject            *SubjectContext
 	SessionStart       *AgentSessionStartConfig
 	PreparedWorkspace  *PreparedAgentWorkspace
@@ -402,13 +402,13 @@ type CreateAgentProviderSessionRequest struct {
 
 // CreateAgentProviderTurnRequest is the native message type for gestalt.provider.v1.CreateAgentProviderTurnRequest.
 type CreateAgentProviderTurnRequest struct {
-	TurnId             string
-	SessionId          string
+	TurnID             string
+	SessionID          string
 	IdempotencyKey     string
 	Model              string
 	Messages           []*AgentMessage
 	Metadata           map[string]any
-	CreatedBySubjectId string
+	CreatedBySubjectID string
 	ExecutionRef       string
 	Subject            *SubjectContext
 	ModelOptions       map[string]any
@@ -426,14 +426,14 @@ type GetAgentProviderCapabilitiesRequest struct{}
 
 // GetAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.GetAgentProviderInteractionRequest.
 type GetAgentProviderInteractionRequest struct {
-	InteractionId string
+	InteractionID string
 	Subject       *SubjectContext
 	Context       *RequestContext
 }
 
 // GetAgentProviderSessionRequest is the native message type for gestalt.provider.v1.GetAgentProviderSessionRequest.
 type GetAgentProviderSessionRequest struct {
-	SessionId    string
+	SessionID    string
 	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
@@ -441,7 +441,7 @@ type GetAgentProviderSessionRequest struct {
 
 // GetAgentProviderTurnRequest is the native message type for gestalt.provider.v1.GetAgentProviderTurnRequest.
 type GetAgentProviderTurnRequest struct {
-	TurnId       string
+	TurnID       string
 	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
@@ -449,7 +449,7 @@ type GetAgentProviderTurnRequest struct {
 
 // ListAgentProviderInteractionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderInteractionsRequest.
 type ListAgentProviderInteractionsRequest struct {
-	TurnId       string
+	TurnID       string
 	Subject      *SubjectContext
 	Context      *RequestContext
 	ProviderName string
@@ -463,7 +463,7 @@ type ListAgentProviderInteractionsResponse struct {
 // ListAgentProviderSessionsRequest is the native message type for gestalt.provider.v1.ListAgentProviderSessionsRequest.
 type ListAgentProviderSessionsRequest struct {
 	Subject    *SubjectContext
-	SessionIds []string
+	SessionIDs []string
 	State      AgentSessionState
 	// When non-zero and bounded_list_hydration is supported, cap results after
 	// ordering sessions newest-first by last_turn_at, updated_at, then created_at.
@@ -482,7 +482,7 @@ type ListAgentProviderSessionsResponse struct {
 
 // ListAgentProviderTurnEventsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnEventsRequest.
 type ListAgentProviderTurnEventsRequest struct {
-	TurnId       string
+	TurnID       string
 	AfterSeq     int64
 	Limit        int32
 	Subject      *SubjectContext
@@ -497,9 +497,9 @@ type ListAgentProviderTurnEventsResponse struct {
 
 // ListAgentProviderTurnsRequest is the native message type for gestalt.provider.v1.ListAgentProviderTurnsRequest.
 type ListAgentProviderTurnsRequest struct {
-	SessionId string
+	SessionID string
 	Subject   *SubjectContext
-	TurnIds   []string
+	TurnIDs   []string
 	Status    AgentExecutionStatus
 	// When non-zero and bounded_list_hydration is supported, cap results after
 	// ordering turns newest-first by created_at.
@@ -519,7 +519,7 @@ type ListAgentProviderTurnsResponse struct {
 
 // ListedAgentTool is the native message type for gestalt.provider.v1.ListedAgentTool.
 type ListedAgentTool struct {
-	Id           string
+	ID           string
 	McpName      string
 	Title        string
 	Description  string
@@ -539,17 +539,17 @@ type PreparedAgentWorkspace struct {
 
 // ResolveAgentProviderInteractionRequest is the native message type for gestalt.provider.v1.ResolveAgentProviderInteractionRequest.
 type ResolveAgentProviderInteractionRequest struct {
-	InteractionId string
+	InteractionID string
 	Resolution    map[string]any
 	Subject       *SubjectContext
-	TurnId        string
+	TurnID        string
 	Context       *RequestContext
 	ProviderName  string
 }
 
 // UpdateAgentProviderSessionRequest is the native message type for gestalt.provider.v1.UpdateAgentProviderSessionRequest.
 type UpdateAgentProviderSessionRequest struct {
-	SessionId    string
+	SessionID    string
 	ClientRef    string
 	State        AgentSessionState
 	Metadata     map[string]any
@@ -646,7 +646,7 @@ func (c *Agent) GetSession(ctx context.Context, sessionId string, opts *AgentGet
 	if opts == nil {
 		opts = &AgentGetSessionOptions{}
 	}
-	request := &GetAgentProviderSessionRequest{SessionId: sessionId, ProviderName: opts.ProviderName, Context: c.context}
+	request := &GetAgentProviderSessionRequest{SessionID: sessionId, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.GetSession(ctx, toWireGetAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -671,7 +671,7 @@ func (c *Agent) GetSessionRaw(ctx context.Context, request *GetAgentProviderSess
 // AgentListSessionsOptions carries the optional parameters of [Agent.ListSessions].
 // A nil options value is equivalent to the zero value.
 type AgentListSessionsOptions struct {
-	SessionIds []string
+	SessionIDs []string
 	State      AgentSessionState
 	// When non-zero and bounded_list_hydration is supported, cap results after
 	// ordering sessions newest-first by last_turn_at, updated_at, then created_at.
@@ -688,7 +688,7 @@ func (c *Agent) ListSessions(ctx context.Context, opts *AgentListSessionsOptions
 	if opts == nil {
 		opts = &AgentListSessionsOptions{}
 	}
-	request := &ListAgentProviderSessionsRequest{SessionIds: opts.SessionIds, State: opts.State, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
+	request := &ListAgentProviderSessionsRequest{SessionIDs: opts.SessionIDs, State: opts.State, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListSessions(ctx, toWireListAgentProviderSessionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -724,7 +724,7 @@ func (c *Agent) UpdateSession(ctx context.Context, sessionId string, opts *Agent
 	if opts == nil {
 		opts = &AgentUpdateSessionOptions{}
 	}
-	request := &UpdateAgentProviderSessionRequest{SessionId: sessionId, ClientRef: opts.ClientRef, State: opts.State, ProviderName: opts.ProviderName, Metadata: opts.Metadata, Context: c.context}
+	request := &UpdateAgentProviderSessionRequest{SessionID: sessionId, ClientRef: opts.ClientRef, State: opts.State, ProviderName: opts.ProviderName, Metadata: opts.Metadata, Context: c.context}
 	response, err := c.client.UpdateSession(ctx, toWireUpdateAgentProviderSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -765,7 +765,7 @@ func (c *Agent) CreateTurn(ctx context.Context, sessionId string, idempotencyKey
 	if opts == nil {
 		opts = &AgentCreateTurnOptions{}
 	}
-	request := &CreateAgentProviderTurnRequest{SessionId: sessionId, IdempotencyKey: idempotencyKey, Model: model, Messages: messages, ExecutionRef: opts.ExecutionRef, TimeoutSeconds: opts.TimeoutSeconds, ProviderName: opts.ProviderName, Metadata: opts.Metadata, ModelOptions: opts.ModelOptions, Output: opts.Output, Context: c.context}
+	request := &CreateAgentProviderTurnRequest{SessionID: sessionId, IdempotencyKey: idempotencyKey, Model: model, Messages: messages, ExecutionRef: opts.ExecutionRef, TimeoutSeconds: opts.TimeoutSeconds, ProviderName: opts.ProviderName, Metadata: opts.Metadata, ModelOptions: opts.ModelOptions, Output: opts.Output, Context: c.context}
 	response, err := c.client.CreateTurn(ctx, toWireCreateAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -798,7 +798,7 @@ func (c *Agent) GetTurn(ctx context.Context, turnId string, opts *AgentGetTurnOp
 	if opts == nil {
 		opts = &AgentGetTurnOptions{}
 	}
-	request := &GetAgentProviderTurnRequest{TurnId: turnId, ProviderName: opts.ProviderName, Context: c.context}
+	request := &GetAgentProviderTurnRequest{TurnID: turnId, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.GetTurn(ctx, toWireGetAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -823,7 +823,7 @@ func (c *Agent) GetTurnRaw(ctx context.Context, request *GetAgentProviderTurnReq
 // AgentListTurnsOptions carries the optional parameters of [Agent.ListTurns].
 // A nil options value is equivalent to the zero value.
 type AgentListTurnsOptions struct {
-	TurnIds []string
+	TurnIDs []string
 	Status  AgentExecutionStatus
 	// When non-zero and bounded_list_hydration is supported, cap results after
 	// ordering turns newest-first by created_at.
@@ -841,7 +841,7 @@ func (c *Agent) ListTurns(ctx context.Context, sessionId string, opts *AgentList
 	if opts == nil {
 		opts = &AgentListTurnsOptions{}
 	}
-	request := &ListAgentProviderTurnsRequest{SessionId: sessionId, TurnIds: opts.TurnIds, Status: opts.Status, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
+	request := &ListAgentProviderTurnsRequest{SessionID: sessionId, TurnIDs: opts.TurnIDs, Status: opts.Status, Limit: opts.Limit, SummaryOnly: opts.SummaryOnly, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListTurns(ctx, toWireListAgentProviderTurnsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -875,7 +875,7 @@ func (c *Agent) CancelTurn(ctx context.Context, turnId string, opts *AgentCancel
 	if opts == nil {
 		opts = &AgentCancelTurnOptions{}
 	}
-	request := &CancelAgentProviderTurnRequest{TurnId: turnId, Reason: opts.Reason, ProviderName: opts.ProviderName, Context: c.context}
+	request := &CancelAgentProviderTurnRequest{TurnID: turnId, Reason: opts.Reason, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.CancelTurn(ctx, toWireCancelAgentProviderTurnRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -911,7 +911,7 @@ func (c *Agent) ListTurnEvents(ctx context.Context, turnId string, opts *AgentLi
 	if opts == nil {
 		opts = &AgentListTurnEventsOptions{}
 	}
-	request := &ListAgentProviderTurnEventsRequest{TurnId: turnId, AfterSeq: opts.AfterSeq, Limit: opts.Limit, ProviderName: opts.ProviderName, Context: c.context}
+	request := &ListAgentProviderTurnEventsRequest{TurnID: turnId, AfterSeq: opts.AfterSeq, Limit: opts.Limit, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListTurnEvents(ctx, toWireListAgentProviderTurnEventsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -935,7 +935,7 @@ func (c *Agent) ListTurnEventsRaw(ctx context.Context, request *ListAgentProvide
 
 // GetInteraction is the ergonomic form of [Agent.GetInteractionRaw].
 func (c *Agent) GetInteraction(ctx context.Context, interactionId string) (*AgentInteraction, error) {
-	request := &GetAgentProviderInteractionRequest{InteractionId: interactionId, Context: c.context}
+	request := &GetAgentProviderInteractionRequest{InteractionID: interactionId, Context: c.context}
 	response, err := c.client.GetInteraction(ctx, toWireGetAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -969,7 +969,7 @@ func (c *Agent) ListInteractions(ctx context.Context, turnId string, opts *Agent
 	if opts == nil {
 		opts = &AgentListInteractionsOptions{}
 	}
-	request := &ListAgentProviderInteractionsRequest{TurnId: turnId, ProviderName: opts.ProviderName, Context: c.context}
+	request := &ListAgentProviderInteractionsRequest{TurnID: turnId, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ListInteractions(ctx, toWireListAgentProviderInteractionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -994,7 +994,7 @@ func (c *Agent) ListInteractionsRaw(ctx context.Context, request *ListAgentProvi
 // AgentResolveInteractionOptions carries the optional parameters of [Agent.ResolveInteraction].
 // A nil options value is equivalent to the zero value.
 type AgentResolveInteractionOptions struct {
-	TurnId       string
+	TurnID       string
 	ProviderName string
 }
 
@@ -1003,7 +1003,7 @@ func (c *Agent) ResolveInteraction(ctx context.Context, interactionId string, re
 	if opts == nil {
 		opts = &AgentResolveInteractionOptions{}
 	}
-	request := &ResolveAgentProviderInteractionRequest{InteractionId: interactionId, Resolution: resolution, TurnId: opts.TurnId, ProviderName: opts.ProviderName, Context: c.context}
+	request := &ResolveAgentProviderInteractionRequest{InteractionID: interactionId, Resolution: resolution, TurnID: opts.TurnID, ProviderName: opts.ProviderName, Context: c.context}
 	response, err := c.client.ResolveInteraction(ctx, toWireResolveAgentProviderInteractionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

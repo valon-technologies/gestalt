@@ -31,7 +31,7 @@ func toWireDeleteExternalCredentialRequest(value *DeleteExternalCredentialReques
 		return nil
 	}
 	out := &proto.DeleteExternalCredentialRequest{
-		Id: value.Id,
+		Id: value.ID,
 	}
 	return out
 }
@@ -41,7 +41,7 @@ func fromWireDeleteExternalCredentialRequest(value *proto.DeleteExternalCredenti
 		return nil
 	}
 	out := &DeleteExternalCredentialRequest{
-		Id: value.Id,
+		ID: value.Id,
 	}
 	return out
 }
@@ -53,12 +53,12 @@ func toWireExchangeExternalCredentialRequest(value *ExchangeExternalCredentialRe
 	out := &proto.ExchangeExternalCredentialRequest{
 		Provider:            value.Provider,
 		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
+		ConnectionId:        value.ConnectionID,
+		CredentialSubjectId: value.CredentialSubjectID,
+		ActorSubjectId:      value.ActorSubjectID,
 		Instance:            value.Instance,
 		Auth:                toWireExternalCredentialAuthConfig(value.Auth),
-		CredentialJson:      value.CredentialJson,
+		CredentialJson:      value.CredentialJSON,
 		ConnectionParams:    value.ConnectionParams,
 	}
 	return out
@@ -71,12 +71,12 @@ func fromWireExchangeExternalCredentialRequest(value *proto.ExchangeExternalCred
 	out := &ExchangeExternalCredentialRequest{
 		Provider:            value.Provider,
 		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
+		ConnectionID:        value.ConnectionId,
+		CredentialSubjectID: value.CredentialSubjectId,
+		ActorSubjectID:      value.ActorSubjectId,
 		Instance:            value.Instance,
 		Auth:                fromWireExternalCredentialAuthConfig(value.Auth),
-		CredentialJson:      value.CredentialJson,
+		CredentialJSON:      value.CredentialJson,
 		ConnectionParams:    value.ConnectionParams,
 	}
 	return out
@@ -107,11 +107,11 @@ func toWireExternalCredential(value *ExternalCredential) *proto.ExternalCredenti
 		return nil
 	}
 	out := &proto.ExternalCredential{
-		Id:           value.Id,
+		Id:           value.ID,
 		Subject:      value.Subject,
 		Audience:     value.Audience,
 		Qualifier:    value.Qualifier,
-		MetadataJson: value.MetadataJson,
+		MetadataJson: value.MetadataJSON,
 		CreatedAt:    toWireTimestamp(value.CreatedAt),
 		UpdatedAt:    toWireTimestamp(value.UpdatedAt),
 	}
@@ -131,11 +131,11 @@ func fromWireExternalCredential(value *proto.ExternalCredential) *ExternalCreden
 		return nil
 	}
 	out := &ExternalCredential{
-		Id:           value.Id,
+		ID:           value.Id,
 		Subject:      value.Subject,
 		Audience:     value.Audience,
 		Qualifier:    value.Qualifier,
-		MetadataJson: value.MetadataJson,
+		MetadataJSON: value.MetadataJson,
 		CreatedAt:    fromWireTimestamp(value.CreatedAt),
 		UpdatedAt:    fromWireTimestamp(value.UpdatedAt),
 	}
@@ -159,8 +159,8 @@ func toWireExternalCredentialAuthConfig(value *ExternalCredentialAuthConfig) *pr
 		Token:           value.Token,
 		TokenPrefix:     value.TokenPrefix,
 		GrantType:       value.GrantType,
-		TokenUrl:        value.TokenUrl,
-		ClientId:        value.ClientId,
+		TokenUrl:        value.TokenURL,
+		ClientId:        value.ClientID,
 		ClientSecret:    value.ClientSecret,
 		ClientAuth:      value.ClientAuth,
 		TokenExchange:   value.TokenExchange,
@@ -188,8 +188,8 @@ func fromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthCon
 		Token:           value.Token,
 		TokenPrefix:     value.TokenPrefix,
 		GrantType:       value.GrantType,
-		TokenUrl:        value.TokenUrl,
-		ClientId:        value.ClientId,
+		TokenURL:        value.TokenUrl,
+		ClientID:        value.ClientId,
 		ClientSecret:    value.ClientSecret,
 		ClientAuth:      value.ClientAuth,
 		TokenExchange:   value.TokenExchange,
@@ -213,7 +213,7 @@ func toWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *pr
 		return nil
 	}
 	out := &proto.ExternalCredentialClientInfo{
-		ClientId:              value.ClientId,
+		ClientId:              value.ClientID,
 		ClientSecret:          value.ClientSecret,
 		ClientSecretExpiresAt: toWireTimestamp(value.ClientSecretExpiresAt),
 	}
@@ -225,7 +225,7 @@ func fromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientI
 		return nil
 	}
 	out := &ExternalCredentialClientInfo{
-		ClientId:              value.ClientId,
+		ClientID:              value.ClientId,
 		ClientSecret:          value.ClientSecret,
 		ClientSecretExpiresAt: fromWireTimestamp(value.ClientSecretExpiresAt),
 	}
@@ -321,7 +321,7 @@ func toWireExternalCredentialTokenResponse(value *ExternalCredentialTokenRespons
 		RefreshToken:  value.RefreshToken,
 		ExpiresIn:     value.ExpiresIn,
 		TokenType:     value.TokenType,
-		ExtraJson:     value.ExtraJson,
+		ExtraJson:     value.ExtraJSON,
 		RefreshSource: value.RefreshSource,
 	}
 	return out
@@ -336,7 +336,7 @@ func fromWireExternalCredentialTokenResponse(value *proto.ExternalCredentialToke
 		RefreshToken:  value.RefreshToken,
 		ExpiresIn:     value.ExpiresIn,
 		TokenType:     value.TokenType,
-		ExtraJson:     value.ExtraJson,
+		ExtraJSON:     value.ExtraJson,
 		RefreshSource: value.RefreshSource,
 	}
 	return out
@@ -417,10 +417,10 @@ func toWireResolveExternalCredentialRequest(value *ResolveExternalCredentialRequ
 	out := &proto.ResolveExternalCredentialRequest{
 		Provider:            value.Provider,
 		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
+		ConnectionId:        value.ConnectionID,
 		Mode:                value.Mode,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
+		CredentialSubjectId: value.CredentialSubjectID,
+		ActorSubjectId:      value.ActorSubjectID,
 		Instance:            value.Instance,
 		Auth:                toWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams:    value.ConnectionParams,
@@ -435,10 +435,10 @@ func fromWireResolveExternalCredentialRequest(value *proto.ResolveExternalCreden
 	out := &ResolveExternalCredentialRequest{
 		Provider:            value.Provider,
 		Connection:          value.Connection,
-		ConnectionId:        value.ConnectionId,
+		ConnectionID:        value.ConnectionId,
 		Mode:                value.Mode,
-		CredentialSubjectId: value.CredentialSubjectId,
-		ActorSubjectId:      value.ActorSubjectId,
+		CredentialSubjectID: value.CredentialSubjectId,
+		ActorSubjectID:      value.ActorSubjectId,
 		Instance:            value.Instance,
 		Auth:                fromWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams:    value.ConnectionParams,
@@ -453,7 +453,7 @@ func toWireResolveExternalCredentialResponse(value *ResolveExternalCredentialRes
 	out := &proto.ResolveExternalCredentialResponse{
 		Token:        value.Token,
 		ExpiresAt:    toWireTimestamp(value.ExpiresAt),
-		MetadataJson: value.MetadataJson,
+		MetadataJson: value.MetadataJSON,
 		Params:       value.Params,
 		Credential:   toWireExternalCredential(value.Credential),
 	}
@@ -467,7 +467,7 @@ func fromWireResolveExternalCredentialResponse(value *proto.ResolveExternalCrede
 	out := &ResolveExternalCredentialResponse{
 		Token:        value.Token,
 		ExpiresAt:    fromWireTimestamp(value.ExpiresAt),
-		MetadataJson: value.MetadataJson,
+		MetadataJSON: value.MetadataJson,
 		Params:       value.Params,
 		Credential:   fromWireExternalCredential(value.Credential),
 	}
@@ -501,7 +501,7 @@ func toWireValidateExternalCredentialConfigRequest(value *ValidateExternalCreden
 	out := &proto.ValidateExternalCredentialConfigRequest{
 		Provider:         value.Provider,
 		Connection:       value.Connection,
-		ConnectionId:     value.ConnectionId,
+		ConnectionId:     value.ConnectionID,
 		Mode:             value.Mode,
 		Auth:             toWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams: value.ConnectionParams,
@@ -516,7 +516,7 @@ func fromWireValidateExternalCredentialConfigRequest(value *proto.ValidateExtern
 	out := &ValidateExternalCredentialConfigRequest{
 		Provider:         value.Provider,
 		Connection:       value.Connection,
-		ConnectionId:     value.ConnectionId,
+		ConnectionID:     value.ConnectionId,
 		Mode:             value.Mode,
 		Auth:             fromWireExternalCredentialAuthConfig(value.Auth),
 		ConnectionParams: value.ConnectionParams,

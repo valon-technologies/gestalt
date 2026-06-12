@@ -331,7 +331,7 @@ type ObjectStoreRangeRequest struct {
 // ObjectStoreRequest addresses one object store row by primary key.
 type ObjectStoreRequest struct {
 	Store string
-	Id    string
+	ID    string
 }
 
 // ObjectStoreSchema is the native message type for gestalt.provider.v1.ObjectStoreSchema.
@@ -579,7 +579,7 @@ func (*TransactionOperationOperationIndexDelete) isTransactionOperationOperation
 // operation. Cursor operations are intentionally excluded from the initial
 // transaction contract.
 type TransactionOperation struct {
-	RequestId uint64
+	RequestID uint64
 	Operation TransactionOperationOperation
 }
 
@@ -641,7 +641,7 @@ func (*TransactionOperationResponseResultDelete) isTransactionOperationResponseR
 // TransactionOperationResponse is the ordered response to one operation.
 // Non-OK error marks the transaction failed and causes rollback in phase 1.
 type TransactionOperationResponse struct {
-	RequestId uint64
+	RequestID uint64
 	Error     *RpcStatus
 	Result    TransactionOperationResponseResult
 }
@@ -738,12 +738,12 @@ type TypedValueKindBytesValue struct {
 
 func (*TypedValueKindBytesValue) isTypedValueKind() {}
 
-// TypedValueKindJsonValue is the jsonValue variant.
-type TypedValueKindJsonValue struct {
+// TypedValueKindJSONValue is the jsonValue variant.
+type TypedValueKindJSONValue struct {
 	Value any
 }
 
-func (*TypedValueKindJsonValue) isTypedValueKind() {}
+func (*TypedValueKindJSONValue) isTypedValueKind() {}
 
 // TypedValue is the native message type for gestalt.provider.v1.TypedValue.
 //
@@ -827,7 +827,7 @@ func (c *IndexedDB) DeleteObjectStoreRaw(ctx context.Context, request *DeleteObj
 //
 // Primary key CRUD
 func (c *IndexedDB) Get(ctx context.Context, store string, id string) (*RecordResponse, error) {
-	request := &ObjectStoreRequest{Store: store, Id: id}
+	request := &ObjectStoreRequest{Store: store, ID: id}
 	response, err := c.client.Get(ctx, toWireObjectStoreRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -848,7 +848,7 @@ func (c *IndexedDB) GetRaw(ctx context.Context, request *ObjectStoreRequest) (*R
 
 // GetKey is the ergonomic form of [IndexedDB.GetKeyRaw].
 func (c *IndexedDB) GetKey(ctx context.Context, store string, id string) (*KeyResponse, error) {
-	request := &ObjectStoreRequest{Store: store, Id: id}
+	request := &ObjectStoreRequest{Store: store, ID: id}
 	response, err := c.client.GetKey(ctx, toWireObjectStoreRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -901,7 +901,7 @@ func (c *IndexedDB) PutRaw(ctx context.Context, request *RecordRequest) error {
 
 // Delete is the ergonomic form of [IndexedDB.DeleteRaw].
 func (c *IndexedDB) Delete(ctx context.Context, store string, id string) error {
-	request := &ObjectStoreRequest{Store: store, Id: id}
+	request := &ObjectStoreRequest{Store: store, ID: id}
 	if _, err := c.client.Delete(ctx, toWireObjectStoreRequest(request)); err != nil {
 		return toGestaltError(err)
 	}

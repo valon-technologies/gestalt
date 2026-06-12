@@ -11,7 +11,7 @@ func toWireAuthSessionSettings(value *AuthSessionSettings) *proto.AuthSessionSet
 		return nil
 	}
 	out := &proto.AuthSessionSettings{
-		SessionTtlSeconds: value.SessionTtlSeconds,
+		SessionTtlSeconds: value.SessionTTLSeconds,
 	}
 	return out
 }
@@ -21,7 +21,7 @@ func fromWireAuthSessionSettings(value *proto.AuthSessionSettings) *AuthSessionS
 		return nil
 	}
 	out := &AuthSessionSettings{
-		SessionTtlSeconds: value.SessionTtlSeconds,
+		SessionTTLSeconds: value.SessionTtlSeconds,
 	}
 	return out
 }
@@ -35,7 +35,7 @@ func toWireAuthenticatedUser(value *AuthenticatedUser) *proto.AuthenticatedUser 
 		Email:         value.Email,
 		EmailVerified: value.EmailVerified,
 		DisplayName:   value.DisplayName,
-		AvatarUrl:     value.AvatarUrl,
+		AvatarUrl:     value.AvatarURL,
 		Claims:        value.Claims,
 	}
 	return out
@@ -50,7 +50,7 @@ func fromWireAuthenticatedUser(value *proto.AuthenticatedUser) *AuthenticatedUse
 		Email:         value.Email,
 		EmailVerified: value.EmailVerified,
 		DisplayName:   value.DisplayName,
-		AvatarUrl:     value.AvatarUrl,
+		AvatarURL:     value.AvatarUrl,
 		Claims:        value.Claims,
 	}
 	return out
@@ -61,7 +61,7 @@ func toWireBeginLoginRequest(value *BeginLoginRequest) *proto.BeginLoginRequest 
 		return nil
 	}
 	out := &proto.BeginLoginRequest{
-		CallbackUrl: value.CallbackUrl,
+		CallbackUrl: value.CallbackURL,
 		HostState:   value.HostState,
 		Scopes:      value.Scopes,
 		Options:     value.Options,
@@ -74,7 +74,7 @@ func fromWireBeginLoginRequest(value *proto.BeginLoginRequest) *BeginLoginReques
 		return nil
 	}
 	out := &BeginLoginRequest{
-		CallbackUrl: value.CallbackUrl,
+		CallbackURL: value.CallbackUrl,
 		HostState:   value.HostState,
 		Scopes:      value.Scopes,
 		Options:     value.Options,
@@ -87,7 +87,7 @@ func toWireBeginLoginResponse(value *BeginLoginResponse) *proto.BeginLoginRespon
 		return nil
 	}
 	out := &proto.BeginLoginResponse{
-		AuthorizationUrl: value.AuthorizationUrl,
+		AuthorizationUrl: value.AuthorizationURL,
 		ProviderState:    value.ProviderState,
 	}
 	return out
@@ -98,7 +98,7 @@ func fromWireBeginLoginResponse(value *proto.BeginLoginResponse) *BeginLoginResp
 		return nil
 	}
 	out := &BeginLoginResponse{
-		AuthorizationUrl: value.AuthorizationUrl,
+		AuthorizationURL: value.AuthorizationUrl,
 		ProviderState:    value.ProviderState,
 	}
 	return out
@@ -111,7 +111,7 @@ func toWireCompleteLoginRequest(value *CompleteLoginRequest) *proto.CompleteLogi
 	out := &proto.CompleteLoginRequest{
 		Query:         value.Query,
 		ProviderState: value.ProviderState,
-		CallbackUrl:   value.CallbackUrl,
+		CallbackUrl:   value.CallbackURL,
 	}
 	return out
 }
@@ -123,7 +123,7 @@ func fromWireCompleteLoginRequest(value *proto.CompleteLoginRequest) *CompleteLo
 	out := &CompleteLoginRequest{
 		Query:         value.Query,
 		ProviderState: value.ProviderState,
-		CallbackUrl:   value.CallbackUrl,
+		CallbackURL:   value.CallbackUrl,
 	}
 	return out
 }

@@ -25,10 +25,10 @@ type recordingWorkflowProvider struct {
 func (p *recordingWorkflowProvider) ApplyDefinition(_ context.Context, request *client.ApplyWorkflowProviderDefinitionRequest) (*client.WorkflowDefinition, error) {
 	p.applied = request
 	return &client.WorkflowDefinition{
-		Id:                 "def-1",
+		ID:                 "def-1",
 		Generation:         3,
 		Paused:             true,
-		CreatedBySubjectId: request.RequestedBySubjectId,
+		CreatedBySubjectID: request.RequestedBySubjectID,
 	}, nil
 }
 
@@ -38,14 +38,14 @@ func (p *recordingWorkflowProvider) DeleteDefinition(_ context.Context, request 
 }
 
 func (p *recordingWorkflowProvider) GetRun(_ context.Context, request *client.GetWorkflowProviderRunRequest) (*client.WorkflowRun, error) {
-	return nil, &client.GestaltError{Code: client.GestaltErrorCodeNotFound, Message: "no run " + request.RunId}
+	return nil, &client.GestaltError{Code: client.GestaltErrorCodeNotFound, Message: "no run " + request.RunID}
 }
 
 func (p *recordingWorkflowProvider) GetRunEvents(_ context.Context, request *client.GetWorkflowProviderRunEventsRequest) (*client.GetWorkflowProviderRunEventsResponse, error) {
 	return &client.GetWorkflowProviderRunEventsResponse{
 		Events: []*client.WorkflowRunEvent{
-			{Id: "ev-1", RunId: request.RunId, Type: "step_started"},
-			{Id: "ev-2", RunId: request.RunId, Type: "step_completed"},
+			{ID: "ev-1", RunID: request.RunID, Type: "step_started"},
+			{ID: "ev-2", RunID: request.RunID, Type: "step_completed"},
 		},
 	}, nil
 }
@@ -81,13 +81,13 @@ func TestWorkflowProviderServerTransport(t *testing.T) {
 	definition, err := workflow.ApplyDefinitionRaw(ctx, &client.ApplyWorkflowProviderDefinitionRequest{
 		ProviderName:         "temporal",
 		IdempotencyKey:       "idem-1",
-		RequestedBySubjectId: "sub-1",
-		Context:              &client.RequestContext{Subject: &client.SubjectContext{Id: "sub-1", Email: "a@b.c"}},
+		RequestedBySubjectID: "sub-1",
+		Context:              &client.RequestContext{Subject: &client.SubjectContext{ID: "sub-1", Email: "a@b.c"}},
 	})
 	if err != nil {
 		t.Fatalf("ApplyDefinitionRaw: %v", err)
 	}
-	if definition.Id != "def-1" || definition.Generation != 3 || !definition.Paused || definition.CreatedBySubjectId != "sub-1" {
+	if definition.ID != "def-1" || definition.Generation != 3 || !definition.Paused || definition.CreatedBySubjectID != "sub-1" {
 		t.Fatalf("ApplyDefinitionRaw response = %+v", definition)
 	}
 	if provider.applied.ProviderName != "temporal" || provider.applied.IdempotencyKey != "idem-1" {
@@ -100,7 +100,7 @@ func TestWorkflowProviderServerTransport(t *testing.T) {
 	if err := workflow.DeleteDefinition(ctx, "def-9"); err != nil {
 		t.Fatalf("DeleteDefinition: %v", err)
 	}
-	if provider.deleted == nil || provider.deleted.DefinitionId != "def-9" {
+	if provider.deleted == nil || provider.deleted.DefinitionID != "def-9" {
 		t.Fatalf("deleted = %+v", provider.deleted)
 	}
 
@@ -108,7 +108,7 @@ func TestWorkflowProviderServerTransport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetRunEvents: %v", err)
 	}
-	if len(events) != 2 || events[0].Id != "ev-1" || events[1].RunId != "run-1" {
+	if len(events) != 2 || events[0].ID != "ev-1" || events[1].RunID != "run-1" {
 		t.Fatalf("GetRunEvents = %+v", events)
 	}
 

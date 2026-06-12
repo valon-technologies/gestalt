@@ -37,8 +37,8 @@ type AccessContext struct {
 // AgentInvocationContext is the native message type for gestalt.provider.v1.AgentInvocationContext.
 type AgentInvocationContext struct {
 	ProviderName string
-	SessionId    string
-	TurnId       string
+	SessionID    string
+	TurnID       string
 }
 
 // AgentToolRef is the native message type for gestalt.provider.v1.AgentToolRef.
@@ -99,7 +99,7 @@ type Catalog struct {
 // CatalogOperation is one executable operation exposed by an integration
 // provider.
 type CatalogOperation struct {
-	Id             string
+	ID             string
 	Method         string
 	Title          string
 	Description    string
@@ -143,7 +143,7 @@ type ConnectionParamDef struct {
 // CredentialContext describes the resolved credential used for an operation.
 type CredentialContext struct {
 	Mode       string
-	SubjectId  string
+	SubjectID  string
 	Connection string
 	Instance   string
 }
@@ -156,7 +156,7 @@ type ExecuteRequest struct {
 	Params           map[string]any
 	Token            string
 	ConnectionParams map[string]string
-	InvocationId     string
+	InvocationID     string
 	Context          *RequestContext
 	IdempotencyKey   string
 }
@@ -168,7 +168,7 @@ type ExecuteRequest struct {
 type GetSessionCatalogRequest struct {
 	Token            string
 	ConnectionParams map[string]string
-	InvocationId     string
+	InvocationID     string
 	Context          *RequestContext
 }
 
@@ -201,12 +201,12 @@ type HTTPSubjectRequest struct {
 //
 // HostContext describes stable public host metadata available to provider code.
 type HostContext struct {
-	PublicBaseUrl string
+	PublicBaseURL string
 }
 
 // InvocationContext is the native message type for gestalt.provider.v1.InvocationContext.
 type InvocationContext struct {
-	RequestId                string
+	RequestID                string
 	Depth                    int32
 	CallChain                []string
 	Surface                  string
@@ -340,8 +340,8 @@ type StringList struct {
 //
 // SubjectContext identifies the caller that initiated an operation.
 type SubjectContext struct {
-	Id                  string
-	CredentialSubjectId string
+	ID                  string
+	CredentialSubjectID string
 	Email               string
 	DisplayName         string
 	Scopes              []string
@@ -512,7 +512,7 @@ func (c *AppProvider) StartProviderRaw(ctx context.Context, request *StartProvid
 
 // Execute is the ergonomic form of [AppProvider.ExecuteRaw].
 func (c *AppProvider) Execute(ctx context.Context, operation string, token string, invocationId string, idempotencyKey string, params map[string]any) (*OperationResult, error) {
-	request := &ExecuteRequest{Operation: operation, Token: token, InvocationId: invocationId, IdempotencyKey: idempotencyKey, Params: params, Context: c.context}
+	request := &ExecuteRequest{Operation: operation, Token: token, InvocationID: invocationId, IdempotencyKey: idempotencyKey, Params: params, Context: c.context}
 	response, err := c.client.Execute(ctx, toWireExecuteRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -550,7 +550,7 @@ func (c *AppProvider) ResolveHTTPSubject(ctx context.Context, request *ResolveHT
 
 // GetSessionCatalog is the ergonomic form of [AppProvider.GetSessionCatalogRaw].
 func (c *AppProvider) GetSessionCatalog(ctx context.Context, token string, invocationId string) (*GetSessionCatalogResponse, error) {
-	request := &GetSessionCatalogRequest{Token: token, InvocationId: invocationId, Context: c.context}
+	request := &GetSessionCatalogRequest{Token: token, InvocationID: invocationId, Context: c.context}
 	response, err := c.client.GetSessionCatalog(ctx, toWireGetSessionCatalogRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

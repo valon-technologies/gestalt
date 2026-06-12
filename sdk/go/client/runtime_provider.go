@@ -44,7 +44,7 @@ const (
 
 // AppendRuntimeLogsRequest is the native message type for gestalt.provider.v1.AppendRuntimeLogsRequest.
 type AppendRuntimeLogsRequest struct {
-	SessionId string
+	SessionID string
 	Logs      []*RuntimeLogEntry
 }
 
@@ -55,13 +55,13 @@ type AppendRuntimeLogsResponse struct {
 
 // GetRuntimeSessionRequest is the native message type for gestalt.provider.v1.GetRuntimeSessionRequest.
 type GetRuntimeSessionRequest struct {
-	SessionId string
+	SessionID string
 }
 
 // HostedApp is the native message type for gestalt.provider.v1.HostedApp.
 type HostedApp struct {
-	Id         string
-	SessionId  string
+	ID         string
+	SessionID  string
 	AppName    string
 	DialTarget string
 }
@@ -80,11 +80,11 @@ type ListRuntimeSessionsResponse struct {
 
 // PrepareRuntimeWorkspaceRequest is the native message type for gestalt.provider.v1.PrepareRuntimeWorkspaceRequest.
 type PrepareRuntimeWorkspaceRequest struct {
-	SessionId string
+	SessionID string
 	// Opaque, path-safe workspace key minted by the host. Despite the name it
 	// is not required to match any agent session id; it only identifies the
 	// prepared workspace directory for later removal.
-	AgentSessionId string
+	AgentSessionID string
 	Workspace      *AgentWorkspace
 }
 
@@ -95,15 +95,15 @@ type PrepareRuntimeWorkspaceResponse struct {
 
 // RemoveRuntimeWorkspaceRequest is the native message type for gestalt.provider.v1.RemoveRuntimeWorkspaceRequest.
 type RemoveRuntimeWorkspaceRequest struct {
-	SessionId string
+	SessionID string
 	// The workspace key the workspace was prepared under; see
 	// PrepareRuntimeWorkspaceRequest.agent_session_id.
-	AgentSessionId string
+	AgentSessionID string
 }
 
 // RuntimeImagePullAuth is the native message type for gestalt.provider.v1.RuntimeImagePullAuth.
 type RuntimeImagePullAuth struct {
-	DockerConfigJson string
+	DockerConfigJSON string
 }
 
 // RuntimeLogEntry is the native message type for gestalt.provider.v1.RuntimeLogEntry.
@@ -116,7 +116,7 @@ type RuntimeLogEntry struct {
 
 // RuntimeSession is the native message type for gestalt.provider.v1.RuntimeSession.
 type RuntimeSession struct {
-	Id           string
+	ID           string
 	State        string
 	Metadata     map[string]string
 	Lifecycle    *RuntimeSessionLifecycle
@@ -145,7 +145,7 @@ type RuntimeSupport struct {
 // app's listener endpoint and returns a host-reachable dial target in the
 // HostedApp response.
 type StartHostedAppRequest struct {
-	SessionId     string
+	SessionID     string
 	AppName       string
 	Command       string
 	Args          []string
@@ -167,7 +167,7 @@ type StartRuntimeSessionRequest struct {
 
 // StopRuntimeSessionRequest is the native message type for gestalt.provider.v1.StopRuntimeSessionRequest.
 type StopRuntimeSessionRequest struct {
-	SessionId string
+	SessionID string
 }
 
 // Runtime is the generated client for gestalt.provider.v1.Runtime.
@@ -211,7 +211,7 @@ func (c *Runtime) StartSessionRaw(ctx context.Context, request *StartRuntimeSess
 
 // GetSession is the ergonomic form of [Runtime.GetSessionRaw].
 func (c *Runtime) GetSession(ctx context.Context, sessionId string) (*RuntimeSession, error) {
-	request := &GetRuntimeSessionRequest{SessionId: sessionId}
+	request := &GetRuntimeSessionRequest{SessionID: sessionId}
 	response, err := c.client.GetSession(ctx, toWireGetRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -239,7 +239,7 @@ func (c *Runtime) ListSessions(ctx context.Context, request *ListRuntimeSessions
 
 // StopSession is the ergonomic form of [Runtime.StopSessionRaw].
 func (c *Runtime) StopSession(ctx context.Context, sessionId string) error {
-	request := &StopRuntimeSessionRequest{SessionId: sessionId}
+	request := &StopRuntimeSessionRequest{SessionID: sessionId}
 	if _, err := c.client.StopSession(ctx, toWireStopRuntimeSessionRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -257,7 +257,7 @@ func (c *Runtime) StopSessionRaw(ctx context.Context, request *StopRuntimeSessio
 // PrepareWorkspace is the ergonomic form of [Runtime.PrepareWorkspaceRaw].
 // The response collapses to its workspace field.
 func (c *Runtime) PrepareWorkspace(ctx context.Context, sessionId string, agentSessionId string, workspace *AgentWorkspace) (*PreparedAgentWorkspace, error) {
-	request := &PrepareRuntimeWorkspaceRequest{SessionId: sessionId, AgentSessionId: agentSessionId, Workspace: workspace}
+	request := &PrepareRuntimeWorkspaceRequest{SessionID: sessionId, AgentSessionID: agentSessionId, Workspace: workspace}
 	response, err := c.client.PrepareWorkspace(ctx, toWirePrepareRuntimeWorkspaceRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -276,7 +276,7 @@ func (c *Runtime) PrepareWorkspaceRaw(ctx context.Context, request *PrepareRunti
 
 // RemoveWorkspace is the ergonomic form of [Runtime.RemoveWorkspaceRaw].
 func (c *Runtime) RemoveWorkspace(ctx context.Context, sessionId string, agentSessionId string) error {
-	request := &RemoveRuntimeWorkspaceRequest{SessionId: sessionId, AgentSessionId: agentSessionId}
+	request := &RemoveRuntimeWorkspaceRequest{SessionID: sessionId, AgentSessionID: agentSessionId}
 	if _, err := c.client.RemoveWorkspace(ctx, toWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
@@ -293,7 +293,7 @@ func (c *Runtime) RemoveWorkspaceRaw(ctx context.Context, request *RemoveRuntime
 
 // StartApp is the ergonomic form of [Runtime.StartAppRaw].
 func (c *Runtime) StartApp(ctx context.Context, sessionId string, appName string, command string, args []string, allowedHosts []string, defaultAction string, hostBinary string, workdir string) (*HostedApp, error) {
-	request := &StartHostedAppRequest{SessionId: sessionId, AppName: appName, Command: command, Args: args, AllowedHosts: allowedHosts, DefaultAction: defaultAction, HostBinary: hostBinary, Workdir: workdir}
+	request := &StartHostedAppRequest{SessionID: sessionId, AppName: appName, Command: command, Args: args, AllowedHosts: allowedHosts, DefaultAction: defaultAction, HostBinary: hostBinary, Workdir: workdir}
 	response, err := c.client.StartApp(ctx, toWireStartHostedAppRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -344,7 +344,7 @@ func ConnectRuntimeLogHost(ctx context.Context, name string) (*RuntimeLogHost, e
 // AppendLogs is the ergonomic form of [RuntimeLogHost.AppendLogsRaw].
 // The response collapses to its lastSeq field.
 func (c *RuntimeLogHost) AppendLogs(ctx context.Context, sessionId string, logs []*RuntimeLogEntry) (int64, error) {
-	request := &AppendRuntimeLogsRequest{SessionId: sessionId, Logs: logs}
+	request := &AppendRuntimeLogsRequest{SessionID: sessionId, Logs: logs}
 	response, err := c.client.AppendLogs(ctx, toWireAppendRuntimeLogsRequest(request))
 	if err != nil {
 		return 0, toGestaltError(err)

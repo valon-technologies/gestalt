@@ -216,11 +216,11 @@ func TestS3Transport_CreateObjectAccessURL(t *testing.T) {
 	if url.Method != client.PresignMethodPut {
 		t.Fatalf("method = %v, want PUT", url.Method)
 	}
-	if !strings.HasPrefix(url.Url, "https://gestalt.example.test/api/v1/s3/object-access/") {
-		t.Fatalf("url = %q, want hosted object access URL", url.Url)
+	if !strings.HasPrefix(url.URL, "https://gestalt.example.test/api/v1/s3/object-access/") {
+		t.Fatalf("url = %q, want hosted object access URL", url.URL)
 	}
-	if strings.Contains(url.Url, "access/"+t.Name()) {
-		t.Fatalf("url leaks object key: %q", url.Url)
+	if strings.Contains(url.URL, "access/"+t.Name()) {
+		t.Fatalf("url leaks object key: %q", url.URL)
 	}
 	if url.Headers["Content-Length"] != "5" {
 		t.Fatalf("Content-Length header = %q, want 5", url.Headers["Content-Length"])
@@ -533,8 +533,8 @@ func TestS3Transport_CopyDeletePresignAndExists(t *testing.T) {
 	if presigned.Method != client.PresignMethodPut {
 		t.Fatalf("Presign method = %v, want PUT", presigned.Method)
 	}
-	if !strings.Contains(presigned.Url, "method=PUT") {
-		t.Fatalf("Presign URL = %q, want method=PUT", presigned.Url)
+	if !strings.Contains(presigned.URL, "method=PUT") {
+		t.Fatalf("Presign URL = %q, want method=PUT", presigned.URL)
 	}
 	if presigned.Headers["x-test"] != "true" {
 		t.Fatalf("Presign headers = %v", presigned.Headers)

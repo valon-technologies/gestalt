@@ -221,7 +221,7 @@ func toWireCacheSetManyRequest(value *CacheSetManyRequest) *proto.CacheSetManyRe
 		return nil
 	}
 	out := &proto.CacheSetManyRequest{
-		Ttl: toWireDuration(value.Ttl),
+		Ttl: toWireDuration(value.TTL),
 	}
 	for _, item := range value.Entries {
 		out.Entries = append(out.Entries, toWireCacheSetEntry(item))
@@ -234,7 +234,7 @@ func fromWireCacheSetManyRequest(value *proto.CacheSetManyRequest) *CacheSetMany
 		return nil
 	}
 	out := &CacheSetManyRequest{
-		Ttl: fromWireDuration(value.Ttl),
+		TTL: fromWireDuration(value.Ttl),
 	}
 	for _, item := range value.Entries {
 		out.Entries = append(out.Entries, fromWireCacheSetEntry(item))
@@ -249,7 +249,7 @@ func toWireCacheSetRequest(value *CacheSetRequest) *proto.CacheSetRequest {
 	out := &proto.CacheSetRequest{
 		Key:   value.Key,
 		Value: value.Value,
-		Ttl:   toWireDuration(value.Ttl),
+		Ttl:   toWireDuration(value.TTL),
 	}
 	return out
 }
@@ -261,7 +261,7 @@ func fromWireCacheSetRequest(value *proto.CacheSetRequest) *CacheSetRequest {
 	out := &CacheSetRequest{
 		Key:   value.Key,
 		Value: value.Value,
-		Ttl:   fromWireDuration(value.Ttl),
+		TTL:   fromWireDuration(value.Ttl),
 	}
 	return out
 }
@@ -272,7 +272,7 @@ func toWireCacheTouchRequest(value *CacheTouchRequest) *proto.CacheTouchRequest 
 	}
 	out := &proto.CacheTouchRequest{
 		Key: value.Key,
-		Ttl: toWireDuration(value.Ttl),
+		Ttl: toWireDuration(value.TTL),
 	}
 	return out
 }
@@ -283,7 +283,7 @@ func fromWireCacheTouchRequest(value *proto.CacheTouchRequest) *CacheTouchReques
 	}
 	out := &CacheTouchRequest{
 		Key: value.Key,
-		Ttl: fromWireDuration(value.Ttl),
+		TTL: fromWireDuration(value.Ttl),
 	}
 	return out
 }

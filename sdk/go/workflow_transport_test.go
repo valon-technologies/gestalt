@@ -72,8 +72,8 @@ func (h *workflowTransportHarness) SignalOrStartRun(ctx context.Context, req *pr
 func workflowTransportRequestContext() *client.RequestContext {
 	return &client.RequestContext{
 		Subject: &client.SubjectContext{
-			Id:                  "user:transport",
-			CredentialSubjectId: "user:transport",
+			ID:                  "user:transport",
+			CredentialSubjectID: "user:transport",
 			Email:               "transport@example.test",
 		},
 	}
@@ -104,16 +104,16 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	}
 
 	applied, err := workflow.ApplyDefinition(context.Background(), "managed", "workflow-definition-key-go", &client.WorkflowDefinitionSpec{
-		Id: "definition-1",
+		ID: "definition-1",
 		Target: &client.BoundWorkflowTarget{Steps: []*client.WorkflowStep{{
-			Id: "review",
+			ID: "review",
 			Action: &client.WorkflowStepActionApp{Value: &client.WorkflowStepAppCall{
 				Name:      "github",
 				Operation: "pullRequests.review",
 			}},
 		}}},
 		Activations: []*client.WorkflowActivation{{
-			Id: "github_pr",
+			ID: "github_pr",
 			Trigger: &client.WorkflowActivationTriggerEvent{Value: &client.WorkflowEventActivation{Match: &client.WorkflowEventMatch{
 				Type:   "github.pull_request",
 				Source: "github",
@@ -123,7 +123,7 @@ func TestTransport_WorkflowApplyDefinitionTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyDefinition: %v", err)
 	}
-	if applied.ProviderName != "managed" || applied.Id != "definition-1" || applied.Generation != 3 {
+	if applied.ProviderName != "managed" || applied.ID != "definition-1" || applied.Generation != 3 {
 		t.Fatalf("definition = %#v", applied)
 	}
 
@@ -174,7 +174,7 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 	resp, err := workflow.SignalOrStartRunRaw(context.Background(), &client.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:                 "local",
 		WorkflowKey:                  "slack:T123:C123:1700000000.000001",
-		DefinitionId:                 "definition-1",
+		DefinitionID:                 "definition-1",
 		ExpectedDefinitionGeneration: 9,
 		Input:                        map[string]any{"thread_ts": "1700000000.000001"},
 		IdempotencyKey:               "slack-event-123",
@@ -188,7 +188,7 @@ func TestTransport_WorkflowSignalOrStartRunPropagatesRequestContext(t *testing.T
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if resp.Run == nil || resp.Run.ProviderName != "local" || resp.Run.Id != "run-1" || !resp.StartedRun {
+	if resp.Run == nil || resp.Run.ProviderName != "local" || resp.Run.ID != "run-1" || !resp.StartedRun {
 		t.Fatalf("response = %#v", resp)
 	}
 

@@ -34,8 +34,8 @@ func toWireAgentInvocationContext(value *AgentInvocationContext) *proto.AgentInv
 	}
 	out := &proto.AgentInvocationContext{
 		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-		TurnId:       value.TurnId,
+		SessionId:    value.SessionID,
+		TurnId:       value.TurnID,
 	}
 	return out
 }
@@ -46,8 +46,8 @@ func fromWireAgentInvocationContext(value *proto.AgentInvocationContext) *AgentI
 	}
 	out := &AgentInvocationContext{
 		ProviderName: value.ProviderName,
-		SessionId:    value.SessionId,
-		TurnId:       value.TurnId,
+		SessionID:    value.SessionId,
+		TurnID:       value.TurnId,
 	}
 	return out
 }
@@ -191,7 +191,7 @@ func toWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
 		return nil
 	}
 	out := &proto.CatalogOperation{
-		Id:             value.Id,
+		Id:             value.ID,
 		Method:         value.Method,
 		Title:          value.Title,
 		Description:    value.Description,
@@ -216,7 +216,7 @@ func fromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
 		return nil
 	}
 	out := &CatalogOperation{
-		Id:             value.Id,
+		ID:             value.Id,
 		Method:         value.Method,
 		Title:          value.Title,
 		Description:    value.Description,
@@ -298,7 +298,7 @@ func toWireCredentialContext(value *CredentialContext) *proto.CredentialContext 
 	}
 	out := &proto.CredentialContext{
 		Mode:       value.Mode,
-		SubjectId:  value.SubjectId,
+		SubjectId:  value.SubjectID,
 		Connection: value.Connection,
 		Instance:   value.Instance,
 	}
@@ -311,7 +311,7 @@ func fromWireCredentialContext(value *proto.CredentialContext) *CredentialContex
 	}
 	out := &CredentialContext{
 		Mode:       value.Mode,
-		SubjectId:  value.SubjectId,
+		SubjectID:  value.SubjectId,
 		Connection: value.Connection,
 		Instance:   value.Instance,
 	}
@@ -327,7 +327,7 @@ func toWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
 		Params:           toWireStruct(value.Params),
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
+		InvocationId:     value.InvocationID,
 		Context:          toWireRequestContext(value.Context),
 		IdempotencyKey:   value.IdempotencyKey,
 	}
@@ -343,7 +343,7 @@ func fromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
 		Params:           fromWireStruct(value.Params),
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
+		InvocationID:     value.InvocationId,
 		Context:          fromWireRequestContext(value.Context),
 		IdempotencyKey:   value.IdempotencyKey,
 	}
@@ -357,7 +357,7 @@ func toWireGetSessionCatalogRequest(value *GetSessionCatalogRequest) *proto.GetS
 	out := &proto.GetSessionCatalogRequest{
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
+		InvocationId:     value.InvocationID,
 		Context:          toWireRequestContext(value.Context),
 	}
 	return out
@@ -370,7 +370,7 @@ func fromWireGetSessionCatalogRequest(value *proto.GetSessionCatalogRequest) *Ge
 	out := &GetSessionCatalogRequest{
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
-		InvocationId:     value.InvocationId,
+		InvocationID:     value.InvocationId,
 		Context:          fromWireRequestContext(value.Context),
 	}
 	return out
@@ -461,7 +461,7 @@ func toWireHostContext(value *HostContext) *proto.HostContext {
 		return nil
 	}
 	out := &proto.HostContext{
-		PublicBaseUrl: value.PublicBaseUrl,
+		PublicBaseUrl: value.PublicBaseURL,
 	}
 	return out
 }
@@ -471,7 +471,7 @@ func fromWireHostContext(value *proto.HostContext) *HostContext {
 		return nil
 	}
 	out := &HostContext{
-		PublicBaseUrl: value.PublicBaseUrl,
+		PublicBaseURL: value.PublicBaseUrl,
 	}
 	return out
 }
@@ -481,7 +481,7 @@ func toWireInvocationContext(value *InvocationContext) *proto.InvocationContext 
 		return nil
 	}
 	out := &proto.InvocationContext{
-		RequestId:                value.RequestId,
+		RequestId:                value.RequestID,
 		Depth:                    value.Depth,
 		CallChain:                value.CallChain,
 		Surface:                  value.Surface,
@@ -496,7 +496,7 @@ func fromWireInvocationContext(value *proto.InvocationContext) *InvocationContex
 		return nil
 	}
 	out := &InvocationContext{
-		RequestId:                value.RequestId,
+		RequestID:                value.RequestId,
 		Depth:                    value.Depth,
 		CallChain:                value.CallChain,
 		Surface:                  value.Surface,
@@ -821,8 +821,8 @@ func toWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
 		return nil
 	}
 	out := &proto.SubjectContext{
-		Id:                  value.Id,
-		CredentialSubjectId: value.CredentialSubjectId,
+		Id:                  value.ID,
+		CredentialSubjectId: value.CredentialSubjectID,
 		Email:               value.Email,
 		DisplayName:         value.DisplayName,
 		Scopes:              value.Scopes,
@@ -838,8 +838,8 @@ func fromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
 		return nil
 	}
 	out := &SubjectContext{
-		Id:                  value.Id,
-		CredentialSubjectId: value.CredentialSubjectId,
+		ID:                  value.Id,
+		CredentialSubjectID: value.CredentialSubjectId,
 		Email:               value.Email,
 		DisplayName:         value.DisplayName,
 		Scopes:              value.Scopes,

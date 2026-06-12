@@ -511,7 +511,7 @@ func toWireObjectStoreRequest(value *ObjectStoreRequest) *proto.ObjectStoreReque
 	}
 	out := &proto.ObjectStoreRequest{
 		Store: value.Store,
-		Id:    value.Id,
+		Id:    value.ID,
 	}
 	return out
 }
@@ -522,7 +522,7 @@ func fromWireObjectStoreRequest(value *proto.ObjectStoreRequest) *ObjectStoreReq
 	}
 	out := &ObjectStoreRequest{
 		Store: value.Store,
-		Id:    value.Id,
+		ID:    value.Id,
 	}
 	return out
 }
@@ -814,7 +814,7 @@ func toWireTransactionOperation(value *TransactionOperation) *proto.TransactionO
 		return nil
 	}
 	out := &proto.TransactionOperation{
-		RequestId: value.RequestId,
+		RequestId: value.RequestID,
 	}
 	switch variant := value.Operation.(type) {
 	case *TransactionOperationOperationGet:
@@ -858,7 +858,7 @@ func fromWireTransactionOperation(value *proto.TransactionOperation) *Transactio
 		return nil
 	}
 	out := &TransactionOperation{
-		RequestId: value.RequestId,
+		RequestID: value.RequestId,
 	}
 	switch variant := value.Operation.(type) {
 	case *proto.TransactionOperation_Get:
@@ -902,7 +902,7 @@ func toWireTransactionOperationResponse(value *TransactionOperationResponse) *pr
 		return nil
 	}
 	out := &proto.TransactionOperationResponse{
-		RequestId: value.RequestId,
+		RequestId: value.RequestID,
 		Error:     toWireStatus(value.Error),
 	}
 	switch variant := value.Result.(type) {
@@ -929,7 +929,7 @@ func fromWireTransactionOperationResponse(value *proto.TransactionOperationRespo
 		return nil
 	}
 	out := &TransactionOperationResponse{
-		RequestId: value.RequestId,
+		RequestID: value.RequestId,
 		Error:     fromWireStatus(value.Error),
 	}
 	switch variant := value.Result.(type) {
@@ -1007,7 +1007,7 @@ func toWireTypedValue(value *TypedValue) *proto.TypedValue {
 		out.Kind = &proto.TypedValue_TimeValue{TimeValue: timestamppb.New(variant.Value)}
 	case *TypedValueKindBytesValue:
 		out.Kind = &proto.TypedValue_BytesValue{BytesValue: variant.Value}
-	case *TypedValueKindJsonValue:
+	case *TypedValueKindJSONValue:
 		out.Kind = &proto.TypedValue_JsonValue{JsonValue: toWireValue(variant.Value)}
 	}
 	return out
@@ -1034,7 +1034,7 @@ func fromWireTypedValue(value *proto.TypedValue) *TypedValue {
 	case *proto.TypedValue_BytesValue:
 		out.Kind = &TypedValueKindBytesValue{Value: variant.BytesValue}
 	case *proto.TypedValue_JsonValue:
-		out.Kind = &TypedValueKindJsonValue{Value: fromWireValue(variant.JsonValue)}
+		out.Kind = &TypedValueKindJSONValue{Value: fromWireValue(variant.JsonValue)}
 	}
 	return out
 }

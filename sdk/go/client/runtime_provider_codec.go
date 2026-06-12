@@ -11,7 +11,7 @@ func toWireAppendRuntimeLogsRequest(value *AppendRuntimeLogsRequest) *proto.Appe
 		return nil
 	}
 	out := &proto.AppendRuntimeLogsRequest{
-		SessionId: value.SessionId,
+		SessionId: value.SessionID,
 	}
 	for _, item := range value.Logs {
 		out.Logs = append(out.Logs, toWireRuntimeLogEntry(item))
@@ -24,7 +24,7 @@ func fromWireAppendRuntimeLogsRequest(value *proto.AppendRuntimeLogsRequest) *Ap
 		return nil
 	}
 	out := &AppendRuntimeLogsRequest{
-		SessionId: value.SessionId,
+		SessionID: value.SessionId,
 	}
 	for _, item := range value.Logs {
 		out.Logs = append(out.Logs, fromWireRuntimeLogEntry(item))
@@ -57,7 +57,7 @@ func toWireGetRuntimeSessionRequest(value *GetRuntimeSessionRequest) *proto.GetR
 		return nil
 	}
 	out := &proto.GetRuntimeSessionRequest{
-		SessionId: value.SessionId,
+		SessionId: value.SessionID,
 	}
 	return out
 }
@@ -67,7 +67,7 @@ func fromWireGetRuntimeSessionRequest(value *proto.GetRuntimeSessionRequest) *Ge
 		return nil
 	}
 	out := &GetRuntimeSessionRequest{
-		SessionId: value.SessionId,
+		SessionID: value.SessionId,
 	}
 	return out
 }
@@ -77,8 +77,8 @@ func toWireHostedApp(value *HostedApp) *proto.HostedApp {
 		return nil
 	}
 	out := &proto.HostedApp{
-		Id:         value.Id,
-		SessionId:  value.SessionId,
+		Id:         value.ID,
+		SessionId:  value.SessionID,
 		AppName:    value.AppName,
 		DialTarget: value.DialTarget,
 	}
@@ -90,8 +90,8 @@ func fromWireHostedApp(value *proto.HostedApp) *HostedApp {
 		return nil
 	}
 	out := &HostedApp{
-		Id:         value.Id,
-		SessionId:  value.SessionId,
+		ID:         value.Id,
+		SessionID:  value.SessionId,
 		AppName:    value.AppName,
 		DialTarget: value.DialTarget,
 	}
@@ -151,8 +151,8 @@ func toWirePrepareRuntimeWorkspaceRequest(value *PrepareRuntimeWorkspaceRequest)
 		return nil
 	}
 	out := &proto.PrepareRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
+		SessionId:      value.SessionID,
+		AgentSessionId: value.AgentSessionID,
 		Workspace:      toWireAgentWorkspace(value.Workspace),
 	}
 	return out
@@ -163,8 +163,8 @@ func fromWirePrepareRuntimeWorkspaceRequest(value *proto.PrepareRuntimeWorkspace
 		return nil
 	}
 	out := &PrepareRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
+		SessionID:      value.SessionId,
+		AgentSessionID: value.AgentSessionId,
 		Workspace:      fromWireAgentWorkspace(value.Workspace),
 	}
 	return out
@@ -195,8 +195,8 @@ func toWireRemoveRuntimeWorkspaceRequest(value *RemoveRuntimeWorkspaceRequest) *
 		return nil
 	}
 	out := &proto.RemoveRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
+		SessionId:      value.SessionID,
+		AgentSessionId: value.AgentSessionID,
 	}
 	return out
 }
@@ -206,8 +206,8 @@ func fromWireRemoveRuntimeWorkspaceRequest(value *proto.RemoveRuntimeWorkspaceRe
 		return nil
 	}
 	out := &RemoveRuntimeWorkspaceRequest{
-		SessionId:      value.SessionId,
-		AgentSessionId: value.AgentSessionId,
+		SessionID:      value.SessionId,
+		AgentSessionID: value.AgentSessionId,
 	}
 	return out
 }
@@ -217,7 +217,7 @@ func toWireRuntimeImagePullAuth(value *RuntimeImagePullAuth) *proto.RuntimeImage
 		return nil
 	}
 	out := &proto.RuntimeImagePullAuth{
-		DockerConfigJson: value.DockerConfigJson,
+		DockerConfigJson: value.DockerConfigJSON,
 	}
 	return out
 }
@@ -227,7 +227,7 @@ func fromWireRuntimeImagePullAuth(value *proto.RuntimeImagePullAuth) *RuntimeIma
 		return nil
 	}
 	out := &RuntimeImagePullAuth{
-		DockerConfigJson: value.DockerConfigJson,
+		DockerConfigJSON: value.DockerConfigJson,
 	}
 	return out
 }
@@ -263,7 +263,7 @@ func toWireRuntimeSession(value *RuntimeSession) *proto.RuntimeSession {
 		return nil
 	}
 	out := &proto.RuntimeSession{
-		Id:           value.Id,
+		Id:           value.ID,
 		State:        value.State,
 		Metadata:     value.Metadata,
 		Lifecycle:    toWireRuntimeSessionLifecycle(value.Lifecycle),
@@ -278,7 +278,7 @@ func fromWireRuntimeSession(value *proto.RuntimeSession) *RuntimeSession {
 		return nil
 	}
 	out := &RuntimeSession{
-		Id:           value.Id,
+		ID:           value.Id,
 		State:        value.State,
 		Metadata:     value.Metadata,
 		Lifecycle:    fromWireRuntimeSessionLifecycle(value.Lifecycle),
@@ -341,7 +341,7 @@ func toWireStartHostedAppRequest(value *StartHostedAppRequest) *proto.StartHoste
 		return nil
 	}
 	out := &proto.StartHostedAppRequest{
-		SessionId:     value.SessionId,
+		SessionId:     value.SessionID,
 		AppName:       value.AppName,
 		Command:       value.Command,
 		Args:          value.Args,
@@ -359,7 +359,7 @@ func fromWireStartHostedAppRequest(value *proto.StartHostedAppRequest) *StartHos
 		return nil
 	}
 	out := &StartHostedAppRequest{
-		SessionId:     value.SessionId,
+		SessionID:     value.SessionId,
 		AppName:       value.AppName,
 		Command:       value.Command,
 		Args:          value.Args,
@@ -405,7 +405,7 @@ func toWireStopRuntimeSessionRequest(value *StopRuntimeSessionRequest) *proto.St
 		return nil
 	}
 	out := &proto.StopRuntimeSessionRequest{
-		SessionId: value.SessionId,
+		SessionId: value.SessionID,
 	}
 	return out
 }
@@ -415,7 +415,7 @@ func fromWireStopRuntimeSessionRequest(value *proto.StopRuntimeSessionRequest) *
 		return nil
 	}
 	out := &StopRuntimeSessionRequest{
-		SessionId: value.SessionId,
+		SessionID: value.SessionId,
 	}
 	return out
 }

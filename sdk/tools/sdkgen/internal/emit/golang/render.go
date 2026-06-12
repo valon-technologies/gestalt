@@ -384,8 +384,8 @@ func (r *renderer) writeLiteral(typeName string, parts []conversionParts) {
 // fieldToWire renders the conversion of one non-oneof field into the wire
 // message under construction.
 func (r *renderer) fieldToWire(f *model.Field) conversionParts {
-	name := fieldGoName(f)
-	expr := "value." + name
+	name := wireFieldName(f)
+	expr := "value." + fieldGoName(f)
 	switch f.Kind {
 	case model.KindRepeated:
 		if identityValue(f.Elem) {
@@ -454,7 +454,7 @@ func (r *renderer) fieldConvToWire(f *model.Field, expr string) string {
 
 func (r *renderer) fieldFromWire(f *model.Field) conversionParts {
 	name := fieldGoName(f)
-	expr := "value." + name
+	expr := "value." + wireFieldName(f)
 	switch f.Kind {
 	case model.KindRepeated:
 		if identityValue(f.Elem) {

@@ -76,7 +76,7 @@ type CreateObjectAccessURLRequest struct {
 // CreateObjectAccessURLResponse returns a hosted object-access URL plus any
 // headers the caller must include when using it.
 type CreateObjectAccessURLResponse struct {
-	Url       string
+	URL       string
 	Method    PresignMethod
 	ExpiresAt *time.Time
 	Headers   map[string]string
@@ -140,7 +140,7 @@ type PresignObjectRequest struct {
 //
 // PresignObjectResponse returns a presigned URL plus any required headers.
 type PresignObjectResponse struct {
-	Url       string
+	URL       string
 	Method    PresignMethod
 	ExpiresAt *time.Time
 	Headers   map[string]string
@@ -203,7 +203,7 @@ type S3ObjectMeta struct {
 // S3ObjectRef identifies one object or object version.
 type S3ObjectRef struct {
 	Key       string
-	VersionId string
+	VersionID string
 }
 
 // WriteObjectOpen is the native message type for gestalt.provider.v1.WriteObjectOpen.
