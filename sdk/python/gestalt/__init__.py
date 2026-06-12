@@ -120,12 +120,6 @@ _AGENT_PROTOCOL_EXPORTS = (
 )
 
 _AGENT_HELPER_EXPORTS = (
-    "AgentMessage",
-    "AgentMessagePartImageRef",
-    "AgentMessagePart",
-    "AgentMessagePartToolCall",
-    "AgentMessagePartToolResult",
-    "AgentToolRef",
     "AgentWorkspaceGitCheckout",
     "AgentWorkspace",
     "agent_message_from_dict",
@@ -486,13 +480,15 @@ _LAZY_EXPORTS.update(
 _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
 )
-_LAZY_EXPORTS.update(
-    {name: ("._workflow", name) for name in _WORKFLOW_HELPER_EXPORTS}
-)
+_LAZY_EXPORTS.update({name: ("._workflow", name) for name in _WORKFLOW_HELPER_EXPORTS})
 
 _LAZY_MODULES = {
     "telemetry": ".telemetry",
 }
+
+
+def __dir__() -> list[str]:
+    return sorted(set(__all__) | set(globals()))
 
 
 def __getattr__(name: str):
@@ -544,7 +540,6 @@ __all__ = [
     "CURSOR_NEXT_UNIQUE",
     "CURSOR_PREV",
     "CURSOR_PREV_UNIQUE",
-    "Catalog",
     "CatalogOperation",
     "CatalogParameter",
     "CopyObjectRequest",
@@ -624,7 +619,6 @@ __all__ = [
     "TransactionIndex",
     "TransactionObjectStore",
     "WorkflowProvider",
-    "Workflow",
     "WarningsProvider",
     "compare_indexeddb_values",
     "WriteObjectOpen",
