@@ -60,16 +60,46 @@ func TestNewCallerTokenIssuerEmptyKey(t *testing.T) {
 	}
 }
 
-func TestInvokeUsesConfiguredTransport(t *testing.T) {
+func TestAuthorizeAllowsRequests(t *testing.T) {
+	t.Parallel()
+
+	gateway := New()
+	allowed, err := gateway.Authorize(context.Background(), AuthorizationParams{
+		ProviderID:  "authz-primary",
+		Operation:   "CheckAccess",
+		CallerToken: "caller-token",
+	})
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	if !allowed {
+		t.Fatal("Authorize allowed = false, want true")
+	}
+}
+
+func TestInvokeAuthorizesThenCallsConfiguredTransport(t *testing.T) {
 	t.Parallel()
 
 	transport := &recordingTransport{}
 	gateway := New(WithTransport(transport))
-	req := ProviderGatewayRequest{ProviderID: "authz", Operation: "CheckAccess"}
+	req := ProviderGatewayRequest{
+		ProviderID:  "authz-primary",
+		Operation:   "CheckAccess",
+		CallerToken: "caller-token",
+	}
 	nextCalled := false
 
-	_, err := gateway.Invoke(context.Background(), req, func(context.Context, ProviderGatewayRequest) (ProviderGatewayResponse, error) {
+	_, err := gateway.Invoke(context.Background(), req, func(_ context.Context, got ProviderGatewayRequest) (ProviderGatewayResponse, error) {
 		nextCalled = true
+		if got.ProviderID != req.ProviderID {
+			t.Fatalf("ProviderID = %q, want %q", got.ProviderID, req.ProviderID)
+		}
+		if got.Operation != req.Operation {
+			t.Fatalf("Operation = %q, want %q", got.Operation, req.Operation)
+		}
+		if got.CallerToken != req.CallerToken {
+			t.Fatalf("CallerToken = %q, want %q", got.CallerToken, req.CallerToken)
+		}
 		return ProviderGatewayResponse{}, nil
 	})
 	if err != nil {
