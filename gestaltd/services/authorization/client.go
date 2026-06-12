@@ -24,7 +24,7 @@ type ExecConfig struct {
 	Cleanup      func()
 	HostServices []runtimehost.HostService
 	Name         string
-	Gateway      providergateway.ProviderGateway
+	Transport    providergateway.Transport
 }
 
 type remoteAuthorizationProvider struct {
@@ -59,7 +59,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvi
 	client := rpcauthorization.NewConn(proc.Conn(), rpcauthorization.Options{
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
 		ProviderID:   cfg.Name,
-	}, cfg.Gateway)
+	}, cfg.Transport)
 	return &remoteAuthorizationProvider{Client: client, runtime: runtimeClient, closer: proc}, nil
 }
 
