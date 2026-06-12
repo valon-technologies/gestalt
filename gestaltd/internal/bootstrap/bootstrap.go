@@ -1149,6 +1149,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err
 	}
+	if err := attachMCPOAuthRuntimeAuth(cfg, connRuntime, prepared.Deps); err != nil {
+		failPendingStartupProviders(prepared.Deps, err)
+		return nil, err
+	}
 	if err := ValidateConnectionRuntimeCredentials(ctx, prepared.Services.ExternalCredentials, connRuntime); err != nil {
 		failPendingStartupProviders(prepared.Deps, err)
 		return nil, err

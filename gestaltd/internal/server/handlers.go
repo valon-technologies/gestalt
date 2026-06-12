@@ -308,7 +308,7 @@ func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]ins
 }
 
 func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID string) (map[string][]instanceInfo, error) {
-	tokens, err := s.externalCredentials.ListCredentials(ctx, subjectID)
+	tokens, err := s.externalCredentials.ListCredentials(ctx, subjectID, "")
 	if err != nil {
 		return nil, fmt.Errorf("listing external credentials: %w", err)
 	}
@@ -319,9 +319,9 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 			continue
 		}
 		credentialInvalid := credentialNeedsReconnect(tok, now)
-		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
+		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.Audience) {
 			m[binding.App] = append(m[binding.App], instanceInfo{
-				Name:              tok.Instance,
+				Name:              tok.Qualifier,
 				Connection:        userFacingConnectionName(binding.Connection),
 				credentialInvalid: credentialInvalid,
 			})
@@ -331,10 +331,10 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 }
 
 func credentialNeedsReconnect(credential *core.ExternalCredential, now time.Time) bool {
-	if credential == nil || credential.ExpiresAt == nil || credential.RefreshErrorCount <= 0 {
+	if credential == nil || credential.Grant == nil || credential.Grant.ExpiresAt == nil || credential.Grant.RefreshErrorCount <= 0 {
 		return false
 	}
-	return !credential.ExpiresAt.After(now)
+	return !credential.Grant.ExpiresAt.After(now)
 }
 
 type pluginConnectionBinding struct {
@@ -446,29 +446,30 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditTarget = connectionAuditTarget(name, requestedConnection, requestedInstance)
 	}
 
-	tokens, err := s.externalCredentials.ListCredentials(r.Context(), subjectID)
+	tokens, err := s.externalCredentials.ListCredentials(r.Context(), subjectID, "")
 	if err != nil {
 		auditErr = errors.New("failed to list external credentials")
 		writeError(w, http.StatusInternalServerError, "failed to list external credentials")
 		return
 	}
 
-	var matched []*core.ExternalCredential
+	type matchedCredential struct {
+		credential *core.ExternalCredential
+		connection string
+	}
+	var matched []matchedCredential
 	for _, tok := range tokens {
 		if tok == nil {
 			continue
 		}
-		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
+		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.Audience) {
 			if binding.App != name {
 				continue
 			}
 			if requestedConnection != "" && binding.Connection != requestedConnection {
 				continue
 			}
-			credential := *tok
-			credential.Integration = name
-			credential.Connection = binding.Connection
-			matched = append(matched, &credential)
+			matched = append(matched, matchedCredential{credential: tok, connection: binding.Connection})
 		}
 	}
 
@@ -479,9 +480,9 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if requestedInstance != "" {
-		var instanceMatched []*core.ExternalCredential
+		var instanceMatched []matchedCredential
 		for _, tok := range matched {
-			if tok.Instance == requestedInstance {
+			if tok.credential.Qualifier == requestedInstance {
 				instanceMatched = append(instanceMatched, tok)
 			}
 		}
@@ -497,7 +498,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("multiple matching connections")
 		labels := make([]string, len(matched))
 		for i, t := range matched {
-			labels[i] = fmt.Sprintf("%s/%s", t.Connection, t.Instance)
+			labels[i] = fmt.Sprintf("%s/%s", t.connection, t.credential.Qualifier)
 		}
 		hint := "?" + httpInstanceParam + "=NAME"
 		if requestedInstance != "" {
@@ -507,8 +508,8 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenID := matched[0].ID
-	auditTarget = connectionAuditTarget(name, matched[0].Connection, matched[0].Instance)
+	tokenID := matched[0].credential.ID
+	auditTarget = connectionAuditTarget(name, matched[0].connection, matched[0].credential.Qualifier)
 	if tokenID == "" {
 		auditErr = errors.New("connection credential is missing an ID")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))

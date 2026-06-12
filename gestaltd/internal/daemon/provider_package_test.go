@@ -429,36 +429,32 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceExternalCredentialsPlugin(t 
 	}()
 
 	credential := &core.ExternalCredential{
-		SubjectID:    "user:user-123",
-		ConnectionID: "slack:default",
-		Integration:  "slack",
-		Connection:   "default",
-		Instance:     "workspace-1",
-		AccessToken:  "xoxb-123",
-		RefreshToken: "refresh-123",
-		Scopes:       "channels:read chat:write",
+		Subject:   "user:user-123",
+		Audience:  "slack:default",
+		Qualifier: "workspace-1",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "xoxb-123", RefreshToken: "refresh-123", Scope: "channels:read chat:write"},
 	}
-	if err := provider.PutCredential(context.Background(), credential); err != nil {
-		t.Fatalf("PutCredential: %v", err)
+	if err := provider.UpsertCredential(context.Background(), credential); err != nil {
+		t.Fatalf("UpsertCredential: %v", err)
 	}
 	if credential.ID == "" {
-		t.Fatal("PutCredential returned empty credential id")
+		t.Fatal("UpsertCredential returned empty credential id")
 	}
 	if credential.CreatedAt.IsZero() || credential.UpdatedAt.IsZero() {
 		t.Fatalf("credential timestamps = created_at:%v updated_at:%v", credential.CreatedAt, credential.UpdatedAt)
 	}
 
-	got, err := provider.GetCredential(context.Background(), credential.SubjectID, credential.ConnectionID, credential.Instance)
+	got, err := provider.GetCredential(context.Background(), credential.Subject, credential.Audience, credential.Qualifier)
 	if err != nil {
 		t.Fatalf("GetCredential: %v", err)
 	}
-	if got.AccessToken != credential.AccessToken || got.RefreshToken != credential.RefreshToken {
-		t.Fatalf("credential tokens = access:%q refresh:%q", got.AccessToken, got.RefreshToken)
+	if got.Grant == nil || got.Grant.AccessToken != credential.Grant.AccessToken || got.Grant.RefreshToken != credential.Grant.RefreshToken {
+		t.Fatalf("credential grant = %+v, want %+v", got.Grant, credential.Grant)
 	}
 
-	listed, err := provider.ListCredentialsForConnection(context.Background(), credential.SubjectID, credential.ConnectionID)
+	listed, err := provider.ListCredentials(context.Background(), credential.Subject, credential.Audience)
 	if err != nil {
-		t.Fatalf("ListCredentialsForConnection: %v", err)
+		t.Fatalf("ListCredentials: %v", err)
 	}
 	if len(listed) != 1 || listed[0].ID != credential.ID {
 		t.Fatalf("listed credentials = %+v", listed)
@@ -468,7 +464,7 @@ func TestRun_ProviderPackageAndReleaseBuildsGoSourceExternalCredentialsPlugin(t 
 		t.Fatalf("DeleteCredential: %v", err)
 	}
 
-	_, err = provider.GetCredential(context.Background(), credential.SubjectID, credential.ConnectionID, credential.Instance)
+	_, err = provider.GetCredential(context.Background(), credential.Subject, credential.Audience, credential.Qualifier)
 	if !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("GetCredential after delete error = %v, want core.ErrNotFound", err)
 	}

@@ -2,6 +2,7 @@ package coretesting
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -26,40 +27,36 @@ func NewStubExternalCredentialProvider() *StubExternalCredentialProvider {
 	return &StubExternalCredentialProvider{credentials: make(map[string]core.ExternalCredential)}
 }
 
-func (p *StubExternalCredentialProvider) PutCredential(_ context.Context, credential *core.ExternalCredential) error {
-	if p != nil && p.PutErr != nil {
-		return p.PutErr
-	}
-	return p.storeCredential(credential, false)
-}
-
-func (p *StubExternalCredentialProvider) RestoreCredential(_ context.Context, credential *core.ExternalCredential) error {
+func (p *StubExternalCredentialProvider) CreateCredential(_ context.Context, credential *core.ExternalCredential) error {
 	if p != nil && p.PutErr != nil {
 		return p.PutErr
 	}
 	return p.storeCredential(credential, true)
 }
 
-func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subjectID, connectionID, instance string) (*core.ExternalCredential, error) {
+func (p *StubExternalCredentialProvider) UpsertCredential(_ context.Context, credential *core.ExternalCredential) error {
+	if p != nil && p.PutErr != nil {
+		return p.PutErr
+	}
+	return p.storeCredential(credential, false)
+}
+
+func (p *StubExternalCredentialProvider) GetCredential(_ context.Context, subject, audience, qualifier string) (*core.ExternalCredential, error) {
 	if p != nil && p.GetErr != nil {
 		return nil, p.GetErr
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, credential := range p.credentials {
-		if credential.SubjectID == subjectID && credential.ConnectionID == connectionID && credential.Instance == instance {
+		if credential.Subject == subject && credential.Audience == audience && credential.Qualifier == qualifier {
 			return cloneExternalCredential(credential), nil
 		}
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *StubExternalCredentialProvider) ListCredentials(_ context.Context, subjectID string) ([]*core.ExternalCredential, error) {
-	return p.listCredentials(subjectID, "")
-}
-
-func (p *StubExternalCredentialProvider) ListCredentialsForConnection(_ context.Context, subjectID, connectionID string) ([]*core.ExternalCredential, error) {
-	return p.listCredentials(subjectID, connectionID)
+func (p *StubExternalCredentialProvider) ListCredentials(_ context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
+	return p.listCredentials(subject, audience)
 }
 
 func (p *StubExternalCredentialProvider) DeleteCredential(_ context.Context, id string) error {
@@ -92,7 +89,7 @@ func (p *StubExternalCredentialProvider) ResolveCredential(ctx context.Context, 
 		credential, err = p.GetCredential(ctx, req.CredentialSubjectID, req.ConnectionID, req.Instance)
 	} else {
 		var credentials []*core.ExternalCredential
-		credentials, err = p.ListCredentialsForConnection(ctx, req.CredentialSubjectID, req.ConnectionID)
+		credentials, err = p.ListCredentials(ctx, req.CredentialSubjectID, req.ConnectionID)
 		if err == nil {
 			switch len(credentials) {
 			case 0:
@@ -107,12 +104,21 @@ func (p *StubExternalCredentialProvider) ResolveCredential(ctx context.Context, 
 	if err != nil {
 		return nil, err
 	}
-	return &core.ResolveExternalCredentialResponse{
-		Token:        credential.AccessToken,
-		ExpiresAt:    credential.ExpiresAt,
+	resp := &core.ResolveExternalCredentialResponse{
 		MetadataJSON: credential.MetadataJSON,
 		Credential:   cloneExternalCredential(*credential),
-	}, nil
+	}
+	switch {
+	case credential.Grant != nil:
+		resp.Token = credential.Grant.AccessToken
+		resp.ExpiresAt = credential.Grant.ExpiresAt
+	case credential.Opaque != nil:
+		if data, err := json.Marshal(credential.Opaque.Fields); err == nil {
+			resp.Token = string(data)
+		}
+		resp.Params = credential.Opaque.Fields
+	}
+	return resp, nil
 }
 
 func (p *StubExternalCredentialProvider) ExchangeCredential(ctx context.Context, req *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
@@ -130,7 +136,7 @@ func (p *StubExternalCredentialProvider) ExchangeCredential(ctx context.Context,
 	}, nil
 }
 
-func (p *StubExternalCredentialProvider) storeCredential(credential *core.ExternalCredential, preserve bool) error {
+func (p *StubExternalCredentialProvider) storeCredential(credential *core.ExternalCredential, insertOnly bool) error {
 	if credential == nil {
 		return nil
 	}
@@ -138,15 +144,11 @@ func (p *StubExternalCredentialProvider) storeCredential(credential *core.Extern
 	defer p.mu.Unlock()
 
 	cloned := *credential
-	if cloned.ConnectionID == "" {
-		connection := cloned.Connection
-		if connection == "" {
-			connection = core.AppConnectionName
-		}
-		cloned.ConnectionID = cloned.Integration + ":" + connection
-	}
 	for _, existing := range p.credentials {
-		if existing.SubjectID == cloned.SubjectID && existing.ConnectionID == cloned.ConnectionID && existing.Instance == cloned.Instance {
+		if existing.Subject == cloned.Subject && existing.Audience == cloned.Audience && existing.Qualifier == cloned.Qualifier {
+			if insertOnly {
+				return core.ErrAlreadyExists
+			}
 			cloned.ID = existing.ID
 			cloned.CreatedAt = existing.CreatedAt
 			break
@@ -160,17 +162,13 @@ func (p *StubExternalCredentialProvider) storeCredential(credential *core.Extern
 	if cloned.CreatedAt.IsZero() {
 		cloned.CreatedAt = now
 	}
-	if preserve && !credential.UpdatedAt.IsZero() {
-		cloned.UpdatedAt = credential.UpdatedAt
-	} else {
-		cloned.UpdatedAt = now
-	}
+	cloned.UpdatedAt = now
 	p.credentials[cloned.ID] = cloned
 	*credential = cloned
 	return nil
 }
 
-func (p *StubExternalCredentialProvider) listCredentials(subjectID, connectionID string) ([]*core.ExternalCredential, error) {
+func (p *StubExternalCredentialProvider) listCredentials(subject, audience string) ([]*core.ExternalCredential, error) {
 	if p != nil && p.ListErr != nil {
 		return nil, p.ListErr
 	}
@@ -178,10 +176,10 @@ func (p *StubExternalCredentialProvider) listCredentials(subjectID, connectionID
 	defer p.mu.Unlock()
 	out := make([]*core.ExternalCredential, 0, len(p.credentials))
 	for _, credential := range p.credentials {
-		if credential.SubjectID != subjectID {
+		if credential.Subject != subject {
 			continue
 		}
-		if connectionID != "" && credential.ConnectionID != connectionID {
+		if audience != "" && credential.Audience != audience {
 			continue
 		}
 		out = append(out, cloneExternalCredential(credential))
@@ -191,13 +189,32 @@ func (p *StubExternalCredentialProvider) listCredentials(subjectID, connectionID
 
 func cloneExternalCredential(src core.ExternalCredential) *core.ExternalCredential {
 	cloned := src
-	if cloned.ExpiresAt != nil {
-		value := *cloned.ExpiresAt
-		cloned.ExpiresAt = &value
+	if src.Grant != nil {
+		grant := *src.Grant
+		if grant.ExpiresAt != nil {
+			value := *grant.ExpiresAt
+			grant.ExpiresAt = &value
+		}
+		if grant.LastRefreshedAt != nil {
+			value := *grant.LastRefreshedAt
+			grant.LastRefreshedAt = &value
+		}
+		cloned.Grant = &grant
 	}
-	if cloned.LastRefreshedAt != nil {
-		value := *cloned.LastRefreshedAt
-		cloned.LastRefreshedAt = &value
+	if src.Client != nil {
+		client := *src.Client
+		if client.ClientSecretExpiresAt != nil {
+			value := *client.ClientSecretExpiresAt
+			client.ClientSecretExpiresAt = &value
+		}
+		cloned.Client = &client
+	}
+	if src.Opaque != nil {
+		fields := make(map[string]string, len(src.Opaque.Fields))
+		for k, v := range src.Opaque.Fields {
+			fields[k] = v
+		}
+		cloned.Opaque = &core.ExternalCredentialOpaque{Fields: fields}
 	}
 	return &cloned
 }

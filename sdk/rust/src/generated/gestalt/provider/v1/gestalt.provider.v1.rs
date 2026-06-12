@@ -1835,63 +1835,93 @@ pub struct CacheTouchResponse {
     pub touched: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalCredentialGrant {
+    #[prost(string, tag = "1")]
+    pub access_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub refresh_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub scope: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "5")]
+    pub last_refreshed_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(int32, tag = "6")]
+    pub refresh_error_count: i32,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExternalCredentialClientInfo {
+    #[prost(string, tag = "1")]
+    pub client_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub client_secret: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub client_secret_expires_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ExternalCredentialOpaque {
+    #[prost(btree_map = "string, string", tag = "1")]
+    pub fields: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExternalCredential {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub access_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub refresh_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub scopes: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
-    pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "10")]
-    pub last_refreshed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int32, tag = "11")]
-    pub refresh_error_count: i32,
-    #[prost(string, tag = "12")]
-    pub metadata_json: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "13")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "14")]
-    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "15")]
-    pub connection_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ExternalCredentialLookup {
-    #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
+    pub subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub audience: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub connection_id: ::prost::alloc::string::String,
+    pub qualifier: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub metadata_json: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "10")]
+    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(oneof = "external_credential::Credential", tags = "5, 6, 7")]
+    pub credential: ::core::option::Option<external_credential::Credential>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+/// Nested message and enum types in `ExternalCredential`.
+pub mod external_credential {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Credential {
+        #[prost(message, tag = "5")]
+        Grant(super::ExternalCredentialGrant),
+        #[prost(message, tag = "6")]
+        Client(super::ExternalCredentialClientInfo),
+        #[prost(message, tag = "7")]
+        Opaque(super::ExternalCredentialOpaque),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CreateExternalCredentialRequest {
+    #[prost(message, optional, tag = "1")]
+    pub credential: ::core::option::Option<ExternalCredential>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpsertExternalCredentialRequest {
     #[prost(message, optional, tag = "1")]
     pub credential: ::core::option::Option<ExternalCredential>,
-    #[prost(bool, tag = "2")]
-    pub preserve_timestamps: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetExternalCredentialRequest {
-    #[prost(message, optional, tag = "1")]
-    pub lookup: ::core::option::Option<ExternalCredentialLookup>,
+    #[prost(string, tag = "1")]
+    pub subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub audience: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub qualifier: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListExternalCredentialsRequest {
     #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub connection_id: ::prost::alloc::string::String,
+    pub subject: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub audience: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListExternalCredentialsResponse {

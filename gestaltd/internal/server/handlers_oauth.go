@@ -294,7 +294,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	tm.ActorUserID = state.ActorUserID
 	tm.ActorAuthSource = state.ActorAuthSource
 
-	result, err := s.runConnectionSetup(credentialMaterialContext(r.Context(), nil, tm), prov, tm)
+	result, err := s.runConnectionSetup(credentialMaterialContext(r.Context(), nil, tm), prov, tm, tm.AccessToken)
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "connection setup failed", "provider", providerName, "error", err)

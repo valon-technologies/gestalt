@@ -18,6 +18,24 @@ func newExternalCredentialProviderServer(provider ExternalCredentialProvider) *e
 	return &externalCredentialServer{provider: provider}
 }
 
+func (s *externalCredentialServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	nativeReq, err := createExternalCredentialRequestFromProto(req)
+	if err != nil {
+		return nil, providerRPCError("create external credential", err)
+	}
+	credential, err := s.provider.CreateCredential(ctx, nativeReq)
+	if err != nil {
+		return nil, providerRPCError("create external credential", err)
+	}
+	if credential == nil {
+		return nil, status.Error(codes.Internal, "external credential provider returned nil credential")
+	}
+	return externalCredentialToProto(credential), nil
+}
+
 func (s *externalCredentialServer) UpsertCredential(ctx context.Context, req *proto.UpsertExternalCredentialRequest) (*proto.ExternalCredential, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")

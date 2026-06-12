@@ -22,6 +22,7 @@ import {
   fromWireExternalCredential,
   fromWireListExternalCredentialsResponse,
   fromWireResolveExternalCredentialResponse,
+  toWireCreateExternalCredentialRequest,
   toWireDeleteExternalCredentialRequest,
   toWireExchangeExternalCredentialRequest,
   toWireGetExternalCredentialRequest,
@@ -32,6 +33,10 @@ import {
 } from "./internal/codec/external_credential.ts";
 import { callOptions, callUnary } from "./internal/codec/support.ts";
 import type { Init } from "./rpc_support.ts";
+
+export interface CreateExternalCredentialRequest {
+  credential?: ExternalCredential;
+}
 
 export interface DeleteExternalCredentialRequest {
   id: string;
@@ -53,20 +58,39 @@ export interface ExchangeExternalCredentialResponse {
   tokenResponse?: ExternalCredentialTokenResponse;
 }
 
+export type ExternalCredentialCredential =
+  | { case: "grant"; value: ExternalCredentialGrant }
+  | { case: "client"; value: ExternalCredentialClientInfo }
+  | { case: "opaque"; value: ExternalCredentialOpaque }
+  | { case: undefined; value?: undefined };
+
+export function externalCredentialCredentialGrant(
+  value: ExternalCredentialGrant,
+): ExternalCredentialCredential {
+  return { case: "grant", value };
+}
+
+export function externalCredentialCredentialClient(
+  value: ExternalCredentialClientInfo,
+): ExternalCredentialCredential {
+  return { case: "client", value };
+}
+
+export function externalCredentialCredentialOpaque(
+  value: ExternalCredentialOpaque,
+): ExternalCredentialCredential {
+  return { case: "opaque", value };
+}
+
 export interface ExternalCredential {
   id: string;
-  subjectId: string;
-  instance: string;
-  accessToken: string;
-  refreshToken: string;
-  scopes: string;
-  expiresAt?: Date;
-  lastRefreshedAt?: Date;
-  refreshErrorCount: number;
+  subject: string;
+  audience: string;
+  qualifier: string;
   metadataJson: string;
   createdAt?: Date;
   updatedAt?: Date;
-  connectionId: string;
+  credential: ExternalCredentialCredential;
 }
 
 export interface ExternalCredentialAuthConfig {
@@ -90,10 +114,23 @@ export interface ExternalCredentialAuthConfig {
   refreshToken: string;
 }
 
-export interface ExternalCredentialLookup {
-  subjectId: string;
-  instance: string;
-  connectionId: string;
+export interface ExternalCredentialClientInfo {
+  clientId: string;
+  clientSecret: string;
+  clientSecretExpiresAt?: Date;
+}
+
+export interface ExternalCredentialGrant {
+  accessToken: string;
+  refreshToken: string;
+  scope: string;
+  expiresAt?: Date;
+  lastRefreshedAt?: Date;
+  refreshErrorCount: number;
+}
+
+export interface ExternalCredentialOpaque {
+  fields: { [key: string]: string };
 }
 
 export interface ExternalCredentialTokenExchangeDriver {
@@ -115,13 +152,14 @@ export interface ExternalCredentialTokenResponse {
 }
 
 export interface GetExternalCredentialRequest {
-  lookup?: ExternalCredentialLookup;
+  subject: string;
+  audience: string;
+  qualifier: string;
 }
 
 export interface ListExternalCredentialsRequest {
-  subjectId: string;
-  instance: string;
-  connectionId: string;
+  subject: string;
+  audience: string;
 }
 
 export interface ListExternalCredentialsResponse {
@@ -150,7 +188,6 @@ export interface ResolveExternalCredentialResponse {
 
 export interface UpsertExternalCredentialRequest {
   credential?: ExternalCredential;
-  preserveTimestamps: boolean;
 }
 
 export interface ValidateExternalCredentialConfigRequest {
@@ -186,12 +223,37 @@ export class ExternalCredentials {
     return new ExternalCredentials(transport, options);
   }
 
-  async upsertCredential(
-    preserveTimestamps: boolean,
+  async createCredential(
     credential?: Init<ExternalCredential>,
   ): Promise<ExternalCredential> {
     const request = {
-      preserveTimestamps,
+      ...(credential !== undefined ? { credential } : {}),
+    } satisfies Init<CreateExternalCredentialRequest>;
+    const response = await callUnary(() =>
+      this.client.createCredential(
+        toWireCreateExternalCredentialRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireExternalCredential(response);
+  }
+
+  async createCredentialRaw(
+    request: Init<CreateExternalCredentialRequest>,
+  ): Promise<ExternalCredential> {
+    const response = await callUnary(() =>
+      this.client.createCredential(
+        toWireCreateExternalCredentialRequest(request),
+        callOptions(this.timeoutMs),
+      ),
+    );
+    return fromWireExternalCredential(response);
+  }
+
+  async upsertCredential(
+    credential?: Init<ExternalCredential>,
+  ): Promise<ExternalCredential> {
+    const request = {
       ...(credential !== undefined ? { credential } : {}),
     } satisfies Init<UpsertExternalCredentialRequest>;
     const response = await callUnary(() =>
@@ -216,10 +278,14 @@ export class ExternalCredentials {
   }
 
   async getCredential(
-    lookup?: Init<ExternalCredentialLookup>,
+    subject: string,
+    audience: string,
+    qualifier: string,
   ): Promise<ExternalCredential> {
     const request = {
-      ...(lookup !== undefined ? { lookup } : {}),
+      subject,
+      audience,
+      qualifier,
     } satisfies Init<GetExternalCredentialRequest>;
     const response = await callUnary(() =>
       this.client.getCredential(
@@ -243,14 +309,12 @@ export class ExternalCredentials {
   }
 
   async listCredentials(
-    subjectId: string,
-    instance: string,
-    connectionId: string,
+    subject: string,
+    options?: { audience?: string | undefined },
   ): Promise<ExternalCredential[]> {
     const request = {
-      subjectId,
-      instance,
-      connectionId,
+      subject,
+      audience: options?.audience ?? "",
     } satisfies Init<ListExternalCredentialsRequest>;
     const response = fromWireListExternalCredentialsResponse(
       await callUnary(() =>

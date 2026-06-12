@@ -88,13 +88,13 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 
 	tokenExchange := manualTokenExchangeConfigured(auth)
 
-	effectiveCredential, credErr := buildEffectiveManualCredential(req, auth, tokenExchange)
+	fields, rawCredential, credErr := buildEffectiveManualCredential(req, auth, tokenExchange)
 	if credErr != nil {
 		auditErr = credErr
 		writeError(w, http.StatusBadRequest, credErr.Error())
 		return
 	}
-	if effectiveCredential == "" {
+	if len(fields) == 0 && rawCredential == "" {
 		auditErr = errors.New("credential is required")
 		writeError(w, http.StatusBadRequest, "credential is required")
 		return
@@ -106,7 +106,17 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenResp, exchangeErr := s.exchangeManualCredential(r.Context(), req, manualConnection, conn.ConnectionID, subjectID, manualInstance, auth, effectiveCredential, connParams, tokenExchange)
+	credentialJSON := ""
+	if len(fields) > 0 {
+		credentialJSON, credErr = marshalManualCredentials(fields)
+		if credErr != nil {
+			auditErr = credErr
+			writeError(w, http.StatusBadRequest, credErr.Error())
+			return
+		}
+	}
+
+	tokenResp, exchangeErr := s.exchangeManualCredential(r.Context(), req, manualConnection, conn.ConnectionID, subjectID, manualInstance, auth, credentialJSON, connParams, tokenExchange)
 	if exchangeErr != nil {
 		auditErr = errors.New("token exchange failed")
 		slog.ErrorContext(r.Context(), "manual token exchange failed", "provider", req.Integration, "error", exchangeErr)
@@ -132,23 +142,20 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		Integration:  req.Integration,
 		Connection:   manualConnection,
 		Instance:     manualInstance,
-		AccessToken:  effectiveCredential,
+		Fields:       fields,
+		AccessToken:  rawCredential,
 		MetadataJSON: manualMeta,
-	}
-	if tokenResp != nil {
-		tm.AccessToken = tokenResp.AccessToken
-		tm.RefreshToken = tokenResp.RefreshToken
-		if tokenResp.RefreshToken == "" {
-			tm.RefreshToken = effectiveCredential
-		}
-		if tokenResp.ExpiresIn > 0 {
-			t := s.now().UTC().Truncate(time.Second).Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-			tm.TokenExpiresAt = &t
-		}
 	}
 	credentialActorFromPrincipal(p, subjectID).applyTo(&tm)
 
-	result, err := s.runConnectionSetup(r.Context(), prov, tm)
+	// Exchange-minted tokens are not persisted; the provider re-mints from
+	// the stored fields at resolve time.
+	discoveryToken := rawCredential
+	if tokenResp != nil {
+		discoveryToken = tokenResp.AccessToken
+	}
+
+	result, err := s.runConnectionSetup(r.Context(), prov, tm, discoveryToken)
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "connection setup failed", "provider", req.Integration, "error", err)
@@ -305,12 +312,15 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type credentialMaterial struct {
-	SubjectID       string
-	AuthSource      string
-	ConnectionID    string
-	Integration     string
-	Connection      string
-	Instance        string
+	SubjectID    string
+	AuthSource   string
+	ConnectionID string
+	Integration  string
+	Connection   string
+	Instance     string
+	// Fields holds named manual credentials, stored as an Opaque credential.
+	// When empty, the token fields below are stored as a Grant.
+	Fields          map[string]string
 	AccessToken     string
 	RefreshToken    string
 	TokenExpiresAt  *time.Time
@@ -388,26 +398,30 @@ type discoveryCandidateInfo struct {
 
 func (s *Server) storeCredentialFromMaterial(ctx context.Context, tm credentialMaterial) (*core.ExternalCredential, error) {
 	now := s.now().UTC().Truncate(time.Second)
-	connectionID := strings.TrimSpace(tm.ConnectionID)
-	if connectionID == "" {
-		connectionID = tm.Integration + ":" + tm.Connection
+	audience := strings.TrimSpace(tm.ConnectionID)
+	if audience == "" {
+		audience = tm.Integration + ":" + tm.Connection
 	}
 	tok := &core.ExternalCredential{
-		ID:              uuid.NewString(),
-		SubjectID:       tm.SubjectID,
-		ConnectionID:    connectionID,
-		Integration:     tm.Integration,
-		Connection:      tm.Connection,
-		Instance:        tm.Instance,
-		AccessToken:     tm.AccessToken,
-		RefreshToken:    tm.RefreshToken,
-		ExpiresAt:       tm.TokenExpiresAt,
-		LastRefreshedAt: &now,
-		MetadataJSON:    tm.MetadataJSON,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:           uuid.NewString(),
+		Subject:      tm.SubjectID,
+		Audience:     audience,
+		Qualifier:    tm.Instance,
+		MetadataJSON: tm.MetadataJSON,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
-	if err := s.externalCredentials.PutCredential(ctx, tok); err != nil {
+	if len(tm.Fields) > 0 {
+		tok.Opaque = &core.ExternalCredentialOpaque{Fields: tm.Fields}
+	} else {
+		tok.Grant = &core.ExternalCredentialGrant{
+			AccessToken:     tm.AccessToken,
+			RefreshToken:    tm.RefreshToken,
+			ExpiresAt:       tm.TokenExpiresAt,
+			LastRefreshedAt: &now,
+		}
+	}
+	if err := s.externalCredentials.UpsertCredential(ctx, tok); err != nil {
 		return nil, err
 	}
 	return tok, nil
@@ -447,11 +461,11 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 	return string(b), nil
 }
 
-func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm credentialMaterial) (*connectionSetupResult, error) {
+func (s *Server) runConnectionSetup(ctx context.Context, prov core.Provider, tm credentialMaterial, discoveryToken string) (*connectionSetupResult, error) {
 	if cfg := prov.DiscoveryConfig(); cfg != nil {
 		client := &http.Client{
 			Timeout:   30 * time.Second,
-			Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
+			Transport: &bearerTransport{token: discoveryToken, base: http.DefaultTransport},
 		}
 		candidates, err := runDiscovery(ctx, cfg, client)
 		if err != nil {
@@ -557,36 +571,47 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 	return out
 }
 
-func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef, tokenExchange bool) (string, error) {
+// buildEffectiveManualCredential returns the named credential fields (stored
+// as an Opaque credential) or the single unstructured secret (stored as a
+// bearer Grant); exactly one of the two is non-empty on success.
+func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef, tokenExchange bool) (map[string]string, string, error) {
 	if tokenExchange {
 		if req.Credential != "" {
-			return "", errors.New("manual token exchange requires named credentials")
+			return nil, "", errors.New("manual token exchange requires named credentials")
 		}
 		if len(auth.Credentials) == 0 {
-			return "", errors.New("manual token exchange requires declared credentials")
+			return nil, "", errors.New("manual token exchange requires declared credentials")
 		}
-		return marshalDeclaredManualCredentials(req.Credentials, auth.Credentials)
+		fields, err := declaredManualCredentials(req.Credentials, auth.Credentials)
+		return fields, "", err
 	}
 
 	if len(req.Credentials) > 0 {
-		return marshalManualCredentials(req.Credentials)
+		if err := validateManualCredentialValues(req.Credentials); err != nil {
+			return nil, "", err
+		}
+		return req.Credentials, "", nil
 	}
 
 	structured := auth.AuthMapping != nil && (len(auth.AuthMapping.Headers) > 0 || auth.AuthMapping.Basic != nil)
 	if !structured {
-		return req.Credential, nil
+		return nil, req.Credential, nil
 	}
 
 	switch {
 	case req.Credential != "" && len(auth.Credentials) == 1:
-		return marshalManualCredentials(map[string]string{auth.Credentials[0].Name: req.Credential})
+		fields := map[string]string{auth.Credentials[0].Name: req.Credential}
+		if err := validateManualCredentialValues(fields); err != nil {
+			return nil, "", err
+		}
+		return fields, "", nil
 	case req.Credential != "":
-		return "", errors.New("manual connection requires named credentials")
+		return nil, "", errors.New("manual connection requires named credentials")
 	}
-	return "", nil
+	return nil, "", nil
 }
 
-func marshalDeclaredManualCredentials(provided map[string]string, fields []config.CredentialFieldDef) (string, error) {
+func declaredManualCredentials(provided map[string]string, fields []config.CredentialFieldDef) (map[string]string, error) {
 	declared := make(map[string]struct{}, len(fields))
 	for _, field := range fields {
 		if field.Name != "" {
@@ -594,11 +619,11 @@ func marshalDeclaredManualCredentials(provided map[string]string, fields []confi
 		}
 	}
 	if len(declared) == 0 {
-		return "", errors.New("manual token exchange requires declared credentials")
+		return nil, errors.New("manual token exchange requires declared credentials")
 	}
 	for name := range provided {
 		if _, ok := declared[name]; !ok {
-			return "", fmt.Errorf("unknown credential: %s", name)
+			return nil, fmt.Errorf("unknown credential: %s", name)
 		}
 	}
 	for _, field := range fields {
@@ -606,20 +631,30 @@ func marshalDeclaredManualCredentials(provided map[string]string, fields []confi
 			continue
 		}
 		if _, ok := provided[field.Name]; !ok {
-			return "", fmt.Errorf("missing required credential: %s", field.Name)
+			return nil, fmt.Errorf("missing required credential: %s", field.Name)
 		}
 	}
-	return marshalManualCredentials(provided)
+	if err := validateManualCredentialValues(provided); err != nil {
+		return nil, err
+	}
+	return provided, nil
+}
+
+func validateManualCredentialValues(creds map[string]string) error {
+	for name, value := range creds {
+		if value == "" {
+			return fmt.Errorf("credential %q must not be empty", name)
+		}
+	}
+	return nil
 }
 
 func marshalManualCredentials(creds map[string]string) (string, error) {
 	if len(creds) == 0 {
 		return "", nil
 	}
-	for name, value := range creds {
-		if value == "" {
-			return "", fmt.Errorf("credential %q must not be empty", name)
-		}
+	if err := validateManualCredentialValues(creds); err != nil {
+		return "", err
 	}
 	data, err := json.Marshal(creds)
 	if err != nil {

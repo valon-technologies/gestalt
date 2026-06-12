@@ -21,7 +21,7 @@ func InstrumentIndexedDB(db indexeddb.IndexedDB, dbName string) indexeddb.Indexe
 
 // UnwrapIndexedDB returns the underlying IndexedDB if db is instrumented,
 // or db itself otherwise. Use this before type-asserting optional interfaces
-// (e.g. RegistrationStore, Warnings) that the wrapper does not implement.
+// (e.g. Warnings) that the wrapper does not implement.
 func UnwrapIndexedDB(db indexeddb.IndexedDB) indexeddb.IndexedDB {
 	if w, ok := db.(*instrumentedIndexedDB); ok {
 		return w.inner

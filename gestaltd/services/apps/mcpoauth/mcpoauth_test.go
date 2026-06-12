@@ -10,35 +10,15 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/apps/mcpoauth"
 )
 
-type memStore struct {
-	mu   sync.Mutex
-	regs map[string]*mcpoauth.Registration
-}
-
-func (s *memStore) GetRegistration(_ context.Context, authServerURL, redirectURI string) (*mcpoauth.Registration, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.regs[authServerURL+"|"+redirectURI], nil
-}
-
-func (s *memStore) StoreRegistration(_ context.Context, reg *mcpoauth.Registration) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.regs[reg.AuthServerURL+"|"+reg.RedirectURI] = reg
-	return nil
-}
-
-func (s *memStore) DeleteRegistration(_ context.Context, authServerURL, redirectURI string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.regs, authServerURL+"|"+redirectURI)
-	return nil
-}
+const testRedirectURL = "http://localhost:9999/callback"
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -48,143 +28,37 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func TestMCPOAuthFlow(t *testing.T) {
-	t.Parallel()
+// fakeAuthServer is an MCP resource plus OAuth authorization server with DCR.
+// direct=false advertises the AS via RFC 9728 WWW-Authenticate indirection;
+// direct=true embeds the endpoints in the resource metadata (ClickHouse style).
+type fakeAuthServer struct {
+	srv *httptest.Server
 
-	t.Run("RFC9728", func(t *testing.T) {
-		t.Parallel()
+	mu             sync.Mutex
+	dcrCount       int
+	dcrGrantTypes  []any
+	tokenClientIDs []string
+	tokenVerifiers []string
+	tokenResources []string
+	// newClientID names the nth registered client; default is client-00n.
+	newClientID func(n int) string
+}
 
-		var dcrBody map[string]any
+func newFakeAuthServer(t *testing.T, direct bool) *fakeAuthServer {
+	t.Helper()
+	as := &fakeAuthServer{newClientID: func(n int) string { return fmt.Sprintf("client-%03d", n) }}
 
-		mux := http.NewServeMux()
-
-		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
+		if !direct {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
-			w.WriteHeader(http.StatusUnauthorized)
-		})
-
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"resource":              baseURL + "/mcp",
-				"authorization_servers": []string{baseURL},
-				"scopes_supported":      []string{"read", "write"},
-			})
-		})
-
-		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"issuer":                                baseURL,
-				"authorization_endpoint":                baseURL + "/oauth/authorize",
-				"token_endpoint":                        baseURL + "/oauth/token",
-				"registration_endpoint":                 baseURL + "/oauth/register",
-				"scopes_supported":                      []string{"read", "write"},
-				"code_challenge_methods_supported":      []string{"S256"},
-				"token_endpoint_auth_methods_supported": []string{"none", "client_secret_post"},
-			})
-		})
-
-		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, r *http.Request) {
-			_ = json.NewDecoder(r.Body).Decode(&dcrBody)
-			writeJSON(w, http.StatusCreated, map[string]any{
-				"client_id": "dcr-client-001",
-			})
-		})
-
-		mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
-			_ = r.ParseForm()
-			if r.Form.Get("grant_type") != "authorization_code" {
-				http.Error(w, "bad grant_type", http.StatusBadRequest)
-				return
-			}
-			if r.Form.Get("code") == "" {
-				http.Error(w, "missing code", http.StatusBadRequest)
-				return
-			}
-			writeJSON(w, 0, map[string]any{
-				"access_token":  "access-tok-123",
-				"refresh_token": "refresh-tok-456",
-				"token_type":    "Bearer",
-				"expires_in":    3600,
-			})
-		})
-
-		srv := httptest.NewServer(mux)
-		testutil.CloseOnCleanup(t, srv)
-
-		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
-		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			Store:       store,
-			RedirectURL: "http://localhost:9999/callback",
-		})
-
-		authURL, verifier := handler.StartOAuth("test-state", nil)
-
-		if authURL == "" {
-			t.Fatal("expected non-empty auth URL")
+				`Bearer resource_metadata="http://%s/.well-known/oauth-protected-resource/mcp"`, r.Host))
 		}
-		if verifier == "" {
-			t.Fatal("expected non-empty PKCE verifier")
-		}
-
-		parsed, err := url.Parse(authURL)
-		if err != nil {
-			t.Fatalf("parsing auth URL: %v", err)
-		}
-		if !strings.HasPrefix(parsed.Path, "/oauth/authorize") {
-			t.Errorf("auth URL path = %q, want /oauth/authorize prefix", parsed.Path)
-		}
-		if parsed.Query().Get("client_id") != "dcr-client-001" {
-			t.Errorf("client_id = %q, want dcr-client-001", parsed.Query().Get("client_id"))
-		}
-		if parsed.Query().Get("code_challenge_method") != "S256" {
-			t.Errorf("code_challenge_method = %q, want S256", parsed.Query().Get("code_challenge_method"))
-		}
-
-		grantTypes, _ := dcrBody["grant_types"].([]any)
-		if len(grantTypes) != 2 {
-			t.Fatalf("DCR grant_types length = %d, want 2", len(grantTypes))
-		}
-		if grantTypes[0] != "authorization_code" || grantTypes[1] != "refresh_token" {
-			t.Errorf("DCR grant_types = %v, want [authorization_code, refresh_token]", grantTypes)
-		}
-
-		reg, _ := store.GetRegistration(context.Background(), srv.URL, "http://localhost:9999/callback")
-		if reg == nil {
-			t.Fatal("expected stored registration")
-			return
-		}
-		if reg.ClientID != "dcr-client-001" {
-			t.Errorf("stored client_id = %q, want dcr-client-001", reg.ClientID)
-		}
-
-		tokenResp, err := handler.ExchangeCodeWithVerifier(context.Background(), "auth-code-xyz", verifier)
-		if err != nil {
-			t.Fatalf("ExchangeCodeWithVerifier: %v", err)
-		}
-		if tokenResp.AccessToken != "access-tok-123" {
-			t.Errorf("access_token = %q, want access-tok-123", tokenResp.AccessToken)
-		}
-		if tokenResp.RefreshToken != "refresh-tok-456" {
-			t.Errorf("refresh_token = %q, want refresh-tok-456", tokenResp.RefreshToken)
-		}
+		w.WriteHeader(http.StatusUnauthorized)
 	})
-
-	t.Run("DirectEndpoints", func(t *testing.T) {
-		t.Parallel()
-
-		mux := http.NewServeMux()
-
-		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusUnauthorized)
-		})
-
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+		baseURL := "http://" + r.Host
+		if direct {
 			writeJSON(w, 0, map[string]any{
 				"authorization_endpoint":                baseURL + "/oauth/authorize",
 				"token_endpoint":                        baseURL + "/oauth/token",
@@ -193,243 +67,280 @@ func TestMCPOAuthFlow(t *testing.T) {
 				"code_challenge_methods_supported":      []string{"S256"},
 				"token_endpoint_auth_methods_supported": []string{"none"},
 			})
-		})
-
-		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusCreated, map[string]any{
-				"client_id": "direct-client-001",
-			})
-		})
-
-		mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
-			_ = r.ParseForm()
-			if r.Form.Get("client_id") == "" {
-				http.Error(w, "missing client_id", http.StatusBadRequest)
-				return
-			}
-			writeJSON(w, 0, map[string]any{
-				"access_token": "direct-access-tok",
-				"token_type":   "Bearer",
-				"expires_in":   7200,
-			})
-		})
-
-		srv := httptest.NewServer(mux)
-		testutil.CloseOnCleanup(t, srv)
-
-		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
-		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			Store:       store,
-			RedirectURL: "http://localhost:9999/callback",
-		})
-
-		authURL, verifier := handler.StartOAuth("test-state", nil)
-		if authURL == "" {
-			t.Fatal("expected non-empty auth URL")
+			return
 		}
-
-		parsed, _ := url.Parse(authURL)
-		if parsed.Query().Get("client_id") != "direct-client-001" {
-			t.Errorf("client_id = %q, want direct-client-001", parsed.Query().Get("client_id"))
+		writeJSON(w, 0, map[string]any{
+			"resource":              baseURL + "/mcp",
+			"authorization_servers": []string{baseURL},
+			"scopes_supported":      []string{"read", "write"},
+		})
+	})
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		baseURL := "http://" + r.Host
+		writeJSON(w, 0, map[string]any{
+			"issuer":                                baseURL,
+			"authorization_endpoint":                baseURL + "/oauth/authorize",
+			"token_endpoint":                        baseURL + "/oauth/token",
+			"registration_endpoint":                 baseURL + "/oauth/register",
+			"scopes_supported":                      []string{"read", "write"},
+			"code_challenge_methods_supported":      []string{"S256"},
+			"token_endpoint_auth_methods_supported": []string{"none", "client_secret_post"},
+		})
+	})
+	mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		as.mu.Lock()
+		as.dcrCount++
+		n := as.dcrCount
+		as.dcrGrantTypes, _ = body["grant_types"].([]any)
+		as.mu.Unlock()
+		// Outside the lock: newClientID may block on a test barrier.
+		writeJSON(w, http.StatusCreated, map[string]any{"client_id": as.newClientID(n)})
+	})
+	mux.HandleFunc("POST /oauth/token", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.Form.Get("grant_type") != "authorization_code" || r.Form.Get("code") == "" {
+			http.Error(w, "bad token request", http.StatusBadRequest)
+			return
 		}
-
-		tokenResp, err := handler.ExchangeCodeWithVerifier(context.Background(), "test-code", verifier)
-		if err != nil {
-			t.Fatalf("ExchangeCodeWithVerifier: %v", err)
-		}
-		if tokenResp.AccessToken != "direct-access-tok" {
-			t.Errorf("access_token = %q, want direct-access-tok", tokenResp.AccessToken)
-		}
+		as.mu.Lock()
+		as.tokenClientIDs = append(as.tokenClientIDs, r.Form.Get("client_id"))
+		as.tokenVerifiers = append(as.tokenVerifiers, r.Form.Get("code_verifier"))
+		as.tokenResources = append(as.tokenResources, r.Form.Get("resource"))
+		as.mu.Unlock()
+		writeJSON(w, 0, map[string]any{
+			"access_token":  "access-tok-123",
+			"refresh_token": "refresh-tok-456",
+			"token_type":    "Bearer",
+			"expires_in":    3600,
+		})
 	})
 
-	t.Run("EphemeralDCRWithoutStore", func(t *testing.T) {
+	as.srv = httptest.NewServer(mux)
+	testutil.CloseOnCleanup(t, as.srv)
+	return as
+}
+
+func (as *fakeAuthServer) mcpURL() string { return as.srv.URL + "/mcp" }
+
+func newHandler(as *fakeAuthServer, creds core.ExternalCredentialProvider) *mcpoauth.Handler {
+	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
+		MCPURL:      as.mcpURL(),
+		Credentials: creds,
+		RedirectURL: testRedirectURL,
+	})
+}
+
+func storedClientInfo(t *testing.T, creds core.ExternalCredentialProvider, authServerURL string) *core.ExternalCredentialClientInfo {
+	t.Helper()
+	credential, err := creds.GetCredential(context.Background(), core.GestaltdSubjectID, authServerURL, testRedirectURL)
+	if err != nil {
+		t.Fatalf("GetCredential(%s, %s, %s): %v", core.GestaltdSubjectID, authServerURL, testRedirectURL, err)
+	}
+	if credential.Client == nil {
+		t.Fatalf("stored credential = %+v, want ClientInfo kind", credential)
+	}
+	return credential.Client
+}
+
+func clientIDOf(t *testing.T, authURL string) string {
+	t.Helper()
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("parsing auth URL %q: %v", authURL, err)
+	}
+	return parsed.Query().Get("client_id")
+}
+
+func TestMCPOAuthFlow(t *testing.T) {
+	t.Parallel()
+
+	// The production topology: the OAuth start and the callback are served by
+	// different instances that share only the external credentials provider.
+	// The exchange must present the same client_id the authorize URL carried.
+	t.Run("RFC9728CrossInstance", func(t *testing.T) {
 		t.Parallel()
 
-		var dcrCount int
-		mux := http.NewServeMux()
+		as := newFakeAuthServer(t, false)
+		creds := coretesting.NewStubExternalCredentialProvider()
+		instanceA := newHandler(as, creds)
+		instanceB := newHandler(as, creds)
 
-		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
-			w.WriteHeader(http.StatusUnauthorized)
-		})
-
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"resource":              baseURL + "/mcp",
-				"authorization_servers": []string{baseURL},
-				"scopes_supported":      []string{"read"},
-			})
-		})
-
-		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"issuer":                                baseURL,
-				"authorization_endpoint":                baseURL + "/oauth/authorize",
-				"token_endpoint":                        baseURL + "/oauth/token",
-				"registration_endpoint":                 baseURL + "/oauth/register",
-				"scopes_supported":                      []string{"read"},
-				"code_challenge_methods_supported":      []string{"S256"},
-				"token_endpoint_auth_methods_supported": []string{"none"},
-			})
-		})
-
-		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, r *http.Request) {
-			dcrCount++
-			writeJSON(w, http.StatusCreated, map[string]any{
-				"client_id": "ephemeral-client-001",
-			})
-		})
-
-		srv := httptest.NewServer(mux)
-		testutil.CloseOnCleanup(t, srv)
-
-		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			RedirectURL: "http://localhost:9999/callback",
-		})
-
-		authURL, verifier := handler.StartOAuth("test-state", nil)
-		if authURL == "" {
-			t.Fatal("expected non-empty auth URL")
+		authURL, verifier := instanceA.StartOAuth("test-state", nil)
+		if authURL == "" || verifier == "" {
+			t.Fatalf("StartOAuth = (%q, %q), want non-empty auth URL and PKCE verifier", authURL, verifier)
 		}
-		if verifier == "" {
-			t.Fatal("expected non-empty verifier")
-		}
-		if dcrCount != 1 {
-			t.Fatalf("DCR calls = %d, want 1", dcrCount)
-		}
-
 		parsed, err := url.Parse(authURL)
 		if err != nil {
 			t.Fatalf("parsing auth URL: %v", err)
 		}
-		if parsed.Query().Get("client_id") != "ephemeral-client-001" {
-			t.Errorf("client_id = %q, want ephemeral-client-001", parsed.Query().Get("client_id"))
+		if !strings.HasPrefix(parsed.Path, "/oauth/authorize") {
+			t.Errorf("auth URL path = %q, want /oauth/authorize prefix", parsed.Path)
+		}
+		if got := parsed.Query().Get("client_id"); got != "client-001" {
+			t.Errorf("client_id = %q, want client-001", got)
+		}
+		if got := parsed.Query().Get("code_challenge_method"); got != "S256" {
+			t.Errorf("code_challenge_method = %q, want S256", got)
+		}
+		if got := parsed.Query().Get("resource"); got != as.mcpURL() {
+			t.Errorf("authorize resource = %q, want %q (RFC 8707)", got, as.mcpURL())
+		}
+		if len(as.dcrGrantTypes) != 2 || as.dcrGrantTypes[0] != "authorization_code" || as.dcrGrantTypes[1] != "refresh_token" {
+			t.Errorf("DCR grant_types = %v, want [authorization_code, refresh_token]", as.dcrGrantTypes)
 		}
 
-		authURL, verifier = handler.StartOAuth("test-state-2", nil)
-		if authURL == "" || verifier == "" {
-			t.Fatal("expected cached upstream for repeated StartOAuth")
+		if got := storedClientInfo(t, creds, as.srv.URL).ClientID; got != "client-001" {
+			t.Errorf("stored client_id = %q, want client-001", got)
 		}
-		if dcrCount != 1 {
-			t.Fatalf("DCR calls after cache reuse = %d, want 1", dcrCount)
+
+		tokenResp, err := instanceB.ExchangeCodeWithVerifier(context.Background(), "auth-code-xyz", verifier)
+		if err != nil {
+			t.Fatalf("ExchangeCodeWithVerifier: %v", err)
+		}
+		if tokenResp.AccessToken != "access-tok-123" || tokenResp.RefreshToken != "refresh-tok-456" {
+			t.Errorf("token response = (%q, %q), want (access-tok-123, refresh-tok-456)", tokenResp.AccessToken, tokenResp.RefreshToken)
+		}
+		if as.dcrCount != 1 {
+			t.Errorf("DCR calls = %d, want 1 (instance B must reuse instance A's client)", as.dcrCount)
+		}
+		if len(as.tokenClientIDs) != 1 || as.tokenClientIDs[0] != "client-001" {
+			t.Errorf("token exchange client_ids = %v, want [client-001]", as.tokenClientIDs)
+		}
+		if len(as.tokenVerifiers) != 1 || as.tokenVerifiers[0] != verifier {
+			t.Errorf("token exchange verifier not forwarded")
+		}
+		if len(as.tokenResources) != 1 || as.tokenResources[0] != as.mcpURL() {
+			t.Errorf("token exchange resource = %v, want [%q] (RFC 8707)", as.tokenResources, as.mcpURL())
 		}
 	})
 
-	t.Run("ClearRegistration", func(t *testing.T) {
+	t.Run("DirectEndpoints", func(t *testing.T) {
 		t.Parallel()
 
-		var dcrCount int
-		var mu sync.Mutex
+		as := newFakeAuthServer(t, true)
+		handler := newHandler(as, coretesting.NewStubExternalCredentialProvider())
 
-		mux := http.NewServeMux()
-		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
-			w.WriteHeader(http.StatusUnauthorized)
-		})
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"resource":              baseURL + "/mcp",
-				"authorization_servers": []string{baseURL},
-			})
-		})
-		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"issuer":                                baseURL,
-				"authorization_endpoint":                baseURL + "/oauth/authorize",
-				"token_endpoint":                        baseURL + "/oauth/token",
-				"registration_endpoint":                 baseURL + "/oauth/register",
-				"code_challenge_methods_supported":      []string{"S256"},
-				"token_endpoint_auth_methods_supported": []string{"none"},
-			})
-		})
-		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, _ *http.Request) {
-			mu.Lock()
-			dcrCount++
-			id := fmt.Sprintf("client-%03d", dcrCount)
-			mu.Unlock()
-			writeJSON(w, http.StatusCreated, map[string]any{"client_id": id})
-		})
+		authURL, verifier := handler.StartOAuth("test-state", nil)
+		if got := clientIDOf(t, authURL); got != "client-001" {
+			t.Errorf("client_id = %q, want client-001", got)
+		}
+		tokenResp, err := handler.ExchangeCodeWithVerifier(context.Background(), "test-code", verifier)
+		if err != nil {
+			t.Fatalf("ExchangeCodeWithVerifier: %v", err)
+		}
+		if tokenResp.AccessToken != "access-tok-123" {
+			t.Errorf("access_token = %q, want access-tok-123", tokenResp.AccessToken)
+		}
+		// Direct-endpoint metadata omits the resource field; the MCP URL is
+		// the canonical resource URI.
+		if len(as.tokenResources) != 1 || as.tokenResources[0] != as.mcpURL() {
+			t.Errorf("token exchange resource = %v, want [%q] (RFC 8707)", as.tokenResources, as.mcpURL())
+		}
+	})
 
-		srv := httptest.NewServer(mux)
-		testutil.CloseOnCleanup(t, srv)
+	t.Run("ConcurrentDCRFirstWriterWins", func(t *testing.T) {
+		t.Parallel()
 
-		store := &memStore{regs: make(map[string]*mcpoauth.Registration)}
-		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			Store:       store,
-			RedirectURL: "http://localhost:9999/callback",
+		as := newFakeAuthServer(t, false)
+		barrier := make(chan struct{})
+		release := sync.OnceFunc(func() { close(barrier) })
+		as.newClientID = func(n int) string {
+			// Hold the first registration until the second arrives so both
+			// instances register before either stores its client.
+			if n == 1 {
+				<-barrier
+			} else {
+				release()
+			}
+			return fmt.Sprintf("client-%03d", n)
+		}
+		creds := coretesting.NewStubExternalCredentialProvider()
+		handlers := []*mcpoauth.Handler{newHandler(as, creds), newHandler(as, creds)}
+
+		urls := make([]string, len(handlers))
+		var wg sync.WaitGroup
+		for i, h := range handlers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				urls[i], _ = h.StartOAuth(fmt.Sprintf("s%d", i), nil)
+			}()
+		}
+		wg.Wait()
+		release()
+
+		clientA, clientB := clientIDOf(t, urls[0]), clientIDOf(t, urls[1])
+		if clientA == "" || clientA != clientB {
+			t.Fatalf("authorize client_ids = (%q, %q), want both equal to the race winner", clientA, clientB)
+		}
+		if got := storedClientInfo(t, creds, as.srv.URL).ClientID; got != clientA {
+			t.Errorf("stored client_id = %q, want %q", got, clientA)
+		}
+	})
+
+	t.Run("ExpiredRegistrationReRegisters", func(t *testing.T) {
+		t.Parallel()
+
+		as := newFakeAuthServer(t, false)
+		creds := coretesting.NewStubExternalCredentialProvider()
+		expired := time.Now().Add(-time.Hour)
+		err := creds.UpsertCredential(context.Background(), &core.ExternalCredential{
+			Subject:   core.GestaltdSubjectID,
+			Audience:  as.srv.URL,
+			Qualifier: testRedirectURL,
+			Client: &core.ExternalCredentialClientInfo{
+				ClientID:              "stale-client",
+				ClientSecretExpiresAt: &expired,
+			},
 		})
-
-		authURL1, _ := handler.StartOAuth("s1", nil)
-		parsed1, _ := url.Parse(authURL1)
-		if parsed1.Query().Get("client_id") != "client-001" {
-			t.Fatalf("first client_id = %q, want client-001", parsed1.Query().Get("client_id"))
+		if err != nil {
+			t.Fatalf("seeding expired registration: %v", err)
 		}
 
-		authURL2, _ := handler.StartOAuth("s2", nil)
-		parsed2, _ := url.Parse(authURL2)
-		if parsed2.Query().Get("client_id") != "client-001" {
-			t.Fatalf("cached client_id = %q, want client-001", parsed2.Query().Get("client_id"))
+		authURL, _ := newHandler(as, creds).StartOAuth("s1", nil)
+		if got := clientIDOf(t, authURL); got != "client-001" {
+			t.Errorf("client_id = %q, want re-registered client-001", got)
 		}
+		if got := storedClientInfo(t, creds, as.srv.URL).ClientID; got != "client-001" {
+			t.Errorf("stored client_id = %q, want replaced registration client-001", got)
+		}
+	})
 
-		handler.ClearRegistration()
+	t.Run("AuthConfigCarriesRegisteredClient", func(t *testing.T) {
+		t.Parallel()
 
-		authURL3, _ := handler.StartOAuth("s3", nil)
-		parsed3, _ := url.Parse(authURL3)
-		if parsed3.Query().Get("client_id") != "client-002" {
-			t.Fatalf("re-registered client_id = %q, want client-002", parsed3.Query().Get("client_id"))
+		as := newFakeAuthServer(t, false)
+		creds := coretesting.NewStubExternalCredentialProvider()
+		handler := newHandler(as, creds)
+
+		authConfig, err := handler.AuthConfig(context.Background())
+		if err != nil {
+			t.Fatalf("AuthConfig: %v", err)
+		}
+		if authConfig.Type != "oauth2" {
+			t.Errorf("auth type = %q, want oauth2", authConfig.Type)
+		}
+		if want := as.srv.URL + "/oauth/token"; authConfig.TokenURL != want {
+			t.Errorf("token URL = %q, want %q", authConfig.TokenURL, want)
+		}
+		if authConfig.ClientID != "client-001" {
+			t.Errorf("client_id = %q, want client-001", authConfig.ClientID)
+		}
+		if got := authConfig.RefreshParams["resource"]; got != as.mcpURL() {
+			t.Errorf("refresh resource param = %q, want %q (RFC 8707)", got, as.mcpURL())
+		}
+		if got := storedClientInfo(t, creds, as.srv.URL).ClientID; got != "client-001" {
+			t.Errorf("stored client_id = %q, want client-001 (AuthConfig registers when absent)", got)
 		}
 	})
 
 	t.Run("IsolatedFromDefaultTransportCloseIdleConnections", func(t *testing.T) {
 		t.Parallel()
 
-		mux := http.NewServeMux()
-		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
-				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
-			w.WriteHeader(http.StatusUnauthorized)
-		})
-		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"resource":              baseURL + "/mcp",
-				"authorization_servers": []string{baseURL},
-			})
-		})
-		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-			baseURL := "http://" + r.Host
-			writeJSON(w, 0, map[string]any{
-				"issuer":                                baseURL,
-				"authorization_endpoint":                baseURL + "/oauth/authorize",
-				"token_endpoint":                        baseURL + "/oauth/token",
-				"registration_endpoint":                 baseURL + "/oauth/register",
-				"code_challenge_methods_supported":      []string{"S256"},
-				"token_endpoint_auth_methods_supported": []string{"none"},
-			})
-		})
-		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusCreated, map[string]any{"client_id": "client-001"})
-		})
-
-		srv := httptest.NewServer(mux)
-		testutil.CloseOnCleanup(t, srv)
-
-		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
-			MCPURL:      srv.URL + "/mcp",
-			RedirectURL: "http://localhost:9999/callback",
-		})
+		as := newFakeAuthServer(t, false)
+		handler := newHandler(as, coretesting.NewStubExternalCredentialProvider())
 
 		defaultTransport, ok := http.DefaultTransport.(*http.Transport)
 		if !ok {
@@ -456,20 +367,12 @@ func TestMCPOAuthFlow(t *testing.T) {
 
 		for i := range 5 {
 			authURL, verifier := handler.StartOAuth(fmt.Sprintf("s%d", i+1), nil)
-			if authURL == "" {
-				t.Fatalf("StartOAuth #%d returned empty authURL", i+1)
+			if authURL == "" || verifier == "" {
+				t.Fatalf("StartOAuth #%d = (%q, %q), want non-empty", i+1, authURL, verifier)
 			}
-			if verifier == "" {
-				t.Fatalf("StartOAuth #%d returned empty verifier", i+1)
+			if got := clientIDOf(t, authURL); got != "client-001" {
+				t.Fatalf("client_id #%d = %q, want client-001", i+1, got)
 			}
-			parsed, err := url.Parse(authURL)
-			if err != nil {
-				t.Fatalf("parse auth URL #%d: %v", i+1, err)
-			}
-			if parsed.Query().Get("client_id") != "client-001" {
-				t.Fatalf("client_id #%d = %q, want client-001", i+1, parsed.Query().Get("client_id"))
-			}
-			handler.ClearRegistration()
 		}
 	})
 }

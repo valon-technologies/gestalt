@@ -39,6 +39,30 @@ func (p *stubExternalCredentialProvider) Configure(context.Context, string, map[
 	return nil
 }
 
+func (p *stubExternalCredentialProvider) CreateCredential(_ context.Context, req *gestalt.CreateExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
+	if req == nil || req.GetCredential() == nil {
+		return nil, fmt.Errorf("credential is required")
+	}
+	value := cloneExternalCredential(req.GetCredential())
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	key := externalCredentialLookupKey(value.GetSubject(), value.GetAudience(), value.GetQualifier())
+	if _, exists := p.credentials[key]; exists {
+		return nil, gestalt.ErrAlreadyExists
+	}
+	now := time.Now().UTC()
+	if value.GetId() == "" {
+		value.ID = "cred-" + value.GetAudience() + "-" + value.GetQualifier()
+	}
+	value.CreatedAt = &now
+	value.UpdatedAt = &now
+	p.credentials[key] = cloneExternalCredential(value)
+	p.lookupByID[value.GetId()] = key
+	return value, nil
+}
+
 func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req *gestalt.UpsertExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
 	if req == nil || req.GetCredential() == nil {
 		return nil, fmt.Errorf("credential is required")
@@ -48,11 +72,7 @@ func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	key := externalCredentialLookupKey(&gestalt.ExternalCredentialLookup{
-		SubjectID:    value.GetSubjectId(),
-		ConnectionID: value.GetConnectionId(),
-		Instance:     value.GetInstance(),
-	})
+	key := externalCredentialLookupKey(value.GetSubject(), value.GetAudience(), value.GetQualifier())
 	existing := p.credentials[key]
 	now := time.Now().UTC()
 	if existing != nil {
@@ -60,7 +80,7 @@ func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req
 		value.CreatedAt = existing.GetCreatedAt()
 	} else {
 		if value.GetId() == "" {
-			value.ID = "cred-" + value.GetConnectionId() + "-" + value.GetInstance()
+			value.ID = "cred-" + value.GetAudience() + "-" + value.GetQualifier()
 		}
 		if value.GetCreatedAt() == nil {
 			value.CreatedAt = &now
@@ -73,13 +93,13 @@ func (p *stubExternalCredentialProvider) UpsertCredential(_ context.Context, req
 }
 
 func (p *stubExternalCredentialProvider) GetCredential(_ context.Context, req *gestalt.GetExternalCredentialRequest) (*gestalt.ExternalCredential, error) {
-	if req == nil || req.GetLookup() == nil {
-		return nil, fmt.Errorf("lookup is required")
+	if req == nil || req.GetSubject() == "" {
+		return nil, fmt.Errorf("subject is required")
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	credential, ok := p.credentials[externalCredentialLookupKey(req.GetLookup())]
+	credential, ok := p.credentials[externalCredentialLookupKey(req.GetSubject(), req.GetAudience(), req.GetQualifier())]
 	if !ok {
 		return nil, gestalt.ErrExternalCredentialNotFound
 	}
@@ -95,13 +115,10 @@ func (p *stubExternalCredentialProvider) ListCredentials(_ context.Context, req 
 
 	credentials := make([]*gestalt.ExternalCredential, 0, len(p.credentials))
 	for _, credential := range p.credentials {
-		if req.GetSubjectId() != "" && credential.GetSubjectId() != req.GetSubjectId() {
+		if req.GetSubject() != "" && credential.GetSubject() != req.GetSubject() {
 			continue
 		}
-		if req.GetConnectionId() != "" && credential.GetConnectionId() != req.GetConnectionId() {
-			continue
-		}
-		if req.GetInstance() != "" && credential.GetInstance() != req.GetInstance() {
+		if req.GetAudience() != "" && credential.GetAudience() != req.GetAudience() {
 			continue
 		}
 		credentials = append(credentials, cloneExternalCredential(credential))
@@ -136,17 +153,17 @@ func (p *stubExternalCredentialProvider) ResolveCredential(ctx context.Context, 
 	if req == nil {
 		return nil, fmt.Errorf("request is required")
 	}
-	credential, err := p.GetCredential(ctx, &gestalt.GetExternalCredentialRequest{Lookup: &gestalt.ExternalCredentialLookup{
-		SubjectID:    req.GetCredentialSubjectId(),
-		ConnectionID: req.GetConnectionId(),
-		Instance:     req.GetInstance(),
-	}})
+	credential, err := p.GetCredential(ctx, &gestalt.GetExternalCredentialRequest{
+		Subject:   req.GetCredentialSubjectId(),
+		Audience:  req.GetConnectionId(),
+		Qualifier: req.GetInstance(),
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &gestalt.ResolveExternalCredentialResponse{
-		Token:      credential.GetAccessToken(),
-		ExpiresAt:  credential.GetExpiresAt(),
+		Token:      credential.GetGrant().GetAccessToken(),
+		ExpiresAt:  credential.GetGrant().GetExpiresAt(),
 		Credential: credential,
 	}, nil
 }
@@ -216,18 +233,15 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 		t.Fatalf("provider kind = %v, want %v", meta.GetKind(), proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL)
 	}
 
-	lookup := &proto.ExternalCredentialLookup{
-		SubjectId:    "user:user-123",
-		ConnectionId: "slack:default",
-		Instance:     "workspace-1",
-	}
 	upserted, err := client.UpsertCredential(rpcCtx, &proto.UpsertExternalCredentialRequest{
 		Credential: &proto.ExternalCredential{
-			SubjectId:    lookup.GetSubjectId(),
-			ConnectionId: lookup.GetConnectionId(),
-			Instance:     lookup.GetInstance(),
-			AccessToken:  "xoxb-123",
-			Scopes:       "channels:read chat:write",
+			Subject:   "user:user-123",
+			Audience:  "slack:default",
+			Qualifier: "workspace-1",
+			Credential: &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{
+				AccessToken: "xoxb-123",
+				Scope:       "channels:read chat:write",
+			}},
 		},
 	}, grpc.WaitForReady(true))
 	if err != nil {
@@ -240,17 +254,53 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 		t.Fatal("UpsertCredential returned nil updated_at")
 	}
 
-	got, err := client.GetCredential(rpcCtx, &proto.GetExternalCredentialRequest{Lookup: lookup}, grpc.WaitForReady(true))
+	created, err := client.CreateCredential(rpcCtx, &proto.CreateExternalCredentialRequest{
+		Credential: &proto.ExternalCredential{
+			Subject:   "system:gestaltd",
+			Audience:  "https://auth.example.com",
+			Qualifier: "https://gestalt.example.com/callback",
+			Credential: &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
+				ClientId:     "client-001",
+				ClientSecret: "secret-001",
+			}},
+		},
+	}, grpc.WaitForReady(true))
+	if err != nil {
+		t.Fatalf("CreateCredential: %v", err)
+	}
+	if created.GetClient().GetClientId() != "client-001" {
+		t.Fatalf("created client_id = %q, want client-001", created.GetClient().GetClientId())
+	}
+
+	_, err = client.CreateCredential(rpcCtx, &proto.CreateExternalCredentialRequest{
+		Credential: &proto.ExternalCredential{
+			Subject:   "system:gestaltd",
+			Audience:  "https://auth.example.com",
+			Qualifier: "https://gestalt.example.com/callback",
+			Credential: &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
+				ClientId: "client-002",
+			}},
+		},
+	}, grpc.WaitForReady(true))
+	if s, ok := status.FromError(err); !ok || s.Code() != codes.AlreadyExists {
+		t.Fatalf("CreateCredential conflict code = %v, want ALREADY_EXISTS", err)
+	}
+
+	got, err := client.GetCredential(rpcCtx, &proto.GetExternalCredentialRequest{
+		Subject:   "user:user-123",
+		Audience:  "slack:default",
+		Qualifier: "workspace-1",
+	}, grpc.WaitForReady(true))
 	if err != nil {
 		t.Fatalf("GetCredential: %v", err)
 	}
-	if got.GetAccessToken() != "xoxb-123" {
-		t.Fatalf("access token = %q, want %q", got.GetAccessToken(), "xoxb-123")
+	if got.GetGrant().GetAccessToken() != "xoxb-123" {
+		t.Fatalf("access token = %q, want %q", got.GetGrant().GetAccessToken(), "xoxb-123")
 	}
 
 	listed, err := client.ListCredentials(rpcCtx, &proto.ListExternalCredentialsRequest{
-		SubjectId:    lookup.GetSubjectId(),
-		ConnectionId: lookup.GetConnectionId(),
+		Subject:  "user:user-123",
+		Audience: "slack:default",
 	}, grpc.WaitForReady(true))
 	if err != nil {
 		t.Fatalf("ListCredentials: %v", err)
@@ -263,7 +313,11 @@ func TestExternalCredentialProviderRoundTrip(t *testing.T) {
 		t.Fatalf("DeleteCredential: %v", err)
 	}
 
-	_, err = client.GetCredential(rpcCtx, &proto.GetExternalCredentialRequest{Lookup: lookup}, grpc.WaitForReady(true))
+	_, err = client.GetCredential(rpcCtx, &proto.GetExternalCredentialRequest{
+		Subject:   "user:user-123",
+		Audience:  "slack:default",
+		Qualifier: "workspace-1",
+	}, grpc.WaitForReady(true))
 	if err == nil {
 		t.Fatal("GetCredential after delete should return error")
 	}
@@ -298,10 +352,12 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 
 	credential, err := externalCredentials.UpsertCredentialRaw(context.Background(), &sdkclient.UpsertExternalCredentialRequest{
 		Credential: &sdkclient.ExternalCredential{
-			SubjectId:    "user:user-123",
-			ConnectionId: "slack:default",
-			Instance:     "workspace-1",
-			AccessToken:  "xoxb-123",
+			Subject:   "user:user-123",
+			Audience:  "slack:default",
+			Qualifier: "workspace-1",
+			Credential: &sdkclient.ExternalCredentialCredentialGrant{Value: &sdkclient.ExternalCredentialGrant{
+				AccessToken: "xoxb-123",
+			}},
 		},
 	})
 	if err != nil {
@@ -320,23 +376,16 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("upsert requests len = %d, want 1", len(harness.requests))
 	}
 	got := harness.requests[0].GetCredential()
-	if got.GetSubjectId() != "user:user-123" {
-		t.Fatalf("subject id = %q, want %q", got.GetSubjectId(), "user:user-123")
+	if got.GetSubject() != "user:user-123" {
+		t.Fatalf("subject = %q, want %q", got.GetSubject(), "user:user-123")
 	}
-	if got.GetConnectionId() != "slack:default" || got.GetInstance() != "workspace-1" {
-		t.Fatalf("credential = %+v, want connection_id=slack:default instance=workspace-1", got)
+	if got.GetAudience() != "slack:default" || got.GetQualifier() != "workspace-1" {
+		t.Fatalf("credential = %+v, want audience=slack:default qualifier=workspace-1", got)
 	}
 }
 
-func externalCredentialLookupKey(lookup interface {
-	GetSubjectId() string
-	GetConnectionId() string
-	GetInstance() string
-}) string {
-	if lookup == nil {
-		return ""
-	}
-	return lookup.GetSubjectId() + "\x00" + lookup.GetConnectionId() + "\x00" + lookup.GetInstance()
+func externalCredentialLookupKey(subject, audience, qualifier string) string {
+	return subject + "\x00" + audience + "\x00" + qualifier
 }
 
 func cloneExternalCredential(value *gestalt.ExternalCredential) *gestalt.ExternalCredential {
@@ -344,8 +393,24 @@ func cloneExternalCredential(value *gestalt.ExternalCredential) *gestalt.Externa
 		return nil
 	}
 	clone := *value
-	clone.ExpiresAt = cloneTime(value.ExpiresAt)
-	clone.LastRefreshedAt = cloneTime(value.LastRefreshedAt)
+	if value.Grant != nil {
+		grant := *value.Grant
+		grant.ExpiresAt = cloneTime(value.Grant.ExpiresAt)
+		grant.LastRefreshedAt = cloneTime(value.Grant.LastRefreshedAt)
+		clone.Grant = &grant
+	}
+	if value.Client != nil {
+		client := *value.Client
+		client.ClientSecretExpiresAt = cloneTime(value.Client.ClientSecretExpiresAt)
+		clone.Client = &client
+	}
+	if value.Opaque != nil {
+		fields := make(map[string]string, len(value.Opaque.Fields))
+		for k, v := range value.Opaque.Fields {
+			fields[k] = v
+		}
+		clone.Opaque = &gestalt.ExternalCredentialOpaque{Fields: fields}
+	}
 	clone.CreatedAt = cloneTime(value.CreatedAt)
 	clone.UpdatedAt = cloneTime(value.UpdatedAt)
 	return &clone

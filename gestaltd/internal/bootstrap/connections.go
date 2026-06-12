@@ -143,6 +143,60 @@ func BuildConnectionRuntime(cfg *config.Config) (invocation.ConnectionRuntimeMap
 	return runtime, nil
 }
 
+// attachMCPOAuthRuntimeAuth wires per-call auth-config resolvers for mcp_oauth
+// connections: their token endpoint is only known after discovery and their
+// client identity lives in the external credentials store, so static runtime
+// config cannot carry refresh-capable auth for them.
+func attachMCPOAuthRuntimeAuth(cfg *config.Config, runtime invocation.ConnectionRuntimeMap, deps Deps) error {
+	if cfg == nil || len(runtime) == 0 {
+		return nil
+	}
+	attachEntry := func(name string, entry *config.ProviderEntry) error {
+		if entry == nil {
+			return nil
+		}
+		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+		if err != nil {
+			return fmt.Errorf("integration %q: %w", name, err)
+		}
+		mcpURL := ""
+		if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
+			mcpURL = resolved.URL
+		}
+		if mcpURL == "" {
+			return nil
+		}
+		attach := func(connName string, conn config.ConnectionDef) {
+			if conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
+				return
+			}
+			info, ok := runtime[name][connName]
+			if !ok {
+				return
+			}
+			info.AuthConfigResolver = buildMCPOAuthHandler(conn, mcpURL, deps).AuthConfig
+			runtime[name][connName] = info
+		}
+		attach(config.AppConnectionName, plan.AppConnection())
+		for _, connName := range plan.NamedConnectionNames() {
+			conn, _ := plan.NamedConnectionDef(connName)
+			attach(connName, conn)
+		}
+		return nil
+	}
+	for name, entry := range cfg.Apps {
+		if err := attachEntry(name, entry); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.Agent {
+		if err := attachEntry(name, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ValidateConnectionRuntimeCredentials(ctx context.Context, provider core.ExternalCredentialProvider, runtime invocation.ConnectionRuntimeMap) error {
 	if len(runtime) == 0 || core.ExternalCredentialProviderMissing(provider) {
 		return nil
@@ -320,7 +374,7 @@ func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConf
 		if mcpURL == "" {
 			return nil, fmt.Errorf("mcp_oauth auth requires mcp_url")
 		}
-		return buildMCPOAuthHandler(conn, mcpURL, buildRegistrationStore(deps), deps), nil
+		return buildMCPOAuthHandler(conn, mcpURL, deps), nil
 	default:
 		return nil, nil
 	}

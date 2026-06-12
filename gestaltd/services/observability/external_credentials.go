@@ -27,34 +27,28 @@ func InstrumentExternalCredentialProvider(name string, provider core.ExternalCre
 	}
 }
 
-func (p *observedExternalCredentialProvider) PutCredential(ctx context.Context, credential *core.ExternalCredential) (err error) {
-	ctx, end := p.start(ctx, "put_credential", credentialIntegration(credential))
+func (p *observedExternalCredentialProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) (err error) {
+	ctx, end := p.start(ctx, "create_credential", credentialAudience(credential))
 	defer func() { end(err) }()
-	return p.delegate.PutCredential(ctx, credential)
+	return p.delegate.CreateCredential(ctx, credential)
 }
 
-func (p *observedExternalCredentialProvider) RestoreCredential(ctx context.Context, credential *core.ExternalCredential) (err error) {
-	ctx, end := p.start(ctx, "restore_credential", credentialIntegration(credential))
+func (p *observedExternalCredentialProvider) UpsertCredential(ctx context.Context, credential *core.ExternalCredential) (err error) {
+	ctx, end := p.start(ctx, "upsert_credential", credentialAudience(credential))
 	defer func() { end(err) }()
-	return p.delegate.RestoreCredential(ctx, credential)
+	return p.delegate.UpsertCredential(ctx, credential)
 }
 
-func (p *observedExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, connectionID, instance string) (credential *core.ExternalCredential, err error) {
-	ctx, end := p.start(ctx, "get_credential", connectionID)
+func (p *observedExternalCredentialProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (credential *core.ExternalCredential, err error) {
+	ctx, end := p.start(ctx, "get_credential", audience)
 	defer func() { end(err) }()
-	return p.delegate.GetCredential(ctx, subjectID, connectionID, instance)
+	return p.delegate.GetCredential(ctx, subject, audience, qualifier)
 }
 
-func (p *observedExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) (credentials []*core.ExternalCredential, err error) {
-	ctx, end := p.start(ctx, "list_credentials", "")
+func (p *observedExternalCredentialProvider) ListCredentials(ctx context.Context, subject, audience string) (credentials []*core.ExternalCredential, err error) {
+	ctx, end := p.start(ctx, "list_credentials", audience)
 	defer func() { end(err) }()
-	return p.delegate.ListCredentials(ctx, subjectID)
-}
-
-func (p *observedExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) (credentials []*core.ExternalCredential, err error) {
-	ctx, end := p.start(ctx, "list_credentials_for_connection", connectionID)
-	defer func() { end(err) }()
-	return p.delegate.ListCredentialsForConnection(ctx, subjectID, connectionID)
+	return p.delegate.ListCredentials(ctx, subject, audience)
 }
 
 func (p *observedExternalCredentialProvider) DeleteCredential(ctx context.Context, id string) (err error) {
@@ -105,14 +99,11 @@ func (p *observedExternalCredentialProvider) start(ctx context.Context, operatio
 	}
 }
 
-func credentialIntegration(credential *core.ExternalCredential) string {
+func credentialAudience(credential *core.ExternalCredential) string {
 	if credential == nil {
 		return ""
 	}
-	if credential.ConnectionID != "" {
-		return credential.ConnectionID
-	}
-	return credential.Integration
+	return credential.Audience
 }
 
 func requestConnectionID(req *core.ValidateExternalCredentialConfigRequest) string {

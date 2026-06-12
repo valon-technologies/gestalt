@@ -16,10 +16,14 @@ import (
 const discoveryTimeout = 10 * time.Second
 
 type DiscoveredMetadata struct {
-	AuthServerURL                 string
-	AuthorizationEndpoint         string
-	TokenEndpoint                 string
-	RegistrationEndpoint          string
+	AuthServerURL         string
+	AuthorizationEndpoint string
+	TokenEndpoint         string
+	RegistrationEndpoint  string
+	// Resource is the canonical resource URI from RFC 9728 protected resource
+	// metadata, sent as the RFC 8707 resource parameter on authorization and
+	// token requests.
+	Resource                      string
 	ScopesSupported               []string
 	CodeChallengeMethodsSupported []string
 	TokenEndpointAuthMethods      []string
@@ -79,7 +83,7 @@ func Discover(ctx context.Context, mcpURL string) (*DiscoveredMetadata, error) {
 		return nil, fmt.Errorf("mcpoauth discovery: fetching resource metadata from %s: %w", resourceMetadataURL, err)
 	}
 
-	return resolveMetadata(ctx, client, resourceMeta)
+	return resolveMetadata(ctx, client, mcpURL, resourceMeta)
 }
 
 // probeForResourceMetadata sends an unauthenticated request to the MCP URL and
@@ -138,8 +142,17 @@ func wellKnownResourceMetadataURL(mcpURL string) (string, error) {
 	return wellKnown.String(), nil
 }
 
-func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[string]any) (*DiscoveredMetadata, error) {
+func resolveMetadata(ctx context.Context, client *http.Client, mcpURL string, resourceMeta map[string]any) (*DiscoveredMetadata, error) {
 	md := &DiscoveredMetadata{}
+
+	// RFC 9728 §2: the metadata's resource value is the canonical resource
+	// URI. Servers that embed endpoints directly omit it; the MCP URL is the
+	// canonical URI then.
+	if v, ok := resourceMeta["resource"].(string); ok && v != "" {
+		md.Resource = v
+	} else {
+		md.Resource = mcpURL
+	}
 
 	// Try RFC 9728 indirection: authorization_servers -> AS metadata
 	if servers, ok := resourceMeta["authorization_servers"].([]any); ok && len(servers) > 0 {

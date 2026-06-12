@@ -11,15 +11,9 @@ import (
 )
 
 type Registration struct {
-	AuthServerURL         string
-	RedirectURI           string
-	ClientID              string
-	ClientSecret          string // empty for public clients
-	ExpiresAt             *time.Time
-	AuthorizationEndpoint string
-	TokenEndpoint         string
-	ScopesSupported       string // JSON array
-	DiscoveredAt          time.Time
+	ClientID     string
+	ClientSecret string // empty for public clients
+	ExpiresAt    *time.Time
 }
 
 func (r *Registration) Expired() bool {
@@ -83,7 +77,6 @@ func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, toke
 	reg := &Registration{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		DiscoveredAt: time.Now(),
 	}
 
 	if expiresAt, ok := result["client_secret_expires_at"].(float64); ok && expiresAt > 0 {

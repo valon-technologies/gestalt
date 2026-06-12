@@ -166,11 +166,11 @@ type closableExternalCredentialProvider struct {
 	closed *atomic.Int32
 }
 
-func (*closableExternalCredentialProvider) PutCredential(context.Context, *core.ExternalCredential) error {
+func (*closableExternalCredentialProvider) CreateCredential(context.Context, *core.ExternalCredential) error {
 	return nil
 }
 
-func (*closableExternalCredentialProvider) RestoreCredential(context.Context, *core.ExternalCredential) error {
+func (*closableExternalCredentialProvider) UpsertCredential(context.Context, *core.ExternalCredential) error {
 	return nil
 }
 
@@ -178,11 +178,7 @@ func (*closableExternalCredentialProvider) GetCredential(context.Context, string
 	return nil, core.ErrNotFound
 }
 
-func (*closableExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*closableExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
+func (*closableExternalCredentialProvider) ListCredentials(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 
@@ -1584,20 +1580,19 @@ func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
 	<-result.ProvidersReady
 
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
-	if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		SubjectID:   principal.UserSubjectID("metrics-user"),
-		Integration: "slack",
-		Connection:  "default",
-		Instance:    "default",
-		AccessToken: "tok_metrics",
+	if err := result.Services.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
+		Subject:   principal.UserSubjectID("metrics-user"),
+		Audience:  "slack:default",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "tok_metrics"},
 	}); err != nil {
-		t.Fatalf("PutCredential: %v", err)
+		t.Fatalf("UpsertCredential: %v", err)
 	}
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.credential.provider.operation.count", 1, map[string]string{
 		"gestalt.credential.provider":  "remote-creds",
-		"gestalt.credential.operation": "put_credential",
-		"gestalt.provider":             "slack",
+		"gestalt.credential.operation": "upsert_credential",
+		"gestalt.provider":             "slack:default",
 	})
 }
 
@@ -1839,15 +1834,16 @@ func TestBootstrap(t *testing.T) {
 				if tc.tokenValue != "" {
 					tokenValue = tc.tokenValue
 				}
-				if err := result.Services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-					SubjectID:    principal.UserSubjectID(user.ID),
-					Integration:  "slack",
-					Connection:   tc.tokenConn,
-					Instance:     "default",
-					AccessToken:  tokenValue,
-					RefreshToken: "refresh-token",
+				if err := result.Services.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
+					Subject:   principal.UserSubjectID(user.ID),
+					Audience:  "slack:" + tc.tokenConn,
+					Qualifier: "default",
+					Grant: &core.ExternalCredentialGrant{
+						AccessToken:  tokenValue,
+						RefreshToken: "refresh-token",
+					},
 				}); err != nil {
-					t.Fatalf("PutCredential: %v", err)
+					t.Fatalf("UpsertCredential: %v", err)
 				}
 
 				principal := &principal.Principal{

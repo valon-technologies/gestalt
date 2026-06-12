@@ -264,9 +264,11 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	u := seedUser(t, successSvc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
 	seedToken(t, successSvc, &core.ExternalCredential{
-		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: providerName,
-		Connection: "default", Instance: "default",
-		AccessToken: "old-access-token", RefreshToken: "old-refresh-token", ExpiresAt: &expired,
+		ID:        "tok1",
+		Subject:   principal.UserSubjectID(u.ID),
+		Audience:  providerName + ":default",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "old-access-token", RefreshToken: "old-refresh-token", ExpiresAt: &expired},
 	})
 
 	successServer := newTestServer(t, func(cfg *server.Config) {
@@ -304,9 +306,11 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	errorSvc := testutil.NewStubServices(t)
 	u2 := seedUser(t, errorSvc, "anonymous@gestalt")
 	seedToken(t, errorSvc, &core.ExternalCredential{
-		ID: "tok2", SubjectID: principal.UserSubjectID(u2.ID), Integration: providerName,
-		Connection: "default", Instance: "default",
-		AccessToken: "expired-access-token", RefreshToken: "expired-refresh-token", ExpiresAt: &expired,
+		ID:        "tok2",
+		Subject:   principal.UserSubjectID(u2.ID),
+		Audience:  providerName + ":default",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "expired-access-token", RefreshToken: "expired-refresh-token", ExpiresAt: &expired},
 	})
 
 	errorServer := newTestServer(t, func(cfg *server.Config) {
