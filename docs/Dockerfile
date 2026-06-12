@@ -165,11 +165,11 @@ server {
     }
 
     location ~ ^/reference/(go-sdk|sdk/go)(\.html)?/?$ {
-        return 301 https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go;
+        return 301 /api/go/index.html;
     }
 
     location ~ ^/reference/(rust-sdk|sdk/rust)(\.html)?/?$ {
-        return 301 https://docs.rs/gestalt-sdk/latest/gestalt/;
+        return 301 /api/rust/index.html;
     }
 
     location ~ ^/providers/[^/]+/.+ {

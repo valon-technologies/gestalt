@@ -19,6 +19,22 @@ on:
         description: TypeScript SDK tag version without the sdk/typescript/v prefix, such as 0.0.1-alpha.18
         required: false
         type: string
+      go-ref:
+        description: Git ref containing the Go SDK source to publish
+        required: false
+        type: string
+      go-version:
+        description: Go SDK tag version without the sdk/go/v prefix, such as 0.0.1-alpha.8
+        required: false
+        type: string
+      rust-ref:
+        description: Git ref containing the Rust SDK source to publish
+        required: false
+        type: string
+      rust-version:
+        description: Rust SDK tag version without the sdk/rust/v prefix, such as 0.0.1-alpha.8
+        required: false
+        type: string
       latest-policy:
         description: Latest alias update policy
         required: true
@@ -196,5 +212,105 @@ jobs:
             --version "${{ inputs.typescript-version }}" \
             --source-tag "${{ inputs.typescript-ref }}" \
             --source-dir "${RUNNER_TEMP}/typescript-sdk-api-docs" \
+            --bucket "${DOCS_SDK_API_BUCKET}" \
+            --latest-policy "${{ inputs.latest-policy }}"
+
+  bootstrap-go:
+    if: ${{ inputs.go-ref != '' && inputs.go-version != '' }}
+    name: Bootstrap Go SDK API Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: sdk-go-docs-release
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: sdk/go
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.go-ref }}
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: tooling
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+
+      - name: Build Go SDK API docs
+        run: |
+          go install golang.org/x/tools/cmd/godoc@v0.30.0
+          PATH="$(go env GOPATH)/bin:$PATH"             "${GITHUB_WORKSPACE}/tooling/docs/scripts/build-go-sdk-docs.sh" "${RUNNER_TEMP}/go-sdk-api-docs"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.GCP_WIF_POOL_ID }}/providers/${{ vars.GCP_WIF_PROVIDER_ID }}
+          service_account: github-actions@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+      - name: Upload Go SDK API docs
+        run: |
+          python3 "${GITHUB_WORKSPACE}/tooling/docs/scripts/publish-sdk-api-docs.py" \
+            --mode upload \
+            --language go \
+            --version "${{ inputs.go-version }}" \
+            --source-tag "bootstrap/${{ inputs.go-ref }}" \
+            --source-dir "${RUNNER_TEMP}/go-sdk-api-docs" \
+            --bucket "${DOCS_SDK_API_BUCKET}" \
+            --latest-policy "${{ inputs.latest-policy }}"
+
+  bootstrap-rust:
+    if: ${{ inputs.rust-ref != '' && inputs.rust-version != '' }}
+    name: Bootstrap Rust SDK API Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: sdk-rust-docs-release
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: sdk/rust
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.rust-ref }}
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: tooling
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust SDK API docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: |
+          cargo doc --no-deps
+          cat > target/doc/index.html <<'HTML'
+          <!doctype html>
+          <meta http-equiv="refresh" content="0; url=./gestalt/" />
+          <title>Gestalt Rust SDK</title>
+          <a href="./gestalt/">Gestalt Rust SDK API reference</a>
+          HTML
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.GCP_WIF_POOL_ID }}/providers/${{ vars.GCP_WIF_PROVIDER_ID }}
+          service_account: github-actions@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+      - name: Upload Rust SDK API docs
+        run: |
+          python3 "${GITHUB_WORKSPACE}/tooling/docs/scripts/publish-sdk-api-docs.py" \
+            --mode upload \
+            --language rust \
+            --version "${{ inputs.rust-version }}" \
+            --source-tag "bootstrap/${{ inputs.rust-ref }}" \
+            --source-dir "target/doc" \
             --bucket "${DOCS_SDK_API_BUCKET}" \
             --latest-policy "${{ inputs.latest-policy }}"
