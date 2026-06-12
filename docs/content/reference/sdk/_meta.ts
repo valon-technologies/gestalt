@@ -9,10 +9,10 @@ export default {
   },
   go: {
     title: "Go SDK",
-    href: "/api/go/index.html",
+    href: "https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go",
   },
   rust: {
     title: "Rust SDK",
-    href: "/api/rust/index.html",
+    href: "https://docs.rs/gestalt-sdk/latest/gestalt/",
   },
 };

@@ -93,41 +93,6 @@ try {
     "api/typescript/latest.json",
   ]);
 
-  for (const [language, sourceTag] of [
-    ["go", "sdk/go/v0.0.1-alpha.10"],
-    ["rust", "sdk/rust/v0.0.1-alpha.10"],
-  ]) {
-    const langManifest = await manifest({
-      language,
-      version: "0.0.1-alpha.10",
-      sourceTag,
-      sourceDir: docsRoot,
-      currentLatestVersion: "0.0.1-alpha.9",
-    });
-    assert(langManifest.updatesLatest === true, `${language} semver comparison should work`);
-    assert(
-      langManifest.cleanupLatestPrefix === `api/${language}/latest/`,
-      `latest-updating ${language} manifest should clean the latest prefix`,
-    );
-    assertKeys(langManifest, [
-      `api/${language}/0.0.1-alpha.10/`,
-      `api/${language}/0.0.1-alpha.10/index.html`,
-      `api/${language}/0.0.1-alpha.10/_static/style.css`,
-      `api/${language}/latest/`,
-      `api/${language}/latest/index.html`,
-      `api/${language}/latest/_static/style.css`,
-      `api/${language}`,
-      `api/${language}/`,
-      `api/${language}/index.html`,
-      `api/${language}/latest.json`,
-    ]);
-    assertCache(
-      langManifest,
-      `api/${language}/0.0.1-alpha.10/index.html`,
-      "public, max-age=31536000, immutable",
-    );
-  }
-
   const pypiMetadata = path.join(tempRoot, "pypi.json");
   await writeFile(pypiMetadata, JSON.stringify({ releases: { "0.0.1a2": [] } }));
   await assertPackageExists(["pypi", "gestalt-sdk", "0.0.1a2", "--metadata-file", pypiMetadata], true);

@@ -7,9 +7,7 @@ on:
       - 'gestaltd/v*'
     paths:
       - 'docs/**'
-      - 'sdk/go/**'
       - 'sdk/python/**'
-      - 'sdk/rust/**'
       - 'sdk/typescript/**'
       - '.github/workflows/deploy-gestalt-docs.yml'
   workflow_dispatch:
@@ -70,36 +68,6 @@ jobs:
           rm -rf ../../docs/public/api/typescript
           bun run docs:build:deploy
 
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version-file: sdk/go/go.mod
-          cache-dependency-path: sdk/go/go.sum
-
-      - name: Build Go SDK API docs
-        working-directory: sdk/go
-        run: |
-          go install golang.org/x/tools/cmd/godoc@v0.30.0
-          rm -rf ../../docs/public/api/go
-          PATH="$(go env GOPATH)/bin:$PATH" ../../docs/scripts/build-go-sdk-docs.sh ../../docs/public/api/go
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Build Rust SDK API docs
-        working-directory: sdk/rust
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: |
-          cargo doc --no-deps
-          rm -rf ../../docs/public/api/rust
-          mkdir -p ../../docs/public/api/rust
-          cp -R target/doc/. ../../docs/public/api/rust/
-          cat > ../../docs/public/api/rust/index.html <<'HTML'
-          <!doctype html>
-          <meta http-equiv="refresh" content="0; url=./gestalt/" />
-          <title>Gestalt Rust SDK</title>
-          <a href="./gestalt/">Gestalt Rust SDK API reference</a>
-          HTML
-
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -120,7 +88,6 @@ jobs:
           NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build
 
-
       - name: Fetch main docs source
         run: git fetch origin main
 
@@ -132,7 +99,6 @@ jobs:
           NEXT_PUBLIC_REGISTRY_BASE_URL: https://registry.gestaltd.ai
           NEXT_PUBLIC_DOCS_BASE_URL: https://gestaltd.ai
         run: npm run build:versioned
-
 
       - name: Test static docs routing
         working-directory: docs
