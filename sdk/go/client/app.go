@@ -11,30 +11,37 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// ConnectionMode describes which credential sources a provider accepts.
-//
 // ConnectionMode is the gestalt.provider.v1.ConnectionMode enum. It is open:
 // numeric values outside the named constants are preserved.
+//
+// ConnectionMode describes which credential sources a provider accepts.
 type ConnectionMode int32
 
 const (
+	// ConnectionModeUnspecified is the CONNECTION_MODE_UNSPECIFIED value of ConnectionMode.
 	ConnectionModeUnspecified ConnectionMode = 0
-	ConnectionModeNone        ConnectionMode = 1
-	ConnectionModeSubject     ConnectionMode = 2
+	// ConnectionModeNone is the CONNECTION_MODE_NONE value of ConnectionMode.
+	ConnectionModeNone ConnectionMode = 1
+	// ConnectionModeSubject is the CONNECTION_MODE_SUBJECT value of ConnectionMode.
+	ConnectionModeSubject ConnectionMode = 2
 )
 
+// AccessContext is the native message type for gestalt.provider.v1.AccessContext.
+//
 // AccessContext describes the host-side access decision for an operation.
 type AccessContext struct {
 	Policy string
 	Role   string
 }
 
+// AgentInvocationContext is the native message type for gestalt.provider.v1.AgentInvocationContext.
 type AgentInvocationContext struct {
 	ProviderName string
 	SessionId    string
 	TurnId       string
 }
 
+// AgentToolRef is the native message type for gestalt.provider.v1.AgentToolRef.
 type AgentToolRef struct {
 	App            string
 	Operation      string
@@ -47,6 +54,8 @@ type AgentToolRef struct {
 	RunAs          *SubjectContext
 }
 
+// AppInvokeGraphQLRequest is the native message type for gestalt.provider.v1.AppInvokeGraphQLRequest.
+//
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 // through Gestalt.
 type AppInvokeGraphQLRequest struct {
@@ -59,6 +68,8 @@ type AppInvokeGraphQLRequest struct {
 	Context        *RequestContext
 }
 
+// AppInvokeRequest is the native message type for gestalt.provider.v1.AppInvokeRequest.
+//
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
 type AppInvokeRequest struct {
 	App            string
@@ -71,6 +82,8 @@ type AppInvokeRequest struct {
 	Context        *RequestContext
 }
 
+// Catalog is the native message type for gestalt.provider.v1.Catalog.
+//
 // Catalog is the static or request-scoped executable surface exposed by a
 // provider.
 type Catalog struct {
@@ -81,6 +94,8 @@ type Catalog struct {
 	Operations  []*CatalogOperation
 }
 
+// CatalogOperation is the native message type for gestalt.provider.v1.CatalogOperation.
+//
 // CatalogOperation is one executable operation exposed by an integration
 // provider.
 type CatalogOperation struct {
@@ -100,6 +115,8 @@ type CatalogOperation struct {
 	AllowedRoles   []string
 }
 
+// CatalogParameter is the native message type for gestalt.provider.v1.CatalogParameter.
+//
 // CatalogParameter describes one input parameter surfaced in the generated
 // catalog for an operation.
 type CatalogParameter struct {
@@ -110,6 +127,8 @@ type CatalogParameter struct {
 	Default     any
 }
 
+// ConnectionParamDef is the native message type for gestalt.provider.v1.ConnectionParamDef.
+//
 // ConnectionParamDef describes one provider-defined connection parameter.
 type ConnectionParamDef struct {
 	Required     bool
@@ -119,6 +138,8 @@ type ConnectionParamDef struct {
 	Field        string
 }
 
+// CredentialContext is the native message type for gestalt.provider.v1.CredentialContext.
+//
 // CredentialContext describes the resolved credential used for an operation.
 type CredentialContext struct {
 	Mode       string
@@ -127,6 +148,8 @@ type CredentialContext struct {
 	Instance   string
 }
 
+// ExecuteRequest is the native message type for gestalt.provider.v1.ExecuteRequest.
+//
 // ExecuteRequest invokes one executable operation.
 type ExecuteRequest struct {
 	Operation        string
@@ -138,6 +161,8 @@ type ExecuteRequest struct {
 	IdempotencyKey   string
 }
 
+// GetSessionCatalogRequest is the native message type for gestalt.provider.v1.GetSessionCatalogRequest.
+//
 // GetSessionCatalogRequest asks a provider for request-scoped catalog
 // extensions.
 type GetSessionCatalogRequest struct {
@@ -147,11 +172,15 @@ type GetSessionCatalogRequest struct {
 	Context          *RequestContext
 }
 
+// GetSessionCatalogResponse is the native message type for gestalt.provider.v1.GetSessionCatalogResponse.
+//
 // GetSessionCatalogResponse returns request-scoped catalog extensions.
 type GetSessionCatalogResponse struct {
 	Catalog *Catalog
 }
 
+// HTTPSubjectRequest is the native message type for gestalt.provider.v1.HTTPSubjectRequest.
+//
 // HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 // plugin-local subject resolution hook.
 type HTTPSubjectRequest struct {
@@ -168,11 +197,14 @@ type HTTPSubjectRequest struct {
 	VerifiedClaims  map[string]string
 }
 
+// HostContext is the native message type for gestalt.provider.v1.HostContext.
+//
 // HostContext describes stable public host metadata available to provider code.
 type HostContext struct {
 	PublicBaseUrl string
 }
 
+// InvocationContext is the native message type for gestalt.provider.v1.InvocationContext.
 type InvocationContext struct {
 	RequestId                string
 	Depth                    int32
@@ -182,6 +214,8 @@ type InvocationContext struct {
 	Connection               string
 }
 
+// OperationAnnotations is the native message type for gestalt.provider.v1.OperationAnnotations.
+//
 // OperationAnnotations carries optional host hints about how an operation
 // behaves.
 type OperationAnnotations struct {
@@ -191,6 +225,8 @@ type OperationAnnotations struct {
 	OpenWorldHint   *bool
 }
 
+// OperationResult is the native message type for gestalt.provider.v1.OperationResult.
+//
 // OperationResult is the serialized result returned from an Execute call.
 type OperationResult struct {
 	Status  int32
@@ -198,6 +234,8 @@ type OperationResult struct {
 	Headers map[string]*StringList
 }
 
+// ProviderContext is the native message type for gestalt.provider.v1.ProviderContext.
+//
 // ProviderContext identifies the provider process that received the request
 // context from the host and is trusted to propagate it back to host services.
 type ProviderContext struct {
@@ -205,6 +243,8 @@ type ProviderContext struct {
 	Name string
 }
 
+// ProviderMetadata is the native message type for gestalt.provider.v1.ProviderMetadata.
+//
 // ProviderMetadata describes an integration provider's static capabilities.
 type ProviderMetadata struct {
 	Name                   string
@@ -219,6 +259,8 @@ type ProviderMetadata struct {
 	MaxProtocolVersion     int32
 }
 
+// RequestContext is the native message type for gestalt.provider.v1.RequestContext.
+//
 // RequestContext bundles the caller, credential, access, and host metadata for
 // one operation.
 type RequestContext struct {
@@ -241,12 +283,15 @@ type RequestContext struct {
 	Agent       *AgentInvocationContext
 }
 
+// RequestMetaContext is the native message type for gestalt.provider.v1.RequestMetaContext.
 type RequestMetaContext struct {
 	ClientIp   string
 	RemoteAddr string
 	UserAgent  string
 }
 
+// ResolveHTTPSubjectRequest is the native message type for gestalt.provider.v1.ResolveHTTPSubjectRequest.
+//
 // ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
 // request to a concrete Gestalt subject before normal operation authorization
 // and dispatch.
@@ -255,6 +300,8 @@ type ResolveHTTPSubjectRequest struct {
 	Context *RequestContext
 }
 
+// ResolveHTTPSubjectResponse is the native message type for gestalt.provider.v1.ResolveHTTPSubjectResponse.
+//
 // ResolveHTTPSubjectResponse returns the concrete Gestalt subject a hosted HTTP
 // request should execute as. An unset subject means "fall back to the binding
 // subject". When reject_status is set, the host should reject the inbound
@@ -265,6 +312,8 @@ type ResolveHTTPSubjectResponse struct {
 	RejectMessage string
 }
 
+// StartProviderRequest is the native message type for gestalt.provider.v1.StartProviderRequest.
+//
 // StartProviderRequest configures an integration provider for one runtime
 // session.
 type StartProviderRequest struct {
@@ -273,16 +322,22 @@ type StartProviderRequest struct {
 	ProtocolVersion int32
 }
 
+// StartProviderResponse is the native message type for gestalt.provider.v1.StartProviderResponse.
+//
 // StartProviderResponse confirms the protocol version the provider is serving.
 type StartProviderResponse struct {
 	ProtocolVersion int32
 }
 
+// StringList is the native message type for gestalt.provider.v1.StringList.
+//
 // StringList is a helper map value for repeated HTTP header and query values.
 type StringList struct {
 	Values []string
 }
 
+// SubjectContext is the native message type for gestalt.provider.v1.SubjectContext.
+//
 // SubjectContext identifies the caller that initiated an operation.
 type SubjectContext struct {
 	Id                  string
@@ -293,6 +348,7 @@ type SubjectContext struct {
 	Permissions         []*SubjectPermissionContext
 }
 
+// SubjectPermissionContext is the native message type for gestalt.provider.v1.SubjectPermissionContext.
 type SubjectPermissionContext struct {
 	App           string
 	Operations    []string
@@ -345,7 +401,7 @@ type AppInvokeOptions struct {
 
 // Invoke is the ergonomic form of [App.InvokeRaw].
 // The result decodes with the standard JSON operation envelope semantics;
-// envelope failures return *InvokeError.
+// // envelope failures return *InvokeError.
 func (c *App) Invoke(ctx context.Context, app string, operation string, params map[string]any, opts *AppInvokeOptions) (any, error) {
 	if opts == nil {
 		opts = &AppInvokeOptions{}
@@ -409,10 +465,10 @@ func (c *App) InvokeGraphQLRaw(ctx context.Context, request *AppInvokeGraphQLReq
 	return fromWireOperationResult(response), nil
 }
 
-// AppProvider models the shared Gestalt integration-provider protocol.
-//
 // AppProvider is the generated client for gestalt.provider.v1.AppProvider.
 // Every transport error is converted to *GestaltError.
+//
+// AppProvider models the shared Gestalt integration-provider protocol.
 type AppProvider struct {
 	client  proto.AppProviderClient
 	context *RequestContext
@@ -426,6 +482,7 @@ func NewAppProvider(conn grpc.ClientConnInterface, opts ...ClientOption) *AppPro
 	return &AppProvider{client: proto.NewAppProviderClient(conn), context: options.requestContext}
 }
 
+// GetMetadata calls the GetMetadata RPC of AppProvider.
 func (c *AppProvider) GetMetadata(ctx context.Context) (*ProviderMetadata, error) {
 	response, err := c.client.GetMetadata(ctx, &emptypb.Empty{})
 	if err != nil {
@@ -477,6 +534,7 @@ func (c *AppProvider) ExecuteRaw(ctx context.Context, request *ExecuteRequest) (
 	return fromWireOperationResult(response), nil
 }
 
+// ResolveHTTPSubject calls the ResolveHTTPSubject RPC of AppProvider.
 func (c *AppProvider) ResolveHTTPSubject(ctx context.Context, request *ResolveHTTPSubjectRequest) (*ResolveHTTPSubjectResponse, error) {
 	if request.Context == nil && c.context != nil {
 		shallow := *request

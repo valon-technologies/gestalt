@@ -10,6 +10,8 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
+// ErrInvalidValue reports a workflow value expression that cannot be
+// evaluated against its run context.
 var ErrInvalidValue = errors.New("invalid workflow value")
 
 // EvalContext carries runtime inputs for workflow value and template evaluation.
@@ -19,6 +21,8 @@ type EvalContext struct {
 	StepInputs map[string]any
 }
 
+// EvaluateStepInputs resolves a step's workflow value expressions against
+// the run context, prior step outputs, and step inputs.
 func (c EvalContext) EvaluateStepInputs(values map[string]gestalt.WorkflowValue) (map[string]any, error) {
 	if len(values) == 0 {
 		return nil, nil
@@ -37,6 +41,8 @@ func (c EvalContext) EvaluateStepInputs(values map[string]gestalt.WorkflowValue)
 	return out, nil
 }
 
+// EvaluateValue resolves one workflow value expression against the run
+// context.
 func (c EvalContext) EvaluateValue(value gestalt.WorkflowValue) (any, bool, error) {
 	switch {
 	case value.LiteralSet:
@@ -97,6 +103,7 @@ func (c EvalContext) EvaluateValue(value gestalt.WorkflowValue) (any, bool, erro
 	}
 }
 
+// RenderTemplate renders a workflow text template against the run context.
 func (c EvalContext) RenderTemplate(template string) (string, error) {
 	var b strings.Builder
 	for i := 0; i < len(template); {
@@ -192,6 +199,7 @@ func templateRenderValue(value any) (string, error) {
 	return string(body), nil
 }
 
+// LatestSignal returns the most recent delivery of a named signal.
 func LatestSignal(signals []gestalt.WorkflowSignal) *gestalt.WorkflowSignal {
 	if len(signals) == 0 {
 		return nil
@@ -199,6 +207,7 @@ func LatestSignal(signals []gestalt.WorkflowSignal) *gestalt.WorkflowSignal {
 	return &signals[len(signals)-1]
 }
 
+// MapPathValue reads a dotted path from a map value.
 func MapPathValue(values map[string]any, path string) (any, bool, error) {
 	if len(values) == 0 {
 		return nil, false, nil
@@ -206,6 +215,7 @@ func MapPathValue(values map[string]any, path string) (any, bool, error) {
 	return PathValue(values, path)
 }
 
+// PathValue reads a dotted path from any JSON-like value.
 func PathValue(root any, path string) (any, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -304,6 +314,7 @@ func unquotePathKey(token string) (string, error) {
 	return out.String(), nil
 }
 
+// IsScalarJSON reports whether a value is a JSON scalar.
 func IsScalarJSON(value any) bool {
 	switch value.(type) {
 	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64, json.Number:
@@ -313,6 +324,8 @@ func IsScalarJSON(value any) bool {
 	}
 }
 
+// ScalarEqual compares two JSON scalars for equality, treating integral
+// floats and ints as equal.
 func ScalarEqual(left, right any) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil

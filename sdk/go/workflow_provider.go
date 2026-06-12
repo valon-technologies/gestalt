@@ -23,6 +23,7 @@ type ListWorkflowProviderDefinitionsResponse struct {
 	Definitions []WorkflowDefinition
 }
 
+// GetDefinitions returns the definitions field; it is safe to call on a nil receiver.
 func (r *ListWorkflowProviderDefinitionsResponse) GetDefinitions() []WorkflowDefinition {
 	if r == nil {
 		return nil
@@ -84,6 +85,7 @@ type ListWorkflowProviderRunsResponse struct {
 	NextPageToken string
 }
 
+// GetRuns returns the runs field; it is safe to call on a nil receiver.
 func (r *ListWorkflowProviderRunsResponse) GetRuns() []WorkflowRun {
 	if r == nil {
 		return nil
@@ -91,6 +93,7 @@ func (r *ListWorkflowProviderRunsResponse) GetRuns() []WorkflowRun {
 	return r.Runs
 }
 
+// GetNextPageToken returns the next page token field; it is safe to call on a nil receiver.
 func (r *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
 	if r == nil {
 		return ""
@@ -108,6 +111,7 @@ type GetWorkflowProviderRunEventsResponse struct {
 	Events []WorkflowRunEvent
 }
 
+// GetEvents returns the events field; it is safe to call on a nil receiver.
 func (r *GetWorkflowProviderRunEventsResponse) GetEvents() []WorkflowRunEvent {
 	if r == nil {
 		return nil
@@ -194,66 +198,98 @@ type WorkflowProvider interface {
 // part of the workflow surface.
 type UnimplementedWorkflowProvider struct{}
 
+// Configure returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
 }
 
+// ApplyDefinition returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) ApplyDefinition(context.Context, *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
 	return nil, Unimplemented("workflow apply definition is not implemented")
 }
 
+// GetDefinition returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) GetDefinition(context.Context, *GetWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error) {
 	return nil, Unimplemented("workflow get definition is not implemented")
 }
 
+// ListDefinitions returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) ListDefinitions(context.Context, *ListWorkflowProviderDefinitionsRequest) (*ListWorkflowProviderDefinitionsResponse, error) {
 	return nil, Unimplemented("workflow list definitions is not implemented")
 }
 
+// SetDefinitionPaused returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) SetDefinitionPaused(context.Context, *SetWorkflowProviderDefinitionPausedRequest) (*WorkflowDefinition, error) {
 	return nil, Unimplemented("workflow set definition paused is not implemented")
 }
 
+// SetActivationPaused returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) SetActivationPaused(context.Context, *SetWorkflowProviderActivationPausedRequest) (*WorkflowDefinition, error) {
 	return nil, Unimplemented("workflow set activation paused is not implemented")
 }
 
+// DeleteDefinition returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) DeleteDefinition(context.Context, *DeleteWorkflowProviderDefinitionRequest) error {
 	return Unimplemented("workflow delete definition is not implemented")
 }
 
+// StartRun returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) StartRun(context.Context, *StartWorkflowProviderRunRequest) (*WorkflowRun, error) {
 	return nil, Unimplemented("workflow start run is not implemented")
 }
 
+// GetRun returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) GetRun(context.Context, *GetWorkflowProviderRunRequest) (*WorkflowRun, error) {
 	return nil, Unimplemented("workflow get run is not implemented")
 }
 
+// ListRuns returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) ListRuns(context.Context, *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error) {
 	return nil, Unimplemented("workflow list runs is not implemented")
 }
 
+// GetRunEvents returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) GetRunEvents(context.Context, *GetWorkflowProviderRunEventsRequest) (*GetWorkflowProviderRunEventsResponse, error) {
 	return nil, Unimplemented("workflow get run events is not implemented")
 }
 
+// GetRunOutput returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) GetRunOutput(context.Context, *GetWorkflowProviderRunOutputRequest) (*GetWorkflowProviderRunOutputResponse, error) {
 	return nil, Unimplemented("workflow get run output is not implemented")
 }
 
+// CancelRun returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) CancelRun(context.Context, *CancelWorkflowProviderRunRequest) (*WorkflowRun, error) {
 	return nil, Unimplemented("workflow cancel run is not implemented")
 }
 
+// SignalRun returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) SignalRun(context.Context, *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
 	return nil, Unimplemented("workflow signal run is not implemented")
 }
 
+// SignalOrStartRun returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) SignalOrStartRun(context.Context, *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
 	return nil, Unimplemented("workflow signal or start run is not implemented")
 }
 
+// DeliverEvent returns Unimplemented; embed UnimplementedWorkflowProvider to default
+// unimplemented surface methods.
 func (UnimplementedWorkflowProvider) DeliverEvent(context.Context, *DeliverWorkflowProviderEventRequest) (*WorkflowEvent, error) {
 	return nil, Unimplemented("workflow deliver event is not implemented")
 }
@@ -261,6 +297,7 @@ func (UnimplementedWorkflowProvider) DeliverEvent(context.Context, *DeliverWorkf
 // WorkflowRunStatus identifies the lifecycle state of a workflow run.
 type WorkflowRunStatus int32
 
+// The workflow run statuses.
 const (
 	WorkflowRunStatusValueUnspecified WorkflowRunStatus = iota
 	WorkflowRunStatusValuePending
@@ -273,6 +310,7 @@ const (
 // WorkflowStepStatus identifies the lifecycle state of one workflow step.
 type WorkflowStepStatus int32
 
+// The workflow step statuses.
 const (
 	WorkflowStepStatusValueUnspecified WorkflowStepStatus = iota
 	WorkflowStepStatusValuePending

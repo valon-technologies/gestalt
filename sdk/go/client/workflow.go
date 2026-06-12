@@ -16,12 +16,18 @@ import (
 type WorkflowRunStatus int32
 
 const (
+	// WorkflowRunStatusUnspecified is the WORKFLOW_RUN_STATUS_UNSPECIFIED value of WorkflowRunStatus.
 	WorkflowRunStatusUnspecified WorkflowRunStatus = 0
-	WorkflowRunStatusPending     WorkflowRunStatus = 1
-	WorkflowRunStatusRunning     WorkflowRunStatus = 2
-	WorkflowRunStatusSucceeded   WorkflowRunStatus = 3
-	WorkflowRunStatusFailed      WorkflowRunStatus = 4
-	WorkflowRunStatusCanceled    WorkflowRunStatus = 5
+	// WorkflowRunStatusPending is the WORKFLOW_RUN_STATUS_PENDING value of WorkflowRunStatus.
+	WorkflowRunStatusPending WorkflowRunStatus = 1
+	// WorkflowRunStatusRunning is the WORKFLOW_RUN_STATUS_RUNNING value of WorkflowRunStatus.
+	WorkflowRunStatusRunning WorkflowRunStatus = 2
+	// WorkflowRunStatusSucceeded is the WORKFLOW_RUN_STATUS_SUCCEEDED value of WorkflowRunStatus.
+	WorkflowRunStatusSucceeded WorkflowRunStatus = 3
+	// WorkflowRunStatusFailed is the WORKFLOW_RUN_STATUS_FAILED value of WorkflowRunStatus.
+	WorkflowRunStatusFailed WorkflowRunStatus = 4
+	// WorkflowRunStatusCanceled is the WORKFLOW_RUN_STATUS_CANCELED value of WorkflowRunStatus.
+	WorkflowRunStatusCanceled WorkflowRunStatus = 5
 )
 
 // WorkflowStepStatus is the gestalt.provider.v1.WorkflowStepStatus enum. It is open:
@@ -29,15 +35,23 @@ const (
 type WorkflowStepStatus int32
 
 const (
+	// WorkflowStepStatusUnspecified is the WORKFLOW_STEP_STATUS_UNSPECIFIED value of WorkflowStepStatus.
 	WorkflowStepStatusUnspecified WorkflowStepStatus = 0
-	WorkflowStepStatusPending     WorkflowStepStatus = 1
-	WorkflowStepStatusRunning     WorkflowStepStatus = 2
-	WorkflowStepStatusSkipped     WorkflowStepStatus = 3
-	WorkflowStepStatusSucceeded   WorkflowStepStatus = 4
-	WorkflowStepStatusFailed      WorkflowStepStatus = 5
-	WorkflowStepStatusUnknown     WorkflowStepStatus = 6
+	// WorkflowStepStatusPending is the WORKFLOW_STEP_STATUS_PENDING value of WorkflowStepStatus.
+	WorkflowStepStatusPending WorkflowStepStatus = 1
+	// WorkflowStepStatusRunning is the WORKFLOW_STEP_STATUS_RUNNING value of WorkflowStepStatus.
+	WorkflowStepStatusRunning WorkflowStepStatus = 2
+	// WorkflowStepStatusSkipped is the WORKFLOW_STEP_STATUS_SKIPPED value of WorkflowStepStatus.
+	WorkflowStepStatusSkipped WorkflowStepStatus = 3
+	// WorkflowStepStatusSucceeded is the WORKFLOW_STEP_STATUS_SUCCEEDED value of WorkflowStepStatus.
+	WorkflowStepStatusSucceeded WorkflowStepStatus = 4
+	// WorkflowStepStatusFailed is the WORKFLOW_STEP_STATUS_FAILED value of WorkflowStepStatus.
+	WorkflowStepStatusFailed WorkflowStepStatus = 5
+	// WorkflowStepStatusUnknown is the WORKFLOW_STEP_STATUS_UNKNOWN value of WorkflowStepStatus.
+	WorkflowStepStatusUnknown WorkflowStepStatus = 6
 )
 
+// ApplyWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.ApplyWorkflowProviderDefinitionRequest.
 type ApplyWorkflowProviderDefinitionRequest struct {
 	ProviderName         string
 	Spec                 *WorkflowDefinitionSpec
@@ -46,21 +60,25 @@ type ApplyWorkflowProviderDefinitionRequest struct {
 	Context              *RequestContext
 }
 
+// BoundWorkflowTarget is the native message type for gestalt.provider.v1.BoundWorkflowTarget.
 type BoundWorkflowTarget struct {
 	Steps []*WorkflowStep
 }
 
+// CancelWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.CancelWorkflowProviderRunRequest.
 type CancelWorkflowProviderRunRequest struct {
 	RunId   string
 	Reason  string
 	Context *RequestContext
 }
 
+// DeleteWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.
 type DeleteWorkflowProviderDefinitionRequest struct {
 	DefinitionId string
 	Context      *RequestContext
 }
 
+// DeliverWorkflowProviderEventRequest is the native message type for gestalt.provider.v1.DeliverWorkflowProviderEventRequest.
 type DeliverWorkflowProviderEventRequest struct {
 	AppName              string
 	Event                *WorkflowEvent
@@ -69,42 +87,51 @@ type DeliverWorkflowProviderEventRequest struct {
 	Context              *RequestContext
 }
 
+// GetWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.
 type GetWorkflowProviderDefinitionRequest struct {
 	DefinitionId string
 	Context      *RequestContext
 }
 
+// GetWorkflowProviderRunEventsRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.
 type GetWorkflowProviderRunEventsRequest struct {
 	RunId   string
 	Context *RequestContext
 }
 
+// GetWorkflowProviderRunEventsResponse is the native message type for gestalt.provider.v1.GetWorkflowProviderRunEventsResponse.
 type GetWorkflowProviderRunEventsResponse struct {
 	Events []*WorkflowRunEvent
 }
 
+// GetWorkflowProviderRunOutputRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.
 type GetWorkflowProviderRunOutputRequest struct {
 	RunId   string
 	Context *RequestContext
 }
 
+// GetWorkflowProviderRunOutputResponse is the native message type for gestalt.provider.v1.GetWorkflowProviderRunOutputResponse.
 type GetWorkflowProviderRunOutputResponse struct {
 	Output any
 }
 
+// GetWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunRequest.
 type GetWorkflowProviderRunRequest struct {
 	RunId   string
 	Context *RequestContext
 }
 
+// ListWorkflowProviderDefinitionsRequest is the native message type for gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest.
 type ListWorkflowProviderDefinitionsRequest struct {
 	Context *RequestContext
 }
 
+// ListWorkflowProviderDefinitionsResponse is the native message type for gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse.
 type ListWorkflowProviderDefinitionsResponse struct {
 	Definitions []*WorkflowDefinition
 }
 
+// ListWorkflowProviderRunsRequest is the native message type for gestalt.provider.v1.ListWorkflowProviderRunsRequest.
 type ListWorkflowProviderRunsRequest struct {
 	PageSize  int32
 	PageToken string
@@ -113,11 +140,13 @@ type ListWorkflowProviderRunsRequest struct {
 	Context   *RequestContext
 }
 
+// ListWorkflowProviderRunsResponse is the native message type for gestalt.provider.v1.ListWorkflowProviderRunsResponse.
 type ListWorkflowProviderRunsResponse struct {
 	Runs          []*WorkflowRun
 	NextPageToken string
 }
 
+// SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.
 type SetWorkflowProviderActivationPausedRequest struct {
 	DefinitionId         string
 	ActivationId         string
@@ -126,6 +155,7 @@ type SetWorkflowProviderActivationPausedRequest struct {
 	Context              *RequestContext
 }
 
+// SetWorkflowProviderDefinitionPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.
 type SetWorkflowProviderDefinitionPausedRequest struct {
 	DefinitionId         string
 	Paused               bool
@@ -133,6 +163,7 @@ type SetWorkflowProviderDefinitionPausedRequest struct {
 	Context              *RequestContext
 }
 
+// SignalOrStartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.
 type SignalOrStartWorkflowProviderRunRequest struct {
 	WorkflowKey                  string
 	IdempotencyKey               string
@@ -146,12 +177,14 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	Context                      *RequestContext
 }
 
+// SignalWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.SignalWorkflowProviderRunRequest.
 type SignalWorkflowProviderRunRequest struct {
 	RunId   string
 	Signal  *WorkflowSignal
 	Context *RequestContext
 }
 
+// SignalWorkflowRunResponse is the native message type for gestalt.provider.v1.SignalWorkflowRunResponse.
 type SignalWorkflowRunResponse struct {
 	Run         *WorkflowRun
 	Signal      *WorkflowSignal
@@ -159,6 +192,7 @@ type SignalWorkflowRunResponse struct {
 	WorkflowKey string
 }
 
+// StartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.StartWorkflowProviderRunRequest.
 type StartWorkflowProviderRunRequest struct {
 	IdempotencyKey               string
 	CreatedBySubjectId           string
@@ -191,6 +225,7 @@ type WorkflowActivationTriggerEvent struct {
 
 func (*WorkflowActivationTriggerEvent) isWorkflowActivationTrigger() {}
 
+// WorkflowActivation is the native message type for gestalt.provider.v1.WorkflowActivation.
 type WorkflowActivation struct {
 	Id      string
 	Input   *WorkflowValue
@@ -198,16 +233,19 @@ type WorkflowActivation struct {
 	Trigger WorkflowActivationTrigger
 }
 
+// WorkflowAgentMessage is the native message type for gestalt.provider.v1.WorkflowAgentMessage.
 type WorkflowAgentMessage struct {
 	Role     string
 	Text     *WorkflowText
 	Metadata map[string]any
 }
 
+// WorkflowArray is the native message type for gestalt.provider.v1.WorkflowArray.
 type WorkflowArray struct {
 	Values []*WorkflowValue
 }
 
+// WorkflowDefinition is the native message type for gestalt.provider.v1.WorkflowDefinition.
 type WorkflowDefinition struct {
 	Id                 string
 	Generation         int64
@@ -221,6 +259,7 @@ type WorkflowDefinition struct {
 	RunAs              *SubjectContext
 }
 
+// WorkflowDefinitionSpec is the native message type for gestalt.provider.v1.WorkflowDefinitionSpec.
 type WorkflowDefinitionSpec struct {
 	Id          string
 	Target      *BoundWorkflowTarget
@@ -229,6 +268,7 @@ type WorkflowDefinitionSpec struct {
 	RunAs       *SubjectContext
 }
 
+// WorkflowEvent is the native message type for gestalt.provider.v1.WorkflowEvent.
 type WorkflowEvent struct {
 	Id              string
 	Source          string
@@ -241,31 +281,38 @@ type WorkflowEvent struct {
 	Extensions      map[string]any
 }
 
+// WorkflowEventActivation is the native message type for gestalt.provider.v1.WorkflowEventActivation.
 type WorkflowEventActivation struct {
 	Match *WorkflowEventMatch
 }
 
+// WorkflowEventMatch is the native message type for gestalt.provider.v1.WorkflowEventMatch.
 type WorkflowEventMatch struct {
 	Type    string
 	Source  string
 	Subject string
 }
 
+// WorkflowEventTriggerInvocation is the native message type for gestalt.provider.v1.WorkflowEventTriggerInvocation.
 type WorkflowEventTriggerInvocation struct {
 	ActivationId string
 	Event        *WorkflowEvent
 }
 
+// WorkflowManualTrigger is the native message type for gestalt.provider.v1.WorkflowManualTrigger.
 type WorkflowManualTrigger struct{}
 
+// WorkflowObject is the native message type for gestalt.provider.v1.WorkflowObject.
 type WorkflowObject struct {
 	Fields map[string]*WorkflowValue
 }
 
+// WorkflowPathSource is the native message type for gestalt.provider.v1.WorkflowPathSource.
 type WorkflowPathSource struct {
 	Path string
 }
 
+// WorkflowRun is the native message type for gestalt.provider.v1.WorkflowRun.
 type WorkflowRun struct {
 	Id                   string
 	Status               WorkflowRunStatus
@@ -287,6 +334,7 @@ type WorkflowRun struct {
 	Steps                []*WorkflowStepExecution
 }
 
+// WorkflowRunEvent is the native message type for gestalt.provider.v1.WorkflowRunEvent.
 type WorkflowRunEvent struct {
 	Id        string
 	RunId     string
@@ -323,20 +371,24 @@ type WorkflowRunTriggerKindEvent struct {
 
 func (*WorkflowRunTriggerKindEvent) isWorkflowRunTriggerKind() {}
 
+// WorkflowRunTrigger is the native message type for gestalt.provider.v1.WorkflowRunTrigger.
 type WorkflowRunTrigger struct {
 	Kind WorkflowRunTriggerKind
 }
 
+// WorkflowScheduleActivation is the native message type for gestalt.provider.v1.WorkflowScheduleActivation.
 type WorkflowScheduleActivation struct {
 	Cron     string
 	Timezone string
 }
 
+// WorkflowScheduleTrigger is the native message type for gestalt.provider.v1.WorkflowScheduleTrigger.
 type WorkflowScheduleTrigger struct {
 	ActivationId string
 	ScheduledFor *time.Time
 }
 
+// WorkflowSignal is the native message type for gestalt.provider.v1.WorkflowSignal.
 type WorkflowSignal struct {
 	Id                 string
 	Name               string
@@ -368,6 +420,7 @@ type WorkflowStepActionAgent struct {
 
 func (*WorkflowStepActionAgent) isWorkflowStepAction() {}
 
+// WorkflowStep is the native message type for gestalt.provider.v1.WorkflowStep.
 type WorkflowStep struct {
 	Id             string
 	Inputs         map[string]*WorkflowValue
@@ -377,6 +430,7 @@ type WorkflowStep struct {
 	Action         WorkflowStepAction
 }
 
+// WorkflowStepAgentTurn is the native message type for gestalt.provider.v1.WorkflowStepAgentTurn.
 type WorkflowStepAgentTurn struct {
 	Provider     string
 	Model        string
@@ -388,6 +442,7 @@ type WorkflowStepAgentTurn struct {
 	ModelOptions map[string]any
 }
 
+// WorkflowStepAppCall is the native message type for gestalt.provider.v1.WorkflowStepAppCall.
 type WorkflowStepAppCall struct {
 	Name           string
 	Operation      string
@@ -397,6 +452,7 @@ type WorkflowStepAppCall struct {
 	CredentialMode string
 }
 
+// WorkflowStepAttempt is the native message type for gestalt.provider.v1.WorkflowStepAttempt.
 type WorkflowStepAttempt struct {
 	Id             string
 	Status         WorkflowStepStatus
@@ -408,6 +464,7 @@ type WorkflowStepAttempt struct {
 	CompletedAt    *time.Time
 }
 
+// WorkflowStepExecution is the native message type for gestalt.provider.v1.WorkflowStepExecution.
 type WorkflowStepExecution struct {
 	StepId        string
 	Status        WorkflowStepStatus
@@ -420,21 +477,25 @@ type WorkflowStepExecution struct {
 	CompletedAt   *time.Time
 }
 
+// WorkflowStepInputSource is the native message type for gestalt.provider.v1.WorkflowStepInputSource.
 type WorkflowStepInputSource struct {
 	StepId string
 	Path   string
 }
 
+// WorkflowStepOutputSource is the native message type for gestalt.provider.v1.WorkflowStepOutputSource.
 type WorkflowStepOutputSource struct {
 	StepId string
 	Path   string
 }
 
+// WorkflowStepWhen is the native message type for gestalt.provider.v1.WorkflowStepWhen.
 type WorkflowStepWhen struct {
 	Value  *WorkflowValue
 	Equals any
 }
 
+// WorkflowText is the native message type for gestalt.provider.v1.WorkflowText.
 type WorkflowText struct {
 	Template string
 }
@@ -501,6 +562,7 @@ type WorkflowValueKindStepInput struct {
 
 func (*WorkflowValueKindStepInput) isWorkflowValueKind() {}
 
+// WorkflowValue is the native message type for gestalt.provider.v1.WorkflowValue.
 type WorkflowValue struct {
 	Kind WorkflowValueKind
 }

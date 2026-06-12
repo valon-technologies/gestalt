@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// The GenAI operation names recorded on spans.
 const (
 	// TelemetryInstrumentationName is the OpenTelemetry instrumentation scope used by the Gestalt SDK.
 	TelemetryInstrumentationName = "gestalt.provider"

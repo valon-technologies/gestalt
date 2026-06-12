@@ -2,6 +2,8 @@ package indexeddb
 
 import "errors"
 
+// Sentinel errors store implementations return so the daemon can map
+// database failures to canonical statuses.
 var (
 	ErrNotFound           = errors.New("indexeddb: not found")
 	ErrAlreadyExists      = errors.New("indexeddb: already exists")

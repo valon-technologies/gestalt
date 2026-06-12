@@ -11,43 +11,54 @@ import (
 	"google.golang.org/grpc"
 )
 
-// CursorDirection controls IndexedDB cursor traversal order.
-//
 // CursorDirection is the gestalt.provider.v1.CursorDirection enum. It is open:
 // numeric values outside the named constants are preserved.
+//
+// CursorDirection controls IndexedDB cursor traversal order.
 type CursorDirection int32
 
 const (
-	CursorDirectionCursorNext       CursorDirection = 0
+	// CursorDirectionCursorNext is the CURSOR_NEXT value of CursorDirection.
+	CursorDirectionCursorNext CursorDirection = 0
+	// CursorDirectionCursorNextUnique is the CURSOR_NEXT_UNIQUE value of CursorDirection.
 	CursorDirectionCursorNextUnique CursorDirection = 1
-	CursorDirectionCursorPrev       CursorDirection = 2
+	// CursorDirectionCursorPrev is the CURSOR_PREV value of CursorDirection.
+	CursorDirectionCursorPrev CursorDirection = 2
+	// CursorDirectionCursorPrevUnique is the CURSOR_PREV_UNIQUE value of CursorDirection.
 	CursorDirectionCursorPrevUnique CursorDirection = 3
 )
 
-// TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
-// provider hint. It is not a portable durability guarantee.
-//
 // TransactionDurabilityHint is the gestalt.provider.v1.TransactionDurabilityHint enum. It is open:
 // numeric values outside the named constants are preserved.
+//
+// TransactionDurabilityHint mirrors the W3C IndexedDB durability option as a
+// provider hint. It is not a portable durability guarantee.
 type TransactionDurabilityHint int32
 
 const (
+	// TransactionDurabilityHintTransactionDurabilityDefault is the TRANSACTION_DURABILITY_DEFAULT value of TransactionDurabilityHint.
 	TransactionDurabilityHintTransactionDurabilityDefault TransactionDurabilityHint = 0
-	TransactionDurabilityHintTransactionDurabilityStrict  TransactionDurabilityHint = 1
+	// TransactionDurabilityHintTransactionDurabilityStrict is the TRANSACTION_DURABILITY_STRICT value of TransactionDurabilityHint.
+	TransactionDurabilityHintTransactionDurabilityStrict TransactionDurabilityHint = 1
+	// TransactionDurabilityHintTransactionDurabilityRelaxed is the TRANSACTION_DURABILITY_RELAXED value of TransactionDurabilityHint.
 	TransactionDurabilityHintTransactionDurabilityRelaxed TransactionDurabilityHint = 2
 )
 
-// TransactionMode controls whether a transaction may mutate scoped stores.
-//
 // TransactionMode is the gestalt.provider.v1.TransactionMode enum. It is open:
 // numeric values outside the named constants are preserved.
+//
+// TransactionMode controls whether a transaction may mutate scoped stores.
 type TransactionMode int32
 
 const (
-	TransactionModeTransactionReadonly  TransactionMode = 0
+	// TransactionModeTransactionReadonly is the TRANSACTION_READONLY value of TransactionMode.
+	TransactionModeTransactionReadonly TransactionMode = 0
+	// TransactionModeTransactionReadwrite is the TRANSACTION_READWRITE value of TransactionMode.
 	TransactionModeTransactionReadwrite TransactionMode = 1
 )
 
+// BeginTransactionRequest is the native message type for gestalt.provider.v1.BeginTransactionRequest.
+//
 // BeginTransactionRequest starts an IndexedDB transaction stream.
 type BeginTransactionRequest struct {
 	Stores         []string
@@ -55,6 +66,8 @@ type BeginTransactionRequest struct {
 	DurabilityHint TransactionDurabilityHint
 }
 
+// ColumnDef is the native message type for gestalt.provider.v1.ColumnDef.
+//
 // ColumnDef is reserved for providers that preserve SQL-style column metadata.
 type ColumnDef struct {
 	Name       string
@@ -64,11 +77,15 @@ type ColumnDef struct {
 	Unique     bool
 }
 
+// CountResponse is the native message type for gestalt.provider.v1.CountResponse.
+//
 // CountResponse reports how many rows matched a query.
 type CountResponse struct {
 	Count int64
 }
 
+// CreateObjectStoreRequest is the native message type for gestalt.provider.v1.CreateObjectStoreRequest.
+//
 // CreateObjectStoreRequest creates a new object store.
 type CreateObjectStoreRequest struct {
 	Name   string
@@ -95,6 +112,8 @@ type CursorClientMessageMsgCommand struct {
 
 func (*CursorClientMessageMsgCommand) isCursorClientMessageMsg() {}
 
+// CursorClientMessage is the native message type for gestalt.provider.v1.CursorClientMessage.
+//
 // CursorClientMessage is one frame in the bidirectional cursor stream.
 type CursorClientMessage struct {
 	Msg CursorClientMessageMsg
@@ -148,11 +167,15 @@ type CursorCommandCommandClose struct {
 
 func (*CursorCommandCommandClose) isCursorCommandCommand() {}
 
+// CursorCommand is the native message type for gestalt.provider.v1.CursorCommand.
+//
 // CursorCommand advances, mutates, or closes an open cursor.
 type CursorCommand struct {
 	Command CursorCommandCommand
 }
 
+// CursorEntry is the native message type for gestalt.provider.v1.CursorEntry.
+//
 // CursorEntry is one streamed cursor row.
 type CursorEntry struct {
 	// Key components per index KeyPath field. Each component is a KeyValue
@@ -163,6 +186,8 @@ type CursorEntry struct {
 	Record     *Record
 }
 
+// CursorKeyTarget is the native message type for gestalt.provider.v1.CursorKeyTarget.
+//
 // CursorKeyTarget addresses a specific cursor position.
 type CursorKeyTarget struct {
 	Key []*KeyValue
@@ -188,21 +213,29 @@ type CursorResponseResultDone struct {
 
 func (*CursorResponseResultDone) isCursorResponseResult() {}
 
+// CursorResponse is the native message type for gestalt.provider.v1.CursorResponse.
+//
 // CursorResponse is one streamed cursor frame.
 type CursorResponse struct {
 	Result CursorResponseResult
 }
 
+// DeleteObjectStoreRequest is the native message type for gestalt.provider.v1.DeleteObjectStoreRequest.
+//
 // DeleteObjectStoreRequest removes an object store.
 type DeleteObjectStoreRequest struct {
 	Name string
 }
 
+// DeleteResponse is the native message type for gestalt.provider.v1.DeleteResponse.
+//
 // DeleteResponse reports how many rows were deleted.
 type DeleteResponse struct {
 	Deleted int64
 }
 
+// IndexQueryRequest is the native message type for gestalt.provider.v1.IndexQueryRequest.
+//
 // IndexQueryRequest addresses a secondary index plus optional key values and
 // range constraints.
 type IndexQueryRequest struct {
@@ -212,6 +245,8 @@ type IndexQueryRequest struct {
 	Range  *KeyRange
 }
 
+// IndexSchema is the native message type for gestalt.provider.v1.IndexSchema.
+//
 // IndexSchema describes one secondary index on an object store.
 type IndexSchema struct {
 	Name    string
@@ -219,6 +254,8 @@ type IndexSchema struct {
 	Unique  bool
 }
 
+// KeyRange is the native message type for gestalt.provider.v1.KeyRange.
+//
 // KeyRange constrains a query or cursor by lower and upper bounds.
 type KeyRange struct {
 	Lower     *TypedValue
@@ -227,6 +264,8 @@ type KeyRange struct {
 	UpperOpen bool
 }
 
+// KeyResponse is the native message type for gestalt.provider.v1.KeyResponse.
+//
 // KeyResponse wraps one primary key.
 type KeyResponse struct {
 	Key string
@@ -252,38 +291,51 @@ type KeyValueKindArray struct {
 
 func (*KeyValueKindArray) isKeyValueKind() {}
 
+// KeyValue is the native message type for gestalt.provider.v1.KeyValue.
+//
 // KeyValue represents a single IndexedDB key, which can be a scalar
 // (string, number, date, binary) or a nested array of keys per the W3C spec.
 type KeyValue struct {
 	Kind KeyValueKind
 }
 
+// KeyValueArray is the native message type for gestalt.provider.v1.KeyValueArray.
 type KeyValueArray struct {
 	Elements []*KeyValue
 }
 
+// KeysResponse is the native message type for gestalt.provider.v1.KeysResponse.
+//
 // KeysResponse wraps repeated primary keys.
 type KeysResponse struct {
 	Keys []string
 }
 
+// ObjectStoreNameRequest is the native message type for gestalt.provider.v1.ObjectStoreNameRequest.
+//
 // ObjectStoreNameRequest addresses an object store without a specific row key.
 type ObjectStoreNameRequest struct {
 	Store string
 }
 
+// ObjectStoreRangeRequest is the native message type for gestalt.provider.v1.ObjectStoreRangeRequest.
+//
 // ObjectStoreRangeRequest addresses an object store plus an optional key range.
 type ObjectStoreRangeRequest struct {
 	Store string
 	Range *KeyRange
 }
 
+// ObjectStoreRequest is the native message type for gestalt.provider.v1.ObjectStoreRequest.
+//
 // ObjectStoreRequest addresses one object store row by primary key.
 type ObjectStoreRequest struct {
 	Store string
 	Id    string
 }
 
+// ObjectStoreSchema is the native message type for gestalt.provider.v1.ObjectStoreSchema.
+//
 // ObjectStoreSchema describes the indexes and columns attached to an object
 // store.
 type ObjectStoreSchema struct {
@@ -291,6 +343,8 @@ type ObjectStoreSchema struct {
 	Columns []*ColumnDef
 }
 
+// OpenCursorRequest is the native message type for gestalt.provider.v1.OpenCursorRequest.
+//
 // OpenCursorRequest starts a streaming cursor over an object store or index.
 type OpenCursorRequest struct {
 	Store     string
@@ -304,36 +358,48 @@ type OpenCursorRequest struct {
 	Values []*TypedValue
 }
 
+// Record is the native message type for gestalt.provider.v1.Record.
+//
 // Record is one JSON-like row in an object store.
 type Record struct {
 	Fields map[string]*TypedValue
 }
 
+// RecordRequest is the native message type for gestalt.provider.v1.RecordRequest.
+//
 // RecordRequest addresses one object store and carries one row payload.
 type RecordRequest struct {
 	Store  string
 	Record *Record
 }
 
+// RecordResponse is the native message type for gestalt.provider.v1.RecordResponse.
+//
 // RecordResponse wraps one row payload.
 type RecordResponse struct {
 	Record *Record
 }
 
+// RecordsResponse is the native message type for gestalt.provider.v1.RecordsResponse.
+//
 // RecordsResponse wraps repeated row payloads.
 type RecordsResponse struct {
 	Records []*Record
 }
 
+// TransactionAbortRequest is the native message type for gestalt.provider.v1.TransactionAbortRequest.
 type TransactionAbortRequest struct {
 	Reason string
 }
 
+// TransactionAbortResponse is the native message type for gestalt.provider.v1.TransactionAbortResponse.
+//
 // TransactionAbortResponse acknowledges abort or reports an abort failure.
 type TransactionAbortResponse struct {
 	Error *RpcStatus
 }
 
+// TransactionBeginResponse is the native message type for gestalt.provider.v1.TransactionBeginResponse.
 type TransactionBeginResponse struct{}
 
 // TransactionClientMessageMsg selects one variant of the msg oneof of TransactionClientMessage.
@@ -370,14 +436,19 @@ type TransactionClientMessageMsgAbort struct {
 
 func (*TransactionClientMessageMsgAbort) isTransactionClientMessageMsg() {}
 
+// TransactionClientMessage is the native message type for gestalt.provider.v1.TransactionClientMessage.
+//
 // TransactionClientMessage is one client frame in the transaction stream. The
 // first frame must be BeginTransactionRequest.
 type TransactionClientMessage struct {
 	Msg TransactionClientMessageMsg
 }
 
+// TransactionCommitRequest is the native message type for gestalt.provider.v1.TransactionCommitRequest.
 type TransactionCommitRequest struct{}
 
+// TransactionCommitResponse is the native message type for gestalt.provider.v1.TransactionCommitResponse.
+//
 // TransactionCommitResponse carries a non-OK status when commit failed after
 // the provider accepted the commit frame and rolled the transaction back.
 type TransactionCommitResponse struct {
@@ -502,6 +573,8 @@ type TransactionOperationOperationIndexDelete struct {
 
 func (*TransactionOperationOperationIndexDelete) isTransactionOperationOperation() {}
 
+// TransactionOperation is the native message type for gestalt.provider.v1.TransactionOperation.
+//
 // TransactionOperation is one ordered transaction-scoped object store or index
 // operation. Cursor operations are intentionally excluded from the initial
 // transaction contract.
@@ -563,6 +636,8 @@ type TransactionOperationResponseResultDelete struct {
 
 func (*TransactionOperationResponseResultDelete) isTransactionOperationResponseResult() {}
 
+// TransactionOperationResponse is the native message type for gestalt.provider.v1.TransactionOperationResponse.
+//
 // TransactionOperationResponse is the ordered response to one operation.
 // Non-OK error marks the transaction failed and causes rollback in phase 1.
 type TransactionOperationResponse struct {
@@ -605,6 +680,7 @@ type TransactionServerMessageMsgAbort struct {
 
 func (*TransactionServerMessageMsgAbort) isTransactionServerMessageMsg() {}
 
+// TransactionServerMessage is the native message type for gestalt.provider.v1.TransactionServerMessage.
 type TransactionServerMessage struct {
 	Msg TransactionServerMessageMsg
 }
@@ -669,15 +745,17 @@ type TypedValueKindJsonValue struct {
 
 func (*TypedValueKindJsonValue) isTypedValueKind() {}
 
+// TypedValue is the native message type for gestalt.provider.v1.TypedValue.
+//
 // TypedValue stores one scalar or structured value in an IndexedDB record.
 type TypedValue struct {
 	Kind TypedValueKind
 }
 
-// IndexedDB models the shared Gestalt IndexedDB-provider protocol.
-//
 // IndexedDB is the generated client for gestalt.provider.v1.IndexedDB.
 // Every transport error is converted to *GestaltError.
+//
+// IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 type IndexedDB struct {
 	client proto.IndexedDBClient
 }
@@ -707,9 +785,9 @@ func ConnectIndexedDB(ctx context.Context, name string) (*IndexedDB, error) {
 	return NewIndexedDB(conn), nil
 }
 
-// Lifecycle
-//
 // CreateObjectStore is the ergonomic form of [IndexedDB.CreateObjectStoreRaw].
+//
+// Lifecycle
 func (c *IndexedDB) CreateObjectStore(ctx context.Context, name string, schema *ObjectStoreSchema) error {
 	request := &CreateObjectStoreRequest{Name: name, Schema: schema}
 	if _, err := c.client.CreateObjectStore(ctx, toWireCreateObjectStoreRequest(request)); err != nil {
@@ -718,9 +796,9 @@ func (c *IndexedDB) CreateObjectStore(ctx context.Context, name string, schema *
 	return nil
 }
 
-// Lifecycle
-//
 // CreateObjectStoreRaw is the faithful form of [IndexedDB.CreateObjectStore].
+//
+// Lifecycle
 func (c *IndexedDB) CreateObjectStoreRaw(ctx context.Context, request *CreateObjectStoreRequest) error {
 	if _, err := c.client.CreateObjectStore(ctx, toWireCreateObjectStoreRequest(request)); err != nil {
 		return toGestaltError(err)
@@ -745,9 +823,9 @@ func (c *IndexedDB) DeleteObjectStoreRaw(ctx context.Context, request *DeleteObj
 	return nil
 }
 
-// Primary key CRUD
-//
 // Get is the ergonomic form of [IndexedDB.GetRaw].
+//
+// Primary key CRUD
 func (c *IndexedDB) Get(ctx context.Context, store string, id string) (*RecordResponse, error) {
 	request := &ObjectStoreRequest{Store: store, Id: id}
 	response, err := c.client.Get(ctx, toWireObjectStoreRequest(request))
@@ -757,9 +835,9 @@ func (c *IndexedDB) Get(ctx context.Context, store string, id string) (*RecordRe
 	return fromWireRecordResponse(response), nil
 }
 
-// Primary key CRUD
-//
 // GetRaw is the faithful form of [IndexedDB.Get].
+//
+// Primary key CRUD
 func (c *IndexedDB) GetRaw(ctx context.Context, request *ObjectStoreRequest) (*RecordResponse, error) {
 	response, err := c.client.Get(ctx, toWireObjectStoreRequest(request))
 	if err != nil {
@@ -838,9 +916,9 @@ func (c *IndexedDB) DeleteRaw(ctx context.Context, request *ObjectStoreRequest) 
 	return nil
 }
 
-// Bulk operations (with optional key range)
-//
 // Clear is the ergonomic form of [IndexedDB.ClearRaw].
+//
+// Bulk operations (with optional key range)
 func (c *IndexedDB) Clear(ctx context.Context, store string) error {
 	request := &ObjectStoreNameRequest{Store: store}
 	if _, err := c.client.Clear(ctx, toWireObjectStoreNameRequest(request)); err != nil {
@@ -849,9 +927,9 @@ func (c *IndexedDB) Clear(ctx context.Context, store string) error {
 	return nil
 }
 
-// Bulk operations (with optional key range)
-//
 // ClearRaw is the faithful form of [IndexedDB.Clear].
+//
+// Bulk operations (with optional key range)
 func (c *IndexedDB) ClearRaw(ctx context.Context, request *ObjectStoreNameRequest) error {
 	if _, err := c.client.Clear(ctx, toWireObjectStoreNameRequest(request)); err != nil {
 		return toGestaltError(err)
@@ -935,9 +1013,9 @@ func (c *IndexedDB) DeleteRangeRaw(ctx context.Context, request *ObjectStoreRang
 	return fromWireDeleteResponse(response), nil
 }
 
-// Index queries
-//
 // IndexGet is the ergonomic form of [IndexedDB.IndexGetRaw].
+//
+// Index queries
 func (c *IndexedDB) IndexGet(ctx context.Context, store string, index string, values []*TypedValue, range_ *KeyRange) (*RecordResponse, error) {
 	request := &IndexQueryRequest{Store: store, Index: index, Values: values, Range: range_}
 	response, err := c.client.IndexGet(ctx, toWireIndexQueryRequest(request))
@@ -947,9 +1025,9 @@ func (c *IndexedDB) IndexGet(ctx context.Context, store string, index string, va
 	return fromWireRecordResponse(response), nil
 }
 
-// Index queries
-//
 // IndexGetRaw is the faithful form of [IndexedDB.IndexGet].
+//
+// Index queries
 func (c *IndexedDB) IndexGetRaw(ctx context.Context, request *IndexQueryRequest) (*RecordResponse, error) {
 	response, err := c.client.IndexGet(ctx, toWireIndexQueryRequest(request))
 	if err != nil {
@@ -1053,6 +1131,8 @@ func (c *IndexedDB) IndexDeleteRaw(ctx context.Context, request *IndexQueryReque
 	return fromWireDeleteResponse(response), nil
 }
 
+// OpenCursor calls the OpenCursor RPC of IndexedDB.
+//
 // Cursor iteration (bidirectional stream)
 func (c *IndexedDB) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream, error) {
 	stream, err := c.client.OpenCursor(ctx)
@@ -1062,6 +1142,8 @@ func (c *IndexedDB) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream,
 	return &IndexedDBOpenCursorStream{stream: stream}, nil
 }
 
+// Transaction calls the Transaction RPC of IndexedDB.
+//
 // Transaction stream. The first client message must be
 // BeginTransactionRequest. Stream close before commit aborts the transaction.
 func (c *IndexedDB) Transaction(ctx context.Context) (*IndexedDBTransactionStream, error) {

@@ -33,21 +33,25 @@ type IndexedDBProvider interface {
 	BeginTransaction(ctx context.Context, req IndexedDBBeginTransactionRequest) (IndexedDBTransaction, error)
 }
 
+// IndexedDBObjectStoreRequest names a store within a database.
 type IndexedDBObjectStoreRequest struct {
 	Store string
 	ID    string
 }
 
+// IndexedDBRecordRequest addresses one record by key.
 type IndexedDBRecordRequest struct {
 	Store  string
 	Record Record
 }
 
+// IndexedDBObjectStoreRangeRequest addresses a key range of a store.
 type IndexedDBObjectStoreRangeRequest struct {
 	Store string
 	Range *KeyRange
 }
 
+// IndexedDBIndexQueryRequest queries records through a secondary index.
 type IndexedDBIndexQueryRequest struct {
 	Store  string
 	Index  string
@@ -55,6 +59,7 @@ type IndexedDBIndexQueryRequest struct {
 	Range  *KeyRange
 }
 
+// IndexedDBOpenCursorRequest opens a cursor over a store or index.
 type IndexedDBOpenCursorRequest struct {
 	Store     string
 	Range     *KeyRange
@@ -64,6 +69,7 @@ type IndexedDBOpenCursorRequest struct {
 	Values    []any
 }
 
+// IndexedDBCursorEntry is one record yielded by a cursor.
 type IndexedDBCursorEntry struct {
 	Key        any
 	PrimaryKey string
@@ -81,12 +87,14 @@ type IndexedDBCursor interface {
 	Close() error
 }
 
+// IndexedDBBeginTransactionRequest begins a transaction over named stores.
 type IndexedDBBeginTransactionRequest struct {
 	Stores         []string
 	Mode           TransactionMode
 	DurabilityHint TransactionDurabilityHint
 }
 
+// IndexedDBTransaction is one open transaction handle.
 type IndexedDBTransaction interface {
 	Commit(ctx context.Context) error
 	Abort(ctx context.Context) error

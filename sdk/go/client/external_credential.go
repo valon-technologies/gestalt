@@ -11,10 +11,12 @@ import (
 	"google.golang.org/grpc"
 )
 
+// DeleteExternalCredentialRequest is the native message type for gestalt.provider.v1.DeleteExternalCredentialRequest.
 type DeleteExternalCredentialRequest struct {
 	Id string
 }
 
+// ExchangeExternalCredentialRequest is the native message type for gestalt.provider.v1.ExchangeExternalCredentialRequest.
 type ExchangeExternalCredentialRequest struct {
 	Provider            string
 	Connection          string
@@ -27,10 +29,12 @@ type ExchangeExternalCredentialRequest struct {
 	ConnectionParams    map[string]string
 }
 
+// ExchangeExternalCredentialResponse is the native message type for gestalt.provider.v1.ExchangeExternalCredentialResponse.
 type ExchangeExternalCredentialResponse struct {
 	TokenResponse *ExternalCredentialTokenResponse
 }
 
+// ExternalCredential is the native message type for gestalt.provider.v1.ExternalCredential.
 type ExternalCredential struct {
 	Id                string
 	SubjectId         string
@@ -47,6 +51,7 @@ type ExternalCredential struct {
 	ConnectionId      string
 }
 
+// ExternalCredentialAuthConfig is the native message type for gestalt.provider.v1.ExternalCredentialAuthConfig.
 type ExternalCredentialAuthConfig struct {
 	Type                 string
 	Token                string
@@ -68,12 +73,14 @@ type ExternalCredentialAuthConfig struct {
 	RefreshToken         string
 }
 
+// ExternalCredentialLookup is the native message type for gestalt.provider.v1.ExternalCredentialLookup.
 type ExternalCredentialLookup struct {
 	SubjectId    string
 	Instance     string
 	ConnectionId string
 }
 
+// ExternalCredentialTokenExchangeDriver is the native message type for gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.
 type ExternalCredentialTokenExchangeDriver struct {
 	Type            string
 	TargetPrincipal string
@@ -83,6 +90,7 @@ type ExternalCredentialTokenExchangeDriver struct {
 	Params          map[string]string
 }
 
+// ExternalCredentialTokenResponse is the native message type for gestalt.provider.v1.ExternalCredentialTokenResponse.
 type ExternalCredentialTokenResponse struct {
 	AccessToken   string
 	RefreshToken  string
@@ -92,20 +100,24 @@ type ExternalCredentialTokenResponse struct {
 	RefreshSource string
 }
 
+// GetExternalCredentialRequest is the native message type for gestalt.provider.v1.GetExternalCredentialRequest.
 type GetExternalCredentialRequest struct {
 	Lookup *ExternalCredentialLookup
 }
 
+// ListExternalCredentialsRequest is the native message type for gestalt.provider.v1.ListExternalCredentialsRequest.
 type ListExternalCredentialsRequest struct {
 	SubjectId    string
 	Instance     string
 	ConnectionId string
 }
 
+// ListExternalCredentialsResponse is the native message type for gestalt.provider.v1.ListExternalCredentialsResponse.
 type ListExternalCredentialsResponse struct {
 	Credentials []*ExternalCredential
 }
 
+// ResolveExternalCredentialRequest is the native message type for gestalt.provider.v1.ResolveExternalCredentialRequest.
 type ResolveExternalCredentialRequest struct {
 	Provider            string
 	Connection          string
@@ -118,6 +130,7 @@ type ResolveExternalCredentialRequest struct {
 	ConnectionParams    map[string]string
 }
 
+// ResolveExternalCredentialResponse is the native message type for gestalt.provider.v1.ResolveExternalCredentialResponse.
 type ResolveExternalCredentialResponse struct {
 	Token        string
 	ExpiresAt    *time.Time
@@ -126,11 +139,13 @@ type ResolveExternalCredentialResponse struct {
 	Credential   *ExternalCredential
 }
 
+// UpsertExternalCredentialRequest is the native message type for gestalt.provider.v1.UpsertExternalCredentialRequest.
 type UpsertExternalCredentialRequest struct {
 	Credential         *ExternalCredential
 	PreserveTimestamps bool
 }
 
+// ValidateExternalCredentialConfigRequest is the native message type for gestalt.provider.v1.ValidateExternalCredentialConfigRequest.
 type ValidateExternalCredentialConfigRequest struct {
 	Provider         string
 	Connection       string

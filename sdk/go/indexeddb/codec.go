@@ -3,8 +3,8 @@ package indexeddb
 import (
 	"fmt"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func typedValueFromAny(v any) (*proto.TypedValue, error) {

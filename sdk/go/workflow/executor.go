@@ -14,6 +14,7 @@ import (
 
 const workflowStepOutputBodyMaxBytes = 64 * 1024
 
+// Request is the workflow callback request an executor serves.
 type Request struct {
 	ProviderName         string
 	RunID                string
@@ -29,17 +30,20 @@ type Request struct {
 	Signals              []gestalt.WorkflowSignal
 }
 
+// Response is the executor's reply to a workflow callback.
 type Response struct {
 	Status int
 	Body   string
 }
 
+// StepExecutor executes one workflow step kind.
 type StepExecutor interface {
 	Execute(context.Context, Request) (*Response, error)
 	ExecuteStep(context.Context, StepRequest) (*StepResponse, error)
 	Close() error
 }
 
+// StepRequest carries one step invocation's inputs.
 type StepRequest struct {
 	Request        Request
 	StepIndex      int
@@ -48,6 +52,7 @@ type StepRequest struct {
 	SkippedStepIDs []string
 }
 
+// StepResponse carries one step invocation's outputs.
 type StepResponse struct {
 	Status      int
 	Step        StepResult
@@ -59,6 +64,7 @@ type StepResponse struct {
 	FinalOutput any
 }
 
+// AppInvocation describes one app operation call a step makes.
 type AppInvocation struct {
 	App             string
 	Operation       string
@@ -71,16 +77,19 @@ type AppInvocation struct {
 	Request         gestalt.Request
 }
 
+// AppResult is the raw result of one app operation call.
 type AppResult struct {
 	Status  int
 	Body    string
 	Headers map[string][]string
 }
 
+// AppInvoker performs app operation calls for steps.
 type AppInvoker interface {
 	InvokeWorkflowApp(context.Context, AppInvocation) (*AppResult, error)
 }
 
+// AgentClient performs the agent session and turn calls agent steps make.
 type AgentClient interface {
 	CreateSession(context.Context, gestalt.AgentCreateSession) (*gestalt.AgentSession, error)
 	CreateTurn(context.Context, gestalt.AgentCreateTurn) (*gestalt.AgentTurn, error)
@@ -88,18 +97,21 @@ type AgentClient interface {
 	CancelTurn(context.Context, gestalt.AgentCancelTurn) (*gestalt.AgentTurn, error)
 }
 
+// Config wires an executor's step dependencies.
 type Config struct {
 	AppInvoker        AppInvoker
 	NewAgent          func(gestalt.Request) (AgentClient, error)
 	AgentPollInterval time.Duration
 }
 
+// Executor serves workflow callback requests by running their steps.
 type Executor struct {
 	appInvoker        AppInvoker
 	newAgent          func(gestalt.Request) (AgentClient, error)
 	agentPollInterval time.Duration
 }
 
+// New builds an executor from its configuration.
 func New(cfg Config) *Executor {
 	appInvoker := cfg.AppInvoker
 	if appInvoker == nil {
@@ -116,8 +128,10 @@ func New(cfg Config) *Executor {
 	return &Executor{appInvoker: appInvoker, newAgent: newAgent, agentPollInterval: poll}
 }
 
+// Close releases the executor's pooled clients.
 func (e *Executor) Close() error { return nil }
 
+// Execute runs the workflow callback request to completion.
 func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) {
 	if e == nil {
 		return nil, fmt.Errorf("workflow executor is not configured")
@@ -183,6 +197,7 @@ func (e *Executor) Execute(ctx context.Context, req Request) (*Response, error) 
 	return &Response{Status: http.StatusOK, Body: string(body)}, nil
 }
 
+// ExecuteStep runs a single step invocation.
 func (e *Executor) ExecuteStep(ctx context.Context, stepReq StepRequest) (*StepResponse, error) {
 	if e == nil {
 		return nil, fmt.Errorf("workflow executor is not configured")
@@ -375,6 +390,7 @@ func workflowAgentSessionIDFromOutput(output any) (string, bool) {
 	return sessionID, ok && sessionID != ""
 }
 
+// WorkflowEvalError wraps a value-evaluation failure with its step context.
 func WorkflowEvalError(err error) error {
 	if err == nil {
 		return nil

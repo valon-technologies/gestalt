@@ -18,6 +18,7 @@ type AuthenticatedUser struct {
 	Claims        map[string]string
 }
 
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
 func (u *AuthenticatedUser) GetSubject() string {
 	if u == nil {
 		return ""
@@ -25,6 +26,7 @@ func (u *AuthenticatedUser) GetSubject() string {
 	return u.Subject
 }
 
+// GetEmail returns the email field; it is safe to call on a nil receiver.
 func (u *AuthenticatedUser) GetEmail() string {
 	if u == nil {
 		return ""
@@ -32,6 +34,7 @@ func (u *AuthenticatedUser) GetEmail() string {
 	return u.Email
 }
 
+// GetEmailVerified returns the email verified field; it is safe to call on a nil receiver.
 func (u *AuthenticatedUser) GetEmailVerified() bool {
 	if u == nil {
 		return false
@@ -39,6 +42,7 @@ func (u *AuthenticatedUser) GetEmailVerified() bool {
 	return u.EmailVerified
 }
 
+// GetDisplayName returns the display name field; it is safe to call on a nil receiver.
 func (u *AuthenticatedUser) GetDisplayName() string {
 	if u == nil {
 		return ""
@@ -46,6 +50,7 @@ func (u *AuthenticatedUser) GetDisplayName() string {
 	return u.DisplayName
 }
 
+// GetAvatarUrl returns the avatar url field; it is safe to call on a nil receiver.
 func (u *AuthenticatedUser) GetAvatarUrl() string {
 	if u == nil {
 		return ""
@@ -53,6 +58,7 @@ func (u *AuthenticatedUser) GetAvatarUrl() string {
 	return u.AvatarUrl
 }
 
+// GetClaims returns the claims field; it is safe to call on a nil receiver.
 func (u *AuthenticatedUser) GetClaims() map[string]string {
 	if u == nil {
 		return nil
@@ -68,6 +74,7 @@ type BeginLoginRequest struct {
 	Options     map[string]string
 }
 
+// GetCallbackUrl returns the callback url field; it is safe to call on a nil receiver.
 func (r *BeginLoginRequest) GetCallbackUrl() string {
 	if r == nil {
 		return ""
@@ -75,6 +82,7 @@ func (r *BeginLoginRequest) GetCallbackUrl() string {
 	return r.CallbackUrl
 }
 
+// GetHostState returns the host state field; it is safe to call on a nil receiver.
 func (r *BeginLoginRequest) GetHostState() string {
 	if r == nil {
 		return ""
@@ -82,6 +90,7 @@ func (r *BeginLoginRequest) GetHostState() string {
 	return r.HostState
 }
 
+// GetScopes returns the scopes field; it is safe to call on a nil receiver.
 func (r *BeginLoginRequest) GetScopes() []string {
 	if r == nil {
 		return nil
@@ -89,6 +98,7 @@ func (r *BeginLoginRequest) GetScopes() []string {
 	return r.Scopes
 }
 
+// GetOptions returns the options field; it is safe to call on a nil receiver.
 func (r *BeginLoginRequest) GetOptions() map[string]string {
 	if r == nil {
 		return nil
@@ -103,6 +113,7 @@ type BeginLoginResponse struct {
 	ProviderState    []byte
 }
 
+// GetAuthorizationUrl returns the authorization url field; it is safe to call on a nil receiver.
 func (r *BeginLoginResponse) GetAuthorizationUrl() string {
 	if r == nil {
 		return ""
@@ -110,6 +121,7 @@ func (r *BeginLoginResponse) GetAuthorizationUrl() string {
 	return r.AuthorizationUrl
 }
 
+// GetProviderState returns the provider state field; it is safe to call on a nil receiver.
 func (r *BeginLoginResponse) GetProviderState() []byte {
 	if r == nil {
 		return nil
@@ -124,6 +136,7 @@ type CompleteLoginRequest struct {
 	CallbackUrl   string
 }
 
+// GetQuery returns the query field; it is safe to call on a nil receiver.
 func (r *CompleteLoginRequest) GetQuery() map[string]string {
 	if r == nil {
 		return nil
@@ -131,6 +144,7 @@ func (r *CompleteLoginRequest) GetQuery() map[string]string {
 	return r.Query
 }
 
+// GetProviderState returns the provider state field; it is safe to call on a nil receiver.
 func (r *CompleteLoginRequest) GetProviderState() []byte {
 	if r == nil {
 		return nil
@@ -138,6 +152,7 @@ func (r *CompleteLoginRequest) GetProviderState() []byte {
 	return r.ProviderState
 }
 
+// GetCallbackUrl returns the callback url field; it is safe to call on a nil receiver.
 func (r *CompleteLoginRequest) GetCallbackUrl() string {
 	if r == nil {
 		return ""
@@ -150,6 +165,7 @@ type AuthSessionSettings struct {
 	SessionTtlSeconds int64
 }
 
+// GetSessionTtlSeconds returns the session ttl seconds field; it is safe to call on a nil receiver.
 func (s *AuthSessionSettings) GetSessionTtlSeconds() int64 {
 	if s == nil {
 		return 0

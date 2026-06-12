@@ -17,10 +17,14 @@ import (
 type RuntimeEgressMode int32
 
 const (
+	// RuntimeEgressModeUnspecified is the RUNTIME_EGRESS_MODE_UNSPECIFIED value of RuntimeEgressMode.
 	RuntimeEgressModeUnspecified RuntimeEgressMode = 0
-	RuntimeEgressModeNone        RuntimeEgressMode = 1
-	RuntimeEgressModeCidr        RuntimeEgressMode = 2
-	RuntimeEgressModeHostname    RuntimeEgressMode = 3
+	// RuntimeEgressModeNone is the RUNTIME_EGRESS_MODE_NONE value of RuntimeEgressMode.
+	RuntimeEgressModeNone RuntimeEgressMode = 1
+	// RuntimeEgressModeCidr is the RUNTIME_EGRESS_MODE_CIDR value of RuntimeEgressMode.
+	RuntimeEgressModeCidr RuntimeEgressMode = 2
+	// RuntimeEgressModeHostname is the RUNTIME_EGRESS_MODE_HOSTNAME value of RuntimeEgressMode.
+	RuntimeEgressModeHostname RuntimeEgressMode = 3
 )
 
 // RuntimeLogStream is the gestalt.provider.v1.RuntimeLogStream enum. It is open:
@@ -28,25 +32,33 @@ const (
 type RuntimeLogStream int32
 
 const (
+	// RuntimeLogStreamUnspecified is the RUNTIME_LOG_STREAM_UNSPECIFIED value of RuntimeLogStream.
 	RuntimeLogStreamUnspecified RuntimeLogStream = 0
-	RuntimeLogStreamStdout      RuntimeLogStream = 1
-	RuntimeLogStreamStderr      RuntimeLogStream = 2
-	RuntimeLogStreamRuntime     RuntimeLogStream = 3
+	// RuntimeLogStreamStdout is the RUNTIME_LOG_STREAM_STDOUT value of RuntimeLogStream.
+	RuntimeLogStreamStdout RuntimeLogStream = 1
+	// RuntimeLogStreamStderr is the RUNTIME_LOG_STREAM_STDERR value of RuntimeLogStream.
+	RuntimeLogStreamStderr RuntimeLogStream = 2
+	// RuntimeLogStreamRuntime is the RUNTIME_LOG_STREAM_RUNTIME value of RuntimeLogStream.
+	RuntimeLogStreamRuntime RuntimeLogStream = 3
 )
 
+// AppendRuntimeLogsRequest is the native message type for gestalt.provider.v1.AppendRuntimeLogsRequest.
 type AppendRuntimeLogsRequest struct {
 	SessionId string
 	Logs      []*RuntimeLogEntry
 }
 
+// AppendRuntimeLogsResponse is the native message type for gestalt.provider.v1.AppendRuntimeLogsResponse.
 type AppendRuntimeLogsResponse struct {
 	LastSeq int64
 }
 
+// GetRuntimeSessionRequest is the native message type for gestalt.provider.v1.GetRuntimeSessionRequest.
 type GetRuntimeSessionRequest struct {
 	SessionId string
 }
 
+// HostedApp is the native message type for gestalt.provider.v1.HostedApp.
 type HostedApp struct {
 	Id         string
 	SessionId  string
@@ -54,16 +66,19 @@ type HostedApp struct {
 	DialTarget string
 }
 
+// ListRuntimeSessionsRequest is the native message type for gestalt.provider.v1.ListRuntimeSessionsRequest.
 type ListRuntimeSessionsRequest struct {
 	PageSize  int32
 	PageToken string
 }
 
+// ListRuntimeSessionsResponse is the native message type for gestalt.provider.v1.ListRuntimeSessionsResponse.
 type ListRuntimeSessionsResponse struct {
 	Sessions      []*RuntimeSession
 	NextPageToken string
 }
 
+// PrepareRuntimeWorkspaceRequest is the native message type for gestalt.provider.v1.PrepareRuntimeWorkspaceRequest.
 type PrepareRuntimeWorkspaceRequest struct {
 	SessionId string
 	// Opaque, path-safe workspace key minted by the host. Despite the name it
@@ -73,10 +88,12 @@ type PrepareRuntimeWorkspaceRequest struct {
 	Workspace      *AgentWorkspace
 }
 
+// PrepareRuntimeWorkspaceResponse is the native message type for gestalt.provider.v1.PrepareRuntimeWorkspaceResponse.
 type PrepareRuntimeWorkspaceResponse struct {
 	Workspace *PreparedAgentWorkspace
 }
 
+// RemoveRuntimeWorkspaceRequest is the native message type for gestalt.provider.v1.RemoveRuntimeWorkspaceRequest.
 type RemoveRuntimeWorkspaceRequest struct {
 	SessionId string
 	// The workspace key the workspace was prepared under; see
@@ -84,10 +101,12 @@ type RemoveRuntimeWorkspaceRequest struct {
 	AgentSessionId string
 }
 
+// RuntimeImagePullAuth is the native message type for gestalt.provider.v1.RuntimeImagePullAuth.
 type RuntimeImagePullAuth struct {
 	DockerConfigJson string
 }
 
+// RuntimeLogEntry is the native message type for gestalt.provider.v1.RuntimeLogEntry.
 type RuntimeLogEntry struct {
 	Stream     RuntimeLogStream
 	Message    string
@@ -95,6 +114,7 @@ type RuntimeLogEntry struct {
 	SourceSeq  int64
 }
 
+// RuntimeSession is the native message type for gestalt.provider.v1.RuntimeSession.
 type RuntimeSession struct {
 	Id           string
 	State        string
@@ -104,18 +124,22 @@ type RuntimeSession struct {
 	StateMessage string
 }
 
+// RuntimeSessionLifecycle is the native message type for gestalt.provider.v1.RuntimeSessionLifecycle.
 type RuntimeSessionLifecycle struct {
 	StartedAt          *time.Time
 	RecommendedDrainAt *time.Time
 	ExpiresAt          *time.Time
 }
 
+// RuntimeSupport is the native message type for gestalt.provider.v1.RuntimeSupport.
 type RuntimeSupport struct {
 	CanHostApps              bool
 	EgressMode               RuntimeEgressMode
 	SupportsPrepareWorkspace bool
 }
 
+// StartHostedAppRequest is the native message type for gestalt.provider.v1.StartHostedAppRequest.
+//
 // StartHostedAppRequest describes the app process to launch inside a
 // runtime session. The runtime backend owns allocation and injection of the
 // app's listener endpoint and returns a host-reachable dial target in the
@@ -132,6 +156,7 @@ type StartHostedAppRequest struct {
 	Workdir       string
 }
 
+// StartRuntimeSessionRequest is the native message type for gestalt.provider.v1.StartRuntimeSessionRequest.
 type StartRuntimeSessionRequest struct {
 	AppName       string
 	Template      string
@@ -140,6 +165,7 @@ type StartRuntimeSessionRequest struct {
 	ImagePullAuth *RuntimeImagePullAuth
 }
 
+// StopRuntimeSessionRequest is the native message type for gestalt.provider.v1.StopRuntimeSessionRequest.
 type StopRuntimeSessionRequest struct {
 	SessionId string
 }
@@ -155,6 +181,7 @@ func NewRuntime(conn grpc.ClientConnInterface) *Runtime {
 	return &Runtime{client: proto.NewRuntimeClient(conn)}
 }
 
+// GetSupport calls the GetSupport RPC of Runtime.
 func (c *Runtime) GetSupport(ctx context.Context) (*RuntimeSupport, error) {
 	response, err := c.client.GetSupport(ctx, &emptypb.Empty{})
 	if err != nil {
@@ -201,6 +228,7 @@ func (c *Runtime) GetSessionRaw(ctx context.Context, request *GetRuntimeSessionR
 	return fromWireRuntimeSession(response), nil
 }
 
+// ListSessions calls the ListSessions RPC of Runtime.
 func (c *Runtime) ListSessions(ctx context.Context, request *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
 	response, err := c.client.ListSessions(ctx, toWireListRuntimeSessionsRequest(request))
 	if err != nil {

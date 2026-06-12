@@ -230,6 +230,18 @@ func (r *renderer) writeDoc(indent, doc string) {
 
 // writeDocPara renders a proto doc comment followed by a blank comment line,
 // so generated provenance lines read as a separate godoc paragraph.
+// writeIdentDoc renders an identifier-first synthetic doc line and, when the
+// proto carries a comment, the proto doc as a following paragraph — so every
+// exported symbol's comment satisfies the godoc naming form regardless of
+// how the proto comment is phrased.
+func (r *renderer) writeIdentDoc(indent, synthetic, doc string) {
+	r.writeDoc(indent, synthetic)
+	if doc != "" {
+		r.body.WriteString(indent + "//\n")
+		r.writeDoc(indent, doc)
+	}
+}
+
 func (r *renderer) writeDocPara(doc string) {
 	if doc == "" {
 		return
@@ -240,14 +252,13 @@ func (r *renderer) writeDocPara(doc string) {
 
 func (r *renderer) renderEnum(e *model.Enum) {
 	name := r.enumType(e.FullName)
-	r.writeDocPara(e.Doc)
-	fmt.Fprintf(&r.body, "// %s is the %s enum. It is open:\n", name, e.FullName)
-	r.body.WriteString("// numeric values outside the named constants are preserved.\n")
+	r.writeIdentDoc("", fmt.Sprintf("%s is the %s enum. It is open:\nnumeric values outside the named constants are preserved.", name, e.FullName), e.Doc)
 	fmt.Fprintf(&r.body, "type %s int32\n\n", name)
 	r.body.WriteString("const (\n")
 	for _, v := range e.Values {
-		r.writeDoc("\t", v.Doc)
-		fmt.Fprintf(&r.body, "\t%s %s = %d\n", enumValueConst(name, e.Name, v.Name), name, v.Number)
+		constName := enumValueConst(name, e.Name, v.Name)
+		r.writeIdentDoc("\t", fmt.Sprintf("%s is the %s value of %s.", constName, v.Name, name), v.Doc)
+		fmt.Fprintf(&r.body, "\t%s %s = %d\n", constName, name, v.Number)
 	}
 	r.body.WriteString(")\n\n")
 }
@@ -263,7 +274,7 @@ func (r *renderer) renderMessage(m *model.Message) {
 			hasFields = true
 		}
 	}
-	r.writeDoc("", m.Doc)
+	r.writeIdentDoc("", fmt.Sprintf("%s is the native message type for %s.", name, m.FullName), m.Doc)
 	if !hasFields {
 		fmt.Fprintf(&r.body, "type %s struct{}\n\n", name)
 		return
@@ -290,13 +301,12 @@ func (r *renderer) renderOneofTypes(m *model.Message, o *model.Oneof) {
 	fmt.Fprintf(&r.body, "type %s interface {\n\tis%s()\n}\n\n", unionName, unionName)
 	for _, f := range oneofFields(m, o) {
 		wrapper := variantTypeName(unionName, f)
-		r.writeDocPara(f.Doc)
 		switch f.Kind {
 		case model.KindJSONNull, model.KindUnit:
-			fmt.Fprintf(&r.body, "// %s is the %s variant. It carries no payload.\n", wrapper, f.JSONName)
+			r.writeIdentDoc("", fmt.Sprintf("%s is the %s variant. It carries no payload.", wrapper, f.JSONName), f.Doc)
 			fmt.Fprintf(&r.body, "type %s struct{}\n\n", wrapper)
 		default:
-			fmt.Fprintf(&r.body, "// %s is the %s variant.\n", wrapper, f.JSONName)
+			r.writeIdentDoc("", fmt.Sprintf("%s is the %s variant.", wrapper, f.JSONName), f.Doc)
 			fmt.Fprintf(&r.body, "type %s struct {\n\tValue %s\n}\n\n", wrapper, r.valueType(fieldRef(f)))
 		}
 		fmt.Fprintf(&r.body, "func (*%s) is%s() {}\n\n", wrapper, unionName)
@@ -548,9 +558,7 @@ func (r *renderer) renderClient(svc *model.Service) {
 	r.features.proto = true
 
 	ctxField := contextFieldOf(svc)
-	r.writeDocPara(svc.Doc)
-	fmt.Fprintf(&r.body, "// %s is the generated client for %s.\n", name, svc.FullName)
-	r.body.WriteString("// Every transport error is converted to *GestaltError.\n")
+	r.writeIdentDoc("", fmt.Sprintf("%s is the generated client for %s.\nEvery transport error is converted to *GestaltError.", name, svc.FullName), svc.Doc)
 	if ctxField != nil {
 		ctxType := r.fieldType(ctxField)
 		fmt.Fprintf(&r.body, "type %s struct {\n\tclient proto.%sClient\n\tcontext %s\n}\n\n", name, name, ctxType)
@@ -834,11 +842,11 @@ func (r *renderer) renderErgonomicUnary(svcName string, m *model.Method) {
 	}
 	collapse := r.collapseOutput(m)
 
-	r.writeDocPara(m.Doc)
-	fmt.Fprintf(&r.body, "// %s is the ergonomic form of [%s.%sRaw].\n", m.Name, svcName, m.Name)
+	synthetic := fmt.Sprintf("%s is the ergonomic form of [%s.%sRaw].", m.Name, svcName, m.Name)
 	if collapse != nil {
-		r.body.WriteString("// " + collapse.doc + "\n")
+		synthetic += "\n" + collapse.doc
 	}
+	r.writeIdentDoc("", synthetic, m.Doc)
 	recv := fmt.Sprintf("func (c *%s) %s", svcName, m.Name)
 	switch {
 	case m.OutputIsEmpty:
@@ -891,9 +899,7 @@ func (r *renderer) renderFramedRead(svcName string, m *model.Method) {
 		callArgs = "ctx, request"
 	}
 
-	r.writeDocPara(m.Doc)
-	fmt.Fprintf(&r.body, "// %s is the ergonomic form of [%s.%sRaw]: it consumes the\n", m.Name, svcName, m.Name)
-	fmt.Fprintf(&r.body, "// leading %s header frame and returns it beside the %s payload\n// stream.\n", header.JSONName, m.Initial.ChunkField)
+	r.writeIdentDoc("", fmt.Sprintf("%s is the ergonomic form of [%s.%sRaw]: it consumes the\nleading %s header frame and returns it beside the %s payload\nstream.", m.Name, svcName, m.Name, header.JSONName, m.Initial.ChunkField), m.Doc)
 	headerZero := zeroValueRef(fieldRef(header))
 	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context%s) (%s, *%s, error) {\n",
 		svcName, m.Name, param, r.valueType(fieldRef(header)), dataStream)
@@ -921,9 +927,7 @@ func (r *renderer) renderFramedWrite(svcName string, m *model.Method) {
 	dataStream := svcName + m.Name + "DataStream"
 	headerParam := goParamName(header.JSONName)
 
-	r.writeDocPara(m.Doc)
-	fmt.Fprintf(&r.body, "// %s is the ergonomic form of [%s.%sRaw]: it sends the %s\n", m.Name, svcName, m.Name, header.JSONName)
-	fmt.Fprintf(&r.body, "// header frame and returns the %s payload stream.\n", m.Initial.ChunkField)
+	r.writeIdentDoc("", fmt.Sprintf("%s is the ergonomic form of [%s.%sRaw]: it sends the %s\nheader frame and returns the %s payload stream.", m.Name, svcName, m.Name, header.JSONName, m.Initial.ChunkField), m.Doc)
 	fmt.Fprintf(&r.body, "func (c *%s) %s(ctx context.Context, %s %s) (*%s, error) {\n",
 		svcName, m.Name, headerParam, r.valueType(fieldRef(header)), dataStream)
 	fmt.Fprintf(&r.body, "\tframes, err := c.%sRaw(ctx)\n", m.Name)
@@ -994,14 +998,12 @@ func (r *renderer) renderFramedStreamWrapper(svcName string, m *model.Method) {
 // annotated surface owns the natural name, the faithful variant keeps a Raw
 // suffix so both remain available.
 func (r *renderer) renderFaithfulMethod(svcName string, m *model.Method, rawSuffix bool) {
-	r.writeDoc("", m.Doc)
 	methodName := m.Name
 	if rawSuffix {
-		if m.Doc != "" {
-			r.body.WriteString("//\n")
-		}
 		methodName += "Raw"
-		fmt.Fprintf(&r.body, "// %s is the faithful form of [%s.%s].\n", methodName, svcName, m.Name)
+		r.writeIdentDoc("", fmt.Sprintf("%s is the faithful form of [%s.%s].", methodName, svcName, m.Name), m.Doc)
+	} else {
+		r.writeIdentDoc("", fmt.Sprintf("%s calls the %s RPC of %s.", methodName, m.Name, svcName), m.Doc)
 	}
 	recv := fmt.Sprintf("func (c *%s) %s", svcName, methodName)
 	streamType := svcName + m.Name + "Stream"
