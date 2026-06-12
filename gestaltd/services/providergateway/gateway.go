@@ -56,7 +56,7 @@ func (g *Gateway) IssueCallerToken(subjectID string, now time.Time) (string, boo
 	return token, true, nil
 }
 
-func (g *Gateway) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
+func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
 	return true, nil
 }
 
@@ -84,11 +84,7 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 	if t == nil {
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: transport is nil")
 	}
-	return t.next.Invoke(ctx, req, next)
-}
-
-func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
-	allowed, err := g.Authorize(ctx, AuthorizationParams{
+	allowed, err := t.Authorize(ctx, AuthorizationParams{
 		ProviderID:  req.ProviderID,
 		Operation:   req.Operation,
 		CallerToken: req.CallerToken,
@@ -99,6 +95,10 @@ func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next N
 	if !allowed {
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: unauthorized")
 	}
+	return t.next.Invoke(ctx, req, next)
+}
+
+func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
 	transport := Transport(DirectTransport{})
 	if g != nil && g.transport != nil {
 		transport = g.transport

@@ -991,7 +991,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		providergateway.WithTransport(providerGatewayTransport),
 		providergateway.WithCallerTokenIssuer(callerTokenIssuer),
 	)
-	deps.ProviderTransport = providerGateway
+	deps.ProviderTransport = providerGatewayTransport
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)

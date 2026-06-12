@@ -1954,12 +1954,11 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 		t.Fatalf("authorization providers built = %d, want 1", len(built))
 	}
 	provider := built[0]
-	transportGateway, ok := provider.transport.(*providergateway.Gateway)
-	if !ok {
-		t.Fatalf("authorization provider transport = %T, want *providergateway.Gateway", provider.transport)
+	if _, ok := provider.transport.(*providergateway.ProviderGatewayTransport); !ok {
+		t.Fatalf("authorization provider transport = %T, want *providergateway.ProviderGatewayTransport", provider.transport)
 	}
-	if transportGateway != result.ProviderGateway {
-		t.Fatal("authorization provider was not built with the runtime provider gateway")
+	if result.ProviderGateway == nil {
+		t.Fatal("ProviderGateway is nil")
 	}
 	if provider.setAuthorizationState == nil {
 		t.Fatal("runtime authorization provider did not receive SetAuthorizationState")

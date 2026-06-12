@@ -63,8 +63,8 @@ func TestNewCallerTokenIssuerEmptyKey(t *testing.T) {
 func TestAuthorizeAllowsRequests(t *testing.T) {
 	t.Parallel()
 
-	gateway := New()
-	allowed, err := gateway.Authorize(context.Background(), AuthorizationParams{
+	transport := NewProviderGatewayTransport(nil)
+	allowed, err := transport.Authorize(context.Background(), AuthorizationParams{
 		ProviderID:  "authz-primary",
 		Operation:   "CheckAccess",
 		CallerToken: "caller-token",
@@ -77,7 +77,7 @@ func TestAuthorizeAllowsRequests(t *testing.T) {
 	}
 }
 
-func TestInvokeAuthorizesThenCallsConfiguredTransport(t *testing.T) {
+func TestGatewayInvokeCallsConfiguredTransport(t *testing.T) {
 	t.Parallel()
 
 	transport := &recordingTransport{}
@@ -116,7 +116,7 @@ func TestInvokeAuthorizesThenCallsConfiguredTransport(t *testing.T) {
 	}
 }
 
-func TestProviderGatewayTransportInvokesNext(t *testing.T) {
+func TestProviderGatewayTransportAuthorizesThenInvokesNext(t *testing.T) {
 	t.Parallel()
 
 	inner := &recordingTransport{}
