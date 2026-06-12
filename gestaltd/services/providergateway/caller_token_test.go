@@ -1,8 +1,12 @@
 package providergateway
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"strings"
 	"testing"
 	"time"
@@ -11,18 +15,22 @@ import (
 func TestCallerTokenIssueVerify(t *testing.T) {
 	t.Parallel()
 
-	secret := []byte("test-secret")
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
 	now := time.Now().UTC()
 	claims, err := GenerateCallerTokenClaims("user:123", now)
 	if err != nil {
 		t.Fatalf("GenerateCallerTokenClaims: %v", err)
 	}
 
-	token, err := Issue(claims, secret)
+	token, err := issuer.Issue(claims)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
-	got, err := Verify(token, secret)
+	got, err := Verify(token, publicKeyPEM)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
@@ -74,12 +82,16 @@ func TestCallerTokenGenerateClaimsRequiresSubjectID(t *testing.T) {
 func TestCallerTokenVerifyRejectsTamperedClaims(t *testing.T) {
 	t.Parallel()
 
-	secret := []byte("test-secret")
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
 	claims, err := GenerateCallerTokenClaims("user:123", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("GenerateCallerTokenClaims: %v", err)
 	}
-	token, err := Issue(claims, secret)
+	token, err := issuer.Issue(claims)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -96,7 +108,7 @@ func TestCallerTokenVerifyRejectsTamperedClaims(t *testing.T) {
 	parts[1] = base64.RawURLEncoding.EncodeToString(tamperedClaims)
 	tamperedToken := strings.Join(parts, ".")
 
-	if _, err := Verify(tamperedToken, secret); err == nil {
+	if _, err := Verify(tamperedToken, publicKeyPEM); err == nil {
 		t.Fatal("Verify tampered token error = nil, want error")
 	}
 }
@@ -104,23 +116,34 @@ func TestCallerTokenVerifyRejectsTamperedClaims(t *testing.T) {
 func TestCallerTokenVerifyRejectsWrongSecret(t *testing.T) {
 	t.Parallel()
 
+	privateKeyPEM, _ := testCallerTokenKeyPair(t)
+	_, otherPublicKeyPEM := testCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
 	claims, err := GenerateCallerTokenClaims("user:123", time.Now().UTC())
 	if err != nil {
 		t.Fatalf("GenerateCallerTokenClaims: %v", err)
 	}
-	token, err := Issue(claims, []byte("test-secret"))
+	token, err := issuer.Issue(claims)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
 
-	if _, err := Verify(token, []byte("other-secret")); err == nil {
-		t.Fatal("Verify with wrong secret error = nil, want error")
+	if _, err := Verify(token, otherPublicKeyPEM); err == nil {
+		t.Fatal("Verify with wrong public key error = nil, want error")
 	}
 }
 
 func TestCallerTokenVerifyRejectsExpiredToken(t *testing.T) {
 	t.Parallel()
 
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
 	now := time.Now().UTC()
 	claims := CallerTokenClaims{
 		SubjectID: "user:123",
@@ -130,12 +153,12 @@ func TestCallerTokenVerifyRejectsExpiredToken(t *testing.T) {
 		Audience:  callerTokenAudience,
 		ID:        "expired-token",
 	}
-	token, err := Issue(claims, []byte("test-secret"))
+	token, err := issuer.Issue(claims)
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
 
-	if _, err := Verify(token, []byte("test-secret")); err == nil {
+	if _, err := Verify(token, publicKeyPEM); err == nil {
 		t.Fatal("Verify expired token error = nil, want error")
 	}
 }
@@ -143,6 +166,8 @@ func TestCallerTokenVerifyRejectsExpiredToken(t *testing.T) {
 func TestCallerTokenVerifyRejectsLifetimeAboveMaximum(t *testing.T) {
 	t.Parallel()
 
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	privateKey := testParseCallerTokenPrivateKey(t, privateKeyPEM)
 	now := time.Now().UTC()
 	claims := CallerTokenClaims{
 		SubjectID: "user:123",
@@ -152,12 +177,12 @@ func TestCallerTokenVerifyRejectsLifetimeAboveMaximum(t *testing.T) {
 		Audience:  callerTokenAudience,
 		ID:        "long-lived-token",
 	}
-	token, err := issueCallerTokenWithoutValidation(t, claims, []byte("test-secret"))
+	token, err := issueCallerTokenWithoutValidation(t, claims, privateKey)
 	if err != nil {
 		t.Fatalf("issueCallerTokenWithoutValidation: %v", err)
 	}
 
-	if _, err := Verify(token, []byte("test-secret")); err == nil {
+	if _, err := Verify(token, publicKeyPEM); err == nil {
 		t.Fatal("Verify long-lived token error = nil, want error")
 	}
 }
@@ -165,6 +190,8 @@ func TestCallerTokenVerifyRejectsLifetimeAboveMaximum(t *testing.T) {
 func TestCallerTokenVerifyRejectsInvalidIssuerAndAudience(t *testing.T) {
 	t.Parallel()
 
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	privateKey := testParseCallerTokenPrivateKey(t, privateKeyPEM)
 	now := time.Now().UTC()
 	base := CallerTokenClaims{
 		SubjectID: "user:123",
@@ -206,18 +233,18 @@ func TestCallerTokenVerifyRejectsInvalidIssuerAndAudience(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			token, err := issueCallerTokenWithoutValidation(t, tc.claims, []byte("test-secret"))
+			token, err := issueCallerTokenWithoutValidation(t, tc.claims, privateKey)
 			if err != nil {
 				t.Fatalf("issueCallerTokenWithoutValidation: %v", err)
 			}
-			if _, err := Verify(token, []byte("test-secret")); err == nil {
+			if _, err := Verify(token, publicKeyPEM); err == nil {
 				t.Fatal("Verify error = nil, want error")
 			}
 		})
 	}
 }
 
-func issueCallerTokenWithoutValidation(t testing.TB, claims CallerTokenClaims, secret []byte) (string, error) {
+func issueCallerTokenWithoutValidation(t testing.TB, claims CallerTokenClaims, privateKey ed25519.PrivateKey) (string, error) {
 	t.Helper()
 	header := callerTokenHeader{Algorithm: callerTokenAlgorithm, Type: callerTokenType}
 	encodedHeader, err := encodeCallerTokenPart(header)
@@ -229,5 +256,33 @@ func issueCallerTokenWithoutValidation(t testing.TB, claims CallerTokenClaims, s
 		return "", err
 	}
 	signingInput := encodedHeader + "." + encodedClaims
-	return signingInput + "." + signCallerToken(signingInput, secret), nil
+	return signingInput + "." + signCallerToken(signingInput, privateKey), nil
+}
+
+func testCallerTokenKeyPair(t testing.TB) (string, string) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatalf("MarshalPKIXPublicKey: %v", err)
+	}
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
+	return string(privateKeyPEM), string(publicKeyPEM)
+}
+
+func testParseCallerTokenPrivateKey(t testing.TB, privateKeyPEM string) ed25519.PrivateKey {
+	t.Helper()
+	privateKey, err := parseCallerTokenPrivateKey(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("parseCallerTokenPrivateKey: %v", err)
+	}
+	return privateKey
 }

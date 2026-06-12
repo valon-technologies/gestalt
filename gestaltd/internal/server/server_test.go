@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -14578,7 +14582,6 @@ func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
 func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	t.Parallel()
 
-	const stateSecret = "0123456789abcdef0123456789abcdef"
 	stub := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "cli-provider", ConnMode: core.ConnectionModeNone},
 		ops:             []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
@@ -14592,6 +14595,11 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	user := seedAPITokenWithPermissions(t, svc, plaintext, hashed, "cli-user", nil)
 	invoker := &callerTokenRecordingInvoker{}
 	now := time.Now().UTC()
+	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
+	issuer, err := providergateway.NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -14603,8 +14611,8 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 		cfg.Invoker = invoker
 		cfg.Now = func() time.Time { return now }
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.ProviderGateway = providergateway.New(providergateway.WithCallerTokenIssuer(issuer))
 		cfg.Services = svc
-		cfg.StateSecret = []byte(stateSecret)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -14623,7 +14631,7 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	if token == "" {
 		t.Fatalf("expected provider gateway caller token")
 	}
-	claims, err := providergateway.Verify(token, []byte(stateSecret))
+	claims, err := providergateway.Verify(token, publicKeyPEM)
 	if err != nil {
 		t.Fatalf("Verify caller token: %v", err)
 	}
@@ -14636,6 +14644,25 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	if claims.ExpiresAt != now.Add(5*time.Minute).Unix() {
 		t.Fatalf("ExpiresAt = %d, want %d", claims.ExpiresAt, now.Add(5*time.Minute).Unix())
 	}
+}
+
+func testProviderGatewayCallerTokenKeyPair(t testing.TB) (string, string) {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatalf("MarshalPKIXPublicKey: %v", err)
+	}
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes})
+	publicKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKeyBytes})
+	return string(privateKeyPEM), string(publicKeyPEM)
 }
 
 func TestCreateAPIToken_InvalidScope(t *testing.T) {

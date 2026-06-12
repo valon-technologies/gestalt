@@ -1,10 +1,11 @@
 package providergateway
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
+	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"strings"
 	"time"
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	callerTokenAlgorithm = "HS256"
+	callerTokenAlgorithm = "EdDSA"
 	callerTokenType      = "JWT"
 	callerTokenIssuer    = "gestaltd"
 	callerTokenAudience  = "provider-gateway"
@@ -34,6 +35,22 @@ type callerTokenHeader struct {
 	Type      string `json:"typ"`
 }
 
+type CallerTokenIssuer struct {
+	privateKey ed25519.PrivateKey
+}
+
+func NewCallerTokenIssuer(privateKeyPEM string) (*CallerTokenIssuer, error) {
+	privateKeyPEM = strings.TrimSpace(privateKeyPEM)
+	if privateKeyPEM == "" {
+		return nil, nil
+	}
+	privateKey, err := parseCallerTokenPrivateKey(privateKeyPEM)
+	if err != nil {
+		return nil, err
+	}
+	return &CallerTokenIssuer{privateKey: privateKey}, nil
+}
+
 func GenerateCallerTokenClaims(subjectID string, now time.Time) (CallerTokenClaims, error) {
 	subjectID = strings.TrimSpace(subjectID)
 	if subjectID == "" {
@@ -50,9 +67,9 @@ func GenerateCallerTokenClaims(subjectID string, now time.Time) (CallerTokenClai
 	}, nil
 }
 
-func Issue(claims CallerTokenClaims, secret []byte) (string, error) {
-	if err := validateCallerTokenSecret(secret); err != nil {
-		return "", err
+func (i *CallerTokenIssuer) Issue(claims CallerTokenClaims) (string, error) {
+	if i == nil || len(i.privateKey) == 0 {
+		return "", fmt.Errorf("caller token: private key is required")
 	}
 	if err := validateCallerTokenClaims(claims); err != nil {
 		return "", err
@@ -70,12 +87,13 @@ func Issue(claims CallerTokenClaims, secret []byte) (string, error) {
 		return "", fmt.Errorf("caller token: encode claims: %w", err)
 	}
 	signingInput := encodedHeader + "." + encodedClaims
-	signature := signCallerToken(signingInput, secret)
+	signature := signCallerToken(signingInput, i.privateKey)
 	return signingInput + "." + signature, nil
 }
 
-func Verify(token string, secret []byte) (CallerTokenClaims, error) {
-	if err := validateCallerTokenSecret(secret); err != nil {
+func Verify(token string, publicKeyPEM string) (CallerTokenClaims, error) {
+	publicKey, err := parseCallerTokenPublicKey(publicKeyPEM)
+	if err != nil {
 		return CallerTokenClaims{}, err
 	}
 	parts := strings.Split(token, ".")
@@ -90,8 +108,11 @@ func Verify(token string, secret []byte) (CallerTokenClaims, error) {
 		return CallerTokenClaims{}, fmt.Errorf("caller token: unsupported token header")
 	}
 	signingInput := parts[0] + "." + parts[1]
-	expectedSignature := signCallerToken(signingInput, secret)
-	if !hmac.Equal([]byte(expectedSignature), []byte(parts[2])) {
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return CallerTokenClaims{}, fmt.Errorf("caller token: decode signature: %w", err)
+	}
+	if !ed25519.Verify(publicKey, []byte(signingInput), signature) {
 		return CallerTokenClaims{}, fmt.Errorf("caller token: invalid signature")
 	}
 	var claims CallerTokenClaims
@@ -107,11 +128,36 @@ func Verify(token string, secret []byte) (CallerTokenClaims, error) {
 	return claims, nil
 }
 
-func validateCallerTokenSecret(secret []byte) error {
-	if len(secret) == 0 {
-		return fmt.Errorf("caller token: secret is required")
+func parseCallerTokenPrivateKey(privateKeyPEM string) (ed25519.PrivateKey, error) {
+	block, _ := pem.Decode([]byte(strings.TrimSpace(privateKeyPEM)))
+	if block == nil {
+		return nil, fmt.Errorf("caller token: decode private key PEM")
 	}
-	return nil
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("caller token: parse private key: %w", err)
+	}
+	privateKey, ok := key.(ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("caller token: private key must be Ed25519")
+	}
+	return privateKey, nil
+}
+
+func parseCallerTokenPublicKey(publicKeyPEM string) (ed25519.PublicKey, error) {
+	block, _ := pem.Decode([]byte(strings.TrimSpace(publicKeyPEM)))
+	if block == nil {
+		return nil, fmt.Errorf("caller token: decode public key PEM")
+	}
+	key, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("caller token: parse public key: %w", err)
+	}
+	publicKey, ok := key.(ed25519.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("caller token: public key must be Ed25519")
+	}
+	return publicKey, nil
 }
 
 func validateCallerTokenClaims(claims CallerTokenClaims) error {
@@ -155,8 +201,6 @@ func decodeCallerTokenPart(encoded string, out any) error {
 	return json.Unmarshal(data, out)
 }
 
-func signCallerToken(signingInput string, secret []byte) string {
-	mac := hmac.New(sha256.New, secret)
-	_, _ = mac.Write([]byte(signingInput))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+func signCallerToken(signingInput string, privateKey ed25519.PrivateKey) string {
+	return base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, []byte(signingInput)))
 }

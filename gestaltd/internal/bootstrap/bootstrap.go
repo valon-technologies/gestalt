@@ -255,6 +255,7 @@ type Result struct {
 	Telemetry            core.TelemetryProvider
 	Runtimes             RuntimeInspector
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
+	ProviderGateway      *providergateway.Gateway
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -671,6 +672,7 @@ type preparedCore struct {
 	WorkflowManager      *lazyWorkflowManager
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
+	ProviderGateway      *providergateway.Gateway
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -972,7 +974,13 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	deps.ProviderGateway = providergateway.New(providergateway.WithCallerTokenPrivateKey(callerTokenPrivateKey))
+	callerTokenIssuer, err := providergateway.NewCallerTokenIssuer(callerTokenPrivateKey)
+	if err != nil {
+		_ = closeAuthProviders(authProviders)
+		return nil, fmt.Errorf("bootstrap: caller token private key: %w", err)
+	}
+	providerGateway := providergateway.New(providergateway.WithCallerTokenIssuer(callerTokenIssuer))
+	deps.ProviderGateway = providerGateway
 	callerTokenPublicKey, err := resolveCallerTokenPublicKey(ctx, sm)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -1040,6 +1048,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
 		PublicHostServices:   publicHostServices,
+		ProviderGateway:      providerGateway,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1264,6 +1273,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:                    prepared.Telemetry,
 		Runtimes:                     prepared.runtimeRegistry,
 		PublicHostServices:           publicHostServices,
+		ProviderGateway:              prepared.ProviderGateway,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
