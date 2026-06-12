@@ -3455,6 +3455,9 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 	}
 
 	for _, work := range ordered {
+		if err := resolveUIThemeConfig(paths, work.name, work.entry); err != nil {
+			return err
+		}
 		if work.install != nil {
 			resolvedAssetRoot, err := bindPreparedUIInstall(&work.entry.ProviderEntry, work.subject, work.destDir, work.configMap, work.install)
 			if err != nil {
@@ -5240,6 +5243,57 @@ func validateLockedInstalledManifest(kind, name, subject string, manifest *provi
 		return fmt.Errorf("locked source manifest version mismatch for %s: got %q, want %q", subject, manifest.Version, entry.Version)
 	}
 	return validateLockedArchivePolicy(subject, archivePolicyKind(kind), manifest, entry, platform, resolvedKey)
+}
+
+// resolveUIThemeConfig decodes the optional theme block of a mounted ui's
+// config and resolves its paths against the deployment config directory at
+// sync time. Unlike resolveProviderIcon, a configured-but-missing path is an
+// error: theme content is served verbatim and a typo would otherwise degrade
+// silently to the empty stylesheet.
+func resolveUIThemeConfig(paths lifecyclePaths, name string, entry *config.UIEntry) error {
+	entry.ResolvedThemeStylesheet = ""
+	entry.ResolvedThemeAssetsDir = ""
+	theme, err := config.UIThemeConfigFromProviderConfig(entry.Config)
+	if err != nil {
+		return fmt.Errorf("decode ui %q theme config: %w", name, err)
+	}
+	if theme == nil {
+		return nil
+	}
+	if stylesheet := strings.TrimSpace(theme.Stylesheet); stylesheet != "" {
+		resolved := resolveUIThemePath(paths.configDir, stylesheet)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return fmt.Errorf("ui %q theme stylesheet not found at %s: %w", name, resolved, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("ui %q theme stylesheet at %s is a directory", name, resolved)
+		}
+		entry.ResolvedThemeStylesheet = resolved
+	}
+	if assetsDir := strings.TrimSpace(theme.AssetsDir); assetsDir != "" {
+		resolved := resolveUIThemePath(paths.configDir, assetsDir)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return fmt.Errorf("ui %q theme assetsDir not found at %s: %w", name, resolved, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("ui %q theme assetsDir at %s is not a directory", name, resolved)
+		}
+		entry.ResolvedThemeAssetsDir = resolved
+	}
+	return nil
+}
+
+func resolveUIThemePath(configDir, value string) string {
+	resolved := filepath.FromSlash(value)
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(configDir, resolved)
+	}
+	if abs, err := filepath.Abs(resolved); err == nil {
+		return abs
+	}
+	return filepath.Clean(resolved)
 }
 
 func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath string, app *config.ProviderEntry) {

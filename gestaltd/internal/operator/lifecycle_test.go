@@ -1706,6 +1706,145 @@ server:
 	}
 }
 
+func TestLoadForExecutionAtPath_ResolvesMountedUIThemeConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		themeYAML      string
+		wantStylesheet string
+		wantAssetsDir  string
+		wantErr        string
+	}{
+		{
+			name: "stylesheet and assetsDir resolved against the config dir",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+          assetsDir: ./theme/assets
+`,
+			wantStylesheet: filepath.Join("theme", "tenant.css"),
+			wantAssetsDir:  filepath.Join("theme", "assets"),
+		},
+		{
+			name: "no theme block leaves theme paths empty",
+		},
+		{
+			name: "missing stylesheet fails sync",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/missing.css
+`,
+			wantErr: "theme stylesheet not found",
+		},
+		{
+			name: "assetsDir pointing at a file fails sync",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+          assetsDir: ./theme/tenant.css
+`,
+			wantErr: "is not a directory",
+		},
+		{
+			name: "unknown theme key fails decode",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+          asetsDir: ./theme/assets
+`,
+			wantErr: "theme config",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			uiDir := filepath.Join(dir, "ui")
+			if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
+				t.Fatalf("MkdirAll ui dist: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+				t.Fatalf("WriteFile index.html: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+				t.Fatalf("WriteFile build.sh: %v", err)
+			}
+			manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+				Kind:        providermanifestv1.KindUI,
+				Source:      "github.com/testowner/web/roadmap",
+				Version:     "0.0.1-alpha.1",
+				DisplayName: "Roadmap UI",
+				Build: &providermanifestv1.SourceBuild{
+					Command: []string{"sh", "./build.sh"},
+				},
+				Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
+			}, providerpkg.ManifestFormatYAML)
+			if err != nil {
+				t.Fatalf("EncodeManifest: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), manifest, 0o644); err != nil {
+				t.Fatalf("WriteFile manifest: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(dir, "theme", "assets"), 0o755); err != nil {
+				t.Fatalf("MkdirAll theme assets: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "theme", "tenant.css"), []byte(":root{--brand:#123456;}"), 0o644); err != nil {
+				t.Fatalf("WriteFile tenant.css: %v", err)
+			}
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      source:
+        path: ./ui/manifest.yaml
+      path: /roadmap
+` + tc.themeYAML + `server:
+` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			loaded, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("LoadForExecutionAtPath error = %q, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadForExecutionAtPath: %v", err)
+			}
+
+			entry := loaded.Providers.UI["roadmap"]
+			if entry == nil {
+				t.Fatal(`Providers.UI["roadmap"] = nil`)
+			}
+			wantStylesheet := ""
+			if tc.wantStylesheet != "" {
+				wantStylesheet = filepath.Join(dir, tc.wantStylesheet)
+			}
+			if got := entry.ResolvedThemeStylesheet; got != wantStylesheet {
+				t.Fatalf("ResolvedThemeStylesheet = %q, want %q", got, wantStylesheet)
+			}
+			wantAssetsDir := ""
+			if tc.wantAssetsDir != "" {
+				wantAssetsDir = filepath.Join(dir, tc.wantAssetsDir)
+			}
+			if got := entry.ResolvedThemeAssetsDir; got != wantAssetsDir {
+				t.Fatalf("ResolvedThemeAssetsDir = %q, want %q", got, wantAssetsDir)
+			}
+		})
+	}
+}
+
 func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *testing.T) {
 	t.Parallel()
 
