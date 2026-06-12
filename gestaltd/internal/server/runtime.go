@@ -83,7 +83,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		AuditSink:            result.AuditSink,
 		Services:             result.Services,
 		Providers:            result.Providers,
-		ProviderGateway:      result.ProviderGateway,
+		CallerTokenIssuer:    result.CallerTokenIssuer,
 		Agent:                result.AgentControl,
 		AgentManager:         result.AgentManager,
 		Workflow:             result.WorkflowControl,

@@ -253,7 +253,7 @@ type Result struct {
 	Telemetry            core.TelemetryProvider
 	Runtimes             RuntimeInspector
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	ProviderGateway      *providergateway.Gateway
+	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -670,7 +670,7 @@ type preparedCore struct {
 	WorkflowManager      *lazyWorkflowManager
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	ProviderGateway      *providergateway.Gateway
+	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -983,10 +983,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	deps.CallerTokenPublicKey = callerTokenPublicKey
 	providerGatewayTransport := providergateway.NewProviderGatewayTransport()
-	providerGateway := providergateway.New(
-		providergateway.WithTransport(providerGatewayTransport),
-		providergateway.WithCallerTokenIssuer(callerTokenIssuer),
-	)
 	deps.ProviderTransport = providerGatewayTransport
 	authorizationProviders, err := buildAuthorizationProviders(ctx, cfg, factories, deps)
 	if err != nil {
@@ -1052,7 +1048,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
 		PublicHostServices:   publicHostServices,
-		ProviderGateway:      providerGateway,
+		CallerTokenIssuer:    callerTokenIssuer,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1281,7 +1277,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:                    prepared.Telemetry,
 		Runtimes:                     prepared.runtimeRegistry,
 		PublicHostServices:           publicHostServices,
-		ProviderGateway:              prepared.ProviderGateway,
+		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,

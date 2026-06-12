@@ -3,59 +3,14 @@ package providergateway
 import (
 	"context"
 	"fmt"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
-
-type Gateway struct {
-	callerTokenIssuer *CallerTokenIssuer
-	transport         Transport
-}
 
 type AuthorizationParams struct {
 	ProviderID  string
 	Operation   string
 	CallerToken string
-}
-
-type GatewayOption func(*Gateway)
-
-func WithCallerTokenIssuer(issuer *CallerTokenIssuer) GatewayOption {
-	return func(g *Gateway) {
-		g.callerTokenIssuer = issuer
-	}
-}
-
-func WithTransport(transport Transport) GatewayOption {
-	return func(g *Gateway) {
-		g.transport = transport
-	}
-}
-
-func New(opts ...GatewayOption) *Gateway {
-	g := &Gateway{transport: DirectTransport{}}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(g)
-		}
-	}
-	return g
-}
-
-func (g *Gateway) IssueCallerToken(subjectID string, now time.Time) (string, bool, error) {
-	if g == nil || g.callerTokenIssuer == nil {
-		return "", false, nil
-	}
-	claims, err := GenerateCallerTokenClaims(subjectID, now)
-	if err != nil {
-		return "", true, err
-	}
-	token, err := g.callerTokenIssuer.Issue(claims)
-	if err != nil {
-		return "", true, err
-	}
-	return token, true, nil
 }
 
 func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
@@ -128,12 +83,4 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: unauthorized")
 	}
 	return next(ctx, req)
-}
-
-func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
-	transport := Transport(DirectTransport{})
-	if g != nil && g.transport != nil {
-		transport = g.transport
-	}
-	return transport.Invoke(ctx, req, next)
 }

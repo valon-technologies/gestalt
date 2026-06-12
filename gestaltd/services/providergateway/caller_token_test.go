@@ -40,6 +40,65 @@ func TestCallerTokenIssueVerify(t *testing.T) {
 	}
 }
 
+func TestCallerTokenSubjectID(t *testing.T) {
+	t.Parallel()
+
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:123", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	token, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+
+	subjectID, err := CallerTokenSubjectID(token, publicKeyPEM)
+	if err != nil {
+		t.Fatalf("CallerTokenSubjectID: %v", err)
+	}
+	if subjectID != "user:123" {
+		t.Fatalf("subjectID = %q, want user:123", subjectID)
+	}
+}
+
+func TestCallerTokenSubjectIDRejectsInvalidToken(t *testing.T) {
+	t.Parallel()
+
+	privateKeyPEM, publicKeyPEM := testCallerTokenKeyPair(t)
+	issuer, err := NewCallerTokenIssuer(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("NewCallerTokenIssuer: %v", err)
+	}
+	claims, err := GenerateCallerTokenClaims("user:123", time.Now().UTC())
+	if err != nil {
+		t.Fatalf("GenerateCallerTokenClaims: %v", err)
+	}
+	token, err := issuer.Issue(claims)
+	if err != nil {
+		t.Fatalf("Issue: %v", err)
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("token parts = %d, want 3", len(parts))
+	}
+	claims.SubjectID = "user:admin"
+	tamperedClaims, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatalf("Marshal tampered claims: %v", err)
+	}
+	parts[1] = base64.RawURLEncoding.EncodeToString(tamperedClaims)
+	tamperedToken := strings.Join(parts, ".")
+
+	if _, err := CallerTokenSubjectID(tamperedToken, publicKeyPEM); err == nil {
+		t.Fatal("CallerTokenSubjectID tampered token error = nil, want error")
+	}
+}
+
 func TestCallerTokenGenerateClaims(t *testing.T) {
 	t.Parallel()
 
