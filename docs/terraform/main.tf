@@ -143,12 +143,8 @@ resource "google_compute_url_map" "docs" {
 
     path_rule {
       paths = [
-        "/api/go",
-        "/api/go/*",
         "/api/python",
         "/api/python/*",
-        "/api/rust",
-        "/api/rust/*",
         "/api/typescript",
         "/api/typescript/*",
       ]

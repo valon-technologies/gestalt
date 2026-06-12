@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Publish versioned SDK API docs to the Gestalt docs bucket.",
     )
-    parser.add_argument("--language", choices=["python", "typescript", "go", "rust"], required=True)
+    parser.add_argument("--language", choices=["python", "typescript"], required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--source-dir", type=Path, required=True)
     parser.add_argument("--bucket")

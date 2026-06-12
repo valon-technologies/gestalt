@@ -24,8 +24,8 @@ const contentTypes = new Map([
 const sdkReferenceTargets = {
   python: "/api/python/index.html",
   typescript: "/api/typescript/index.html",
-  go: "/api/go/index.html",
-  rust: "/api/rust/index.html",
+  go: "https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go",
+  rust: "https://docs.rs/gestalt-sdk/latest/gestalt/",
 };
 const registryMarker = "data-registry-shell";
 
