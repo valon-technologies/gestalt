@@ -11,6 +11,12 @@ type Gateway struct {
 	transport         Transport
 }
 
+type AuthorizationParams struct {
+	ProviderID  string
+	Operation   string
+	CallerToken string
+}
+
 type GatewayOption func(*Gateway)
 
 func WithCallerTokenIssuer(issuer *CallerTokenIssuer) GatewayOption {
@@ -50,6 +56,10 @@ func (g *Gateway) IssueCallerToken(subjectID string, now time.Time) (string, boo
 	return token, true, nil
 }
 
+func (g *Gateway) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
+	return true, nil
+}
+
 type DirectTransport struct{}
 
 func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
@@ -78,6 +88,17 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 }
 
 func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
+	allowed, err := g.Authorize(ctx, AuthorizationParams{
+		ProviderID:  req.ProviderID,
+		Operation:   req.Operation,
+		CallerToken: req.CallerToken,
+	})
+	if err != nil {
+		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: authorize: %w", err)
+	}
+	if !allowed {
+		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: unauthorized")
+	}
 	transport := Transport(DirectTransport{})
 	if g != nil && g.transport != nil {
 		transport = g.transport
