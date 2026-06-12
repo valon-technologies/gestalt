@@ -14,7 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -361,7 +360,7 @@ config:
 	var capturedName string
 	var capturedHostServices []runtimehost.HostService
 	factories := &FactoryRegistry{
-		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, _ providergateway.ProviderGateway) (core.AuthorizationProvider, error) {
+		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, _ Deps) (core.AuthorizationProvider, error) {
 			capturedName = name
 			capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
 			return &recordingAuthorizationProvider{}, nil
@@ -399,6 +398,67 @@ config:
 		}
 	}
 	t.Fatalf("authorization host services = %#v, want indexeddb host service", capturedHostServices)
+}
+
+func TestBuildAuthorizationProviderPassesCallerTokenPublicKeyDep(t *testing.T) {
+	t.Parallel()
+
+	var runtimeConfig yaml.Node
+	if err := yaml.Unmarshal([]byte(`
+command: /bin/true
+`), &runtimeConfig); err != nil {
+		t.Fatalf("decode runtime config: %v", err)
+	}
+	var capturedPublicKey string
+	factories := &FactoryRegistry{
+		Authorization: func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps Deps) (core.AuthorizationProvider, error) {
+			capturedPublicKey = deps.CallerTokenPublicKey
+			return &recordingAuthorizationProvider{}, nil
+		},
+	}
+	cfg := &config.Config{
+		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "indexeddb"}},
+		Providers: config.ProvidersConfig{
+			Authorization: map[string]*config.ProviderEntry{
+				"indexeddb": {Config: *runtimeConfig.Content[0]},
+			},
+		},
+	}
+	deps := Deps{
+		CallerTokenPublicKey: "public-key-pem",
+	}
+
+	_, err := buildAuthorizationProviders(context.Background(), cfg, factories, deps)
+	if err != nil {
+		t.Fatalf("buildAuthorizationProviders: %v", err)
+	}
+	if capturedPublicKey != "public-key-pem" {
+		t.Fatalf("CallerTokenPublicKey = %q, want public-key-pem", capturedPublicKey)
+	}
+}
+
+func TestResolveCallerTokenPublicKey(t *testing.T) {
+	t.Parallel()
+
+	got, err := resolveCallerTokenPublicKey(context.Background(), &coretesting.StubSecretManager{
+		Secrets: map[string]string{
+			callerTokenPublicKeySecretName: " public-key-pem ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolveCallerTokenPublicKey: %v", err)
+	}
+	if got != "public-key-pem" {
+		t.Fatalf("public key = %q, want public-key-pem", got)
+	}
+
+	missing, err := resolveCallerTokenPublicKey(context.Background(), &coretesting.StubSecretManager{})
+	if err != nil {
+		t.Fatalf("resolveCallerTokenPublicKey missing: %v", err)
+	}
+	if missing != "" {
+		t.Fatalf("missing public key = %q, want empty", missing)
+	}
 }
 
 func assertAppInvocationRelationship(t *testing.T, relationship *proto.Relationship, resourceType string) {
