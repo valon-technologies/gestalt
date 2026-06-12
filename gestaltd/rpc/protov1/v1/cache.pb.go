@@ -760,7 +760,7 @@ const file_v1_cache_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
 	"\x03ttl\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x03ttl\";\n" +
 	"\x12CacheTouchResponse\x12\x18\n" +
-	"\atouched\x18\x01 \x01(\bR\atouched:\v\x9a\xb5\x18\atouched2\xdb\x05\n" +
+	"\atouched\x18\x01 \x01(\bR\atouched:\v\x9a\xb5\x18\atouched2\xdf\x05\n" +
 	"\x05Cache\x12[\n" +
 	"\x03Get\x12$.gestalt.provider.v1.CacheGetRequest\x1a%.gestalt.provider.v1.CacheGetResponse\"\a\x8a\xb5\x18\x03key\x12h\n" +
 	"\aGetMany\x12(.gestalt.provider.v1.CacheGetManyRequest\x1a).gestalt.provider.v1.CacheGetManyResponse\"\b\x8a\xb5\x18\x04keys\x12\\\n" +
@@ -769,7 +769,7 @@ const file_v1_cache_proto_rawDesc = "" +
 	"\x06Delete\x12'.gestalt.provider.v1.CacheDeleteRequest\x1a(.gestalt.provider.v1.CacheDeleteResponse\"\a\x8a\xb5\x18\x03key\x12q\n" +
 	"\n" +
 	"DeleteMany\x12+.gestalt.provider.v1.CacheDeleteManyRequest\x1a,.gestalt.provider.v1.CacheDeleteManyResponse\"\b\x8a\xb5\x18\x04keys\x12h\n" +
-	"\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a'.gestalt.provider.v1.CacheTouchResponse\"\x0e\x8a\xb5\x18\x03key\x8a\xb5\x18\x03ttl\x1a\t\x8a\xb5\x18\x05cacheB\xd6\x01\n" +
+	"\x05Touch\x12&.gestalt.provider.v1.CacheTouchRequest\x1a'.gestalt.provider.v1.CacheTouchResponse\"\x0e\x8a\xb5\x18\x03key\x8a\xb5\x18\x03ttl\x1a\r\x8a\xb5\x18\x05cache\x90\xb5\x18\x01B\xd6\x01\n" +
 	"\x17com.gestalt.provider.v1B\n" +
 	"CacheProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 

@@ -48,14 +48,18 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"client/s3.go", "client/s3_codec.go",
 		"client/indexeddb.go", "client/indexeddb_codec.go",
 		"client/secrets.go", "client/authorization.go",
-		"client/workflow_server.go", "client/support_server.go",
+		"client/workflow_server.go", "client/agent_server.go", "client/app_server.go",
+		"client/authentication_server.go", "client/authorization_server.go",
+		"client/cache_server.go", "client/external_credential_server.go",
+		"client/runtime_provider_server.go", "client/secrets_server.go",
+		"client/support_server.go",
 	} {
 		if _, ok := files[want]; !ok {
 			t.Fatalf("missing generated file %s (have %v)", want, keys(files))
 		}
 	}
-	if len(files) != 32 {
-		t.Errorf("generated files = %d, want 32: %v", len(files), keys(files))
+	if len(files) != 40 {
+		t.Errorf("generated files = %d, want 40: %v", len(files), keys(files))
 	}
 
 	// The wire seam stays out of the public files: every converter lives in
@@ -147,7 +151,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"type Cache struct {",
 		"func NewCache(conn grpc.ClientConnInterface) *Cache {",
 		"// CacheSetRequest writes one cache key.\ntype CacheSetRequest struct {",
-		"\t// ttl applies an optional expiration to the entry.\n\tTtl *time.Duration",
+		"\t// ttl applies an optional expiration to the entry.\n\tTTL *time.Duration",
 		"Deleted int64",
 		// The host_binding annotation generates a Connect constructor that
 		// dials the named host service like the handwritten sdk/go clients.
@@ -218,7 +222,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"type TypedValueKind interface {",
 		"isTypedValueKind()",
 		"type TypedValueKindNullValue struct{}",
-		"type TypedValueKindJsonValue struct {\n\tValue any\n}",
+		"type TypedValueKindJSONValue struct {\n\tValue any\n}",
 		"type TransactionOperationResponseResultEmpty struct{}",
 		"func (c *IndexedDB) OpenCursor(ctx context.Context) (*IndexedDBOpenCursorStream, error) {",
 		"func (s *IndexedDBOpenCursorStream) Send(request *CursorClientMessage) error {",

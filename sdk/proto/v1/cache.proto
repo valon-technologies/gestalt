@@ -106,6 +106,7 @@ message CacheTouchResponse {
 // Cache models the shared Gestalt cache-provider protocol.
 service Cache {
   option (host_binding) = "cache";
+  option (provider) = true;
 
   rpc Get(CacheGetRequest) returns (CacheGetResponse) {
     option (signature) = "key";

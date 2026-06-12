@@ -3309,6 +3309,7 @@ pub mod cache_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        ///
         pub async fn get(
             &mut self,
             request: impl tonic::IntoRequest<super::CacheGetRequest>,
@@ -3433,6 +3434,7 @@ pub mod cache_server {
     /// Generated trait containing gRPC methods that should be implemented for use with CacheServer.
     #[async_trait]
     pub trait Cache: std::marker::Send + std::marker::Sync + 'static {
+        ///
         async fn get(
             &self,
             request: tonic::Request<super::CacheGetRequest>,
@@ -6633,7 +6635,6 @@ pub mod runtime_log_host_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn append_logs(
             &mut self,
             request: impl tonic::IntoRequest<super::AppendRuntimeLogsRequest>,
@@ -6668,7 +6669,6 @@ pub mod runtime_log_host_server {
     /// Generated trait containing gRPC methods that should be implemented for use with RuntimeLogHostServer.
     #[async_trait]
     pub trait RuntimeLogHost: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn append_logs(
             &self,
             request: tonic::Request<super::AppendRuntimeLogsRequest>,
@@ -6915,7 +6915,6 @@ pub mod runtime_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn get_support(
             &mut self,
             request: impl tonic::IntoRequest<()>,
@@ -7074,7 +7073,6 @@ pub mod runtime_server {
     /// Generated trait containing gRPC methods that should be implemented for use with RuntimeServer.
     #[async_trait]
     pub trait Runtime: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn get_support(
             &self,
             request: tonic::Request<()>,
@@ -8561,7 +8559,6 @@ pub mod secrets_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        ///
         pub async fn get_secret(
             &mut self,
             request: impl tonic::IntoRequest<super::GetSecretRequest>,
@@ -8592,7 +8589,6 @@ pub mod secrets_server {
     /// Generated trait containing gRPC methods that should be implemented for use with SecretsServer.
     #[async_trait]
     pub trait Secrets: std::marker::Send + std::marker::Sync + 'static {
-        ///
         async fn get_secret(
             &self,
             request: tonic::Request<super::GetSecretRequest>,

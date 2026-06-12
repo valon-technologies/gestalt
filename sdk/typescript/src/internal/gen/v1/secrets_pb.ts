@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/secrets.proto.
  */
 export const file_v1_secrets: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSItChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCToJmrUYBXZhbHVlMm8KB1NlY3JldHMSZAoJR2V0U2VjcmV0EiUuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXNwb25zZSIIirUYBG5hbWViBnByb3RvMw", [file_v1_annotations]);
+  fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSItChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCToJmrUYBXZhbHVlMnUKB1NlY3JldHMSZAoJR2V0U2VjcmV0EiUuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXNwb25zZSIIirUYBG5hbWUaBJC1GAFiBnByb3RvMw", [file_v1_annotations]);
 
 /**
  * GetSecretRequest looks up one named secret.

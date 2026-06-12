@@ -119,9 +119,9 @@ const file_v1_secrets_proto_rawDesc = "" +
 	"\x10GetSecretRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"4\n" +
 	"\x11GetSecretResponse\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\tR\x05value:\t\x9a\xb5\x18\x05value2o\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value:\t\x9a\xb5\x18\x05value2u\n" +
 	"\aSecrets\x12d\n" +
-	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponse\"\b\x8a\xb5\x18\x04nameB\xd8\x01\n" +
+	"\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponse\"\b\x8a\xb5\x18\x04name\x1a\x04\x90\xb5\x18\x01B\xd8\x01\n" +
 	"\x17com.gestalt.provider.v1B\fSecretsProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

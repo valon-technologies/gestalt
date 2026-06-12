@@ -1258,7 +1258,7 @@ const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\x0eRuntimeLogHost\x12\x83\x01\n" +
 	"\n" +
 	"AppendLogs\x12-.gestalt.provider.v1.AppendRuntimeLogsRequest\x1a..gestalt.provider.v1.AppendRuntimeLogsResponse\"\x16\x8a\xb5\x18\n" +
-	"session_id\x8a\xb5\x18\x04logs\x1a\x14\x8a\xb5\x18\x10runtime log host2\xb7\b\n" +
+	"session_id\x8a\xb5\x18\x04logs\x1a\x14\x8a\xb5\x18\x10runtime log host2\xbd\b\n" +
 	"\aRuntime\x12I\n" +
 	"\n" +
 	"GetSupport\x12\x16.google.protobuf.Empty\x1a#.gestalt.provider.v1.RuntimeSupport\x12\x9a\x01\n" +
@@ -1274,7 +1274,7 @@ const file_v1_runtime_provider_proto_rawDesc = "" +
 	"\x0fRemoveWorkspace\x122.gestalt.provider.v1.RemoveRuntimeWorkspaceRequest\x1a\x16.google.protobuf.Empty\"\"\x8a\xb5\x18\n" +
 	"session_id\x8a\xb5\x18\x10agent_session_id\x12\xc2\x01\n" +
 	"\bStartApp\x12*.gestalt.provider.v1.StartHostedAppRequest\x1a\x1e.gestalt.provider.v1.HostedApp\"j\x8a\xb5\x18\n" +
-	"session_id\x8a\xb5\x18\bapp_name\x8a\xb5\x18\acommand\x8a\xb5\x18\x04args\x8a\xb5\x18\rallowed_hosts\x8a\xb5\x18\x0edefault_action\x8a\xb5\x18\vhost_binary\x8a\xb5\x18\aworkdirB\xe0\x01\n" +
+	"session_id\x8a\xb5\x18\bapp_name\x8a\xb5\x18\acommand\x8a\xb5\x18\x04args\x8a\xb5\x18\rallowed_hosts\x8a\xb5\x18\x0edefault_action\x8a\xb5\x18\vhost_binary\x8a\xb5\x18\aworkdir\x1a\x04\x90\xb5\x18\x01B\xe0\x01\n" +
 	"\x17com.gestalt.provider.v1B\x14RuntimeProviderProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

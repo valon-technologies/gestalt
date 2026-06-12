@@ -8,11 +8,12 @@ import (
 )
 
 // providerName renders the handler interface name for a provider service:
-// the service name with a Provider suffix, kept as-is when the proto name
-// already carries one (service AppProvider stays AppProvider).
+// the service name with a Provider suffix. A service already named *Provider
+// takes a Handler suffix instead — its generated client owns the bare name
+// (service AppProvider: client AppProvider, handler AppProviderHandler).
 func providerName(svcName string) string {
 	if strings.HasSuffix(svcName, "Provider") {
-		return svcName
+		return svcName + "Handler"
 	}
 	return svcName + "Provider"
 }

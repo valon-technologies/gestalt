@@ -298,6 +298,7 @@ message StartProviderResponse {
 
 // AppProvider models the shared Gestalt integration-provider protocol.
 service AppProvider {
+  option (provider) = true;
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse) {
     option (signature) = "name";

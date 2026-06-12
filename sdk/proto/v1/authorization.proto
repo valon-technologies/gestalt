@@ -212,6 +212,7 @@ enum SourceLayer {
 
 service Authorization {
   option (host_binding) = "authorization";
+  option (provider) = true;
 
   rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
     option (signature) = "action";

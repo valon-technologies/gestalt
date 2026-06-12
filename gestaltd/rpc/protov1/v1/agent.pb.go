@@ -3987,7 +3987,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"#AGENT_INTERACTION_STATE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAGENT_INTERACTION_STATE_PENDING\x10\x01\x12$\n" +
 	" AGENT_INTERACTION_STATE_RESOLVED\x10\x02\x12$\n" +
-	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\xc3\x11\n" +
+	" AGENT_INTERACTION_STATE_CANCELED\x10\x032\xc7\x11\n" +
 	"\x05Agent\x12\xc9\x01\n" +
 	"\rCreateSession\x126.gestalt.provider.v1.CreateAgentProviderSessionRequest\x1a!.gestalt.provider.v1.AgentSession\"]\x8a\xb5\x18\x0fidempotency_key\x8a\xb5\x18\x05model\xa2\xb5\x18\rprovider_name\xa2\xb5\x18\n" +
 	"client_ref\xa2\xb5\x18\bmetadata\xa2\xb5\x18\tworkspace\xa2\xb5\x18\x05tools\x12\x85\x01\n" +
@@ -4011,7 +4011,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x10ListInteractions\x129.gestalt.provider.v1.ListAgentProviderInteractionsRequest\x1a:.gestalt.provider.v1.ListAgentProviderInteractionsResponse\"\x1c\x8a\xb5\x18\aturn_id\xa2\xb5\x18\rprovider_name\x12\xb6\x01\n" +
 	"\x12ResolveInteraction\x12;.gestalt.provider.v1.ResolveAgentProviderInteractionRequest\x1a%.gestalt.provider.v1.AgentInteraction\"<\x8a\xb5\x18\x0einteraction_id\x8a\xb5\x18\n" +
 	"resolution\xa2\xb5\x18\aturn_id\xa2\xb5\x18\rprovider_name\x12{\n" +
-	"\x0fGetCapabilities\x128.gestalt.provider.v1.GetAgentProviderCapabilitiesRequest\x1a..gestalt.provider.v1.AgentProviderCapabilities\x1a\t\x8a\xb5\x18\x05agentB\xd6\x01\n" +
+	"\x0fGetCapabilities\x128.gestalt.provider.v1.GetAgentProviderCapabilitiesRequest\x1a..gestalt.provider.v1.AgentProviderCapabilities\x1a\r\x8a\xb5\x18\x05agent\x90\xb5\x18\x01B\xd6\x01\n" +
 	"\x17com.gestalt.provider.v1B\n" +
 	"AgentProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
