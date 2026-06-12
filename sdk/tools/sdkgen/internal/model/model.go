@@ -98,6 +98,11 @@ type Service struct {
 	// HostBinding is the host-service binding name from the host_binding
 	// annotation; empty when unannotated.
 	HostBinding string
+
+	// Provider reports that providers implement this service, from the
+	// provider annotation: emitters generate the native handler surface and
+	// the wire dispatch adapter.
+	Provider bool
 }
 
 type Method struct {

@@ -48,13 +48,14 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"client/s3.go", "client/s3_codec.go",
 		"client/indexeddb.go", "client/indexeddb_codec.go",
 		"client/secrets.go", "client/authorization.go",
+		"client/workflow_server.go", "client/support_server.go",
 	} {
 		if _, ok := files[want]; !ok {
 			t.Fatalf("missing generated file %s (have %v)", want, keys(files))
 		}
 	}
-	if len(files) != 30 {
-		t.Errorf("generated files = %d, want 30: %v", len(files), keys(files))
+	if len(files) != 32 {
+		t.Errorf("generated files = %d, want 32: %v", len(files), keys(files))
 	}
 
 	// The wire seam stays out of the public files: every converter lives in
@@ -76,6 +77,21 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"type RpcStatus struct",
 		"func toGestaltError(err error) *GestaltError",
 		"func (e *GestaltError) Unwrap() error",
+	)
+	assertContains(t, files, "client/support_server.go",
+		"func statusError(operation string, err error) error",
+	)
+	assertContains(t, files, "client/workflow_server.go",
+		"type WorkflowProvider interface {",
+		"ApplyDefinition(ctx context.Context, request *ApplyWorkflowProviderDefinitionRequest) (*WorkflowDefinition, error)",
+		"DeleteDefinition(ctx context.Context, request *DeleteWorkflowProviderDefinitionRequest) error",
+		"type UnimplementedWorkflowProvider struct{}",
+		`Message: "workflow cancel run is not implemented"`,
+		"func NewWorkflowProviderServer(provider WorkflowProvider) proto.WorkflowServer {",
+		"s.provider.ApplyDefinition(ctx, fromWireApplyWorkflowProviderDefinitionRequest(request))",
+		`statusError("workflow apply definition", err)`,
+		"return toWireWorkflowDefinition(response), nil",
+		"return &emptypb.Empty{}, nil",
 	)
 	assertContains(t, files, "client/support_codec.go",
 		"func toWireTimestamp(value *time.Time) *timestamppb.Timestamp",

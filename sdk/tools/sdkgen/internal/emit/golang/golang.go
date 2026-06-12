@@ -79,6 +79,11 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 	if err := set.Add("client/support_codec.go", []byte(codecSupportFile)); err != nil {
 		return nil, err
 	}
+	if hasProvider(services) {
+		if err := set.Add("client/support_server.go", []byte(serverSupportFile)); err != nil {
+			return nil, err
+		}
+	}
 	for _, g := range groupFiles(services, messages, enums) {
 		public := newRenderer(idx)
 		for _, e := range g.enums {
@@ -94,6 +99,20 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 			return nil, err
 		}
 
+		server := newRenderer(idx)
+		for _, svc := range g.services {
+			if !svc.Provider {
+				continue
+			}
+			server.renderProviderHandler(svc)
+			server.renderProviderServer(svc)
+		}
+		if server.body.Len() > 0 {
+			if err := set.Add("client/"+g.base+"_server.go", []byte(server.assemble())); err != nil {
+				return nil, err
+			}
+		}
+
 		if len(g.messages) == 0 {
 			continue
 		}
@@ -106,6 +125,17 @@ func (*Emitter) Emit(schema *model.Schema) (*fileset.FileSet, error) {
 		}
 	}
 	return set, nil
+}
+
+// hasProvider reports whether any service carries the provider annotation,
+// which pulls in the server-side error mapping runtime.
+func hasProvider(services []*model.Service) bool {
+	for _, svc := range services {
+		if svc.Provider {
+			return true
+		}
+	}
+	return false
 }
 
 // hasJsonResult reports whether any method carries the json_result

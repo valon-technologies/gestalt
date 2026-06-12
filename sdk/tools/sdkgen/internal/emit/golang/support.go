@@ -227,6 +227,35 @@ func applyInvokeErrorFields(err *InvokeError, parsed any) {
 }
 `
 
+// serverSupportFile is the provider-side error mapping, emitted as
+// support_server.go when any service carries the provider annotation.
+const serverSupportFile = `package client
+
+import (
+	"errors"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+// statusError converts one handler error to the gRPC status returned to the
+// host: *GestaltError carries its code through, status errors pass through
+// unchanged, and any other error is codes.Unknown tagged with the operation.
+func statusError(operation string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var gerr *GestaltError
+	if errors.As(err, &gerr) {
+		return status.Error(codes.Code(gerr.Code), gerr.Message)
+	}
+	if st, ok := status.FromError(err); ok {
+		return st.Err()
+	}
+	return status.Errorf(codes.Unknown, "%s: %v", operation, err)
+}
+`
+
 // contextSupportFile is the client option machinery, emitted as
 // support_context.go when any service carries a request context. The fmt verb
 // is the native request context type.
