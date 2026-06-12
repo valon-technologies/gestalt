@@ -3,27 +3,21 @@ package gestalt
 import (
 	"context"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 )
 
-type secretsServer struct {
-	proto.UnimplementedSecretsServer
+// secretsHandler bridges the ergonomic [SecretsProvider] facade onto the
+// generated transport handler; wire conversion lives in the generated
+// adapter.
+type secretsHandler struct {
+	client.UnimplementedSecretsProvider
 	secrets SecretsProvider
 }
 
-func newSecretsProviderServer(secrets SecretsProvider) *secretsServer {
-	return &secretsServer{secrets: secrets}
-}
-
-func (s *secretsServer) GetSecret(ctx context.Context, req *proto.GetSecretRequest) (*proto.GetSecretResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	value, err := s.secrets.GetSecret(ctx, req.GetName())
+func (s secretsHandler) GetSecret(ctx context.Context, request *client.GetSecretRequest) (*client.GetSecretResponse, error) {
+	value, err := s.secrets.GetSecret(ctx, request.GetName())
 	if err != nil {
 		return nil, providerRPCError("get secret", err)
 	}
-	return &proto.GetSecretResponse{Value: value}, nil
+	return &client.GetSecretResponse{Value: value}, nil
 }

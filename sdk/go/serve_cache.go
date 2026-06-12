@@ -4,113 +4,115 @@ import (
 	"context"
 	"time"
 
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // ServeCacheProvider starts a gRPC server for a [CacheProvider].
 func ServeCacheProvider(ctx context.Context, cache CacheProvider) error {
 	return serveProvider(withProviderCloser(ctx, cache), func(srv *grpc.Server) {
 		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindCache, cache))
-		proto.RegisterCacheServer(srv, cacheProviderServer{provider: cache})
+		proto.RegisterCacheServer(srv, client.NewCacheProviderServer(cacheHandler{provider: cache}))
 	})
 }
 
-type cacheProviderServer struct {
-	proto.UnimplementedCacheServer
+// cacheHandler bridges the ergonomic [CacheProvider] facade onto the
+// generated transport handler; wire conversion lives in the generated
+// adapter.
+type cacheHandler struct {
+	client.UnimplementedCacheProvider
 	provider CacheProvider
 }
 
-func (s cacheProviderServer) Get(ctx context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {
-	value, found, err := s.provider.Get(ctx, req.GetKey())
+func (s cacheHandler) Get(ctx context.Context, request *client.CacheGetRequest) (*client.CacheGetResponse, error) {
+	value, found, err := s.provider.Get(ctx, request.GetKey())
 	if err != nil {
 		return nil, providerRPCError("cache get", err)
 	}
-	return &proto.CacheGetResponse{Found: found, Value: append([]byte(nil), value...)}, nil
+	return &client.CacheGetResponse{Found: found, Value: append([]byte(nil), value...)}, nil
 }
 
-func (s cacheProviderServer) GetMany(ctx context.Context, req *proto.CacheGetManyRequest) (*proto.CacheGetManyResponse, error) {
-	values, err := s.provider.GetMany(ctx, append([]string(nil), req.GetKeys()...))
+func (s cacheHandler) GetMany(ctx context.Context, request *client.CacheGetManyRequest) (*client.CacheGetManyResponse, error) {
+	keys := request.GetKeys()
+	values, err := s.provider.GetMany(ctx, append([]string(nil), keys...))
 	if err != nil {
 		return nil, providerRPCError("cache get many", err)
 	}
-	entries := make([]*proto.CacheResult, 0, len(req.GetKeys()))
-	for _, key := range req.GetKeys() {
-		entry := &proto.CacheResult{Key: key}
+	entries := make([]*client.CacheResult, 0, len(keys))
+	for _, key := range keys {
+		entry := &client.CacheResult{Key: key}
 		if value, ok := values[key]; ok {
 			entry.Found = true
 			entry.Value = append([]byte(nil), value...)
 		}
 		entries = append(entries, entry)
 	}
-	return &proto.CacheGetManyResponse{Entries: entries}, nil
+	return &client.CacheGetManyResponse{Entries: entries}, nil
 }
 
-func (s cacheProviderServer) Set(ctx context.Context, req *proto.CacheSetRequest) (*emptypb.Empty, error) {
-	ttl, err := cacheTTLFromProto(req.GetTtl())
+func (s cacheHandler) Set(ctx context.Context, request *client.CacheSetRequest) error {
+	ttl, err := cacheTTL(request.GetTTL())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := s.provider.Set(ctx, req.GetKey(), append([]byte(nil), req.GetValue()...), CacheSetOptions{TTL: ttl}); err != nil {
-		return nil, providerRPCError("cache set", err)
+	if err := s.provider.Set(ctx, request.GetKey(), append([]byte(nil), request.GetValue()...), CacheSetOptions{TTL: ttl}); err != nil {
+		return providerRPCError("cache set", err)
 	}
-	return &emptypb.Empty{}, nil
+	return nil
 }
 
-func (s cacheProviderServer) SetMany(ctx context.Context, req *proto.CacheSetManyRequest) (*emptypb.Empty, error) {
-	ttl, err := cacheTTLFromProto(req.GetTtl())
+func (s cacheHandler) SetMany(ctx context.Context, request *client.CacheSetManyRequest) error {
+	ttl, err := cacheTTL(request.GetTTL())
 	if err != nil {
-		return nil, err
+		return err
 	}
-	entries := make([]CacheEntry, 0, len(req.GetEntries()))
-	for _, entry := range req.GetEntries() {
+	entries := make([]CacheEntry, 0, len(request.GetEntries()))
+	for _, entry := range request.GetEntries() {
 		entries = append(entries, CacheEntry{Key: entry.GetKey(), Value: append([]byte(nil), entry.GetValue()...)})
 	}
 	if err := s.provider.SetMany(ctx, entries, CacheSetOptions{TTL: ttl}); err != nil {
-		return nil, providerRPCError("cache set many", err)
+		return providerRPCError("cache set many", err)
 	}
-	return &emptypb.Empty{}, nil
+	return nil
 }
 
-func (s cacheProviderServer) Delete(ctx context.Context, req *proto.CacheDeleteRequest) (*proto.CacheDeleteResponse, error) {
-	deleted, err := s.provider.Delete(ctx, req.GetKey())
+func (s cacheHandler) Delete(ctx context.Context, request *client.CacheDeleteRequest) (*client.CacheDeleteResponse, error) {
+	deleted, err := s.provider.Delete(ctx, request.GetKey())
 	if err != nil {
 		return nil, providerRPCError("cache delete", err)
 	}
-	return &proto.CacheDeleteResponse{Deleted: deleted}, nil
+	return &client.CacheDeleteResponse{Deleted: deleted}, nil
 }
 
-func (s cacheProviderServer) DeleteMany(ctx context.Context, req *proto.CacheDeleteManyRequest) (*proto.CacheDeleteManyResponse, error) {
-	deleted, err := s.provider.DeleteMany(ctx, append([]string(nil), req.GetKeys()...))
+func (s cacheHandler) DeleteMany(ctx context.Context, request *client.CacheDeleteManyRequest) (*client.CacheDeleteManyResponse, error) {
+	deleted, err := s.provider.DeleteMany(ctx, append([]string(nil), request.GetKeys()...))
 	if err != nil {
 		return nil, providerRPCError("cache delete many", err)
 	}
-	return &proto.CacheDeleteManyResponse{Deleted: deleted}, nil
+	return &client.CacheDeleteManyResponse{Deleted: deleted}, nil
 }
 
-func (s cacheProviderServer) Touch(ctx context.Context, req *proto.CacheTouchRequest) (*proto.CacheTouchResponse, error) {
-	ttl, err := cacheTTLFromProto(req.GetTtl())
+func (s cacheHandler) Touch(ctx context.Context, request *client.CacheTouchRequest) (*client.CacheTouchResponse, error) {
+	ttl, err := cacheTTL(request.GetTTL())
 	if err != nil {
 		return nil, err
 	}
-	touched, err := s.provider.Touch(ctx, req.GetKey(), ttl)
+	touched, err := s.provider.Touch(ctx, request.GetKey(), ttl)
 	if err != nil {
 		return nil, providerRPCError("cache touch", err)
 	}
-	return &proto.CacheTouchResponse{Touched: touched}, nil
+	return &client.CacheTouchResponse{Touched: touched}, nil
 }
 
-func cacheTTLFromProto(ttl *durationpb.Duration) (time.Duration, error) {
+func cacheTTL(ttl *time.Duration) (time.Duration, error) {
 	if ttl == nil {
 		return 0, nil
 	}
-	value := ttl.AsDuration()
-	if value < 0 {
+	if *ttl < 0 {
 		return 0, status.Error(codes.InvalidArgument, "cache: ttl must be non-negative")
 	}
-	return value, nil
+	return *ttl, nil
 }

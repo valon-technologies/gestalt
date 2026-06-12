@@ -16,9 +16,25 @@ type CreateExternalCredentialRequest struct {
 	Credential *ExternalCredential
 }
 
+// GetCredential returns the credential field; it is safe to call on a nil receiver.
+func (x *CreateExternalCredentialRequest) GetCredential() *ExternalCredential {
+	if x == nil {
+		return nil
+	}
+	return x.Credential
+}
+
 // DeleteExternalCredentialRequest is the native message type for gestalt.provider.v1.DeleteExternalCredentialRequest.
 type DeleteExternalCredentialRequest struct {
 	ID string
+}
+
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *DeleteExternalCredentialRequest) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
 }
 
 // ExchangeExternalCredentialRequest is the native message type for gestalt.provider.v1.ExchangeExternalCredentialRequest.
@@ -34,9 +50,89 @@ type ExchangeExternalCredentialRequest struct {
 	ConnectionParams    map[string]string
 }
 
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetProvider() string {
+	if x == nil {
+		return ""
+	}
+	return x.Provider
+}
+
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetConnection() string {
+	if x == nil {
+		return ""
+	}
+	return x.Connection
+}
+
+// GetConnectionID returns the connectionId field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetConnectionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ConnectionID
+}
+
+// GetCredentialSubjectID returns the credentialSubjectId field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetCredentialSubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CredentialSubjectID
+}
+
+// GetActorSubjectID returns the actorSubjectId field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetActorSubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ActorSubjectID
+}
+
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetInstance() string {
+	if x == nil {
+		return ""
+	}
+	return x.Instance
+}
+
+// GetAuth returns the auth field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConfig {
+	if x == nil {
+		return nil
+	}
+	return x.Auth
+}
+
+// GetCredentialJSON returns the credentialJson field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetCredentialJSON() string {
+	if x == nil {
+		return ""
+	}
+	return x.CredentialJSON
+}
+
+// GetConnectionParams returns the connectionParams field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialRequest) GetConnectionParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.ConnectionParams
+}
+
 // ExchangeExternalCredentialResponse is the native message type for gestalt.provider.v1.ExchangeExternalCredentialResponse.
 type ExchangeExternalCredentialResponse struct {
 	TokenResponse *ExternalCredentialTokenResponse
+}
+
+// GetTokenResponse returns the tokenResponse field; it is safe to call on a nil receiver.
+func (x *ExchangeExternalCredentialResponse) GetTokenResponse() *ExternalCredentialTokenResponse {
+	if x == nil {
+		return nil
+	}
+	return x.TokenResponse
 }
 
 // ExternalCredentialCredential selects one variant of the credential oneof of ExternalCredential.
@@ -78,6 +174,70 @@ type ExternalCredential struct {
 	Credential   ExternalCredentialCredential
 }
 
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetSubject() string {
+	if x == nil {
+		return ""
+	}
+	return x.Subject
+}
+
+// GetAudience returns the audience field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetAudience() string {
+	if x == nil {
+		return ""
+	}
+	return x.Audience
+}
+
+// GetQualifier returns the qualifier field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetQualifier() string {
+	if x == nil {
+		return ""
+	}
+	return x.Qualifier
+}
+
+// GetMetadataJSON returns the metadataJson field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetMetadataJSON() string {
+	if x == nil {
+		return ""
+	}
+	return x.MetadataJSON
+}
+
+// GetCreatedAt returns the createdAt field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetCreatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CreatedAt
+}
+
+// GetUpdatedAt returns the updatedAt field; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetUpdatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.UpdatedAt
+}
+
+// GetCredential returns the credential oneof; it is safe to call on a nil receiver.
+func (x *ExternalCredential) GetCredential() ExternalCredentialCredential {
+	if x == nil {
+		return nil
+	}
+	return x.Credential
+}
+
 // ExternalCredentialAuthConfig is the native message type for gestalt.provider.v1.ExternalCredentialAuthConfig.
 type ExternalCredentialAuthConfig struct {
 	Type                 string
@@ -100,11 +260,179 @@ type ExternalCredentialAuthConfig struct {
 	RefreshToken         string
 }
 
+// GetType returns the type field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetType() string {
+	if x == nil {
+		return ""
+	}
+	return x.Type
+}
+
+// GetToken returns the token field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.Token
+}
+
+// GetTokenPrefix returns the tokenPrefix field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetTokenPrefix() string {
+	if x == nil {
+		return ""
+	}
+	return x.TokenPrefix
+}
+
+// GetGrantType returns the grantType field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetGrantType() string {
+	if x == nil {
+		return ""
+	}
+	return x.GrantType
+}
+
+// GetTokenURL returns the tokenUrl field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetTokenURL() string {
+	if x == nil {
+		return ""
+	}
+	return x.TokenURL
+}
+
+// GetClientID returns the clientId field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetClientID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ClientID
+}
+
+// GetClientSecret returns the clientSecret field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetClientSecret() string {
+	if x == nil {
+		return ""
+	}
+	return x.ClientSecret
+}
+
+// GetClientAuth returns the clientAuth field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetClientAuth() string {
+	if x == nil {
+		return ""
+	}
+	return x.ClientAuth
+}
+
+// GetTokenExchange returns the tokenExchange field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetTokenExchange() string {
+	if x == nil {
+		return ""
+	}
+	return x.TokenExchange
+}
+
+// GetScopes returns the scopes field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetScopes() []string {
+	if x == nil {
+		return nil
+	}
+	return x.Scopes
+}
+
+// GetScopeParam returns the scopeParam field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetScopeParam() string {
+	if x == nil {
+		return ""
+	}
+	return x.ScopeParam
+}
+
+// GetScopeSeparator returns the scopeSeparator field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetScopeSeparator() string {
+	if x == nil {
+		return ""
+	}
+	return x.ScopeSeparator
+}
+
+// GetTokenParams returns the tokenParams field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetTokenParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.TokenParams
+}
+
+// GetRefreshParams returns the refreshParams field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetRefreshParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.RefreshParams
+}
+
+// GetAcceptHeader returns the acceptHeader field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetAcceptHeader() string {
+	if x == nil {
+		return ""
+	}
+	return x.AcceptHeader
+}
+
+// GetAccessTokenPath returns the accessTokenPath field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetAccessTokenPath() string {
+	if x == nil {
+		return ""
+	}
+	return x.AccessTokenPath
+}
+
+// GetTokenExchangeDrivers returns the tokenExchangeDrivers field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetTokenExchangeDrivers() []*ExternalCredentialTokenExchangeDriver {
+	if x == nil {
+		return nil
+	}
+	return x.TokenExchangeDrivers
+}
+
+// GetRefreshToken returns the refreshToken field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialAuthConfig) GetRefreshToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.RefreshToken
+}
+
 // ExternalCredentialClientInfo is the native message type for gestalt.provider.v1.ExternalCredentialClientInfo.
 type ExternalCredentialClientInfo struct {
 	ClientID              string
 	ClientSecret          string
 	ClientSecretExpiresAt *time.Time
+}
+
+// GetClientID returns the clientId field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialClientInfo) GetClientID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ClientID
+}
+
+// GetClientSecret returns the clientSecret field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialClientInfo) GetClientSecret() string {
+	if x == nil {
+		return ""
+	}
+	return x.ClientSecret
+}
+
+// GetClientSecretExpiresAt returns the clientSecretExpiresAt field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialClientInfo) GetClientSecretExpiresAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.ClientSecretExpiresAt
 }
 
 // ExternalCredentialGrant is the native message type for gestalt.provider.v1.ExternalCredentialGrant.
@@ -117,9 +445,65 @@ type ExternalCredentialGrant struct {
 	RefreshErrorCount int32
 }
 
+// GetAccessToken returns the accessToken field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialGrant) GetAccessToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.AccessToken
+}
+
+// GetRefreshToken returns the refreshToken field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialGrant) GetRefreshToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.RefreshToken
+}
+
+// GetScope returns the scope field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialGrant) GetScope() string {
+	if x == nil {
+		return ""
+	}
+	return x.Scope
+}
+
+// GetExpiresAt returns the expiresAt field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialGrant) GetExpiresAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.ExpiresAt
+}
+
+// GetLastRefreshedAt returns the lastRefreshedAt field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialGrant) GetLastRefreshedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.LastRefreshedAt
+}
+
+// GetRefreshErrorCount returns the refreshErrorCount field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialGrant) GetRefreshErrorCount() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.RefreshErrorCount
+}
+
 // ExternalCredentialOpaque is the native message type for gestalt.provider.v1.ExternalCredentialOpaque.
 type ExternalCredentialOpaque struct {
 	Fields map[string]string
+}
+
+// GetFields returns the fields field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialOpaque) GetFields() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Fields
 }
 
 // ExternalCredentialTokenExchangeDriver is the native message type for gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.
@@ -132,6 +516,54 @@ type ExternalCredentialTokenExchangeDriver struct {
 	Params          map[string]string
 }
 
+// GetType returns the type field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenExchangeDriver) GetType() string {
+	if x == nil {
+		return ""
+	}
+	return x.Type
+}
+
+// GetTargetPrincipal returns the targetPrincipal field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenExchangeDriver) GetTargetPrincipal() string {
+	if x == nil {
+		return ""
+	}
+	return x.TargetPrincipal
+}
+
+// GetScopes returns the scopes field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenExchangeDriver) GetScopes() []string {
+	if x == nil {
+		return nil
+	}
+	return x.Scopes
+}
+
+// GetLifetimeSeconds returns the lifetimeSeconds field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenExchangeDriver) GetLifetimeSeconds() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.LifetimeSeconds
+}
+
+// GetEndpoint returns the endpoint field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenExchangeDriver) GetEndpoint() string {
+	if x == nil {
+		return ""
+	}
+	return x.Endpoint
+}
+
+// GetParams returns the params field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenExchangeDriver) GetParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Params
+}
+
 // ExternalCredentialTokenResponse is the native message type for gestalt.provider.v1.ExternalCredentialTokenResponse.
 type ExternalCredentialTokenResponse struct {
 	AccessToken   string
@@ -142,11 +574,83 @@ type ExternalCredentialTokenResponse struct {
 	RefreshSource string
 }
 
+// GetAccessToken returns the accessToken field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenResponse) GetAccessToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.AccessToken
+}
+
+// GetRefreshToken returns the refreshToken field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenResponse) GetRefreshToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.RefreshToken
+}
+
+// GetExpiresIn returns the expiresIn field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenResponse) GetExpiresIn() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.ExpiresIn
+}
+
+// GetTokenType returns the tokenType field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenResponse) GetTokenType() string {
+	if x == nil {
+		return ""
+	}
+	return x.TokenType
+}
+
+// GetExtraJSON returns the extraJson field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenResponse) GetExtraJSON() string {
+	if x == nil {
+		return ""
+	}
+	return x.ExtraJSON
+}
+
+// GetRefreshSource returns the refreshSource field; it is safe to call on a nil receiver.
+func (x *ExternalCredentialTokenResponse) GetRefreshSource() string {
+	if x == nil {
+		return ""
+	}
+	return x.RefreshSource
+}
+
 // GetExternalCredentialRequest is the native message type for gestalt.provider.v1.GetExternalCredentialRequest.
 type GetExternalCredentialRequest struct {
 	Subject   string
 	Audience  string
 	Qualifier string
+}
+
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (x *GetExternalCredentialRequest) GetSubject() string {
+	if x == nil {
+		return ""
+	}
+	return x.Subject
+}
+
+// GetAudience returns the audience field; it is safe to call on a nil receiver.
+func (x *GetExternalCredentialRequest) GetAudience() string {
+	if x == nil {
+		return ""
+	}
+	return x.Audience
+}
+
+// GetQualifier returns the qualifier field; it is safe to call on a nil receiver.
+func (x *GetExternalCredentialRequest) GetQualifier() string {
+	if x == nil {
+		return ""
+	}
+	return x.Qualifier
 }
 
 // ListExternalCredentialsRequest is the native message type for gestalt.provider.v1.ListExternalCredentialsRequest.
@@ -155,9 +659,33 @@ type ListExternalCredentialsRequest struct {
 	Audience string
 }
 
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (x *ListExternalCredentialsRequest) GetSubject() string {
+	if x == nil {
+		return ""
+	}
+	return x.Subject
+}
+
+// GetAudience returns the audience field; it is safe to call on a nil receiver.
+func (x *ListExternalCredentialsRequest) GetAudience() string {
+	if x == nil {
+		return ""
+	}
+	return x.Audience
+}
+
 // ListExternalCredentialsResponse is the native message type for gestalt.provider.v1.ListExternalCredentialsResponse.
 type ListExternalCredentialsResponse struct {
 	Credentials []*ExternalCredential
+}
+
+// GetCredentials returns the credentials field; it is safe to call on a nil receiver.
+func (x *ListExternalCredentialsResponse) GetCredentials() []*ExternalCredential {
+	if x == nil {
+		return nil
+	}
+	return x.Credentials
 }
 
 // ResolveExternalCredentialRequest is the native message type for gestalt.provider.v1.ResolveExternalCredentialRequest.
@@ -173,6 +701,78 @@ type ResolveExternalCredentialRequest struct {
 	ConnectionParams    map[string]string
 }
 
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetProvider() string {
+	if x == nil {
+		return ""
+	}
+	return x.Provider
+}
+
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetConnection() string {
+	if x == nil {
+		return ""
+	}
+	return x.Connection
+}
+
+// GetConnectionID returns the connectionId field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetConnectionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ConnectionID
+}
+
+// GetMode returns the mode field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetMode() string {
+	if x == nil {
+		return ""
+	}
+	return x.Mode
+}
+
+// GetCredentialSubjectID returns the credentialSubjectId field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetCredentialSubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CredentialSubjectID
+}
+
+// GetActorSubjectID returns the actorSubjectId field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetActorSubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ActorSubjectID
+}
+
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetInstance() string {
+	if x == nil {
+		return ""
+	}
+	return x.Instance
+}
+
+// GetAuth returns the auth field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetAuth() *ExternalCredentialAuthConfig {
+	if x == nil {
+		return nil
+	}
+	return x.Auth
+}
+
+// GetConnectionParams returns the connectionParams field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialRequest) GetConnectionParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.ConnectionParams
+}
+
 // ResolveExternalCredentialResponse is the native message type for gestalt.provider.v1.ResolveExternalCredentialResponse.
 type ResolveExternalCredentialResponse struct {
 	Token        string
@@ -182,9 +782,57 @@ type ResolveExternalCredentialResponse struct {
 	Credential   *ExternalCredential
 }
 
+// GetToken returns the token field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialResponse) GetToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.Token
+}
+
+// GetExpiresAt returns the expiresAt field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialResponse) GetExpiresAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.ExpiresAt
+}
+
+// GetMetadataJSON returns the metadataJson field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialResponse) GetMetadataJSON() string {
+	if x == nil {
+		return ""
+	}
+	return x.MetadataJSON
+}
+
+// GetParams returns the params field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialResponse) GetParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Params
+}
+
+// GetCredential returns the credential field; it is safe to call on a nil receiver.
+func (x *ResolveExternalCredentialResponse) GetCredential() *ExternalCredential {
+	if x == nil {
+		return nil
+	}
+	return x.Credential
+}
+
 // UpsertExternalCredentialRequest is the native message type for gestalt.provider.v1.UpsertExternalCredentialRequest.
 type UpsertExternalCredentialRequest struct {
 	Credential *ExternalCredential
+}
+
+// GetCredential returns the credential field; it is safe to call on a nil receiver.
+func (x *UpsertExternalCredentialRequest) GetCredential() *ExternalCredential {
+	if x == nil {
+		return nil
+	}
+	return x.Credential
 }
 
 // ValidateExternalCredentialConfigRequest is the native message type for gestalt.provider.v1.ValidateExternalCredentialConfigRequest.
@@ -195,6 +843,54 @@ type ValidateExternalCredentialConfigRequest struct {
 	Mode             string
 	Auth             *ExternalCredentialAuthConfig
 	ConnectionParams map[string]string
+}
+
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
+func (x *ValidateExternalCredentialConfigRequest) GetProvider() string {
+	if x == nil {
+		return ""
+	}
+	return x.Provider
+}
+
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
+func (x *ValidateExternalCredentialConfigRequest) GetConnection() string {
+	if x == nil {
+		return ""
+	}
+	return x.Connection
+}
+
+// GetConnectionID returns the connectionId field; it is safe to call on a nil receiver.
+func (x *ValidateExternalCredentialConfigRequest) GetConnectionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ConnectionID
+}
+
+// GetMode returns the mode field; it is safe to call on a nil receiver.
+func (x *ValidateExternalCredentialConfigRequest) GetMode() string {
+	if x == nil {
+		return ""
+	}
+	return x.Mode
+}
+
+// GetAuth returns the auth field; it is safe to call on a nil receiver.
+func (x *ValidateExternalCredentialConfigRequest) GetAuth() *ExternalCredentialAuthConfig {
+	if x == nil {
+		return nil
+	}
+	return x.Auth
+}
+
+// GetConnectionParams returns the connectionParams field; it is safe to call on a nil receiver.
+func (x *ValidateExternalCredentialConfigRequest) GetConnectionParams() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.ConnectionParams
 }
 
 // ExternalCredentials is the generated client for gestalt.provider.v1.ExternalCredentials.

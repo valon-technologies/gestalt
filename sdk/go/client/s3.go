@@ -40,6 +40,22 @@ type ByteRange struct {
 	End   *int64
 }
 
+// GetStart returns the start field; it is safe to call on a nil receiver.
+func (x *ByteRange) GetStart() *int64 {
+	if x == nil {
+		return nil
+	}
+	return x.Start
+}
+
+// GetEnd returns the end field; it is safe to call on a nil receiver.
+func (x *ByteRange) GetEnd() *int64 {
+	if x == nil {
+		return nil
+	}
+	return x.End
+}
+
 // CopyObjectRequest is the native message type for gestalt.provider.v1.CopyObjectRequest.
 //
 // CopyObjectRequest copies one object to another location.
@@ -50,11 +66,51 @@ type CopyObjectRequest struct {
 	IfNoneMatch string
 }
 
+// GetSource returns the source field; it is safe to call on a nil receiver.
+func (x *CopyObjectRequest) GetSource() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Source
+}
+
+// GetDestination returns the destination field; it is safe to call on a nil receiver.
+func (x *CopyObjectRequest) GetDestination() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Destination
+}
+
+// GetIfMatch returns the ifMatch field; it is safe to call on a nil receiver.
+func (x *CopyObjectRequest) GetIfMatch() string {
+	if x == nil {
+		return ""
+	}
+	return x.IfMatch
+}
+
+// GetIfNoneMatch returns the ifNoneMatch field; it is safe to call on a nil receiver.
+func (x *CopyObjectRequest) GetIfNoneMatch() string {
+	if x == nil {
+		return ""
+	}
+	return x.IfNoneMatch
+}
+
 // CopyObjectResponse is the native message type for gestalt.provider.v1.CopyObjectResponse.
 //
 // CopyObjectResponse returns metadata for the copied object.
 type CopyObjectResponse struct {
 	Meta *S3ObjectMeta
+}
+
+// GetMeta returns the meta field; it is safe to call on a nil receiver.
+func (x *CopyObjectResponse) GetMeta() *S3ObjectMeta {
+	if x == nil {
+		return nil
+	}
+	return x.Meta
 }
 
 // CreateObjectAccessURLRequest is the native message type for gestalt.provider.v1.CreateObjectAccessURLRequest.
@@ -71,6 +127,54 @@ type CreateObjectAccessURLRequest struct {
 	Headers            map[string]string
 }
 
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLRequest) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
+}
+
+// GetMethod returns the method field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLRequest) GetMethod() PresignMethod {
+	if x == nil {
+		return 0
+	}
+	return x.Method
+}
+
+// GetExpiresSeconds returns the expiresSeconds field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLRequest) GetExpiresSeconds() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.ExpiresSeconds
+}
+
+// GetContentType returns the contentType field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLRequest) GetContentType() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentType
+}
+
+// GetContentDisposition returns the contentDisposition field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLRequest) GetContentDisposition() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentDisposition
+}
+
+// GetHeaders returns the headers field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLRequest) GetHeaders() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Headers
+}
+
 // CreateObjectAccessURLResponse is the native message type for gestalt.provider.v1.CreateObjectAccessURLResponse.
 //
 // CreateObjectAccessURLResponse returns a hosted object-access URL plus any
@@ -82,11 +186,51 @@ type CreateObjectAccessURLResponse struct {
 	Headers   map[string]string
 }
 
+// GetURL returns the url field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLResponse) GetURL() string {
+	if x == nil {
+		return ""
+	}
+	return x.URL
+}
+
+// GetMethod returns the method field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLResponse) GetMethod() PresignMethod {
+	if x == nil {
+		return 0
+	}
+	return x.Method
+}
+
+// GetExpiresAt returns the expiresAt field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLResponse) GetExpiresAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.ExpiresAt
+}
+
+// GetHeaders returns the headers field; it is safe to call on a nil receiver.
+func (x *CreateObjectAccessURLResponse) GetHeaders() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Headers
+}
+
 // DeleteObjectRequest is the native message type for gestalt.provider.v1.DeleteObjectRequest.
 //
 // DeleteObjectRequest removes one object.
 type DeleteObjectRequest struct {
 	Ref *S3ObjectRef
+}
+
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *DeleteObjectRequest) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
 }
 
 // HeadObjectRequest is the native message type for gestalt.provider.v1.HeadObjectRequest.
@@ -96,11 +240,27 @@ type HeadObjectRequest struct {
 	Ref *S3ObjectRef
 }
 
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *HeadObjectRequest) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
+}
+
 // HeadObjectResponse is the native message type for gestalt.provider.v1.HeadObjectResponse.
 //
 // HeadObjectResponse returns object metadata.
 type HeadObjectResponse struct {
 	Meta *S3ObjectMeta
+}
+
+// GetMeta returns the meta field; it is safe to call on a nil receiver.
+func (x *HeadObjectResponse) GetMeta() *S3ObjectMeta {
+	if x == nil {
+		return nil
+	}
+	return x.Meta
 }
 
 // ListObjectsRequest is the native message type for gestalt.provider.v1.ListObjectsRequest.
@@ -114,6 +274,46 @@ type ListObjectsRequest struct {
 	MaxKeys           int32
 }
 
+// GetPrefix returns the prefix field; it is safe to call on a nil receiver.
+func (x *ListObjectsRequest) GetPrefix() string {
+	if x == nil {
+		return ""
+	}
+	return x.Prefix
+}
+
+// GetDelimiter returns the delimiter field; it is safe to call on a nil receiver.
+func (x *ListObjectsRequest) GetDelimiter() string {
+	if x == nil {
+		return ""
+	}
+	return x.Delimiter
+}
+
+// GetContinuationToken returns the continuationToken field; it is safe to call on a nil receiver.
+func (x *ListObjectsRequest) GetContinuationToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContinuationToken
+}
+
+// GetStartAfter returns the startAfter field; it is safe to call on a nil receiver.
+func (x *ListObjectsRequest) GetStartAfter() string {
+	if x == nil {
+		return ""
+	}
+	return x.StartAfter
+}
+
+// GetMaxKeys returns the maxKeys field; it is safe to call on a nil receiver.
+func (x *ListObjectsRequest) GetMaxKeys() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.MaxKeys
+}
+
 // ListObjectsResponse is the native message type for gestalt.provider.v1.ListObjectsResponse.
 //
 // ListObjectsResponse is one page of list-objects results.
@@ -122,6 +322,38 @@ type ListObjectsResponse struct {
 	CommonPrefixes        []string
 	NextContinuationToken string
 	HasMore               bool
+}
+
+// GetObjects returns the objects field; it is safe to call on a nil receiver.
+func (x *ListObjectsResponse) GetObjects() []*S3ObjectMeta {
+	if x == nil {
+		return nil
+	}
+	return x.Objects
+}
+
+// GetCommonPrefixes returns the commonPrefixes field; it is safe to call on a nil receiver.
+func (x *ListObjectsResponse) GetCommonPrefixes() []string {
+	if x == nil {
+		return nil
+	}
+	return x.CommonPrefixes
+}
+
+// GetNextContinuationToken returns the nextContinuationToken field; it is safe to call on a nil receiver.
+func (x *ListObjectsResponse) GetNextContinuationToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.NextContinuationToken
+}
+
+// GetHasMore returns the hasMore field; it is safe to call on a nil receiver.
+func (x *ListObjectsResponse) GetHasMore() bool {
+	if x == nil {
+		return false
+	}
+	return x.HasMore
 }
 
 // PresignObjectRequest is the native message type for gestalt.provider.v1.PresignObjectRequest.
@@ -136,6 +368,54 @@ type PresignObjectRequest struct {
 	Headers            map[string]string
 }
 
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *PresignObjectRequest) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
+}
+
+// GetMethod returns the method field; it is safe to call on a nil receiver.
+func (x *PresignObjectRequest) GetMethod() PresignMethod {
+	if x == nil {
+		return 0
+	}
+	return x.Method
+}
+
+// GetExpiresSeconds returns the expiresSeconds field; it is safe to call on a nil receiver.
+func (x *PresignObjectRequest) GetExpiresSeconds() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.ExpiresSeconds
+}
+
+// GetContentType returns the contentType field; it is safe to call on a nil receiver.
+func (x *PresignObjectRequest) GetContentType() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentType
+}
+
+// GetContentDisposition returns the contentDisposition field; it is safe to call on a nil receiver.
+func (x *PresignObjectRequest) GetContentDisposition() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentDisposition
+}
+
+// GetHeaders returns the headers field; it is safe to call on a nil receiver.
+func (x *PresignObjectRequest) GetHeaders() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Headers
+}
+
 // PresignObjectResponse is the native message type for gestalt.provider.v1.PresignObjectResponse.
 //
 // PresignObjectResponse returns a presigned URL plus any required headers.
@@ -144,6 +424,38 @@ type PresignObjectResponse struct {
 	Method    PresignMethod
 	ExpiresAt *time.Time
 	Headers   map[string]string
+}
+
+// GetURL returns the url field; it is safe to call on a nil receiver.
+func (x *PresignObjectResponse) GetURL() string {
+	if x == nil {
+		return ""
+	}
+	return x.URL
+}
+
+// GetMethod returns the method field; it is safe to call on a nil receiver.
+func (x *PresignObjectResponse) GetMethod() PresignMethod {
+	if x == nil {
+		return 0
+	}
+	return x.Method
+}
+
+// GetExpiresAt returns the expiresAt field; it is safe to call on a nil receiver.
+func (x *PresignObjectResponse) GetExpiresAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.ExpiresAt
+}
+
+// GetHeaders returns the headers field; it is safe to call on a nil receiver.
+func (x *PresignObjectResponse) GetHeaders() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Headers
 }
 
 // ReadObjectChunkResult selects one variant of the result oneof of ReadObjectChunk.
@@ -173,6 +485,14 @@ type ReadObjectChunk struct {
 	Result ReadObjectChunkResult
 }
 
+// GetResult returns the result oneof; it is safe to call on a nil receiver.
+func (x *ReadObjectChunk) GetResult() ReadObjectChunkResult {
+	if x == nil {
+		return nil
+	}
+	return x.Result
+}
+
 // ReadObjectRequest is the native message type for gestalt.provider.v1.ReadObjectRequest.
 //
 // ReadObjectRequest opens a streaming object read.
@@ -183,6 +503,54 @@ type ReadObjectRequest struct {
 	IfNoneMatch       string
 	IfModifiedSince   *time.Time
 	IfUnmodifiedSince *time.Time
+}
+
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *ReadObjectRequest) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
+}
+
+// GetRange returns the range field; it is safe to call on a nil receiver.
+func (x *ReadObjectRequest) GetRange() *ByteRange {
+	if x == nil {
+		return nil
+	}
+	return x.Range
+}
+
+// GetIfMatch returns the ifMatch field; it is safe to call on a nil receiver.
+func (x *ReadObjectRequest) GetIfMatch() string {
+	if x == nil {
+		return ""
+	}
+	return x.IfMatch
+}
+
+// GetIfNoneMatch returns the ifNoneMatch field; it is safe to call on a nil receiver.
+func (x *ReadObjectRequest) GetIfNoneMatch() string {
+	if x == nil {
+		return ""
+	}
+	return x.IfNoneMatch
+}
+
+// GetIfModifiedSince returns the ifModifiedSince field; it is safe to call on a nil receiver.
+func (x *ReadObjectRequest) GetIfModifiedSince() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.IfModifiedSince
+}
+
+// GetIfUnmodifiedSince returns the ifUnmodifiedSince field; it is safe to call on a nil receiver.
+func (x *ReadObjectRequest) GetIfUnmodifiedSince() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.IfUnmodifiedSince
 }
 
 // S3ObjectMeta is the native message type for gestalt.provider.v1.S3ObjectMeta.
@@ -198,12 +566,84 @@ type S3ObjectMeta struct {
 	StorageClass string
 }
 
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
+}
+
+// GetEtag returns the etag field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetEtag() string {
+	if x == nil {
+		return ""
+	}
+	return x.Etag
+}
+
+// GetSize returns the size field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetSize() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.Size
+}
+
+// GetContentType returns the contentType field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetContentType() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentType
+}
+
+// GetLastModified returns the lastModified field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetLastModified() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.LastModified
+}
+
+// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetMetadata() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Metadata
+}
+
+// GetStorageClass returns the storageClass field; it is safe to call on a nil receiver.
+func (x *S3ObjectMeta) GetStorageClass() string {
+	if x == nil {
+		return ""
+	}
+	return x.StorageClass
+}
+
 // S3ObjectRef is the native message type for gestalt.provider.v1.S3ObjectRef.
 //
 // S3ObjectRef identifies one object or object version.
 type S3ObjectRef struct {
 	Key       string
 	VersionID string
+}
+
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *S3ObjectRef) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
+// GetVersionID returns the versionId field; it is safe to call on a nil receiver.
+func (x *S3ObjectRef) GetVersionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.VersionID
 }
 
 // WriteObjectOpen is the native message type for gestalt.provider.v1.WriteObjectOpen.
@@ -220,6 +660,78 @@ type WriteObjectOpen struct {
 	Metadata           map[string]string
 	IfMatch            string
 	IfNoneMatch        string
+}
+
+// GetRef returns the ref field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetRef() *S3ObjectRef {
+	if x == nil {
+		return nil
+	}
+	return x.Ref
+}
+
+// GetContentType returns the contentType field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetContentType() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentType
+}
+
+// GetCacheControl returns the cacheControl field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetCacheControl() string {
+	if x == nil {
+		return ""
+	}
+	return x.CacheControl
+}
+
+// GetContentDisposition returns the contentDisposition field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetContentDisposition() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentDisposition
+}
+
+// GetContentEncoding returns the contentEncoding field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetContentEncoding() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentEncoding
+}
+
+// GetContentLanguage returns the contentLanguage field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetContentLanguage() string {
+	if x == nil {
+		return ""
+	}
+	return x.ContentLanguage
+}
+
+// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetMetadata() map[string]string {
+	if x == nil {
+		return nil
+	}
+	return x.Metadata
+}
+
+// GetIfMatch returns the ifMatch field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetIfMatch() string {
+	if x == nil {
+		return ""
+	}
+	return x.IfMatch
+}
+
+// GetIfNoneMatch returns the ifNoneMatch field; it is safe to call on a nil receiver.
+func (x *WriteObjectOpen) GetIfNoneMatch() string {
+	if x == nil {
+		return ""
+	}
+	return x.IfNoneMatch
 }
 
 // WriteObjectRequestMsg selects one variant of the msg oneof of WriteObjectRequest.
@@ -249,11 +761,27 @@ type WriteObjectRequest struct {
 	Msg WriteObjectRequestMsg
 }
 
+// GetMsg returns the msg oneof; it is safe to call on a nil receiver.
+func (x *WriteObjectRequest) GetMsg() WriteObjectRequestMsg {
+	if x == nil {
+		return nil
+	}
+	return x.Msg
+}
+
 // WriteObjectResponse is the native message type for gestalt.provider.v1.WriteObjectResponse.
 //
 // WriteObjectResponse returns metadata for the committed object.
 type WriteObjectResponse struct {
 	Meta *S3ObjectMeta
+}
+
+// GetMeta returns the meta field; it is safe to call on a nil receiver.
+func (x *WriteObjectResponse) GetMeta() *S3ObjectMeta {
+	if x == nil {
+		return nil
+	}
+	return x.Meta
 }
 
 // S3 is the generated client for gestalt.provider.v1.S3.

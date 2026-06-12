@@ -22,6 +22,14 @@ type HelloWorldResponse struct {
 	Message string
 }
 
+// GetMessage returns the message field; it is safe to call on a nil receiver.
+func (x *HelloWorldResponse) GetMessage() string {
+	if x == nil {
+		return ""
+	}
+	return x.Message
+}
+
 // Test is the generated client for gestalt.provider.v1.Test.
 // Every transport error is converted to *GestaltError.
 //

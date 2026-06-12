@@ -18,11 +18,27 @@ type CacheDeleteManyRequest struct {
 	Keys []string
 }
 
+// GetKeys returns the keys field; it is safe to call on a nil receiver.
+func (x *CacheDeleteManyRequest) GetKeys() []string {
+	if x == nil {
+		return nil
+	}
+	return x.Keys
+}
+
 // CacheDeleteManyResponse is the native message type for gestalt.provider.v1.CacheDeleteManyResponse.
 //
 // CacheDeleteManyResponse reports how many keys were deleted.
 type CacheDeleteManyResponse struct {
 	Deleted int64
+}
+
+// GetDeleted returns the deleted field; it is safe to call on a nil receiver.
+func (x *CacheDeleteManyResponse) GetDeleted() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.Deleted
 }
 
 // CacheDeleteRequest is the native message type for gestalt.provider.v1.CacheDeleteRequest.
@@ -32,11 +48,27 @@ type CacheDeleteRequest struct {
 	Key string
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CacheDeleteRequest) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
 // CacheDeleteResponse is the native message type for gestalt.provider.v1.CacheDeleteResponse.
 //
 // CacheDeleteResponse reports whether one key existed and was deleted.
 type CacheDeleteResponse struct {
 	Deleted bool
+}
+
+// GetDeleted returns the deleted field; it is safe to call on a nil receiver.
+func (x *CacheDeleteResponse) GetDeleted() bool {
+	if x == nil {
+		return false
+	}
+	return x.Deleted
 }
 
 // CacheGetManyRequest is the native message type for gestalt.provider.v1.CacheGetManyRequest.
@@ -46,11 +78,27 @@ type CacheGetManyRequest struct {
 	Keys []string
 }
 
+// GetKeys returns the keys field; it is safe to call on a nil receiver.
+func (x *CacheGetManyRequest) GetKeys() []string {
+	if x == nil {
+		return nil
+	}
+	return x.Keys
+}
+
 // CacheGetManyResponse is the native message type for gestalt.provider.v1.CacheGetManyResponse.
 //
 // CacheGetManyResponse returns every lookup result for GetMany.
 type CacheGetManyResponse struct {
 	Entries []*CacheResult
+}
+
+// GetEntries returns the entries field; it is safe to call on a nil receiver.
+func (x *CacheGetManyResponse) GetEntries() []*CacheResult {
+	if x == nil {
+		return nil
+	}
+	return x.Entries
 }
 
 // CacheGetRequest is the native message type for gestalt.provider.v1.CacheGetRequest.
@@ -60,12 +108,36 @@ type CacheGetRequest struct {
 	Key string
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CacheGetRequest) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
 // CacheGetResponse is the native message type for gestalt.provider.v1.CacheGetResponse.
 //
 // CacheGetResponse is the result of looking up one cache key.
 type CacheGetResponse struct {
 	Found bool
 	Value []byte
+}
+
+// GetFound returns the found field; it is safe to call on a nil receiver.
+func (x *CacheGetResponse) GetFound() bool {
+	if x == nil {
+		return false
+	}
+	return x.Found
+}
+
+// GetValue returns the value field; it is safe to call on a nil receiver.
+func (x *CacheGetResponse) GetValue() []byte {
+	if x == nil {
+		return nil
+	}
+	return x.Value
 }
 
 // CacheResult is the native message type for gestalt.provider.v1.CacheResult.
@@ -77,6 +149,30 @@ type CacheResult struct {
 	Value []byte
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CacheResult) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
+// GetFound returns the found field; it is safe to call on a nil receiver.
+func (x *CacheResult) GetFound() bool {
+	if x == nil {
+		return false
+	}
+	return x.Found
+}
+
+// GetValue returns the value field; it is safe to call on a nil receiver.
+func (x *CacheResult) GetValue() []byte {
+	if x == nil {
+		return nil
+	}
+	return x.Value
+}
+
 // CacheSetEntry is the native message type for gestalt.provider.v1.CacheSetEntry.
 //
 // CacheSetEntry is one key/value pair written by SetMany.
@@ -85,12 +181,44 @@ type CacheSetEntry struct {
 	Value []byte
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CacheSetEntry) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
+// GetValue returns the value field; it is safe to call on a nil receiver.
+func (x *CacheSetEntry) GetValue() []byte {
+	if x == nil {
+		return nil
+	}
+	return x.Value
+}
+
 // CacheSetManyRequest is the native message type for gestalt.provider.v1.CacheSetManyRequest.
 //
 // CacheSetManyRequest writes multiple cache keys in one RPC.
 type CacheSetManyRequest struct {
 	Entries []*CacheSetEntry
 	TTL     *time.Duration
+}
+
+// GetEntries returns the entries field; it is safe to call on a nil receiver.
+func (x *CacheSetManyRequest) GetEntries() []*CacheSetEntry {
+	if x == nil {
+		return nil
+	}
+	return x.Entries
+}
+
+// GetTTL returns the ttl field; it is safe to call on a nil receiver.
+func (x *CacheSetManyRequest) GetTTL() *time.Duration {
+	if x == nil {
+		return nil
+	}
+	return x.TTL
 }
 
 // CacheSetRequest is the native message type for gestalt.provider.v1.CacheSetRequest.
@@ -103,6 +231,30 @@ type CacheSetRequest struct {
 	TTL *time.Duration
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CacheSetRequest) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
+// GetValue returns the value field; it is safe to call on a nil receiver.
+func (x *CacheSetRequest) GetValue() []byte {
+	if x == nil {
+		return nil
+	}
+	return x.Value
+}
+
+// GetTTL returns the ttl field; it is safe to call on a nil receiver.
+func (x *CacheSetRequest) GetTTL() *time.Duration {
+	if x == nil {
+		return nil
+	}
+	return x.TTL
+}
+
 // CacheTouchRequest is the native message type for gestalt.provider.v1.CacheTouchRequest.
 //
 // CacheTouchRequest extends the TTL for one cache key.
@@ -111,11 +263,35 @@ type CacheTouchRequest struct {
 	TTL *time.Duration
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CacheTouchRequest) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
+}
+
+// GetTTL returns the ttl field; it is safe to call on a nil receiver.
+func (x *CacheTouchRequest) GetTTL() *time.Duration {
+	if x == nil {
+		return nil
+	}
+	return x.TTL
+}
+
 // CacheTouchResponse is the native message type for gestalt.provider.v1.CacheTouchResponse.
 //
 // CacheTouchResponse reports whether a key existed and had its TTL updated.
 type CacheTouchResponse struct {
 	Touched bool
+}
+
+// GetTouched returns the touched field; it is safe to call on a nil receiver.
+func (x *CacheTouchResponse) GetTouched() bool {
+	if x == nil {
+		return false
+	}
+	return x.Touched
 }
 
 // Cache is the generated client for gestalt.provider.v1.Cache.

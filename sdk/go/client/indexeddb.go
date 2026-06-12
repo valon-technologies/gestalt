@@ -66,6 +66,30 @@ type BeginTransactionRequest struct {
 	DurabilityHint TransactionDurabilityHint
 }
 
+// GetStores returns the stores field; it is safe to call on a nil receiver.
+func (x *BeginTransactionRequest) GetStores() []string {
+	if x == nil {
+		return nil
+	}
+	return x.Stores
+}
+
+// GetMode returns the mode field; it is safe to call on a nil receiver.
+func (x *BeginTransactionRequest) GetMode() TransactionMode {
+	if x == nil {
+		return 0
+	}
+	return x.Mode
+}
+
+// GetDurabilityHint returns the durabilityHint field; it is safe to call on a nil receiver.
+func (x *BeginTransactionRequest) GetDurabilityHint() TransactionDurabilityHint {
+	if x == nil {
+		return 0
+	}
+	return x.DurabilityHint
+}
+
 // ColumnDef is the native message type for gestalt.provider.v1.ColumnDef.
 //
 // ColumnDef is reserved for providers that preserve SQL-style column metadata.
@@ -77,11 +101,59 @@ type ColumnDef struct {
 	Unique     bool
 }
 
+// GetName returns the name field; it is safe to call on a nil receiver.
+func (x *ColumnDef) GetName() string {
+	if x == nil {
+		return ""
+	}
+	return x.Name
+}
+
+// GetType returns the type field; it is safe to call on a nil receiver.
+func (x *ColumnDef) GetType() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.Type
+}
+
+// GetPrimaryKey returns the primaryKey field; it is safe to call on a nil receiver.
+func (x *ColumnDef) GetPrimaryKey() bool {
+	if x == nil {
+		return false
+	}
+	return x.PrimaryKey
+}
+
+// GetNotNull returns the notNull field; it is safe to call on a nil receiver.
+func (x *ColumnDef) GetNotNull() bool {
+	if x == nil {
+		return false
+	}
+	return x.NotNull
+}
+
+// GetUnique returns the unique field; it is safe to call on a nil receiver.
+func (x *ColumnDef) GetUnique() bool {
+	if x == nil {
+		return false
+	}
+	return x.Unique
+}
+
 // CountResponse is the native message type for gestalt.provider.v1.CountResponse.
 //
 // CountResponse reports how many rows matched a query.
 type CountResponse struct {
 	Count int64
+}
+
+// GetCount returns the count field; it is safe to call on a nil receiver.
+func (x *CountResponse) GetCount() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.Count
 }
 
 // CreateObjectStoreRequest is the native message type for gestalt.provider.v1.CreateObjectStoreRequest.
@@ -90,6 +162,22 @@ type CountResponse struct {
 type CreateObjectStoreRequest struct {
 	Name   string
 	Schema *ObjectStoreSchema
+}
+
+// GetName returns the name field; it is safe to call on a nil receiver.
+func (x *CreateObjectStoreRequest) GetName() string {
+	if x == nil {
+		return ""
+	}
+	return x.Name
+}
+
+// GetSchema returns the schema field; it is safe to call on a nil receiver.
+func (x *CreateObjectStoreRequest) GetSchema() *ObjectStoreSchema {
+	if x == nil {
+		return nil
+	}
+	return x.Schema
 }
 
 // CursorClientMessageMsg selects one variant of the msg oneof of CursorClientMessage.
@@ -117,6 +205,14 @@ func (*CursorClientMessageMsgCommand) isCursorClientMessageMsg() {}
 // CursorClientMessage is one frame in the bidirectional cursor stream.
 type CursorClientMessage struct {
 	Msg CursorClientMessageMsg
+}
+
+// GetMsg returns the msg oneof; it is safe to call on a nil receiver.
+func (x *CursorClientMessage) GetMsg() CursorClientMessageMsg {
+	if x == nil {
+		return nil
+	}
+	return x.Msg
 }
 
 // CursorCommandCommand selects one variant of the command oneof of CursorCommand.
@@ -174,6 +270,14 @@ type CursorCommand struct {
 	Command CursorCommandCommand
 }
 
+// GetCommand returns the command oneof; it is safe to call on a nil receiver.
+func (x *CursorCommand) GetCommand() CursorCommandCommand {
+	if x == nil {
+		return nil
+	}
+	return x.Command
+}
+
 // CursorEntry is the native message type for gestalt.provider.v1.CursorEntry.
 //
 // CursorEntry is one streamed cursor row.
@@ -186,11 +290,43 @@ type CursorEntry struct {
 	Record     *Record
 }
 
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CursorEntry) GetKey() []*KeyValue {
+	if x == nil {
+		return nil
+	}
+	return x.Key
+}
+
+// GetPrimaryKey returns the primaryKey field; it is safe to call on a nil receiver.
+func (x *CursorEntry) GetPrimaryKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.PrimaryKey
+}
+
+// GetRecord returns the record field; it is safe to call on a nil receiver.
+func (x *CursorEntry) GetRecord() *Record {
+	if x == nil {
+		return nil
+	}
+	return x.Record
+}
+
 // CursorKeyTarget is the native message type for gestalt.provider.v1.CursorKeyTarget.
 //
 // CursorKeyTarget addresses a specific cursor position.
 type CursorKeyTarget struct {
 	Key []*KeyValue
+}
+
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *CursorKeyTarget) GetKey() []*KeyValue {
+	if x == nil {
+		return nil
+	}
+	return x.Key
 }
 
 // CursorResponseResult selects one variant of the result oneof of CursorResponse.
@@ -220,6 +356,14 @@ type CursorResponse struct {
 	Result CursorResponseResult
 }
 
+// GetResult returns the result oneof; it is safe to call on a nil receiver.
+func (x *CursorResponse) GetResult() CursorResponseResult {
+	if x == nil {
+		return nil
+	}
+	return x.Result
+}
+
 // DeleteObjectStoreRequest is the native message type for gestalt.provider.v1.DeleteObjectStoreRequest.
 //
 // DeleteObjectStoreRequest removes an object store.
@@ -227,11 +371,27 @@ type DeleteObjectStoreRequest struct {
 	Name string
 }
 
+// GetName returns the name field; it is safe to call on a nil receiver.
+func (x *DeleteObjectStoreRequest) GetName() string {
+	if x == nil {
+		return ""
+	}
+	return x.Name
+}
+
 // DeleteResponse is the native message type for gestalt.provider.v1.DeleteResponse.
 //
 // DeleteResponse reports how many rows were deleted.
 type DeleteResponse struct {
 	Deleted int64
+}
+
+// GetDeleted returns the deleted field; it is safe to call on a nil receiver.
+func (x *DeleteResponse) GetDeleted() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.Deleted
 }
 
 // IndexQueryRequest is the native message type for gestalt.provider.v1.IndexQueryRequest.
@@ -245,6 +405,38 @@ type IndexQueryRequest struct {
 	Range  *KeyRange
 }
 
+// GetStore returns the store field; it is safe to call on a nil receiver.
+func (x *IndexQueryRequest) GetStore() string {
+	if x == nil {
+		return ""
+	}
+	return x.Store
+}
+
+// GetIndex returns the index field; it is safe to call on a nil receiver.
+func (x *IndexQueryRequest) GetIndex() string {
+	if x == nil {
+		return ""
+	}
+	return x.Index
+}
+
+// GetValues returns the values field; it is safe to call on a nil receiver.
+func (x *IndexQueryRequest) GetValues() []*TypedValue {
+	if x == nil {
+		return nil
+	}
+	return x.Values
+}
+
+// GetRange returns the range field; it is safe to call on a nil receiver.
+func (x *IndexQueryRequest) GetRange() *KeyRange {
+	if x == nil {
+		return nil
+	}
+	return x.Range
+}
+
 // IndexSchema is the native message type for gestalt.provider.v1.IndexSchema.
 //
 // IndexSchema describes one secondary index on an object store.
@@ -252,6 +444,30 @@ type IndexSchema struct {
 	Name    string
 	KeyPath []string
 	Unique  bool
+}
+
+// GetName returns the name field; it is safe to call on a nil receiver.
+func (x *IndexSchema) GetName() string {
+	if x == nil {
+		return ""
+	}
+	return x.Name
+}
+
+// GetKeyPath returns the keyPath field; it is safe to call on a nil receiver.
+func (x *IndexSchema) GetKeyPath() []string {
+	if x == nil {
+		return nil
+	}
+	return x.KeyPath
+}
+
+// GetUnique returns the unique field; it is safe to call on a nil receiver.
+func (x *IndexSchema) GetUnique() bool {
+	if x == nil {
+		return false
+	}
+	return x.Unique
 }
 
 // KeyRange is the native message type for gestalt.provider.v1.KeyRange.
@@ -264,11 +480,51 @@ type KeyRange struct {
 	UpperOpen bool
 }
 
+// GetLower returns the lower field; it is safe to call on a nil receiver.
+func (x *KeyRange) GetLower() *TypedValue {
+	if x == nil {
+		return nil
+	}
+	return x.Lower
+}
+
+// GetUpper returns the upper field; it is safe to call on a nil receiver.
+func (x *KeyRange) GetUpper() *TypedValue {
+	if x == nil {
+		return nil
+	}
+	return x.Upper
+}
+
+// GetLowerOpen returns the lowerOpen field; it is safe to call on a nil receiver.
+func (x *KeyRange) GetLowerOpen() bool {
+	if x == nil {
+		return false
+	}
+	return x.LowerOpen
+}
+
+// GetUpperOpen returns the upperOpen field; it is safe to call on a nil receiver.
+func (x *KeyRange) GetUpperOpen() bool {
+	if x == nil {
+		return false
+	}
+	return x.UpperOpen
+}
+
 // KeyResponse is the native message type for gestalt.provider.v1.KeyResponse.
 //
 // KeyResponse wraps one primary key.
 type KeyResponse struct {
 	Key string
+}
+
+// GetKey returns the key field; it is safe to call on a nil receiver.
+func (x *KeyResponse) GetKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.Key
 }
 
 // KeyValueKind selects one variant of the kind oneof of KeyValue.
@@ -299,9 +555,25 @@ type KeyValue struct {
 	Kind KeyValueKind
 }
 
+// GetKind returns the kind oneof; it is safe to call on a nil receiver.
+func (x *KeyValue) GetKind() KeyValueKind {
+	if x == nil {
+		return nil
+	}
+	return x.Kind
+}
+
 // KeyValueArray is the native message type for gestalt.provider.v1.KeyValueArray.
 type KeyValueArray struct {
 	Elements []*KeyValue
+}
+
+// GetElements returns the elements field; it is safe to call on a nil receiver.
+func (x *KeyValueArray) GetElements() []*KeyValue {
+	if x == nil {
+		return nil
+	}
+	return x.Elements
 }
 
 // KeysResponse is the native message type for gestalt.provider.v1.KeysResponse.
@@ -311,11 +583,27 @@ type KeysResponse struct {
 	Keys []string
 }
 
+// GetKeys returns the keys field; it is safe to call on a nil receiver.
+func (x *KeysResponse) GetKeys() []string {
+	if x == nil {
+		return nil
+	}
+	return x.Keys
+}
+
 // ObjectStoreNameRequest is the native message type for gestalt.provider.v1.ObjectStoreNameRequest.
 //
 // ObjectStoreNameRequest addresses an object store without a specific row key.
 type ObjectStoreNameRequest struct {
 	Store string
+}
+
+// GetStore returns the store field; it is safe to call on a nil receiver.
+func (x *ObjectStoreNameRequest) GetStore() string {
+	if x == nil {
+		return ""
+	}
+	return x.Store
 }
 
 // ObjectStoreRangeRequest is the native message type for gestalt.provider.v1.ObjectStoreRangeRequest.
@@ -326,12 +614,44 @@ type ObjectStoreRangeRequest struct {
 	Range *KeyRange
 }
 
+// GetStore returns the store field; it is safe to call on a nil receiver.
+func (x *ObjectStoreRangeRequest) GetStore() string {
+	if x == nil {
+		return ""
+	}
+	return x.Store
+}
+
+// GetRange returns the range field; it is safe to call on a nil receiver.
+func (x *ObjectStoreRangeRequest) GetRange() *KeyRange {
+	if x == nil {
+		return nil
+	}
+	return x.Range
+}
+
 // ObjectStoreRequest is the native message type for gestalt.provider.v1.ObjectStoreRequest.
 //
 // ObjectStoreRequest addresses one object store row by primary key.
 type ObjectStoreRequest struct {
 	Store string
 	ID    string
+}
+
+// GetStore returns the store field; it is safe to call on a nil receiver.
+func (x *ObjectStoreRequest) GetStore() string {
+	if x == nil {
+		return ""
+	}
+	return x.Store
+}
+
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *ObjectStoreRequest) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
 }
 
 // ObjectStoreSchema is the native message type for gestalt.provider.v1.ObjectStoreSchema.
@@ -341,6 +661,22 @@ type ObjectStoreRequest struct {
 type ObjectStoreSchema struct {
 	Indexes []*IndexSchema
 	Columns []*ColumnDef
+}
+
+// GetIndexes returns the indexes field; it is safe to call on a nil receiver.
+func (x *ObjectStoreSchema) GetIndexes() []*IndexSchema {
+	if x == nil {
+		return nil
+	}
+	return x.Indexes
+}
+
+// GetColumns returns the columns field; it is safe to call on a nil receiver.
+func (x *ObjectStoreSchema) GetColumns() []*ColumnDef {
+	if x == nil {
+		return nil
+	}
+	return x.Columns
 }
 
 // OpenCursorRequest is the native message type for gestalt.provider.v1.OpenCursorRequest.
@@ -358,11 +694,67 @@ type OpenCursorRequest struct {
 	Values []*TypedValue
 }
 
+// GetStore returns the store field; it is safe to call on a nil receiver.
+func (x *OpenCursorRequest) GetStore() string {
+	if x == nil {
+		return ""
+	}
+	return x.Store
+}
+
+// GetRange returns the range field; it is safe to call on a nil receiver.
+func (x *OpenCursorRequest) GetRange() *KeyRange {
+	if x == nil {
+		return nil
+	}
+	return x.Range
+}
+
+// GetDirection returns the direction field; it is safe to call on a nil receiver.
+func (x *OpenCursorRequest) GetDirection() CursorDirection {
+	if x == nil {
+		return 0
+	}
+	return x.Direction
+}
+
+// GetKeysOnly returns the keysOnly field; it is safe to call on a nil receiver.
+func (x *OpenCursorRequest) GetKeysOnly() bool {
+	if x == nil {
+		return false
+	}
+	return x.KeysOnly
+}
+
+// GetIndex returns the index field; it is safe to call on a nil receiver.
+func (x *OpenCursorRequest) GetIndex() string {
+	if x == nil {
+		return ""
+	}
+	return x.Index
+}
+
+// GetValues returns the values field; it is safe to call on a nil receiver.
+func (x *OpenCursorRequest) GetValues() []*TypedValue {
+	if x == nil {
+		return nil
+	}
+	return x.Values
+}
+
 // Record is the native message type for gestalt.provider.v1.Record.
 //
 // Record is one JSON-like row in an object store.
 type Record struct {
 	Fields map[string]*TypedValue
+}
+
+// GetFields returns the fields field; it is safe to call on a nil receiver.
+func (x *Record) GetFields() map[string]*TypedValue {
+	if x == nil {
+		return nil
+	}
+	return x.Fields
 }
 
 // RecordRequest is the native message type for gestalt.provider.v1.RecordRequest.
@@ -373,11 +765,35 @@ type RecordRequest struct {
 	Record *Record
 }
 
+// GetStore returns the store field; it is safe to call on a nil receiver.
+func (x *RecordRequest) GetStore() string {
+	if x == nil {
+		return ""
+	}
+	return x.Store
+}
+
+// GetRecord returns the record field; it is safe to call on a nil receiver.
+func (x *RecordRequest) GetRecord() *Record {
+	if x == nil {
+		return nil
+	}
+	return x.Record
+}
+
 // RecordResponse is the native message type for gestalt.provider.v1.RecordResponse.
 //
 // RecordResponse wraps one row payload.
 type RecordResponse struct {
 	Record *Record
+}
+
+// GetRecord returns the record field; it is safe to call on a nil receiver.
+func (x *RecordResponse) GetRecord() *Record {
+	if x == nil {
+		return nil
+	}
+	return x.Record
 }
 
 // RecordsResponse is the native message type for gestalt.provider.v1.RecordsResponse.
@@ -387,9 +803,25 @@ type RecordsResponse struct {
 	Records []*Record
 }
 
+// GetRecords returns the records field; it is safe to call on a nil receiver.
+func (x *RecordsResponse) GetRecords() []*Record {
+	if x == nil {
+		return nil
+	}
+	return x.Records
+}
+
 // TransactionAbortRequest is the native message type for gestalt.provider.v1.TransactionAbortRequest.
 type TransactionAbortRequest struct {
 	Reason string
+}
+
+// GetReason returns the reason field; it is safe to call on a nil receiver.
+func (x *TransactionAbortRequest) GetReason() string {
+	if x == nil {
+		return ""
+	}
+	return x.Reason
 }
 
 // TransactionAbortResponse is the native message type for gestalt.provider.v1.TransactionAbortResponse.
@@ -397,6 +829,14 @@ type TransactionAbortRequest struct {
 // TransactionAbortResponse acknowledges abort or reports an abort failure.
 type TransactionAbortResponse struct {
 	Error *RpcStatus
+}
+
+// GetError returns the error field; it is safe to call on a nil receiver.
+func (x *TransactionAbortResponse) GetError() *RpcStatus {
+	if x == nil {
+		return nil
+	}
+	return x.Error
 }
 
 // TransactionBeginResponse is the native message type for gestalt.provider.v1.TransactionBeginResponse.
@@ -444,6 +884,14 @@ type TransactionClientMessage struct {
 	Msg TransactionClientMessageMsg
 }
 
+// GetMsg returns the msg oneof; it is safe to call on a nil receiver.
+func (x *TransactionClientMessage) GetMsg() TransactionClientMessageMsg {
+	if x == nil {
+		return nil
+	}
+	return x.Msg
+}
+
 // TransactionCommitRequest is the native message type for gestalt.provider.v1.TransactionCommitRequest.
 type TransactionCommitRequest struct{}
 
@@ -453,6 +901,14 @@ type TransactionCommitRequest struct{}
 // the provider accepted the commit frame and rolled the transaction back.
 type TransactionCommitResponse struct {
 	Error *RpcStatus
+}
+
+// GetError returns the error field; it is safe to call on a nil receiver.
+func (x *TransactionCommitResponse) GetError() *RpcStatus {
+	if x == nil {
+		return nil
+	}
+	return x.Error
 }
 
 // TransactionOperationOperation selects one variant of the operation oneof of TransactionOperation.
@@ -583,6 +1039,22 @@ type TransactionOperation struct {
 	Operation TransactionOperationOperation
 }
 
+// GetRequestID returns the requestId field; it is safe to call on a nil receiver.
+func (x *TransactionOperation) GetRequestID() uint64 {
+	if x == nil {
+		return 0
+	}
+	return x.RequestID
+}
+
+// GetOperation returns the operation oneof; it is safe to call on a nil receiver.
+func (x *TransactionOperation) GetOperation() TransactionOperationOperation {
+	if x == nil {
+		return nil
+	}
+	return x.Operation
+}
+
 // TransactionOperationResponseResult selects one variant of the result oneof of TransactionOperationResponse.
 // A nil value means unset.
 type TransactionOperationResponseResult interface {
@@ -646,6 +1118,30 @@ type TransactionOperationResponse struct {
 	Result    TransactionOperationResponseResult
 }
 
+// GetRequestID returns the requestId field; it is safe to call on a nil receiver.
+func (x *TransactionOperationResponse) GetRequestID() uint64 {
+	if x == nil {
+		return 0
+	}
+	return x.RequestID
+}
+
+// GetError returns the error field; it is safe to call on a nil receiver.
+func (x *TransactionOperationResponse) GetError() *RpcStatus {
+	if x == nil {
+		return nil
+	}
+	return x.Error
+}
+
+// GetResult returns the result oneof; it is safe to call on a nil receiver.
+func (x *TransactionOperationResponse) GetResult() TransactionOperationResponseResult {
+	if x == nil {
+		return nil
+	}
+	return x.Result
+}
+
 // TransactionServerMessageMsg selects one variant of the msg oneof of TransactionServerMessage.
 // A nil value means unset.
 type TransactionServerMessageMsg interface {
@@ -683,6 +1179,14 @@ func (*TransactionServerMessageMsgAbort) isTransactionServerMessageMsg() {}
 // TransactionServerMessage is the native message type for gestalt.provider.v1.TransactionServerMessage.
 type TransactionServerMessage struct {
 	Msg TransactionServerMessageMsg
+}
+
+// GetMsg returns the msg oneof; it is safe to call on a nil receiver.
+func (x *TransactionServerMessage) GetMsg() TransactionServerMessageMsg {
+	if x == nil {
+		return nil
+	}
+	return x.Msg
 }
 
 // TypedValueKind selects one variant of the kind oneof of TypedValue.
@@ -750,6 +1254,14 @@ func (*TypedValueKindJSONValue) isTypedValueKind() {}
 // TypedValue stores one scalar or structured value in an IndexedDB record.
 type TypedValue struct {
 	Kind TypedValueKind
+}
+
+// GetKind returns the kind oneof; it is safe to call on a nil receiver.
+func (x *TypedValue) GetKind() TypedValueKind {
+	if x == nil {
+		return nil
+	}
+	return x.Kind
 }
 
 // IndexedDB is the generated client for gestalt.provider.v1.IndexedDB.

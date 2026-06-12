@@ -60,9 +60,57 @@ type ApplyWorkflowProviderDefinitionRequest struct {
 	Context              *RequestContext
 }
 
+// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
+func (x *ApplyWorkflowProviderDefinitionRequest) GetProviderName() string {
+	if x == nil {
+		return ""
+	}
+	return x.ProviderName
+}
+
+// GetSpec returns the spec field; it is safe to call on a nil receiver.
+func (x *ApplyWorkflowProviderDefinitionRequest) GetSpec() *WorkflowDefinitionSpec {
+	if x == nil {
+		return nil
+	}
+	return x.Spec
+}
+
+// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
+func (x *ApplyWorkflowProviderDefinitionRequest) GetIdempotencyKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.IdempotencyKey
+}
+
+// GetRequestedBySubjectID returns the requestedBySubjectId field; it is safe to call on a nil receiver.
+func (x *ApplyWorkflowProviderDefinitionRequest) GetRequestedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RequestedBySubjectID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *ApplyWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // BoundWorkflowTarget is the native message type for gestalt.provider.v1.BoundWorkflowTarget.
 type BoundWorkflowTarget struct {
 	Steps []*WorkflowStep
+}
+
+// GetSteps returns the steps field; it is safe to call on a nil receiver.
+func (x *BoundWorkflowTarget) GetSteps() []*WorkflowStep {
+	if x == nil {
+		return nil
+	}
+	return x.Steps
 }
 
 // CancelWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.CancelWorkflowProviderRunRequest.
@@ -72,10 +120,50 @@ type CancelWorkflowProviderRunRequest struct {
 	Context *RequestContext
 }
 
+// GetRunID returns the runId field; it is safe to call on a nil receiver.
+func (x *CancelWorkflowProviderRunRequest) GetRunID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RunID
+}
+
+// GetReason returns the reason field; it is safe to call on a nil receiver.
+func (x *CancelWorkflowProviderRunRequest) GetReason() string {
+	if x == nil {
+		return ""
+	}
+	return x.Reason
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *CancelWorkflowProviderRunRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // DeleteWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.DeleteWorkflowProviderDefinitionRequest.
 type DeleteWorkflowProviderDefinitionRequest struct {
 	DefinitionID string
 	Context      *RequestContext
+}
+
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *DeleteWorkflowProviderDefinitionRequest) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *DeleteWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
 }
 
 // DeliverWorkflowProviderEventRequest is the native message type for gestalt.provider.v1.DeliverWorkflowProviderEventRequest.
@@ -87,10 +175,66 @@ type DeliverWorkflowProviderEventRequest struct {
 	Context              *RequestContext
 }
 
+// GetAppName returns the appName field; it is safe to call on a nil receiver.
+func (x *DeliverWorkflowProviderEventRequest) GetAppName() string {
+	if x == nil {
+		return ""
+	}
+	return x.AppName
+}
+
+// GetEvent returns the event field; it is safe to call on a nil receiver.
+func (x *DeliverWorkflowProviderEventRequest) GetEvent() *WorkflowEvent {
+	if x == nil {
+		return nil
+	}
+	return x.Event
+}
+
+// GetDeliveredBySubjectID returns the deliveredBySubjectId field; it is safe to call on a nil receiver.
+func (x *DeliverWorkflowProviderEventRequest) GetDeliveredBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DeliveredBySubjectID
+}
+
+// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
+func (x *DeliverWorkflowProviderEventRequest) GetProviderName() string {
+	if x == nil {
+		return ""
+	}
+	return x.ProviderName
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *DeliverWorkflowProviderEventRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // GetWorkflowProviderDefinitionRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderDefinitionRequest.
 type GetWorkflowProviderDefinitionRequest struct {
 	DefinitionID string
 	Context      *RequestContext
+}
+
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderDefinitionRequest) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderDefinitionRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
 }
 
 // GetWorkflowProviderRunEventsRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunEventsRequest.
@@ -99,9 +243,33 @@ type GetWorkflowProviderRunEventsRequest struct {
 	Context *RequestContext
 }
 
+// GetRunID returns the runId field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunEventsRequest) GetRunID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RunID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunEventsRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // GetWorkflowProviderRunEventsResponse is the native message type for gestalt.provider.v1.GetWorkflowProviderRunEventsResponse.
 type GetWorkflowProviderRunEventsResponse struct {
 	Events []*WorkflowRunEvent
+}
+
+// GetEvents returns the events field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunEventsResponse) GetEvents() []*WorkflowRunEvent {
+	if x == nil {
+		return nil
+	}
+	return x.Events
 }
 
 // GetWorkflowProviderRunOutputRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunOutputRequest.
@@ -110,9 +278,33 @@ type GetWorkflowProviderRunOutputRequest struct {
 	Context *RequestContext
 }
 
+// GetRunID returns the runId field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunOutputRequest) GetRunID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RunID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunOutputRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // GetWorkflowProviderRunOutputResponse is the native message type for gestalt.provider.v1.GetWorkflowProviderRunOutputResponse.
 type GetWorkflowProviderRunOutputResponse struct {
 	Output any
+}
+
+// GetOutput returns the output field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunOutputResponse) GetOutput() any {
+	if x == nil {
+		return nil
+	}
+	return x.Output
 }
 
 // GetWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.GetWorkflowProviderRunRequest.
@@ -121,14 +313,46 @@ type GetWorkflowProviderRunRequest struct {
 	Context *RequestContext
 }
 
+// GetRunID returns the runId field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunRequest) GetRunID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RunID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *GetWorkflowProviderRunRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // ListWorkflowProviderDefinitionsRequest is the native message type for gestalt.provider.v1.ListWorkflowProviderDefinitionsRequest.
 type ListWorkflowProviderDefinitionsRequest struct {
 	Context *RequestContext
 }
 
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderDefinitionsRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // ListWorkflowProviderDefinitionsResponse is the native message type for gestalt.provider.v1.ListWorkflowProviderDefinitionsResponse.
 type ListWorkflowProviderDefinitionsResponse struct {
 	Definitions []*WorkflowDefinition
+}
+
+// GetDefinitions returns the definitions field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderDefinitionsResponse) GetDefinitions() []*WorkflowDefinition {
+	if x == nil {
+		return nil
+	}
+	return x.Definitions
 }
 
 // ListWorkflowProviderRunsRequest is the native message type for gestalt.provider.v1.ListWorkflowProviderRunsRequest.
@@ -140,10 +364,66 @@ type ListWorkflowProviderRunsRequest struct {
 	Context   *RequestContext
 }
 
+// GetPageSize returns the pageSize field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsRequest) GetPageSize() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.PageSize
+}
+
+// GetPageToken returns the pageToken field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsRequest) GetPageToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.PageToken
+}
+
+// GetStatus returns the status field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsRequest) GetStatus() WorkflowRunStatus {
+	if x == nil {
+		return 0
+	}
+	return x.Status
+}
+
+// GetTargetApp returns the targetApp field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsRequest) GetTargetApp() string {
+	if x == nil {
+		return ""
+	}
+	return x.TargetApp
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // ListWorkflowProviderRunsResponse is the native message type for gestalt.provider.v1.ListWorkflowProviderRunsResponse.
 type ListWorkflowProviderRunsResponse struct {
 	Runs          []*WorkflowRun
 	NextPageToken string
+}
+
+// GetRuns returns the runs field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsResponse) GetRuns() []*WorkflowRun {
+	if x == nil {
+		return nil
+	}
+	return x.Runs
+}
+
+// GetNextPageToken returns the nextPageToken field; it is safe to call on a nil receiver.
+func (x *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
+	if x == nil {
+		return ""
+	}
+	return x.NextPageToken
 }
 
 // SetWorkflowProviderActivationPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderActivationPausedRequest.
@@ -155,12 +435,84 @@ type SetWorkflowProviderActivationPausedRequest struct {
 	Context              *RequestContext
 }
 
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderActivationPausedRequest) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetActivationID returns the activationId field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderActivationPausedRequest) GetActivationID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ActivationID
+}
+
+// GetPaused returns the paused field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderActivationPausedRequest) GetPaused() bool {
+	if x == nil {
+		return false
+	}
+	return x.Paused
+}
+
+// GetRequestedBySubjectID returns the requestedBySubjectId field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderActivationPausedRequest) GetRequestedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RequestedBySubjectID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderActivationPausedRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // SetWorkflowProviderDefinitionPausedRequest is the native message type for gestalt.provider.v1.SetWorkflowProviderDefinitionPausedRequest.
 type SetWorkflowProviderDefinitionPausedRequest struct {
 	DefinitionID         string
 	Paused               bool
 	RequestedBySubjectID string
 	Context              *RequestContext
+}
+
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderDefinitionPausedRequest) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetPaused returns the paused field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderDefinitionPausedRequest) GetPaused() bool {
+	if x == nil {
+		return false
+	}
+	return x.Paused
+}
+
+// GetRequestedBySubjectID returns the requestedBySubjectId field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderDefinitionPausedRequest) GetRequestedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RequestedBySubjectID
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *SetWorkflowProviderDefinitionPausedRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
 }
 
 // SignalOrStartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.SignalOrStartWorkflowProviderRunRequest.
@@ -177,11 +529,115 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	Context                      *RequestContext
 }
 
+// GetWorkflowKey returns the workflowKey field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetWorkflowKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.WorkflowKey
+}
+
+// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetIdempotencyKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.IdempotencyKey
+}
+
+// GetCreatedBySubjectID returns the createdBySubjectId field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetCreatedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CreatedBySubjectID
+}
+
+// GetSignal returns the signal field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetSignal() *WorkflowSignal {
+	if x == nil {
+		return nil
+	}
+	return x.Signal
+}
+
+// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetProviderName() string {
+	if x == nil {
+		return ""
+	}
+	return x.ProviderName
+}
+
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetRunAs returns the runAs field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetRunAs() *SubjectContext {
+	if x == nil {
+		return nil
+	}
+	return x.RunAs
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetInput() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetExpectedDefinitionGeneration returns the expectedDefinitionGeneration field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetExpectedDefinitionGeneration() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.ExpectedDefinitionGeneration
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *SignalOrStartWorkflowProviderRunRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
+}
+
 // SignalWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.SignalWorkflowProviderRunRequest.
 type SignalWorkflowProviderRunRequest struct {
 	RunID   string
 	Signal  *WorkflowSignal
 	Context *RequestContext
+}
+
+// GetRunID returns the runId field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowProviderRunRequest) GetRunID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RunID
+}
+
+// GetSignal returns the signal field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowProviderRunRequest) GetSignal() *WorkflowSignal {
+	if x == nil {
+		return nil
+	}
+	return x.Signal
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowProviderRunRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
 }
 
 // SignalWorkflowRunResponse is the native message type for gestalt.provider.v1.SignalWorkflowRunResponse.
@@ -190,6 +646,38 @@ type SignalWorkflowRunResponse struct {
 	Signal      *WorkflowSignal
 	StartedRun  bool
 	WorkflowKey string
+}
+
+// GetRun returns the run field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowRunResponse) GetRun() *WorkflowRun {
+	if x == nil {
+		return nil
+	}
+	return x.Run
+}
+
+// GetSignal returns the signal field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowRunResponse) GetSignal() *WorkflowSignal {
+	if x == nil {
+		return nil
+	}
+	return x.Signal
+}
+
+// GetStartedRun returns the startedRun field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowRunResponse) GetStartedRun() bool {
+	if x == nil {
+		return false
+	}
+	return x.StartedRun
+}
+
+// GetWorkflowKey returns the workflowKey field; it is safe to call on a nil receiver.
+func (x *SignalWorkflowRunResponse) GetWorkflowKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.WorkflowKey
 }
 
 // StartWorkflowProviderRunRequest is the native message type for gestalt.provider.v1.StartWorkflowProviderRunRequest.
@@ -203,6 +691,78 @@ type StartWorkflowProviderRunRequest struct {
 	Input                        map[string]any
 	ExpectedDefinitionGeneration int64
 	Context                      *RequestContext
+}
+
+// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetIdempotencyKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.IdempotencyKey
+}
+
+// GetCreatedBySubjectID returns the createdBySubjectId field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetCreatedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CreatedBySubjectID
+}
+
+// GetWorkflowKey returns the workflowKey field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetWorkflowKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.WorkflowKey
+}
+
+// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetProviderName() string {
+	if x == nil {
+		return ""
+	}
+	return x.ProviderName
+}
+
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetRunAs returns the runAs field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetRunAs() *SubjectContext {
+	if x == nil {
+		return nil
+	}
+	return x.RunAs
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetInput() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetExpectedDefinitionGeneration returns the expectedDefinitionGeneration field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetExpectedDefinitionGeneration() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.ExpectedDefinitionGeneration
+}
+
+// GetContext returns the context field; it is safe to call on a nil receiver.
+func (x *StartWorkflowProviderRunRequest) GetContext() *RequestContext {
+	if x == nil {
+		return nil
+	}
+	return x.Context
 }
 
 // WorkflowActivationTrigger selects one variant of the trigger oneof of WorkflowActivation.
@@ -233,6 +793,38 @@ type WorkflowActivation struct {
 	Trigger WorkflowActivationTrigger
 }
 
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowActivation) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *WorkflowActivation) GetInput() *WorkflowValue {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetPaused returns the paused field; it is safe to call on a nil receiver.
+func (x *WorkflowActivation) GetPaused() bool {
+	if x == nil {
+		return false
+	}
+	return x.Paused
+}
+
+// GetTrigger returns the trigger oneof; it is safe to call on a nil receiver.
+func (x *WorkflowActivation) GetTrigger() WorkflowActivationTrigger {
+	if x == nil {
+		return nil
+	}
+	return x.Trigger
+}
+
 // WorkflowAgentMessage is the native message type for gestalt.provider.v1.WorkflowAgentMessage.
 type WorkflowAgentMessage struct {
 	Role     string
@@ -240,9 +832,41 @@ type WorkflowAgentMessage struct {
 	Metadata map[string]any
 }
 
+// GetRole returns the role field; it is safe to call on a nil receiver.
+func (x *WorkflowAgentMessage) GetRole() string {
+	if x == nil {
+		return ""
+	}
+	return x.Role
+}
+
+// GetText returns the text field; it is safe to call on a nil receiver.
+func (x *WorkflowAgentMessage) GetText() *WorkflowText {
+	if x == nil {
+		return nil
+	}
+	return x.Text
+}
+
+// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
+func (x *WorkflowAgentMessage) GetMetadata() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Metadata
+}
+
 // WorkflowArray is the native message type for gestalt.provider.v1.WorkflowArray.
 type WorkflowArray struct {
 	Values []*WorkflowValue
+}
+
+// GetValues returns the values field; it is safe to call on a nil receiver.
+func (x *WorkflowArray) GetValues() []*WorkflowValue {
+	if x == nil {
+		return nil
+	}
+	return x.Values
 }
 
 // WorkflowDefinition is the native message type for gestalt.provider.v1.WorkflowDefinition.
@@ -259,6 +883,86 @@ type WorkflowDefinition struct {
 	RunAs              *SubjectContext
 }
 
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetGeneration returns the generation field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetGeneration() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.Generation
+}
+
+// GetTarget returns the target field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetTarget() *BoundWorkflowTarget {
+	if x == nil {
+		return nil
+	}
+	return x.Target
+}
+
+// GetActivations returns the activations field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetActivations() []*WorkflowActivation {
+	if x == nil {
+		return nil
+	}
+	return x.Activations
+}
+
+// GetPaused returns the paused field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetPaused() bool {
+	if x == nil {
+		return false
+	}
+	return x.Paused
+}
+
+// GetCreatedBySubjectID returns the createdBySubjectId field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetCreatedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CreatedBySubjectID
+}
+
+// GetCreatedAt returns the createdAt field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetCreatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CreatedAt
+}
+
+// GetUpdatedAt returns the updatedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetUpdatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.UpdatedAt
+}
+
+// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetProviderName() string {
+	if x == nil {
+		return ""
+	}
+	return x.ProviderName
+}
+
+// GetRunAs returns the runAs field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinition) GetRunAs() *SubjectContext {
+	if x == nil {
+		return nil
+	}
+	return x.RunAs
+}
+
 // WorkflowDefinitionSpec is the native message type for gestalt.provider.v1.WorkflowDefinitionSpec.
 type WorkflowDefinitionSpec struct {
 	ID          string
@@ -266,6 +970,46 @@ type WorkflowDefinitionSpec struct {
 	Activations []*WorkflowActivation
 	Paused      bool
 	RunAs       *SubjectContext
+}
+
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinitionSpec) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetTarget returns the target field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinitionSpec) GetTarget() *BoundWorkflowTarget {
+	if x == nil {
+		return nil
+	}
+	return x.Target
+}
+
+// GetActivations returns the activations field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinitionSpec) GetActivations() []*WorkflowActivation {
+	if x == nil {
+		return nil
+	}
+	return x.Activations
+}
+
+// GetPaused returns the paused field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinitionSpec) GetPaused() bool {
+	if x == nil {
+		return false
+	}
+	return x.Paused
+}
+
+// GetRunAs returns the runAs field; it is safe to call on a nil receiver.
+func (x *WorkflowDefinitionSpec) GetRunAs() *SubjectContext {
+	if x == nil {
+		return nil
+	}
+	return x.RunAs
 }
 
 // WorkflowEvent is the native message type for gestalt.provider.v1.WorkflowEvent.
@@ -281,9 +1025,89 @@ type WorkflowEvent struct {
 	Extensions      map[string]any
 }
 
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetSource returns the source field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetSource() string {
+	if x == nil {
+		return ""
+	}
+	return x.Source
+}
+
+// GetSpecVersion returns the specVersion field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetSpecVersion() string {
+	if x == nil {
+		return ""
+	}
+	return x.SpecVersion
+}
+
+// GetType returns the type field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetType() string {
+	if x == nil {
+		return ""
+	}
+	return x.Type
+}
+
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetSubject() string {
+	if x == nil {
+		return ""
+	}
+	return x.Subject
+}
+
+// GetTime returns the time field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetTime() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.Time
+}
+
+// GetDatacontenttype returns the datacontenttype field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetDatacontenttype() string {
+	if x == nil {
+		return ""
+	}
+	return x.Datacontenttype
+}
+
+// GetData returns the data field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetData() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Data
+}
+
+// GetExtensions returns the extensions field; it is safe to call on a nil receiver.
+func (x *WorkflowEvent) GetExtensions() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Extensions
+}
+
 // WorkflowEventActivation is the native message type for gestalt.provider.v1.WorkflowEventActivation.
 type WorkflowEventActivation struct {
 	Match *WorkflowEventMatch
+}
+
+// GetMatch returns the match field; it is safe to call on a nil receiver.
+func (x *WorkflowEventActivation) GetMatch() *WorkflowEventMatch {
+	if x == nil {
+		return nil
+	}
+	return x.Match
 }
 
 // WorkflowEventMatch is the native message type for gestalt.provider.v1.WorkflowEventMatch.
@@ -293,10 +1117,50 @@ type WorkflowEventMatch struct {
 	Subject string
 }
 
+// GetType returns the type field; it is safe to call on a nil receiver.
+func (x *WorkflowEventMatch) GetType() string {
+	if x == nil {
+		return ""
+	}
+	return x.Type
+}
+
+// GetSource returns the source field; it is safe to call on a nil receiver.
+func (x *WorkflowEventMatch) GetSource() string {
+	if x == nil {
+		return ""
+	}
+	return x.Source
+}
+
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (x *WorkflowEventMatch) GetSubject() string {
+	if x == nil {
+		return ""
+	}
+	return x.Subject
+}
+
 // WorkflowEventTriggerInvocation is the native message type for gestalt.provider.v1.WorkflowEventTriggerInvocation.
 type WorkflowEventTriggerInvocation struct {
 	ActivationID string
 	Event        *WorkflowEvent
+}
+
+// GetActivationID returns the activationId field; it is safe to call on a nil receiver.
+func (x *WorkflowEventTriggerInvocation) GetActivationID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ActivationID
+}
+
+// GetEvent returns the event field; it is safe to call on a nil receiver.
+func (x *WorkflowEventTriggerInvocation) GetEvent() *WorkflowEvent {
+	if x == nil {
+		return nil
+	}
+	return x.Event
 }
 
 // WorkflowManualTrigger is the native message type for gestalt.provider.v1.WorkflowManualTrigger.
@@ -307,9 +1171,25 @@ type WorkflowObject struct {
 	Fields map[string]*WorkflowValue
 }
 
+// GetFields returns the fields field; it is safe to call on a nil receiver.
+func (x *WorkflowObject) GetFields() map[string]*WorkflowValue {
+	if x == nil {
+		return nil
+	}
+	return x.Fields
+}
+
 // WorkflowPathSource is the native message type for gestalt.provider.v1.WorkflowPathSource.
 type WorkflowPathSource struct {
 	Path string
+}
+
+// GetPath returns the path field; it is safe to call on a nil receiver.
+func (x *WorkflowPathSource) GetPath() string {
+	if x == nil {
+		return ""
+	}
+	return x.Path
 }
 
 // WorkflowRun is the native message type for gestalt.provider.v1.WorkflowRun.
@@ -334,6 +1214,150 @@ type WorkflowRun struct {
 	Steps                []*WorkflowStepExecution
 }
 
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetStatus returns the status field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetStatus() WorkflowRunStatus {
+	if x == nil {
+		return 0
+	}
+	return x.Status
+}
+
+// GetTarget returns the target field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetTarget() *BoundWorkflowTarget {
+	if x == nil {
+		return nil
+	}
+	return x.Target
+}
+
+// GetTrigger returns the trigger field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetTrigger() *WorkflowRunTrigger {
+	if x == nil {
+		return nil
+	}
+	return x.Trigger
+}
+
+// GetCreatedAt returns the createdAt field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetCreatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CreatedAt
+}
+
+// GetStartedAt returns the startedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetStartedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.StartedAt
+}
+
+// GetCompletedAt returns the completedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetCompletedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CompletedAt
+}
+
+// GetStatusMessage returns the statusMessage field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetStatusMessage() string {
+	if x == nil {
+		return ""
+	}
+	return x.StatusMessage
+}
+
+// GetOutput returns the output field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetOutput() any {
+	if x == nil {
+		return nil
+	}
+	return x.Output
+}
+
+// GetCreatedBySubjectID returns the createdBySubjectId field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetCreatedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CreatedBySubjectID
+}
+
+// GetWorkflowKey returns the workflowKey field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetWorkflowKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.WorkflowKey
+}
+
+// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetProviderName() string {
+	if x == nil {
+		return ""
+	}
+	return x.ProviderName
+}
+
+// GetDefinitionID returns the definitionId field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetDefinitionID() string {
+	if x == nil {
+		return ""
+	}
+	return x.DefinitionID
+}
+
+// GetRunAs returns the runAs field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetRunAs() *SubjectContext {
+	if x == nil {
+		return nil
+	}
+	return x.RunAs
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetInput() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetDefinitionGeneration returns the definitionGeneration field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetDefinitionGeneration() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.DefinitionGeneration
+}
+
+// GetCurrentStepID returns the currentStepId field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetCurrentStepID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CurrentStepID
+}
+
+// GetSteps returns the steps field; it is safe to call on a nil receiver.
+func (x *WorkflowRun) GetSteps() []*WorkflowStepExecution {
+	if x == nil {
+		return nil
+	}
+	return x.Steps
+}
+
 // WorkflowRunEvent is the native message type for gestalt.provider.v1.WorkflowRunEvent.
 type WorkflowRunEvent struct {
 	ID        string
@@ -342,6 +1366,54 @@ type WorkflowRunEvent struct {
 	Type      string
 	Data      map[string]any
 	CreatedAt *time.Time
+}
+
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowRunEvent) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetRunID returns the runId field; it is safe to call on a nil receiver.
+func (x *WorkflowRunEvent) GetRunID() string {
+	if x == nil {
+		return ""
+	}
+	return x.RunID
+}
+
+// GetStepID returns the stepId field; it is safe to call on a nil receiver.
+func (x *WorkflowRunEvent) GetStepID() string {
+	if x == nil {
+		return ""
+	}
+	return x.StepID
+}
+
+// GetType returns the type field; it is safe to call on a nil receiver.
+func (x *WorkflowRunEvent) GetType() string {
+	if x == nil {
+		return ""
+	}
+	return x.Type
+}
+
+// GetData returns the data field; it is safe to call on a nil receiver.
+func (x *WorkflowRunEvent) GetData() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Data
+}
+
+// GetCreatedAt returns the createdAt field; it is safe to call on a nil receiver.
+func (x *WorkflowRunEvent) GetCreatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CreatedAt
 }
 
 // WorkflowRunTriggerKind selects one variant of the kind oneof of WorkflowRunTrigger.
@@ -376,16 +1448,56 @@ type WorkflowRunTrigger struct {
 	Kind WorkflowRunTriggerKind
 }
 
+// GetKind returns the kind oneof; it is safe to call on a nil receiver.
+func (x *WorkflowRunTrigger) GetKind() WorkflowRunTriggerKind {
+	if x == nil {
+		return nil
+	}
+	return x.Kind
+}
+
 // WorkflowScheduleActivation is the native message type for gestalt.provider.v1.WorkflowScheduleActivation.
 type WorkflowScheduleActivation struct {
 	Cron     string
 	Timezone string
 }
 
+// GetCron returns the cron field; it is safe to call on a nil receiver.
+func (x *WorkflowScheduleActivation) GetCron() string {
+	if x == nil {
+		return ""
+	}
+	return x.Cron
+}
+
+// GetTimezone returns the timezone field; it is safe to call on a nil receiver.
+func (x *WorkflowScheduleActivation) GetTimezone() string {
+	if x == nil {
+		return ""
+	}
+	return x.Timezone
+}
+
 // WorkflowScheduleTrigger is the native message type for gestalt.provider.v1.WorkflowScheduleTrigger.
 type WorkflowScheduleTrigger struct {
 	ActivationID string
 	ScheduledFor *time.Time
+}
+
+// GetActivationID returns the activationId field; it is safe to call on a nil receiver.
+func (x *WorkflowScheduleTrigger) GetActivationID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ActivationID
+}
+
+// GetScheduledFor returns the scheduledFor field; it is safe to call on a nil receiver.
+func (x *WorkflowScheduleTrigger) GetScheduledFor() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.ScheduledFor
 }
 
 // WorkflowSignal is the native message type for gestalt.provider.v1.WorkflowSignal.
@@ -398,6 +1510,70 @@ type WorkflowSignal struct {
 	CreatedAt          *time.Time
 	IdempotencyKey     string
 	Sequence           int64
+}
+
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetName returns the name field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetName() string {
+	if x == nil {
+		return ""
+	}
+	return x.Name
+}
+
+// GetPayload returns the payload field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetPayload() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Payload
+}
+
+// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetMetadata() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Metadata
+}
+
+// GetCreatedBySubjectID returns the createdBySubjectId field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetCreatedBySubjectID() string {
+	if x == nil {
+		return ""
+	}
+	return x.CreatedBySubjectID
+}
+
+// GetCreatedAt returns the createdAt field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetCreatedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CreatedAt
+}
+
+// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetIdempotencyKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.IdempotencyKey
+}
+
+// GetSequence returns the sequence field; it is safe to call on a nil receiver.
+func (x *WorkflowSignal) GetSequence() int64 {
+	if x == nil {
+		return 0
+	}
+	return x.Sequence
 }
 
 // WorkflowStepAction selects one variant of the action oneof of WorkflowStep.
@@ -430,6 +1606,54 @@ type WorkflowStep struct {
 	Action         WorkflowStepAction
 }
 
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowStep) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetInputs returns the inputs field; it is safe to call on a nil receiver.
+func (x *WorkflowStep) GetInputs() map[string]*WorkflowValue {
+	if x == nil {
+		return nil
+	}
+	return x.Inputs
+}
+
+// GetWhen returns the when field; it is safe to call on a nil receiver.
+func (x *WorkflowStep) GetWhen() *WorkflowStepWhen {
+	if x == nil {
+		return nil
+	}
+	return x.When
+}
+
+// GetTimeoutSeconds returns the timeoutSeconds field; it is safe to call on a nil receiver.
+func (x *WorkflowStep) GetTimeoutSeconds() int32 {
+	if x == nil {
+		return 0
+	}
+	return x.TimeoutSeconds
+}
+
+// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
+func (x *WorkflowStep) GetMetadata() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.Metadata
+}
+
+// GetAction returns the action oneof; it is safe to call on a nil receiver.
+func (x *WorkflowStep) GetAction() WorkflowStepAction {
+	if x == nil {
+		return nil
+	}
+	return x.Action
+}
+
 // WorkflowStepAgentTurn is the native message type for gestalt.provider.v1.WorkflowStepAgentTurn.
 type WorkflowStepAgentTurn struct {
 	Provider     string
@@ -442,6 +1666,70 @@ type WorkflowStepAgentTurn struct {
 	ModelOptions map[string]any
 }
 
+// GetProvider returns the provider field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetProvider() string {
+	if x == nil {
+		return ""
+	}
+	return x.Provider
+}
+
+// GetModel returns the model field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetModel() string {
+	if x == nil {
+		return ""
+	}
+	return x.Model
+}
+
+// GetSessionKey returns the sessionKey field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetSessionKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.SessionKey
+}
+
+// GetPrompt returns the prompt field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetPrompt() *WorkflowText {
+	if x == nil {
+		return nil
+	}
+	return x.Prompt
+}
+
+// GetMessages returns the messages field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetMessages() []*WorkflowAgentMessage {
+	if x == nil {
+		return nil
+	}
+	return x.Messages
+}
+
+// GetTools returns the tools field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetTools() []*AgentToolRef {
+	if x == nil {
+		return nil
+	}
+	return x.Tools
+}
+
+// GetOutput returns the output field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetOutput() *AgentOutput {
+	if x == nil {
+		return nil
+	}
+	return x.Output
+}
+
+// GetModelOptions returns the modelOptions field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAgentTurn) GetModelOptions() map[string]any {
+	if x == nil {
+		return nil
+	}
+	return x.ModelOptions
+}
+
 // WorkflowStepAppCall is the native message type for gestalt.provider.v1.WorkflowStepAppCall.
 type WorkflowStepAppCall struct {
 	Name           string
@@ -450,6 +1738,54 @@ type WorkflowStepAppCall struct {
 	Connection     string
 	Instance       string
 	CredentialMode string
+}
+
+// GetName returns the name field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAppCall) GetName() string {
+	if x == nil {
+		return ""
+	}
+	return x.Name
+}
+
+// GetOperation returns the operation field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAppCall) GetOperation() string {
+	if x == nil {
+		return ""
+	}
+	return x.Operation
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAppCall) GetInput() *WorkflowValue {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetConnection returns the connection field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAppCall) GetConnection() string {
+	if x == nil {
+		return ""
+	}
+	return x.Connection
+}
+
+// GetInstance returns the instance field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAppCall) GetInstance() string {
+	if x == nil {
+		return ""
+	}
+	return x.Instance
+}
+
+// GetCredentialMode returns the credentialMode field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAppCall) GetCredentialMode() string {
+	if x == nil {
+		return ""
+	}
+	return x.CredentialMode
 }
 
 // WorkflowStepAttempt is the native message type for gestalt.provider.v1.WorkflowStepAttempt.
@@ -462,6 +1798,70 @@ type WorkflowStepAttempt struct {
 	StatusMessage  string
 	StartedAt      *time.Time
 	CompletedAt    *time.Time
+}
+
+// GetID returns the id field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetID() string {
+	if x == nil {
+		return ""
+	}
+	return x.ID
+}
+
+// GetStatus returns the status field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetStatus() WorkflowStepStatus {
+	if x == nil {
+		return 0
+	}
+	return x.Status
+}
+
+// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetIdempotencyKey() string {
+	if x == nil {
+		return ""
+	}
+	return x.IdempotencyKey
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetInput() any {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetOutput returns the output field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetOutput() any {
+	if x == nil {
+		return nil
+	}
+	return x.Output
+}
+
+// GetStatusMessage returns the statusMessage field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetStatusMessage() string {
+	if x == nil {
+		return ""
+	}
+	return x.StatusMessage
+}
+
+// GetStartedAt returns the startedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetStartedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.StartedAt
+}
+
+// GetCompletedAt returns the completedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowStepAttempt) GetCompletedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CompletedAt
 }
 
 // WorkflowStepExecution is the native message type for gestalt.provider.v1.WorkflowStepExecution.
@@ -477,10 +1877,98 @@ type WorkflowStepExecution struct {
 	CompletedAt   *time.Time
 }
 
+// GetStepID returns the stepId field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetStepID() string {
+	if x == nil {
+		return ""
+	}
+	return x.StepID
+}
+
+// GetStatus returns the status field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetStatus() WorkflowStepStatus {
+	if x == nil {
+		return 0
+	}
+	return x.Status
+}
+
+// GetAttempts returns the attempts field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetAttempts() []*WorkflowStepAttempt {
+	if x == nil {
+		return nil
+	}
+	return x.Attempts
+}
+
+// GetInput returns the input field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetInput() any {
+	if x == nil {
+		return nil
+	}
+	return x.Input
+}
+
+// GetOutput returns the output field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetOutput() any {
+	if x == nil {
+		return nil
+	}
+	return x.Output
+}
+
+// GetStatusMessage returns the statusMessage field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetStatusMessage() string {
+	if x == nil {
+		return ""
+	}
+	return x.StatusMessage
+}
+
+// GetSkipReason returns the skipReason field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetSkipReason() string {
+	if x == nil {
+		return ""
+	}
+	return x.SkipReason
+}
+
+// GetStartedAt returns the startedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetStartedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.StartedAt
+}
+
+// GetCompletedAt returns the completedAt field; it is safe to call on a nil receiver.
+func (x *WorkflowStepExecution) GetCompletedAt() *time.Time {
+	if x == nil {
+		return nil
+	}
+	return x.CompletedAt
+}
+
 // WorkflowStepInputSource is the native message type for gestalt.provider.v1.WorkflowStepInputSource.
 type WorkflowStepInputSource struct {
 	StepID string
 	Path   string
+}
+
+// GetStepID returns the stepId field; it is safe to call on a nil receiver.
+func (x *WorkflowStepInputSource) GetStepID() string {
+	if x == nil {
+		return ""
+	}
+	return x.StepID
+}
+
+// GetPath returns the path field; it is safe to call on a nil receiver.
+func (x *WorkflowStepInputSource) GetPath() string {
+	if x == nil {
+		return ""
+	}
+	return x.Path
 }
 
 // WorkflowStepOutputSource is the native message type for gestalt.provider.v1.WorkflowStepOutputSource.
@@ -489,15 +1977,55 @@ type WorkflowStepOutputSource struct {
 	Path   string
 }
 
+// GetStepID returns the stepId field; it is safe to call on a nil receiver.
+func (x *WorkflowStepOutputSource) GetStepID() string {
+	if x == nil {
+		return ""
+	}
+	return x.StepID
+}
+
+// GetPath returns the path field; it is safe to call on a nil receiver.
+func (x *WorkflowStepOutputSource) GetPath() string {
+	if x == nil {
+		return ""
+	}
+	return x.Path
+}
+
 // WorkflowStepWhen is the native message type for gestalt.provider.v1.WorkflowStepWhen.
 type WorkflowStepWhen struct {
 	Value  *WorkflowValue
 	Equals any
 }
 
+// GetValue returns the value field; it is safe to call on a nil receiver.
+func (x *WorkflowStepWhen) GetValue() *WorkflowValue {
+	if x == nil {
+		return nil
+	}
+	return x.Value
+}
+
+// GetEquals returns the equals field; it is safe to call on a nil receiver.
+func (x *WorkflowStepWhen) GetEquals() any {
+	if x == nil {
+		return nil
+	}
+	return x.Equals
+}
+
 // WorkflowText is the native message type for gestalt.provider.v1.WorkflowText.
 type WorkflowText struct {
 	Template string
+}
+
+// GetTemplate returns the template field; it is safe to call on a nil receiver.
+func (x *WorkflowText) GetTemplate() string {
+	if x == nil {
+		return ""
+	}
+	return x.Template
 }
 
 // WorkflowValueKind selects one variant of the kind oneof of WorkflowValue.
@@ -565,6 +2093,14 @@ func (*WorkflowValueKindStepInput) isWorkflowValueKind() {}
 // WorkflowValue is the native message type for gestalt.provider.v1.WorkflowValue.
 type WorkflowValue struct {
 	Kind WorkflowValueKind
+}
+
+// GetKind returns the kind oneof; it is safe to call on a nil receiver.
+func (x *WorkflowValue) GetKind() WorkflowValueKind {
+	if x == nil {
+		return nil
+	}
+	return x.Kind
 }
 
 // Workflow is the generated client for gestalt.provider.v1.Workflow.

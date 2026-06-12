@@ -90,7 +90,7 @@ func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grp
 		_ = os.Remove(socket)
 	}()
 
-	srv := grpc.NewServer(opts...)
+	srv := grpc.NewServer(append([]grpc.ServerOption{grpc.ChainUnaryInterceptor(requestContextUnaryInterceptor)}, opts...)...)
 	register(srv)
 
 	closer, _ := ctx.Value(providerCloserContextKey{}).(Closer)
@@ -119,6 +119,17 @@ func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grp
 		return nil
 	}
 	return err
+}
+
+// requestContextUnaryInterceptor scopes the request context carried on any
+// unary wire request into ctx, so provider code reads the inbound subject and
+// request context through the usual accessors and outbound host calls
+// propagate them. Requests without a context field pass through untouched.
+func requestContextUnaryInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	if r, ok := req.(interface{ GetContext() *proto.RequestContext }); ok {
+		ctx = withRequestContext(ctx, r.GetContext())
+	}
+	return handler(ctx, req)
 }
 
 func providerParentPID() int {
