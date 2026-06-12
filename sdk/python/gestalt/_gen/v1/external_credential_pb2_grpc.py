@@ -35,6 +35,11 @@ class ExternalCredentialsStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.CreateCredential = channel.unary_unary(
+                '/gestalt.provider.v1.ExternalCredentials/CreateCredential',
+                request_serializer=v1_dot_external__credential__pb2.CreateExternalCredentialRequest.SerializeToString,
+                response_deserializer=v1_dot_external__credential__pb2.ExternalCredential.FromString,
+                _registered_method=True)
         self.UpsertCredential = channel.unary_unary(
                 '/gestalt.provider.v1.ExternalCredentials/UpsertCredential',
                 request_serializer=v1_dot_external__credential__pb2.UpsertExternalCredentialRequest.SerializeToString,
@@ -74,6 +79,12 @@ class ExternalCredentialsStub(object):
 
 class ExternalCredentialsServicer(object):
     """Missing associated documentation comment in .proto file."""
+
+    def CreateCredential(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def UpsertCredential(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -120,6 +131,11 @@ class ExternalCredentialsServicer(object):
 
 def add_ExternalCredentialsServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'CreateCredential': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateCredential,
+                    request_deserializer=v1_dot_external__credential__pb2.CreateExternalCredentialRequest.FromString,
+                    response_serializer=v1_dot_external__credential__pb2.ExternalCredential.SerializeToString,
+            ),
             'UpsertCredential': grpc.unary_unary_rpc_method_handler(
                     servicer.UpsertCredential,
                     request_deserializer=v1_dot_external__credential__pb2.UpsertExternalCredentialRequest.FromString,
@@ -165,6 +181,33 @@ def add_ExternalCredentialsServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class ExternalCredentials(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def CreateCredential(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.ExternalCredentials/CreateCredential',
+            v1_dot_external__credential__pb2.CreateExternalCredentialRequest.SerializeToString,
+            v1_dot_external__credential__pb2.ExternalCredential.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def UpsertCredential(request,

@@ -6,6 +6,26 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
+func toWireCreateExternalCredentialRequest(value *CreateExternalCredentialRequest) *proto.CreateExternalCredentialRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.CreateExternalCredentialRequest{
+		Credential: toWireExternalCredential(value.Credential),
+	}
+	return out
+}
+
+func fromWireCreateExternalCredentialRequest(value *proto.CreateExternalCredentialRequest) *CreateExternalCredentialRequest {
+	if value == nil {
+		return nil
+	}
+	out := &CreateExternalCredentialRequest{
+		Credential: fromWireExternalCredential(value.Credential),
+	}
+	return out
+}
+
 func toWireDeleteExternalCredentialRequest(value *DeleteExternalCredentialRequest) *proto.DeleteExternalCredentialRequest {
 	if value == nil {
 		return nil
@@ -87,19 +107,21 @@ func toWireExternalCredential(value *ExternalCredential) *proto.ExternalCredenti
 		return nil
 	}
 	out := &proto.ExternalCredential{
-		Id:                value.Id,
-		SubjectId:         value.SubjectId,
-		Instance:          value.Instance,
-		AccessToken:       value.AccessToken,
-		RefreshToken:      value.RefreshToken,
-		Scopes:            value.Scopes,
-		ExpiresAt:         toWireTimestamp(value.ExpiresAt),
-		LastRefreshedAt:   toWireTimestamp(value.LastRefreshedAt),
-		RefreshErrorCount: value.RefreshErrorCount,
-		MetadataJson:      value.MetadataJson,
-		CreatedAt:         toWireTimestamp(value.CreatedAt),
-		UpdatedAt:         toWireTimestamp(value.UpdatedAt),
-		ConnectionId:      value.ConnectionId,
+		Id:           value.Id,
+		Subject:      value.Subject,
+		Audience:     value.Audience,
+		Qualifier:    value.Qualifier,
+		MetadataJson: value.MetadataJson,
+		CreatedAt:    toWireTimestamp(value.CreatedAt),
+		UpdatedAt:    toWireTimestamp(value.UpdatedAt),
+	}
+	switch variant := value.Credential.(type) {
+	case *ExternalCredentialCredentialGrant:
+		out.Credential = &proto.ExternalCredential_Grant{Grant: toWireExternalCredentialGrant(variant.Value)}
+	case *ExternalCredentialCredentialClient:
+		out.Credential = &proto.ExternalCredential_Client{Client: toWireExternalCredentialClientInfo(variant.Value)}
+	case *ExternalCredentialCredentialOpaque:
+		out.Credential = &proto.ExternalCredential_Opaque{Opaque: toWireExternalCredentialOpaque(variant.Value)}
 	}
 	return out
 }
@@ -109,19 +131,21 @@ func fromWireExternalCredential(value *proto.ExternalCredential) *ExternalCreden
 		return nil
 	}
 	out := &ExternalCredential{
-		Id:                value.Id,
-		SubjectId:         value.SubjectId,
-		Instance:          value.Instance,
-		AccessToken:       value.AccessToken,
-		RefreshToken:      value.RefreshToken,
-		Scopes:            value.Scopes,
-		ExpiresAt:         fromWireTimestamp(value.ExpiresAt),
-		LastRefreshedAt:   fromWireTimestamp(value.LastRefreshedAt),
-		RefreshErrorCount: value.RefreshErrorCount,
-		MetadataJson:      value.MetadataJson,
-		CreatedAt:         fromWireTimestamp(value.CreatedAt),
-		UpdatedAt:         fromWireTimestamp(value.UpdatedAt),
-		ConnectionId:      value.ConnectionId,
+		Id:           value.Id,
+		Subject:      value.Subject,
+		Audience:     value.Audience,
+		Qualifier:    value.Qualifier,
+		MetadataJson: value.MetadataJson,
+		CreatedAt:    fromWireTimestamp(value.CreatedAt),
+		UpdatedAt:    fromWireTimestamp(value.UpdatedAt),
+	}
+	switch variant := value.Credential.(type) {
+	case *proto.ExternalCredential_Grant:
+		out.Credential = &ExternalCredentialCredentialGrant{Value: fromWireExternalCredentialGrant(variant.Grant)}
+	case *proto.ExternalCredential_Client:
+		out.Credential = &ExternalCredentialCredentialClient{Value: fromWireExternalCredentialClientInfo(variant.Client)}
+	case *proto.ExternalCredential_Opaque:
+		out.Credential = &ExternalCredentialCredentialOpaque{Value: fromWireExternalCredentialOpaque(variant.Opaque)}
 	}
 	return out
 }
@@ -184,26 +208,76 @@ func fromWireExternalCredentialAuthConfig(value *proto.ExternalCredentialAuthCon
 	return out
 }
 
-func toWireExternalCredentialLookup(value *ExternalCredentialLookup) *proto.ExternalCredentialLookup {
+func toWireExternalCredentialClientInfo(value *ExternalCredentialClientInfo) *proto.ExternalCredentialClientInfo {
 	if value == nil {
 		return nil
 	}
-	out := &proto.ExternalCredentialLookup{
-		SubjectId:    value.SubjectId,
-		Instance:     value.Instance,
-		ConnectionId: value.ConnectionId,
+	out := &proto.ExternalCredentialClientInfo{
+		ClientId:              value.ClientId,
+		ClientSecret:          value.ClientSecret,
+		ClientSecretExpiresAt: toWireTimestamp(value.ClientSecretExpiresAt),
 	}
 	return out
 }
 
-func fromWireExternalCredentialLookup(value *proto.ExternalCredentialLookup) *ExternalCredentialLookup {
+func fromWireExternalCredentialClientInfo(value *proto.ExternalCredentialClientInfo) *ExternalCredentialClientInfo {
 	if value == nil {
 		return nil
 	}
-	out := &ExternalCredentialLookup{
-		SubjectId:    value.SubjectId,
-		Instance:     value.Instance,
-		ConnectionId: value.ConnectionId,
+	out := &ExternalCredentialClientInfo{
+		ClientId:              value.ClientId,
+		ClientSecret:          value.ClientSecret,
+		ClientSecretExpiresAt: fromWireTimestamp(value.ClientSecretExpiresAt),
+	}
+	return out
+}
+
+func toWireExternalCredentialGrant(value *ExternalCredentialGrant) *proto.ExternalCredentialGrant {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ExternalCredentialGrant{
+		AccessToken:       value.AccessToken,
+		RefreshToken:      value.RefreshToken,
+		Scope:             value.Scope,
+		ExpiresAt:         toWireTimestamp(value.ExpiresAt),
+		LastRefreshedAt:   toWireTimestamp(value.LastRefreshedAt),
+		RefreshErrorCount: value.RefreshErrorCount,
+	}
+	return out
+}
+
+func fromWireExternalCredentialGrant(value *proto.ExternalCredentialGrant) *ExternalCredentialGrant {
+	if value == nil {
+		return nil
+	}
+	out := &ExternalCredentialGrant{
+		AccessToken:       value.AccessToken,
+		RefreshToken:      value.RefreshToken,
+		Scope:             value.Scope,
+		ExpiresAt:         fromWireTimestamp(value.ExpiresAt),
+		LastRefreshedAt:   fromWireTimestamp(value.LastRefreshedAt),
+		RefreshErrorCount: value.RefreshErrorCount,
+	}
+	return out
+}
+
+func toWireExternalCredentialOpaque(value *ExternalCredentialOpaque) *proto.ExternalCredentialOpaque {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ExternalCredentialOpaque{
+		Fields: value.Fields,
+	}
+	return out
+}
+
+func fromWireExternalCredentialOpaque(value *proto.ExternalCredentialOpaque) *ExternalCredentialOpaque {
+	if value == nil {
+		return nil
+	}
+	out := &ExternalCredentialOpaque{
+		Fields: value.Fields,
 	}
 	return out
 }
@@ -273,7 +347,9 @@ func toWireGetExternalCredentialRequest(value *GetExternalCredentialRequest) *pr
 		return nil
 	}
 	out := &proto.GetExternalCredentialRequest{
-		Lookup: toWireExternalCredentialLookup(value.Lookup),
+		Subject:   value.Subject,
+		Audience:  value.Audience,
+		Qualifier: value.Qualifier,
 	}
 	return out
 }
@@ -283,7 +359,9 @@ func fromWireGetExternalCredentialRequest(value *proto.GetExternalCredentialRequ
 		return nil
 	}
 	out := &GetExternalCredentialRequest{
-		Lookup: fromWireExternalCredentialLookup(value.Lookup),
+		Subject:   value.Subject,
+		Audience:  value.Audience,
+		Qualifier: value.Qualifier,
 	}
 	return out
 }
@@ -293,9 +371,8 @@ func toWireListExternalCredentialsRequest(value *ListExternalCredentialsRequest)
 		return nil
 	}
 	out := &proto.ListExternalCredentialsRequest{
-		SubjectId:    value.SubjectId,
-		Instance:     value.Instance,
-		ConnectionId: value.ConnectionId,
+		Subject:  value.Subject,
+		Audience: value.Audience,
 	}
 	return out
 }
@@ -305,9 +382,8 @@ func fromWireListExternalCredentialsRequest(value *proto.ListExternalCredentials
 		return nil
 	}
 	out := &ListExternalCredentialsRequest{
-		SubjectId:    value.SubjectId,
-		Instance:     value.Instance,
-		ConnectionId: value.ConnectionId,
+		Subject:  value.Subject,
+		Audience: value.Audience,
 	}
 	return out
 }
@@ -403,8 +479,7 @@ func toWireUpsertExternalCredentialRequest(value *UpsertExternalCredentialReques
 		return nil
 	}
 	out := &proto.UpsertExternalCredentialRequest{
-		Credential:         toWireExternalCredential(value.Credential),
-		PreserveTimestamps: value.PreserveTimestamps,
+		Credential: toWireExternalCredential(value.Credential),
 	}
 	return out
 }
@@ -414,8 +489,7 @@ func fromWireUpsertExternalCredentialRequest(value *proto.UpsertExternalCredenti
 		return nil
 	}
 	out := &UpsertExternalCredentialRequest{
-		Credential:         fromWireExternalCredential(value.Credential),
-		PreserveTimestamps: value.PreserveTimestamps,
+		Credential: fromWireExternalCredential(value.Credential),
 	}
 	return out
 }

@@ -4,12 +4,16 @@ import { create } from "@bufbuild/protobuf";
 
 import * as wire from "../gen/v1/external_credential_pb.ts";
 import type {
+  CreateExternalCredentialRequest,
   DeleteExternalCredentialRequest,
   ExchangeExternalCredentialRequest,
   ExchangeExternalCredentialResponse,
   ExternalCredential,
   ExternalCredentialAuthConfig,
-  ExternalCredentialLookup,
+  ExternalCredentialClientInfo,
+  ExternalCredentialCredential,
+  ExternalCredentialGrant,
+  ExternalCredentialOpaque,
   ExternalCredentialTokenExchangeDriver,
   ExternalCredentialTokenResponse,
   GetExternalCredentialRequest,
@@ -22,6 +26,26 @@ import type {
 } from "../../external_credential.ts";
 import { fromWireTimestamp, toWireTimestamp } from "./support.ts";
 import type { Init } from "../../rpc_support.ts";
+
+export function toWireCreateExternalCredentialRequest(
+  value: Init<CreateExternalCredentialRequest>,
+): wire.CreateExternalCredentialRequest {
+  return create(wire.CreateExternalCredentialRequestSchema, {
+    ...(value.credential !== undefined
+      ? { credential: toWireExternalCredential(value.credential) }
+      : {}),
+  });
+}
+
+export function fromWireCreateExternalCredentialRequest(
+  value: wire.CreateExternalCredentialRequest,
+): CreateExternalCredentialRequest {
+  return {
+    ...(value.credential !== undefined
+      ? { credential: fromWireExternalCredential(value.credential) }
+      : {}),
+  };
+}
 
 export function toWireDeleteExternalCredentialRequest(
   value: Init<DeleteExternalCredentialRequest>,
@@ -108,18 +132,9 @@ export function toWireExternalCredential(
 ): wire.ExternalCredential {
   return create(wire.ExternalCredentialSchema, {
     id: value.id ?? "",
-    subjectId: value.subjectId ?? "",
-    instance: value.instance ?? "",
-    accessToken: value.accessToken ?? "",
-    refreshToken: value.refreshToken ?? "",
-    scopes: value.scopes ?? "",
-    ...(value.expiresAt !== undefined
-      ? { expiresAt: toWireTimestamp(value.expiresAt) }
-      : {}),
-    ...(value.lastRefreshedAt !== undefined
-      ? { lastRefreshedAt: toWireTimestamp(value.lastRefreshedAt) }
-      : {}),
-    refreshErrorCount: value.refreshErrorCount ?? 0,
+    subject: value.subject ?? "",
+    audience: value.audience ?? "",
+    qualifier: value.qualifier ?? "",
     metadataJson: value.metadataJson ?? "",
     ...(value.createdAt !== undefined
       ? { createdAt: toWireTimestamp(value.createdAt) }
@@ -127,7 +142,9 @@ export function toWireExternalCredential(
     ...(value.updatedAt !== undefined
       ? { updatedAt: toWireTimestamp(value.updatedAt) }
       : {}),
-    connectionId: value.connectionId ?? "",
+    credential: toWireExternalCredentialCredential(
+      value.credential ?? { case: undefined },
+    ),
   });
 }
 
@@ -136,18 +153,9 @@ export function fromWireExternalCredential(
 ): ExternalCredential {
   return {
     id: value.id,
-    subjectId: value.subjectId,
-    instance: value.instance,
-    accessToken: value.accessToken,
-    refreshToken: value.refreshToken,
-    scopes: value.scopes,
-    ...(value.expiresAt !== undefined
-      ? { expiresAt: fromWireTimestamp(value.expiresAt) }
-      : {}),
-    ...(value.lastRefreshedAt !== undefined
-      ? { lastRefreshedAt: fromWireTimestamp(value.lastRefreshedAt) }
-      : {}),
-    refreshErrorCount: value.refreshErrorCount,
+    subject: value.subject,
+    audience: value.audience,
+    qualifier: value.qualifier,
     metadataJson: value.metadataJson,
     ...(value.createdAt !== undefined
       ? { createdAt: fromWireTimestamp(value.createdAt) }
@@ -155,8 +163,56 @@ export function fromWireExternalCredential(
     ...(value.updatedAt !== undefined
       ? { updatedAt: fromWireTimestamp(value.updatedAt) }
       : {}),
-    connectionId: value.connectionId,
+    credential: fromWireExternalCredentialCredential(value.credential),
   };
+}
+
+export function toWireExternalCredentialCredential(
+  value: Init<ExternalCredentialCredential>,
+): wire.ExternalCredential["credential"] {
+  switch (value.case) {
+    case "grant":
+      return {
+        case: "grant",
+        value: toWireExternalCredentialGrant(value.value),
+      };
+    case "client":
+      return {
+        case: "client",
+        value: toWireExternalCredentialClientInfo(value.value),
+      };
+    case "opaque":
+      return {
+        case: "opaque",
+        value: toWireExternalCredentialOpaque(value.value),
+      };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function fromWireExternalCredentialCredential(
+  value: wire.ExternalCredential["credential"],
+): ExternalCredentialCredential {
+  switch (value.case) {
+    case "grant":
+      return {
+        case: "grant",
+        value: fromWireExternalCredentialGrant(value.value),
+      };
+    case "client":
+      return {
+        case: "client",
+        value: fromWireExternalCredentialClientInfo(value.value),
+      };
+    case "opaque":
+      return {
+        case: "opaque",
+        value: fromWireExternalCredentialOpaque(value.value),
+      };
+    default:
+      return { case: undefined };
+  }
 }
 
 export function toWireExternalCredentialAuthConfig(
@@ -213,23 +269,79 @@ export function fromWireExternalCredentialAuthConfig(
   };
 }
 
-export function toWireExternalCredentialLookup(
-  value: Init<ExternalCredentialLookup>,
-): wire.ExternalCredentialLookup {
-  return create(wire.ExternalCredentialLookupSchema, {
-    subjectId: value.subjectId ?? "",
-    instance: value.instance ?? "",
-    connectionId: value.connectionId ?? "",
+export function toWireExternalCredentialClientInfo(
+  value: Init<ExternalCredentialClientInfo>,
+): wire.ExternalCredentialClientInfo {
+  return create(wire.ExternalCredentialClientInfoSchema, {
+    clientId: value.clientId ?? "",
+    clientSecret: value.clientSecret ?? "",
+    ...(value.clientSecretExpiresAt !== undefined
+      ? { clientSecretExpiresAt: toWireTimestamp(value.clientSecretExpiresAt) }
+      : {}),
   });
 }
 
-export function fromWireExternalCredentialLookup(
-  value: wire.ExternalCredentialLookup,
-): ExternalCredentialLookup {
+export function fromWireExternalCredentialClientInfo(
+  value: wire.ExternalCredentialClientInfo,
+): ExternalCredentialClientInfo {
   return {
-    subjectId: value.subjectId,
-    instance: value.instance,
-    connectionId: value.connectionId,
+    clientId: value.clientId,
+    clientSecret: value.clientSecret,
+    ...(value.clientSecretExpiresAt !== undefined
+      ? {
+          clientSecretExpiresAt: fromWireTimestamp(value.clientSecretExpiresAt),
+        }
+      : {}),
+  };
+}
+
+export function toWireExternalCredentialGrant(
+  value: Init<ExternalCredentialGrant>,
+): wire.ExternalCredentialGrant {
+  return create(wire.ExternalCredentialGrantSchema, {
+    accessToken: value.accessToken ?? "",
+    refreshToken: value.refreshToken ?? "",
+    scope: value.scope ?? "",
+    ...(value.expiresAt !== undefined
+      ? { expiresAt: toWireTimestamp(value.expiresAt) }
+      : {}),
+    ...(value.lastRefreshedAt !== undefined
+      ? { lastRefreshedAt: toWireTimestamp(value.lastRefreshedAt) }
+      : {}),
+    refreshErrorCount: value.refreshErrorCount ?? 0,
+  });
+}
+
+export function fromWireExternalCredentialGrant(
+  value: wire.ExternalCredentialGrant,
+): ExternalCredentialGrant {
+  return {
+    accessToken: value.accessToken,
+    refreshToken: value.refreshToken,
+    scope: value.scope,
+    ...(value.expiresAt !== undefined
+      ? { expiresAt: fromWireTimestamp(value.expiresAt) }
+      : {}),
+    ...(value.lastRefreshedAt !== undefined
+      ? { lastRefreshedAt: fromWireTimestamp(value.lastRefreshedAt) }
+      : {}),
+    refreshErrorCount: value.refreshErrorCount,
+  };
+}
+
+export function toWireExternalCredentialOpaque(
+  value: Init<ExternalCredentialOpaque>,
+): wire.ExternalCredentialOpaque {
+  return create(wire.ExternalCredentialOpaqueSchema, {
+    fields: value.fields ?? {},
+  });
+}
+
+export function fromWireExternalCredentialOpaque(
+  value: wire.ExternalCredentialOpaque,
+): ExternalCredentialOpaque {
+  return {
+    fields: value.fields,
   };
 }
 
@@ -289,9 +401,9 @@ export function toWireGetExternalCredentialRequest(
   value: Init<GetExternalCredentialRequest>,
 ): wire.GetExternalCredentialRequest {
   return create(wire.GetExternalCredentialRequestSchema, {
-    ...(value.lookup !== undefined
-      ? { lookup: toWireExternalCredentialLookup(value.lookup) }
-      : {}),
+    subject: value.subject ?? "",
+    audience: value.audience ?? "",
+    qualifier: value.qualifier ?? "",
   });
 }
 
@@ -299,9 +411,9 @@ export function fromWireGetExternalCredentialRequest(
   value: wire.GetExternalCredentialRequest,
 ): GetExternalCredentialRequest {
   return {
-    ...(value.lookup !== undefined
-      ? { lookup: fromWireExternalCredentialLookup(value.lookup) }
-      : {}),
+    subject: value.subject,
+    audience: value.audience,
+    qualifier: value.qualifier,
   };
 }
 
@@ -309,9 +421,8 @@ export function toWireListExternalCredentialsRequest(
   value: Init<ListExternalCredentialsRequest>,
 ): wire.ListExternalCredentialsRequest {
   return create(wire.ListExternalCredentialsRequestSchema, {
-    subjectId: value.subjectId ?? "",
-    instance: value.instance ?? "",
-    connectionId: value.connectionId ?? "",
+    subject: value.subject ?? "",
+    audience: value.audience ?? "",
   });
 }
 
@@ -319,9 +430,8 @@ export function fromWireListExternalCredentialsRequest(
   value: wire.ListExternalCredentialsRequest,
 ): ListExternalCredentialsRequest {
   return {
-    subjectId: value.subjectId,
-    instance: value.instance,
-    connectionId: value.connectionId,
+    subject: value.subject,
+    audience: value.audience,
   };
 }
 
@@ -416,7 +526,6 @@ export function toWireUpsertExternalCredentialRequest(
     ...(value.credential !== undefined
       ? { credential: toWireExternalCredential(value.credential) }
       : {}),
-    preserveTimestamps: value.preserveTimestamps ?? false,
   });
 }
 
@@ -427,7 +536,6 @@ export function fromWireUpsertExternalCredentialRequest(
     ...(value.credential !== undefined
       ? { credential: fromWireExternalCredential(value.credential) }
       : {}),
-    preserveTimestamps: value.preserveTimestamps,
   };
 }
 

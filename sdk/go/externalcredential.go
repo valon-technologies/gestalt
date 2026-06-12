@@ -5,46 +5,67 @@ import (
 	"time"
 )
 
-// ExternalCredential is the credential record stored by the host.
-type ExternalCredential struct {
-	ID                string
-	SubjectID         string
-	Instance          string
+// ExternalCredentialGrant holds tokens minted for a subject's authorization.
+type ExternalCredentialGrant struct {
 	AccessToken       string
 	RefreshToken      string
-	Scopes            string
+	Scope             string
 	ExpiresAt         *time.Time
 	LastRefreshedAt   *time.Time
 	RefreshErrorCount int32
-	MetadataJSON      string
-	CreatedAt         *time.Time
-	UpdatedAt         *time.Time
-	ConnectionID      string
 }
 
-// ExternalCredentialLookup selects a host-managed external credential.
-type ExternalCredentialLookup struct {
-	SubjectID    string
-	Instance     string
-	ConnectionID string
+// ExternalCredentialClientInfo holds a dynamically registered client identity.
+type ExternalCredentialClientInfo struct {
+	ClientID              string
+	ClientSecret          string
+	ClientSecretExpiresAt *time.Time
+}
+
+// ExternalCredentialOpaque holds externally supplied named fields the store
+// does not interpret.
+type ExternalCredentialOpaque struct {
+	Fields map[string]string
+}
+
+// ExternalCredential is the credential record stored by the host, keyed by
+// (subject, audience, qualifier). Exactly one of Grant, Client, Opaque is set.
+type ExternalCredential struct {
+	ID           string
+	Subject      string
+	Audience     string
+	Qualifier    string
+	Grant        *ExternalCredentialGrant
+	Client       *ExternalCredentialClientInfo
+	Opaque       *ExternalCredentialOpaque
+	MetadataJSON string
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+}
+
+// CreateExternalCredentialRequest is the request for inserting a credential.
+// Creation fails with [ErrAlreadyExists] when a credential already exists for
+// (subject, audience, qualifier).
+type CreateExternalCredentialRequest struct {
+	Credential *ExternalCredential
 }
 
 // UpsertExternalCredentialRequest is the request for creating or updating a credential.
 type UpsertExternalCredentialRequest struct {
-	Credential         *ExternalCredential
-	PreserveTimestamps bool
+	Credential *ExternalCredential
 }
 
 // GetExternalCredentialRequest is the request for fetching one credential.
 type GetExternalCredentialRequest struct {
-	Lookup *ExternalCredentialLookup
+	Subject   string
+	Audience  string
+	Qualifier string
 }
 
 // ListExternalCredentialsRequest is the request for listing credentials.
 type ListExternalCredentialsRequest struct {
-	SubjectID    string
-	Instance     string
-	ConnectionID string
+	Subject  string
+	Audience string
 }
 
 // ListExternalCredentialsResponse is the response returned when listing credentials.
@@ -157,68 +178,52 @@ func (c *ExternalCredential) GetId() string {
 	return c.ID
 }
 
-// GetSubjectId returns the subject id field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetSubjectId() string {
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (c *ExternalCredential) GetSubject() string {
 	if c == nil {
 		return ""
 	}
-	return c.SubjectID
+	return c.Subject
 }
 
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetInstance() string {
+// GetAudience returns the audience field; it is safe to call on a nil receiver.
+func (c *ExternalCredential) GetAudience() string {
 	if c == nil {
 		return ""
 	}
-	return c.Instance
+	return c.Audience
 }
 
-// GetAccessToken returns the access token field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetAccessToken() string {
+// GetQualifier returns the qualifier field; it is safe to call on a nil receiver.
+func (c *ExternalCredential) GetQualifier() string {
 	if c == nil {
 		return ""
 	}
-	return c.AccessToken
+	return c.Qualifier
 }
 
-// GetRefreshToken returns the refresh token field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetRefreshToken() string {
-	if c == nil {
-		return ""
-	}
-	return c.RefreshToken
-}
-
-// GetScopes returns the scopes field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetScopes() string {
-	if c == nil {
-		return ""
-	}
-	return c.Scopes
-}
-
-// GetExpiresAt returns the expires at field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetExpiresAt() *time.Time {
+// GetGrant returns the grant variant; it is safe to call on a nil receiver.
+func (c *ExternalCredential) GetGrant() *ExternalCredentialGrant {
 	if c == nil {
 		return nil
 	}
-	return c.ExpiresAt
+	return c.Grant
 }
 
-// GetLastRefreshedAt returns the last refreshed at field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetLastRefreshedAt() *time.Time {
+// GetClient returns the client variant; it is safe to call on a nil receiver.
+func (c *ExternalCredential) GetClient() *ExternalCredentialClientInfo {
 	if c == nil {
 		return nil
 	}
-	return c.LastRefreshedAt
+	return c.Client
 }
 
-// GetRefreshErrorCount returns the refresh error count field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetRefreshErrorCount() int32 {
+// GetOpaque returns the opaque variant; it is safe to call on a nil receiver.
+func (c *ExternalCredential) GetOpaque() *ExternalCredentialOpaque {
 	if c == nil {
-		return 0
+		return nil
 	}
-	return c.RefreshErrorCount
+	return c.Opaque
 }
 
 // GetMetadataJson returns the metadata json field; it is safe to call on a nil receiver.
@@ -245,36 +250,92 @@ func (c *ExternalCredential) GetUpdatedAt() *time.Time {
 	return c.UpdatedAt
 }
 
-// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
-func (c *ExternalCredential) GetConnectionId() string {
+// GetAccessToken returns the access token field; it is safe to call on a nil receiver.
+func (g *ExternalCredentialGrant) GetAccessToken() string {
+	if g == nil {
+		return ""
+	}
+	return g.AccessToken
+}
+
+// GetRefreshToken returns the refresh token field; it is safe to call on a nil receiver.
+func (g *ExternalCredentialGrant) GetRefreshToken() string {
+	if g == nil {
+		return ""
+	}
+	return g.RefreshToken
+}
+
+// GetScope returns the scope field; it is safe to call on a nil receiver.
+func (g *ExternalCredentialGrant) GetScope() string {
+	if g == nil {
+		return ""
+	}
+	return g.Scope
+}
+
+// GetExpiresAt returns the expires at field; it is safe to call on a nil receiver.
+func (g *ExternalCredentialGrant) GetExpiresAt() *time.Time {
+	if g == nil {
+		return nil
+	}
+	return g.ExpiresAt
+}
+
+// GetLastRefreshedAt returns the last refreshed at field; it is safe to call on a nil receiver.
+func (g *ExternalCredentialGrant) GetLastRefreshedAt() *time.Time {
+	if g == nil {
+		return nil
+	}
+	return g.LastRefreshedAt
+}
+
+// GetRefreshErrorCount returns the refresh error count field; it is safe to call on a nil receiver.
+func (g *ExternalCredentialGrant) GetRefreshErrorCount() int32 {
+	if g == nil {
+		return 0
+	}
+	return g.RefreshErrorCount
+}
+
+// GetClientId returns the client id field; it is safe to call on a nil receiver.
+func (c *ExternalCredentialClientInfo) GetClientId() string {
 	if c == nil {
 		return ""
 	}
-	return c.ConnectionID
+	return c.ClientID
 }
 
-// GetSubjectId returns the subject id field; it is safe to call on a nil receiver.
-func (l *ExternalCredentialLookup) GetSubjectId() string {
-	if l == nil {
+// GetClientSecret returns the client secret field; it is safe to call on a nil receiver.
+func (c *ExternalCredentialClientInfo) GetClientSecret() string {
+	if c == nil {
 		return ""
 	}
-	return l.SubjectID
+	return c.ClientSecret
 }
 
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (l *ExternalCredentialLookup) GetInstance() string {
-	if l == nil {
-		return ""
+// GetClientSecretExpiresAt returns the client secret expires at field; it is safe to call on a nil receiver.
+func (c *ExternalCredentialClientInfo) GetClientSecretExpiresAt() *time.Time {
+	if c == nil {
+		return nil
 	}
-	return l.Instance
+	return c.ClientSecretExpiresAt
 }
 
-// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
-func (l *ExternalCredentialLookup) GetConnectionId() string {
-	if l == nil {
-		return ""
+// GetFields returns the fields map; it is safe to call on a nil receiver.
+func (o *ExternalCredentialOpaque) GetFields() map[string]string {
+	if o == nil {
+		return nil
 	}
-	return l.ConnectionID
+	return o.Fields
+}
+
+// GetCredential returns the credential field; it is safe to call on a nil receiver.
+func (r *CreateExternalCredentialRequest) GetCredential() *ExternalCredential {
+	if r == nil {
+		return nil
+	}
+	return r.Credential
 }
 
 // GetCredential returns the credential field; it is safe to call on a nil receiver.
@@ -285,44 +346,44 @@ func (r *UpsertExternalCredentialRequest) GetCredential() *ExternalCredential {
 	return r.Credential
 }
 
-// GetPreserveTimestamps returns the preserve timestamps field; it is safe to call on a nil receiver.
-func (r *UpsertExternalCredentialRequest) GetPreserveTimestamps() bool {
-	if r == nil {
-		return false
-	}
-	return r.PreserveTimestamps
-}
-
-// GetLookup returns the lookup field; it is safe to call on a nil receiver.
-func (r *GetExternalCredentialRequest) GetLookup() *ExternalCredentialLookup {
-	if r == nil {
-		return nil
-	}
-	return r.Lookup
-}
-
-// GetSubjectId returns the subject id field; it is safe to call on a nil receiver.
-func (r *ListExternalCredentialsRequest) GetSubjectId() string {
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (r *GetExternalCredentialRequest) GetSubject() string {
 	if r == nil {
 		return ""
 	}
-	return r.SubjectID
+	return r.Subject
 }
 
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (r *ListExternalCredentialsRequest) GetInstance() string {
+// GetAudience returns the audience field; it is safe to call on a nil receiver.
+func (r *GetExternalCredentialRequest) GetAudience() string {
 	if r == nil {
 		return ""
 	}
-	return r.Instance
+	return r.Audience
 }
 
-// GetConnectionId returns the connection id field; it is safe to call on a nil receiver.
-func (r *ListExternalCredentialsRequest) GetConnectionId() string {
+// GetQualifier returns the qualifier field; it is safe to call on a nil receiver.
+func (r *GetExternalCredentialRequest) GetQualifier() string {
 	if r == nil {
 		return ""
 	}
-	return r.ConnectionID
+	return r.Qualifier
+}
+
+// GetSubject returns the subject field; it is safe to call on a nil receiver.
+func (r *ListExternalCredentialsRequest) GetSubject() string {
+	if r == nil {
+		return ""
+	}
+	return r.Subject
+}
+
+// GetAudience returns the audience field; it is safe to call on a nil receiver.
+func (r *ListExternalCredentialsRequest) GetAudience() string {
+	if r == nil {
+		return ""
+	}
+	return r.Audience
 }
 
 // GetCredentials returns the credentials field; it is safe to call on a nil receiver.
@@ -825,6 +886,7 @@ func (r *ExchangeExternalCredentialResponse) GetTokenResponse() *ExternalCredent
 // credentials.
 type ExternalCredentialProvider interface {
 	Provider
+	CreateCredential(ctx context.Context, req *CreateExternalCredentialRequest) (*ExternalCredential, error)
 	UpsertCredential(ctx context.Context, req *UpsertExternalCredentialRequest) (*ExternalCredential, error)
 	GetCredential(ctx context.Context, req *GetExternalCredentialRequest) (*ExternalCredential, error)
 	ListCredentials(ctx context.Context, req *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error)

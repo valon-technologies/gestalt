@@ -11,6 +11,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+// CreateExternalCredentialRequest is the native message type for gestalt.provider.v1.CreateExternalCredentialRequest.
+type CreateExternalCredentialRequest struct {
+	Credential *ExternalCredential
+}
+
 // DeleteExternalCredentialRequest is the native message type for gestalt.provider.v1.DeleteExternalCredentialRequest.
 type DeleteExternalCredentialRequest struct {
 	Id string
@@ -34,21 +39,43 @@ type ExchangeExternalCredentialResponse struct {
 	TokenResponse *ExternalCredentialTokenResponse
 }
 
+// ExternalCredentialCredential selects one variant of the credential oneof of ExternalCredential.
+// A nil value means unset.
+type ExternalCredentialCredential interface {
+	isExternalCredentialCredential()
+}
+
+// ExternalCredentialCredentialGrant is the grant variant.
+type ExternalCredentialCredentialGrant struct {
+	Value *ExternalCredentialGrant
+}
+
+func (*ExternalCredentialCredentialGrant) isExternalCredentialCredential() {}
+
+// ExternalCredentialCredentialClient is the client variant.
+type ExternalCredentialCredentialClient struct {
+	Value *ExternalCredentialClientInfo
+}
+
+func (*ExternalCredentialCredentialClient) isExternalCredentialCredential() {}
+
+// ExternalCredentialCredentialOpaque is the opaque variant.
+type ExternalCredentialCredentialOpaque struct {
+	Value *ExternalCredentialOpaque
+}
+
+func (*ExternalCredentialCredentialOpaque) isExternalCredentialCredential() {}
+
 // ExternalCredential is the native message type for gestalt.provider.v1.ExternalCredential.
 type ExternalCredential struct {
-	Id                string
-	SubjectId         string
-	Instance          string
-	AccessToken       string
-	RefreshToken      string
-	Scopes            string
-	ExpiresAt         *time.Time
-	LastRefreshedAt   *time.Time
-	RefreshErrorCount int32
-	MetadataJson      string
-	CreatedAt         *time.Time
-	UpdatedAt         *time.Time
-	ConnectionId      string
+	Id           string
+	Subject      string
+	Audience     string
+	Qualifier    string
+	MetadataJson string
+	CreatedAt    *time.Time
+	UpdatedAt    *time.Time
+	Credential   ExternalCredentialCredential
 }
 
 // ExternalCredentialAuthConfig is the native message type for gestalt.provider.v1.ExternalCredentialAuthConfig.
@@ -73,11 +100,26 @@ type ExternalCredentialAuthConfig struct {
 	RefreshToken         string
 }
 
-// ExternalCredentialLookup is the native message type for gestalt.provider.v1.ExternalCredentialLookup.
-type ExternalCredentialLookup struct {
-	SubjectId    string
-	Instance     string
-	ConnectionId string
+// ExternalCredentialClientInfo is the native message type for gestalt.provider.v1.ExternalCredentialClientInfo.
+type ExternalCredentialClientInfo struct {
+	ClientId              string
+	ClientSecret          string
+	ClientSecretExpiresAt *time.Time
+}
+
+// ExternalCredentialGrant is the native message type for gestalt.provider.v1.ExternalCredentialGrant.
+type ExternalCredentialGrant struct {
+	AccessToken       string
+	RefreshToken      string
+	Scope             string
+	ExpiresAt         *time.Time
+	LastRefreshedAt   *time.Time
+	RefreshErrorCount int32
+}
+
+// ExternalCredentialOpaque is the native message type for gestalt.provider.v1.ExternalCredentialOpaque.
+type ExternalCredentialOpaque struct {
+	Fields map[string]string
 }
 
 // ExternalCredentialTokenExchangeDriver is the native message type for gestalt.provider.v1.ExternalCredentialTokenExchangeDriver.
@@ -102,14 +144,15 @@ type ExternalCredentialTokenResponse struct {
 
 // GetExternalCredentialRequest is the native message type for gestalt.provider.v1.GetExternalCredentialRequest.
 type GetExternalCredentialRequest struct {
-	Lookup *ExternalCredentialLookup
+	Subject   string
+	Audience  string
+	Qualifier string
 }
 
 // ListExternalCredentialsRequest is the native message type for gestalt.provider.v1.ListExternalCredentialsRequest.
 type ListExternalCredentialsRequest struct {
-	SubjectId    string
-	Instance     string
-	ConnectionId string
+	Subject  string
+	Audience string
 }
 
 // ListExternalCredentialsResponse is the native message type for gestalt.provider.v1.ListExternalCredentialsResponse.
@@ -141,8 +184,7 @@ type ResolveExternalCredentialResponse struct {
 
 // UpsertExternalCredentialRequest is the native message type for gestalt.provider.v1.UpsertExternalCredentialRequest.
 type UpsertExternalCredentialRequest struct {
-	Credential         *ExternalCredential
-	PreserveTimestamps bool
+	Credential *ExternalCredential
 }
 
 // ValidateExternalCredentialConfigRequest is the native message type for gestalt.provider.v1.ValidateExternalCredentialConfigRequest.
@@ -186,9 +228,28 @@ func ConnectExternalCredentials(ctx context.Context, name string) (*ExternalCred
 	return NewExternalCredentials(conn), nil
 }
 
+// CreateCredential is the ergonomic form of [ExternalCredentials.CreateCredentialRaw].
+func (c *ExternalCredentials) CreateCredential(ctx context.Context, credential *ExternalCredential) (*ExternalCredential, error) {
+	request := &CreateExternalCredentialRequest{Credential: credential}
+	response, err := c.client.CreateCredential(ctx, toWireCreateExternalCredentialRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return fromWireExternalCredential(response), nil
+}
+
+// CreateCredentialRaw is the faithful form of [ExternalCredentials.CreateCredential].
+func (c *ExternalCredentials) CreateCredentialRaw(ctx context.Context, request *CreateExternalCredentialRequest) (*ExternalCredential, error) {
+	response, err := c.client.CreateCredential(ctx, toWireCreateExternalCredentialRequest(request))
+	if err != nil {
+		return nil, toGestaltError(err)
+	}
+	return fromWireExternalCredential(response), nil
+}
+
 // UpsertCredential is the ergonomic form of [ExternalCredentials.UpsertCredentialRaw].
-func (c *ExternalCredentials) UpsertCredential(ctx context.Context, preserveTimestamps bool, credential *ExternalCredential) (*ExternalCredential, error) {
-	request := &UpsertExternalCredentialRequest{PreserveTimestamps: preserveTimestamps, Credential: credential}
+func (c *ExternalCredentials) UpsertCredential(ctx context.Context, credential *ExternalCredential) (*ExternalCredential, error) {
+	request := &UpsertExternalCredentialRequest{Credential: credential}
 	response, err := c.client.UpsertCredential(ctx, toWireUpsertExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -206,8 +267,8 @@ func (c *ExternalCredentials) UpsertCredentialRaw(ctx context.Context, request *
 }
 
 // GetCredential is the ergonomic form of [ExternalCredentials.GetCredentialRaw].
-func (c *ExternalCredentials) GetCredential(ctx context.Context, lookup *ExternalCredentialLookup) (*ExternalCredential, error) {
-	request := &GetExternalCredentialRequest{Lookup: lookup}
+func (c *ExternalCredentials) GetCredential(ctx context.Context, subject string, audience string, qualifier string) (*ExternalCredential, error) {
+	request := &GetExternalCredentialRequest{Subject: subject, Audience: audience, Qualifier: qualifier}
 	response, err := c.client.GetCredential(ctx, toWireGetExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
@@ -224,10 +285,19 @@ func (c *ExternalCredentials) GetCredentialRaw(ctx context.Context, request *Get
 	return fromWireExternalCredential(response), nil
 }
 
+// ExternalCredentialsListCredentialsOptions carries the optional parameters of [ExternalCredentials.ListCredentials].
+// A nil options value is equivalent to the zero value.
+type ExternalCredentialsListCredentialsOptions struct {
+	Audience string
+}
+
 // ListCredentials is the ergonomic form of [ExternalCredentials.ListCredentialsRaw].
 // The response collapses to its credentials field.
-func (c *ExternalCredentials) ListCredentials(ctx context.Context, subjectId string, instance string, connectionId string) ([]*ExternalCredential, error) {
-	request := &ListExternalCredentialsRequest{SubjectId: subjectId, Instance: instance, ConnectionId: connectionId}
+func (c *ExternalCredentials) ListCredentials(ctx context.Context, subject string, opts *ExternalCredentialsListCredentialsOptions) ([]*ExternalCredential, error) {
+	if opts == nil {
+		opts = &ExternalCredentialsListCredentialsOptions{}
+	}
+	request := &ListExternalCredentialsRequest{Subject: subject, Audience: opts.Audience}
 	response, err := c.client.ListCredentials(ctx, toWireListExternalCredentialsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

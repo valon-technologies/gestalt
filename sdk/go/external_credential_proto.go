@@ -6,14 +6,6 @@ func externalCredentialFromProto(value *proto.ExternalCredential) (*ExternalCred
 	if value == nil {
 		return nil, nil
 	}
-	expiresAt, err := timePtrFromTimestamp(value.GetExpiresAt())
-	if err != nil {
-		return nil, err
-	}
-	lastRefreshedAt, err := timePtrFromTimestamp(value.GetLastRefreshedAt())
-	if err != nil {
-		return nil, err
-	}
 	createdAt, err := timePtrFromTimestamp(value.GetCreatedAt())
 	if err != nil {
 		return nil, err
@@ -22,53 +14,95 @@ func externalCredentialFromProto(value *proto.ExternalCredential) (*ExternalCred
 	if err != nil {
 		return nil, err
 	}
-	return &ExternalCredential{
-		ID:                value.GetId(),
-		SubjectID:         value.GetSubjectId(),
-		Instance:          value.GetInstance(),
-		AccessToken:       value.GetAccessToken(),
-		RefreshToken:      value.GetRefreshToken(),
-		Scopes:            value.GetScopes(),
-		ExpiresAt:         expiresAt,
-		LastRefreshedAt:   lastRefreshedAt,
-		RefreshErrorCount: value.GetRefreshErrorCount(),
-		MetadataJSON:      value.GetMetadataJson(),
-		CreatedAt:         createdAt,
-		UpdatedAt:         updatedAt,
-		ConnectionID:      value.GetConnectionId(),
-	}, nil
+	out := &ExternalCredential{
+		ID:           value.GetId(),
+		Subject:      value.GetSubject(),
+		Audience:     value.GetAudience(),
+		Qualifier:    value.GetQualifier(),
+		MetadataJSON: value.GetMetadataJson(),
+		CreatedAt:    createdAt,
+		UpdatedAt:    updatedAt,
+	}
+	switch variant := value.GetCredential().(type) {
+	case *proto.ExternalCredential_Grant:
+		expiresAt, err := timePtrFromTimestamp(variant.Grant.GetExpiresAt())
+		if err != nil {
+			return nil, err
+		}
+		lastRefreshedAt, err := timePtrFromTimestamp(variant.Grant.GetLastRefreshedAt())
+		if err != nil {
+			return nil, err
+		}
+		out.Grant = &ExternalCredentialGrant{
+			AccessToken:       variant.Grant.GetAccessToken(),
+			RefreshToken:      variant.Grant.GetRefreshToken(),
+			Scope:             variant.Grant.GetScope(),
+			ExpiresAt:         expiresAt,
+			LastRefreshedAt:   lastRefreshedAt,
+			RefreshErrorCount: variant.Grant.GetRefreshErrorCount(),
+		}
+	case *proto.ExternalCredential_Client:
+		clientSecretExpiresAt, err := timePtrFromTimestamp(variant.Client.GetClientSecretExpiresAt())
+		if err != nil {
+			return nil, err
+		}
+		out.Client = &ExternalCredentialClientInfo{
+			ClientID:              variant.Client.GetClientId(),
+			ClientSecret:          variant.Client.GetClientSecret(),
+			ClientSecretExpiresAt: clientSecretExpiresAt,
+		}
+	case *proto.ExternalCredential_Opaque:
+		out.Opaque = &ExternalCredentialOpaque{Fields: copyStringMap(variant.Opaque.GetFields())}
+	}
+	return out, nil
 }
 
 func externalCredentialToProto(value *ExternalCredential) *proto.ExternalCredential {
 	if value == nil {
 		return nil
 	}
-	return &proto.ExternalCredential{
-		Id:                value.GetId(),
-		SubjectId:         value.GetSubjectId(),
-		Instance:          value.GetInstance(),
-		AccessToken:       value.GetAccessToken(),
-		RefreshToken:      value.GetRefreshToken(),
-		Scopes:            value.GetScopes(),
-		ExpiresAt:         timestampFromOptionalTime(value.GetExpiresAt()),
-		LastRefreshedAt:   timestampFromOptionalTime(value.GetLastRefreshedAt()),
-		RefreshErrorCount: value.GetRefreshErrorCount(),
-		MetadataJson:      value.GetMetadataJson(),
-		CreatedAt:         timestampFromOptionalTime(value.GetCreatedAt()),
-		UpdatedAt:         timestampFromOptionalTime(value.GetUpdatedAt()),
-		ConnectionId:      value.GetConnectionId(),
+	out := &proto.ExternalCredential{
+		Id:           value.GetId(),
+		Subject:      value.GetSubject(),
+		Audience:     value.GetAudience(),
+		Qualifier:    value.GetQualifier(),
+		MetadataJson: value.GetMetadataJson(),
+		CreatedAt:    timestampFromOptionalTime(value.GetCreatedAt()),
+		UpdatedAt:    timestampFromOptionalTime(value.GetUpdatedAt()),
 	}
+	switch {
+	case value.Grant != nil:
+		out.Credential = &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{
+			AccessToken:       value.Grant.GetAccessToken(),
+			RefreshToken:      value.Grant.GetRefreshToken(),
+			Scope:             value.Grant.GetScope(),
+			ExpiresAt:         timestampFromOptionalTime(value.Grant.GetExpiresAt()),
+			LastRefreshedAt:   timestampFromOptionalTime(value.Grant.GetLastRefreshedAt()),
+			RefreshErrorCount: value.Grant.GetRefreshErrorCount(),
+		}}
+	case value.Client != nil:
+		out.Credential = &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
+			ClientId:              value.Client.GetClientId(),
+			ClientSecret:          value.Client.GetClientSecret(),
+			ClientSecretExpiresAt: timestampFromOptionalTime(value.Client.GetClientSecretExpiresAt()),
+		}}
+	case value.Opaque != nil:
+		out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
+			Fields: copyStringMap(value.Opaque.GetFields()),
+		}}
+	}
+	return out
 }
 
-func externalCredentialLookupFromProto(value *proto.ExternalCredentialLookup) *ExternalCredentialLookup {
+func createExternalCredentialRequestFromProto(value *proto.CreateExternalCredentialRequest) (*CreateExternalCredentialRequest, error) {
 	if value == nil {
-		return nil
+		return nil, nil
 	}
-	return &ExternalCredentialLookup{
-		SubjectID:    value.GetSubjectId(),
-		Instance:     value.GetInstance(),
-		ConnectionID: value.GetConnectionId(),
+	credential, err := externalCredentialFromProto(value.GetCredential())
+	if err != nil {
+		return nil, err
 	}
+	return &CreateExternalCredentialRequest{Credential: credential}, nil
 }
 
 func upsertExternalCredentialRequestFromProto(value *proto.UpsertExternalCredentialRequest) (*UpsertExternalCredentialRequest, error) {
@@ -79,17 +113,18 @@ func upsertExternalCredentialRequestFromProto(value *proto.UpsertExternalCredent
 	if err != nil {
 		return nil, err
 	}
-	return &UpsertExternalCredentialRequest{
-		Credential:         credential,
-		PreserveTimestamps: value.GetPreserveTimestamps(),
-	}, nil
+	return &UpsertExternalCredentialRequest{Credential: credential}, nil
 }
 
 func getExternalCredentialRequestFromProto(value *proto.GetExternalCredentialRequest) *GetExternalCredentialRequest {
 	if value == nil {
 		return nil
 	}
-	return &GetExternalCredentialRequest{Lookup: externalCredentialLookupFromProto(value.GetLookup())}
+	return &GetExternalCredentialRequest{
+		Subject:   value.GetSubject(),
+		Audience:  value.GetAudience(),
+		Qualifier: value.GetQualifier(),
+	}
 }
 
 func listExternalCredentialsRequestFromProto(value *proto.ListExternalCredentialsRequest) *ListExternalCredentialsRequest {
@@ -97,9 +132,8 @@ func listExternalCredentialsRequestFromProto(value *proto.ListExternalCredential
 		return nil
 	}
 	return &ListExternalCredentialsRequest{
-		SubjectID:    value.GetSubjectId(),
-		Instance:     value.GetInstance(),
-		ConnectionID: value.GetConnectionId(),
+		Subject:  value.GetSubject(),
+		Audience: value.GetAudience(),
 	}
 }
 

@@ -21,21 +21,26 @@ func NewProviderServer(provider core.ExternalCredentialProvider) proto.ExternalC
 	return &externalCredentialProviderServer{provider: provider}
 }
 
+func (s *externalCredentialProviderServer) CreateCredential(ctx context.Context, req *proto.CreateExternalCredentialRequest) (*proto.ExternalCredential, error) {
+	if req == nil || req.GetCredential() == nil {
+		return nil, status.Error(codes.InvalidArgument, "credential is required")
+	}
+	credential := externalCredentialFromProto(req.GetCredential())
+	if err := s.provider.CreateCredential(ctx, credential); err != nil {
+		return nil, externalCredentialToGRPCError("create external credential", err)
+	}
+	return externalCredentialToProto(credential), nil
+}
+
 func (s *externalCredentialProviderServer) UpsertCredential(ctx context.Context, req *proto.UpsertExternalCredentialRequest) (*proto.ExternalCredential, error) {
 	if req == nil || req.GetCredential() == nil {
 		return nil, status.Error(codes.InvalidArgument, "credential is required")
 	}
 	credential := externalCredentialFromProto(req.GetCredential())
-	var err error
-	if req.GetPreserveTimestamps() {
-		err = s.provider.RestoreCredential(ctx, credential)
-	} else {
-		err = s.provider.PutCredential(ctx, credential)
-	}
-	if err != nil {
+	if err := s.provider.UpsertCredential(ctx, credential); err != nil {
 		return nil, externalCredentialToGRPCError("upsert external credential", err)
 	}
-	stored, err := s.provider.GetCredential(ctx, credential.SubjectID, credential.ConnectionID, credential.Instance)
+	stored, err := s.provider.GetCredential(ctx, credential.Subject, credential.Audience, credential.Qualifier)
 	if err != nil {
 		return nil, externalCredentialToGRPCError("read stored external credential", err)
 	}
@@ -43,11 +48,10 @@ func (s *externalCredentialProviderServer) UpsertCredential(ctx context.Context,
 }
 
 func (s *externalCredentialProviderServer) GetCredential(ctx context.Context, req *proto.GetExternalCredentialRequest) (*proto.ExternalCredential, error) {
-	if req == nil || req.GetLookup() == nil {
-		return nil, status.Error(codes.InvalidArgument, "lookup is required")
+	if req == nil || strings.TrimSpace(req.GetSubject()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "subject is required")
 	}
-	lookup := req.GetLookup()
-	credential, err := s.provider.GetCredential(ctx, lookup.GetSubjectId(), lookup.GetConnectionId(), lookup.GetInstance())
+	credential, err := s.provider.GetCredential(ctx, req.GetSubject(), req.GetAudience(), req.GetQualifier())
 	if err != nil {
 		return nil, externalCredentialToGRPCError("get external credential", err)
 	}
@@ -58,39 +62,24 @@ func (s *externalCredentialProviderServer) ListCredentials(ctx context.Context, 
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	subjectID := strings.TrimSpace(req.GetSubjectId())
-	if subjectID == "" {
-		return nil, status.Error(codes.InvalidArgument, "subject_id is required")
+	subject := strings.TrimSpace(req.GetSubject())
+	if subject == "" {
+		return nil, status.Error(codes.InvalidArgument, "subject is required")
 	}
 
-	var (
-		credentials []*core.ExternalCredential
-		err         error
-	)
-	switch {
-	case req.GetConnectionId() != "":
-		credentials, err = s.provider.ListCredentialsForConnection(ctx, subjectID, req.GetConnectionId())
-	default:
-		credentials, err = s.provider.ListCredentials(ctx, subjectID)
-	}
+	credentials, err := s.provider.ListCredentials(ctx, subject, strings.TrimSpace(req.GetAudience()))
 	if err != nil {
 		return nil, externalCredentialToGRPCError("list external credentials", err)
 	}
 
-	filtered := make([]*proto.ExternalCredential, 0, len(credentials))
+	out := make([]*proto.ExternalCredential, 0, len(credentials))
 	for _, credential := range credentials {
 		if credential == nil {
 			continue
 		}
-		if req.GetConnectionId() != "" && credential.ConnectionID != req.GetConnectionId() {
-			continue
-		}
-		if req.GetInstance() != "" && credential.Instance != req.GetInstance() {
-			continue
-		}
-		filtered = append(filtered, externalCredentialToProto(credential))
+		out = append(out, externalCredentialToProto(credential))
 	}
-	return &proto.ListExternalCredentialsResponse{Credentials: filtered}, nil
+	return &proto.ListExternalCredentialsResponse{Credentials: out}, nil
 }
 
 func (s *externalCredentialProviderServer) DeleteCredential(ctx context.Context, req *proto.DeleteExternalCredentialRequest) (*emptypb.Empty, error) {
@@ -183,6 +172,9 @@ func externalCredentialToGRPCError(operation string, err error) error {
 	}
 	if errors.Is(err, core.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
+	}
+	if errors.Is(err, core.ErrAlreadyExists) {
+		return status.Error(codes.AlreadyExists, err.Error())
 	}
 	if errors.Is(err, core.ErrAmbiguousCredential) {
 		return status.Error(codes.FailedPrecondition, err.Error())

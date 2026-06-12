@@ -627,7 +627,7 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 		}
 
 		connectionID := b.connectionID(providerName, target.Connection)
-		credentials, listErr := b.externalCreds.ListCredentialsForConnection(ctx, subjectID, connectionID)
+		credentials, listErr := b.externalCreds.ListCredentials(ctx, subjectID, connectionID)
 		if listErr != nil {
 			return nil, fmt.Errorf("%w: listing external credentials: %v", ErrInternal, listErr)
 		}
@@ -645,18 +645,12 @@ func (b *Broker) ExpandCatalogTargets(ctx context.Context, p *principal.Principa
 			}
 		}
 		sort.Slice(nonNil, func(i, j int) bool {
-			if nonNil[i].Connection != nonNil[j].Connection {
-				return nonNil[i].Connection < nonNil[j].Connection
-			}
-			return nonNil[i].Instance < nonNil[j].Instance
+			return nonNil[i].Qualifier < nonNil[j].Qualifier
 		})
 		for _, credential := range nonNil {
 			resolved := CatalogResolutionTarget{
-				Connection: strings.TrimSpace(credential.Connection),
-				Instance:   strings.TrimSpace(credential.Instance),
-			}
-			if resolved.Connection == "" {
-				resolved.Connection = target.Connection
+				Connection: target.Connection,
+				Instance:   strings.TrimSpace(credential.Qualifier),
 			}
 			if _, ok := seen[resolved]; ok {
 				continue
@@ -780,6 +774,18 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		runtimeInfo, _ = b.connectionRuntime(providerName, connection)
 	}
 
+	authConfig := runtimeInfo.AuthConfig
+	if runtimeInfo.AuthConfigResolver != nil {
+		resolved, resolverErr := runtimeInfo.AuthConfigResolver(ctx)
+		if resolverErr != nil {
+			// Serve the stored credential without refresh capability rather
+			// than failing the invocation on a discovery outage.
+			b.log().WarnContext(ctx, "resolving connection auth config", "provider", providerName, "connection", connection, "error", resolverErr)
+		} else {
+			authConfig = resolved
+		}
+	}
+
 	resp, err := b.externalCreds.ResolveCredential(ctx, &core.ResolveExternalCredentialRequest{
 		Provider:            providerName,
 		Connection:          connection,
@@ -787,7 +793,7 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		Mode:                credentialMode,
 		CredentialSubjectID: subjectID,
 		Instance:            instance,
-		Auth:                runtimeInfo.AuthConfig,
+		Auth:                authConfig,
 		ConnectionParams:    runtimeInfo.Params,
 	})
 	if err != nil {
@@ -813,19 +819,16 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 	if storedCredential == nil {
 		return ctx, ConnectionRuntimeCredential{}, fmt.Errorf("%w: no external credential stored for integration %q", ErrNoCredential, providerName)
 	}
-	credentialConnection := strings.TrimSpace(storedCredential.Connection)
-	if credentialConnection == "" {
-		credentialConnection = strings.TrimSpace(connection)
-	}
+	credentialConnection := strings.TrimSpace(connection)
 	if credentialConnection == "" {
 		credentialConnection = core.AppConnectionName
 	}
-	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, credentialConnection, storedCredential.Instance)
+	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, credentialConnection, storedCredential.Qualifier)
 	ctx = WithCredentialContext(ctx, CredentialContext{
 		Mode:       credentialMode,
 		SubjectID:  credentialSubjectID,
 		Connection: credentialConnection,
-		Instance:   storedCredential.Instance,
+		Instance:   storedCredential.Qualifier,
 	})
 
 	metadataJSON := storedCredential.MetadataJSON
@@ -844,15 +847,7 @@ func (b *Broker) resolveSubjectRuntimeCredential(ctx context.Context, prov core.
 		ctx = core.WithConnectionParams(ctx, resp.Params)
 	}
 
-	expiresAt := resp.ExpiresAt
-	if expiresAt == nil {
-		expiresAt = storedCredential.ExpiresAt
-	}
-	token := strings.TrimSpace(resp.Token)
-	if token == "" {
-		token = storedCredential.AccessToken
-	}
-	return ctx, ConnectionRuntimeCredential{Token: token, ExpiresAt: expiresAt}, nil
+	return ctx, ConnectionRuntimeCredential{Token: strings.TrimSpace(resp.Token), ExpiresAt: resp.ExpiresAt}, nil
 }
 
 // ResolveSubjectToken exposes the broker's refresh-aware token lookup for

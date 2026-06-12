@@ -13,7 +13,93 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/external_credential.proto.
  */
 export const file_v1_external_credential: GenFile = /*@__PURE__*/
-  fileDesc("Chx2MS9leHRlcm5hbF9jcmVkZW50aWFsLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIroDChJFeHRlcm5hbENyZWRlbnRpYWwSCgoCaWQYASABKAkSEgoKc3ViamVjdF9pZBgCIAEoCRIQCghpbnN0YW5jZRgFIAEoCRIUCgxhY2Nlc3NfdG9rZW4YBiABKAkSFQoNcmVmcmVzaF90b2tlbhgHIAEoCRIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSFQoNbWV0YWRhdGFfanNvbhgMIAEoCRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1jb25uZWN0aW9uX2lkGA8gASgJSgQIAxAESgQIBBAFUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ8ChhFeHRlcm5hbENyZWRlbnRpYWxMb29rdXASEgoKc3ViamVjdF9pZBgBIAEoCRIQCghpbnN0YW5jZRgEIAEoCRIVCg1jb25uZWN0aW9uX2lkGAUgASgJSgQIAhADSgQIAxAEUgtpbnRlZ3JhdGlvblIKY29ubmVjdGlvbiJ7Ch9VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EjsKCmNyZWRlbnRpYWwYASABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbBIbChNwcmVzZXJ2ZV90aW1lc3RhbXBzGAIgASgIIl0KHEdldEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSPQoGbG9va3VwGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxMb29rdXAiggEKHkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVxdWVzdBISCgpzdWJqZWN0X2lkGAEgASgJEhAKCGluc3RhbmNlGAQgASgJEhUKDWNvbm5lY3Rpb25faWQYBSABKAlKBAgCEANKBAgDEARSC2ludGVncmF0aW9uUgpjb25uZWN0aW9uInAKH0xpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2USPAoLY3JlZGVudGlhbHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbDoPmrUYC2NyZWRlbnRpYWxzIi0KH0RlbGV0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSCgoCaWQYASABKAkikgIKJUV4dGVybmFsQ3JlZGVudGlhbFRva2VuRXhjaGFuZ2VEcml2ZXISDAoEdHlwZRgBIAEoCRIYChB0YXJnZXRfcHJpbmNpcGFsGAIgASgJEg4KBnNjb3BlcxgDIAMoCRIYChBsaWZldGltZV9zZWNvbmRzGAQgASgFEhAKCGVuZHBvaW50GAUgASgJElYKBnBhcmFtcxgGIAMoCzJGLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsVG9rZW5FeGNoYW5nZURyaXZlci5QYXJhbXNFbnRyeRotCgtQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBItQFChxFeHRlcm5hbENyZWRlbnRpYWxBdXRoQ29uZmlnEgwKBHR5cGUYASABKAkSDQoFdG9rZW4YAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmdyYW50X3R5cGUYBCABKAkSEQoJdG9rZW5fdXJsGAUgASgJEhEKCWNsaWVudF9pZBgGIAEoCRIVCg1jbGllbnRfc2VjcmV0GAcgASgJEhMKC2NsaWVudF9hdXRoGAggASgJEhYKDnRva2VuX2V4Y2hhbmdlGAkgASgJEg4KBnNjb3BlcxgKIAMoCRITCgtzY29wZV9wYXJhbRgLIAEoCRIXCg9zY29wZV9zZXBhcmF0b3IYDCABKAkSWAoMdG9rZW5fcGFyYW1zGA0gAygLMkIuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxBdXRoQ29uZmlnLlRva2VuUGFyYW1zRW50cnkSXAoOcmVmcmVzaF9wYXJhbXMYDiADKAsyRC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbEF1dGhDb25maWcuUmVmcmVzaFBhcmFtc0VudHJ5EhUKDWFjY2VwdF9oZWFkZXIYDyABKAkSGQoRYWNjZXNzX3Rva2VuX3BhdGgYECABKAkSWgoWdG9rZW5fZXhjaGFuZ2VfZHJpdmVycxgRIAMoCzI6Lmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsVG9rZW5FeGNoYW5nZURyaXZlchIVCg1yZWZyZXNoX3Rva2VuGBIgASgJGjIKEFRva2VuUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ARo0ChJSZWZyZXNoUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLdAgonVmFsaWRhdGVFeHRlcm5hbENyZWRlbnRpYWxDb25maWdSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEhIKCmNvbm5lY3Rpb24YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIMCgRtb2RlGAQgASgJEj8KBGF1dGgYBSABKAsyMS5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbEF1dGhDb25maWcSbQoRY29ubmVjdGlvbl9wYXJhbXMYBiADKAsyUi5nZXN0YWx0LnByb3ZpZGVyLnYxLlZhbGlkYXRlRXh0ZXJuYWxDcmVkZW50aWFsQ29uZmlnUmVxdWVzdC5Db25uZWN0aW9uUGFyYW1zRW50cnkaNwoVQ29ubmVjdGlvblBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEimgMKIFJlc29sdmVFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEhIKCmNvbm5lY3Rpb24YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIMCgRtb2RlGAQgASgJEh0KFWNyZWRlbnRpYWxfc3ViamVjdF9pZBgFIAEoCRIYChBhY3Rvcl9zdWJqZWN0X2lkGAYgASgJEhAKCGluc3RhbmNlGAcgASgJEj8KBGF1dGgYCCABKAsyMS5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbEF1dGhDb25maWcSZgoRY29ubmVjdGlvbl9wYXJhbXMYCSADKAsySy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASK5AgohUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlc3BvbnNlEg0KBXRva2VuGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1ldGFkYXRhX2pzb24YAyABKAkSUgoGcGFyYW1zGAQgAygLMkIuZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlRXh0ZXJuYWxDcmVkZW50aWFsUmVzcG9uc2UuUGFyYW1zRW50cnkSOwoKY3JlZGVudGlhbBgFIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiogEKH0V4dGVybmFsQ3JlZGVudGlhbFRva2VuUmVzcG9uc2USFAoMYWNjZXNzX3Rva2VuGAEgASgJEhUKDXJlZnJlc2hfdG9rZW4YAiABKAkSEgoKZXhwaXJlc19pbhgDIAEoBRISCgp0b2tlbl90eXBlGAQgASgJEhIKCmV4dHJhX2pzb24YBSABKAkSFgoOcmVmcmVzaF9zb3VyY2UYBiABKAkipwMKIUV4Y2hhbmdlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBIQCghwcm92aWRlchgBIAEoCRISCgpjb25uZWN0aW9uGAIgASgJEhUKDWNvbm5lY3Rpb25faWQYAyABKAkSHQoVY3JlZGVudGlhbF9zdWJqZWN0X2lkGAQgASgJEhgKEGFjdG9yX3N1YmplY3RfaWQYBSABKAkSEAoIaW5zdGFuY2UYBiABKAkSPwoEYXV0aBgHIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZxIXCg9jcmVkZW50aWFsX2pzb24YCCABKAkSZwoRY29ubmVjdGlvbl9wYXJhbXMYCSADKAsyTC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4Y2hhbmdlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdC5Db25uZWN0aW9uUGFyYW1zRW50cnkaNwoVQ29ubmVjdGlvblBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEihgEKIkV4Y2hhbmdlRXh0ZXJuYWxDcmVkZW50aWFsUmVzcG9uc2USTAoOdG9rZW5fcmVzcG9uc2UYASABKAsyNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbFRva2VuUmVzcG9uc2U6Epq1GA50b2tlbl9yZXNwb25zZTKNCgoTRXh0ZXJuYWxDcmVkZW50aWFscxKYAQoQVXBzZXJ0Q3JlZGVudGlhbBI0Lmdlc3RhbHQucHJvdmlkZXIudjEuVXBzZXJ0RXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsIiWKtRgTcHJlc2VydmVfdGltZXN0YW1wc4q1GApjcmVkZW50aWFsEncKDUdldENyZWRlbnRpYWwSMS5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbCIKirUYBmxvb2t1cBKpAQoPTGlzdENyZWRlbnRpYWxzEjMuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0RXh0ZXJuYWxDcmVkZW50aWFsc1JlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2UiK4q1GApzdWJqZWN0X2lkirUYCGluc3RhbmNlirUYDWNvbm5lY3Rpb25faWQSaAoQRGVsZXRlQ3JlZGVudGlhbBI0Lmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eSIGirUYAmlkEq0BChhWYWxpZGF0ZUNyZWRlbnRpYWxDb25maWcSPC5nZXN0YWx0LnByb3ZpZGVyLnYxLlZhbGlkYXRlRXh0ZXJuYWxDcmVkZW50aWFsQ29uZmlnUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eSI7irUYCHByb3ZpZGVyirUYCmNvbm5lY3Rpb26KtRgNY29ubmVjdGlvbl9pZIq1GARtb2RlirUYBGF1dGgS+AEKEVJlc29sdmVDcmVkZW50aWFsEjUuZ2VzdGFsdC5wcm92aWRlci52MS5SZXNvbHZlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBo2Lmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlc3BvbnNlInSKtRgIcHJvdmlkZXKKtRgKY29ubmVjdGlvboq1GA1jb25uZWN0aW9uX2lkirUYBG1vZGWKtRgVY3JlZGVudGlhbF9zdWJqZWN0X2lkirUYEGFjdG9yX3N1YmplY3RfaWSKtRgIaW5zdGFuY2WKtRgEYXV0aBKGAgoSRXhjaGFuZ2VDcmVkZW50aWFsEjYuZ2VzdGFsdC5wcm92aWRlci52MS5FeGNoYW5nZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaNy5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4Y2hhbmdlRXh0ZXJuYWxDcmVkZW50aWFsUmVzcG9uc2Uif4q1GAhwcm92aWRlcoq1GApjb25uZWN0aW9uirUYDWNvbm5lY3Rpb25faWSKtRgVY3JlZGVudGlhbF9zdWJqZWN0X2lkirUYEGFjdG9yX3N1YmplY3RfaWSKtRgIaW5zdGFuY2WKtRgPY3JlZGVudGlhbF9qc29uirUYBGF1dGgaGIq1GBRleHRlcm5hbF9jcmVkZW50aWFsc2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_timestamp, file_v1_annotations]);
+  fileDesc("Chx2MS9leHRlcm5hbF9jcmVkZW50aWFsLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxItkBChdFeHRlcm5hbENyZWRlbnRpYWxHcmFudBIUCgxhY2Nlc3NfdG9rZW4YASABKAkSFQoNcmVmcmVzaF90b2tlbhgCIAEoCRINCgVzY29wZRgDIAEoCRIuCgpleHBpcmVzX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI1ChFsYXN0X3JlZnJlc2hlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGwoTcmVmcmVzaF9lcnJvcl9jb3VudBgGIAEoBSKGAQocRXh0ZXJuYWxDcmVkZW50aWFsQ2xpZW50SW5mbxIRCgljbGllbnRfaWQYASABKAkSFQoNY2xpZW50X3NlY3JldBgCIAEoCRI8ChhjbGllbnRfc2VjcmV0X2V4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIpQBChhFeHRlcm5hbENyZWRlbnRpYWxPcGFxdWUSSQoGZmllbGRzGAEgAygLMjkuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxPcGFxdWUuRmllbGRzRW50cnkaLQoLRmllbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKgAwoSRXh0ZXJuYWxDcmVkZW50aWFsEgoKAmlkGAEgASgJEg8KB3N1YmplY3QYAiABKAkSEAoIYXVkaWVuY2UYAyABKAkSEQoJcXVhbGlmaWVyGAQgASgJEj0KBWdyYW50GAUgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxHcmFudEgAEkMKBmNsaWVudBgGIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQ2xpZW50SW5mb0gAEj8KBm9wYXF1ZRgHIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsT3BhcXVlSAASFQoNbWV0YWRhdGFfanNvbhgIIAEoCRIuCgpjcmVhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIMCgpjcmVkZW50aWFsIl4KH0NyZWF0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSOwoKY3JlZGVudGlhbBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsIl4KH1Vwc2VydEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSOwoKY3JlZGVudGlhbBgBIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsIlQKHEdldEV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSDwoHc3ViamVjdBgBIAEoCRIQCghhdWRpZW5jZRgCIAEoCRIRCglxdWFsaWZpZXIYAyABKAkiQwoeTGlzdEV4dGVybmFsQ3JlZGVudGlhbHNSZXF1ZXN0Eg8KB3N1YmplY3QYASABKAkSEAoIYXVkaWVuY2UYAiABKAkicAofTGlzdEV4dGVybmFsQ3JlZGVudGlhbHNSZXNwb25zZRI8CgtjcmVkZW50aWFscxgBIAMoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsOg+atRgLY3JlZGVudGlhbHMiLQofRGVsZXRlRXh0ZXJuYWxDcmVkZW50aWFsUmVxdWVzdBIKCgJpZBgBIAEoCSKSAgolRXh0ZXJuYWxDcmVkZW50aWFsVG9rZW5FeGNoYW5nZURyaXZlchIMCgR0eXBlGAEgASgJEhgKEHRhcmdldF9wcmluY2lwYWwYAiABKAkSDgoGc2NvcGVzGAMgAygJEhgKEGxpZmV0aW1lX3NlY29uZHMYBCABKAUSEAoIZW5kcG9pbnQYBSABKAkSVgoGcGFyYW1zGAYgAygLMkYuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxUb2tlbkV4Y2hhbmdlRHJpdmVyLlBhcmFtc0VudHJ5Gi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi1AUKHEV4dGVybmFsQ3JlZGVudGlhbEF1dGhDb25maWcSDAoEdHlwZRgBIAEoCRINCgV0b2tlbhgCIAEoCRIUCgx0b2tlbl9wcmVmaXgYAyABKAkSEgoKZ3JhbnRfdHlwZRgEIAEoCRIRCgl0b2tlbl91cmwYBSABKAkSEQoJY2xpZW50X2lkGAYgASgJEhUKDWNsaWVudF9zZWNyZXQYByABKAkSEwoLY2xpZW50X2F1dGgYCCABKAkSFgoOdG9rZW5fZXhjaGFuZ2UYCSABKAkSDgoGc2NvcGVzGAogAygJEhMKC3Njb3BlX3BhcmFtGAsgASgJEhcKD3Njb3BlX3NlcGFyYXRvchgMIAEoCRJYCgx0b2tlbl9wYXJhbXMYDSADKAsyQi5nZXN0YWx0LnByb3ZpZGVyLnYxLkV4dGVybmFsQ3JlZGVudGlhbEF1dGhDb25maWcuVG9rZW5QYXJhbXNFbnRyeRJcCg5yZWZyZXNoX3BhcmFtcxgOIAMoCzJELmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZy5SZWZyZXNoUGFyYW1zRW50cnkSFQoNYWNjZXB0X2hlYWRlchgPIAEoCRIZChFhY2Nlc3NfdG9rZW5fcGF0aBgQIAEoCRJaChZ0b2tlbl9leGNoYW5nZV9kcml2ZXJzGBEgAygLMjouZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxUb2tlbkV4Y2hhbmdlRHJpdmVyEhUKDXJlZnJlc2hfdG9rZW4YEiABKAkaMgoQVG9rZW5QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjQKElJlZnJlc2hQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIt0CCidWYWxpZGF0ZUV4dGVybmFsQ3JlZGVudGlhbENvbmZpZ1JlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkSEgoKY29ubmVjdGlvbhgCIAEoCRIVCg1jb25uZWN0aW9uX2lkGAMgASgJEgwKBG1vZGUYBCABKAkSPwoEYXV0aBgFIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZxJtChFjb25uZWN0aW9uX3BhcmFtcxgGIAMoCzJSLmdlc3RhbHQucHJvdmlkZXIudjEuVmFsaWRhdGVFeHRlcm5hbENyZWRlbnRpYWxDb25maWdSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKaAwogUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkSEgoKY29ubmVjdGlvbhgCIAEoCRIVCg1jb25uZWN0aW9uX2lkGAMgASgJEgwKBG1vZGUYBCABKAkSHQoVY3JlZGVudGlhbF9zdWJqZWN0X2lkGAUgASgJEhgKEGFjdG9yX3N1YmplY3RfaWQYBiABKAkSEAoIaW5zdGFuY2UYByABKAkSPwoEYXV0aBgIIAEoCzIxLmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsQXV0aENvbmZpZxJmChFjb25uZWN0aW9uX3BhcmFtcxgJIAMoCzJLLmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QuQ29ubmVjdGlvblBhcmFtc0VudHJ5GjcKFUNvbm5lY3Rpb25QYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIrkCCiFSZXNvbHZlRXh0ZXJuYWxDcmVkZW50aWFsUmVzcG9uc2USDQoFdG9rZW4YASABKAkSLgoKZXhwaXJlc19hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFQoNbWV0YWRhdGFfanNvbhgDIAEoCRJSCgZwYXJhbXMYBCADKAsyQi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVFeHRlcm5hbENyZWRlbnRpYWxSZXNwb25zZS5QYXJhbXNFbnRyeRI7CgpjcmVkZW50aWFsGAUgASgLMicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKiAQofRXh0ZXJuYWxDcmVkZW50aWFsVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSFQoNcmVmcmVzaF90b2tlbhgCIAEoCRISCgpleHBpcmVzX2luGAMgASgFEhIKCnRva2VuX3R5cGUYBCABKAkSEgoKZXh0cmFfanNvbhgFIAEoCRIWCg5yZWZyZXNoX3NvdXJjZRgGIAEoCSKnAwohRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0EhAKCHByb3ZpZGVyGAEgASgJEhIKCmNvbm5lY3Rpb24YAiABKAkSFQoNY29ubmVjdGlvbl9pZBgDIAEoCRIdChVjcmVkZW50aWFsX3N1YmplY3RfaWQYBCABKAkSGAoQYWN0b3Jfc3ViamVjdF9pZBgFIAEoCRIQCghpbnN0YW5jZRgGIAEoCRI/CgRhdXRoGAcgASgLMjEuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWxBdXRoQ29uZmlnEhcKD2NyZWRlbnRpYWxfanNvbhgIIAEoCRJnChFjb25uZWN0aW9uX3BhcmFtcxgJIAMoCzJMLmdlc3RhbHQucHJvdmlkZXIudjEuRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0LkNvbm5lY3Rpb25QYXJhbXNFbnRyeRo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKGAQoiRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXNwb25zZRJMCg50b2tlbl9yZXNwb25zZRgBIAEoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuRXh0ZXJuYWxDcmVkZW50aWFsVG9rZW5SZXNwb25zZToSmrUYDnRva2VuX3Jlc3BvbnNlMoELChNFeHRlcm5hbENyZWRlbnRpYWxzEoEBChBDcmVhdGVDcmVkZW50aWFsEjQuZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwiDoq1GApjcmVkZW50aWFsEoEBChBVcHNlcnRDcmVkZW50aWFsEjQuZ2VzdGFsdC5wcm92aWRlci52MS5VcHNlcnRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwiDoq1GApjcmVkZW50aWFsEpEBCg1HZXRDcmVkZW50aWFsEjEuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5FeHRlcm5hbENyZWRlbnRpYWwiJIq1GAdzdWJqZWN0irUYCGF1ZGllbmNlirUYCXF1YWxpZmllchKVAQoPTGlzdENyZWRlbnRpYWxzEjMuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0RXh0ZXJuYWxDcmVkZW50aWFsc1JlcXVlc3QaNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkxpc3RFeHRlcm5hbENyZWRlbnRpYWxzUmVzcG9uc2UiF4q1GAdzdWJqZWN0orUYCGF1ZGllbmNlEmgKEERlbGV0ZUNyZWRlbnRpYWwSNC5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiBoq1GAJpZBKtAQoYVmFsaWRhdGVDcmVkZW50aWFsQ29uZmlnEjwuZ2VzdGFsdC5wcm92aWRlci52MS5WYWxpZGF0ZUV4dGVybmFsQ3JlZGVudGlhbENvbmZpZ1JlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiO4q1GAhwcm92aWRlcoq1GApjb25uZWN0aW9uirUYDWNvbm5lY3Rpb25faWSKtRgEbW9kZYq1GARhdXRoEvgBChFSZXNvbHZlQ3JlZGVudGlhbBI1Lmdlc3RhbHQucHJvdmlkZXIudjEuUmVzb2x2ZUV4dGVybmFsQ3JlZGVudGlhbFJlcXVlc3QaNi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlc29sdmVFeHRlcm5hbENyZWRlbnRpYWxSZXNwb25zZSJ0irUYCHByb3ZpZGVyirUYCmNvbm5lY3Rpb26KtRgNY29ubmVjdGlvbl9pZIq1GARtb2RlirUYFWNyZWRlbnRpYWxfc3ViamVjdF9pZIq1GBBhY3Rvcl9zdWJqZWN0X2lkirUYCGluc3RhbmNlirUYBGF1dGgShgIKEkV4Y2hhbmdlQ3JlZGVudGlhbBI2Lmdlc3RhbHQucHJvdmlkZXIudjEuRXhjaGFuZ2VFeHRlcm5hbENyZWRlbnRpYWxSZXF1ZXN0GjcuZ2VzdGFsdC5wcm92aWRlci52MS5FeGNoYW5nZUV4dGVybmFsQ3JlZGVudGlhbFJlc3BvbnNlIn+KtRgIcHJvdmlkZXKKtRgKY29ubmVjdGlvboq1GA1jb25uZWN0aW9uX2lkirUYFWNyZWRlbnRpYWxfc3ViamVjdF9pZIq1GBBhY3Rvcl9zdWJqZWN0X2lkirUYCGluc3RhbmNlirUYD2NyZWRlbnRpYWxfanNvboq1GARhdXRoGhiKtRgUZXh0ZXJuYWxfY3JlZGVudGlhbHNiBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp, file_v1_annotations]);
+
+/**
+ * @generated from message gestalt.provider.v1.ExternalCredentialGrant
+ */
+export type ExternalCredentialGrant = Message<"gestalt.provider.v1.ExternalCredentialGrant"> & {
+  /**
+   * @generated from field: string access_token = 1;
+   */
+  accessToken: string;
+
+  /**
+   * @generated from field: string refresh_token = 2;
+   */
+  refreshToken: string;
+
+  /**
+   * @generated from field: string scope = 3;
+   */
+  scope: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp expires_at = 4;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp last_refreshed_at = 5;
+   */
+  lastRefreshedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: int32 refresh_error_count = 6;
+   */
+  refreshErrorCount: number;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExternalCredentialGrant.
+ * Use `create(ExternalCredentialGrantSchema)` to create a new message.
+ */
+export const ExternalCredentialGrantSchema: GenMessage<ExternalCredentialGrant> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 0);
+
+/**
+ * @generated from message gestalt.provider.v1.ExternalCredentialClientInfo
+ */
+export type ExternalCredentialClientInfo = Message<"gestalt.provider.v1.ExternalCredentialClientInfo"> & {
+  /**
+   * @generated from field: string client_id = 1;
+   */
+  clientId: string;
+
+  /**
+   * @generated from field: string client_secret = 2;
+   */
+  clientSecret: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp client_secret_expires_at = 3;
+   */
+  clientSecretExpiresAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExternalCredentialClientInfo.
+ * Use `create(ExternalCredentialClientInfoSchema)` to create a new message.
+ */
+export const ExternalCredentialClientInfoSchema: GenMessage<ExternalCredentialClientInfo> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 1);
+
+/**
+ * @generated from message gestalt.provider.v1.ExternalCredentialOpaque
+ */
+export type ExternalCredentialOpaque = Message<"gestalt.provider.v1.ExternalCredentialOpaque"> & {
+  /**
+   * @generated from field: map<string, string> fields = 1;
+   */
+  fields: { [key: string]: string };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ExternalCredentialOpaque.
+ * Use `create(ExternalCredentialOpaqueSchema)` to create a new message.
+ */
+export const ExternalCredentialOpaqueSchema: GenMessage<ExternalCredentialOpaque> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 2);
 
 /**
  * @generated from message gestalt.provider.v1.ExternalCredential
@@ -25,64 +111,57 @@ export type ExternalCredential = Message<"gestalt.provider.v1.ExternalCredential
   id: string;
 
   /**
-   * @generated from field: string subject_id = 2;
+   * @generated from field: string subject = 2;
    */
-  subjectId: string;
+  subject: string;
 
   /**
-   * @generated from field: string instance = 5;
+   * @generated from field: string audience = 3;
    */
-  instance: string;
+  audience: string;
 
   /**
-   * @generated from field: string access_token = 6;
+   * @generated from field: string qualifier = 4;
    */
-  accessToken: string;
+  qualifier: string;
 
   /**
-   * @generated from field: string refresh_token = 7;
+   * @generated from oneof gestalt.provider.v1.ExternalCredential.credential
    */
-  refreshToken: string;
+  credential: {
+    /**
+     * @generated from field: gestalt.provider.v1.ExternalCredentialGrant grant = 5;
+     */
+    value: ExternalCredentialGrant;
+    case: "grant";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ExternalCredentialClientInfo client = 6;
+     */
+    value: ExternalCredentialClientInfo;
+    case: "client";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.ExternalCredentialOpaque opaque = 7;
+     */
+    value: ExternalCredentialOpaque;
+    case: "opaque";
+  } | { case: undefined; value?: undefined };
 
   /**
-   * @generated from field: string scopes = 8;
-   */
-  scopes: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 9;
-   */
-  expiresAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp last_refreshed_at = 10;
-   */
-  lastRefreshedAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: int32 refresh_error_count = 11;
-   */
-  refreshErrorCount: number;
-
-  /**
-   * @generated from field: string metadata_json = 12;
+   * @generated from field: string metadata_json = 8;
    */
   metadataJson: string;
 
   /**
-   * @generated from field: google.protobuf.Timestamp created_at = 13;
+   * @generated from field: google.protobuf.Timestamp created_at = 9;
    */
   createdAt?: Timestamp | undefined;
 
   /**
-   * @generated from field: google.protobuf.Timestamp updated_at = 14;
+   * @generated from field: google.protobuf.Timestamp updated_at = 10;
    */
   updatedAt?: Timestamp | undefined;
-
-  /**
-   * @generated from field: string connection_id = 15;
-   */
-  connectionId: string;
 };
 
 /**
@@ -90,34 +169,24 @@ export type ExternalCredential = Message<"gestalt.provider.v1.ExternalCredential
  * Use `create(ExternalCredentialSchema)` to create a new message.
  */
 export const ExternalCredentialSchema: GenMessage<ExternalCredential> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 0);
+  messageDesc(file_v1_external_credential, 3);
 
 /**
- * @generated from message gestalt.provider.v1.ExternalCredentialLookup
+ * @generated from message gestalt.provider.v1.CreateExternalCredentialRequest
  */
-export type ExternalCredentialLookup = Message<"gestalt.provider.v1.ExternalCredentialLookup"> & {
+export type CreateExternalCredentialRequest = Message<"gestalt.provider.v1.CreateExternalCredentialRequest"> & {
   /**
-   * @generated from field: string subject_id = 1;
+   * @generated from field: gestalt.provider.v1.ExternalCredential credential = 1;
    */
-  subjectId: string;
-
-  /**
-   * @generated from field: string instance = 4;
-   */
-  instance: string;
-
-  /**
-   * @generated from field: string connection_id = 5;
-   */
-  connectionId: string;
+  credential?: ExternalCredential | undefined;
 };
 
 /**
- * Describes the message gestalt.provider.v1.ExternalCredentialLookup.
- * Use `create(ExternalCredentialLookupSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.CreateExternalCredentialRequest.
+ * Use `create(CreateExternalCredentialRequestSchema)` to create a new message.
  */
-export const ExternalCredentialLookupSchema: GenMessage<ExternalCredentialLookup> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 1);
+export const CreateExternalCredentialRequestSchema: GenMessage<CreateExternalCredentialRequest> = /*@__PURE__*/
+  messageDesc(file_v1_external_credential, 4);
 
 /**
  * @generated from message gestalt.provider.v1.UpsertExternalCredentialRequest
@@ -127,11 +196,6 @@ export type UpsertExternalCredentialRequest = Message<"gestalt.provider.v1.Upser
    * @generated from field: gestalt.provider.v1.ExternalCredential credential = 1;
    */
   credential?: ExternalCredential | undefined;
-
-  /**
-   * @generated from field: bool preserve_timestamps = 2;
-   */
-  preserveTimestamps: boolean;
 };
 
 /**
@@ -139,16 +203,26 @@ export type UpsertExternalCredentialRequest = Message<"gestalt.provider.v1.Upser
  * Use `create(UpsertExternalCredentialRequestSchema)` to create a new message.
  */
 export const UpsertExternalCredentialRequestSchema: GenMessage<UpsertExternalCredentialRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 2);
+  messageDesc(file_v1_external_credential, 5);
 
 /**
  * @generated from message gestalt.provider.v1.GetExternalCredentialRequest
  */
 export type GetExternalCredentialRequest = Message<"gestalt.provider.v1.GetExternalCredentialRequest"> & {
   /**
-   * @generated from field: gestalt.provider.v1.ExternalCredentialLookup lookup = 1;
+   * @generated from field: string subject = 1;
    */
-  lookup?: ExternalCredentialLookup | undefined;
+  subject: string;
+
+  /**
+   * @generated from field: string audience = 2;
+   */
+  audience: string;
+
+  /**
+   * @generated from field: string qualifier = 3;
+   */
+  qualifier: string;
 };
 
 /**
@@ -156,26 +230,21 @@ export type GetExternalCredentialRequest = Message<"gestalt.provider.v1.GetExter
  * Use `create(GetExternalCredentialRequestSchema)` to create a new message.
  */
 export const GetExternalCredentialRequestSchema: GenMessage<GetExternalCredentialRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 3);
+  messageDesc(file_v1_external_credential, 6);
 
 /**
  * @generated from message gestalt.provider.v1.ListExternalCredentialsRequest
  */
 export type ListExternalCredentialsRequest = Message<"gestalt.provider.v1.ListExternalCredentialsRequest"> & {
   /**
-   * @generated from field: string subject_id = 1;
+   * @generated from field: string subject = 1;
    */
-  subjectId: string;
+  subject: string;
 
   /**
-   * @generated from field: string instance = 4;
+   * @generated from field: string audience = 2;
    */
-  instance: string;
-
-  /**
-   * @generated from field: string connection_id = 5;
-   */
-  connectionId: string;
+  audience: string;
 };
 
 /**
@@ -183,7 +252,7 @@ export type ListExternalCredentialsRequest = Message<"gestalt.provider.v1.ListEx
  * Use `create(ListExternalCredentialsRequestSchema)` to create a new message.
  */
 export const ListExternalCredentialsRequestSchema: GenMessage<ListExternalCredentialsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 4);
+  messageDesc(file_v1_external_credential, 7);
 
 /**
  * @generated from message gestalt.provider.v1.ListExternalCredentialsResponse
@@ -200,7 +269,7 @@ export type ListExternalCredentialsResponse = Message<"gestalt.provider.v1.ListE
  * Use `create(ListExternalCredentialsResponseSchema)` to create a new message.
  */
 export const ListExternalCredentialsResponseSchema: GenMessage<ListExternalCredentialsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 5);
+  messageDesc(file_v1_external_credential, 8);
 
 /**
  * @generated from message gestalt.provider.v1.DeleteExternalCredentialRequest
@@ -217,7 +286,7 @@ export type DeleteExternalCredentialRequest = Message<"gestalt.provider.v1.Delet
  * Use `create(DeleteExternalCredentialRequestSchema)` to create a new message.
  */
 export const DeleteExternalCredentialRequestSchema: GenMessage<DeleteExternalCredentialRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 6);
+  messageDesc(file_v1_external_credential, 9);
 
 /**
  * @generated from message gestalt.provider.v1.ExternalCredentialTokenExchangeDriver
@@ -259,7 +328,7 @@ export type ExternalCredentialTokenExchangeDriver = Message<"gestalt.provider.v1
  * Use `create(ExternalCredentialTokenExchangeDriverSchema)` to create a new message.
  */
 export const ExternalCredentialTokenExchangeDriverSchema: GenMessage<ExternalCredentialTokenExchangeDriver> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 7);
+  messageDesc(file_v1_external_credential, 10);
 
 /**
  * @generated from message gestalt.provider.v1.ExternalCredentialAuthConfig
@@ -361,7 +430,7 @@ export type ExternalCredentialAuthConfig = Message<"gestalt.provider.v1.External
  * Use `create(ExternalCredentialAuthConfigSchema)` to create a new message.
  */
 export const ExternalCredentialAuthConfigSchema: GenMessage<ExternalCredentialAuthConfig> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 8);
+  messageDesc(file_v1_external_credential, 11);
 
 /**
  * @generated from message gestalt.provider.v1.ValidateExternalCredentialConfigRequest
@@ -403,7 +472,7 @@ export type ValidateExternalCredentialConfigRequest = Message<"gestalt.provider.
  * Use `create(ValidateExternalCredentialConfigRequestSchema)` to create a new message.
  */
 export const ValidateExternalCredentialConfigRequestSchema: GenMessage<ValidateExternalCredentialConfigRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 9);
+  messageDesc(file_v1_external_credential, 12);
 
 /**
  * @generated from message gestalt.provider.v1.ResolveExternalCredentialRequest
@@ -460,7 +529,7 @@ export type ResolveExternalCredentialRequest = Message<"gestalt.provider.v1.Reso
  * Use `create(ResolveExternalCredentialRequestSchema)` to create a new message.
  */
 export const ResolveExternalCredentialRequestSchema: GenMessage<ResolveExternalCredentialRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 10);
+  messageDesc(file_v1_external_credential, 13);
 
 /**
  * @generated from message gestalt.provider.v1.ResolveExternalCredentialResponse
@@ -497,7 +566,7 @@ export type ResolveExternalCredentialResponse = Message<"gestalt.provider.v1.Res
  * Use `create(ResolveExternalCredentialResponseSchema)` to create a new message.
  */
 export const ResolveExternalCredentialResponseSchema: GenMessage<ResolveExternalCredentialResponse> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 11);
+  messageDesc(file_v1_external_credential, 14);
 
 /**
  * @generated from message gestalt.provider.v1.ExternalCredentialTokenResponse
@@ -539,7 +608,7 @@ export type ExternalCredentialTokenResponse = Message<"gestalt.provider.v1.Exter
  * Use `create(ExternalCredentialTokenResponseSchema)` to create a new message.
  */
 export const ExternalCredentialTokenResponseSchema: GenMessage<ExternalCredentialTokenResponse> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 12);
+  messageDesc(file_v1_external_credential, 15);
 
 /**
  * @generated from message gestalt.provider.v1.ExchangeExternalCredentialRequest
@@ -596,7 +665,7 @@ export type ExchangeExternalCredentialRequest = Message<"gestalt.provider.v1.Exc
  * Use `create(ExchangeExternalCredentialRequestSchema)` to create a new message.
  */
 export const ExchangeExternalCredentialRequestSchema: GenMessage<ExchangeExternalCredentialRequest> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 13);
+  messageDesc(file_v1_external_credential, 16);
 
 /**
  * @generated from message gestalt.provider.v1.ExchangeExternalCredentialResponse
@@ -613,12 +682,20 @@ export type ExchangeExternalCredentialResponse = Message<"gestalt.provider.v1.Ex
  * Use `create(ExchangeExternalCredentialResponseSchema)` to create a new message.
  */
 export const ExchangeExternalCredentialResponseSchema: GenMessage<ExchangeExternalCredentialResponse> = /*@__PURE__*/
-  messageDesc(file_v1_external_credential, 14);
+  messageDesc(file_v1_external_credential, 17);
 
 /**
  * @generated from service gestalt.provider.v1.ExternalCredentials
  */
 export const ExternalCredentials: GenService<{
+  /**
+   * @generated from rpc gestalt.provider.v1.ExternalCredentials.CreateCredential
+   */
+  createCredential: {
+    methodKind: "unary";
+    input: typeof CreateExternalCredentialRequestSchema;
+    output: typeof ExternalCredentialSchema;
+  },
   /**
    * @generated from rpc gestalt.provider.v1.ExternalCredentials.UpsertCredential
    */

@@ -61,34 +61,54 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.ExternalCredential
 	return &remoteExternalCredentialProvider{client: client, closer: proc}, nil
 }
 
-func (r *remoteExternalCredentialProvider) PutCredential(ctx context.Context, credential *core.ExternalCredential) error {
-	value, err := r.upsertCredential(ctx, credential, false)
-	if err != nil {
-		return err
+func (r *remoteExternalCredentialProvider) CreateCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	if credential == nil {
+		return fmt.Errorf("external credential is required")
 	}
-	*credential = *value
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+
+	resp, err := r.client.CreateCredential(ctx, &proto.CreateExternalCredentialRequest{
+		Credential: externalCredentialToProto(credential),
+	})
+	if err != nil {
+		return externalCredentialRPCError("create external credential", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("create external credential: provider returned nil credential")
+	}
+	*credential = *externalCredentialFromProto(resp)
 	return nil
 }
 
-func (r *remoteExternalCredentialProvider) RestoreCredential(ctx context.Context, credential *core.ExternalCredential) error {
-	value, err := r.upsertCredential(ctx, credential, true)
-	if err != nil {
-		return err
+func (r *remoteExternalCredentialProvider) UpsertCredential(ctx context.Context, credential *core.ExternalCredential) error {
+	if credential == nil {
+		return fmt.Errorf("external credential is required")
 	}
-	*credential = *value
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+
+	resp, err := r.client.UpsertCredential(ctx, &proto.UpsertExternalCredentialRequest{
+		Credential: externalCredentialToProto(credential),
+	})
+	if err != nil {
+		return fmt.Errorf("upsert external credential: %w", err)
+	}
+	if resp == nil {
+		return fmt.Errorf("upsert external credential: provider returned nil credential")
+	}
+	*credential = *externalCredentialFromProto(resp)
 	return nil
 }
 
-func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, subjectID, connectionID, instance string) (*core.ExternalCredential, error) {
+func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, subject, audience, qualifier string) (*core.ExternalCredential, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
 	resp, err := r.client.GetCredential(ctx, &proto.GetExternalCredentialRequest{
-		Lookup: &proto.ExternalCredentialLookup{
-			SubjectId:    strings.TrimSpace(subjectID),
-			ConnectionId: strings.TrimSpace(connectionID),
-			Instance:     strings.TrimSpace(instance),
-		},
+		Subject:   strings.TrimSpace(subject),
+		Audience:  strings.TrimSpace(audience),
+		Qualifier: strings.TrimSpace(qualifier),
 	})
 	if err != nil {
 		return nil, externalCredentialRPCError("get external credential", err)
@@ -99,16 +119,10 @@ func (r *remoteExternalCredentialProvider) GetCredential(ctx context.Context, su
 	return externalCredentialFromProto(resp), nil
 }
 
-func (r *remoteExternalCredentialProvider) ListCredentials(ctx context.Context, subjectID string) ([]*core.ExternalCredential, error) {
+func (r *remoteExternalCredentialProvider) ListCredentials(ctx context.Context, subject, audience string) ([]*core.ExternalCredential, error) {
 	return r.listCredentials(ctx, &proto.ListExternalCredentialsRequest{
-		SubjectId: strings.TrimSpace(subjectID),
-	})
-}
-
-func (r *remoteExternalCredentialProvider) ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) ([]*core.ExternalCredential, error) {
-	return r.listCredentials(ctx, &proto.ListExternalCredentialsRequest{
-		SubjectId:    strings.TrimSpace(subjectID),
-		ConnectionId: strings.TrimSpace(connectionID),
+		Subject:  strings.TrimSpace(subject),
+		Audience: strings.TrimSpace(audience),
 	})
 }
 
@@ -174,26 +188,6 @@ func (r *remoteExternalCredentialProvider) Close() error {
 	return r.closer.Close()
 }
 
-func (r *remoteExternalCredentialProvider) upsertCredential(ctx context.Context, credential *core.ExternalCredential, preserveTimestamps bool) (*core.ExternalCredential, error) {
-	if credential == nil {
-		return nil, fmt.Errorf("external credential is required")
-	}
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-
-	resp, err := r.client.UpsertCredential(ctx, &proto.UpsertExternalCredentialRequest{
-		Credential:         externalCredentialToProto(credential),
-		PreserveTimestamps: preserveTimestamps,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("upsert external credential: %w", err)
-	}
-	if resp == nil {
-		return nil, fmt.Errorf("upsert external credential: provider returned nil credential")
-	}
-	return externalCredentialFromProto(resp), nil
-}
-
 func (r *remoteExternalCredentialProvider) listCredentials(ctx context.Context, req *proto.ListExternalCredentialsRequest) ([]*core.ExternalCredential, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
@@ -216,21 +210,37 @@ func externalCredentialToProto(credential *core.ExternalCredential) *proto.Exter
 	if credential == nil {
 		return nil
 	}
-	return &proto.ExternalCredential{
-		Id:                credential.ID,
-		SubjectId:         strings.TrimSpace(credential.SubjectID),
-		ConnectionId:      strings.TrimSpace(credential.ConnectionID),
-		Instance:          strings.TrimSpace(credential.Instance),
-		AccessToken:       credential.AccessToken,
-		RefreshToken:      credential.RefreshToken,
-		Scopes:            credential.Scopes,
-		ExpiresAt:         timeToProto(credential.ExpiresAt),
-		LastRefreshedAt:   timeToProto(credential.LastRefreshedAt),
-		RefreshErrorCount: int32(credential.RefreshErrorCount),
-		MetadataJson:      credential.MetadataJSON,
-		CreatedAt:         timeToProto(nonZeroTimePtr(credential.CreatedAt)),
-		UpdatedAt:         timeToProto(nonZeroTimePtr(credential.UpdatedAt)),
+	out := &proto.ExternalCredential{
+		Id:           credential.ID,
+		Subject:      strings.TrimSpace(credential.Subject),
+		Audience:     strings.TrimSpace(credential.Audience),
+		Qualifier:    strings.TrimSpace(credential.Qualifier),
+		MetadataJson: credential.MetadataJSON,
+		CreatedAt:    timeToProto(nonZeroTimePtr(credential.CreatedAt)),
+		UpdatedAt:    timeToProto(nonZeroTimePtr(credential.UpdatedAt)),
 	}
+	switch {
+	case credential.Grant != nil:
+		out.Credential = &proto.ExternalCredential_Grant{Grant: &proto.ExternalCredentialGrant{
+			AccessToken:       credential.Grant.AccessToken,
+			RefreshToken:      credential.Grant.RefreshToken,
+			Scope:             credential.Grant.Scope,
+			ExpiresAt:         timeToProto(credential.Grant.ExpiresAt),
+			LastRefreshedAt:   timeToProto(credential.Grant.LastRefreshedAt),
+			RefreshErrorCount: int32(credential.Grant.RefreshErrorCount),
+		}}
+	case credential.Client != nil:
+		out.Credential = &proto.ExternalCredential_Client{Client: &proto.ExternalCredentialClientInfo{
+			ClientId:              credential.Client.ClientID,
+			ClientSecret:          credential.Client.ClientSecret,
+			ClientSecretExpiresAt: timeToProto(credential.Client.ClientSecretExpiresAt),
+		}}
+	case credential.Opaque != nil:
+		out.Credential = &proto.ExternalCredential_Opaque{Opaque: &proto.ExternalCredentialOpaque{
+			Fields: cloneStringMap(credential.Opaque.Fields),
+		}}
+	}
+	return out
 }
 
 func validateCredentialConfigToProto(req *core.ValidateExternalCredentialConfigRequest) *proto.ValidateExternalCredentialConfigRequest {
@@ -433,27 +443,45 @@ func externalCredentialFromProto(credential *proto.ExternalCredential) *core.Ext
 	if credential == nil {
 		return nil
 	}
-	return &core.ExternalCredential{
-		ID:                strings.TrimSpace(credential.GetId()),
-		SubjectID:         strings.TrimSpace(credential.GetSubjectId()),
-		ConnectionID:      strings.TrimSpace(credential.GetConnectionId()),
-		Instance:          strings.TrimSpace(credential.GetInstance()),
-		AccessToken:       credential.GetAccessToken(),
-		RefreshToken:      credential.GetRefreshToken(),
-		Scopes:            credential.GetScopes(),
-		ExpiresAt:         timeFromProto(credential.GetExpiresAt()),
-		LastRefreshedAt:   timeFromProto(credential.GetLastRefreshedAt()),
-		RefreshErrorCount: int(credential.GetRefreshErrorCount()),
-		MetadataJSON:      credential.GetMetadataJson(),
-		CreatedAt:         derefTime(timeFromProto(credential.GetCreatedAt())),
-		UpdatedAt:         derefTime(timeFromProto(credential.GetUpdatedAt())),
+	out := &core.ExternalCredential{
+		ID:           strings.TrimSpace(credential.GetId()),
+		Subject:      strings.TrimSpace(credential.GetSubject()),
+		Audience:     strings.TrimSpace(credential.GetAudience()),
+		Qualifier:    strings.TrimSpace(credential.GetQualifier()),
+		MetadataJSON: credential.GetMetadataJson(),
+		CreatedAt:    derefTime(timeFromProto(credential.GetCreatedAt())),
+		UpdatedAt:    derefTime(timeFromProto(credential.GetUpdatedAt())),
 	}
+	switch value := credential.GetCredential().(type) {
+	case *proto.ExternalCredential_Grant:
+		out.Grant = &core.ExternalCredentialGrant{
+			AccessToken:       value.Grant.GetAccessToken(),
+			RefreshToken:      value.Grant.GetRefreshToken(),
+			Scope:             value.Grant.GetScope(),
+			ExpiresAt:         timeFromProto(value.Grant.GetExpiresAt()),
+			LastRefreshedAt:   timeFromProto(value.Grant.GetLastRefreshedAt()),
+			RefreshErrorCount: int(value.Grant.GetRefreshErrorCount()),
+		}
+	case *proto.ExternalCredential_Client:
+		out.Client = &core.ExternalCredentialClientInfo{
+			ClientID:              value.Client.GetClientId(),
+			ClientSecret:          value.Client.GetClientSecret(),
+			ClientSecretExpiresAt: timeFromProto(value.Client.GetClientSecretExpiresAt()),
+		}
+	case *proto.ExternalCredential_Opaque:
+		out.Opaque = &core.ExternalCredentialOpaque{
+			Fields: cloneStringMap(value.Opaque.GetFields()),
+		}
+	}
+	return out
 }
 
 func externalCredentialRPCError(operation string, err error) error {
 	switch status.Code(err) {
 	case codes.NotFound:
 		return core.ErrNotFound
+	case codes.AlreadyExists:
+		return core.ErrAlreadyExists
 	case codes.Unauthenticated:
 		return fmt.Errorf("%w: %s", core.ErrReconnectRequired, status.Convert(err).Message())
 	case codes.FailedPrecondition:

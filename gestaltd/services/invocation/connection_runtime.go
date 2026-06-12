@@ -21,14 +21,18 @@ type ConnectionRuntimeCredentialSource interface {
 // ConnectionRuntimeInfo describes connection material that is resolved after an
 // operation selects its concrete connection.
 type ConnectionRuntimeInfo struct {
-	ConnectionID      string
-	Mode              core.ConnectionMode
-	AuthType          providermanifestv1.AuthType
-	AuthConfig        core.ExternalCredentialAuthConfig
-	TokenSource       ConnectionRuntimeCredentialSource
-	AuthMapping       *providermanifestv1.AuthMapping
-	Params            map[string]string
-	CredentialRefresh *providermanifestv1.CredentialRefreshConfig
+	ConnectionID string
+	Mode         core.ConnectionMode
+	AuthType     providermanifestv1.AuthType
+	AuthConfig   core.ExternalCredentialAuthConfig
+	// AuthConfigResolver, when set, supersedes AuthConfig at resolve time.
+	// mcp_oauth connections discover their token endpoint and registered
+	// client per call instead of carrying them in static config.
+	AuthConfigResolver func(ctx context.Context) (core.ExternalCredentialAuthConfig, error)
+	TokenSource        ConnectionRuntimeCredentialSource
+	AuthMapping        *providermanifestv1.AuthMapping
+	Params             map[string]string
+	CredentialRefresh  *providermanifestv1.CredentialRefreshConfig
 }
 
 // ConnectionRuntimeResolver resolves runtime metadata for a provider

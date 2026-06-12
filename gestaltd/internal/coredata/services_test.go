@@ -418,18 +418,14 @@ func TestExternalCredentialProvider(t *testing.T) {
 		expires := time.Now().Add(time.Hour).Truncate(time.Second)
 		token := &core.ExternalCredential{
 			ID:           "tok-1",
-			SubjectID:    principal.UserSubjectID(user.ID),
-			Integration:  "test-svc",
-			Connection:   "default",
-			Instance:     "inst-1",
-			AccessToken:  "access-secret",
-			RefreshToken: "refresh-secret",
-			Scopes:       "read,write",
-			ExpiresAt:    &expires,
+			Subject:      principal.UserSubjectID(user.ID),
+			Audience:     "test-svc:default",
+			Qualifier:    "inst-1",
+			Grant:        &core.ExternalCredentialGrant{AccessToken: "access-secret", RefreshToken: "refresh-secret", Scope: "read,write", ExpiresAt: &expires},
 			MetadataJSON: `{"key":"val"}`,
 		}
-		if err := svc.ExternalCredentials.PutCredential(ctx, token); err != nil {
-			t.Fatalf("PutCredential: %v", err)
+		if err := svc.ExternalCredentials.UpsertCredential(ctx, token); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
 		}
 
 		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "test-svc:default", "inst-1")
@@ -439,14 +435,17 @@ func TestExternalCredentialProvider(t *testing.T) {
 		if got.ID != "tok-1" {
 			t.Errorf("ID = %q, want %q", got.ID, "tok-1")
 		}
-		if got.AccessToken != "access-secret" {
-			t.Errorf("AccessToken = %q, want %q", got.AccessToken, "access-secret")
+		if got.Grant == nil {
+			t.Fatal("Grant = nil, want stored grant")
 		}
-		if got.RefreshToken != "refresh-secret" {
-			t.Errorf("RefreshToken = %q, want %q", got.RefreshToken, "refresh-secret")
+		if got.Grant.AccessToken != "access-secret" {
+			t.Errorf("AccessToken = %q, want %q", got.Grant.AccessToken, "access-secret")
 		}
-		if got.Scopes != "read,write" {
-			t.Errorf("Scopes = %q, want %q", got.Scopes, "read,write")
+		if got.Grant.RefreshToken != "refresh-secret" {
+			t.Errorf("RefreshToken = %q, want %q", got.Grant.RefreshToken, "refresh-secret")
+		}
+		if got.Grant.Scope != "read,write" {
+			t.Errorf("Scope = %q, want %q", got.Grant.Scope, "read,write")
 		}
 		if got.MetadataJSON != `{"key":"val"}` {
 			t.Errorf("MetadataJSON = %q, want %q", got.MetadataJSON, `{"key":"val"}`)
@@ -472,16 +471,34 @@ func TestExternalCredentialProvider(t *testing.T) {
 		userB := mustCreateUser(t, svc, "bob@test.com")
 
 		for _, tok := range []*core.ExternalCredential{
-			{ID: "tok-a1", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a1", RefreshToken: "r1"},
-			{ID: "tok-a2", SubjectID: principal.UserSubjectID(userA.ID), Integration: "svc-b", Connection: "default", Instance: "i2", AccessToken: "a2", RefreshToken: "r2"},
-			{ID: "tok-b1", SubjectID: principal.UserSubjectID(userB.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a3", RefreshToken: "r3"},
+			{
+				ID:        "tok-a1",
+				Subject:   principal.UserSubjectID(userA.ID),
+				Audience:  "svc-a:default",
+				Qualifier: "i1",
+				Grant:     &core.ExternalCredentialGrant{AccessToken: "a1", RefreshToken: "r1"},
+			},
+			{
+				ID:        "tok-a2",
+				Subject:   principal.UserSubjectID(userA.ID),
+				Audience:  "svc-b:default",
+				Qualifier: "i2",
+				Grant:     &core.ExternalCredentialGrant{AccessToken: "a2", RefreshToken: "r2"},
+			},
+			{
+				ID:        "tok-b1",
+				Subject:   principal.UserSubjectID(userB.ID),
+				Audience:  "svc-a:default",
+				Qualifier: "i1",
+				Grant:     &core.ExternalCredentialGrant{AccessToken: "a3", RefreshToken: "r3"},
+			},
 		} {
-			if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
-				t.Fatalf("PutCredential(%s): %v", tok.ID, err)
+			if err := svc.ExternalCredentials.UpsertCredential(ctx, tok); err != nil {
+				t.Fatalf("UpsertCredential(%s): %v", tok.ID, err)
 			}
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(userA.ID))
+		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(userA.ID), "")
 		if err != nil {
 			t.Fatalf("ListCredentials: %v", err)
 		}
@@ -490,50 +507,43 @@ func TestExternalCredentialProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("ListCredentialsForProvider", func(t *testing.T) {
+	t.Run("ListCredentials_by_audience", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		for _, tok := range []*core.ExternalCredential{
-			{ID: "tok-1", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
-			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-a", Connection: "default", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
-			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc-b", Connection: "default", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
+			{
+				ID:        "tok-1",
+				Subject:   principal.UserSubjectID(user.ID),
+				Audience:  "svc:conn-a",
+				Qualifier: "i1",
+				Grant:     &core.ExternalCredentialGrant{AccessToken: "a", RefreshToken: "r"},
+			},
+			{
+				ID:        "tok-2",
+				Subject:   principal.UserSubjectID(user.ID),
+				Audience:  "svc:conn-a",
+				Qualifier: "i2",
+				Grant:     &core.ExternalCredentialGrant{AccessToken: "b", RefreshToken: "s"},
+			},
+			{
+				ID:        "tok-3",
+				Subject:   principal.UserSubjectID(user.ID),
+				Audience:  "svc:conn-b",
+				Qualifier: "i1",
+				Grant:     &core.ExternalCredentialGrant{AccessToken: "c", RefreshToken: "u"},
+			},
 		} {
-			if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
-				t.Fatalf("PutCredential(%s): %v", tok.ID, err)
+			if err := svc.ExternalCredentials.UpsertCredential(ctx, tok); err != nil {
+				t.Fatalf("UpsertCredential(%s): %v", tok.ID, err)
 			}
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc-a:default")
+		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(user.ID), "svc:conn-a")
 		if err != nil {
-			t.Fatalf("ListCredentialsForProvider: %v", err)
-		}
-		if len(tokens) != 2 {
-			t.Fatalf("got %d tokens, want 2", len(tokens))
-		}
-	})
-
-	t.Run("ListCredentialsForConnection", func(t *testing.T) {
-		t.Parallel()
-		svc := newTestServices(t)
-		ctx := context.Background()
-
-		user := mustCreateUser(t, svc, "alice@test.com")
-		for _, tok := range []*core.ExternalCredential{
-			{ID: "tok-1", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i1", AccessToken: "a", RefreshToken: "r"},
-			{ID: "tok-2", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-a", Instance: "i2", AccessToken: "b", RefreshToken: "s"},
-			{ID: "tok-3", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc", Connection: "conn-b", Instance: "i1", AccessToken: "c", RefreshToken: "u"},
-		} {
-			if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
-				t.Fatalf("PutCredential(%s): %v", tok.ID, err)
-			}
-		}
-
-		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc:conn-a")
-		if err != nil {
-			t.Fatalf("ListCredentialsForConnection: %v", err)
+			t.Fatalf("ListCredentials: %v", err)
 		}
 		if len(tokens) != 2 {
 			t.Fatalf("got %d tokens, want 2", len(tokens))
@@ -547,12 +557,14 @@ func TestExternalCredentialProvider(t *testing.T) {
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		tok := &core.ExternalCredential{
-			ID: "tok-del", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc",
-			Connection: "default", Instance: "i1",
-			AccessToken: "a", RefreshToken: "r",
+			ID:        "tok-del",
+			Subject:   principal.UserSubjectID(user.ID),
+			Audience:  "svc:default",
+			Qualifier: "i1",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "a", RefreshToken: "r"},
 		}
-		if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
-			t.Fatalf("PutCredential: %v", err)
+		if err := svc.ExternalCredentials.UpsertCredential(ctx, tok); err != nil {
+			t.Fatalf("UpsertCredential: %v", err)
 		}
 
 		if err := svc.ExternalCredentials.DeleteCredential(ctx, "tok-del"); err != nil {
@@ -574,25 +586,27 @@ func TestExternalCredentialProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("PutCredential_upsert", func(t *testing.T) {
+	t.Run("UpsertCredential_replaces_existing", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
 		ctx := context.Background()
 
 		user := mustCreateUser(t, svc, "alice@test.com")
 		tok := &core.ExternalCredential{
-			ID: "tok-upsert", SubjectID: principal.UserSubjectID(user.ID), Integration: "svc",
-			Connection: "default", Instance: "i1",
-			AccessToken: "original", RefreshToken: "r",
+			ID:        "tok-upsert",
+			Subject:   principal.UserSubjectID(user.ID),
+			Audience:  "svc:default",
+			Qualifier: "i1",
+			Grant:     &core.ExternalCredentialGrant{AccessToken: "original", RefreshToken: "r"},
 		}
-		if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
-			t.Fatalf("first PutCredential: %v", err)
+		if err := svc.ExternalCredentials.UpsertCredential(ctx, tok); err != nil {
+			t.Fatalf("first UpsertCredential: %v", err)
 		}
 
 		tok.ID = "tok-upsert-replacement"
-		tok.AccessToken = "updated"
-		if err := svc.ExternalCredentials.PutCredential(ctx, tok); err != nil {
-			t.Fatalf("second PutCredential: %v", err)
+		tok.Grant.AccessToken = "updated"
+		if err := svc.ExternalCredentials.UpsertCredential(ctx, tok); err != nil {
+			t.Fatalf("second UpsertCredential: %v", err)
 		}
 
 		got, err := svc.ExternalCredentials.GetCredential(ctx, principal.UserSubjectID(user.ID), "svc:default", "i1")
@@ -602,13 +616,13 @@ func TestExternalCredentialProvider(t *testing.T) {
 		if got.ID != "tok-upsert" {
 			t.Errorf("ID = %q, want %q", got.ID, "tok-upsert")
 		}
-		if got.AccessToken != "updated" {
-			t.Errorf("AccessToken = %q, want %q", got.AccessToken, "updated")
+		if got.Grant == nil || got.Grant.AccessToken != "updated" {
+			t.Errorf("Grant = %+v, want access token %q", got.Grant, "updated")
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentialsForConnection(ctx, principal.UserSubjectID(user.ID), "svc:default")
+		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(user.ID), "svc:default")
 		if err != nil {
-			t.Fatalf("ListCredentialsForConnection: %v", err)
+			t.Fatalf("ListCredentials: %v", err)
 		}
 		if len(tokens) != 1 {
 			t.Fatalf("got %d tokens, want 1", len(tokens))
@@ -629,14 +643,12 @@ func TestExternalCredentialProvider(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				errs[idx] = svc.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-					ID:           fmt.Sprintf("tok-%d", idx),
-					SubjectID:    principal.UserSubjectID(user.ID),
-					Integration:  "svc",
-					Connection:   "default",
-					Instance:     fmt.Sprintf("inst-%d", idx),
-					AccessToken:  "access",
-					RefreshToken: "refresh",
+				errs[idx] = svc.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
+					ID:        fmt.Sprintf("tok-%d", idx),
+					Subject:   principal.UserSubjectID(user.ID),
+					Audience:  "svc:default",
+					Qualifier: fmt.Sprintf("inst-%d", idx),
+					Grant:     &core.ExternalCredentialGrant{AccessToken: "access", RefreshToken: "refresh"},
 				})
 			}(i)
 		}
@@ -648,7 +660,7 @@ func TestExternalCredentialProvider(t *testing.T) {
 			}
 		}
 
-		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(user.ID))
+		tokens, err := svc.ExternalCredentials.ListCredentials(ctx, principal.UserSubjectID(user.ID), "")
 		if err != nil {
 			t.Fatalf("ListCredentials: %v", err)
 		}

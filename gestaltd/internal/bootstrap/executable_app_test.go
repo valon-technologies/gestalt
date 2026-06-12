@@ -2516,14 +2516,13 @@ func TestHybridDeclarativeExecutableProviderUsesNamedDefaultConnectionForPluginO
 
 	services := testutil.NewStubServices(t)
 	subjectID := principal.UserSubjectID("u-hybrid")
-	if err := services.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		SubjectID:   subjectID,
-		Integration: "hybrid",
-		Connection:  "default",
-		Instance:    "default",
-		AccessToken: "tok-default",
+	if err := services.ExternalCredentials.UpsertCredential(context.Background(), &core.ExternalCredential{
+		Subject:   subjectID,
+		Audience:  "hybrid:default",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "tok-default"},
 	}); err != nil {
-		t.Fatalf("PutCredential(default): %v", err)
+		t.Fatalf("UpsertCredential(default): %v", err)
 	}
 
 	result, err := invocation.NewBroker(providers, services.Users, services.ExternalCredentials).Invoke(
@@ -3020,15 +3019,16 @@ func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx cont
 func storeNestedInvokeTokenForSubject(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, subjectID, plugin, connection, instance string) {
 	t.Helper()
 
-	if err := harness.services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		SubjectID:    subjectID,
-		Integration:  plugin,
-		Connection:   connection,
-		Instance:     instance,
-		AccessToken:  plugin + "-" + connection + "-token",
-		RefreshToken: "refresh-token",
+	if err := harness.services.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
+		Subject:   subjectID,
+		Audience:  plugin + ":" + connection,
+		Qualifier: instance,
+		Grant: &core.ExternalCredentialGrant{
+			AccessToken:  plugin + "-" + connection + "-token",
+			RefreshToken: "refresh-token",
+		},
 	}); err != nil {
-		t.Fatalf("PutCredential(%s,%s,%s): %v", plugin, connection, instance, err)
+		t.Fatalf("UpsertCredential(%s,%s,%s): %v", plugin, connection, instance, err)
 	}
 }
 

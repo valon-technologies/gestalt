@@ -22,6 +22,11 @@ from ._grpc_transport import (
 
 
 @dataclass(frozen=True, slots=True)
+class CreateExternalCredentialRequest:
+    credential: ExternalCredential | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DeleteExternalCredentialRequest:
     id: str = ""
 
@@ -45,20 +50,38 @@ class ExchangeExternalCredentialResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class ExternalCredentialCredentialGrant:
+    value: ExternalCredentialGrant
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalCredentialCredentialClient:
+    value: ExternalCredentialClientInfo
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalCredentialCredentialOpaque:
+    value: ExternalCredentialOpaque
+
+
+ExternalCredentialCredential = (
+    ExternalCredentialCredentialGrant
+    | ExternalCredentialCredentialClient
+    | ExternalCredentialCredentialOpaque
+    | None
+)
+
+
+@dataclass(frozen=True, slots=True)
 class ExternalCredential:
     id: str = ""
-    subject_id: str = ""
-    instance: str = ""
-    access_token: str = ""
-    refresh_token: str = ""
-    scopes: str = ""
-    expires_at: datetime.datetime | None = None
-    last_refreshed_at: datetime.datetime | None = None
-    refresh_error_count: int = 0
+    subject: str = ""
+    audience: str = ""
+    qualifier: str = ""
     metadata_json: str = ""
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
-    connection_id: str = ""
+    credential: ExternalCredentialCredential = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,10 +109,25 @@ class ExternalCredentialAuthConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalCredentialLookup:
-    subject_id: str = ""
-    instance: str = ""
-    connection_id: str = ""
+class ExternalCredentialClientInfo:
+    client_id: str = ""
+    client_secret: str = ""
+    client_secret_expires_at: datetime.datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalCredentialGrant:
+    access_token: str = ""
+    refresh_token: str = ""
+    scope: str = ""
+    expires_at: datetime.datetime | None = None
+    last_refreshed_at: datetime.datetime | None = None
+    refresh_error_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalCredentialOpaque:
+    fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,14 +152,15 @@ class ExternalCredentialTokenResponse:
 
 @dataclass(frozen=True, slots=True)
 class GetExternalCredentialRequest:
-    lookup: ExternalCredentialLookup | None = None
+    subject: str = ""
+    audience: str = ""
+    qualifier: str = ""
 
 
 @dataclass(frozen=True, slots=True)
 class ListExternalCredentialsRequest:
-    subject_id: str = ""
-    instance: str = ""
-    connection_id: str = ""
+    subject: str = ""
+    audience: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,7 +193,6 @@ class ResolveExternalCredentialResponse:
 @dataclass(frozen=True, slots=True)
 class UpsertExternalCredentialRequest:
     credential: ExternalCredential | None = None
-    preserve_timestamps: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,30 +229,52 @@ class ExternalCredentials:
         return cls(channel, timeout=timeout)
 
     @overload
+    def create_credential(
+        self, request: CreateExternalCredentialRequest
+    ) -> ExternalCredential: ...
+
+    @overload
+    def create_credential(
+        self, *, credential: ExternalCredential | None = ...
+    ) -> ExternalCredential: ...
+
+    def create_credential(
+        self,
+        request: CreateExternalCredentialRequest | None = None,
+        *,
+        credential: ExternalCredential | None = None,
+    ) -> ExternalCredential:
+        if request is None:
+            request = CreateExternalCredentialRequest(credential=credential)
+        elif credential is not None:
+            raise ValueError("pass either request or keyword arguments, not both")
+        response = _support.call_unary(
+            lambda: self._stub.CreateCredential(
+                _codec.to_wire_create_external_credential_request(request),
+                timeout=self._timeout,
+            )
+        )
+        return _codec.from_wire_external_credential(response)
+
+    @overload
     def upsert_credential(
         self, request: UpsertExternalCredentialRequest
     ) -> ExternalCredential: ...
 
     @overload
     def upsert_credential(
-        self,
-        *,
-        preserve_timestamps: bool = ...,
-        credential: ExternalCredential | None = ...,
+        self, *, credential: ExternalCredential | None = ...
     ) -> ExternalCredential: ...
 
     def upsert_credential(
         self,
         request: UpsertExternalCredentialRequest | None = None,
         *,
-        preserve_timestamps: bool | None = None,
         credential: ExternalCredential | None = None,
     ) -> ExternalCredential:
         if request is None:
-            request = UpsertExternalCredentialRequest(
-                preserve_timestamps=preserve_timestamps or False, credential=credential
-            )
-        elif preserve_timestamps is not None or credential is not None:
+            request = UpsertExternalCredentialRequest(credential=credential)
+        elif credential is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.UpsertCredential(
@@ -231,18 +291,24 @@ class ExternalCredentials:
 
     @overload
     def get_credential(
-        self, *, lookup: ExternalCredentialLookup | None = ...
+        self, *, subject: str = ..., audience: str = ..., qualifier: str = ...
     ) -> ExternalCredential: ...
 
     def get_credential(
         self,
         request: GetExternalCredentialRequest | None = None,
         *,
-        lookup: ExternalCredentialLookup | None = None,
+        subject: str | None = None,
+        audience: str | None = None,
+        qualifier: str | None = None,
     ) -> ExternalCredential:
         if request is None:
-            request = GetExternalCredentialRequest(lookup=lookup)
-        elif lookup is not None:
+            request = GetExternalCredentialRequest(
+                subject=subject or "",
+                audience=audience or "",
+                qualifier=qualifier or "",
+            )
+        elif subject is not None or audience is not None or qualifier is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _support.call_unary(
             lambda: self._stub.GetCredential(
@@ -259,26 +325,21 @@ class ExternalCredentials:
 
     @overload
     def list_credentials(
-        self, *, subject_id: str = ..., instance: str = ..., connection_id: str = ...
+        self, *, subject: str = ..., audience: str = ...
     ) -> list[ExternalCredential]: ...
 
     def list_credentials(
         self,
         request: ListExternalCredentialsRequest | None = None,
         *,
-        subject_id: str | None = None,
-        instance: str | None = None,
-        connection_id: str | None = None,
+        subject: str | None = None,
+        audience: str | None = None,
     ) -> list[ExternalCredential]:
         if request is None:
             request = ListExternalCredentialsRequest(
-                subject_id=subject_id or "",
-                instance=instance or "",
-                connection_id=connection_id or "",
+                subject=subject or "", audience=audience or ""
             )
-        elif (
-            subject_id is not None or instance is not None or connection_id is not None
-        ):
+        elif subject is not None or audience is not None:
             raise ValueError("pass either request or keyword arguments, not both")
         response = _codec.from_wire_list_external_credentials_response(
             _support.call_unary(

@@ -4,21 +4,32 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 )
 
+func newRemoteProvider(t *testing.T, provider core.ExternalCredentialProvider) *remoteExternalCredentialProvider {
+	t.Helper()
+
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
+	})
+	return &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+}
+
 type wrappedNotFoundExternalCredentialProvider struct{}
 
-func (*wrappedNotFoundExternalCredentialProvider) PutCredential(context.Context, *core.ExternalCredential) error {
+func (*wrappedNotFoundExternalCredentialProvider) CreateCredential(context.Context, *core.ExternalCredential) error {
 	return nil
 }
 
-func (*wrappedNotFoundExternalCredentialProvider) RestoreCredential(context.Context, *core.ExternalCredential) error {
+func (*wrappedNotFoundExternalCredentialProvider) UpsertCredential(context.Context, *core.ExternalCredential) error {
 	return nil
 }
 
@@ -26,11 +37,7 @@ func (*wrappedNotFoundExternalCredentialProvider) GetCredential(context.Context,
 	return nil, fmt.Errorf("lookup failed: %w", core.ErrNotFound)
 }
 
-func (*wrappedNotFoundExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*wrappedNotFoundExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
+func (*wrappedNotFoundExternalCredentialProvider) ListCredentials(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 
@@ -53,10 +60,7 @@ func (*wrappedNotFoundExternalCredentialProvider) ExchangeCredential(context.Con
 func TestExternalCredentialProviderTransportHandlesWrappedNotFound(t *testing.T) {
 	t.Parallel()
 
-	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialsServer(server, NewProviderServer(&wrappedNotFoundExternalCredentialProvider{}))
-	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+	remote := newRemoteProvider(t, &wrappedNotFoundExternalCredentialProvider{})
 
 	_, err := remote.GetCredential(context.Background(), "user:test", "github:default", "")
 	if !errors.Is(err, core.ErrNotFound) {
@@ -73,11 +77,11 @@ type authRoundTripExternalCredentialProvider struct {
 	exchangeAuth core.ExternalCredentialAuthConfig
 }
 
-func (*authRoundTripExternalCredentialProvider) PutCredential(context.Context, *core.ExternalCredential) error {
+func (*authRoundTripExternalCredentialProvider) CreateCredential(context.Context, *core.ExternalCredential) error {
 	return nil
 }
 
-func (*authRoundTripExternalCredentialProvider) RestoreCredential(context.Context, *core.ExternalCredential) error {
+func (*authRoundTripExternalCredentialProvider) UpsertCredential(context.Context, *core.ExternalCredential) error {
 	return nil
 }
 
@@ -85,11 +89,7 @@ func (*authRoundTripExternalCredentialProvider) GetCredential(context.Context, s
 	return nil, core.ErrNotFound
 }
 
-func (*authRoundTripExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*authRoundTripExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
+func (*authRoundTripExternalCredentialProvider) ListCredentials(context.Context, string, string) ([]*core.ExternalCredential, error) {
 	return nil, nil
 }
 
@@ -116,10 +116,7 @@ func TestExternalCredentialAuthConfigRefreshTokenRoundTripsOverTransport(t *test
 	t.Parallel()
 
 	provider := &authRoundTripExternalCredentialProvider{}
-	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
-	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+	remote := newRemoteProvider(t, provider)
 	auth := core.ExternalCredentialAuthConfig{
 		Type:         "oauth2",
 		GrantType:    "refresh_token",
@@ -155,100 +152,114 @@ func TestExternalCredentialAuthConfigRefreshTokenRoundTripsOverTransport(t *test
 	}
 }
 
-type restoreTrackingExternalCredentialProvider struct {
-	putCalls     int
-	restoreCalls int
-	stored       *core.ExternalCredential
-}
-
-func (p *restoreTrackingExternalCredentialProvider) PutCredential(_ context.Context, credential *core.ExternalCredential) error {
-	p.putCalls++
-	copy := *credential
-	now := time.Unix(1_700_000_100, 0).UTC()
-	copy.CreatedAt = now
-	copy.UpdatedAt = now
-	p.stored = &copy
-	return nil
-}
-
-func (p *restoreTrackingExternalCredentialProvider) RestoreCredential(_ context.Context, credential *core.ExternalCredential) error {
-	p.restoreCalls++
-	copy := *credential
-	p.stored = &copy
-	return nil
-}
-
-func (p *restoreTrackingExternalCredentialProvider) GetCredential(context.Context, string, string, string) (*core.ExternalCredential, error) {
-	if p.stored == nil {
-		return nil, core.ErrNotFound
-	}
-	copy := *p.stored
-	return &copy, nil
-}
-
-func (*restoreTrackingExternalCredentialProvider) ListCredentials(context.Context, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*restoreTrackingExternalCredentialProvider) ListCredentialsForConnection(context.Context, string, string) ([]*core.ExternalCredential, error) {
-	return nil, nil
-}
-
-func (*restoreTrackingExternalCredentialProvider) DeleteCredential(context.Context, string) error {
-	return nil
-}
-
-func (*restoreTrackingExternalCredentialProvider) ValidateCredentialConfig(context.Context, *core.ValidateExternalCredentialConfigRequest) error {
-	return nil
-}
-
-func (p *restoreTrackingExternalCredentialProvider) ResolveCredential(context.Context, *core.ResolveExternalCredentialRequest) (*core.ResolveExternalCredentialResponse, error) {
-	if p.stored == nil {
-		return nil, core.ErrNotFound
-	}
-	copy := *p.stored
-	return &core.ResolveExternalCredentialResponse{Token: copy.AccessToken, Credential: &copy}, nil
-}
-
-func (*restoreTrackingExternalCredentialProvider) ExchangeCredential(context.Context, *core.ExchangeExternalCredentialRequest) (*core.ExchangeExternalCredentialResponse, error) {
-	return &core.ExchangeExternalCredentialResponse{}, nil
-}
-
-func TestExternalCredentialProviderRestorePreservesTimestampsOverTransport(t *testing.T) {
+func TestExternalCredentialRoundTripsOverTransport(t *testing.T) {
 	t.Parallel()
 
-	provider := &restoreTrackingExternalCredentialProvider{}
-	conn := newBufconnConn(t, func(server *grpc.Server) {
-		proto.RegisterExternalCredentialsServer(server, NewProviderServer(provider))
-	})
-	remote := &remoteExternalCredentialProvider{client: proto.NewExternalCredentialsClient(conn)}
+	expiresAt := time.Unix(1_700_000_000, 0).UTC()
+	lastRefreshedAt := time.Unix(1_700_000_100, 0).UTC()
+	clientSecretExpiresAt := time.Unix(1_700_000_200, 0).UTC()
 
-	createdAt := time.Unix(1_700_000_000, 0).UTC()
-	updatedAt := time.Unix(1_700_000_001, 0).UTC()
-	credential := &core.ExternalCredential{
-		ID:           "cred-1",
-		SubjectID:    "user:test",
-		ConnectionID: "github:default",
-		Integration:  "github",
-		Connection:   "default",
-		Instance:     "org",
-		CreatedAt:    createdAt,
-		UpdatedAt:    updatedAt,
+	cases := []struct {
+		name       string
+		credential core.ExternalCredential
+	}{
+		{
+			name: "grant",
+			credential: core.ExternalCredential{
+				Subject:   "user:test",
+				Audience:  "github:default",
+				Qualifier: "org",
+				Grant: &core.ExternalCredentialGrant{
+					AccessToken:       "access-token",
+					RefreshToken:      "refresh-token",
+					Scope:             "repo",
+					ExpiresAt:         &expiresAt,
+					LastRefreshedAt:   &lastRefreshedAt,
+					RefreshErrorCount: 2,
+				},
+				MetadataJSON: `{"workspace":"acme"}`,
+			},
+		},
+		{
+			name: "client",
+			credential: core.ExternalCredential{
+				Subject:  "user:test",
+				Audience: "mcp:default",
+				Client: &core.ExternalCredentialClientInfo{
+					ClientID:              "client-id",
+					ClientSecret:          "client-secret",
+					ClientSecretExpiresAt: &clientSecretExpiresAt,
+				},
+			},
+		},
+		{
+			name: "opaque",
+			credential: core.ExternalCredential{
+				Subject:  "user:test",
+				Audience: "basic:default",
+				Opaque: &core.ExternalCredentialOpaque{
+					Fields: map[string]string{"username": "alice", "password": "secret"},
+				},
+			},
+		},
 	}
 
-	if err := remote.RestoreCredential(context.Background(), credential); err != nil {
-		t.Fatalf("RestoreCredential error = %v", err)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			remote := newRemoteProvider(t, coretesting.NewStubExternalCredentialProvider())
+			want := tc.credential
+
+			stored := tc.credential
+			if err := remote.UpsertCredential(context.Background(), &stored); err != nil {
+				t.Fatalf("UpsertCredential: %v", err)
+			}
+			if stored.ID == "" {
+				t.Fatal("UpsertCredential left credential ID empty")
+			}
+
+			got, err := remote.GetCredential(context.Background(), want.Subject, want.Audience, want.Qualifier)
+			if err != nil {
+				t.Fatalf("GetCredential: %v", err)
+			}
+			if got.Subject != want.Subject || got.Audience != want.Audience || got.Qualifier != want.Qualifier {
+				t.Fatalf("identity = (%q,%q,%q), want (%q,%q,%q)",
+					got.Subject, got.Audience, got.Qualifier, want.Subject, want.Audience, want.Qualifier)
+			}
+			if got.MetadataJSON != want.MetadataJSON {
+				t.Fatalf("metadataJSON = %q, want %q", got.MetadataJSON, want.MetadataJSON)
+			}
+			if !reflect.DeepEqual(got.Grant, want.Grant) {
+				t.Fatalf("grant = %+v, want %+v", got.Grant, want.Grant)
+			}
+			if !reflect.DeepEqual(got.Client, want.Client) {
+				t.Fatalf("client = %+v, want %+v", got.Client, want.Client)
+			}
+			if !reflect.DeepEqual(got.Opaque, want.Opaque) {
+				t.Fatalf("opaque = %+v, want %+v", got.Opaque, want.Opaque)
+			}
+		})
 	}
-	if provider.putCalls != 0 {
-		t.Fatalf("PutCredential calls = %d, want 0", provider.putCalls)
+}
+
+func TestExternalCredentialCreateConflictSurfacesAlreadyExistsOverTransport(t *testing.T) {
+	t.Parallel()
+
+	remote := newRemoteProvider(t, coretesting.NewStubExternalCredentialProvider())
+	newCredential := func() *core.ExternalCredential {
+		return &core.ExternalCredential{
+			Subject:  "user:test",
+			Audience: "github:default",
+			Grant:    &core.ExternalCredentialGrant{AccessToken: "access-token"},
+		}
 	}
-	if provider.restoreCalls != 1 {
-		t.Fatalf("RestoreCredential calls = %d, want 1", provider.restoreCalls)
+
+	if err := remote.CreateCredential(context.Background(), newCredential()); err != nil {
+		t.Fatalf("CreateCredential: %v", err)
 	}
-	if !credential.CreatedAt.Equal(createdAt) {
-		t.Fatalf("created_at = %v, want %v", credential.CreatedAt, createdAt)
-	}
-	if !credential.UpdatedAt.Equal(updatedAt) {
-		t.Fatalf("updated_at = %v, want %v", credential.UpdatedAt, updatedAt)
+	if err := remote.CreateCredential(context.Background(), newCredential()); !errors.Is(err, core.ErrAlreadyExists) {
+		t.Fatalf("CreateCredential conflict error = %v, want core.ErrAlreadyExists", err)
 	}
 }

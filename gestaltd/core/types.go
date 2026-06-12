@@ -23,22 +23,39 @@ type ManagedSubject struct {
 	DeletedAt          *time.Time
 }
 
-type ExternalCredential struct {
-	ID                string
-	SubjectID         string
-	ConnectionID      string
-	Integration       string
-	Connection        string
-	Instance          string
+type ExternalCredentialGrant struct {
 	AccessToken       string
 	RefreshToken      string
-	Scopes            string
+	Scope             string
 	ExpiresAt         *time.Time
 	LastRefreshedAt   *time.Time
 	RefreshErrorCount int
-	MetadataJSON      string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+}
+
+type ExternalCredentialClientInfo struct {
+	ClientID              string
+	ClientSecret          string
+	ClientSecretExpiresAt *time.Time
+}
+
+type ExternalCredentialOpaque struct {
+	Fields map[string]string
+}
+
+type ExternalCredential struct {
+	ID        string
+	Subject   string
+	Audience  string
+	Qualifier string
+
+	// Exactly one of Grant, Client, Opaque is set.
+	Grant  *ExternalCredentialGrant
+	Client *ExternalCredentialClientInfo
+	Opaque *ExternalCredentialOpaque
+
+	MetadataJSON string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 type AccessPermission struct {

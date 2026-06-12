@@ -11,6 +11,26 @@ from .._gen.v1 import external_credential_pb2 as _external_credential_pb2
 from .support import from_wire_timestamp, to_wire_timestamp
 
 
+def to_wire_create_external_credential_request(
+    value: native.CreateExternalCredentialRequest,
+) -> Any:
+    return _external_credential_pb2.CreateExternalCredentialRequest(
+        credential=None
+        if value.credential is None
+        else to_wire_external_credential(value.credential),
+    )
+
+
+def from_wire_create_external_credential_request(
+    value: Any,
+) -> native.CreateExternalCredentialRequest:
+    return native.CreateExternalCredentialRequest(
+        credential=from_wire_external_credential(value.credential)
+        if value.HasField("credential")
+        else None,
+    )
+
+
 def to_wire_delete_external_credential_request(
     value: native.DeleteExternalCredentialRequest,
 ) -> Any:
@@ -88,18 +108,9 @@ def from_wire_exchange_external_credential_response(
 def to_wire_external_credential(value: native.ExternalCredential) -> Any:
     return _external_credential_pb2.ExternalCredential(
         id=value.id,
-        subject_id=value.subject_id,
-        instance=value.instance,
-        access_token=value.access_token,
-        refresh_token=value.refresh_token,
-        scopes=value.scopes,
-        expires_at=None
-        if value.expires_at is None
-        else to_wire_timestamp(value.expires_at),
-        last_refreshed_at=None
-        if value.last_refreshed_at is None
-        else to_wire_timestamp(value.last_refreshed_at),
-        refresh_error_count=value.refresh_error_count,
+        subject=value.subject,
+        audience=value.audience,
+        qualifier=value.qualifier,
         metadata_json=value.metadata_json,
         created_at=None
         if value.created_at is None
@@ -107,25 +118,16 @@ def to_wire_external_credential(value: native.ExternalCredential) -> Any:
         updated_at=None
         if value.updated_at is None
         else to_wire_timestamp(value.updated_at),
-        connection_id=value.connection_id,
+        **to_wire_external_credential_credential(value.credential),
     )
 
 
 def from_wire_external_credential(value: Any) -> native.ExternalCredential:
     return native.ExternalCredential(
         id=value.id,
-        subject_id=value.subject_id,
-        instance=value.instance,
-        access_token=value.access_token,
-        refresh_token=value.refresh_token,
-        scopes=value.scopes,
-        expires_at=from_wire_timestamp(value.expires_at)
-        if value.HasField("expires_at")
-        else None,
-        last_refreshed_at=from_wire_timestamp(value.last_refreshed_at)
-        if value.HasField("last_refreshed_at")
-        else None,
-        refresh_error_count=value.refresh_error_count,
+        subject=value.subject,
+        audience=value.audience,
+        qualifier=value.qualifier,
         metadata_json=value.metadata_json,
         created_at=from_wire_timestamp(value.created_at)
         if value.HasField("created_at")
@@ -133,8 +135,39 @@ def from_wire_external_credential(value: Any) -> native.ExternalCredential:
         updated_at=from_wire_timestamp(value.updated_at)
         if value.HasField("updated_at")
         else None,
-        connection_id=value.connection_id,
+        credential=from_wire_external_credential_credential(value),
     )
+
+
+def to_wire_external_credential_credential(
+    value: native.ExternalCredentialCredential,
+) -> dict[str, Any]:
+    if isinstance(value, native.ExternalCredentialCredentialGrant):
+        return {"grant": to_wire_external_credential_grant(value.value)}
+    if isinstance(value, native.ExternalCredentialCredentialClient):
+        return {"client": to_wire_external_credential_client_info(value.value)}
+    if isinstance(value, native.ExternalCredentialCredentialOpaque):
+        return {"opaque": to_wire_external_credential_opaque(value.value)}
+    return {}
+
+
+def from_wire_external_credential_credential(
+    value: Any,
+) -> native.ExternalCredentialCredential:
+    case = value.WhichOneof("credential")
+    if case == "grant":
+        return native.ExternalCredentialCredentialGrant(
+            value=from_wire_external_credential_grant(value.grant)
+        )
+    if case == "client":
+        return native.ExternalCredentialCredentialClient(
+            value=from_wire_external_credential_client_info(value.client)
+        )
+    if case == "opaque":
+        return native.ExternalCredentialCredentialOpaque(
+            value=from_wire_external_credential_opaque(value.opaque)
+        )
+    return None
 
 
 def to_wire_external_credential_auth_config(
@@ -193,19 +226,69 @@ def from_wire_external_credential_auth_config(
     )
 
 
-def to_wire_external_credential_lookup(value: native.ExternalCredentialLookup) -> Any:
-    return _external_credential_pb2.ExternalCredentialLookup(
-        subject_id=value.subject_id,
-        instance=value.instance,
-        connection_id=value.connection_id,
+def to_wire_external_credential_client_info(
+    value: native.ExternalCredentialClientInfo,
+) -> Any:
+    return _external_credential_pb2.ExternalCredentialClientInfo(
+        client_id=value.client_id,
+        client_secret=value.client_secret,
+        client_secret_expires_at=None
+        if value.client_secret_expires_at is None
+        else to_wire_timestamp(value.client_secret_expires_at),
     )
 
 
-def from_wire_external_credential_lookup(value: Any) -> native.ExternalCredentialLookup:
-    return native.ExternalCredentialLookup(
-        subject_id=value.subject_id,
-        instance=value.instance,
-        connection_id=value.connection_id,
+def from_wire_external_credential_client_info(
+    value: Any,
+) -> native.ExternalCredentialClientInfo:
+    return native.ExternalCredentialClientInfo(
+        client_id=value.client_id,
+        client_secret=value.client_secret,
+        client_secret_expires_at=from_wire_timestamp(value.client_secret_expires_at)
+        if value.HasField("client_secret_expires_at")
+        else None,
+    )
+
+
+def to_wire_external_credential_grant(value: native.ExternalCredentialGrant) -> Any:
+    return _external_credential_pb2.ExternalCredentialGrant(
+        access_token=value.access_token,
+        refresh_token=value.refresh_token,
+        scope=value.scope,
+        expires_at=None
+        if value.expires_at is None
+        else to_wire_timestamp(value.expires_at),
+        last_refreshed_at=None
+        if value.last_refreshed_at is None
+        else to_wire_timestamp(value.last_refreshed_at),
+        refresh_error_count=value.refresh_error_count,
+    )
+
+
+def from_wire_external_credential_grant(value: Any) -> native.ExternalCredentialGrant:
+    return native.ExternalCredentialGrant(
+        access_token=value.access_token,
+        refresh_token=value.refresh_token,
+        scope=value.scope,
+        expires_at=from_wire_timestamp(value.expires_at)
+        if value.HasField("expires_at")
+        else None,
+        last_refreshed_at=from_wire_timestamp(value.last_refreshed_at)
+        if value.HasField("last_refreshed_at")
+        else None,
+        refresh_error_count=value.refresh_error_count,
+    )
+
+
+def to_wire_external_credential_opaque(value: native.ExternalCredentialOpaque) -> Any:
+    return _external_credential_pb2.ExternalCredentialOpaque(
+        fields=value.fields,
+    )
+
+
+def from_wire_external_credential_opaque(value: Any) -> native.ExternalCredentialOpaque:
+    return native.ExternalCredentialOpaque(
+        fields=dict(value.fields),
     )
 
 
@@ -265,9 +348,9 @@ def to_wire_get_external_credential_request(
     value: native.GetExternalCredentialRequest,
 ) -> Any:
     return _external_credential_pb2.GetExternalCredentialRequest(
-        lookup=None
-        if value.lookup is None
-        else to_wire_external_credential_lookup(value.lookup),
+        subject=value.subject,
+        audience=value.audience,
+        qualifier=value.qualifier,
     )
 
 
@@ -275,9 +358,9 @@ def from_wire_get_external_credential_request(
     value: Any,
 ) -> native.GetExternalCredentialRequest:
     return native.GetExternalCredentialRequest(
-        lookup=from_wire_external_credential_lookup(value.lookup)
-        if value.HasField("lookup")
-        else None,
+        subject=value.subject,
+        audience=value.audience,
+        qualifier=value.qualifier,
     )
 
 
@@ -285,9 +368,8 @@ def to_wire_list_external_credentials_request(
     value: native.ListExternalCredentialsRequest,
 ) -> Any:
     return _external_credential_pb2.ListExternalCredentialsRequest(
-        subject_id=value.subject_id,
-        instance=value.instance,
-        connection_id=value.connection_id,
+        subject=value.subject,
+        audience=value.audience,
     )
 
 
@@ -295,9 +377,8 @@ def from_wire_list_external_credentials_request(
     value: Any,
 ) -> native.ListExternalCredentialsRequest:
     return native.ListExternalCredentialsRequest(
-        subject_id=value.subject_id,
-        instance=value.instance,
-        connection_id=value.connection_id,
+        subject=value.subject,
+        audience=value.audience,
     )
 
 
@@ -392,7 +473,6 @@ def to_wire_upsert_external_credential_request(
         credential=None
         if value.credential is None
         else to_wire_external_credential(value.credential),
-        preserve_timestamps=value.preserve_timestamps,
     )
 
 
@@ -403,7 +483,6 @@ def from_wire_upsert_external_credential_request(
         credential=from_wire_external_credential(value.credential)
         if value.HasField("credential")
         else None,
-        preserve_timestamps=value.preserve_timestamps,
     )
 
 

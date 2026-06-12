@@ -9,11 +9,14 @@ import (
 // ExternalCredentialProvider manages subject-scoped third-party credentials
 // used to invoke integrations on behalf of users or other canonical subjects.
 type ExternalCredentialProvider interface {
-	PutCredential(ctx context.Context, credential *ExternalCredential) error
-	RestoreCredential(ctx context.Context, credential *ExternalCredential) error
-	GetCredential(ctx context.Context, subjectID, connectionID, instance string) (*ExternalCredential, error)
-	ListCredentials(ctx context.Context, subjectID string) ([]*ExternalCredential, error)
-	ListCredentialsForConnection(ctx context.Context, subjectID, connectionID string) ([]*ExternalCredential, error)
+	// CreateCredential is insert-only and returns ErrAlreadyExists when a
+	// credential already exists for (subject, audience, qualifier).
+	CreateCredential(ctx context.Context, credential *ExternalCredential) error
+	UpsertCredential(ctx context.Context, credential *ExternalCredential) error
+	GetCredential(ctx context.Context, subject, audience, qualifier string) (*ExternalCredential, error)
+	// ListCredentials lists all of a subject's credentials when audience is
+	// empty.
+	ListCredentials(ctx context.Context, subject, audience string) ([]*ExternalCredential, error)
 	DeleteCredential(ctx context.Context, id string) error
 	ValidateCredentialConfig(ctx context.Context, req *ValidateExternalCredentialConfigRequest) error
 	ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error)

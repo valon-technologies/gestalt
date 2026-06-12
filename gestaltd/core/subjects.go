@@ -2,6 +2,10 @@ package core
 
 import "strings"
 
+// GestaltdSubjectID is gestaltd's own workload-identity subject, the owner of
+// ClientInfo credentials minted via RFC 7591 dynamic client registration.
+const GestaltdSubjectID = "system:gestaltd"
+
 // TODO(#1823): Add first-class run-as subject and external-identity grant
 // provisioning instead of relying on opaque subject IDs plus separate tuple
 // seeding.

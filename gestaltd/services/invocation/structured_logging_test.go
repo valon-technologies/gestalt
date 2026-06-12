@@ -43,12 +43,15 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	if err := svc.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		ID: "tok1", SubjectID: principal.UserSubjectID(u.ID), Integration: "myservice",
-		Connection: "", Instance: "default", AccessToken: "test-token",
+	if err := svc.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
+		ID:           "tok1",
+		Subject:      principal.UserSubjectID(u.ID),
+		Audience:     "myservice:" + core.AppConnectionName,
+		Qualifier:    "default",
+		Grant:        &core.ExternalCredentialGrant{AccessToken: "test-token"},
 		MetadataJSON: "not-valid-json{",
 	}); err != nil {
-		t.Fatalf("PutCredential: %v", err)
+		t.Fatalf("UpsertCredential: %v", err)
 	}
 
 	broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.ExternalCredentials, invocation.WithLogger(logger))

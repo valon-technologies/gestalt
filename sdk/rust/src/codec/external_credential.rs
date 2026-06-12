@@ -4,15 +4,25 @@
 
 use crate::codec::support::{from_wire_timestamp, to_wire_timestamp};
 use crate::external_credential::{
-    DeleteExternalCredentialRequest, ExchangeExternalCredentialRequest,
-    ExchangeExternalCredentialResponse, ExternalCredential, ExternalCredentialAuthConfig,
-    ExternalCredentialLookup, ExternalCredentialTokenExchangeDriver,
+    CreateExternalCredentialRequest, DeleteExternalCredentialRequest,
+    ExchangeExternalCredentialRequest, ExchangeExternalCredentialResponse, ExternalCredential,
+    ExternalCredentialAuthConfig, ExternalCredentialClientInfo, ExternalCredentialCredential,
+    ExternalCredentialGrant, ExternalCredentialOpaque, ExternalCredentialTokenExchangeDriver,
     ExternalCredentialTokenResponse, GetExternalCredentialRequest, ListExternalCredentialsRequest,
     ListExternalCredentialsResponse, ResolveExternalCredentialRequest,
     ResolveExternalCredentialResponse, UpsertExternalCredentialRequest,
     ValidateExternalCredentialConfigRequest,
 };
 use crate::generated::v1;
+
+/// Converts a native `CreateExternalCredentialRequest` to its wire message.
+pub(crate) fn to_wire_create_external_credential_request(
+    value: CreateExternalCredentialRequest,
+) -> v1::CreateExternalCredentialRequest {
+    v1::CreateExternalCredentialRequest {
+        credential: value.credential.map(to_wire_external_credential),
+    }
+}
 
 /// Converts a native `DeleteExternalCredentialRequest` to its wire message.
 pub(crate) fn to_wire_delete_external_credential_request(
@@ -53,18 +63,13 @@ pub(crate) fn from_wire_exchange_external_credential_response(
 pub(crate) fn to_wire_external_credential(value: ExternalCredential) -> v1::ExternalCredential {
     v1::ExternalCredential {
         id: value.id,
-        subject_id: value.subject_id,
-        instance: value.instance,
-        access_token: value.access_token,
-        refresh_token: value.refresh_token,
-        scopes: value.scopes,
-        expires_at: value.expires_at.map(to_wire_timestamp),
-        last_refreshed_at: value.last_refreshed_at.map(to_wire_timestamp),
-        refresh_error_count: value.refresh_error_count,
+        subject: value.subject,
+        audience: value.audience,
+        qualifier: value.qualifier,
         metadata_json: value.metadata_json,
         created_at: value.created_at.map(to_wire_timestamp),
         updated_at: value.updated_at.map(to_wire_timestamp),
-        connection_id: value.connection_id,
+        credential: value.credential.map(to_wire_external_credential_credential),
     }
 }
 
@@ -72,18 +77,47 @@ pub(crate) fn to_wire_external_credential(value: ExternalCredential) -> v1::Exte
 pub(crate) fn from_wire_external_credential(value: v1::ExternalCredential) -> ExternalCredential {
     ExternalCredential {
         id: value.id,
-        subject_id: value.subject_id,
-        instance: value.instance,
-        access_token: value.access_token,
-        refresh_token: value.refresh_token,
-        scopes: value.scopes,
-        expires_at: value.expires_at.map(from_wire_timestamp),
-        last_refreshed_at: value.last_refreshed_at.map(from_wire_timestamp),
-        refresh_error_count: value.refresh_error_count,
+        subject: value.subject,
+        audience: value.audience,
+        qualifier: value.qualifier,
         metadata_json: value.metadata_json,
         created_at: value.created_at.map(from_wire_timestamp),
         updated_at: value.updated_at.map(from_wire_timestamp),
-        connection_id: value.connection_id,
+        credential: value
+            .credential
+            .map(from_wire_external_credential_credential),
+    }
+}
+
+pub(crate) fn to_wire_external_credential_credential(
+    value: ExternalCredentialCredential,
+) -> v1::external_credential::Credential {
+    match value {
+        ExternalCredentialCredential::Grant(value) => {
+            v1::external_credential::Credential::Grant(to_wire_external_credential_grant(value))
+        }
+        ExternalCredentialCredential::Client(value) => v1::external_credential::Credential::Client(
+            to_wire_external_credential_client_info(value),
+        ),
+        ExternalCredentialCredential::Opaque(value) => {
+            v1::external_credential::Credential::Opaque(to_wire_external_credential_opaque(value))
+        }
+    }
+}
+
+pub(crate) fn from_wire_external_credential_credential(
+    value: v1::external_credential::Credential,
+) -> ExternalCredentialCredential {
+    match value {
+        v1::external_credential::Credential::Grant(value) => {
+            ExternalCredentialCredential::Grant(from_wire_external_credential_grant(value))
+        }
+        v1::external_credential::Credential::Client(value) => {
+            ExternalCredentialCredential::Client(from_wire_external_credential_client_info(value))
+        }
+        v1::external_credential::Credential::Opaque(value) => {
+            ExternalCredentialCredential::Opaque(from_wire_external_credential_opaque(value))
+        }
     }
 }
 
@@ -117,14 +151,71 @@ pub(crate) fn to_wire_external_credential_auth_config(
     }
 }
 
-/// Converts a native `ExternalCredentialLookup` to its wire message.
-pub(crate) fn to_wire_external_credential_lookup(
-    value: ExternalCredentialLookup,
-) -> v1::ExternalCredentialLookup {
-    v1::ExternalCredentialLookup {
-        subject_id: value.subject_id,
-        instance: value.instance,
-        connection_id: value.connection_id,
+/// Converts a native `ExternalCredentialClientInfo` to its wire message.
+pub(crate) fn to_wire_external_credential_client_info(
+    value: ExternalCredentialClientInfo,
+) -> v1::ExternalCredentialClientInfo {
+    v1::ExternalCredentialClientInfo {
+        client_id: value.client_id,
+        client_secret: value.client_secret,
+        client_secret_expires_at: value.client_secret_expires_at.map(to_wire_timestamp),
+    }
+}
+
+/// Converts a wire `ExternalCredentialClientInfo` to its native message.
+pub(crate) fn from_wire_external_credential_client_info(
+    value: v1::ExternalCredentialClientInfo,
+) -> ExternalCredentialClientInfo {
+    ExternalCredentialClientInfo {
+        client_id: value.client_id,
+        client_secret: value.client_secret,
+        client_secret_expires_at: value.client_secret_expires_at.map(from_wire_timestamp),
+    }
+}
+
+/// Converts a native `ExternalCredentialGrant` to its wire message.
+pub(crate) fn to_wire_external_credential_grant(
+    value: ExternalCredentialGrant,
+) -> v1::ExternalCredentialGrant {
+    v1::ExternalCredentialGrant {
+        access_token: value.access_token,
+        refresh_token: value.refresh_token,
+        scope: value.scope,
+        expires_at: value.expires_at.map(to_wire_timestamp),
+        last_refreshed_at: value.last_refreshed_at.map(to_wire_timestamp),
+        refresh_error_count: value.refresh_error_count,
+    }
+}
+
+/// Converts a wire `ExternalCredentialGrant` to its native message.
+pub(crate) fn from_wire_external_credential_grant(
+    value: v1::ExternalCredentialGrant,
+) -> ExternalCredentialGrant {
+    ExternalCredentialGrant {
+        access_token: value.access_token,
+        refresh_token: value.refresh_token,
+        scope: value.scope,
+        expires_at: value.expires_at.map(from_wire_timestamp),
+        last_refreshed_at: value.last_refreshed_at.map(from_wire_timestamp),
+        refresh_error_count: value.refresh_error_count,
+    }
+}
+
+/// Converts a native `ExternalCredentialOpaque` to its wire message.
+pub(crate) fn to_wire_external_credential_opaque(
+    value: ExternalCredentialOpaque,
+) -> v1::ExternalCredentialOpaque {
+    v1::ExternalCredentialOpaque {
+        fields: value.fields,
+    }
+}
+
+/// Converts a wire `ExternalCredentialOpaque` to its native message.
+pub(crate) fn from_wire_external_credential_opaque(
+    value: v1::ExternalCredentialOpaque,
+) -> ExternalCredentialOpaque {
+    ExternalCredentialOpaque {
+        fields: value.fields,
     }
 }
 
@@ -161,7 +252,9 @@ pub(crate) fn to_wire_get_external_credential_request(
     value: GetExternalCredentialRequest,
 ) -> v1::GetExternalCredentialRequest {
     v1::GetExternalCredentialRequest {
-        lookup: value.lookup.map(to_wire_external_credential_lookup),
+        subject: value.subject,
+        audience: value.audience,
+        qualifier: value.qualifier,
     }
 }
 
@@ -170,9 +263,8 @@ pub(crate) fn to_wire_list_external_credentials_request(
     value: ListExternalCredentialsRequest,
 ) -> v1::ListExternalCredentialsRequest {
     v1::ListExternalCredentialsRequest {
-        subject_id: value.subject_id,
-        instance: value.instance,
-        connection_id: value.connection_id,
+        subject: value.subject,
+        audience: value.audience,
     }
 }
 
@@ -225,7 +317,6 @@ pub(crate) fn to_wire_upsert_external_credential_request(
 ) -> v1::UpsertExternalCredentialRequest {
     v1::UpsertExternalCredentialRequest {
         credential: value.credential.map(to_wire_external_credential),
-        preserve_timestamps: value.preserve_timestamps,
     }
 }
 

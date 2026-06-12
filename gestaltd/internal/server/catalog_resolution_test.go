@@ -379,14 +379,13 @@ func TestResolveCatalogAndOperationMetrics(t *testing.T) {
 		},
 	}
 	services := testutil.NewStubServices(t)
-	if err := services.ExternalCredentials.PutCredential(ctx, &core.ExternalCredential{
-		SubjectID:   principal.UserSubjectID("metrics-user"),
-		Integration: "metric-api",
-		Connection:  "default",
-		Instance:    "default",
-		AccessToken: "bound-token",
+	if err := services.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
+		Subject:   principal.UserSubjectID("metrics-user"),
+		Audience:  "metric-api:default",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "bound-token"},
 	}); err != nil {
-		t.Fatalf("PutCredential: %v", err)
+		t.Fatalf("UpsertCredential: %v", err)
 	}
 	resolver := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), services.Users, services.ExternalCredentials)
 	p := &principal.Principal{

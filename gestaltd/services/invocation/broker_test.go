@@ -64,25 +64,23 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	broker := NewBroker(providers, svc.Users, svc.ExternalCredentials)
 	subjectID := "service_account:workflow-roadmap"
 
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		ID:          "subject-workspace-team-a",
-		SubjectID:   subjectID,
-		Integration: "slack",
-		Connection:  "workspace",
-		Instance:    "team-a",
-		AccessToken: "team-a-token",
+	if err := svc.ExternalCredentials.UpsertCredential(context.Background(), &core.ExternalCredential{
+		ID:        "subject-workspace-team-a",
+		Subject:   subjectID,
+		Audience:  "slack:workspace",
+		Qualifier: "team-a",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "team-a-token"},
 	}); err != nil {
-		t.Fatalf("PutCredential team-a: %v", err)
+		t.Fatalf("UpsertCredential team-a: %v", err)
 	}
-	if err := svc.ExternalCredentials.PutCredential(context.Background(), &core.ExternalCredential{
-		ID:          "subject-workspace-team-b",
-		SubjectID:   subjectID,
-		Integration: "slack",
-		Connection:  "workspace",
-		Instance:    "team-b",
-		AccessToken: "team-b-token",
+	if err := svc.ExternalCredentials.UpsertCredential(context.Background(), &core.ExternalCredential{
+		ID:        "subject-workspace-team-b",
+		Subject:   subjectID,
+		Audience:  "slack:workspace",
+		Qualifier: "team-b",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "team-b-token"},
 	}); err != nil {
-		t.Fatalf("PutCredential team-b: %v", err)
+		t.Fatalf("UpsertCredential team-b: %v", err)
 	}
 
 	subject := &principal.Principal{

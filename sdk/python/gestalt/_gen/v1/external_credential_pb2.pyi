@@ -11,69 +11,98 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
-class ExternalCredential(_message.Message):
+class ExternalCredentialGrant(_message.Message):
     __slots__ = ()
-    ID_FIELD_NUMBER: _ClassVar[int]
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    INSTANCE_FIELD_NUMBER: _ClassVar[int]
     ACCESS_TOKEN_FIELD_NUMBER: _ClassVar[int]
     REFRESH_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    SCOPE_FIELD_NUMBER: _ClassVar[int]
     EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
     LAST_REFRESHED_AT_FIELD_NUMBER: _ClassVar[int]
     REFRESH_ERROR_COUNT_FIELD_NUMBER: _ClassVar[int]
-    METADATA_JSON_FIELD_NUMBER: _ClassVar[int]
-    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
-    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
-    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    subject_id: str
-    instance: str
     access_token: str
     refresh_token: str
-    scopes: str
+    scope: str
     expires_at: _timestamp_pb2.Timestamp
     last_refreshed_at: _timestamp_pb2.Timestamp
     refresh_error_count: int
+    def __init__(self, access_token: _Optional[str] = ..., refresh_token: _Optional[str] = ..., scope: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_refreshed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., refresh_error_count: _Optional[int] = ...) -> None: ...
+
+class ExternalCredentialClientInfo(_message.Message):
+    __slots__ = ()
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_SECRET_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_SECRET_EXPIRES_AT_FIELD_NUMBER: _ClassVar[int]
+    client_id: str
+    client_secret: str
+    client_secret_expires_at: _timestamp_pb2.Timestamp
+    def __init__(self, client_id: _Optional[str] = ..., client_secret: _Optional[str] = ..., client_secret_expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class ExternalCredentialOpaque(_message.Message):
+    __slots__ = ()
+    class FieldsEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
+    fields: _containers.ScalarMap[str, str]
+    def __init__(self, fields: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class ExternalCredential(_message.Message):
+    __slots__ = ()
+    ID_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    QUALIFIER_FIELD_NUMBER: _ClassVar[int]
+    GRANT_FIELD_NUMBER: _ClassVar[int]
+    CLIENT_FIELD_NUMBER: _ClassVar[int]
+    OPAQUE_FIELD_NUMBER: _ClassVar[int]
+    METADATA_JSON_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    subject: str
+    audience: str
+    qualifier: str
+    grant: ExternalCredentialGrant
+    client: ExternalCredentialClientInfo
+    opaque: ExternalCredentialOpaque
     metadata_json: str
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
-    connection_id: str
-    def __init__(self, id: _Optional[str] = ..., subject_id: _Optional[str] = ..., instance: _Optional[str] = ..., access_token: _Optional[str] = ..., refresh_token: _Optional[str] = ..., scopes: _Optional[str] = ..., expires_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., last_refreshed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., refresh_error_count: _Optional[int] = ..., metadata_json: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., connection_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., subject: _Optional[str] = ..., audience: _Optional[str] = ..., qualifier: _Optional[str] = ..., grant: _Optional[_Union[ExternalCredentialGrant, _Mapping]] = ..., client: _Optional[_Union[ExternalCredentialClientInfo, _Mapping]] = ..., opaque: _Optional[_Union[ExternalCredentialOpaque, _Mapping]] = ..., metadata_json: _Optional[str] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
-class ExternalCredentialLookup(_message.Message):
+class CreateExternalCredentialRequest(_message.Message):
     __slots__ = ()
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
-    subject_id: str
-    instance: str
-    connection_id: str
-    def __init__(self, subject_id: _Optional[str] = ..., instance: _Optional[str] = ..., connection_id: _Optional[str] = ...) -> None: ...
+    CREDENTIAL_FIELD_NUMBER: _ClassVar[int]
+    credential: ExternalCredential
+    def __init__(self, credential: _Optional[_Union[ExternalCredential, _Mapping]] = ...) -> None: ...
 
 class UpsertExternalCredentialRequest(_message.Message):
     __slots__ = ()
     CREDENTIAL_FIELD_NUMBER: _ClassVar[int]
-    PRESERVE_TIMESTAMPS_FIELD_NUMBER: _ClassVar[int]
     credential: ExternalCredential
-    preserve_timestamps: bool
-    def __init__(self, credential: _Optional[_Union[ExternalCredential, _Mapping]] = ..., preserve_timestamps: _Optional[bool] = ...) -> None: ...
+    def __init__(self, credential: _Optional[_Union[ExternalCredential, _Mapping]] = ...) -> None: ...
 
 class GetExternalCredentialRequest(_message.Message):
     __slots__ = ()
-    LOOKUP_FIELD_NUMBER: _ClassVar[int]
-    lookup: ExternalCredentialLookup
-    def __init__(self, lookup: _Optional[_Union[ExternalCredentialLookup, _Mapping]] = ...) -> None: ...
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    QUALIFIER_FIELD_NUMBER: _ClassVar[int]
+    subject: str
+    audience: str
+    qualifier: str
+    def __init__(self, subject: _Optional[str] = ..., audience: _Optional[str] = ..., qualifier: _Optional[str] = ...) -> None: ...
 
 class ListExternalCredentialsRequest(_message.Message):
     __slots__ = ()
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    INSTANCE_FIELD_NUMBER: _ClassVar[int]
-    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
-    subject_id: str
-    instance: str
-    connection_id: str
-    def __init__(self, subject_id: _Optional[str] = ..., instance: _Optional[str] = ..., connection_id: _Optional[str] = ...) -> None: ...
+    SUBJECT_FIELD_NUMBER: _ClassVar[int]
+    AUDIENCE_FIELD_NUMBER: _ClassVar[int]
+    subject: str
+    audience: str
+    def __init__(self, subject: _Optional[str] = ..., audience: _Optional[str] = ...) -> None: ...
 
 class ListExternalCredentialsResponse(_message.Message):
     __slots__ = ()

@@ -2,8 +2,6 @@
 
 Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, and managed subject metadata. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
 
-MCP OAuth client registrations (`oauth_registrations`) are stored separately in a raw SQL table managed outside the IndexedDB provider.
-
 For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a provider, see [Configuration](/reference/configuration).
 
 ## Ownership summary
@@ -14,7 +12,6 @@ For encryption mechanics, see [Security Internals](/architecture/security-intern
 | External credentials provider | `external_credentials` |
 | Agent provider | Provider-defined agent session, turn, interaction, event, and idempotency state |
 | Workflow provider | Provider-defined schedule, event trigger, run, execution ref, and idempotency state |
-| MCP OAuth support | `oauth_registrations` raw SQL table |
 
 ## Object stores
 
@@ -55,26 +52,36 @@ provider-backed app relationships.
 
 ### `external_credentials`
 
-Owned by the configured external credentials provider, not gestaltd core. The default provider stores upstream credentials (OAuth tokens, API keys, manual credentials) for each subject's connected integrations.
+Owned by the configured external credentials provider, not gestaltd core. Every record holds a credential of one of three kinds under the unique key `(subject, audience, qualifier)`:
+
+| Kind | Holds | `audience` | `qualifier` |
+| --- | --- | --- | --- |
+| `grant` | Tokens minted for a subject's authorization (OAuth tokens, pasted bearer secrets) | Connection ID (e.g. `gmail:default`) | Instance |
+| `client_info` | The client identity issued to `gestaltd` by an authorization server at RFC 7591 dynamic registration | Authorization server URL | Redirect URI |
+| `opaque` | Externally supplied named fields the store does not interpret (e.g. Datadog `api_key` + `app_key`) | Connection ID | Instance |
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | string, PK | UUID. |
-| `subject_id` | string | Canonical credential owner such as `user:<id>`, `service_account:<id>`, or a runtime-supplied `system:<id>` subject. |
-| `integration` | string | Provider name from config (e.g., `slack`). |
-| `connection` | string | Named connection within the provider (e.g., `default`, `mcp`). |
-| `instance` | string | User-chosen or discovery-assigned name for multi-account providers. |
-| `access_token_encrypted` | string | **Encrypted.** AES-256-GCM. |
-| `refresh_token_encrypted` | string | **Encrypted.** AES-256-GCM. Empty (still encrypted) if no refresh token. |
-| `scopes` | string | Plaintext. Space-separated OAuth scopes. |
-| `expires_at` | time | Null if the provider doesn't report expiry. |
-| `last_refreshed_at` | time | |
-| `refresh_error_count` | int | Consecutive failed refreshes. Reset to 0 on success. |
+| `subject` | string | Canonical credential owner such as `user:<id>`, `service_account:<id>`, or `system:gestaltd` for `client_info` rows. |
+| `audience` | string | Where the credential is presented. |
+| `qualifier` | string | Per-kind disambiguator. |
+| `kind` | string | `grant`, `client_info`, or `opaque`. |
+| `access_token_encrypted` | string | **Encrypted.** AES-256-GCM. `grant` only. |
+| `refresh_token_encrypted` | string | **Encrypted.** AES-256-GCM. `grant` only. |
+| `scope` | string | Plaintext. Space-separated OAuth scopes. `grant` only. |
+| `expires_at` | time | `grant` only. Null if the provider doesn't report expiry. |
+| `last_refreshed_at` | time | `grant` only. |
+| `refresh_error_count` | int | `grant` only. Consecutive failed refreshes. Reset to 0 on success. |
+| `client_id` | string | `client_info` only. |
+| `client_secret_encrypted` | string | **Encrypted.** AES-256-GCM. `client_info` only. |
+| `client_secret_expires_at` | time | `client_info` only. |
+| `fields_encrypted` | string | **Encrypted.** AES-256-GCM JSON object. `opaque` only. |
 | `metadata_json` | string | Plaintext. Connection metadata from post-connect discovery. |
 | `created_at` | time | |
 | `updated_at` | time | |
 
-Unique index on `(subject_id, integration, connection, instance)`. Reconnecting overwrites the existing record via `Put`.
+`CreateCredential` is insert-only and fails with `ALREADY_EXISTS` on a `(subject, audience, qualifier)` conflict, which gives first-writer-wins convergence when multiple server instances race RFC 7591 dynamic client registration. Reconnecting overwrites the existing record via `UpsertCredential`.
 
 ### `api_tokens`
 
@@ -94,27 +101,6 @@ Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way 
 | `created_at` | time | |
 | `updated_at` | time | |
 
-### `oauth_registrations`
-
-Caches dynamic OAuth client registrations for `mcp_oauth` connections, so Gestalt doesn't re-register on every request.
-
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | string, PK | |
-| `auth_server_url` | string | Upstream authorization server. |
-| `redirect_uri` | string | Callback URI. |
-| `client_id` | string | Dynamically registered client ID. |
-| `client_secret_encrypted` | string | **Encrypted.** AES-256-GCM. |
-| `expires_at` | time | |
-| `authorization_endpoint` | string | Discovered URL. |
-| `token_endpoint` | string | Discovered URL. |
-| `scopes_supported` | string | |
-| `discovered_at` | time | |
-| `created_at` | time | |
-| `updated_at` | time | |
-
-Unique index on `(auth_server_url, redirect_uri)`.
-
 ## Encryption summary
 
 Credentials are encrypted. Everything else is plaintext.
@@ -123,7 +109,8 @@ Credentials are encrypted. Everything else is plaintext.
 | --- | --- | --- |
 | Access tokens | `external_credentials.access_token_encrypted` | AES-256-GCM |
 | Refresh tokens | `external_credentials.refresh_token_encrypted` | AES-256-GCM |
-| MCP OAuth client secrets | `oauth_registrations.client_secret_encrypted` | AES-256-GCM |
+| MCP OAuth client secrets | `external_credentials.client_secret_encrypted` | AES-256-GCM |
+| Manual credential fields | `external_credentials.fields_encrypted` | AES-256-GCM |
 | API tokens | `api_tokens.hashed_token` | One-way SHA-256 |
 | Emails, names, metadata, scopes, timestamps | Various | Plaintext |
 
@@ -131,9 +118,9 @@ All encrypted fields use the same key derived from `server.encryptionKey`. There
 
 ## Credential storage granularity
 
-External credentials are keyed by four dimensions: `subject_id`, `integration`, `connection`, and `instance`.
+External credentials are keyed by `subject`, `audience`, and `qualifier`.
 
-The *integration* is the provider name from your config. The *connection* is the named connection within that provider (most have just `default`). The *instance* distinguishes multiple accounts within the same connection, which matters for providers with post-connect discovery (e.g., a user connected to three Slack workspaces).
+For `grant` and `opaque` credentials, the *audience* is the connection ID from your config and the *qualifier* is the instance, which distinguishes multiple accounts within the same connection for providers with post-connect discovery (e.g., a user connected to three Slack workspaces).
 
 The `_connection` and `_instance` selectors in the [HTTP API](/reference/http-api) and CLI map directly to these storage keys.
 

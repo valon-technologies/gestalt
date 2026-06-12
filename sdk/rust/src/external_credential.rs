@@ -5,14 +5,22 @@
 use crate::codec::external_credential::{
     from_wire_exchange_external_credential_response, from_wire_external_credential,
     from_wire_list_external_credentials_response, from_wire_resolve_external_credential_response,
-    to_wire_delete_external_credential_request, to_wire_exchange_external_credential_request,
-    to_wire_get_external_credential_request, to_wire_list_external_credentials_request,
-    to_wire_resolve_external_credential_request, to_wire_upsert_external_credential_request,
+    to_wire_create_external_credential_request, to_wire_delete_external_credential_request,
+    to_wire_exchange_external_credential_request, to_wire_get_external_credential_request,
+    to_wire_list_external_credentials_request, to_wire_resolve_external_credential_request,
+    to_wire_upsert_external_credential_request,
     to_wire_validate_external_credential_config_request,
 };
 use crate::codec::host_service::{HostServiceChannel, connect_host_service, plain_channel};
 use crate::generated::v1;
 use crate::rpc_support::GestaltError;
+
+/// Native message type for `gestalt.provider.v1.CreateExternalCredentialRequest`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CreateExternalCredentialRequest {
+    /// The `credential` field; None when unset.
+    pub credential: Option<ExternalCredential>,
+}
 
 /// Native message type for `gestalt.provider.v1.DeleteExternalCredentialRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -51,35 +59,37 @@ pub struct ExchangeExternalCredentialResponse {
     pub token_response: Option<ExternalCredentialTokenResponse>,
 }
 
+/// Values of the `credential` oneof in `ExternalCredential`; the message field is None when unset.
+#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExternalCredentialCredential {
+    /// The `grant` variant.
+    Grant(ExternalCredentialGrant),
+    /// The `client` variant.
+    Client(ExternalCredentialClientInfo),
+    /// The `opaque` variant.
+    Opaque(ExternalCredentialOpaque),
+}
+
 /// Native message type for `gestalt.provider.v1.ExternalCredential`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ExternalCredential {
     /// The `id` field.
     pub id: String,
-    /// The `subject_id` field.
-    pub subject_id: String,
-    /// The `instance` field.
-    pub instance: String,
-    /// The `access_token` field.
-    pub access_token: String,
-    /// The `refresh_token` field.
-    pub refresh_token: String,
-    /// The `scopes` field.
-    pub scopes: String,
-    /// The `expires_at` field; None when unset.
-    pub expires_at: Option<std::time::SystemTime>,
-    /// The `last_refreshed_at` field; None when unset.
-    pub last_refreshed_at: Option<std::time::SystemTime>,
-    /// The `refresh_error_count` field.
-    pub refresh_error_count: i32,
+    /// The `subject` field.
+    pub subject: String,
+    /// The `audience` field.
+    pub audience: String,
+    /// The `qualifier` field.
+    pub qualifier: String,
     /// The `metadata_json` field.
     pub metadata_json: String,
     /// The `created_at` field; None when unset.
     pub created_at: Option<std::time::SystemTime>,
     /// The `updated_at` field; None when unset.
     pub updated_at: Option<std::time::SystemTime>,
-    /// The `connection_id` field.
-    pub connection_id: String,
+    /// The `credential` oneof; None when unset.
+    pub credential: Option<ExternalCredentialCredential>,
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialAuthConfig`.
@@ -123,15 +133,39 @@ pub struct ExternalCredentialAuthConfig {
     pub refresh_token: String,
 }
 
-/// Native message type for `gestalt.provider.v1.ExternalCredentialLookup`.
+/// Native message type for `gestalt.provider.v1.ExternalCredentialClientInfo`.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ExternalCredentialLookup {
-    /// The `subject_id` field.
-    pub subject_id: String,
-    /// The `instance` field.
-    pub instance: String,
-    /// The `connection_id` field.
-    pub connection_id: String,
+pub struct ExternalCredentialClientInfo {
+    /// The `client_id` field.
+    pub client_id: String,
+    /// The `client_secret` field.
+    pub client_secret: String,
+    /// The `client_secret_expires_at` field; None when unset.
+    pub client_secret_expires_at: Option<std::time::SystemTime>,
+}
+
+/// Native message type for `gestalt.provider.v1.ExternalCredentialGrant`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ExternalCredentialGrant {
+    /// The `access_token` field.
+    pub access_token: String,
+    /// The `refresh_token` field.
+    pub refresh_token: String,
+    /// The `scope` field.
+    pub scope: String,
+    /// The `expires_at` field; None when unset.
+    pub expires_at: Option<std::time::SystemTime>,
+    /// The `last_refreshed_at` field; None when unset.
+    pub last_refreshed_at: Option<std::time::SystemTime>,
+    /// The `refresh_error_count` field.
+    pub refresh_error_count: i32,
+}
+
+/// Native message type for `gestalt.provider.v1.ExternalCredentialOpaque`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ExternalCredentialOpaque {
+    /// The `fields` field.
+    pub fields: std::collections::BTreeMap<String, String>,
 }
 
 /// Native message type for `gestalt.provider.v1.ExternalCredentialTokenExchangeDriver`.
@@ -171,19 +205,21 @@ pub struct ExternalCredentialTokenResponse {
 /// Native message type for `gestalt.provider.v1.GetExternalCredentialRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GetExternalCredentialRequest {
-    /// The `lookup` field; None when unset.
-    pub lookup: Option<ExternalCredentialLookup>,
+    /// The `subject` field.
+    pub subject: String,
+    /// The `audience` field.
+    pub audience: String,
+    /// The `qualifier` field.
+    pub qualifier: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ListExternalCredentialsRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListExternalCredentialsRequest {
-    /// The `subject_id` field.
-    pub subject_id: String,
-    /// The `instance` field.
-    pub instance: String,
-    /// The `connection_id` field.
-    pub connection_id: String,
+    /// The `subject` field.
+    pub subject: String,
+    /// The `audience` field.
+    pub audience: String,
 }
 
 /// Native message type for `gestalt.provider.v1.ListExternalCredentialsResponse`.
@@ -236,8 +272,6 @@ pub struct ResolveExternalCredentialResponse {
 pub struct UpsertExternalCredentialRequest {
     /// The `credential` field; None when unset.
     pub credential: Option<ExternalCredential>,
-    /// The `preserve_timestamps` field.
-    pub preserve_timestamps: bool,
 }
 
 /// Native message type for `gestalt.provider.v1.ValidateExternalCredentialConfigRequest`.
@@ -296,16 +330,41 @@ impl ExternalCredentials {
         })
     }
 
+    /// Calls `gestalt.provider.v1.ExternalCredentials.CreateCredential`.
+    pub async fn create_credential(
+        &mut self,
+        credential: Option<ExternalCredential>,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let request = CreateExternalCredentialRequest { credential };
+        let mut tonic_request =
+            tonic::Request::new(to_wire_create_external_credential_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.create_credential(tonic_request).await?;
+        Ok(from_wire_external_credential(response.into_inner()))
+    }
+
+    /// Calls `gestalt.provider.v1.ExternalCredentials.CreateCredential` with the full request and response messages.
+    pub async fn create_credential_raw(
+        &mut self,
+        request: CreateExternalCredentialRequest,
+    ) -> Result<ExternalCredential, GestaltError> {
+        let mut tonic_request =
+            tonic::Request::new(to_wire_create_external_credential_request(request));
+        if let Some(timeout) = self.timeout {
+            tonic_request.set_timeout(timeout);
+        }
+        let response = self.inner.create_credential(tonic_request).await?;
+        Ok(from_wire_external_credential(response.into_inner()))
+    }
+
     /// Calls `gestalt.provider.v1.ExternalCredentials.UpsertCredential`.
     pub async fn upsert_credential(
         &mut self,
-        preserve_timestamps: bool,
         credential: Option<ExternalCredential>,
     ) -> Result<ExternalCredential, GestaltError> {
-        let request = UpsertExternalCredentialRequest {
-            preserve_timestamps,
-            credential,
-        };
+        let request = UpsertExternalCredentialRequest { credential };
         let mut tonic_request =
             tonic::Request::new(to_wire_upsert_external_credential_request(request));
         if let Some(timeout) = self.timeout {
@@ -332,9 +391,15 @@ impl ExternalCredentials {
     /// Calls `gestalt.provider.v1.ExternalCredentials.GetCredential`.
     pub async fn get_credential(
         &mut self,
-        lookup: Option<ExternalCredentialLookup>,
+        subject: String,
+        audience: String,
+        qualifier: String,
     ) -> Result<ExternalCredential, GestaltError> {
-        let request = GetExternalCredentialRequest { lookup };
+        let request = GetExternalCredentialRequest {
+            subject,
+            audience,
+            qualifier,
+        };
         let mut tonic_request =
             tonic::Request::new(to_wire_get_external_credential_request(request));
         if let Some(timeout) = self.timeout {
@@ -361,14 +426,12 @@ impl ExternalCredentials {
     /// Calls `gestalt.provider.v1.ExternalCredentials.ListCredentials`.
     pub async fn list_credentials(
         &mut self,
-        subject_id: String,
-        instance: String,
-        connection_id: String,
+        subject: String,
+        options: ExternalCredentialsListCredentialsOptions,
     ) -> Result<Vec<ExternalCredential>, GestaltError> {
         let request = ListExternalCredentialsRequest {
-            subject_id,
-            instance,
-            connection_id,
+            subject,
+            audience: options.audience,
         };
         let mut tonic_request =
             tonic::Request::new(to_wire_list_external_credentials_request(request));
@@ -570,4 +633,12 @@ impl ExternalCredentials {
             response.into_inner(),
         ))
     }
+}
+
+/// Optional parameters of [`ExternalCredentials::list_credentials`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct ExternalCredentialsListCredentialsOptions {
+    /// The `audience` field.
+    pub audience: String,
 }

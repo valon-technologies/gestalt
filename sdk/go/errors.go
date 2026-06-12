@@ -198,9 +198,6 @@ var (
 	// ErrExternalTokenValidationUnsupported indicates that the authentication provider
 	// does not implement external token validation.
 	ErrExternalTokenValidationUnsupported = errors.New("authentication provider does not support external token validation")
-	// ErrOAuthRegistrationStoreUnsupported indicates that the IndexedDB provider
-	// does not implement OAuth registration storage.
-	ErrOAuthRegistrationStoreUnsupported = errors.New("indexeddb provider does not support oauth registrations")
 )
 
 func providerRPCError(operation string, err error) error {
@@ -224,8 +221,7 @@ func providerRPCError(operation string, err error) error {
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, ErrReadOnly), errors.Is(err, ErrTransactionDone):
 		return status.Error(codes.FailedPrecondition, err.Error())
-	case errors.Is(err, ErrExternalTokenValidationUnsupported),
-		errors.Is(err, ErrOAuthRegistrationStoreUnsupported):
+	case errors.Is(err, ErrExternalTokenValidationUnsupported):
 		return status.Error(codes.Unimplemented, err.Error())
 	}
 	if st, ok := status.FromError(err); ok {
