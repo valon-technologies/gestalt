@@ -14611,7 +14611,7 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 		cfg.Invoker = invoker
 		cfg.Now = func() time.Time { return now }
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.ProviderGateway = providergateway.New(providergateway.WithCallerTokenIssuer(issuer))
+		cfg.CallerTokenIssuer = issuer
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)

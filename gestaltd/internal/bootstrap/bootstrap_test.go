@@ -2,9 +2,13 @@ package bootstrap_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
@@ -1608,6 +1612,19 @@ func transportSecretRef(name string) string {
 	})
 }
 
+func bootstrapCallerTokenPrivateKey(t testing.TB) string {
+	t.Helper()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes}))
+}
+
 func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
 	t.Parallel()
 
@@ -1938,6 +1955,13 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 
 	var built []*bootstrapTransportRecordingAuthorizationProvider
 	factories := validFactories()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{
+				"gestaltd-caller-token-ed25519-private-key": bootstrapCallerTokenPrivateKey(t),
+			},
+		}, nil
+	}
 	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (core.AuthorizationProvider, error) {
 		provider := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
 		built = append(built, provider)
@@ -1957,8 +1981,8 @@ func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *test
 	if _, ok := provider.transport.(*providergateway.ProviderGatewayTransport); !ok {
 		t.Fatalf("authorization provider transport = %T, want *providergateway.ProviderGatewayTransport", provider.transport)
 	}
-	if result.ProviderGateway == nil {
-		t.Fatal("ProviderGateway is nil")
+	if result.CallerTokenIssuer == nil {
+		t.Fatal("CallerTokenIssuer is nil")
 	}
 	if provider.setAuthorizationState == nil {
 		t.Fatal("runtime authorization provider did not receive SetAuthorizationState")

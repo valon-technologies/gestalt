@@ -95,7 +95,7 @@ type Server struct {
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
 	providers              *registry.ProviderMap[core.Provider]
-	providerGateway        *providergateway.Gateway
+	callerTokenIssuer      *providergateway.CallerTokenIssuer
 	workflow               bootstrap.WorkflowControl
 	pluginRuntimes         bootstrap.RuntimeInspector
 	resolver               *principal.Resolver
@@ -154,7 +154,7 @@ type Config struct {
 	AuditSink            core.AuditSink
 	Services             *coredata.Services
 	Providers            *registry.ProviderMap[core.Provider]
-	ProviderGateway      *providergateway.Gateway
+	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 	Agent                bootstrap.AgentControl
 	AgentManager         agentmanager.Service
 	Workflow             bootstrap.WorkflowControl
@@ -351,7 +351,7 @@ func New(cfg Config) (*Server, error) {
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		providers:              cfg.Providers,
-		providerGateway:        cfg.ProviderGateway,
+		callerTokenIssuer:      cfg.CallerTokenIssuer,
 		workflow:               cfg.Workflow,
 		pluginRuntimes:         cfg.Runtimes,
 		resolver:               resolver,
