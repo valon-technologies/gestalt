@@ -7,6 +7,7 @@ type contextKey string
 const (
 	sourceContextKey         contextKey = "provider_gateway_source"
 	requestContextContextKey contextKey = "provider_gateway_request_context"
+	callerTokenContextKey    contextKey = "provider_gateway_caller_token"
 )
 
 func WithSource(ctx context.Context, source GatewaySource) context.Context {
@@ -34,4 +35,16 @@ func WithRequestContext(ctx context.Context, reqCtx *RequestContext) context.Con
 func RequestContextFromContext(ctx context.Context) *RequestContext {
 	reqCtx, _ := ctx.Value(requestContextContextKey).(*RequestContext)
 	return reqCtx
+}
+
+func WithCallerToken(ctx context.Context, token string) context.Context {
+	if token == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, callerTokenContextKey, token)
+}
+
+func CallerTokenFromContext(ctx context.Context) string {
+	token, _ := ctx.Value(callerTokenContextKey).(string)
+	return token
 }

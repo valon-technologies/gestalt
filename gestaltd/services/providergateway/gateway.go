@@ -3,37 +3,14 @@ package providergateway
 import (
 	"context"
 	"fmt"
-	"strings"
+	"time"
 )
 
 type Gateway struct {
 	callerTokenIssuer *CallerTokenIssuer
 }
 
-type CallerTokenIssuer struct {
-	privateKey string
-}
-
-func NewCallerTokenIssuer(privateKey string) *CallerTokenIssuer {
-	privateKey = strings.TrimSpace(privateKey)
-	if privateKey == "" {
-		return nil
-	}
-	return &CallerTokenIssuer{privateKey: privateKey}
-}
-
-func (i *CallerTokenIssuer) privateKeyForTesting() string {
-	if i == nil {
-		return ""
-	}
-	return i.privateKey
-}
-
 type GatewayOption func(*Gateway)
-
-func WithCallerTokenPrivateKey(privateKey string) GatewayOption {
-	return WithCallerTokenIssuer(NewCallerTokenIssuer(privateKey))
-}
 
 func WithCallerTokenIssuer(issuer *CallerTokenIssuer) GatewayOption {
 	return func(g *Gateway) {
@@ -49,6 +26,21 @@ func New(opts ...GatewayOption) *Gateway {
 		}
 	}
 	return g
+}
+
+func (g *Gateway) IssueCallerToken(subjectID string, now time.Time) (string, bool, error) {
+	if g == nil || g.callerTokenIssuer == nil {
+		return "", false, nil
+	}
+	claims, err := GenerateCallerTokenClaims(subjectID, now)
+	if err != nil {
+		return "", true, err
+	}
+	token, err := g.callerTokenIssuer.Issue(claims)
+	if err != nil {
+		return "", true, err
+	}
+	return token, true, nil
 }
 
 func (g *Gateway) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {

@@ -21,7 +21,8 @@ func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
 		ProviderID: "authz",
 	}, gateway)
 
-	resp, err := client.CheckAccess(context.Background(), &proto.CheckAccessRequest{
+	ctx := providergateway.WithCallerToken(context.Background(), "caller-token")
+	resp, err := client.CheckAccess(ctx, &proto.CheckAccessRequest{
 		Subject:  &proto.Subject{Type: "subject", Id: "user:checked"},
 		Action:   &proto.Action{Name: "view"},
 		Resource: &proto.Resource{Type: "team", Id: "servicing"},
@@ -48,6 +49,9 @@ func TestClientCheckAccessInvokesProviderGatewayBeforeGRPC(t *testing.T) {
 	}
 	if got.Operation != "CheckAccess" {
 		t.Fatalf("Operation = %q", got.Operation)
+	}
+	if got.CallerToken != "caller-token" {
+		t.Fatalf("CallerToken = %q, want caller-token", got.CallerToken)
 	}
 	var payload proto.CheckAccessRequest
 	if err := gproto.Unmarshal(got.Payload, &payload); err != nil {
