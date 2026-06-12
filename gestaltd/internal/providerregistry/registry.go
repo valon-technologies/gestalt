@@ -24,8 +24,12 @@ const (
 	IndexSchemaVersion = 1
 	MaxIndexBytes      = 10 << 20
 
-	DefaultRepositoryName = "valon"
-	DefaultRepositoryURL  = "https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml"
+	// The project's provider index at its canonical, consumer-neutral
+	// home. Provider entries installed from the default repository omit
+	// the repo name in config, so renaming the default re-resolves them
+	// here transparently.
+	DefaultRepositoryName = "gestalt"
+	DefaultRepositoryURL  = "https://registry.gestaltd.ai/provider-index.yaml"
 )
 
 var (
@@ -185,6 +189,21 @@ func (r *Resolver) Resolve(ctx context.Context, req ResolveRequest) (*ResolvedPa
 			return nil, errors.Join(errs...)
 		}
 		return nil, fmt.Errorf("%w: %s", errNoPackageMatch, pkg)
+	}
+	if len(matches) > 1 {
+		// Repositories that resolve the package to the same version and
+		// metadata URL are mirrors or aliases of one index (e.g. a legacy
+		// explicit "valon" entry alongside the built-in default), not an
+		// ambiguity. Keep the first match — repository order puts the
+		// default repository first. Only genuinely divergent answers are
+		// ambiguous.
+		distinct := matches[:1]
+		for i := 1; i < len(matches); i++ {
+			if matches[i].Version != matches[0].Version || matches[i].MetadataURL != matches[0].MetadataURL {
+				distinct = append(distinct, matches[i])
+			}
+		}
+		matches = distinct
 	}
 	if len(matches) > 1 && strings.TrimSpace(req.RepositoryName) == "" {
 		names := make([]string, 0, len(matches))
