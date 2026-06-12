@@ -25,9 +25,13 @@ const RUNTIME_LOG_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token
 /// Runtime log stream for runtime log entries.
 pub enum RuntimeLogStream {
     #[default]
+    /// The `Unspecified` variant.
     Unspecified = 0,
+    /// The `Stdout` variant.
     Stdout = 1,
+    /// The `Stderr` variant.
     Stderr = 2,
+    /// The `Runtime` variant.
     Runtime = 3,
 }
 
@@ -40,22 +44,29 @@ impl RuntimeLogStream {
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// One runtime log entry.
 pub struct RuntimeLogEntry {
+    /// The `stream` field.
     pub stream: RuntimeLogStream,
+    /// The `message` field.
     pub message: String,
+    /// The `observed_at` field.
     pub observed_at: SystemTime,
+    /// The `source_seq` field.
     pub source_seq: i64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Request for appending runtime logs.
 pub struct AppendRuntimeLogsRequest {
+    /// The `session_id` field.
     pub session_id: String,
+    /// The `logs` field.
     pub logs: Vec<RuntimeLogEntry>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 /// Response returned after appending runtime logs.
 pub struct AppendRuntimeLogsResponse {
+    /// The `last_seq` field.
     pub last_seq: i64,
 }
 

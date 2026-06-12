@@ -8,41 +8,57 @@ use crate::error::{Error, Result};
 /// Normalized user identity returned by an authentication provider.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AuthenticatedUser {
+    /// The `subject` field.
     pub subject: String,
+    /// The `email` field.
     pub email: String,
+    /// The `email_verified` field.
     pub email_verified: bool,
+    /// The `display_name` field.
     pub display_name: String,
+    /// The `avatar_url` field.
     pub avatar_url: String,
+    /// The `claims` field.
     pub claims: std::collections::BTreeMap<String, String>,
 }
 
 /// Starts an interactive login flow.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BeginLoginRequest {
+    /// The `callback_url` field.
     pub callback_url: String,
+    /// The `host_state` field.
     pub host_state: String,
+    /// The `scopes` field.
     pub scopes: Vec<String>,
+    /// The `options` field.
     pub options: std::collections::BTreeMap<String, String>,
 }
 
 /// Provider-managed authorization URL and opaque state for login completion.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BeginLoginResponse {
+    /// The `authorization_url` field.
     pub authorization_url: String,
+    /// The `provider_state` field.
     pub provider_state: Vec<u8>,
 }
 
 /// Finishes an interactive login flow.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CompleteLoginRequest {
+    /// The `query` field.
     pub query: std::collections::BTreeMap<String, String>,
+    /// The `provider_state` field.
     pub provider_state: Vec<u8>,
+    /// The `callback_url` field.
     pub callback_url: String,
 }
 
 /// Host persistence settings for authenticated sessions.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AuthSessionSettings {
+    /// The `session_ttl` field.
     pub session_ttl: Duration,
 }
 

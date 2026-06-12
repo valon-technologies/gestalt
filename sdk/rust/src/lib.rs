@@ -1,4 +1,5 @@
 #![warn(rustdoc::broken_intra_doc_links)]
+#![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
 /// Generated Agent client and native types.
@@ -24,10 +25,14 @@ mod env;
 mod error;
 /// Generated ExternalCredentials client and native types.
 pub mod external_credential;
+// The prost wire module is reachable only through the doc-hidden proto
+// escape hatch; its items are not part of the documented surface.
+#[allow(missing_docs)]
 mod generated;
 /// Generated IndexedDB client and native types.
 pub mod indexeddb;
 mod indexeddb_provider;
+/// Decoded app invocation results and the canonical invoke error.
 pub mod invoke_support;
 mod protocol;
 mod provider_server;

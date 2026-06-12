@@ -158,7 +158,9 @@ pub struct TransactionOptions {
 #[async_trait]
 /// Fakeable client contract for IndexedDB-compatible storage.
 pub trait IndexedDBApi: Send {
+    /// The store handle this scope yields.
     type ObjectStore: ObjectStoreApi;
+    /// The transaction handle this database yields.
     type Transaction: TransactionApi;
 
     /// Creates a named object store and returns a typed handle for it.
@@ -186,7 +188,9 @@ pub trait IndexedDBApi: Send {
 #[async_trait]
 /// Fakeable IndexedDB object-store contract.
 pub trait ObjectStoreApi: Send {
+    /// The index handle this store yields.
     type Index: IndexApi;
+    /// The cursor handle this scope yields.
     type Cursor: CursorApi;
 
     /// Loads one record by primary key.
@@ -243,6 +247,7 @@ pub trait ObjectStoreApi: Send {
 #[async_trait]
 /// Fakeable IndexedDB secondary-index contract.
 pub trait IndexApi: Send {
+    /// The cursor handle this scope yields.
     type Cursor: CursorApi;
 
     /// Loads the first row that matches values.
@@ -302,6 +307,7 @@ pub trait IndexApi: Send {
 #[async_trait]
 /// Fakeable explicit IndexedDB transaction contract.
 pub trait TransactionApi: Send {
+    /// The transaction-scoped store handle.
     type ObjectStore<'a>: TransactionObjectStoreApi + 'a
     where
         Self: 'a;
@@ -319,6 +325,7 @@ pub trait TransactionApi: Send {
 #[async_trait]
 /// Fakeable transaction-scoped object-store contract.
 pub trait TransactionObjectStoreApi: Send {
+    /// The transaction-scoped index handle.
     type Index<'a>: TransactionIndexApi + 'a
     where
         Self: 'a;
