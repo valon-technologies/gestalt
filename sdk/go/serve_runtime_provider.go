@@ -12,28 +12,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// agentWorkspaceFromProto is still used by agent_conversions.go.
-func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *AgentWorkspace {
-	if workspace == nil {
-		return nil
-	}
-	out := &AgentWorkspace{
-		Checkouts: make([]AgentWorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
-		CWD:       workspace.GetCwd(),
-	}
-	for _, checkout := range workspace.GetCheckouts() {
-		if checkout == nil {
-			continue
-		}
-		out.Checkouts = append(out.Checkouts, AgentWorkspaceGitCheckout{
-			URL:  checkout.GetUrl(),
-			Ref:  checkout.GetRef(),
-			Path: checkout.GetPath(),
-		})
-	}
-	return out
-}
-
 // ServeRuntimeProvider starts a gRPC server for a [RuntimeProvider].
 func ServeRuntimeProvider(ctx context.Context, provider RuntimeProvider) error {
 	return serveProvider(withProviderCloser(ctx, provider), func(srv *grpc.Server) {
