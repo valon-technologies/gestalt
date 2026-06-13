@@ -330,6 +330,14 @@ var file_v1_annotations_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50001,opt,name=host_binding",
 		Filename:      "v1/annotations.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.ServiceOptions)(nil),
+		ExtensionType: (*bool)(nil),
+		Field:         50002,
+		Name:          "gestalt.provider.v1.provider",
+		Tag:           "varint,50002,opt,name=provider",
+		Filename:      "v1/annotations.proto",
+	},
 }
 
 // Extension fields to descriptorpb.MethodOptions.
@@ -378,6 +386,14 @@ var (
 	//
 	// optional string host_binding = 50001;
 	E_HostBinding = &file_v1_annotations_proto_extTypes[7]
+	// Provider-implementation marker: providers implement this service. SDKs
+	// generate the native handler surface with unimplemented defaults and the
+	// wire dispatch adapter; serve wiring stays in the handwritten runtime.
+	// Independent of host_binding: a service may carry both when the host
+	// surface and the provider protocol are the same service.
+	//
+	// optional bool provider = 50002;
+	E_Provider = &file_v1_annotations_proto_extTypes[8]
 )
 
 var File_v1_annotations_proto protoreflect.FileDescriptor
@@ -408,7 +424,8 @@ const file_v1_annotations_proto_rawDesc = "" +
 	"\x0foptional_result\x12\x1f.google.protobuf.MessageOptions\x18ц\x03 \x01(\v2#.gestalt.provider.v1.OptionalResultR\x0eoptionalResult:S\n" +
 	"\x05keyed\x12\x1f.google.protobuf.MessageOptions\x18҆\x03 \x01(\v2\x1a.gestalt.provider.v1.KeyedR\x05keyed:9\n" +
 	"\x06unwrap\x12\x1f.google.protobuf.MessageOptions\x18ӆ\x03 \x01(\tR\x06unwrap:D\n" +
-	"\fhost_binding\x12\x1f.google.protobuf.ServiceOptions\x18ц\x03 \x01(\tR\vhostBindingB\xdc\x01\n" +
+	"\fhost_binding\x12\x1f.google.protobuf.ServiceOptions\x18ц\x03 \x01(\tR\vhostBinding:=\n" +
+	"\bprovider\x12\x1f.google.protobuf.ServiceOptions\x18҆\x03 \x01(\bR\bproviderB\xdc\x01\n" +
 	"\x17com.gestalt.provider.v1B\x10AnnotationsProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -442,14 +459,15 @@ var file_v1_annotations_proto_depIdxs = []int32{
 	5,  // 5: gestalt.provider.v1.keyed:extendee -> google.protobuf.MessageOptions
 	5,  // 6: gestalt.provider.v1.unwrap:extendee -> google.protobuf.MessageOptions
 	6,  // 7: gestalt.provider.v1.host_binding:extendee -> google.protobuf.ServiceOptions
-	2,  // 8: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
-	3,  // 9: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
-	0,  // 10: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
-	1,  // 11: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	8,  // [8:12] is the sub-list for extension type_name
-	0,  // [0:8] is the sub-list for extension extendee
+	6,  // 8: gestalt.provider.v1.provider:extendee -> google.protobuf.ServiceOptions
+	2,  // 9: gestalt.provider.v1.initial:type_name -> gestalt.provider.v1.Initial
+	3,  // 10: gestalt.provider.v1.json_result:type_name -> gestalt.provider.v1.JsonResult
+	0,  // 11: gestalt.provider.v1.optional_result:type_name -> gestalt.provider.v1.OptionalResult
+	1,  // 12: gestalt.provider.v1.keyed:type_name -> gestalt.provider.v1.Keyed
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	9,  // [9:13] is the sub-list for extension type_name
+	0,  // [0:9] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
 }
 
@@ -465,7 +483,7 @@ func file_v1_annotations_proto_init() {
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_annotations_proto_rawDesc), len(file_v1_annotations_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
-			NumExtensions: 8,
+			NumExtensions: 9,
 			NumServices:   0,
 		},
 		GoTypes:           file_v1_annotations_proto_goTypes,

@@ -60,6 +60,7 @@ message AuthSessionSettings {
 
 // Authentication models the shared Gestalt authentication protocol.
 service Authentication {
+  option (provider) = true;
   rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse) {
     option (signature) = "callback_url";
     option (signature) = "host_state";

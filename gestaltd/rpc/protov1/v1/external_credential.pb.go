@@ -1582,7 +1582,7 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x01\n" +
 	"\"ExchangeExternalCredentialResponse\x12[\n" +
-	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse:\x12\x9a\xb5\x18\x0etoken_response2\x81\v\n" +
+	"\x0etoken_response\x18\x01 \x01(\v24.gestalt.provider.v1.ExternalCredentialTokenResponseR\rtokenResponse:\x12\x9a\xb5\x18\x0etoken_response2\x85\v\n" +
 	"\x13ExternalCredentials\x12\x81\x01\n" +
 	"\x10CreateCredential\x124.gestalt.provider.v1.CreateExternalCredentialRequest\x1a'.gestalt.provider.v1.ExternalCredential\"\x0e\x8a\xb5\x18\n" +
 	"credential\x12\x81\x01\n" +
@@ -1596,7 +1596,7 @@ const file_v1_external_credential_proto_rawDesc = "" +
 	"\x11ResolveCredential\x125.gestalt.provider.v1.ResolveExternalCredentialRequest\x1a6.gestalt.provider.v1.ResolveExternalCredentialResponse\"t\x8a\xb5\x18\bprovider\x8a\xb5\x18\n" +
 	"connection\x8a\xb5\x18\rconnection_id\x8a\xb5\x18\x04mode\x8a\xb5\x18\x15credential_subject_id\x8a\xb5\x18\x10actor_subject_id\x8a\xb5\x18\binstance\x8a\xb5\x18\x04auth\x12\x86\x02\n" +
 	"\x12ExchangeCredential\x126.gestalt.provider.v1.ExchangeExternalCredentialRequest\x1a7.gestalt.provider.v1.ExchangeExternalCredentialResponse\"\x7f\x8a\xb5\x18\bprovider\x8a\xb5\x18\n" +
-	"connection\x8a\xb5\x18\rconnection_id\x8a\xb5\x18\x15credential_subject_id\x8a\xb5\x18\x10actor_subject_id\x8a\xb5\x18\binstance\x8a\xb5\x18\x0fcredential_json\x8a\xb5\x18\x04auth\x1a\x18\x8a\xb5\x18\x14external_credentialsB\xe3\x01\n" +
+	"connection\x8a\xb5\x18\rconnection_id\x8a\xb5\x18\x15credential_subject_id\x8a\xb5\x18\x10actor_subject_id\x8a\xb5\x18\binstance\x8a\xb5\x18\x0fcredential_json\x8a\xb5\x18\x04auth\x1a\x1c\x8a\xb5\x18\x14external_credentials\x90\xb5\x18\x01B\xe3\x01\n" +
 	"\x17com.gestalt.provider.v1B\x17ExternalCredentialProtoP\x01ZAgithub.com/valon-technologies/gestalt/server/rpc/protov1/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (

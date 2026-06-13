@@ -84,4 +84,11 @@ extend google.protobuf.ServiceOptions {
   // Host-service binding name, enabling a generated zero-configuration
   // constructor for the client.
   string host_binding = 50001;
+
+  // Provider-implementation marker: providers implement this service. SDKs
+  // generate the native handler surface with unimplemented defaults and the
+  // wire dispatch adapter; serve wiring stays in the handwritten runtime.
+  // Independent of host_binding: a service may carry both when the host
+  // surface and the provider protocol are the same service.
+  bool provider = 50002;
 }

@@ -429,6 +429,7 @@ message GetWorkflowProviderRunOutputResponse {
 
 service Workflow {
   option (host_binding) = "workflow";
+  option (provider) = true;
 
   rpc ApplyDefinition(ApplyWorkflowProviderDefinitionRequest) returns (WorkflowDefinition) {
     option (signature) = "provider_name";

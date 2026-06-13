@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from . import annotations_pb2 as v1_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"4\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value:\t\x9a\xb5\x18\x05value2o\n\x07Secrets\x12\x64\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponse\"\x08\x8a\xb5\x18\x04nameb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"4\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value:\t\x9a\xb5\x18\x05value2u\n\x07Secrets\x12\x64\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponse\"\x08\x8a\xb5\x18\x04name\x1a\x04\x90\xb5\x18\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,6 +34,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
   _globals['_GETSECRETRESPONSE']._loaded_options = None
   _globals['_GETSECRETRESPONSE']._serialized_options = b'\232\265\030\005value'
+  _globals['_SECRETS']._loaded_options = None
+  _globals['_SECRETS']._serialized_options = b'\220\265\030\001'
   _globals['_SECRETS'].methods_by_name['GetSecret']._loaded_options = None
   _globals['_SECRETS'].methods_by_name['GetSecret']._serialized_options = b'\212\265\030\004name'
   _globals['_GETSECRETREQUEST']._serialized_start=63
@@ -41,5 +43,5 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_GETSECRETRESPONSE']._serialized_start=103
   _globals['_GETSECRETRESPONSE']._serialized_end=155
   _globals['_SECRETS']._serialized_start=157
-  _globals['_SECRETS']._serialized_end=268
+  _globals['_SECRETS']._serialized_end=274
 # @@protoc_insertion_point(module_scope)

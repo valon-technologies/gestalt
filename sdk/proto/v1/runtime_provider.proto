@@ -150,6 +150,7 @@ service RuntimeLogHost {
 }
 
 service Runtime {
+  option (provider) = true;
   rpc GetSupport(google.protobuf.Empty) returns (RuntimeSupport);
   rpc StartSession(StartRuntimeSessionRequest) returns (RuntimeSession) {
     option (signature) = "app_name";

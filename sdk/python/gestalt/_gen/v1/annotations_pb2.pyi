@@ -20,6 +20,8 @@ UNWRAP_FIELD_NUMBER: _ClassVar[int]
 unwrap: _descriptor.FieldDescriptor
 HOST_BINDING_FIELD_NUMBER: _ClassVar[int]
 host_binding: _descriptor.FieldDescriptor
+PROVIDER_FIELD_NUMBER: _ClassVar[int]
+provider: _descriptor.FieldDescriptor
 
 class OptionalResult(_message.Message):
     __slots__ = ()

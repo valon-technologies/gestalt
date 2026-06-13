@@ -25,6 +25,7 @@ const (
 	extJsonResult     = "gestalt.provider.v1.json_result"
 	extOptionalSig    = "gestalt.provider.v1.optional_signature"
 	extHostBinding    = "gestalt.provider.v1.host_binding"
+	extProvider       = "gestalt.provider.v1.provider"
 )
 
 type annotations struct {
@@ -76,6 +77,14 @@ func (b *builder) serviceAnnotations(sd protoreflect.ServiceDescriptor, svc *mod
 		svc.HostBinding = v.String()
 		if svc.HostBinding == "" {
 			b.add(sd, "service", "host_binding annotation must not be empty")
+		}
+	}
+	if v, ok := exts[extProvider]; ok && v.Bool() {
+		svc.Provider = true
+		for _, m := range svc.Methods {
+			if m.Stream != model.Unary {
+				b.add(sd, "service", fmt.Sprintf("provider annotation does not yet support streaming method %s", m.Name))
+			}
 		}
 	}
 }
