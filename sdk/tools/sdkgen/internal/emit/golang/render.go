@@ -291,25 +291,6 @@ func (r *renderer) renderMessage(m *model.Message) {
 		fmt.Fprintf(&r.body, "\t%s %s\n", oneofGoName(o), oneofTypeName(name, o))
 	}
 	r.body.WriteString("}\n\n")
-
-	for _, f := range m.Fields {
-		if f.OneofIndex >= 0 {
-			continue
-		}
-		fieldName := fieldGoName(f)
-		fieldType := r.fieldType(f)
-		fmt.Fprintf(&r.body, "// Get%s returns the %s field; it is safe to call on a nil receiver.\n", fieldName, f.JSONName)
-		fmt.Fprintf(&r.body, "func (x *%s) Get%s() %s {\n", name, fieldName, fieldType)
-		fmt.Fprintf(&r.body, "\tif x == nil {\n\t\treturn %s\n\t}\n", zeroValue(f))
-		fmt.Fprintf(&r.body, "\treturn x.%s\n}\n\n", fieldName)
-	}
-	for _, o := range m.Oneofs {
-		prop := oneofGoName(o)
-		fmt.Fprintf(&r.body, "// Get%s returns the %s oneof; it is safe to call on a nil receiver.\n", prop, o.Name)
-		fmt.Fprintf(&r.body, "func (x *%s) Get%s() %s {\n", name, prop, oneofTypeName(name, o))
-		fmt.Fprintf(&r.body, "\tif x == nil {\n\t\treturn nil\n\t}\n")
-		fmt.Fprintf(&r.body, "\treturn x.%s\n}\n\n", prop)
-	}
 }
 
 func (r *renderer) renderOneofTypes(m *model.Message, o *model.Oneof) {

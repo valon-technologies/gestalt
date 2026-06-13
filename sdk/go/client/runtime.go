@@ -55,30 +55,6 @@ type ConfigureProviderRequest struct {
 	ProtocolVersion int32
 }
 
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *ConfigureProviderRequest) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetConfig returns the config field; it is safe to call on a nil receiver.
-func (x *ConfigureProviderRequest) GetConfig() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Config
-}
-
-// GetProtocolVersion returns the protocolVersion field; it is safe to call on a nil receiver.
-func (x *ConfigureProviderRequest) GetProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.ProtocolVersion
-}
-
 // ConfigureProviderResponse is the native message type for gestalt.provider.v1.ConfigureProviderResponse.
 //
 // ConfigureProviderResponse confirms the protocol version the provider is
@@ -87,36 +63,12 @@ type ConfigureProviderResponse struct {
 	ProtocolVersion int32
 }
 
-// GetProtocolVersion returns the protocolVersion field; it is safe to call on a nil receiver.
-func (x *ConfigureProviderResponse) GetProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.ProtocolVersion
-}
-
 // HealthCheckResponse is the native message type for gestalt.provider.v1.HealthCheckResponse.
 //
 // HealthCheckResponse reports runtime readiness for a provider surface.
 type HealthCheckResponse struct {
 	Ready   bool
 	Message string
-}
-
-// GetReady returns the ready field; it is safe to call on a nil receiver.
-func (x *HealthCheckResponse) GetReady() bool {
-	if x == nil {
-		return false
-	}
-	return x.Ready
-}
-
-// GetMessage returns the message field; it is safe to call on a nil receiver.
-func (x *HealthCheckResponse) GetMessage() string {
-	if x == nil {
-		return ""
-	}
-	return x.Message
 }
 
 // ProviderIdentity is the native message type for gestalt.provider.v1.ProviderIdentity.
@@ -134,84 +86,12 @@ type ProviderIdentity struct {
 	MaxProtocolVersion int32
 }
 
-// GetKind returns the kind field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetKind() ProviderKind {
-	if x == nil {
-		return 0
-	}
-	return x.Kind
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetDisplayName returns the displayName field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetDisplayName() string {
-	if x == nil {
-		return ""
-	}
-	return x.DisplayName
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetVersion returns the version field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetVersion() string {
-	if x == nil {
-		return ""
-	}
-	return x.Version
-}
-
-// GetWarnings returns the warnings field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetWarnings() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Warnings
-}
-
-// GetMinProtocolVersion returns the minProtocolVersion field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetMinProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.MinProtocolVersion
-}
-
-// GetMaxProtocolVersion returns the maxProtocolVersion field; it is safe to call on a nil receiver.
-func (x *ProviderIdentity) GetMaxProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.MaxProtocolVersion
-}
-
 // StartRuntimeProviderResponse is the native message type for gestalt.provider.v1.StartRuntimeProviderResponse.
 //
 // StartRuntimeProviderResponse confirms the protocol version the provider is
 // serving after the optional runtime start phase.
 type StartRuntimeProviderResponse struct {
 	ProtocolVersion int32
-}
-
-// GetProtocolVersion returns the protocolVersion field; it is safe to call on a nil receiver.
-func (x *StartRuntimeProviderResponse) GetProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.ProtocolVersion
 }
 
 // ProviderLifecycle is the generated client for gestalt.provider.v1.ProviderLifecycle.

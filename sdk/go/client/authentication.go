@@ -17,14 +17,6 @@ type AuthSessionSettings struct {
 	SessionTTLSeconds int64
 }
 
-// GetSessionTTLSeconds returns the sessionTtlSeconds field; it is safe to call on a nil receiver.
-func (x *AuthSessionSettings) GetSessionTTLSeconds() int64 {
-	if x == nil {
-		return 0
-	}
-	return x.SessionTTLSeconds
-}
-
 // AuthenticatedUser is the native message type for gestalt.provider.v1.AuthenticatedUser.
 //
 // AuthenticatedUser is the normalized user identity returned by an authentication
@@ -36,54 +28,6 @@ type AuthenticatedUser struct {
 	DisplayName   string
 	AvatarURL     string
 	Claims        map[string]string
-}
-
-// GetSubject returns the subject field; it is safe to call on a nil receiver.
-func (x *AuthenticatedUser) GetSubject() string {
-	if x == nil {
-		return ""
-	}
-	return x.Subject
-}
-
-// GetEmail returns the email field; it is safe to call on a nil receiver.
-func (x *AuthenticatedUser) GetEmail() string {
-	if x == nil {
-		return ""
-	}
-	return x.Email
-}
-
-// GetEmailVerified returns the emailVerified field; it is safe to call on a nil receiver.
-func (x *AuthenticatedUser) GetEmailVerified() bool {
-	if x == nil {
-		return false
-	}
-	return x.EmailVerified
-}
-
-// GetDisplayName returns the displayName field; it is safe to call on a nil receiver.
-func (x *AuthenticatedUser) GetDisplayName() string {
-	if x == nil {
-		return ""
-	}
-	return x.DisplayName
-}
-
-// GetAvatarURL returns the avatarUrl field; it is safe to call on a nil receiver.
-func (x *AuthenticatedUser) GetAvatarURL() string {
-	if x == nil {
-		return ""
-	}
-	return x.AvatarURL
-}
-
-// GetClaims returns the claims field; it is safe to call on a nil receiver.
-func (x *AuthenticatedUser) GetClaims() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.Claims
 }
 
 // BeginLoginRequest is the native message type for gestalt.provider.v1.BeginLoginRequest.
@@ -101,38 +45,6 @@ type BeginLoginRequest struct {
 	Options map[string]string
 }
 
-// GetCallbackURL returns the callbackUrl field; it is safe to call on a nil receiver.
-func (x *BeginLoginRequest) GetCallbackURL() string {
-	if x == nil {
-		return ""
-	}
-	return x.CallbackURL
-}
-
-// GetHostState returns the hostState field; it is safe to call on a nil receiver.
-func (x *BeginLoginRequest) GetHostState() string {
-	if x == nil {
-		return ""
-	}
-	return x.HostState
-}
-
-// GetScopes returns the scopes field; it is safe to call on a nil receiver.
-func (x *BeginLoginRequest) GetScopes() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Scopes
-}
-
-// GetOptions returns the options field; it is safe to call on a nil receiver.
-func (x *BeginLoginRequest) GetOptions() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.Options
-}
-
 // BeginLoginResponse is the native message type for gestalt.provider.v1.BeginLoginResponse.
 //
 // BeginLoginResponse returns the provider-managed authorization URL and opaque
@@ -140,22 +52,6 @@ func (x *BeginLoginRequest) GetOptions() map[string]string {
 type BeginLoginResponse struct {
 	AuthorizationURL string
 	ProviderState    []byte
-}
-
-// GetAuthorizationURL returns the authorizationUrl field; it is safe to call on a nil receiver.
-func (x *BeginLoginResponse) GetAuthorizationURL() string {
-	if x == nil {
-		return ""
-	}
-	return x.AuthorizationURL
-}
-
-// GetProviderState returns the providerState field; it is safe to call on a nil receiver.
-func (x *BeginLoginResponse) GetProviderState() []byte {
-	if x == nil {
-		return nil
-	}
-	return x.ProviderState
 }
 
 // CompleteLoginRequest is the native message type for gestalt.provider.v1.CompleteLoginRequest.
@@ -171,44 +67,12 @@ type CompleteLoginRequest struct {
 	CallbackURL string
 }
 
-// GetQuery returns the query field; it is safe to call on a nil receiver.
-func (x *CompleteLoginRequest) GetQuery() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.Query
-}
-
-// GetProviderState returns the providerState field; it is safe to call on a nil receiver.
-func (x *CompleteLoginRequest) GetProviderState() []byte {
-	if x == nil {
-		return nil
-	}
-	return x.ProviderState
-}
-
-// GetCallbackURL returns the callbackUrl field; it is safe to call on a nil receiver.
-func (x *CompleteLoginRequest) GetCallbackURL() string {
-	if x == nil {
-		return ""
-	}
-	return x.CallbackURL
-}
-
 // ValidateExternalTokenRequest is the native message type for gestalt.provider.v1.ValidateExternalTokenRequest.
 //
 // ValidateExternalTokenRequest asks the provider to validate a token minted
 // outside the interactive login flow.
 type ValidateExternalTokenRequest struct {
 	Token string
-}
-
-// GetToken returns the token field; it is safe to call on a nil receiver.
-func (x *ValidateExternalTokenRequest) GetToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.Token
 }
 
 // Authentication is the generated client for gestalt.provider.v1.Authentication.

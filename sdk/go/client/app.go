@@ -34,51 +34,11 @@ type AccessContext struct {
 	Role   string
 }
 
-// GetPolicy returns the policy field; it is safe to call on a nil receiver.
-func (x *AccessContext) GetPolicy() string {
-	if x == nil {
-		return ""
-	}
-	return x.Policy
-}
-
-// GetRole returns the role field; it is safe to call on a nil receiver.
-func (x *AccessContext) GetRole() string {
-	if x == nil {
-		return ""
-	}
-	return x.Role
-}
-
 // AgentInvocationContext is the native message type for gestalt.provider.v1.AgentInvocationContext.
 type AgentInvocationContext struct {
 	ProviderName string
 	SessionID    string
 	TurnID       string
-}
-
-// GetProviderName returns the providerName field; it is safe to call on a nil receiver.
-func (x *AgentInvocationContext) GetProviderName() string {
-	if x == nil {
-		return ""
-	}
-	return x.ProviderName
-}
-
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *AgentInvocationContext) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
-}
-
-// GetTurnID returns the turnId field; it is safe to call on a nil receiver.
-func (x *AgentInvocationContext) GetTurnID() string {
-	if x == nil {
-		return ""
-	}
-	return x.TurnID
 }
 
 // AgentToolRef is the native message type for gestalt.provider.v1.AgentToolRef.
@@ -92,78 +52,6 @@ type AgentToolRef struct {
 	CredentialMode string
 	System         string
 	RunAs          *SubjectContext
-}
-
-// GetApp returns the app field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetApp() string {
-	if x == nil {
-		return ""
-	}
-	return x.App
-}
-
-// GetOperation returns the operation field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetOperation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Operation
-}
-
-// GetConnection returns the connection field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetConnection() string {
-	if x == nil {
-		return ""
-	}
-	return x.Connection
-}
-
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetInstance() string {
-	if x == nil {
-		return ""
-	}
-	return x.Instance
-}
-
-// GetTitle returns the title field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetTitle() string {
-	if x == nil {
-		return ""
-	}
-	return x.Title
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetCredentialMode returns the credentialMode field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetCredentialMode() string {
-	if x == nil {
-		return ""
-	}
-	return x.CredentialMode
-}
-
-// GetSystem returns the system field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetSystem() string {
-	if x == nil {
-		return ""
-	}
-	return x.System
-}
-
-// GetRunAs returns the runAs field; it is safe to call on a nil receiver.
-func (x *AgentToolRef) GetRunAs() *SubjectContext {
-	if x == nil {
-		return nil
-	}
-	return x.RunAs
 }
 
 // AppInvokeGraphQLRequest is the native message type for gestalt.provider.v1.AppInvokeGraphQLRequest.
@@ -180,62 +68,6 @@ type AppInvokeGraphQLRequest struct {
 	Context        *RequestContext
 }
 
-// GetApp returns the app field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetApp() string {
-	if x == nil {
-		return ""
-	}
-	return x.App
-}
-
-// GetDocument returns the document field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetDocument() string {
-	if x == nil {
-		return ""
-	}
-	return x.Document
-}
-
-// GetVariables returns the variables field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetVariables() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Variables
-}
-
-// GetConnection returns the connection field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetConnection() string {
-	if x == nil {
-		return ""
-	}
-	return x.Connection
-}
-
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetInstance() string {
-	if x == nil {
-		return ""
-	}
-	return x.Instance
-}
-
-// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetIdempotencyKey() string {
-	if x == nil {
-		return ""
-	}
-	return x.IdempotencyKey
-}
-
-// GetContext returns the context field; it is safe to call on a nil receiver.
-func (x *AppInvokeGraphQLRequest) GetContext() *RequestContext {
-	if x == nil {
-		return nil
-	}
-	return x.Context
-}
-
 // AppInvokeRequest is the native message type for gestalt.provider.v1.AppInvokeRequest.
 //
 // AppInvokeRequest invokes a declared operation on another app through Gestalt.
@@ -250,70 +82,6 @@ type AppInvokeRequest struct {
 	Context        *RequestContext
 }
 
-// GetApp returns the app field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetApp() string {
-	if x == nil {
-		return ""
-	}
-	return x.App
-}
-
-// GetOperation returns the operation field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetOperation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Operation
-}
-
-// GetParams returns the params field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetParams() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Params
-}
-
-// GetConnection returns the connection field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetConnection() string {
-	if x == nil {
-		return ""
-	}
-	return x.Connection
-}
-
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetInstance() string {
-	if x == nil {
-		return ""
-	}
-	return x.Instance
-}
-
-// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetIdempotencyKey() string {
-	if x == nil {
-		return ""
-	}
-	return x.IdempotencyKey
-}
-
-// GetCredentialMode returns the credentialMode field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetCredentialMode() string {
-	if x == nil {
-		return ""
-	}
-	return x.CredentialMode
-}
-
-// GetContext returns the context field; it is safe to call on a nil receiver.
-func (x *AppInvokeRequest) GetContext() *RequestContext {
-	if x == nil {
-		return nil
-	}
-	return x.Context
-}
-
 // Catalog is the native message type for gestalt.provider.v1.Catalog.
 //
 // Catalog is the static or request-scoped executable surface exposed by a
@@ -324,46 +92,6 @@ type Catalog struct {
 	Description string
 	IconSvg     string
 	Operations  []*CatalogOperation
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *Catalog) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetDisplayName returns the displayName field; it is safe to call on a nil receiver.
-func (x *Catalog) GetDisplayName() string {
-	if x == nil {
-		return ""
-	}
-	return x.DisplayName
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *Catalog) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetIconSvg returns the iconSvg field; it is safe to call on a nil receiver.
-func (x *Catalog) GetIconSvg() string {
-	if x == nil {
-		return ""
-	}
-	return x.IconSvg
-}
-
-// GetOperations returns the operations field; it is safe to call on a nil receiver.
-func (x *Catalog) GetOperations() []*CatalogOperation {
-	if x == nil {
-		return nil
-	}
-	return x.Operations
 }
 
 // CatalogOperation is the native message type for gestalt.provider.v1.CatalogOperation.
@@ -387,118 +115,6 @@ type CatalogOperation struct {
 	AllowedRoles   []string
 }
 
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetMethod returns the method field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetMethod() string {
-	if x == nil {
-		return ""
-	}
-	return x.Method
-}
-
-// GetTitle returns the title field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetTitle() string {
-	if x == nil {
-		return ""
-	}
-	return x.Title
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetInputSchema returns the inputSchema field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetInputSchema() string {
-	if x == nil {
-		return ""
-	}
-	return x.InputSchema
-}
-
-// GetOutputSchema returns the outputSchema field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetOutputSchema() string {
-	if x == nil {
-		return ""
-	}
-	return x.OutputSchema
-}
-
-// GetAnnotations returns the annotations field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetAnnotations() *OperationAnnotations {
-	if x == nil {
-		return nil
-	}
-	return x.Annotations
-}
-
-// GetParameters returns the parameters field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetParameters() []*CatalogParameter {
-	if x == nil {
-		return nil
-	}
-	return x.Parameters
-}
-
-// GetRequiredScopes returns the requiredScopes field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetRequiredScopes() []string {
-	if x == nil {
-		return nil
-	}
-	return x.RequiredScopes
-}
-
-// GetTags returns the tags field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetTags() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Tags
-}
-
-// GetReadOnly returns the readOnly field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetReadOnly() bool {
-	if x == nil {
-		return false
-	}
-	return x.ReadOnly
-}
-
-// GetVisible returns the visible field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetVisible() *bool {
-	if x == nil {
-		return nil
-	}
-	return x.Visible
-}
-
-// GetTransport returns the transport field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetTransport() string {
-	if x == nil {
-		return ""
-	}
-	return x.Transport
-}
-
-// GetAllowedRoles returns the allowedRoles field; it is safe to call on a nil receiver.
-func (x *CatalogOperation) GetAllowedRoles() []string {
-	if x == nil {
-		return nil
-	}
-	return x.AllowedRoles
-}
-
 // CatalogParameter is the native message type for gestalt.provider.v1.CatalogParameter.
 //
 // CatalogParameter describes one input parameter surfaced in the generated
@@ -509,46 +125,6 @@ type CatalogParameter struct {
 	Description string
 	Required    bool
 	Default     any
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *CatalogParameter) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetType returns the type field; it is safe to call on a nil receiver.
-func (x *CatalogParameter) GetType() string {
-	if x == nil {
-		return ""
-	}
-	return x.Type
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *CatalogParameter) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetRequired returns the required field; it is safe to call on a nil receiver.
-func (x *CatalogParameter) GetRequired() bool {
-	if x == nil {
-		return false
-	}
-	return x.Required
-}
-
-// GetDefault returns the default field; it is safe to call on a nil receiver.
-func (x *CatalogParameter) GetDefault() any {
-	if x == nil {
-		return nil
-	}
-	return x.Default
 }
 
 // ConnectionParamDef is the native message type for gestalt.provider.v1.ConnectionParamDef.
@@ -562,46 +138,6 @@ type ConnectionParamDef struct {
 	Field        string
 }
 
-// GetRequired returns the required field; it is safe to call on a nil receiver.
-func (x *ConnectionParamDef) GetRequired() bool {
-	if x == nil {
-		return false
-	}
-	return x.Required
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *ConnectionParamDef) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetDefaultValue returns the defaultValue field; it is safe to call on a nil receiver.
-func (x *ConnectionParamDef) GetDefaultValue() string {
-	if x == nil {
-		return ""
-	}
-	return x.DefaultValue
-}
-
-// GetFrom returns the from field; it is safe to call on a nil receiver.
-func (x *ConnectionParamDef) GetFrom() string {
-	if x == nil {
-		return ""
-	}
-	return x.From
-}
-
-// GetField returns the field field; it is safe to call on a nil receiver.
-func (x *ConnectionParamDef) GetField() string {
-	if x == nil {
-		return ""
-	}
-	return x.Field
-}
-
 // CredentialContext is the native message type for gestalt.provider.v1.CredentialContext.
 //
 // CredentialContext describes the resolved credential used for an operation.
@@ -610,38 +146,6 @@ type CredentialContext struct {
 	SubjectID  string
 	Connection string
 	Instance   string
-}
-
-// GetMode returns the mode field; it is safe to call on a nil receiver.
-func (x *CredentialContext) GetMode() string {
-	if x == nil {
-		return ""
-	}
-	return x.Mode
-}
-
-// GetSubjectID returns the subjectId field; it is safe to call on a nil receiver.
-func (x *CredentialContext) GetSubjectID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SubjectID
-}
-
-// GetConnection returns the connection field; it is safe to call on a nil receiver.
-func (x *CredentialContext) GetConnection() string {
-	if x == nil {
-		return ""
-	}
-	return x.Connection
-}
-
-// GetInstance returns the instance field; it is safe to call on a nil receiver.
-func (x *CredentialContext) GetInstance() string {
-	if x == nil {
-		return ""
-	}
-	return x.Instance
 }
 
 // ExecuteRequest is the native message type for gestalt.provider.v1.ExecuteRequest.
@@ -657,62 +161,6 @@ type ExecuteRequest struct {
 	IdempotencyKey   string
 }
 
-// GetOperation returns the operation field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetOperation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Operation
-}
-
-// GetParams returns the params field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetParams() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Params
-}
-
-// GetToken returns the token field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.Token
-}
-
-// GetConnectionParams returns the connectionParams field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetConnectionParams() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.ConnectionParams
-}
-
-// GetInvocationID returns the invocationId field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetInvocationID() string {
-	if x == nil {
-		return ""
-	}
-	return x.InvocationID
-}
-
-// GetContext returns the context field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetContext() *RequestContext {
-	if x == nil {
-		return nil
-	}
-	return x.Context
-}
-
-// GetIdempotencyKey returns the idempotencyKey field; it is safe to call on a nil receiver.
-func (x *ExecuteRequest) GetIdempotencyKey() string {
-	if x == nil {
-		return ""
-	}
-	return x.IdempotencyKey
-}
-
 // GetSessionCatalogRequest is the native message type for gestalt.provider.v1.GetSessionCatalogRequest.
 //
 // GetSessionCatalogRequest asks a provider for request-scoped catalog
@@ -724,51 +172,11 @@ type GetSessionCatalogRequest struct {
 	Context          *RequestContext
 }
 
-// GetToken returns the token field; it is safe to call on a nil receiver.
-func (x *GetSessionCatalogRequest) GetToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.Token
-}
-
-// GetConnectionParams returns the connectionParams field; it is safe to call on a nil receiver.
-func (x *GetSessionCatalogRequest) GetConnectionParams() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.ConnectionParams
-}
-
-// GetInvocationID returns the invocationId field; it is safe to call on a nil receiver.
-func (x *GetSessionCatalogRequest) GetInvocationID() string {
-	if x == nil {
-		return ""
-	}
-	return x.InvocationID
-}
-
-// GetContext returns the context field; it is safe to call on a nil receiver.
-func (x *GetSessionCatalogRequest) GetContext() *RequestContext {
-	if x == nil {
-		return nil
-	}
-	return x.Context
-}
-
 // GetSessionCatalogResponse is the native message type for gestalt.provider.v1.GetSessionCatalogResponse.
 //
 // GetSessionCatalogResponse returns request-scoped catalog extensions.
 type GetSessionCatalogResponse struct {
 	Catalog *Catalog
-}
-
-// GetCatalog returns the catalog field; it is safe to call on a nil receiver.
-func (x *GetSessionCatalogResponse) GetCatalog() *Catalog {
-	if x == nil {
-		return nil
-	}
-	return x.Catalog
 }
 
 // HTTPSubjectRequest is the native message type for gestalt.provider.v1.HTTPSubjectRequest.
@@ -789,107 +197,11 @@ type HTTPSubjectRequest struct {
 	VerifiedClaims  map[string]string
 }
 
-// GetBinding returns the binding field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetBinding() string {
-	if x == nil {
-		return ""
-	}
-	return x.Binding
-}
-
-// GetMethod returns the method field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetMethod() string {
-	if x == nil {
-		return ""
-	}
-	return x.Method
-}
-
-// GetPath returns the path field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetPath() string {
-	if x == nil {
-		return ""
-	}
-	return x.Path
-}
-
-// GetContentType returns the contentType field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetContentType() string {
-	if x == nil {
-		return ""
-	}
-	return x.ContentType
-}
-
-// GetHeaders returns the headers field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetHeaders() map[string]*StringList {
-	if x == nil {
-		return nil
-	}
-	return x.Headers
-}
-
-// GetQuery returns the query field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetQuery() map[string]*StringList {
-	if x == nil {
-		return nil
-	}
-	return x.Query
-}
-
-// GetParams returns the params field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetParams() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Params
-}
-
-// GetRawBody returns the rawBody field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetRawBody() []byte {
-	if x == nil {
-		return nil
-	}
-	return x.RawBody
-}
-
-// GetSecurityScheme returns the securityScheme field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetSecurityScheme() string {
-	if x == nil {
-		return ""
-	}
-	return x.SecurityScheme
-}
-
-// GetVerifiedSubject returns the verifiedSubject field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetVerifiedSubject() string {
-	if x == nil {
-		return ""
-	}
-	return x.VerifiedSubject
-}
-
-// GetVerifiedClaims returns the verifiedClaims field; it is safe to call on a nil receiver.
-func (x *HTTPSubjectRequest) GetVerifiedClaims() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.VerifiedClaims
-}
-
 // HostContext is the native message type for gestalt.provider.v1.HostContext.
 //
 // HostContext describes stable public host metadata available to provider code.
 type HostContext struct {
 	PublicBaseURL string
-}
-
-// GetPublicBaseURL returns the publicBaseUrl field; it is safe to call on a nil receiver.
-func (x *HostContext) GetPublicBaseURL() string {
-	if x == nil {
-		return ""
-	}
-	return x.PublicBaseURL
 }
 
 // InvocationContext is the native message type for gestalt.provider.v1.InvocationContext.
@@ -900,54 +212,6 @@ type InvocationContext struct {
 	Surface                  string
 	InternalConnectionAccess bool
 	Connection               string
-}
-
-// GetRequestID returns the requestId field; it is safe to call on a nil receiver.
-func (x *InvocationContext) GetRequestID() string {
-	if x == nil {
-		return ""
-	}
-	return x.RequestID
-}
-
-// GetDepth returns the depth field; it is safe to call on a nil receiver.
-func (x *InvocationContext) GetDepth() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.Depth
-}
-
-// GetCallChain returns the callChain field; it is safe to call on a nil receiver.
-func (x *InvocationContext) GetCallChain() []string {
-	if x == nil {
-		return nil
-	}
-	return x.CallChain
-}
-
-// GetSurface returns the surface field; it is safe to call on a nil receiver.
-func (x *InvocationContext) GetSurface() string {
-	if x == nil {
-		return ""
-	}
-	return x.Surface
-}
-
-// GetInternalConnectionAccess returns the internalConnectionAccess field; it is safe to call on a nil receiver.
-func (x *InvocationContext) GetInternalConnectionAccess() bool {
-	if x == nil {
-		return false
-	}
-	return x.InternalConnectionAccess
-}
-
-// GetConnection returns the connection field; it is safe to call on a nil receiver.
-func (x *InvocationContext) GetConnection() string {
-	if x == nil {
-		return ""
-	}
-	return x.Connection
 }
 
 // OperationAnnotations is the native message type for gestalt.provider.v1.OperationAnnotations.
@@ -961,38 +225,6 @@ type OperationAnnotations struct {
 	OpenWorldHint   *bool
 }
 
-// GetReadOnlyHint returns the readOnlyHint field; it is safe to call on a nil receiver.
-func (x *OperationAnnotations) GetReadOnlyHint() *bool {
-	if x == nil {
-		return nil
-	}
-	return x.ReadOnlyHint
-}
-
-// GetIdempotentHint returns the idempotentHint field; it is safe to call on a nil receiver.
-func (x *OperationAnnotations) GetIdempotentHint() *bool {
-	if x == nil {
-		return nil
-	}
-	return x.IdempotentHint
-}
-
-// GetDestructiveHint returns the destructiveHint field; it is safe to call on a nil receiver.
-func (x *OperationAnnotations) GetDestructiveHint() *bool {
-	if x == nil {
-		return nil
-	}
-	return x.DestructiveHint
-}
-
-// GetOpenWorldHint returns the openWorldHint field; it is safe to call on a nil receiver.
-func (x *OperationAnnotations) GetOpenWorldHint() *bool {
-	if x == nil {
-		return nil
-	}
-	return x.OpenWorldHint
-}
-
 // OperationResult is the native message type for gestalt.provider.v1.OperationResult.
 //
 // OperationResult is the serialized result returned from an Execute call.
@@ -1002,30 +234,6 @@ type OperationResult struct {
 	Headers map[string]*StringList
 }
 
-// GetStatus returns the status field; it is safe to call on a nil receiver.
-func (x *OperationResult) GetStatus() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.Status
-}
-
-// GetBody returns the body field; it is safe to call on a nil receiver.
-func (x *OperationResult) GetBody() []byte {
-	if x == nil {
-		return nil
-	}
-	return x.Body
-}
-
-// GetHeaders returns the headers field; it is safe to call on a nil receiver.
-func (x *OperationResult) GetHeaders() map[string]*StringList {
-	if x == nil {
-		return nil
-	}
-	return x.Headers
-}
-
 // ProviderContext is the native message type for gestalt.provider.v1.ProviderContext.
 //
 // ProviderContext identifies the provider process that received the request
@@ -1033,22 +241,6 @@ func (x *OperationResult) GetHeaders() map[string]*StringList {
 type ProviderContext struct {
 	Kind string
 	Name string
-}
-
-// GetKind returns the kind field; it is safe to call on a nil receiver.
-func (x *ProviderContext) GetKind() string {
-	if x == nil {
-		return ""
-	}
-	return x.Kind
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *ProviderContext) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
 }
 
 // ProviderMetadata is the native message type for gestalt.provider.v1.ProviderMetadata.
@@ -1065,86 +257,6 @@ type ProviderMetadata struct {
 	SupportsSessionCatalog bool
 	MinProtocolVersion     int32
 	MaxProtocolVersion     int32
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetDisplayName returns the displayName field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetDisplayName() string {
-	if x == nil {
-		return ""
-	}
-	return x.DisplayName
-}
-
-// GetDescription returns the description field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetDescription() string {
-	if x == nil {
-		return ""
-	}
-	return x.Description
-}
-
-// GetConnectionMode returns the connectionMode field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetConnectionMode() ConnectionMode {
-	if x == nil {
-		return 0
-	}
-	return x.ConnectionMode
-}
-
-// GetAuthTypes returns the authTypes field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetAuthTypes() []string {
-	if x == nil {
-		return nil
-	}
-	return x.AuthTypes
-}
-
-// GetConnectionParams returns the connectionParams field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetConnectionParams() map[string]*ConnectionParamDef {
-	if x == nil {
-		return nil
-	}
-	return x.ConnectionParams
-}
-
-// GetStaticCatalog returns the staticCatalog field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetStaticCatalog() *Catalog {
-	if x == nil {
-		return nil
-	}
-	return x.StaticCatalog
-}
-
-// GetSupportsSessionCatalog returns the supportsSessionCatalog field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetSupportsSessionCatalog() bool {
-	if x == nil {
-		return false
-	}
-	return x.SupportsSessionCatalog
-}
-
-// GetMinProtocolVersion returns the minProtocolVersion field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetMinProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.MinProtocolVersion
-}
-
-// GetMaxProtocolVersion returns the maxProtocolVersion field; it is safe to call on a nil receiver.
-func (x *ProviderMetadata) GetMaxProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.MaxProtocolVersion
 }
 
 // RequestContext is the native message type for gestalt.provider.v1.RequestContext.
@@ -1171,131 +283,11 @@ type RequestContext struct {
 	Agent       *AgentInvocationContext
 }
 
-// GetSubject returns the subject field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetSubject() *SubjectContext {
-	if x == nil {
-		return nil
-	}
-	return x.Subject
-}
-
-// GetCredential returns the credential field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetCredential() *CredentialContext {
-	if x == nil {
-		return nil
-	}
-	return x.Credential
-}
-
-// GetAccess returns the access field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetAccess() *AccessContext {
-	if x == nil {
-		return nil
-	}
-	return x.Access
-}
-
-// GetWorkflow returns the workflow field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetWorkflow() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Workflow
-}
-
-// GetHost returns the host field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetHost() *HostContext {
-	if x == nil {
-		return nil
-	}
-	return x.Host
-}
-
-// GetAgentSubject returns the agentSubject field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetAgentSubject() *SubjectContext {
-	if x == nil {
-		return nil
-	}
-	return x.AgentSubject
-}
-
-// GetCaller returns the caller field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetCaller() *ProviderContext {
-	if x == nil {
-		return nil
-	}
-	return x.Caller
-}
-
-// GetInvocation returns the invocation field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetInvocation() *InvocationContext {
-	if x == nil {
-		return nil
-	}
-	return x.Invocation
-}
-
-// GetToolRefs returns the toolRefs field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetToolRefs() []*AgentToolRef {
-	if x == nil {
-		return nil
-	}
-	return x.ToolRefs
-}
-
-// GetToolRefsSet returns the toolRefsSet field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetToolRefsSet() bool {
-	if x == nil {
-		return false
-	}
-	return x.ToolRefsSet
-}
-
-// GetRequestMeta returns the requestMeta field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetRequestMeta() *RequestMetaContext {
-	if x == nil {
-		return nil
-	}
-	return x.RequestMeta
-}
-
-// GetAgent returns the agent field; it is safe to call on a nil receiver.
-func (x *RequestContext) GetAgent() *AgentInvocationContext {
-	if x == nil {
-		return nil
-	}
-	return x.Agent
-}
-
 // RequestMetaContext is the native message type for gestalt.provider.v1.RequestMetaContext.
 type RequestMetaContext struct {
 	ClientIp   string
 	RemoteAddr string
 	UserAgent  string
-}
-
-// GetClientIp returns the clientIp field; it is safe to call on a nil receiver.
-func (x *RequestMetaContext) GetClientIp() string {
-	if x == nil {
-		return ""
-	}
-	return x.ClientIp
-}
-
-// GetRemoteAddr returns the remoteAddr field; it is safe to call on a nil receiver.
-func (x *RequestMetaContext) GetRemoteAddr() string {
-	if x == nil {
-		return ""
-	}
-	return x.RemoteAddr
-}
-
-// GetUserAgent returns the userAgent field; it is safe to call on a nil receiver.
-func (x *RequestMetaContext) GetUserAgent() string {
-	if x == nil {
-		return ""
-	}
-	return x.UserAgent
 }
 
 // ResolveHTTPSubjectRequest is the native message type for gestalt.provider.v1.ResolveHTTPSubjectRequest.
@@ -1306,22 +298,6 @@ func (x *RequestMetaContext) GetUserAgent() string {
 type ResolveHTTPSubjectRequest struct {
 	Request *HTTPSubjectRequest
 	Context *RequestContext
-}
-
-// GetRequest returns the request field; it is safe to call on a nil receiver.
-func (x *ResolveHTTPSubjectRequest) GetRequest() *HTTPSubjectRequest {
-	if x == nil {
-		return nil
-	}
-	return x.Request
-}
-
-// GetContext returns the context field; it is safe to call on a nil receiver.
-func (x *ResolveHTTPSubjectRequest) GetContext() *RequestContext {
-	if x == nil {
-		return nil
-	}
-	return x.Context
 }
 
 // ResolveHTTPSubjectResponse is the native message type for gestalt.provider.v1.ResolveHTTPSubjectResponse.
@@ -1336,30 +312,6 @@ type ResolveHTTPSubjectResponse struct {
 	RejectMessage string
 }
 
-// GetSubject returns the subject field; it is safe to call on a nil receiver.
-func (x *ResolveHTTPSubjectResponse) GetSubject() *SubjectContext {
-	if x == nil {
-		return nil
-	}
-	return x.Subject
-}
-
-// GetRejectStatus returns the rejectStatus field; it is safe to call on a nil receiver.
-func (x *ResolveHTTPSubjectResponse) GetRejectStatus() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.RejectStatus
-}
-
-// GetRejectMessage returns the rejectMessage field; it is safe to call on a nil receiver.
-func (x *ResolveHTTPSubjectResponse) GetRejectMessage() string {
-	if x == nil {
-		return ""
-	}
-	return x.RejectMessage
-}
-
 // StartProviderRequest is the native message type for gestalt.provider.v1.StartProviderRequest.
 //
 // StartProviderRequest configures an integration provider for one runtime
@@ -1370,30 +322,6 @@ type StartProviderRequest struct {
 	ProtocolVersion int32
 }
 
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *StartProviderRequest) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetConfig returns the config field; it is safe to call on a nil receiver.
-func (x *StartProviderRequest) GetConfig() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Config
-}
-
-// GetProtocolVersion returns the protocolVersion field; it is safe to call on a nil receiver.
-func (x *StartProviderRequest) GetProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.ProtocolVersion
-}
-
 // StartProviderResponse is the native message type for gestalt.provider.v1.StartProviderResponse.
 //
 // StartProviderResponse confirms the protocol version the provider is serving.
@@ -1401,27 +329,11 @@ type StartProviderResponse struct {
 	ProtocolVersion int32
 }
 
-// GetProtocolVersion returns the protocolVersion field; it is safe to call on a nil receiver.
-func (x *StartProviderResponse) GetProtocolVersion() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.ProtocolVersion
-}
-
 // StringList is the native message type for gestalt.provider.v1.StringList.
 //
 // StringList is a helper map value for repeated HTTP header and query values.
 type StringList struct {
 	Values []string
-}
-
-// GetValues returns the values field; it is safe to call on a nil receiver.
-func (x *StringList) GetValues() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Values
 }
 
 // SubjectContext is the native message type for gestalt.provider.v1.SubjectContext.
@@ -1436,83 +348,11 @@ type SubjectContext struct {
 	Permissions         []*SubjectPermissionContext
 }
 
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *SubjectContext) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetCredentialSubjectID returns the credentialSubjectId field; it is safe to call on a nil receiver.
-func (x *SubjectContext) GetCredentialSubjectID() string {
-	if x == nil {
-		return ""
-	}
-	return x.CredentialSubjectID
-}
-
-// GetEmail returns the email field; it is safe to call on a nil receiver.
-func (x *SubjectContext) GetEmail() string {
-	if x == nil {
-		return ""
-	}
-	return x.Email
-}
-
-// GetDisplayName returns the displayName field; it is safe to call on a nil receiver.
-func (x *SubjectContext) GetDisplayName() string {
-	if x == nil {
-		return ""
-	}
-	return x.DisplayName
-}
-
-// GetScopes returns the scopes field; it is safe to call on a nil receiver.
-func (x *SubjectContext) GetScopes() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Scopes
-}
-
-// GetPermissions returns the permissions field; it is safe to call on a nil receiver.
-func (x *SubjectContext) GetPermissions() []*SubjectPermissionContext {
-	if x == nil {
-		return nil
-	}
-	return x.Permissions
-}
-
 // SubjectPermissionContext is the native message type for gestalt.provider.v1.SubjectPermissionContext.
 type SubjectPermissionContext struct {
 	App           string
 	Operations    []string
 	AllOperations bool
-}
-
-// GetApp returns the app field; it is safe to call on a nil receiver.
-func (x *SubjectPermissionContext) GetApp() string {
-	if x == nil {
-		return ""
-	}
-	return x.App
-}
-
-// GetOperations returns the operations field; it is safe to call on a nil receiver.
-func (x *SubjectPermissionContext) GetOperations() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Operations
-}
-
-// GetAllOperations returns the allOperations field; it is safe to call on a nil receiver.
-func (x *SubjectPermissionContext) GetAllOperations() bool {
-	if x == nil {
-		return false
-	}
-	return x.AllOperations
 }
 
 // App is the generated client for gestalt.provider.v1.App.

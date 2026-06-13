@@ -27,18 +27,18 @@ type agentHandler struct {
 
 func (h agentHandler) CreateSession(ctx context.Context, req *client.CreateAgentProviderSessionRequest) (*client.AgentSession, error) {
 	rootReq := &CreateAgentProviderSessionRequest{
-		ProviderName:       req.GetProviderName(),
-		IdempotencyKey:     req.GetIdempotencyKey(),
-		Model:              req.GetModel(),
-		ClientRef:          req.GetClientRef(),
-		Metadata:           req.GetMetadata(),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectID()),
-		Subject:            clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName:       req.ProviderName,
+		IdempotencyKey:     req.IdempotencyKey,
+		Model:              req.Model,
+		ClientRef:          req.ClientRef,
+		Metadata:           req.Metadata,
+		CreatedBySubjectID: strings.TrimSpace(req.CreatedBySubjectID),
+		Subject:            clientSubjectContextToRootSubject(req.Subject),
 		Context:            requestContextFromContext(ctx),
-		SessionStart:       clientAgentSessionStartConfigToRoot(req.GetSessionStart()),
-		PreparedWorkspace:  clientAgentPreparedWorkspaceToRoot(req.GetPreparedWorkspace()),
-		Workspace:          clientAgentWorkspaceToRoot(req.GetWorkspace()),
-		Tools:              clientAgentToolConfigToRoot(req.GetTools()),
+		SessionStart:       clientAgentSessionStartConfigToRoot(req.SessionStart),
+		PreparedWorkspace:  clientAgentPreparedWorkspaceToRoot(req.PreparedWorkspace),
+		Workspace:          clientAgentWorkspaceToRoot(req.Workspace),
+		Tools:              clientAgentToolConfigToRoot(req.Tools),
 	}
 	session, err := h.provider.CreateSession(ctx, rootReq)
 	if err != nil {
@@ -49,9 +49,9 @@ func (h agentHandler) CreateSession(ctx context.Context, req *client.CreateAgent
 
 func (h agentHandler) GetSession(ctx context.Context, req *client.GetAgentProviderSessionRequest) (*client.AgentSession, error) {
 	rootReq := &GetAgentProviderSessionRequest{
-		ProviderName: req.GetProviderName(),
-		SessionID:    req.GetSessionID(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		SessionID:    req.SessionID,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
 	}
 	session, err := h.provider.GetSession(ctx, rootReq)
@@ -63,13 +63,13 @@ func (h agentHandler) GetSession(ctx context.Context, req *client.GetAgentProvid
 
 func (h agentHandler) ListSessions(ctx context.Context, req *client.ListAgentProviderSessionsRequest) (*client.ListAgentProviderSessionsResponse, error) {
 	rootReq := &ListAgentProviderSessionsRequest{
-		ProviderName: req.GetProviderName(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
-		SessionIDs:   append([]string(nil), req.GetSessionIDs()...),
-		State:        AgentSessionState(req.GetState()),
-		Limit:        req.GetLimit(),
-		SummaryOnly:  req.GetSummaryOnly(),
+		SessionIDs:   append([]string(nil), req.SessionIDs...),
+		State:        AgentSessionState(req.State),
+		Limit:        req.Limit,
+		SummaryOnly:  req.SummaryOnly,
 	}
 	resp, err := h.provider.ListSessions(ctx, rootReq)
 	if err != nil {
@@ -80,12 +80,12 @@ func (h agentHandler) ListSessions(ctx context.Context, req *client.ListAgentPro
 
 func (h agentHandler) UpdateSession(ctx context.Context, req *client.UpdateAgentProviderSessionRequest) (*client.AgentSession, error) {
 	rootReq := &UpdateAgentProviderSessionRequest{
-		ProviderName: req.GetProviderName(),
-		SessionID:    req.GetSessionID(),
-		ClientRef:    req.GetClientRef(),
-		State:        AgentSessionState(req.GetState()),
-		Metadata:     req.GetMetadata(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		SessionID:    req.SessionID,
+		ClientRef:    req.ClientRef,
+		State:        AgentSessionState(req.State),
+		Metadata:     req.Metadata,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
 	}
 	session, err := h.provider.UpdateSession(ctx, rootReq)
@@ -96,24 +96,24 @@ func (h agentHandler) UpdateSession(ctx context.Context, req *client.UpdateAgent
 }
 
 func (h agentHandler) CreateTurn(ctx context.Context, req *client.CreateAgentProviderTurnRequest) (*client.AgentTurn, error) {
-	if req.GetTimeoutSeconds() < 0 {
+	if req.TimeoutSeconds < 0 {
 		return nil, providerRPCError("agent create turn", InvalidArgument("agent create turn timeout_seconds must not be negative"))
 	}
 	rootReq := &CreateAgentProviderTurnRequest{
-		ProviderName:       req.GetProviderName(),
-		TurnID:             req.GetTurnID(),
-		SessionID:          req.GetSessionID(),
-		IdempotencyKey:     req.GetIdempotencyKey(),
-		Model:              req.GetModel(),
-		Messages:           clientAgentMessagesToRoot(req.GetMessages()),
-		Output:             clientAgentOutputToRootOutput(req.GetOutput()),
-		Metadata:           req.GetMetadata(),
-		CreatedBySubjectID: strings.TrimSpace(req.GetCreatedBySubjectID()),
-		ExecutionRef:       req.GetExecutionRef(),
-		Subject:            clientSubjectContextToRootSubject(req.GetSubject()),
-		ModelOptions:       req.GetModelOptions(),
+		ProviderName:       req.ProviderName,
+		TurnID:             req.TurnID,
+		SessionID:          req.SessionID,
+		IdempotencyKey:     req.IdempotencyKey,
+		Model:              req.Model,
+		Messages:           clientAgentMessagesToRoot(req.Messages),
+		Output:             clientAgentOutputToRootOutput(req.Output),
+		Metadata:           req.Metadata,
+		CreatedBySubjectID: strings.TrimSpace(req.CreatedBySubjectID),
+		ExecutionRef:       req.ExecutionRef,
+		Subject:            clientSubjectContextToRootSubject(req.Subject),
+		ModelOptions:       req.ModelOptions,
 		Context:            requestContextFromContext(ctx),
-		TimeoutSeconds:     req.GetTimeoutSeconds(),
+		TimeoutSeconds:     req.TimeoutSeconds,
 	}
 	turn, err := h.provider.CreateTurn(ctx, rootReq)
 	if err != nil {
@@ -124,9 +124,9 @@ func (h agentHandler) CreateTurn(ctx context.Context, req *client.CreateAgentPro
 
 func (h agentHandler) GetTurn(ctx context.Context, req *client.GetAgentProviderTurnRequest) (*client.AgentTurn, error) {
 	rootReq := &GetAgentProviderTurnRequest{
-		ProviderName: req.GetProviderName(),
-		TurnID:       req.GetTurnID(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		TurnID:       req.TurnID,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
 	}
 	turn, err := h.provider.GetTurn(ctx, rootReq)
@@ -138,14 +138,14 @@ func (h agentHandler) GetTurn(ctx context.Context, req *client.GetAgentProviderT
 
 func (h agentHandler) ListTurns(ctx context.Context, req *client.ListAgentProviderTurnsRequest) (*client.ListAgentProviderTurnsResponse, error) {
 	rootReq := &ListAgentProviderTurnsRequest{
-		ProviderName: req.GetProviderName(),
-		SessionID:    req.GetSessionID(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		SessionID:    req.SessionID,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
-		TurnIDs:      append([]string(nil), req.GetTurnIDs()...),
-		Status:       AgentExecutionStatus(req.GetStatus()),
-		Limit:        req.GetLimit(),
-		SummaryOnly:  req.GetSummaryOnly(),
+		TurnIDs:      append([]string(nil), req.TurnIDs...),
+		Status:       AgentExecutionStatus(req.Status),
+		Limit:        req.Limit,
+		SummaryOnly:  req.SummaryOnly,
 	}
 	resp, err := h.provider.ListTurns(ctx, rootReq)
 	if err != nil {
@@ -156,10 +156,10 @@ func (h agentHandler) ListTurns(ctx context.Context, req *client.ListAgentProvid
 
 func (h agentHandler) CancelTurn(ctx context.Context, req *client.CancelAgentProviderTurnRequest) (*client.AgentTurn, error) {
 	rootReq := &CancelAgentProviderTurnRequest{
-		ProviderName: req.GetProviderName(),
-		TurnID:       req.GetTurnID(),
-		Reason:       req.GetReason(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		TurnID:       req.TurnID,
+		Reason:       req.Reason,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
 	}
 	turn, err := h.provider.CancelTurn(ctx, rootReq)
@@ -171,11 +171,11 @@ func (h agentHandler) CancelTurn(ctx context.Context, req *client.CancelAgentPro
 
 func (h agentHandler) ListTurnEvents(ctx context.Context, req *client.ListAgentProviderTurnEventsRequest) (*client.ListAgentProviderTurnEventsResponse, error) {
 	rootReq := &ListAgentProviderTurnEventsRequest{
-		ProviderName: req.GetProviderName(),
-		TurnID:       req.GetTurnID(),
-		AfterSeq:     req.GetAfterSeq(),
-		Limit:        req.GetLimit(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		TurnID:       req.TurnID,
+		AfterSeq:     req.AfterSeq,
+		Limit:        req.Limit,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
 	}
 	resp, err := h.provider.ListTurnEvents(ctx, rootReq)
@@ -187,8 +187,8 @@ func (h agentHandler) ListTurnEvents(ctx context.Context, req *client.ListAgentP
 
 func (h agentHandler) GetInteraction(ctx context.Context, req *client.GetAgentProviderInteractionRequest) (*client.AgentInteraction, error) {
 	rootReq := &GetAgentProviderInteractionRequest{
-		InteractionID: req.GetInteractionID(),
-		Subject:       clientSubjectContextToRootSubject(req.GetSubject()),
+		InteractionID: req.InteractionID,
+		Subject:       clientSubjectContextToRootSubject(req.Subject),
 		Context:       requestContextFromContext(ctx),
 	}
 	interaction, err := h.provider.GetInteraction(ctx, rootReq)
@@ -200,9 +200,9 @@ func (h agentHandler) GetInteraction(ctx context.Context, req *client.GetAgentPr
 
 func (h agentHandler) ListInteractions(ctx context.Context, req *client.ListAgentProviderInteractionsRequest) (*client.ListAgentProviderInteractionsResponse, error) {
 	rootReq := &ListAgentProviderInteractionsRequest{
-		ProviderName: req.GetProviderName(),
-		TurnID:       req.GetTurnID(),
-		Subject:      clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName: req.ProviderName,
+		TurnID:       req.TurnID,
+		Subject:      clientSubjectContextToRootSubject(req.Subject),
 		Context:      requestContextFromContext(ctx),
 	}
 	resp, err := h.provider.ListInteractions(ctx, rootReq)
@@ -214,11 +214,11 @@ func (h agentHandler) ListInteractions(ctx context.Context, req *client.ListAgen
 
 func (h agentHandler) ResolveInteraction(ctx context.Context, req *client.ResolveAgentProviderInteractionRequest) (*client.AgentInteraction, error) {
 	rootReq := &ResolveAgentProviderInteractionRequest{
-		ProviderName:  req.GetProviderName(),
-		TurnID:        req.GetTurnID(),
-		InteractionID: req.GetInteractionID(),
-		Resolution:    req.GetResolution(),
-		Subject:       clientSubjectContextToRootSubject(req.GetSubject()),
+		ProviderName:  req.ProviderName,
+		TurnID:        req.TurnID,
+		InteractionID: req.InteractionID,
+		Resolution:    req.Resolution,
+		Subject:       clientSubjectContextToRootSubject(req.Subject),
 		Context:       requestContextFromContext(ctx),
 	}
 	interaction, err := h.provider.ResolveInteraction(ctx, rootReq)
@@ -504,7 +504,7 @@ func clientAgentSessionStartConfigToRoot(in *client.AgentSessionStartConfig) *Ag
 		return nil
 	}
 	out := &AgentSessionStartConfig{}
-	for _, hook := range in.GetHooks() {
+	for _, hook := range in.Hooks {
 		out.Hooks = append(out.Hooks, clientAgentSessionStartHookToRoot(hook))
 	}
 	return out
@@ -515,17 +515,17 @@ func clientAgentSessionStartHookToRoot(in *client.AgentSessionStartHook) AgentSe
 		return AgentSessionStartHook{}
 	}
 	out := AgentSessionStartHook{
-		ID:      in.GetID(),
-		Type:    in.GetType(),
-		Command: append([]string(nil), in.GetCommand()...),
-		Cwd:     in.GetCwd(),
-		Timeout: in.GetTimeout(),
-		Env:     cloneAgentStringMap(in.GetEnv()),
+		ID:      in.ID,
+		Type:    in.Type,
+		Command: append([]string(nil), in.Command...),
+		Cwd:     in.Cwd,
+		Timeout: in.Timeout,
+		Env:     cloneAgentStringMap(in.Env),
 	}
-	if hook := in.GetOutput(); hook != nil {
+	if hook := in.Output; hook != nil {
 		out.Output = &AgentSessionStartHookOutput{
-			AdditionalContext: hook.GetAdditionalContext(),
-			Metadata:          hook.GetMetadata(),
+			AdditionalContext: hook.AdditionalContext,
+			Metadata:          hook.Metadata,
 		}
 	}
 	return out
@@ -536,8 +536,8 @@ func clientAgentPreparedWorkspaceToRoot(in *client.PreparedAgentWorkspace) *Agen
 		return nil
 	}
 	return &AgentPreparedWorkspace{
-		Root: in.GetRoot(),
-		Cwd:  in.GetCwd(),
+		Root: in.Root,
+		Cwd:  in.Cwd,
 	}
 }
 
@@ -545,7 +545,7 @@ func clientAgentToolConfigToRoot(in *client.AgentToolConfig) AgentToolConfig {
 	if in == nil {
 		return nil
 	}
-	switch src := in.GetSource().(type) {
+	switch src := in.Source.(type) {
 	case *client.AgentToolConfigSourceNone:
 		_ = src
 		return &AgentNoTools{}
@@ -554,10 +554,10 @@ func clientAgentToolConfigToRoot(in *client.AgentToolConfig) AgentToolConfig {
 			return &AgentCatalogToolConfig{}
 		}
 		catalog := &AgentCatalogToolConfig{}
-		for _, ref := range src.Value.GetRefs() {
+		for _, ref := range src.Value.Refs {
 			catalog.Refs = append(catalog.Refs, clientAgentToolRefToRoot(ref))
 		}
-		for _, tool := range src.Value.GetTools() {
+		for _, tool := range src.Value.Tools {
 			catalog.Tools = append(catalog.Tools, clientListedAgentToolToRoot(tool))
 		}
 		return catalog
@@ -571,16 +571,16 @@ func clientListedAgentToolToRoot(in *client.ListedAgentTool) ListedAgentTool {
 		return ListedAgentTool{}
 	}
 	out := ListedAgentTool{
-		ID:           in.GetID(),
-		MCPName:      in.GetMcpName(),
-		Title:        in.GetTitle(),
-		Description:  in.GetDescription(),
-		InputSchema:  in.GetInputSchema(),
-		OutputSchema: in.GetOutputSchema(),
-		Tags:         append([]string(nil), in.GetTags()...),
-		SearchText:   in.GetSearchText(),
+		ID:           in.ID,
+		MCPName:      in.McpName,
+		Title:        in.Title,
+		Description:  in.Description,
+		InputSchema:  in.InputSchema,
+		OutputSchema: in.OutputSchema,
+		Tags:         append([]string(nil), in.Tags...),
+		SearchText:   in.SearchText,
 	}
-	if ann := in.GetAnnotations(); ann != nil {
+	if ann := in.Annotations; ann != nil {
 		out.Annotations = &AgentToolAnnotations{
 			ReadOnlyHint:    ann.ReadOnlyHint,
 			IdempotentHint:  ann.IdempotentHint,
@@ -588,7 +588,7 @@ func clientListedAgentToolToRoot(in *client.ListedAgentTool) ListedAgentTool {
 			OpenWorldHint:   ann.OpenWorldHint,
 		}
 	}
-	if ref := in.GetRef(); ref != nil {
+	if ref := in.Ref; ref != nil {
 		r := clientAgentToolRefToRoot(ref)
 		out.Ref = &r
 	}
@@ -611,11 +611,11 @@ func clientAgentMessageToRoot(in *client.AgentMessage) AgentMessage {
 		return AgentMessage{}
 	}
 	out := AgentMessage{
-		Role:     in.GetRole(),
-		Text:     in.GetText(),
-		Metadata: in.GetMetadata(),
+		Role:     in.Role,
+		Text:     in.Text,
+		Metadata: in.Metadata,
 	}
-	for _, part := range in.GetParts() {
+	for _, part := range in.Parts {
 		out.Parts = append(out.Parts, clientAgentMessagePartToRoot(part))
 	}
 	return out
@@ -626,7 +626,7 @@ func clientAgentMessagePartToRoot(in *client.AgentMessagePart) AgentMessagePart 
 		return AgentMessagePart{}
 	}
 	out := AgentMessagePart{
-		Type: AgentMessagePartType(in.GetType()),
+		Type: AgentMessagePartType(in.Type),
 		Text: in.Text,
 		JSON: in.JSON,
 	}
@@ -658,7 +658,7 @@ func clientAgentOutputToRootOutput(in *client.AgentOutput) *AgentOutput {
 	if in == nil {
 		return nil
 	}
-	switch k := in.GetKind().(type) {
+	switch k := in.Kind.(type) {
 	case *client.AgentOutputKindText:
 		_ = k
 		return &AgentOutput{Text: &AgentTextOutput{}}

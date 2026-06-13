@@ -48,46 +48,14 @@ type AppendRuntimeLogsRequest struct {
 	Logs      []*RuntimeLogEntry
 }
 
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *AppendRuntimeLogsRequest) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
-}
-
-// GetLogs returns the logs field; it is safe to call on a nil receiver.
-func (x *AppendRuntimeLogsRequest) GetLogs() []*RuntimeLogEntry {
-	if x == nil {
-		return nil
-	}
-	return x.Logs
-}
-
 // AppendRuntimeLogsResponse is the native message type for gestalt.provider.v1.AppendRuntimeLogsResponse.
 type AppendRuntimeLogsResponse struct {
 	LastSeq int64
 }
 
-// GetLastSeq returns the lastSeq field; it is safe to call on a nil receiver.
-func (x *AppendRuntimeLogsResponse) GetLastSeq() int64 {
-	if x == nil {
-		return 0
-	}
-	return x.LastSeq
-}
-
 // GetRuntimeSessionRequest is the native message type for gestalt.provider.v1.GetRuntimeSessionRequest.
 type GetRuntimeSessionRequest struct {
 	SessionID string
-}
-
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *GetRuntimeSessionRequest) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
 }
 
 // HostedApp is the native message type for gestalt.provider.v1.HostedApp.
@@ -98,80 +66,16 @@ type HostedApp struct {
 	DialTarget string
 }
 
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *HostedApp) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *HostedApp) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
-}
-
-// GetAppName returns the appName field; it is safe to call on a nil receiver.
-func (x *HostedApp) GetAppName() string {
-	if x == nil {
-		return ""
-	}
-	return x.AppName
-}
-
-// GetDialTarget returns the dialTarget field; it is safe to call on a nil receiver.
-func (x *HostedApp) GetDialTarget() string {
-	if x == nil {
-		return ""
-	}
-	return x.DialTarget
-}
-
 // ListRuntimeSessionsRequest is the native message type for gestalt.provider.v1.ListRuntimeSessionsRequest.
 type ListRuntimeSessionsRequest struct {
 	PageSize  int32
 	PageToken string
 }
 
-// GetPageSize returns the pageSize field; it is safe to call on a nil receiver.
-func (x *ListRuntimeSessionsRequest) GetPageSize() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.PageSize
-}
-
-// GetPageToken returns the pageToken field; it is safe to call on a nil receiver.
-func (x *ListRuntimeSessionsRequest) GetPageToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.PageToken
-}
-
 // ListRuntimeSessionsResponse is the native message type for gestalt.provider.v1.ListRuntimeSessionsResponse.
 type ListRuntimeSessionsResponse struct {
 	Sessions      []*RuntimeSession
 	NextPageToken string
-}
-
-// GetSessions returns the sessions field; it is safe to call on a nil receiver.
-func (x *ListRuntimeSessionsResponse) GetSessions() []*RuntimeSession {
-	if x == nil {
-		return nil
-	}
-	return x.Sessions
-}
-
-// GetNextPageToken returns the nextPageToken field; it is safe to call on a nil receiver.
-func (x *ListRuntimeSessionsResponse) GetNextPageToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.NextPageToken
 }
 
 // PrepareRuntimeWorkspaceRequest is the native message type for gestalt.provider.v1.PrepareRuntimeWorkspaceRequest.
@@ -184,41 +88,9 @@ type PrepareRuntimeWorkspaceRequest struct {
 	Workspace      *AgentWorkspace
 }
 
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *PrepareRuntimeWorkspaceRequest) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
-}
-
-// GetAgentSessionID returns the agentSessionId field; it is safe to call on a nil receiver.
-func (x *PrepareRuntimeWorkspaceRequest) GetAgentSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.AgentSessionID
-}
-
-// GetWorkspace returns the workspace field; it is safe to call on a nil receiver.
-func (x *PrepareRuntimeWorkspaceRequest) GetWorkspace() *AgentWorkspace {
-	if x == nil {
-		return nil
-	}
-	return x.Workspace
-}
-
 // PrepareRuntimeWorkspaceResponse is the native message type for gestalt.provider.v1.PrepareRuntimeWorkspaceResponse.
 type PrepareRuntimeWorkspaceResponse struct {
 	Workspace *PreparedAgentWorkspace
-}
-
-// GetWorkspace returns the workspace field; it is safe to call on a nil receiver.
-func (x *PrepareRuntimeWorkspaceResponse) GetWorkspace() *PreparedAgentWorkspace {
-	if x == nil {
-		return nil
-	}
-	return x.Workspace
 }
 
 // RemoveRuntimeWorkspaceRequest is the native message type for gestalt.provider.v1.RemoveRuntimeWorkspaceRequest.
@@ -229,33 +101,9 @@ type RemoveRuntimeWorkspaceRequest struct {
 	AgentSessionID string
 }
 
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *RemoveRuntimeWorkspaceRequest) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
-}
-
-// GetAgentSessionID returns the agentSessionId field; it is safe to call on a nil receiver.
-func (x *RemoveRuntimeWorkspaceRequest) GetAgentSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.AgentSessionID
-}
-
 // RuntimeImagePullAuth is the native message type for gestalt.provider.v1.RuntimeImagePullAuth.
 type RuntimeImagePullAuth struct {
 	DockerConfigJSON string
-}
-
-// GetDockerConfigJSON returns the dockerConfigJson field; it is safe to call on a nil receiver.
-func (x *RuntimeImagePullAuth) GetDockerConfigJSON() string {
-	if x == nil {
-		return ""
-	}
-	return x.DockerConfigJSON
 }
 
 // RuntimeLogEntry is the native message type for gestalt.provider.v1.RuntimeLogEntry.
@@ -264,38 +112,6 @@ type RuntimeLogEntry struct {
 	Message    string
 	ObservedAt *time.Time
 	SourceSeq  int64
-}
-
-// GetStream returns the stream field; it is safe to call on a nil receiver.
-func (x *RuntimeLogEntry) GetStream() RuntimeLogStream {
-	if x == nil {
-		return 0
-	}
-	return x.Stream
-}
-
-// GetMessage returns the message field; it is safe to call on a nil receiver.
-func (x *RuntimeLogEntry) GetMessage() string {
-	if x == nil {
-		return ""
-	}
-	return x.Message
-}
-
-// GetObservedAt returns the observedAt field; it is safe to call on a nil receiver.
-func (x *RuntimeLogEntry) GetObservedAt() *time.Time {
-	if x == nil {
-		return nil
-	}
-	return x.ObservedAt
-}
-
-// GetSourceSeq returns the sourceSeq field; it is safe to call on a nil receiver.
-func (x *RuntimeLogEntry) GetSourceSeq() int64 {
-	if x == nil {
-		return 0
-	}
-	return x.SourceSeq
 }
 
 // RuntimeSession is the native message type for gestalt.provider.v1.RuntimeSession.
@@ -308,54 +124,6 @@ type RuntimeSession struct {
 	StateMessage string
 }
 
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *RuntimeSession) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetState returns the state field; it is safe to call on a nil receiver.
-func (x *RuntimeSession) GetState() string {
-	if x == nil {
-		return ""
-	}
-	return x.State
-}
-
-// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
-func (x *RuntimeSession) GetMetadata() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.Metadata
-}
-
-// GetLifecycle returns the lifecycle field; it is safe to call on a nil receiver.
-func (x *RuntimeSession) GetLifecycle() *RuntimeSessionLifecycle {
-	if x == nil {
-		return nil
-	}
-	return x.Lifecycle
-}
-
-// GetStateReason returns the stateReason field; it is safe to call on a nil receiver.
-func (x *RuntimeSession) GetStateReason() string {
-	if x == nil {
-		return ""
-	}
-	return x.StateReason
-}
-
-// GetStateMessage returns the stateMessage field; it is safe to call on a nil receiver.
-func (x *RuntimeSession) GetStateMessage() string {
-	if x == nil {
-		return ""
-	}
-	return x.StateMessage
-}
-
 // RuntimeSessionLifecycle is the native message type for gestalt.provider.v1.RuntimeSessionLifecycle.
 type RuntimeSessionLifecycle struct {
 	StartedAt          *time.Time
@@ -363,59 +131,11 @@ type RuntimeSessionLifecycle struct {
 	ExpiresAt          *time.Time
 }
 
-// GetStartedAt returns the startedAt field; it is safe to call on a nil receiver.
-func (x *RuntimeSessionLifecycle) GetStartedAt() *time.Time {
-	if x == nil {
-		return nil
-	}
-	return x.StartedAt
-}
-
-// GetRecommendedDrainAt returns the recommendedDrainAt field; it is safe to call on a nil receiver.
-func (x *RuntimeSessionLifecycle) GetRecommendedDrainAt() *time.Time {
-	if x == nil {
-		return nil
-	}
-	return x.RecommendedDrainAt
-}
-
-// GetExpiresAt returns the expiresAt field; it is safe to call on a nil receiver.
-func (x *RuntimeSessionLifecycle) GetExpiresAt() *time.Time {
-	if x == nil {
-		return nil
-	}
-	return x.ExpiresAt
-}
-
 // RuntimeSupport is the native message type for gestalt.provider.v1.RuntimeSupport.
 type RuntimeSupport struct {
 	CanHostApps              bool
 	EgressMode               RuntimeEgressMode
 	SupportsPrepareWorkspace bool
-}
-
-// GetCanHostApps returns the canHostApps field; it is safe to call on a nil receiver.
-func (x *RuntimeSupport) GetCanHostApps() bool {
-	if x == nil {
-		return false
-	}
-	return x.CanHostApps
-}
-
-// GetEgressMode returns the egressMode field; it is safe to call on a nil receiver.
-func (x *RuntimeSupport) GetEgressMode() RuntimeEgressMode {
-	if x == nil {
-		return 0
-	}
-	return x.EgressMode
-}
-
-// GetSupportsPrepareWorkspace returns the supportsPrepareWorkspace field; it is safe to call on a nil receiver.
-func (x *RuntimeSupport) GetSupportsPrepareWorkspace() bool {
-	if x == nil {
-		return false
-	}
-	return x.SupportsPrepareWorkspace
 }
 
 // StartHostedAppRequest is the native message type for gestalt.provider.v1.StartHostedAppRequest.
@@ -436,78 +156,6 @@ type StartHostedAppRequest struct {
 	Workdir       string
 }
 
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
-}
-
-// GetAppName returns the appName field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetAppName() string {
-	if x == nil {
-		return ""
-	}
-	return x.AppName
-}
-
-// GetCommand returns the command field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetCommand() string {
-	if x == nil {
-		return ""
-	}
-	return x.Command
-}
-
-// GetArgs returns the args field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetArgs() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Args
-}
-
-// GetEnv returns the env field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetEnv() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.Env
-}
-
-// GetAllowedHosts returns the allowedHosts field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetAllowedHosts() []string {
-	if x == nil {
-		return nil
-	}
-	return x.AllowedHosts
-}
-
-// GetDefaultAction returns the defaultAction field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetDefaultAction() string {
-	if x == nil {
-		return ""
-	}
-	return x.DefaultAction
-}
-
-// GetHostBinary returns the hostBinary field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetHostBinary() string {
-	if x == nil {
-		return ""
-	}
-	return x.HostBinary
-}
-
-// GetWorkdir returns the workdir field; it is safe to call on a nil receiver.
-func (x *StartHostedAppRequest) GetWorkdir() string {
-	if x == nil {
-		return ""
-	}
-	return x.Workdir
-}
-
 // StartRuntimeSessionRequest is the native message type for gestalt.provider.v1.StartRuntimeSessionRequest.
 type StartRuntimeSessionRequest struct {
 	AppName       string
@@ -517,57 +165,9 @@ type StartRuntimeSessionRequest struct {
 	ImagePullAuth *RuntimeImagePullAuth
 }
 
-// GetAppName returns the appName field; it is safe to call on a nil receiver.
-func (x *StartRuntimeSessionRequest) GetAppName() string {
-	if x == nil {
-		return ""
-	}
-	return x.AppName
-}
-
-// GetTemplate returns the template field; it is safe to call on a nil receiver.
-func (x *StartRuntimeSessionRequest) GetTemplate() string {
-	if x == nil {
-		return ""
-	}
-	return x.Template
-}
-
-// GetImage returns the image field; it is safe to call on a nil receiver.
-func (x *StartRuntimeSessionRequest) GetImage() string {
-	if x == nil {
-		return ""
-	}
-	return x.Image
-}
-
-// GetMetadata returns the metadata field; it is safe to call on a nil receiver.
-func (x *StartRuntimeSessionRequest) GetMetadata() map[string]string {
-	if x == nil {
-		return nil
-	}
-	return x.Metadata
-}
-
-// GetImagePullAuth returns the imagePullAuth field; it is safe to call on a nil receiver.
-func (x *StartRuntimeSessionRequest) GetImagePullAuth() *RuntimeImagePullAuth {
-	if x == nil {
-		return nil
-	}
-	return x.ImagePullAuth
-}
-
 // StopRuntimeSessionRequest is the native message type for gestalt.provider.v1.StopRuntimeSessionRequest.
 type StopRuntimeSessionRequest struct {
 	SessionID string
-}
-
-// GetSessionID returns the sessionId field; it is safe to call on a nil receiver.
-func (x *StopRuntimeSessionRequest) GetSessionID() string {
-	if x == nil {
-		return ""
-	}
-	return x.SessionID
 }
 
 // Runtime is the generated client for gestalt.provider.v1.Runtime.

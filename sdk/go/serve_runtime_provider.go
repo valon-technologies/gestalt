@@ -47,12 +47,12 @@ func (h runtimeHandler) GetSupport(ctx context.Context) (*client.RuntimeSupport,
 
 func (h runtimeHandler) StartSession(ctx context.Context, req *client.StartRuntimeSessionRequest) (*client.RuntimeSession, error) {
 	rootReq := StartRuntimeSessionRequest{
-		AppName:  req.GetAppName(),
-		Template: req.GetTemplate(),
-		Image:    req.GetImage(),
-		Metadata: cloneStringMap(req.GetMetadata()),
+		AppName:  req.AppName,
+		Template: req.Template,
+		Image:    req.Image,
+		Metadata: cloneStringMap(req.Metadata),
 	}
-	if auth := req.GetImagePullAuth(); auth != nil {
+	if auth := req.ImagePullAuth; auth != nil {
 		rootReq.ImagePullAuth = &RuntimeImagePullAuth{DockerConfigJSON: auth.DockerConfigJSON}
 	}
 	session, err := h.provider.StartSession(ctx, rootReq)
@@ -63,7 +63,7 @@ func (h runtimeHandler) StartSession(ctx context.Context, req *client.StartRunti
 }
 
 func (h runtimeHandler) GetSession(ctx context.Context, req *client.GetRuntimeSessionRequest) (*client.RuntimeSession, error) {
-	session, err := h.provider.GetSession(ctx, req.GetSessionID())
+	session, err := h.provider.GetSession(ctx, req.SessionID)
 	if err != nil {
 		return nil, providerRPCError("runtime get session", err)
 	}
@@ -90,7 +90,7 @@ func (h runtimeHandler) ListSessions(ctx context.Context, req *client.ListRuntim
 }
 
 func (h runtimeHandler) StopSession(ctx context.Context, req *client.StopRuntimeSessionRequest) error {
-	if err := h.provider.StopSession(ctx, req.GetSessionID()); err != nil {
+	if err := h.provider.StopSession(ctx, req.SessionID); err != nil {
 		return providerRPCError("runtime stop session", err)
 	}
 	return nil
@@ -102,9 +102,9 @@ func (h runtimeHandler) PrepareWorkspace(ctx context.Context, req *client.Prepar
 		return nil, status.Error(codes.Unimplemented, "runtime prepare workspace is not implemented")
 	}
 	rootReq := PrepareRuntimeWorkspaceRequest{
-		SessionID:      req.GetSessionID(),
-		AgentSessionID: req.GetAgentSessionID(),
-		Workspace:      clientAgentWorkspaceToRoot(req.GetWorkspace()),
+		SessionID:      req.SessionID,
+		AgentSessionID: req.AgentSessionID,
+		Workspace:      clientAgentWorkspaceToRoot(req.Workspace),
 	}
 	resp, err := workspaceProvider.PrepareWorkspace(ctx, rootReq)
 	if err != nil {
@@ -119,8 +119,8 @@ func (h runtimeHandler) RemoveWorkspace(ctx context.Context, req *client.RemoveR
 		return status.Error(codes.Unimplemented, "runtime remove workspace is not implemented")
 	}
 	rootReq := RemoveRuntimeWorkspaceRequest{
-		SessionID:      req.GetSessionID(),
-		AgentSessionID: req.GetAgentSessionID(),
+		SessionID:      req.SessionID,
+		AgentSessionID: req.AgentSessionID,
 	}
 	if err := workspaceProvider.RemoveWorkspace(ctx, rootReq); err != nil {
 		return providerRPCError("runtime remove workspace", err)
@@ -130,15 +130,15 @@ func (h runtimeHandler) RemoveWorkspace(ctx context.Context, req *client.RemoveR
 
 func (h runtimeHandler) StartApp(ctx context.Context, req *client.StartHostedAppRequest) (*client.HostedApp, error) {
 	rootReq := StartHostedAppRequest{
-		SessionID:     req.GetSessionID(),
-		AppName:       req.GetAppName(),
-		Command:       req.GetCommand(),
-		Args:          append([]string(nil), req.GetArgs()...),
-		Env:           cloneStringMap(req.GetEnv()),
-		AllowedHosts:  append([]string(nil), req.GetAllowedHosts()...),
-		DefaultAction: req.GetDefaultAction(),
-		HostBinary:    req.GetHostBinary(),
-		Workdir:       req.GetWorkdir(),
+		SessionID:     req.SessionID,
+		AppName:       req.AppName,
+		Command:       req.Command,
+		Args:          append([]string(nil), req.Args...),
+		Env:           cloneStringMap(req.Env),
+		AllowedHosts:  append([]string(nil), req.AllowedHosts...),
+		DefaultAction: req.DefaultAction,
+		HostBinary:    req.HostBinary,
+		Workdir:       req.Workdir,
 	}
 	hostedApp, err := h.provider.StartApp(ctx, rootReq)
 	if err != nil {
@@ -172,8 +172,8 @@ func clientListRuntimeSessionsRequestToRoot(req *client.ListRuntimeSessionsReque
 	pageSize := 0
 	pageToken := ""
 	if req != nil {
-		pageSize = int(req.GetPageSize())
-		pageToken = strings.TrimSpace(req.GetPageToken())
+		pageSize = int(req.PageSize)
+		pageToken = strings.TrimSpace(req.PageToken)
 	}
 	if pageSize < 0 {
 		return ListRuntimeSessionsRequest{}, fmt.Errorf("page_size must be non-negative")
@@ -195,10 +195,10 @@ func clientAgentWorkspaceToRoot(workspace *client.AgentWorkspace) *AgentWorkspac
 		return nil
 	}
 	out := &AgentWorkspace{
-		Checkouts: make([]AgentWorkspaceGitCheckout, 0, len(workspace.GetCheckouts())),
-		CWD:       workspace.GetCwd(),
+		Checkouts: make([]AgentWorkspaceGitCheckout, 0, len(workspace.Checkouts)),
+		CWD:       workspace.Cwd,
 	}
-	for _, checkout := range workspace.GetCheckouts() {
+	for _, checkout := range workspace.Checkouts {
 		if checkout == nil {
 			continue
 		}

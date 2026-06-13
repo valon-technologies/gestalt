@@ -18,7 +18,7 @@ type externalCredentialHandler struct {
 
 func (h externalCredentialHandler) CreateCredential(ctx context.Context, req *client.CreateExternalCredentialRequest) (*client.ExternalCredential, error) {
 	rootReq := &CreateExternalCredentialRequest{
-		Credential: clientExternalCredentialToRoot(req.GetCredential()),
+		Credential: clientExternalCredentialToRoot(req.Credential),
 	}
 	credential, err := h.provider.CreateCredential(ctx, rootReq)
 	if err != nil {
@@ -32,7 +32,7 @@ func (h externalCredentialHandler) CreateCredential(ctx context.Context, req *cl
 
 func (h externalCredentialHandler) UpsertCredential(ctx context.Context, req *client.UpsertExternalCredentialRequest) (*client.ExternalCredential, error) {
 	rootReq := &UpsertExternalCredentialRequest{
-		Credential: clientExternalCredentialToRoot(req.GetCredential()),
+		Credential: clientExternalCredentialToRoot(req.Credential),
 	}
 	credential, err := h.provider.UpsertCredential(ctx, rootReq)
 	if err != nil {
@@ -46,9 +46,9 @@ func (h externalCredentialHandler) UpsertCredential(ctx context.Context, req *cl
 
 func (h externalCredentialHandler) GetCredential(ctx context.Context, req *client.GetExternalCredentialRequest) (*client.ExternalCredential, error) {
 	rootReq := &GetExternalCredentialRequest{
-		Subject:   req.GetSubject(),
-		Audience:  req.GetAudience(),
-		Qualifier: req.GetQualifier(),
+		Subject:   req.Subject,
+		Audience:  req.Audience,
+		Qualifier: req.Qualifier,
 	}
 	credential, err := h.provider.GetCredential(ctx, rootReq)
 	if err != nil {
@@ -62,8 +62,8 @@ func (h externalCredentialHandler) GetCredential(ctx context.Context, req *clien
 
 func (h externalCredentialHandler) ListCredentials(ctx context.Context, req *client.ListExternalCredentialsRequest) (*client.ListExternalCredentialsResponse, error) {
 	rootReq := &ListExternalCredentialsRequest{
-		Subject:  req.GetSubject(),
-		Audience: req.GetAudience(),
+		Subject:  req.Subject,
+		Audience: req.Audience,
 	}
 	resp, err := h.provider.ListCredentials(ctx, rootReq)
 	if err != nil {
@@ -91,12 +91,12 @@ func (h externalCredentialHandler) DeleteCredential(ctx context.Context, req *cl
 
 func (h externalCredentialHandler) ValidateCredentialConfig(ctx context.Context, req *client.ValidateExternalCredentialConfigRequest) error {
 	rootReq := &ValidateExternalCredentialConfigRequest{
-		Provider:         req.GetProvider(),
-		Connection:       req.GetConnection(),
-		ConnectionID:     req.GetConnectionID(),
-		Mode:             req.GetMode(),
-		Auth:             clientExternalCredentialAuthConfigToRoot(req.GetAuth()),
-		ConnectionParams: copyStringMap(req.GetConnectionParams()),
+		Provider:         req.Provider,
+		Connection:       req.Connection,
+		ConnectionID:     req.ConnectionID,
+		Mode:             req.Mode,
+		Auth:             clientExternalCredentialAuthConfigToRoot(req.Auth),
+		ConnectionParams: copyStringMap(req.ConnectionParams),
 	}
 	if err := h.provider.ValidateCredentialConfig(ctx, rootReq); err != nil {
 		return providerRPCError("validate external credential config", err)
@@ -106,15 +106,15 @@ func (h externalCredentialHandler) ValidateCredentialConfig(ctx context.Context,
 
 func (h externalCredentialHandler) ResolveCredential(ctx context.Context, req *client.ResolveExternalCredentialRequest) (*client.ResolveExternalCredentialResponse, error) {
 	rootReq := &ResolveExternalCredentialRequest{
-		Provider:            req.GetProvider(),
-		Connection:          req.GetConnection(),
-		ConnectionID:        req.GetConnectionID(),
-		Mode:                req.GetMode(),
-		CredentialSubjectID: req.GetCredentialSubjectID(),
-		ActorSubjectID:      req.GetActorSubjectID(),
-		Instance:            req.GetInstance(),
-		Auth:                clientExternalCredentialAuthConfigToRoot(req.GetAuth()),
-		ConnectionParams:    copyStringMap(req.GetConnectionParams()),
+		Provider:            req.Provider,
+		Connection:          req.Connection,
+		ConnectionID:        req.ConnectionID,
+		Mode:                req.Mode,
+		CredentialSubjectID: req.CredentialSubjectID,
+		ActorSubjectID:      req.ActorSubjectID,
+		Instance:            req.Instance,
+		Auth:                clientExternalCredentialAuthConfigToRoot(req.Auth),
+		ConnectionParams:    copyStringMap(req.ConnectionParams),
 	}
 	resp, err := h.provider.ResolveCredential(ctx, rootReq)
 	if err != nil {
@@ -134,15 +134,15 @@ func (h externalCredentialHandler) ResolveCredential(ctx context.Context, req *c
 
 func (h externalCredentialHandler) ExchangeCredential(ctx context.Context, req *client.ExchangeExternalCredentialRequest) (*client.ExchangeExternalCredentialResponse, error) {
 	rootReq := &ExchangeExternalCredentialRequest{
-		Provider:            req.GetProvider(),
-		Connection:          req.GetConnection(),
-		ConnectionID:        req.GetConnectionID(),
-		CredentialSubjectID: req.GetCredentialSubjectID(),
-		ActorSubjectID:      req.GetActorSubjectID(),
-		Instance:            req.GetInstance(),
-		Auth:                clientExternalCredentialAuthConfigToRoot(req.GetAuth()),
-		CredentialJSON:      req.GetCredentialJSON(),
-		ConnectionParams:    copyStringMap(req.GetConnectionParams()),
+		Provider:            req.Provider,
+		Connection:          req.Connection,
+		ConnectionID:        req.ConnectionID,
+		CredentialSubjectID: req.CredentialSubjectID,
+		ActorSubjectID:      req.ActorSubjectID,
+		Instance:            req.Instance,
+		Auth:                clientExternalCredentialAuthConfigToRoot(req.Auth),
+		CredentialJSON:      req.CredentialJSON,
+		ConnectionParams:    copyStringMap(req.ConnectionParams),
 	}
 	resp, err := h.provider.ExchangeCredential(ctx, rootReq)
 	if err != nil {

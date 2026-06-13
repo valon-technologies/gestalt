@@ -28,7 +28,7 @@ type cacheHandler struct {
 }
 
 func (s cacheHandler) Get(ctx context.Context, request *client.CacheGetRequest) (*client.CacheGetResponse, error) {
-	value, found, err := s.provider.Get(ctx, request.GetKey())
+	value, found, err := s.provider.Get(ctx, request.Key)
 	if err != nil {
 		return nil, providerRPCError("cache get", err)
 	}
@@ -36,7 +36,7 @@ func (s cacheHandler) Get(ctx context.Context, request *client.CacheGetRequest) 
 }
 
 func (s cacheHandler) GetMany(ctx context.Context, request *client.CacheGetManyRequest) (*client.CacheGetManyResponse, error) {
-	keys := request.GetKeys()
+	keys := request.Keys
 	values, err := s.provider.GetMany(ctx, append([]string(nil), keys...))
 	if err != nil {
 		return nil, providerRPCError("cache get many", err)
@@ -54,24 +54,24 @@ func (s cacheHandler) GetMany(ctx context.Context, request *client.CacheGetManyR
 }
 
 func (s cacheHandler) Set(ctx context.Context, request *client.CacheSetRequest) error {
-	ttl, err := cacheTTL(request.GetTTL())
+	ttl, err := cacheTTL(request.TTL)
 	if err != nil {
 		return err
 	}
-	if err := s.provider.Set(ctx, request.GetKey(), append([]byte(nil), request.GetValue()...), CacheSetOptions{TTL: ttl}); err != nil {
+	if err := s.provider.Set(ctx, request.Key, append([]byte(nil), request.Value...), CacheSetOptions{TTL: ttl}); err != nil {
 		return providerRPCError("cache set", err)
 	}
 	return nil
 }
 
 func (s cacheHandler) SetMany(ctx context.Context, request *client.CacheSetManyRequest) error {
-	ttl, err := cacheTTL(request.GetTTL())
+	ttl, err := cacheTTL(request.TTL)
 	if err != nil {
 		return err
 	}
-	entries := make([]CacheEntry, 0, len(request.GetEntries()))
-	for _, entry := range request.GetEntries() {
-		entries = append(entries, CacheEntry{Key: entry.GetKey(), Value: append([]byte(nil), entry.GetValue()...)})
+	entries := make([]CacheEntry, 0, len(request.Entries))
+	for _, entry := range request.Entries {
+		entries = append(entries, CacheEntry{Key: entry.Key, Value: append([]byte(nil), entry.Value...)})
 	}
 	if err := s.provider.SetMany(ctx, entries, CacheSetOptions{TTL: ttl}); err != nil {
 		return providerRPCError("cache set many", err)
@@ -80,7 +80,7 @@ func (s cacheHandler) SetMany(ctx context.Context, request *client.CacheSetManyR
 }
 
 func (s cacheHandler) Delete(ctx context.Context, request *client.CacheDeleteRequest) (*client.CacheDeleteResponse, error) {
-	deleted, err := s.provider.Delete(ctx, request.GetKey())
+	deleted, err := s.provider.Delete(ctx, request.Key)
 	if err != nil {
 		return nil, providerRPCError("cache delete", err)
 	}
@@ -88,7 +88,7 @@ func (s cacheHandler) Delete(ctx context.Context, request *client.CacheDeleteReq
 }
 
 func (s cacheHandler) DeleteMany(ctx context.Context, request *client.CacheDeleteManyRequest) (*client.CacheDeleteManyResponse, error) {
-	deleted, err := s.provider.DeleteMany(ctx, append([]string(nil), request.GetKeys()...))
+	deleted, err := s.provider.DeleteMany(ctx, append([]string(nil), request.Keys...))
 	if err != nil {
 		return nil, providerRPCError("cache delete many", err)
 	}
@@ -96,11 +96,11 @@ func (s cacheHandler) DeleteMany(ctx context.Context, request *client.CacheDelet
 }
 
 func (s cacheHandler) Touch(ctx context.Context, request *client.CacheTouchRequest) (*client.CacheTouchResponse, error) {
-	ttl, err := cacheTTL(request.GetTTL())
+	ttl, err := cacheTTL(request.TTL)
 	if err != nil {
 		return nil, err
 	}
-	touched, err := s.provider.Touch(ctx, request.GetKey(), ttl)
+	touched, err := s.provider.Touch(ctx, request.Key, ttl)
 	if err != nil {
 		return nil, providerRPCError("cache touch", err)
 	}

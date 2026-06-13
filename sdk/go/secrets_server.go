@@ -15,7 +15,7 @@ type secretsHandler struct {
 }
 
 func (s secretsHandler) GetSecret(ctx context.Context, request *client.GetSecretRequest) (*client.GetSecretResponse, error) {
-	value, err := s.secrets.GetSecret(ctx, request.GetName())
+	value, err := s.secrets.GetSecret(ctx, request.Name)
 	if err != nil {
 		return nil, providerRPCError("get secret", err)
 	}

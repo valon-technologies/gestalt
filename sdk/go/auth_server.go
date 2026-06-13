@@ -19,10 +19,10 @@ type authenticationHandler struct {
 
 func (h authenticationHandler) BeginLogin(ctx context.Context, req *client.BeginLoginRequest) (*client.BeginLoginResponse, error) {
 	rootReq := &BeginLoginRequest{
-		CallbackUrl: req.GetCallbackURL(),
-		HostState:   req.GetHostState(),
-		Scopes:      append([]string(nil), req.GetScopes()...),
-		Options:     cloneStringMap(req.GetOptions()),
+		CallbackUrl: req.CallbackURL,
+		HostState:   req.HostState,
+		Scopes:      append([]string(nil), req.Scopes...),
+		Options:     cloneStringMap(req.Options),
 	}
 	resp, err := h.auth.BeginLogin(ctx, rootReq)
 	if err != nil {
@@ -39,9 +39,9 @@ func (h authenticationHandler) BeginLogin(ctx context.Context, req *client.Begin
 
 func (h authenticationHandler) CompleteLogin(ctx context.Context, req *client.CompleteLoginRequest) (*client.AuthenticatedUser, error) {
 	rootReq := &CompleteLoginRequest{
-		Query:         cloneStringMap(req.GetQuery()),
-		ProviderState: append([]byte(nil), req.GetProviderState()...),
-		CallbackUrl:   req.GetCallbackURL(),
+		Query:         cloneStringMap(req.Query),
+		ProviderState: append([]byte(nil), req.ProviderState...),
+		CallbackUrl:   req.CallbackURL,
 	}
 	user, err := h.auth.CompleteLogin(ctx, rootReq)
 	if err != nil {
@@ -58,7 +58,7 @@ func (h authenticationHandler) ValidateExternalToken(ctx context.Context, req *c
 	if !ok {
 		return nil, providerRPCError("validate external token", ErrExternalTokenValidationUnsupported)
 	}
-	user, err := validator.ValidateExternalToken(ctx, req.GetToken())
+	user, err := validator.ValidateExternalToken(ctx, req.Token)
 	if err != nil {
 		return nil, providerRPCError("validate external token", err)
 	}

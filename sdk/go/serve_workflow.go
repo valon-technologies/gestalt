@@ -27,8 +27,8 @@ type workflowHandler struct {
 
 func (h workflowHandler) ApplyDefinition(ctx context.Context, req *client.ApplyWorkflowProviderDefinitionRequest) (*client.WorkflowDefinition, error) {
 	var spec *WorkflowDefinitionSpec
-	if req.GetSpec() != nil {
-		input, err := clientWorkflowDefinitionSpecToRoot(req.GetSpec())
+	if req.Spec != nil {
+		input, err := clientWorkflowDefinitionSpecToRoot(req.Spec)
 		if err != nil {
 			return nil, providerRPCError("workflow apply definition", err)
 		}
@@ -36,8 +36,8 @@ func (h workflowHandler) ApplyDefinition(ctx context.Context, req *client.ApplyW
 	}
 	rootReq := &ApplyWorkflowProviderDefinitionRequest{
 		Spec:                 spec,
-		IdempotencyKey:       req.GetIdempotencyKey(),
-		RequestedBySubjectID: req.GetRequestedBySubjectID(),
+		IdempotencyKey:       req.IdempotencyKey,
+		RequestedBySubjectID: req.RequestedBySubjectID,
 	}
 	definition, err := h.provider.ApplyDefinition(ctx, rootReq)
 	if err != nil {
@@ -51,7 +51,7 @@ func (h workflowHandler) ApplyDefinition(ctx context.Context, req *client.ApplyW
 }
 
 func (h workflowHandler) GetDefinition(ctx context.Context, req *client.GetWorkflowProviderDefinitionRequest) (*client.WorkflowDefinition, error) {
-	definition, err := h.provider.GetDefinition(ctx, &GetWorkflowProviderDefinitionRequest{DefinitionID: req.GetDefinitionID()})
+	definition, err := h.provider.GetDefinition(ctx, &GetWorkflowProviderDefinitionRequest{DefinitionID: req.DefinitionID})
 	if err != nil {
 		return nil, providerRPCError("workflow get definition", err)
 	}
@@ -77,9 +77,9 @@ func (h workflowHandler) ListDefinitions(ctx context.Context, req *client.ListWo
 
 func (h workflowHandler) SetDefinitionPaused(ctx context.Context, req *client.SetWorkflowProviderDefinitionPausedRequest) (*client.WorkflowDefinition, error) {
 	definition, err := h.provider.SetDefinitionPaused(ctx, &SetWorkflowProviderDefinitionPausedRequest{
-		DefinitionID:         req.GetDefinitionID(),
-		Paused:               req.GetPaused(),
-		RequestedBySubjectID: req.GetRequestedBySubjectID(),
+		DefinitionID:         req.DefinitionID,
+		Paused:               req.Paused,
+		RequestedBySubjectID: req.RequestedBySubjectID,
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow set definition paused", err)
@@ -93,10 +93,10 @@ func (h workflowHandler) SetDefinitionPaused(ctx context.Context, req *client.Se
 
 func (h workflowHandler) SetActivationPaused(ctx context.Context, req *client.SetWorkflowProviderActivationPausedRequest) (*client.WorkflowDefinition, error) {
 	definition, err := h.provider.SetActivationPaused(ctx, &SetWorkflowProviderActivationPausedRequest{
-		DefinitionID:         req.GetDefinitionID(),
-		ActivationID:         req.GetActivationID(),
-		Paused:               req.GetPaused(),
-		RequestedBySubjectID: req.GetRequestedBySubjectID(),
+		DefinitionID:         req.DefinitionID,
+		ActivationID:         req.ActivationID,
+		Paused:               req.Paused,
+		RequestedBySubjectID: req.RequestedBySubjectID,
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow set activation paused", err)
@@ -109,18 +109,18 @@ func (h workflowHandler) SetActivationPaused(ctx context.Context, req *client.Se
 }
 
 func (h workflowHandler) DeleteDefinition(ctx context.Context, req *client.DeleteWorkflowProviderDefinitionRequest) error {
-	return providerRPCError("workflow delete definition", h.provider.DeleteDefinition(ctx, &DeleteWorkflowProviderDefinitionRequest{DefinitionID: req.GetDefinitionID()}))
+	return providerRPCError("workflow delete definition", h.provider.DeleteDefinition(ctx, &DeleteWorkflowProviderDefinitionRequest{DefinitionID: req.DefinitionID}))
 }
 
 func (h workflowHandler) StartRun(ctx context.Context, req *client.StartWorkflowProviderRunRequest) (*client.WorkflowRun, error) {
 	rootReq := &StartWorkflowProviderRunRequest{
-		DefinitionID:                 req.GetDefinitionID(),
-		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
-		Input:                        req.GetInput(),
-		IdempotencyKey:               req.GetIdempotencyKey(),
-		CreatedBySubjectID:           req.GetCreatedBySubjectID(),
-		RunAs:                        clientSubjectContextToRootSubject(req.GetRunAs()),
-		WorkflowKey:                  req.GetWorkflowKey(),
+		DefinitionID:                 req.DefinitionID,
+		ExpectedDefinitionGeneration: req.ExpectedDefinitionGeneration,
+		Input:                        req.Input,
+		IdempotencyKey:               req.IdempotencyKey,
+		CreatedBySubjectID:           req.CreatedBySubjectID,
+		RunAs:                        clientSubjectContextToRootSubject(req.RunAs),
+		WorkflowKey:                  req.WorkflowKey,
 	}
 	run, err := h.provider.StartRun(ctx, rootReq)
 	if err != nil {
@@ -134,7 +134,7 @@ func (h workflowHandler) StartRun(ctx context.Context, req *client.StartWorkflow
 }
 
 func (h workflowHandler) GetRun(ctx context.Context, req *client.GetWorkflowProviderRunRequest) (*client.WorkflowRun, error) {
-	run, err := h.provider.GetRun(ctx, &GetWorkflowProviderRunRequest{RunID: req.GetRunID()})
+	run, err := h.provider.GetRun(ctx, &GetWorkflowProviderRunRequest{RunID: req.RunID})
 	if err != nil {
 		return nil, providerRPCError("workflow get run", err)
 	}
@@ -147,10 +147,10 @@ func (h workflowHandler) GetRun(ctx context.Context, req *client.GetWorkflowProv
 
 func (h workflowHandler) ListRuns(ctx context.Context, req *client.ListWorkflowProviderRunsRequest) (*client.ListWorkflowProviderRunsResponse, error) {
 	resp, err := h.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		Status:    WorkflowRunStatus(req.GetStatus()),
-		TargetApp: req.GetTargetApp(),
+		PageSize:  int(req.PageSize),
+		PageToken: req.PageToken,
+		Status:    WorkflowRunStatus(req.Status),
+		TargetApp: req.TargetApp,
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
@@ -166,7 +166,7 @@ func (h workflowHandler) ListRuns(ctx context.Context, req *client.ListWorkflowP
 }
 
 func (h workflowHandler) GetRunEvents(ctx context.Context, req *client.GetWorkflowProviderRunEventsRequest) (*client.GetWorkflowProviderRunEventsResponse, error) {
-	resp, err := h.provider.GetRunEvents(ctx, &GetWorkflowProviderRunEventsRequest{RunID: req.GetRunID()})
+	resp, err := h.provider.GetRunEvents(ctx, &GetWorkflowProviderRunEventsRequest{RunID: req.RunID})
 	if err != nil {
 		return nil, providerRPCError("workflow get run events", err)
 	}
@@ -178,7 +178,7 @@ func (h workflowHandler) GetRunEvents(ctx context.Context, req *client.GetWorkfl
 }
 
 func (h workflowHandler) GetRunOutput(ctx context.Context, req *client.GetWorkflowProviderRunOutputRequest) (*client.GetWorkflowProviderRunOutputResponse, error) {
-	resp, err := h.provider.GetRunOutput(ctx, &GetWorkflowProviderRunOutputRequest{RunID: req.GetRunID()})
+	resp, err := h.provider.GetRunOutput(ctx, &GetWorkflowProviderRunOutputRequest{RunID: req.RunID})
 	if err != nil {
 		return nil, providerRPCError("workflow get run output", err)
 	}
@@ -194,7 +194,7 @@ func (h workflowHandler) GetRunOutput(ctx context.Context, req *client.GetWorkfl
 }
 
 func (h workflowHandler) CancelRun(ctx context.Context, req *client.CancelWorkflowProviderRunRequest) (*client.WorkflowRun, error) {
-	run, err := h.provider.CancelRun(ctx, &CancelWorkflowProviderRunRequest{RunID: req.GetRunID(), Reason: req.GetReason()})
+	run, err := h.provider.CancelRun(ctx, &CancelWorkflowProviderRunRequest{RunID: req.RunID, Reason: req.Reason})
 	if err != nil {
 		return nil, providerRPCError("workflow cancel run", err)
 	}
@@ -207,8 +207,8 @@ func (h workflowHandler) CancelRun(ctx context.Context, req *client.CancelWorkfl
 
 func (h workflowHandler) SignalRun(ctx context.Context, req *client.SignalWorkflowProviderRunRequest) (*client.SignalWorkflowRunResponse, error) {
 	rootReq := &SignalWorkflowProviderRunRequest{
-		RunID:  req.GetRunID(),
-		Signal: clientWorkflowSignalToRoot(req.GetSignal()),
+		RunID:  req.RunID,
+		Signal: clientWorkflowSignalToRoot(req.Signal),
 	}
 	resp, err := h.provider.SignalRun(ctx, rootReq)
 	if err != nil {
@@ -223,14 +223,14 @@ func (h workflowHandler) SignalRun(ctx context.Context, req *client.SignalWorkfl
 
 func (h workflowHandler) SignalOrStartRun(ctx context.Context, req *client.SignalOrStartWorkflowProviderRunRequest) (*client.SignalWorkflowRunResponse, error) {
 	rootReq := &SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:                  req.GetWorkflowKey(),
-		DefinitionID:                 req.GetDefinitionID(),
-		ExpectedDefinitionGeneration: req.GetExpectedDefinitionGeneration(),
-		Input:                        req.GetInput(),
-		IdempotencyKey:               req.GetIdempotencyKey(),
-		CreatedBySubjectID:           req.GetCreatedBySubjectID(),
-		RunAs:                        clientSubjectContextToRootSubject(req.GetRunAs()),
-		Signal:                       clientWorkflowSignalToRoot(req.GetSignal()),
+		WorkflowKey:                  req.WorkflowKey,
+		DefinitionID:                 req.DefinitionID,
+		ExpectedDefinitionGeneration: req.ExpectedDefinitionGeneration,
+		Input:                        req.Input,
+		IdempotencyKey:               req.IdempotencyKey,
+		CreatedBySubjectID:           req.CreatedBySubjectID,
+		RunAs:                        clientSubjectContextToRootSubject(req.RunAs),
+		Signal:                       clientWorkflowSignalToRoot(req.Signal),
 	}
 	resp, err := h.provider.SignalOrStartRun(ctx, rootReq)
 	if err != nil {
@@ -245,9 +245,9 @@ func (h workflowHandler) SignalOrStartRun(ctx context.Context, req *client.Signa
 
 func (h workflowHandler) DeliverEvent(ctx context.Context, req *client.DeliverWorkflowProviderEventRequest) (*client.WorkflowEvent, error) {
 	rootReq := &DeliverWorkflowProviderEventRequest{
-		AppName:              req.GetAppName(),
-		Event:                clientWorkflowEventToRoot(req.GetEvent()),
-		DeliveredBySubjectID: req.GetDeliveredBySubjectID(),
+		AppName:              req.AppName,
+		Event:                clientWorkflowEventToRoot(req.Event),
+		DeliveredBySubjectID: req.DeliveredBySubjectID,
 	}
 	eventResult, err := h.provider.DeliverEvent(ctx, rootReq)
 	if err != nil {
@@ -829,16 +829,16 @@ func clientWorkflowDefinitionSpecToRoot(in *client.WorkflowDefinitionSpec) (Work
 	if in == nil {
 		return WorkflowDefinitionSpec{}, nil
 	}
-	activations, err := clientWorkflowActivationsToRoot(in.GetActivations())
+	activations, err := clientWorkflowActivationsToRoot(in.Activations)
 	if err != nil {
 		return WorkflowDefinitionSpec{}, err
 	}
 	return WorkflowDefinitionSpec{
-		ID:          in.GetID(),
-		Target:      clientBoundWorkflowTargetToRoot(in.GetTarget()),
+		ID:          in.ID,
+		Target:      clientBoundWorkflowTargetToRoot(in.Target),
 		Activations: activations,
-		Paused:      in.GetPaused(),
-		RunAs:       clientSubjectContextToRootSubject(in.GetRunAs()),
+		Paused:      in.Paused,
+		RunAs:       clientSubjectContextToRootSubject(in.RunAs),
 	}, nil
 }
 
@@ -847,7 +847,7 @@ func clientBoundWorkflowTargetToRoot(in *client.BoundWorkflowTarget) *BoundWorkf
 		return nil
 	}
 	out := &BoundWorkflowTarget{}
-	for _, s := range in.GetSteps() {
+	for _, s := range in.Steps {
 		out.Steps = append(out.Steps, clientWorkflowStepToRoot(s))
 	}
 	return out
@@ -869,7 +869,7 @@ func clientWorkflowStepToRoot(in *client.WorkflowStep) WorkflowStep {
 			out.Inputs[k] = clientWorkflowValueToRoot(v)
 		}
 	}
-	switch a := in.GetAction().(type) {
+	switch a := in.Action.(type) {
 	case *client.WorkflowStepActionApp:
 		out.App = clientWorkflowStepAppCallToRoot(a.Value)
 	case *client.WorkflowStepActionAgent:
@@ -962,7 +962,7 @@ func clientAgentOutputToRoot(in *client.AgentOutput) *AgentOutput {
 	if in == nil {
 		return nil
 	}
-	switch k := in.GetKind().(type) {
+	switch k := in.Kind.(type) {
 	case *client.AgentOutputKindText:
 		_ = k
 		return &AgentOutput{Text: &AgentTextOutput{}}
@@ -981,7 +981,7 @@ func clientWorkflowValueToRoot(in *client.WorkflowValue) WorkflowValue {
 	if in == nil {
 		return WorkflowValue{}
 	}
-	switch k := in.GetKind().(type) {
+	switch k := in.Kind.(type) {
 	case *client.WorkflowValueKindLiteral:
 		return WorkflowValue{Literal: k.Value, LiteralSet: true}
 	case *client.WorkflowValueKindObject:
@@ -1054,11 +1054,11 @@ func clientWorkflowActivationToRoot(in *client.WorkflowActivation) (WorkflowActi
 		return WorkflowActivation{}, nil
 	}
 	out := WorkflowActivation{
-		ID:     in.GetID(),
-		Paused: in.GetPaused(),
-		Input:  clientWorkflowValueToRoot(in.GetInput()),
+		ID:     in.ID,
+		Paused: in.Paused,
+		Input:  clientWorkflowValueToRoot(in.Input),
 	}
-	switch t := in.GetTrigger().(type) {
+	switch t := in.Trigger.(type) {
 	case *client.WorkflowActivationTriggerSchedule:
 		if t.Value != nil {
 			out.Schedule = &WorkflowScheduleActivation{Cron: t.Value.Cron, Timezone: t.Value.Timezone}
@@ -1082,13 +1082,13 @@ func clientWorkflowSignalToRoot(in *client.WorkflowSignal) *WorkflowSignal {
 		return nil
 	}
 	out := &WorkflowSignal{
-		ID:                 in.GetID(),
-		Name:               in.GetName(),
-		Payload:            in.GetPayload(),
-		Metadata:           in.GetMetadata(),
-		CreatedBySubjectID: in.GetCreatedBySubjectID(),
-		IdempotencyKey:     in.GetIdempotencyKey(),
-		Sequence:           in.GetSequence(),
+		ID:                 in.ID,
+		Name:               in.Name,
+		Payload:            in.Payload,
+		Metadata:           in.Metadata,
+		CreatedBySubjectID: in.CreatedBySubjectID,
+		IdempotencyKey:     in.IdempotencyKey,
+		Sequence:           in.Sequence,
 	}
 	if in.CreatedAt != nil {
 		out.CreatedAt = *in.CreatedAt
@@ -1101,14 +1101,14 @@ func clientWorkflowEventToRoot(in *client.WorkflowEvent) *WorkflowEvent {
 		return nil
 	}
 	out := &WorkflowEvent{
-		ID:              in.GetID(),
-		Source:          in.GetSource(),
-		SpecVersion:     in.GetSpecVersion(),
-		Type:            in.GetType(),
-		Subject:         in.GetSubject(),
-		DataContentType: in.GetDatacontenttype(),
-		Data:            in.GetData(),
-		Extensions:      in.GetExtensions(),
+		ID:              in.ID,
+		Source:          in.Source,
+		SpecVersion:     in.SpecVersion,
+		Type:            in.Type,
+		Subject:         in.Subject,
+		DataContentType: in.Datacontenttype,
+		Data:            in.Data,
+		Extensions:      in.Extensions,
 	}
 	if in.Time != nil {
 		out.Time = *in.Time
@@ -1136,10 +1136,10 @@ func clientSubjectContextToRootSubject(in *client.SubjectContext) *Subject {
 		return nil
 	}
 	return &Subject{
-		ID:                  in.GetID(),
-		CredentialSubjectID: in.GetCredentialSubjectID(),
-		Email:               in.GetEmail(),
-		DisplayName:         in.GetDisplayName(),
-		Scopes:              append([]string(nil), in.GetScopes()...),
+		ID:                  in.ID,
+		CredentialSubjectID: in.CredentialSubjectID,
+		Email:               in.Email,
+		DisplayName:         in.DisplayName,
+		Scopes:              append([]string(nil), in.Scopes...),
 	}
 }

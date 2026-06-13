@@ -16,27 +16,11 @@ type GetSecretRequest struct {
 	Name string
 }
 
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *GetSecretRequest) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
 // GetSecretResponse is the native message type for gestalt.provider.v1.GetSecretResponse.
 //
 // GetSecretResponse returns the secret value.
 type GetSecretResponse struct {
 	Value string
-}
-
-// GetValue returns the value field; it is safe to call on a nil receiver.
-func (x *GetSecretResponse) GetValue() string {
-	if x == nil {
-		return ""
-	}
-	return x.Value
 }
 
 // Secrets is the generated client for gestalt.provider.v1.Secrets.

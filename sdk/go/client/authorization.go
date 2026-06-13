@@ -57,46 +57,14 @@ type Action struct {
 	Properties map[string]any
 }
 
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *Action) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetProperties returns the properties field; it is safe to call on a nil receiver.
-func (x *Action) GetProperties() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Properties
-}
-
 // AddRelationshipRequest is the native message type for gestalt.provider.v1.AddRelationshipRequest.
 type AddRelationshipRequest struct {
 	Relationship *Relationship
 }
 
-// GetRelationship returns the relationship field; it is safe to call on a nil receiver.
-func (x *AddRelationshipRequest) GetRelationship() *Relationship {
-	if x == nil {
-		return nil
-	}
-	return x.Relationship
-}
-
 // AddRelationshipResponse is the native message type for gestalt.provider.v1.AddRelationshipResponse.
 type AddRelationshipResponse struct {
 	Relationship *Relationship
-}
-
-// GetRelationship returns the relationship field; it is safe to call on a nil receiver.
-func (x *AddRelationshipResponse) GetRelationship() *Relationship {
-	if x == nil {
-		return nil
-	}
-	return x.Relationship
 }
 
 // AuthorizationModel is the native message type for gestalt.provider.v1.AuthorizationModel.
@@ -106,59 +74,11 @@ type AuthorizationModel struct {
 	ResourceTypes []*AuthorizationModelResourceType
 }
 
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *AuthorizationModel) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetVersion returns the version field; it is safe to call on a nil receiver.
-func (x *AuthorizationModel) GetVersion() string {
-	if x == nil {
-		return ""
-	}
-	return x.Version
-}
-
-// GetResourceTypes returns the resourceTypes field; it is safe to call on a nil receiver.
-func (x *AuthorizationModel) GetResourceTypes() []*AuthorizationModelResourceType {
-	if x == nil {
-		return nil
-	}
-	return x.ResourceTypes
-}
-
 // AuthorizationModelRef is the native message type for gestalt.provider.v1.AuthorizationModelRef.
 type AuthorizationModelRef struct {
 	ID        string
 	Version   string
 	CreatedAt *time.Time
-}
-
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelRef) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetVersion returns the version field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelRef) GetVersion() string {
-	if x == nil {
-		return ""
-	}
-	return x.Version
-}
-
-// GetCreatedAt returns the createdAt field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelRef) GetCreatedAt() *time.Time {
-	if x == nil {
-		return nil
-	}
-	return x.CreatedAt
 }
 
 // AuthorizationModelResourceType is the native message type for gestalt.provider.v1.AuthorizationModelResourceType.
@@ -170,66 +90,10 @@ type AuthorizationModelResourceType struct {
 	DefaultAccessPolicy DefaultAccessPolicy
 }
 
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceType) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetRelations returns the relations field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceType) GetRelations() []*ModelRelation {
-	if x == nil {
-		return nil
-	}
-	return x.Relations
-}
-
-// GetActions returns the actions field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceType) GetActions() []*ModelAction {
-	if x == nil {
-		return nil
-	}
-	return x.Actions
-}
-
-// GetSourceLayer returns the sourceLayer field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceType) GetSourceLayer() SourceLayer {
-	if x == nil {
-		return 0
-	}
-	return x.SourceLayer
-}
-
-// GetDefaultAccessPolicy returns the defaultAccessPolicy field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceType) GetDefaultAccessPolicy() DefaultAccessPolicy {
-	if x == nil {
-		return 0
-	}
-	return x.DefaultAccessPolicy
-}
-
 // AuthorizationModelResourceTypeFilter is the native message type for gestalt.provider.v1.AuthorizationModelResourceTypeFilter.
 type AuthorizationModelResourceTypeFilter struct {
 	Name        string
 	SourceLayer SourceLayer
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceTypeFilter) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetSourceLayer returns the sourceLayer field; it is safe to call on a nil receiver.
-func (x *AuthorizationModelResourceTypeFilter) GetSourceLayer() SourceLayer {
-	if x == nil {
-		return 0
-	}
-	return x.SourceLayer
 }
 
 // CheckAccessManyRequest is the native message type for gestalt.provider.v1.CheckAccessManyRequest.
@@ -237,25 +101,9 @@ type CheckAccessManyRequest struct {
 	Requests []*CheckAccessRequest
 }
 
-// GetRequests returns the requests field; it is safe to call on a nil receiver.
-func (x *CheckAccessManyRequest) GetRequests() []*CheckAccessRequest {
-	if x == nil {
-		return nil
-	}
-	return x.Requests
-}
-
 // CheckAccessManyResponse is the native message type for gestalt.provider.v1.CheckAccessManyResponse.
 type CheckAccessManyResponse struct {
 	Decisions []*CheckAccessResponse
-}
-
-// GetDecisions returns the decisions field; it is safe to call on a nil receiver.
-func (x *CheckAccessManyResponse) GetDecisions() []*CheckAccessResponse {
-	if x == nil {
-		return nil
-	}
-	return x.Decisions
 }
 
 // CheckAccessRequest is the native message type for gestalt.provider.v1.CheckAccessRequest.
@@ -265,63 +113,15 @@ type CheckAccessRequest struct {
 	Resource *Resource
 }
 
-// GetSubject returns the subject field; it is safe to call on a nil receiver.
-func (x *CheckAccessRequest) GetSubject() *Subject {
-	if x == nil {
-		return nil
-	}
-	return x.Subject
-}
-
-// GetAction returns the action field; it is safe to call on a nil receiver.
-func (x *CheckAccessRequest) GetAction() *Action {
-	if x == nil {
-		return nil
-	}
-	return x.Action
-}
-
-// GetResource returns the resource field; it is safe to call on a nil receiver.
-func (x *CheckAccessRequest) GetResource() *Resource {
-	if x == nil {
-		return nil
-	}
-	return x.Resource
-}
-
 // CheckAccessResponse is the native message type for gestalt.provider.v1.CheckAccessResponse.
 type CheckAccessResponse struct {
 	Allowed bool
 	ModelID string
 }
 
-// GetAllowed returns the allowed field; it is safe to call on a nil receiver.
-func (x *CheckAccessResponse) GetAllowed() bool {
-	if x == nil {
-		return false
-	}
-	return x.Allowed
-}
-
-// GetModelID returns the modelId field; it is safe to call on a nil receiver.
-func (x *CheckAccessResponse) GetModelID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ModelID
-}
-
 // DeleteRelationshipRequest is the native message type for gestalt.provider.v1.DeleteRelationshipRequest.
 type DeleteRelationshipRequest struct {
 	RelationshipTuple *RelationshipTuple
-}
-
-// GetRelationshipTuple returns the relationshipTuple field; it is safe to call on a nil receiver.
-func (x *DeleteRelationshipRequest) GetRelationshipTuple() *RelationshipTuple {
-	if x == nil {
-		return nil
-	}
-	return x.RelationshipTuple
 }
 
 // DeleteRelationshipResponse is the native message type for gestalt.provider.v1.DeleteRelationshipResponse.
@@ -332,43 +132,11 @@ type GetActiveModelRefResponse struct {
 	Model *AuthorizationModelRef
 }
 
-// GetModel returns the model field; it is safe to call on a nil receiver.
-func (x *GetActiveModelRefResponse) GetModel() *AuthorizationModelRef {
-	if x == nil {
-		return nil
-	}
-	return x.Model
-}
-
 // ListActiveModelResourceTypesRequest is the native message type for gestalt.provider.v1.ListActiveModelResourceTypesRequest.
 type ListActiveModelResourceTypesRequest struct {
 	Filter    *AuthorizationModelResourceTypeFilter
 	PageSize  int32
 	PageToken string
-}
-
-// GetFilter returns the filter field; it is safe to call on a nil receiver.
-func (x *ListActiveModelResourceTypesRequest) GetFilter() *AuthorizationModelResourceTypeFilter {
-	if x == nil {
-		return nil
-	}
-	return x.Filter
-}
-
-// GetPageSize returns the pageSize field; it is safe to call on a nil receiver.
-func (x *ListActiveModelResourceTypesRequest) GetPageSize() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.PageSize
-}
-
-// GetPageToken returns the pageToken field; it is safe to call on a nil receiver.
-func (x *ListActiveModelResourceTypesRequest) GetPageToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.PageToken
 }
 
 // ListActiveModelResourceTypesResponse is the native message type for gestalt.provider.v1.ListActiveModelResourceTypesResponse.
@@ -378,59 +146,11 @@ type ListActiveModelResourceTypesResponse struct {
 	ModelID       string
 }
 
-// GetResourceTypes returns the resourceTypes field; it is safe to call on a nil receiver.
-func (x *ListActiveModelResourceTypesResponse) GetResourceTypes() []*AuthorizationModelResourceType {
-	if x == nil {
-		return nil
-	}
-	return x.ResourceTypes
-}
-
-// GetNextPageToken returns the nextPageToken field; it is safe to call on a nil receiver.
-func (x *ListActiveModelResourceTypesResponse) GetNextPageToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.NextPageToken
-}
-
-// GetModelID returns the modelId field; it is safe to call on a nil receiver.
-func (x *ListActiveModelResourceTypesResponse) GetModelID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ModelID
-}
-
 // ListRelationshipsRequest is the native message type for gestalt.provider.v1.ListRelationshipsRequest.
 type ListRelationshipsRequest struct {
 	Filter    *RelationshipFilter
 	PageSize  int32
 	PageToken string
-}
-
-// GetFilter returns the filter field; it is safe to call on a nil receiver.
-func (x *ListRelationshipsRequest) GetFilter() *RelationshipFilter {
-	if x == nil {
-		return nil
-	}
-	return x.Filter
-}
-
-// GetPageSize returns the pageSize field; it is safe to call on a nil receiver.
-func (x *ListRelationshipsRequest) GetPageSize() int32 {
-	if x == nil {
-		return 0
-	}
-	return x.PageSize
-}
-
-// GetPageToken returns the pageToken field; it is safe to call on a nil receiver.
-func (x *ListRelationshipsRequest) GetPageToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.PageToken
 }
 
 // ListRelationshipsResponse is the native message type for gestalt.provider.v1.ListRelationshipsResponse.
@@ -439,42 +159,10 @@ type ListRelationshipsResponse struct {
 	NextPageToken string
 }
 
-// GetRelationships returns the relationships field; it is safe to call on a nil receiver.
-func (x *ListRelationshipsResponse) GetRelationships() []*Relationship {
-	if x == nil {
-		return nil
-	}
-	return x.Relationships
-}
-
-// GetNextPageToken returns the nextPageToken field; it is safe to call on a nil receiver.
-func (x *ListRelationshipsResponse) GetNextPageToken() string {
-	if x == nil {
-		return ""
-	}
-	return x.NextPageToken
-}
-
 // ModelAction is the native message type for gestalt.provider.v1.ModelAction.
 type ModelAction struct {
 	Name      string
 	Relations []string
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *ModelAction) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetRelations returns the relations field; it is safe to call on a nil receiver.
-func (x *ModelAction) GetRelations() []string {
-	if x == nil {
-		return nil
-	}
-	return x.Relations
 }
 
 // ModelAllowedTargetKind selects one variant of the kind oneof of ModelAllowedTarget.
@@ -509,34 +197,10 @@ type ModelAllowedTarget struct {
 	Kind ModelAllowedTargetKind
 }
 
-// GetKind returns the kind oneof; it is safe to call on a nil receiver.
-func (x *ModelAllowedTarget) GetKind() ModelAllowedTargetKind {
-	if x == nil {
-		return nil
-	}
-	return x.Kind
-}
-
 // ModelRelation is the native message type for gestalt.provider.v1.ModelRelation.
 type ModelRelation struct {
 	Name           string
 	AllowedTargets []*ModelAllowedTarget
-}
-
-// GetName returns the name field; it is safe to call on a nil receiver.
-func (x *ModelRelation) GetName() string {
-	if x == nil {
-		return ""
-	}
-	return x.Name
-}
-
-// GetAllowedTargets returns the allowedTargets field; it is safe to call on a nil receiver.
-func (x *ModelRelation) GetAllowedTargets() []*ModelAllowedTarget {
-	if x == nil {
-		return nil
-	}
-	return x.AllowedTargets
 }
 
 // Relationship is the native message type for gestalt.provider.v1.Relationship.
@@ -544,30 +208,6 @@ type Relationship struct {
 	Tuple       *RelationshipTuple
 	Properties  map[string]any
 	SourceLayer SourceLayer
-}
-
-// GetTuple returns the tuple field; it is safe to call on a nil receiver.
-func (x *Relationship) GetTuple() *RelationshipTuple {
-	if x == nil {
-		return nil
-	}
-	return x.Tuple
-}
-
-// GetProperties returns the properties field; it is safe to call on a nil receiver.
-func (x *Relationship) GetProperties() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Properties
-}
-
-// GetSourceLayer returns the sourceLayer field; it is safe to call on a nil receiver.
-func (x *Relationship) GetSourceLayer() SourceLayer {
-	if x == nil {
-		return 0
-	}
-	return x.SourceLayer
 }
 
 // RelationshipFilter is the native message type for gestalt.provider.v1.RelationshipFilter.
@@ -579,62 +219,6 @@ type RelationshipFilter struct {
 	TargetEntityType string
 	ResourceType     string
 	SourceLayer      SourceLayer
-}
-
-// GetTarget returns the target field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetTarget() *RelationshipTarget {
-	if x == nil {
-		return nil
-	}
-	return x.Target
-}
-
-// GetRelation returns the relation field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetRelation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Relation
-}
-
-// GetResource returns the resource field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetResource() *Resource {
-	if x == nil {
-		return nil
-	}
-	return x.Resource
-}
-
-// GetTargetType returns the targetType field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetTargetType() RelationshipTargetType {
-	if x == nil {
-		return 0
-	}
-	return x.TargetType
-}
-
-// GetTargetEntityType returns the targetEntityType field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetTargetEntityType() string {
-	if x == nil {
-		return ""
-	}
-	return x.TargetEntityType
-}
-
-// GetResourceType returns the resourceType field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetResourceType() string {
-	if x == nil {
-		return ""
-	}
-	return x.ResourceType
-}
-
-// GetSourceLayer returns the sourceLayer field; it is safe to call on a nil receiver.
-func (x *RelationshipFilter) GetSourceLayer() SourceLayer {
-	if x == nil {
-		return 0
-	}
-	return x.SourceLayer
 }
 
 // RelationshipTargetKind selects one variant of the kind oneof of RelationshipTarget.
@@ -669,43 +253,11 @@ type RelationshipTarget struct {
 	Kind RelationshipTargetKind
 }
 
-// GetKind returns the kind oneof; it is safe to call on a nil receiver.
-func (x *RelationshipTarget) GetKind() RelationshipTargetKind {
-	if x == nil {
-		return nil
-	}
-	return x.Kind
-}
-
 // RelationshipTuple is the native message type for gestalt.provider.v1.RelationshipTuple.
 type RelationshipTuple struct {
 	Target   *RelationshipTarget
 	Relation string
 	Resource *Resource
-}
-
-// GetTarget returns the target field; it is safe to call on a nil receiver.
-func (x *RelationshipTuple) GetTarget() *RelationshipTarget {
-	if x == nil {
-		return nil
-	}
-	return x.Target
-}
-
-// GetRelation returns the relation field; it is safe to call on a nil receiver.
-func (x *RelationshipTuple) GetRelation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Relation
-}
-
-// GetResource returns the resource field; it is safe to call on a nil receiver.
-func (x *RelationshipTuple) GetResource() *Resource {
-	if x == nil {
-		return nil
-	}
-	return x.Resource
 }
 
 // Resource is the native message type for gestalt.provider.v1.Resource.
@@ -715,54 +267,14 @@ type Resource struct {
 	Properties map[string]any
 }
 
-// GetType returns the type field; it is safe to call on a nil receiver.
-func (x *Resource) GetType() string {
-	if x == nil {
-		return ""
-	}
-	return x.Type
-}
-
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *Resource) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetProperties returns the properties field; it is safe to call on a nil receiver.
-func (x *Resource) GetProperties() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Properties
-}
-
 // SetActiveModelRequest is the native message type for gestalt.provider.v1.SetActiveModelRequest.
 type SetActiveModelRequest struct {
 	Model *AuthorizationModel
 }
 
-// GetModel returns the model field; it is safe to call on a nil receiver.
-func (x *SetActiveModelRequest) GetModel() *AuthorizationModel {
-	if x == nil {
-		return nil
-	}
-	return x.Model
-}
-
 // SetActiveModelResponse is the native message type for gestalt.provider.v1.SetActiveModelResponse.
 type SetActiveModelResponse struct {
 	Model *AuthorizationModelRef
-}
-
-// GetModel returns the model field; it is safe to call on a nil receiver.
-func (x *SetActiveModelResponse) GetModel() *AuthorizationModelRef {
-	if x == nil {
-		return nil
-	}
-	return x.Model
 }
 
 // SetAuthorizationStateRequest is the native message type for gestalt.provider.v1.SetAuthorizationStateRequest.
@@ -771,33 +283,9 @@ type SetAuthorizationStateRequest struct {
 	Relationships []*Relationship
 }
 
-// GetModel returns the model field; it is safe to call on a nil receiver.
-func (x *SetAuthorizationStateRequest) GetModel() *AuthorizationModel {
-	if x == nil {
-		return nil
-	}
-	return x.Model
-}
-
-// GetRelationships returns the relationships field; it is safe to call on a nil receiver.
-func (x *SetAuthorizationStateRequest) GetRelationships() []*Relationship {
-	if x == nil {
-		return nil
-	}
-	return x.Relationships
-}
-
 // SetAuthorizationStateResponse is the native message type for gestalt.provider.v1.SetAuthorizationStateResponse.
 type SetAuthorizationStateResponse struct {
 	ActiveModel *AuthorizationModelRef
-}
-
-// GetActiveModel returns the activeModel field; it is safe to call on a nil receiver.
-func (x *SetAuthorizationStateResponse) GetActiveModel() *AuthorizationModelRef {
-	if x == nil {
-		return nil
-	}
-	return x.ActiveModel
 }
 
 // Subject is the native message type for gestalt.provider.v1.Subject.
@@ -807,72 +295,16 @@ type Subject struct {
 	Properties map[string]any
 }
 
-// GetType returns the type field; it is safe to call on a nil receiver.
-func (x *Subject) GetType() string {
-	if x == nil {
-		return ""
-	}
-	return x.Type
-}
-
-// GetID returns the id field; it is safe to call on a nil receiver.
-func (x *Subject) GetID() string {
-	if x == nil {
-		return ""
-	}
-	return x.ID
-}
-
-// GetProperties returns the properties field; it is safe to call on a nil receiver.
-func (x *Subject) GetProperties() map[string]any {
-	if x == nil {
-		return nil
-	}
-	return x.Properties
-}
-
 // SubjectSet is the native message type for gestalt.provider.v1.SubjectSet.
 type SubjectSet struct {
 	Resource *Resource
 	Relation string
 }
 
-// GetResource returns the resource field; it is safe to call on a nil receiver.
-func (x *SubjectSet) GetResource() *Resource {
-	if x == nil {
-		return nil
-	}
-	return x.Resource
-}
-
-// GetRelation returns the relation field; it is safe to call on a nil receiver.
-func (x *SubjectSet) GetRelation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Relation
-}
-
 // SubjectSetType is the native message type for gestalt.provider.v1.SubjectSetType.
 type SubjectSetType struct {
 	ResourceType string
 	Relation     string
-}
-
-// GetResourceType returns the resourceType field; it is safe to call on a nil receiver.
-func (x *SubjectSetType) GetResourceType() string {
-	if x == nil {
-		return ""
-	}
-	return x.ResourceType
-}
-
-// GetRelation returns the relation field; it is safe to call on a nil receiver.
-func (x *SubjectSetType) GetRelation() string {
-	if x == nil {
-		return ""
-	}
-	return x.Relation
 }
 
 // Authorization is the generated client for gestalt.provider.v1.Authorization.

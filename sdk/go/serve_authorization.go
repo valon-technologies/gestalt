@@ -29,9 +29,9 @@ type authorizationHandler struct {
 
 func (h authorizationHandler) CheckAccess(ctx context.Context, req *client.CheckAccessRequest) (*client.CheckAccessResponse, error) {
 	rootReq := &CheckAccessRequest{
-		Subject:  clientSubjectToRoot(req.GetSubject()),
-		Action:   clientActionToRoot(req.GetAction()),
-		Resource: clientResourceToRoot(req.GetResource()),
+		Subject:  clientSubjectToRoot(req.Subject),
+		Action:   clientActionToRoot(req.Action),
+		Resource: clientResourceToRoot(req.Resource),
 	}
 	resp, err := h.provider.CheckAccess(ctx, rootReq)
 	if err != nil {
@@ -45,13 +45,13 @@ func (h authorizationHandler) CheckAccess(ctx context.Context, req *client.Check
 
 func (h authorizationHandler) CheckAccessMany(ctx context.Context, req *client.CheckAccessManyRequest) (*client.CheckAccessManyResponse, error) {
 	rootReq := &CheckAccessManyRequest{
-		Requests: make([]*CheckAccessRequest, 0, len(req.GetRequests())),
+		Requests: make([]*CheckAccessRequest, 0, len(req.Requests)),
 	}
-	for _, r := range req.GetRequests() {
+	for _, r := range req.Requests {
 		rootReq.Requests = append(rootReq.Requests, &CheckAccessRequest{
-			Subject:  clientSubjectToRoot(r.GetSubject()),
-			Action:   clientActionToRoot(r.GetAction()),
-			Resource: clientResourceToRoot(r.GetResource()),
+			Subject:  clientSubjectToRoot(r.Subject),
+			Action:   clientActionToRoot(r.Action),
+			Resource: clientResourceToRoot(r.Resource),
 		})
 	}
 	resp, err := h.provider.CheckAccessMany(ctx, rootReq)
@@ -76,9 +76,9 @@ func (h authorizationHandler) CheckAccessMany(ctx context.Context, req *client.C
 
 func (h authorizationHandler) ListRelationships(ctx context.Context, req *client.ListRelationshipsRequest) (*client.ListRelationshipsResponse, error) {
 	rootReq := &ListRelationshipsRequest{
-		Filter:    clientRelationshipFilterToRoot(req.GetFilter()),
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		Filter:    clientRelationshipFilterToRoot(req.Filter),
+		PageSize:  req.PageSize,
+		PageToken: req.PageToken,
 	}
 	resp, err := h.provider.ListRelationships(ctx, rootReq)
 	if err != nil {
@@ -99,7 +99,7 @@ func (h authorizationHandler) ListRelationships(ctx context.Context, req *client
 
 func (h authorizationHandler) AddRelationship(ctx context.Context, req *client.AddRelationshipRequest) (*client.AddRelationshipResponse, error) {
 	rootReq := &AddRelationshipRequest{
-		Relationship: clientRelationshipToRoot(req.GetRelationship()),
+		Relationship: clientRelationshipToRoot(req.Relationship),
 	}
 	resp, err := h.provider.AddRelationship(ctx, rootReq)
 	if err != nil {
@@ -117,7 +117,7 @@ func (h authorizationHandler) AddRelationship(ctx context.Context, req *client.A
 
 func (h authorizationHandler) DeleteRelationship(ctx context.Context, req *client.DeleteRelationshipRequest) (*client.DeleteRelationshipResponse, error) {
 	rootReq := &DeleteRelationshipRequest{
-		RelationshipTuple: clientRelationshipTupleToRoot(req.GetRelationshipTuple()),
+		RelationshipTuple: clientRelationshipTupleToRoot(req.RelationshipTuple),
 	}
 	resp, err := h.provider.DeleteRelationship(ctx, rootReq)
 	if err != nil {
@@ -130,12 +130,12 @@ func (h authorizationHandler) DeleteRelationship(ctx context.Context, req *clien
 }
 
 func (h authorizationHandler) SetAuthorizationState(ctx context.Context, req *client.SetAuthorizationStateRequest) (*client.SetAuthorizationStateResponse, error) {
-	rootRelationships := make([]*Relationship, 0, len(req.GetRelationships()))
-	for _, r := range req.GetRelationships() {
+	rootRelationships := make([]*Relationship, 0, len(req.Relationships))
+	for _, r := range req.Relationships {
 		rootRelationships = append(rootRelationships, clientRelationshipToRoot(r))
 	}
 	rootReq := &SetAuthorizationStateRequest{
-		Model:         clientAuthorizationModelToRoot(req.GetModel()),
+		Model:         clientAuthorizationModelToRoot(req.Model),
 		Relationships: rootRelationships,
 	}
 	resp, err := h.provider.SetAuthorizationState(ctx, rootReq)
@@ -165,7 +165,7 @@ func (h authorizationHandler) GetActiveModelRef(ctx context.Context) (*client.Ge
 
 func (h authorizationHandler) SetActiveModel(ctx context.Context, req *client.SetActiveModelRequest) (*client.SetActiveModelResponse, error) {
 	rootReq := &SetActiveModelRequest{
-		Model: clientAuthorizationModelToRoot(req.GetModel()),
+		Model: clientAuthorizationModelToRoot(req.Model),
 	}
 	resp, err := h.provider.SetActiveModel(ctx, rootReq)
 	if err != nil {
@@ -181,16 +181,16 @@ func (h authorizationHandler) SetActiveModel(ctx context.Context, req *client.Se
 
 func (h authorizationHandler) ListActiveModelResourceTypes(ctx context.Context, req *client.ListActiveModelResourceTypesRequest) (*client.ListActiveModelResourceTypesResponse, error) {
 	rootFilter := (*AuthorizationModelResourceTypeFilter)(nil)
-	if f := req.GetFilter(); f != nil {
+	if f := req.Filter; f != nil {
 		rootFilter = &AuthorizationModelResourceTypeFilter{
-			Name:        f.GetName(),
-			SourceLayer: SourceLayer(f.GetSourceLayer()),
+			Name:        f.Name,
+			SourceLayer: SourceLayer(f.SourceLayer),
 		}
 	}
 	rootReq := &ListActiveModelResourceTypesRequest{
 		Filter:    rootFilter,
-		PageSize:  req.GetPageSize(),
-		PageToken: req.GetPageToken(),
+		PageSize:  req.PageSize,
+		PageToken: req.PageToken,
 	}
 	resp, err := h.provider.ListActiveModelResourceTypes(ctx, rootReq)
 	if err != nil {
@@ -225,7 +225,7 @@ func clientSubjectToRoot(in *client.Subject) *AuthorizationSubject {
 	if in == nil {
 		return nil
 	}
-	return &AuthorizationSubject{Type: in.Type, Id: in.ID, Properties: in.GetProperties()}
+	return &AuthorizationSubject{Type: in.Type, Id: in.ID, Properties: in.Properties}
 }
 
 // clientActionToRoot converts client.Action → root AuthorizationAction.
@@ -233,7 +233,7 @@ func clientActionToRoot(in *client.Action) *AuthorizationAction {
 	if in == nil {
 		return nil
 	}
-	return &AuthorizationAction{Name: in.Name, Properties: in.GetProperties()}
+	return &AuthorizationAction{Name: in.Name, Properties: in.Properties}
 }
 
 // clientResourceToRoot converts client.Resource → root AuthorizationResource.
@@ -241,7 +241,7 @@ func clientResourceToRoot(in *client.Resource) *AuthorizationResource {
 	if in == nil {
 		return nil
 	}
-	return &AuthorizationResource{Type: in.Type, Id: in.ID, Properties: in.GetProperties()}
+	return &AuthorizationResource{Type: in.Type, Id: in.ID, Properties: in.Properties}
 }
 
 func clientRelationshipFilterToRoot(in *client.RelationshipFilter) *RelationshipFilter {
@@ -249,13 +249,13 @@ func clientRelationshipFilterToRoot(in *client.RelationshipFilter) *Relationship
 		return nil
 	}
 	return &RelationshipFilter{
-		Target:           clientRelationshipTargetToRoot(in.GetTarget()),
-		Relation:         in.GetRelation(),
-		Resource:         clientResourceToRoot(in.GetResource()),
-		TargetType:       RelationshipTargetType(in.GetTargetType()),
-		TargetEntityType: in.GetTargetEntityType(),
-		ResourceType:     in.GetResourceType(),
-		SourceLayer:      SourceLayer(in.GetSourceLayer()),
+		Target:           clientRelationshipTargetToRoot(in.Target),
+		Relation:         in.Relation,
+		Resource:         clientResourceToRoot(in.Resource),
+		TargetType:       RelationshipTargetType(in.TargetType),
+		TargetEntityType: in.TargetEntityType,
+		ResourceType:     in.ResourceType,
+		SourceLayer:      SourceLayer(in.SourceLayer),
 	}
 }
 
@@ -263,7 +263,7 @@ func clientRelationshipTargetToRoot(in *client.RelationshipTarget) *Relationship
 	if in == nil {
 		return nil
 	}
-	switch kind := in.GetKind().(type) {
+	switch kind := in.Kind.(type) {
 	case *client.RelationshipTargetKindSubject:
 		return &RelationshipTarget{Subject: clientSubjectToRoot(kind.Value)}
 	case *client.RelationshipTargetKindResource:
@@ -279,7 +279,7 @@ func clientSubjectSetToRoot(in *client.SubjectSet) *SubjectSet {
 	if in == nil {
 		return nil
 	}
-	return &SubjectSet{Resource: clientResourceToRoot(in.GetResource()), Relation: in.GetRelation()}
+	return &SubjectSet{Resource: clientResourceToRoot(in.Resource), Relation: in.Relation}
 }
 
 func clientRelationshipToRoot(in *client.Relationship) *Relationship {
@@ -287,9 +287,9 @@ func clientRelationshipToRoot(in *client.Relationship) *Relationship {
 		return nil
 	}
 	return &Relationship{
-		Tuple:       clientRelationshipTupleToRoot(in.GetTuple()),
-		Properties:  in.GetProperties(),
-		SourceLayer: SourceLayer(in.GetSourceLayer()),
+		Tuple:       clientRelationshipTupleToRoot(in.Tuple),
+		Properties:  in.Properties,
+		SourceLayer: SourceLayer(in.SourceLayer),
 	}
 }
 
@@ -298,9 +298,9 @@ func clientRelationshipTupleToRoot(in *client.RelationshipTuple) *RelationshipTu
 		return nil
 	}
 	return &RelationshipTuple{
-		Target:   clientRelationshipTargetToRoot(in.GetTarget()),
-		Relation: in.GetRelation(),
-		Resource: clientResourceToRoot(in.GetResource()),
+		Target:   clientRelationshipTargetToRoot(in.Target),
+		Relation: in.Relation,
+		Resource: clientResourceToRoot(in.Resource),
 	}
 }
 
@@ -311,7 +311,7 @@ func clientAuthorizationModelToRoot(in *client.AuthorizationModel) *Authorizatio
 	return &AuthorizationModel{
 		Id:            in.ID,
 		Version:       in.Version,
-		ResourceTypes: clientAuthorizationModelResourceTypesToRoot(in.GetResourceTypes()),
+		ResourceTypes: clientAuthorizationModelResourceTypesToRoot(in.ResourceTypes),
 	}
 }
 
@@ -324,8 +324,8 @@ func clientAuthorizationModelResourceTypesToRoot(in []*client.AuthorizationModel
 		}
 		out = append(out, &AuthorizationModelResourceType{
 			Name:                item.Name,
-			Relations:           clientModelRelationsToRoot(item.GetRelations()),
-			Actions:             clientModelActionsToRoot(item.GetActions()),
+			Relations:           clientModelRelationsToRoot(item.Relations),
+			Actions:             clientModelActionsToRoot(item.Actions),
 			SourceLayer:         SourceLayer(item.SourceLayer),
 			DefaultAccessPolicy: DefaultAccessPolicy(item.DefaultAccessPolicy),
 		})
@@ -342,7 +342,7 @@ func clientModelRelationsToRoot(in []*client.ModelRelation) []*ModelRelation {
 		}
 		out = append(out, &ModelRelation{
 			Name:           item.Name,
-			AllowedTargets: clientModelAllowedTargetsToRoot(item.GetAllowedTargets()),
+			AllowedTargets: clientModelAllowedTargetsToRoot(item.AllowedTargets),
 		})
 	}
 	return out
@@ -355,7 +355,7 @@ func clientModelAllowedTargetsToRoot(in []*client.ModelAllowedTarget) []*ModelAl
 			out = append(out, nil)
 			continue
 		}
-		switch kind := item.GetKind().(type) {
+		switch kind := item.Kind.(type) {
 		case *client.ModelAllowedTargetKindSubjectType:
 			out = append(out, &ModelAllowedTarget{SubjectType: kind.Value})
 		case *client.ModelAllowedTargetKindResourceType:
