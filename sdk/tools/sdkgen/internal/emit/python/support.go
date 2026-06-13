@@ -22,6 +22,16 @@ var invokeSupportFile string
 //go:embed codec_support.py
 var runtimeFile string
 
+// serverSupportFile is the provider-side error mapping, emitted as
+// _serve/support.py when any service carries the provider annotation.
+//
+//go:embed server_support.py
+var serverSupportFile string
+
+// serveInit makes the generated _serve directory an importable package.
+const serveInit = `"""Generated provider dispatch servicers for the Gestalt SDK."""
+`
+
 // codecInit makes the generated _codec directory an importable package. The
 // underscore-prefixed package name keeps every codec module internal by the
 // SDK's naming convention (like _gen), so the converters inside carry no
