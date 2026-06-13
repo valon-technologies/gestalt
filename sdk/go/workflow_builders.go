@@ -797,23 +797,6 @@ func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.Workflo
 	}, nil
 }
 
-func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) (WorkflowDefinitionSpec, error) {
-	if value == nil {
-		return WorkflowDefinitionSpec{}, nil
-	}
-	activations, err := workflowActivationsFromProto(value.GetActivations())
-	if err != nil {
-		return WorkflowDefinitionSpec{}, err
-	}
-	return WorkflowDefinitionSpec{
-		ID:          value.GetId(),
-		Target:      workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Activations: activations,
-		Paused:      value.GetPaused(),
-		RunAs:       subjectFromProto(value.GetRunAs()),
-	}, nil
-}
-
 func workflowDefinitionToProto(input WorkflowDefinition) (*proto.WorkflowDefinition, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
