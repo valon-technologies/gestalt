@@ -19,6 +19,13 @@ const (
 	GatewaySourceInternal GatewaySource = "internal"
 )
 
+type TransportPath string
+
+const (
+	TransportPathDirect          TransportPath = "direct"
+	TransportPathProviderGateway TransportPath = "provider_gateway"
+)
+
 type RequestContext = proto.RequestContext
 
 type Transport interface {

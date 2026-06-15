@@ -14,7 +14,8 @@ var (
 	attrProviderGatewayProviderKind = attribute.Key("gestaltd.provider_gateway.provider.kind")
 	attrProviderGatewayServiceName  = attribute.Key("gestaltd.provider_gateway.service.name")
 	attrProviderGatewayOperation    = attribute.Key("gestaltd.provider_gateway.operation.name")
-	attrProviderGatewaySource       = attribute.Key("gestaltd.provider_gateway.source")
+	attrProviderGatewaySource        = attribute.Key("gestaltd.provider_gateway.source")
+	attrProviderGatewayTransportPath = attribute.Key("gestaltd.provider_gateway.transport.path")
 
 	providerGatewayOperationMetrics metricutil.MeterCache[providerGatewayMetrics]
 )
@@ -46,7 +47,7 @@ func newProviderGatewayMetrics(meter metric.Meter) providerGatewayMetrics {
 	}
 }
 
-func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, err error, req ProviderGatewayRequest) {
+func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, err error, req ProviderGatewayRequest, transportPath TransportPath) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -57,6 +58,7 @@ func recordProviderGatewayOperation(ctx context.Context, startedAt time.Time, er
 		attrProviderGatewayServiceName.String(metricutil.AttrValue(req.ServiceName)),
 		attrProviderGatewayOperation.String(metricutil.AttrValue(req.Operation)),
 		attrProviderGatewaySource.String(metricutil.AttrValue(string(req.Source))),
+		attrProviderGatewayTransportPath.String(metricutil.AttrValue(string(transportPath))),
 	}
 	metricAttrs := metric.WithAttributes(attrs...)
 

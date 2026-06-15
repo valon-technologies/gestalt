@@ -18,16 +18,16 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 
 type DirectTransport struct{}
 
-func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
+func (DirectTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (resp ProviderGatewayResponse, err error) {
 	startedAt := time.Now()
+	defer func() {
+		recordProviderGatewayOperation(ctx, startedAt, err, req, TransportPathDirect)
+	}()
+
 	if next == nil {
-		err := fmt.Errorf("provider gateway: next handler is required")
-		recordProviderGatewayOperation(ctx, startedAt, err, req)
-		return ProviderGatewayResponse{}, err
+		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: next handler is required")
 	}
-	resp, err := next(ctx, req)
-	recordProviderGatewayOperation(ctx, startedAt, err, req)
-	return resp, err
+	return next(ctx, req)
 }
 
 type ProviderGatewayTransport struct {
@@ -45,7 +45,12 @@ func (t *ProviderGatewayTransport) SetAuthorizationProvider(authorization Author
 	t.authorization = authorization
 }
 
-func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (ProviderGatewayResponse, error) {
+func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatewayRequest, next Next) (resp ProviderGatewayResponse, err error) {
+	startedAt := time.Now()
+	defer func() {
+		recordProviderGatewayOperation(ctx, startedAt, err, req, TransportPathProviderGateway)
+	}()
+
 	if t == nil {
 		return ProviderGatewayResponse{}, fmt.Errorf("provider gateway: transport is nil")
 	}
