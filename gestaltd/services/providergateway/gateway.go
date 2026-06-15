@@ -3,8 +3,6 @@ package providergateway
 import (
 	"context"
 	"fmt"
-
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 type AuthorizationParams struct {
@@ -14,30 +12,7 @@ type AuthorizationParams struct {
 }
 
 func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params AuthorizationParams) (bool, error) {
-	if t == nil || t.authorization == nil {
-		return true, nil
-	}
-	req := &proto.CheckAccessRequest{
-		Action: &proto.Action{
-			Name: params.Operation,
-		},
-	}
-	if params.ProviderID != "" {
-		req.Resource = &proto.Resource{
-			Type: "provider",
-			Id:   params.ProviderID,
-		}
-	}
-	ctx = WithSource(ctx, GatewaySourceInternal)
-	ctx = WithCallerToken(ctx, params.CallerToken)
-	resp, err := t.authorization.CheckAccess(ctx, req)
-	if err != nil {
-		return false, err
-	}
-	if resp == nil {
-		return false, fmt.Errorf("provider gateway: check access returned nil response")
-	}
-	return resp.GetAllowed(), nil
+	return true, nil
 }
 
 type DirectTransport struct{}

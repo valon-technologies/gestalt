@@ -24,7 +24,7 @@ func TestAuthorizeAllowsRequests(t *testing.T) {
 	}
 }
 
-func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
+func TestAuthorizePassesThroughWithAuthorizationProvider(t *testing.T) {
 	t.Parallel()
 
 	authorization := &stubAuthorizationProvider{}
@@ -42,20 +42,8 @@ func TestAuthorizeUsesAuthorizationProvider(t *testing.T) {
 	if !allowed {
 		t.Fatal("Authorize allowed = false, want true")
 	}
-	if !authorization.called {
-		t.Fatal("authorization provider was not called")
-	}
-	if got := authorization.request.GetAction().GetName(); got != "CheckAccess" {
-		t.Fatalf("Action.Name = %q, want %q", got, "CheckAccess")
-	}
-	if got := authorization.request.GetResource().GetId(); got != "authz-primary" {
-		t.Fatalf("Resource.Id = %q, want %q", got, "authz-primary")
-	}
-	if got := SourceFromContext(authorization.ctx); got != GatewaySourceInternal {
-		t.Fatalf("source = %q, want %q", got, GatewaySourceInternal)
-	}
-	if got := CallerTokenFromContext(authorization.ctx); got != "caller-token" {
-		t.Fatalf("caller token = %q, want %q", got, "caller-token")
+	if authorization.called {
+		t.Fatal("authorization provider was called")
 	}
 }
 
