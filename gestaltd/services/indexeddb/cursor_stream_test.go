@@ -62,9 +62,10 @@ func openEmptyStoreCursorStream(t *testing.T, client proto.IndexedDBClient) grpc
 func TestCursorStream_ClientHalfClose(t *testing.T) {
 	t.Parallel()
 
-	client := newEmptyStoreCursorClient(t)
-
 	t.Run("after_open", func(t *testing.T) {
+		t.Parallel()
+
+		client := newEmptyStoreCursorClient(t)
 		stream := openEmptyStoreCursorStream(t, client)
 		if err := stream.CloseSend(); err != nil {
 			t.Fatalf("CloseSend: %v", err)
@@ -73,6 +74,9 @@ func TestCursorStream_ClientHalfClose(t *testing.T) {
 	})
 
 	t.Run("after_exhaustion", func(t *testing.T) {
+		t.Parallel()
+
+		client := newEmptyStoreCursorClient(t)
 		stream := openEmptyStoreCursorStream(t, client)
 
 		if err := stream.Send(&proto.CursorClientMessage{
