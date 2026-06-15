@@ -1,68 +1,116 @@
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
 
+/** gRPC metadata key for the caller bearer token on grant-management RPCs. */
+export const CALLER_BEARER_TOKEN_METADATA_KEY =
+  "x-gestalt-caller-bearer-token";
+
 /**
- * Identity payload returned by an authentication provider after a successful
- * login.
+ * Call context passed to grant-management handlers.
  */
-export interface AuthenticatedUser {
-  subject: string;
-  email?: string;
-  emailVerified?: boolean;
-  displayName?: string;
-  avatarUrl?: string;
-  claims?: Record<string, string>;
+export interface AuthCallContext {
+  callerBearerToken: string;
 }
 
 /**
- * Input passed to an authentication provider's `beginLogin` handler.
+ * RFC 6749 authorization request parameters.
  */
-export interface BeginLoginRequest {
-  callbackUrl: string;
-  hostState: string;
-  scopes: string[];
-  options: Record<string, string>;
+export interface AuthorizeRequest {
+  responseType: string;
+  clientId: string;
+  redirectUri: string;
+  scope: string;
+  state: string;
 }
 
 /**
- * Response returned by an authentication provider's `beginLogin` handler.
+ * RFC 6749 authorization redirect response.
  */
-export interface BeginLoginResponse {
-  authorizationUrl: string;
-  providerState?: Uint8Array;
+export interface AuthorizeResponse {
+  redirectUri: string;
 }
 
 /**
- * Callback payload passed to an authentication provider's `completeLogin`
- * handler.
+ * RFC 6749 token endpoint request parameters.
  */
-export interface CompleteLoginRequest {
-  query: Record<string, string>;
-  providerState: Uint8Array;
-  callbackUrl: string;
+export interface TokenRequest {
+  grantType: string;
+  code: string;
+  redirectUri: string;
+  clientId: string;
+  state: string;
+  scope: string;
+  subjectToken: string;
+  subjectTokenType: string;
 }
 
 /**
- * Session TTL hints exposed by an authentication provider.
+ * RFC 6749 token endpoint response fields.
  */
-export interface AuthenticationSessionSettings {
-  sessionTtlSeconds: number | bigint;
+export interface TokenResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number | bigint;
+  refreshToken?: string;
+  scope?: string;
+  grantId?: string;
+}
+
+/**
+ * RFC 7662 token introspection request parameters.
+ */
+export interface IntrospectRequest {
+  token: string;
+  tokenTypeHint?: string;
+}
+
+/**
+ * RFC 7662 token introspection response fields.
+ */
+export interface IntrospectResponse {
+  active: boolean;
+  subject?: string;
+  scope?: string;
+  clientId?: string;
+  audience?: string[];
+}
+
+/**
+ * Grant scope entry returned by grant-management RPCs.
+ */
+export interface GrantScope {
+  scope: string;
+  resource?: string[];
+}
+
+/**
+ * OIDF-shaped grant details.
+ */
+export interface GrantDetails {
+  scopes: GrantScope[];
+  createdAt: number | bigint;
+  expiresAt: number | bigint;
 }
 
 /**
  * Runtime hooks required to implement a Gestalt authentication provider.
  */
 export interface AuthenticationProviderOptions extends ProviderBaseOptions {
-  beginLogin: (
-    request: BeginLoginRequest,
-  ) => MaybePromise<BeginLoginResponse>;
-  completeLogin: (
-    request: CompleteLoginRequest,
-  ) => MaybePromise<AuthenticatedUser>;
-  validateExternalToken?: (
-    token: string,
-  ) => MaybePromise<AuthenticatedUser | null | undefined>;
-  sessionSettings?: () => MaybePromise<AuthenticationSessionSettings>;
+  authorize: (request: AuthorizeRequest) => MaybePromise<AuthorizeResponse>;
+  token: (request: TokenRequest) => MaybePromise<TokenResponse>;
+  introspect: (request: IntrospectRequest) => MaybePromise<IntrospectResponse>;
+  listGrants: (
+    request: Record<string, never>,
+    call: AuthCallContext,
+  ) => MaybePromise<{ grantIds: string[] }>;
+  getGrant: (
+    request: { grantId: string },
+    call: AuthCallContext,
+  ) => MaybePromise<GrantDetails>;
+  revokeGrant: (
+    request: { grantId: string },
+    call: AuthCallContext,
+  ) => MaybePromise<void>;
 }
 
 /**
@@ -71,64 +119,60 @@ export interface AuthenticationProviderOptions extends ProviderBaseOptions {
 export class AuthenticationProvider extends ProviderBase {
   readonly kind = "authentication" as const;
 
-  private readonly beginLoginHandler: AuthenticationProviderOptions["beginLogin"];
-  private readonly completeLoginHandler: AuthenticationProviderOptions["completeLogin"];
-  private readonly validateExternalTokenHandler: AuthenticationProviderOptions["validateExternalToken"];
-  private readonly sessionSettingsHandler: AuthenticationProviderOptions["sessionSettings"];
+  private readonly authorizeHandler: AuthenticationProviderOptions["authorize"];
+  private readonly tokenHandler: AuthenticationProviderOptions["token"];
+  private readonly introspectHandler: AuthenticationProviderOptions["introspect"];
+  private readonly listGrantsHandler: AuthenticationProviderOptions["listGrants"];
+  private readonly getGrantHandler: AuthenticationProviderOptions["getGrant"];
+  private readonly revokeGrantHandler: AuthenticationProviderOptions["revokeGrant"];
 
   constructor(options: AuthenticationProviderOptions) {
     super(options);
-    this.beginLoginHandler = options.beginLogin;
-    this.completeLoginHandler = options.completeLogin;
-    this.validateExternalTokenHandler = options.validateExternalToken;
-    this.sessionSettingsHandler = options.sessionSettings;
+    this.authorizeHandler = options.authorize;
+    this.tokenHandler = options.token;
+    this.introspectHandler = options.introspect;
+    this.listGrantsHandler = options.listGrants;
+    this.getGrantHandler = options.getGrant;
+    this.revokeGrantHandler = options.revokeGrant;
   }
 
-  async beginLogin(request: BeginLoginRequest): Promise<BeginLoginResponse> {
-    return await this.beginLoginHandler(request);
+  async authorize(request: AuthorizeRequest): Promise<AuthorizeResponse> {
+    return await this.authorizeHandler(request);
   }
 
-  async completeLogin(request: CompleteLoginRequest): Promise<AuthenticatedUser> {
-    return await this.completeLoginHandler(request);
+  async token(request: TokenRequest): Promise<TokenResponse> {
+    return await this.tokenHandler(request);
   }
 
-  supportsExternalTokenValidation(): boolean {
-    return this.validateExternalTokenHandler !== undefined;
+  async introspect(request: IntrospectRequest): Promise<IntrospectResponse> {
+    return await this.introspectHandler(request);
   }
 
-  async validateExternalToken(token: string): Promise<AuthenticatedUser | null | undefined> {
-    return await this.validateExternalTokenHandler?.(token);
+  async listGrants(
+    request: Record<string, never>,
+    call: AuthCallContext,
+  ): Promise<{ grantIds: string[] }> {
+    return await this.listGrantsHandler(request, call);
   }
 
-  supportsSessionSettings(): boolean {
-    return this.sessionSettingsHandler !== undefined;
+  async getGrant(
+    request: { grantId: string },
+    call: AuthCallContext,
+  ): Promise<GrantDetails> {
+    return await this.getGrantHandler(request, call);
   }
 
-  async sessionSettings(): Promise<AuthenticationSessionSettings | undefined> {
-    return await this.sessionSettingsHandler?.();
+  async revokeGrant(
+    request: { grantId: string },
+    call: AuthCallContext,
+  ): Promise<void> {
+    await this.revokeGrantHandler(request, call);
   }
 }
 
 /**
  * Creates an authentication provider with the standard Gestalt runtime
  * contract.
- *
- * @example
- * ```ts
- * import { defineAuthenticationProvider } from "@valon-technologies/gestalt";
- *
- * export const authentication = defineAuthenticationProvider({
- *   displayName: "Example Authentication",
- *   async beginLogin(request) {
- *     return {
- *       authorizationUrl: new URL("/login", request.callbackUrl).toString(),
- *     };
- *   },
- *   async completeLogin() {
- *     return { subject: "usr_123", email: "user@example.com" };
- *   },
- * });
- * ```
  */
 export function defineAuthenticationProvider(
   options: AuthenticationProviderOptions,
@@ -148,7 +192,11 @@ export function isAuthenticationProvider(
       value !== null &&
       "kind" in value &&
       String((value as { kind?: unknown }).kind ?? "") === "authentication" &&
-      "beginLogin" in value &&
-      "completeLogin" in value)
+      "authorize" in value &&
+      "token" in value &&
+      "introspect" in value &&
+      "listGrants" in value &&
+      "getGrant" in value &&
+      "revokeGrant" in value)
   );
 }

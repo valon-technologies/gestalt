@@ -1,21 +1,12 @@
 package principal
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
-)
-
-func TestPermissionsForAPITokenExplicitEmptyDeniesAll(t *testing.T) {
+func TestPermissionSetFromScopesExplicitEmptyDeniesAll(t *testing.T) {
 	t.Parallel()
 
-	perms, ok := permissionsForAPIToken(&core.APIToken{
-		Permissions: []core.AccessPermission{},
-	})
-	if !ok {
-		t.Fatal("permissionsForAPIToken did not treat explicit empty permissions as scoped")
-	}
-	if perms == nil || len(perms) != 0 {
-		t.Fatalf("permissions = %#v, want explicit empty set", perms)
+	perms := PermissionSetFromScopes(nil)
+	if perms != nil {
+		t.Fatalf("permissions = %#v, want nil for empty scopes", perms)
 	}
 }

@@ -4,129 +4,260 @@ import { create } from "@bufbuild/protobuf";
 
 import * as wire from "../gen/v1/authentication_pb.ts";
 import type {
-  AuthSessionSettings,
-  AuthenticatedUser,
-  BeginLoginRequest,
-  BeginLoginResponse,
-  CompleteLoginRequest,
-  ValidateExternalTokenRequest,
+  AuthorizeRequest,
+  AuthorizeResponse,
+  GetGrantRequest,
+  GetGrantResponse,
+  GrantScope,
+  IntrospectRequest,
+  IntrospectResponse,
+  ListGrantsRequest,
+  ListGrantsResponse,
+  RevokeGrantRequest,
+  RevokeGrantResponse,
+  TokenRequest,
+  TokenResponse,
 } from "../../authentication.ts";
 import type { Init } from "../../rpc_support.ts";
 
-export function toWireAuthSessionSettings(
-  value: Init<AuthSessionSettings>,
-): wire.AuthSessionSettings {
-  return create(wire.AuthSessionSettingsSchema, {
-    sessionTtlSeconds: value.sessionTtlSeconds ?? 0n,
+export function toWireAuthorizeRequest(
+  value: Init<AuthorizeRequest>,
+): wire.AuthorizeRequest {
+  return create(wire.AuthorizeRequestSchema, {
+    responseType: value.responseType ?? "",
+    clientId: value.clientId ?? "",
+    redirectUri: value.redirectUri ?? "",
+    scope: value.scope ?? "",
+    state: value.state ?? "",
   });
 }
 
-export function fromWireAuthSessionSettings(
-  value: wire.AuthSessionSettings,
-): AuthSessionSettings {
+export function fromWireAuthorizeRequest(
+  value: wire.AuthorizeRequest,
+): AuthorizeRequest {
   return {
-    sessionTtlSeconds: value.sessionTtlSeconds,
+    responseType: value.responseType,
+    clientId: value.clientId,
+    redirectUri: value.redirectUri,
+    scope: value.scope,
+    state: value.state,
   };
 }
 
-export function toWireAuthenticatedUser(
-  value: Init<AuthenticatedUser>,
-): wire.AuthenticatedUser {
-  return create(wire.AuthenticatedUserSchema, {
-    subject: value.subject ?? "",
-    email: value.email ?? "",
-    emailVerified: value.emailVerified ?? false,
-    displayName: value.displayName ?? "",
-    avatarUrl: value.avatarUrl ?? "",
-    claims: value.claims ?? {},
+export function toWireAuthorizeResponse(
+  value: Init<AuthorizeResponse>,
+): wire.AuthorizeResponse {
+  return create(wire.AuthorizeResponseSchema, {
+    redirectUri: value.redirectUri ?? "",
   });
 }
 
-export function fromWireAuthenticatedUser(
-  value: wire.AuthenticatedUser,
-): AuthenticatedUser {
+export function fromWireAuthorizeResponse(
+  value: wire.AuthorizeResponse,
+): AuthorizeResponse {
   return {
-    subject: value.subject,
-    email: value.email,
-    emailVerified: value.emailVerified,
-    displayName: value.displayName,
-    avatarUrl: value.avatarUrl,
-    claims: value.claims,
+    redirectUri: value.redirectUri,
   };
 }
 
-export function toWireBeginLoginRequest(
-  value: Init<BeginLoginRequest>,
-): wire.BeginLoginRequest {
-  return create(wire.BeginLoginRequestSchema, {
-    callbackUrl: value.callbackUrl ?? "",
-    hostState: value.hostState ?? "",
-    scopes: value.scopes ?? [],
-    options: value.options ?? {},
+export function toWireGetGrantRequest(
+  value: Init<GetGrantRequest>,
+): wire.GetGrantRequest {
+  return create(wire.GetGrantRequestSchema, {
+    grantId: value.grantId ?? "",
   });
 }
 
-export function fromWireBeginLoginRequest(
-  value: wire.BeginLoginRequest,
-): BeginLoginRequest {
+export function fromWireGetGrantRequest(
+  value: wire.GetGrantRequest,
+): GetGrantRequest {
   return {
-    callbackUrl: value.callbackUrl,
-    hostState: value.hostState,
-    scopes: value.scopes,
-    options: value.options,
+    grantId: value.grantId,
   };
 }
 
-export function toWireBeginLoginResponse(
-  value: Init<BeginLoginResponse>,
-): wire.BeginLoginResponse {
-  return create(wire.BeginLoginResponseSchema, {
-    authorizationUrl: value.authorizationUrl ?? "",
-    providerState: value.providerState ?? new Uint8Array(),
+export function toWireGetGrantResponse(
+  value: Init<GetGrantResponse>,
+): wire.GetGrantResponse {
+  return create(wire.GetGrantResponseSchema, {
+    scopes: (value.scopes ?? []).map(toWireGrantScope),
+    createdAt: value.createdAt ?? 0n,
+    expiresAt: value.expiresAt ?? 0n,
   });
 }
 
-export function fromWireBeginLoginResponse(
-  value: wire.BeginLoginResponse,
-): BeginLoginResponse {
+export function fromWireGetGrantResponse(
+  value: wire.GetGrantResponse,
+): GetGrantResponse {
   return {
-    authorizationUrl: value.authorizationUrl,
-    providerState: value.providerState,
+    scopes: value.scopes.map(fromWireGrantScope),
+    createdAt: value.createdAt,
+    expiresAt: value.expiresAt,
   };
 }
 
-export function toWireCompleteLoginRequest(
-  value: Init<CompleteLoginRequest>,
-): wire.CompleteLoginRequest {
-  return create(wire.CompleteLoginRequestSchema, {
-    query: value.query ?? {},
-    providerState: value.providerState ?? new Uint8Array(),
-    callbackUrl: value.callbackUrl ?? "",
+export function toWireGrantScope(value: Init<GrantScope>): wire.GrantScope {
+  return create(wire.GrantScopeSchema, {
+    scope: value.scope ?? "",
+    resource: value.resource ?? [],
   });
 }
 
-export function fromWireCompleteLoginRequest(
-  value: wire.CompleteLoginRequest,
-): CompleteLoginRequest {
+export function fromWireGrantScope(value: wire.GrantScope): GrantScope {
   return {
-    query: value.query,
-    providerState: value.providerState,
-    callbackUrl: value.callbackUrl,
+    scope: value.scope,
+    resource: value.resource,
   };
 }
 
-export function toWireValidateExternalTokenRequest(
-  value: Init<ValidateExternalTokenRequest>,
-): wire.ValidateExternalTokenRequest {
-  return create(wire.ValidateExternalTokenRequestSchema, {
+export function toWireIntrospectRequest(
+  value: Init<IntrospectRequest>,
+): wire.IntrospectRequest {
+  return create(wire.IntrospectRequestSchema, {
     token: value.token ?? "",
+    tokenTypeHint: value.tokenTypeHint ?? "",
   });
 }
 
-export function fromWireValidateExternalTokenRequest(
-  value: wire.ValidateExternalTokenRequest,
-): ValidateExternalTokenRequest {
+export function fromWireIntrospectRequest(
+  value: wire.IntrospectRequest,
+): IntrospectRequest {
   return {
     token: value.token,
+    tokenTypeHint: value.tokenTypeHint,
+  };
+}
+
+export function toWireIntrospectResponse(
+  value: Init<IntrospectResponse>,
+): wire.IntrospectResponse {
+  return create(wire.IntrospectResponseSchema, {
+    active: value.active ?? false,
+    subject: value.subject ?? "",
+    scope: value.scope ?? "",
+    clientId: value.clientId ?? "",
+    audience: value.audience ?? [],
+  });
+}
+
+export function fromWireIntrospectResponse(
+  value: wire.IntrospectResponse,
+): IntrospectResponse {
+  return {
+    active: value.active,
+    subject: value.subject,
+    scope: value.scope,
+    clientId: value.clientId,
+    audience: value.audience,
+  };
+}
+
+export function toWireListGrantsRequest(
+  value: Init<ListGrantsRequest>,
+): wire.ListGrantsRequest {
+  return create(wire.ListGrantsRequestSchema, {});
+}
+
+export function fromWireListGrantsRequest(
+  value: wire.ListGrantsRequest,
+): ListGrantsRequest {
+  return {};
+}
+
+export function toWireListGrantsResponse(
+  value: Init<ListGrantsResponse>,
+): wire.ListGrantsResponse {
+  return create(wire.ListGrantsResponseSchema, {
+    grantIds: value.grantIds ?? [],
+  });
+}
+
+export function fromWireListGrantsResponse(
+  value: wire.ListGrantsResponse,
+): ListGrantsResponse {
+  return {
+    grantIds: value.grantIds,
+  };
+}
+
+export function toWireRevokeGrantRequest(
+  value: Init<RevokeGrantRequest>,
+): wire.RevokeGrantRequest {
+  return create(wire.RevokeGrantRequestSchema, {
+    grantId: value.grantId ?? "",
+  });
+}
+
+export function fromWireRevokeGrantRequest(
+  value: wire.RevokeGrantRequest,
+): RevokeGrantRequest {
+  return {
+    grantId: value.grantId,
+  };
+}
+
+export function toWireRevokeGrantResponse(
+  value: Init<RevokeGrantResponse>,
+): wire.RevokeGrantResponse {
+  return create(wire.RevokeGrantResponseSchema, {});
+}
+
+export function fromWireRevokeGrantResponse(
+  value: wire.RevokeGrantResponse,
+): RevokeGrantResponse {
+  return {};
+}
+
+export function toWireTokenRequest(
+  value: Init<TokenRequest>,
+): wire.TokenRequest {
+  return create(wire.TokenRequestSchema, {
+    grantType: value.grantType ?? "",
+    code: value.code ?? "",
+    redirectUri: value.redirectUri ?? "",
+    clientId: value.clientId ?? "",
+    state: value.state ?? "",
+    scope: value.scope ?? "",
+    subjectToken: value.subjectToken ?? "",
+    subjectTokenType: value.subjectTokenType ?? "",
+  });
+}
+
+export function fromWireTokenRequest(value: wire.TokenRequest): TokenRequest {
+  return {
+    grantType: value.grantType,
+    code: value.code,
+    redirectUri: value.redirectUri,
+    clientId: value.clientId,
+    state: value.state,
+    scope: value.scope,
+    subjectToken: value.subjectToken,
+    subjectTokenType: value.subjectTokenType,
+  };
+}
+
+export function toWireTokenResponse(
+  value: Init<TokenResponse>,
+): wire.TokenResponse {
+  return create(wire.TokenResponseSchema, {
+    accessToken: value.accessToken ?? "",
+    tokenType: value.tokenType ?? "",
+    expiresIn: value.expiresIn ?? 0n,
+    refreshToken: value.refreshToken ?? "",
+    scope: value.scope ?? "",
+    grantId: value.grantId ?? "",
+  });
+}
+
+export function fromWireTokenResponse(
+  value: wire.TokenResponse,
+): TokenResponse {
+  return {
+    accessToken: value.accessToken,
+    tokenType: value.tokenType,
+    expiresIn: value.expiresIn,
+    refreshToken: value.refreshToken,
+    scope: value.scope,
+    grantId: value.grantId,
   };
 }

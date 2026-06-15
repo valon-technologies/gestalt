@@ -208,11 +208,11 @@ func (p *oauthProvider) AuthorizationURL(state string, scopes []string) string {
 	return p.auth.AuthorizationURL(state, scopes)
 }
 
-func (p *oauthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (p *oauthProvider) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return p.auth.ExchangeCode(ctx, code)
 }
 
-func (p *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (p *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return p.auth.RefreshToken(ctx, refreshToken)
 }
 

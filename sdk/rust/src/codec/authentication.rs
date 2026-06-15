@@ -3,64 +3,184 @@
 //! Generated wire conversions for authentication.proto.
 
 use crate::authentication::{
-    AuthSessionSettings, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse,
-    CompleteLoginRequest, ValidateExternalTokenRequest,
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, GrantScope,
+    IntrospectRequest, IntrospectResponse, ListGrantsRequest, ListGrantsResponse,
+    RevokeGrantRequest, RevokeGrantResponse, TokenRequest, TokenResponse,
 };
 use crate::generated::v1;
 
-/// Converts a wire `AuthSessionSettings` to its native message.
-pub(crate) fn from_wire_auth_session_settings(
-    value: v1::AuthSessionSettings,
-) -> AuthSessionSettings {
-    AuthSessionSettings {
-        session_ttl_seconds: value.session_ttl_seconds,
+/// Converts a native `AuthorizeRequest` to its wire message.
+pub(crate) fn to_wire_authorize_request(value: AuthorizeRequest) -> v1::AuthorizeRequest {
+    v1::AuthorizeRequest {
+        response_type: value.response_type,
+        client_id: value.client_id,
+        redirect_uri: value.redirect_uri,
+        scope: value.scope,
+        state: value.state,
     }
 }
 
-/// Converts a wire `AuthenticatedUser` to its native message.
-pub(crate) fn from_wire_authenticated_user(value: v1::AuthenticatedUser) -> AuthenticatedUser {
-    AuthenticatedUser {
+/// Converts a wire `AuthorizeResponse` to its native message.
+pub(crate) fn from_wire_authorize_response(value: v1::AuthorizeResponse) -> AuthorizeResponse {
+    AuthorizeResponse {
+        redirect_uri: value.redirect_uri,
+    }
+}
+
+/// Converts a native `AuthorizeResponse` to its wire message.
+pub(crate) fn to_wire_authorize_response(value: AuthorizeResponse) -> v1::AuthorizeResponse {
+    v1::AuthorizeResponse {
+        redirect_uri: value.redirect_uri,
+    }
+}
+
+/// Converts a native `GetGrantRequest` to its wire message.
+pub(crate) fn to_wire_get_grant_request(value: GetGrantRequest) -> v1::GetGrantRequest {
+    v1::GetGrantRequest {
+        grant_id: value.grant_id,
+    }
+}
+
+/// Converts a wire `GetGrantResponse` to its native message.
+pub(crate) fn from_wire_get_grant_response(value: v1::GetGrantResponse) -> GetGrantResponse {
+    GetGrantResponse {
+        scopes: value
+            .scopes
+            .into_iter()
+            .map(from_wire_grant_scope)
+            .collect(),
+        created_at: value.created_at,
+        expires_at: value.expires_at,
+    }
+}
+
+/// Converts a native `GetGrantResponse` to its wire message.
+pub(crate) fn to_wire_get_grant_response(value: GetGrantResponse) -> v1::GetGrantResponse {
+    v1::GetGrantResponse {
+        scopes: value.scopes.into_iter().map(to_wire_grant_scope).collect(),
+        created_at: value.created_at,
+        expires_at: value.expires_at,
+    }
+}
+
+/// Converts a wire `GrantScope` to its native message.
+pub(crate) fn from_wire_grant_scope(value: v1::GrantScope) -> GrantScope {
+    GrantScope {
+        scope: value.scope,
+        resource: value.resource,
+    }
+}
+
+/// Converts a native `GrantScope` to its wire message.
+pub(crate) fn to_wire_grant_scope(value: GrantScope) -> v1::GrantScope {
+    v1::GrantScope {
+        scope: value.scope,
+        resource: value.resource,
+    }
+}
+
+/// Converts a native `IntrospectRequest` to its wire message.
+pub(crate) fn to_wire_introspect_request(value: IntrospectRequest) -> v1::IntrospectRequest {
+    v1::IntrospectRequest {
+        token: value.token,
+        token_type_hint: value.token_type_hint,
+    }
+}
+
+/// Converts a wire `IntrospectResponse` to its native message.
+pub(crate) fn from_wire_introspect_response(value: v1::IntrospectResponse) -> IntrospectResponse {
+    IntrospectResponse {
+        active: value.active,
         subject: value.subject,
-        email: value.email,
-        email_verified: value.email_verified,
-        display_name: value.display_name,
-        avatar_url: value.avatar_url,
-        claims: value.claims,
+        scope: value.scope,
+        client_id: value.client_id,
+        audience: value.audience,
     }
 }
 
-/// Converts a native `BeginLoginRequest` to its wire message.
-pub(crate) fn to_wire_begin_login_request(value: BeginLoginRequest) -> v1::BeginLoginRequest {
-    v1::BeginLoginRequest {
-        callback_url: value.callback_url,
-        host_state: value.host_state,
-        scopes: value.scopes,
-        options: value.options,
+/// Converts a native `IntrospectResponse` to its wire message.
+pub(crate) fn to_wire_introspect_response(value: IntrospectResponse) -> v1::IntrospectResponse {
+    v1::IntrospectResponse {
+        active: value.active,
+        subject: value.subject,
+        scope: value.scope,
+        client_id: value.client_id,
+        audience: value.audience,
     }
 }
 
-/// Converts a wire `BeginLoginResponse` to its native message.
-pub(crate) fn from_wire_begin_login_response(value: v1::BeginLoginResponse) -> BeginLoginResponse {
-    BeginLoginResponse {
-        authorization_url: value.authorization_url,
-        provider_state: value.provider_state,
+/// Converts a native `ListGrantsRequest` to its wire message.
+pub(crate) fn to_wire_list_grants_request(_value: ListGrantsRequest) -> v1::ListGrantsRequest {
+    v1::ListGrantsRequest {}
+}
+
+/// Converts a wire `ListGrantsResponse` to its native message.
+pub(crate) fn from_wire_list_grants_response(value: v1::ListGrantsResponse) -> ListGrantsResponse {
+    ListGrantsResponse {
+        grant_ids: value.grant_ids,
     }
 }
 
-/// Converts a native `CompleteLoginRequest` to its wire message.
-pub(crate) fn to_wire_complete_login_request(
-    value: CompleteLoginRequest,
-) -> v1::CompleteLoginRequest {
-    v1::CompleteLoginRequest {
-        query: value.query,
-        provider_state: value.provider_state,
-        callback_url: value.callback_url,
+/// Converts a native `ListGrantsResponse` to its wire message.
+pub(crate) fn to_wire_list_grants_response(value: ListGrantsResponse) -> v1::ListGrantsResponse {
+    v1::ListGrantsResponse {
+        grant_ids: value.grant_ids,
     }
 }
 
-/// Converts a native `ValidateExternalTokenRequest` to its wire message.
-pub(crate) fn to_wire_validate_external_token_request(
-    value: ValidateExternalTokenRequest,
-) -> v1::ValidateExternalTokenRequest {
-    v1::ValidateExternalTokenRequest { token: value.token }
+/// Converts a native `RevokeGrantRequest` to its wire message.
+pub(crate) fn to_wire_revoke_grant_request(value: RevokeGrantRequest) -> v1::RevokeGrantRequest {
+    v1::RevokeGrantRequest {
+        grant_id: value.grant_id,
+    }
+}
+
+/// Converts a wire `RevokeGrantResponse` to its native message.
+pub(crate) fn from_wire_revoke_grant_response(
+    _value: v1::RevokeGrantResponse,
+) -> RevokeGrantResponse {
+    RevokeGrantResponse {}
+}
+
+/// Converts a native `RevokeGrantResponse` to its wire message.
+pub(crate) fn to_wire_revoke_grant_response(_value: RevokeGrantResponse) -> v1::RevokeGrantResponse {
+    v1::RevokeGrantResponse {}
+}
+
+/// Converts a native `TokenRequest` to its wire message.
+pub(crate) fn to_wire_token_request(value: TokenRequest) -> v1::TokenRequest {
+    v1::TokenRequest {
+        grant_type: value.grant_type,
+        code: value.code,
+        redirect_uri: value.redirect_uri,
+        client_id: value.client_id,
+        state: value.state,
+        scope: value.scope,
+        subject_token: value.subject_token,
+        subject_token_type: value.subject_token_type,
+    }
+}
+
+/// Converts a wire `TokenResponse` to its native message.
+pub(crate) fn from_wire_token_response(value: v1::TokenResponse) -> TokenResponse {
+    TokenResponse {
+        access_token: value.access_token,
+        token_type: value.token_type,
+        expires_in: value.expires_in,
+        refresh_token: value.refresh_token,
+        scope: value.scope,
+        grant_id: value.grant_id,
+    }
+}
+
+/// Converts a native `TokenResponse` to its wire message.
+pub(crate) fn to_wire_token_response(value: TokenResponse) -> v1::TokenResponse {
+    v1::TokenResponse {
+        access_token: value.access_token,
+        token_type: value.token_type,
+        expires_in: value.expires_in,
+        refresh_token: value.refresh_token,
+        scope: value.scope,
+        grant_id: value.grant_id,
+    }
 }

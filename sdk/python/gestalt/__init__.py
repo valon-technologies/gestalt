@@ -137,10 +137,19 @@ _AGENT_HELPER_EXPORTS = (
 )
 
 _AUTHENTICATION_AUTHORED_EXPORTS = (
-    "AuthenticatedUser",
-    "BeginLoginRequest",
-    "BeginLoginResponse",
-    "CompleteLoginRequest",
+    "AuthorizeRequest",
+    "AuthorizeResponse",
+    "GetGrantRequest",
+    "GetGrantResponse",
+    "GrantScope",
+    "IntrospectRequest",
+    "IntrospectResponse",
+    "ListGrantsRequest",
+    "ListGrantsResponse",
+    "RevokeGrantRequest",
+    "RevokeGrantResponse",
+    "TokenRequest",
+    "TokenResponse",
 )
 
 _AUTHORIZATION_AUTHORED_EXPORTS = (
@@ -359,6 +368,11 @@ _LAZY_EXPORTS = {
     "AuthorizationAction": (".authorization", "Action"),
     "AuthorizationResource": (".authorization", "Resource"),
     "AuthenticationProvider": ("._providers", "AuthenticationProvider"),
+    "AuthCallContext": ("._providers", "AuthCallContext"),
+    "CALLER_BEARER_TOKEN_METADATA_KEY": (
+        "._providers",
+        "CALLER_BEARER_TOKEN_METADATA_KEY",
+    ),
     "ByteRange": (".s3", "ByteRange"),
     "Cache": (".cache", "Cache"),
     "CacheSetEntry": (".cache", "CacheSetEntry"),

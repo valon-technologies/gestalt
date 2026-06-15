@@ -11,7 +11,6 @@ import (
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -89,7 +88,6 @@ type Server struct {
 	auditSink              core.AuditSink
 	users                  *coredata.UserService
 	externalCredentials    core.ExternalCredentialProvider
-	apiTokens              *coredata.APITokenService
 	managedSubjects        *coredata.ManagedSubjectService
 	agent                  bootstrap.AgentControl
 	workflowSchedules      *workflowmanager.Manager
@@ -118,7 +116,6 @@ type Server struct {
 	encryptor              *cryptoutil.AESGCMEncryptor
 	sessionIssuer          []byte
 	stateCodec             *integrationOAuthStateCodec
-	apiTokenTTL            time.Duration
 	now                    func() time.Time
 	readiness              ReadinessChecker
 	meterProvider          metric.MeterProvider
@@ -172,7 +169,6 @@ type Config struct {
 	ManagementBaseURL    string
 	SecureCookies        bool
 	StateSecret          []byte
-	APITokenTTL          time.Duration
 	APIRouteTimeout      time.Duration
 	AgentStreamHeartbeat time.Duration
 	Now                  func() time.Time
@@ -199,15 +195,15 @@ func New(cfg Config) (*Server, error) {
 	if pluginInvoker == nil {
 		pluginInvoker = cfg.Invoker
 	}
-	noAuth := cfg.Auth == nil || cfg.Auth.Name() == "none"
 	serverAuthProvider := strings.TrimSpace(cfg.SelectedAuthProvider)
 	if serverAuthProvider == "" {
 		if cfg.Auth == nil {
 			serverAuthProvider = "none"
 		} else {
-			serverAuthProvider = cfg.Auth.Name()
+			serverAuthProvider = "authentication"
 		}
 	}
+	noAuth := cfg.Auth == nil || serverAuthProvider == "none"
 	var stateCodec *integrationOAuthStateCodec
 	var encryptor *cryptoutil.AESGCMEncryptor
 	if len(cfg.StateSecret) > 0 {
@@ -288,9 +284,8 @@ func New(cfg Config) (*Server, error) {
 	if core.ExternalCredentialProviderMissing(externalCredentials) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
-	apiTokens := cfg.Services.APITokens
 	managedSubjects := cfg.Services.ManagedSubjects
-	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
+	resolver := principal.NewResolverNamed(cfg.SelectedAuthProvider, cfg.Auth)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
 		if provider == nil {
@@ -305,7 +300,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	authResolvers := make(map[string]*principal.Resolver, len(authProviders))
 	for name, provider := range authProviders {
-		authResolvers[name] = principal.NewResolver(provider, users, apiTokens)
+		authResolvers[name] = principal.NewResolverNamed(name, provider)
 	}
 
 	router := chi.NewRouter()
@@ -346,7 +341,6 @@ func New(cfg Config) (*Server, error) {
 		auditSink:              cfg.AuditSink,
 		users:                  users,
 		externalCredentials:    externalCredentials,
-		apiTokens:              apiTokens,
 		managedSubjects:        managedSubjects,
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
@@ -373,7 +367,6 @@ func New(cfg Config) (*Server, error) {
 		encryptor:              encryptor,
 		sessionIssuer:          cfg.StateSecret,
 		stateCodec:             stateCodec,
-		apiTokenTTL:            cfg.APITokenTTL,
 		now:                    now,
 		readiness:              cfg.Readiness,
 		meterProvider:          cfg.MeterProvider,
@@ -401,7 +394,7 @@ func New(cfg Config) (*Server, error) {
 		CatalogConnection: cfg.CatalogConnection,
 		Now:               now,
 	})
-	if noAuth || hasAnonymousAuthProvider(authProviders) {
+	if noAuth || serverAuthProvider == "none" {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
 
@@ -409,27 +402,8 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) issueSessionToken(provider core.AuthenticationProvider, identity *core.UserIdentity) (string, error) {
-	if issuer, ok := provider.(SessionTokenIssuer); ok {
-		return issuer.IssueSessionToken(identity)
-	}
-	if len(s.sessionIssuer) == 0 {
-		return "", fmt.Errorf("session secret is not configured")
-	}
-	ttl := defaultSessionCookieTTL
-	if p, ok := provider.(SessionTokenTTLProvider); ok {
-		ttl = p.SessionTokenTTL()
-	}
-	return session.IssueToken(identity, s.sessionIssuer, ttl)
-}
-
-func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider) bool {
-	for _, provider := range providers {
-		if provider != nil && provider.Name() == "none" {
-			return true
-		}
-	}
-	return false
+func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider, selected string) bool {
+	return strings.TrimSpace(selected) == "none"
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

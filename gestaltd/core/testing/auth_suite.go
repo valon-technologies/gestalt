@@ -14,75 +14,79 @@ import (
 // fresh provider configured to talk to mockServer for any external HTTP calls.
 //
 // The mock server must recognize these well-known values:
-//   - "valid-code" for HandleCallback (returns a valid identity)
-//   - "invalid-code" for HandleCallback (returns an error)
-//   - "valid-token" for ValidateToken (returns a valid identity)
-//   - "invalid-token" for ValidateToken (returns an error)
+//   - "valid-code" for Token authorization_code exchange (returns an active access token)
+//   - "invalid-code" for Token (returns an error)
+//   - "valid-token" for Introspect (returns active=true)
+//   - "invalid-token" for Introspect (returns active=false)
 func RunAuthenticationProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthenticationProvider, mockServer *httptest.Server) {
 	if mockServer == nil {
 		t.Fatal("RunAuthenticationProviderTests requires a mock server")
 		return
 	}
 	provider := newProvider(t, mockServer.URL)
+	ctx := context.Background()
 
-	t.Run("Name", func(t *testing.T) {
-		if provider.Name() == "" {
-			t.Error("Name() returned empty string")
+	t.Run("Authorize", func(t *testing.T) {
+		resp, err := provider.Authorize(ctx, &core.AuthorizeRequest{
+			ResponseType: "code",
+			ClientID:     core.DefaultOAuthClientID,
+			RedirectURI:  mockServer.URL + "/callback",
+			State:        "test-state-123",
+		})
+		if err != nil {
+			t.Fatalf("Authorize: %v", err)
+		}
+		if resp == nil || resp.RedirectURI == "" {
+			t.Fatal("Authorize returned empty redirect URI")
+		}
+		if !strings.Contains(resp.RedirectURI, "test-state-123") {
+			t.Errorf("Authorize redirect should contain state parameter; got %q", resp.RedirectURI)
 		}
 	})
 
-	t.Run("LoginURL", func(t *testing.T) {
-		url, err := provider.LoginURL("test-state-123")
+	t.Run("Token", func(t *testing.T) {
+		resp, err := provider.Token(ctx, &core.TokenRequest{
+			GrantType:   "authorization_code",
+			Code:        "valid-code",
+			RedirectURI: mockServer.URL + "/callback",
+			ClientID:    core.DefaultOAuthClientID,
+		})
 		if err != nil {
-			t.Fatalf("LoginURL: %v", err)
+			t.Fatalf("Token(valid-code): %v", err)
 		}
-		if url == "" {
-			t.Fatal("LoginURL returned empty string")
-		}
-		if !strings.Contains(url, "test-state-123") {
-			t.Errorf("LoginURL should contain state parameter; got %q", url)
-		}
-	})
-
-	t.Run("HandleCallback", func(t *testing.T) {
-		ctx := context.Background()
-
-		identity, err := provider.HandleCallback(ctx, "valid-code")
-		if err != nil {
-			t.Fatalf("HandleCallback(valid-code): %v", err)
-		}
-		if identity == nil {
-			t.Fatal("HandleCallback returned nil identity")
-			return
-		}
-		if identity.Email == "" {
-			t.Error("identity.Email is empty")
+		if resp == nil || strings.TrimSpace(resp.AccessToken) == "" {
+			t.Fatal("Token returned empty access token")
 		}
 
-		_, err = provider.HandleCallback(ctx, "invalid-code")
+		_, err = provider.Token(ctx, &core.TokenRequest{
+			GrantType:   "authorization_code",
+			Code:        "invalid-code",
+			RedirectURI: mockServer.URL + "/callback",
+			ClientID:    core.DefaultOAuthClientID,
+		})
 		if err == nil {
-			t.Error("HandleCallback(invalid-code): expected error, got nil")
+			t.Error("Token(invalid-code): expected error, got nil")
 		}
 	})
 
-	t.Run("ValidateToken", func(t *testing.T) {
-		ctx := context.Background()
-
-		identity, err := provider.ValidateToken(ctx, "valid-token")
+	t.Run("Introspect", func(t *testing.T) {
+		resp, err := provider.Introspect(ctx, &core.IntrospectRequest{Token: "valid-token"})
 		if err != nil {
-			t.Fatalf("ValidateToken(valid-token): %v", err)
+			t.Fatalf("Introspect(valid-token): %v", err)
 		}
-		if identity == nil {
-			t.Fatal("ValidateToken returned nil identity")
-			return
+		if resp == nil || !resp.Active {
+			t.Fatal("Introspect(valid-token) expected active token")
 		}
-		if identity.Email == "" {
-			t.Error("identity.Email is empty")
+		if strings.TrimSpace(resp.Subject) == "" {
+			t.Error("Introspect subject is empty")
 		}
 
-		_, err = provider.ValidateToken(ctx, "invalid-token")
-		if err == nil {
-			t.Error("ValidateToken(invalid-token): expected error, got nil")
+		resp, err = provider.Introspect(ctx, &core.IntrospectRequest{Token: "invalid-token"})
+		if err != nil {
+			t.Fatalf("Introspect(invalid-token): %v", err)
+		}
+		if resp != nil && resp.Active {
+			t.Error("Introspect(invalid-token): expected inactive token")
 		}
 	})
 }

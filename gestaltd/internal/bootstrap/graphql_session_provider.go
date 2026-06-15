@@ -127,11 +127,11 @@ func (p *graphQLSessionCatalogOAuthProvider) AuthorizationURL(state string, scop
 	return p.auth.AuthorizationURL(state, scopes)
 }
 
-func (p *graphQLSessionCatalogOAuthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (p *graphQLSessionCatalogOAuthProvider) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return p.auth.ExchangeCode(ctx, code)
 }
 
-func (p *graphQLSessionCatalogOAuthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (p *graphQLSessionCatalogOAuthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return p.auth.RefreshToken(ctx, refreshToken)
 }
 

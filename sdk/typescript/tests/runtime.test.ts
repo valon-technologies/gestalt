@@ -28,9 +28,9 @@ import {
   UpdateAgentProviderSessionRequestSchema,
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
-  BeginLoginRequestSchema,
-  CompleteLoginRequestSchema,
-  ValidateExternalTokenRequestSchema,
+  AuthorizeRequestSchema,
+  IntrospectRequestSchema,
+  TokenRequestSchema,
 } from "../src/internal/gen/v1/authentication_pb.ts";
 import {
   CacheDeleteManyRequestSchema,
@@ -998,7 +998,7 @@ export const app = defineApp({
   }
 });
 
-test("authentication provider supports runtime metadata, login flows, and token validation", async () => {
+test("authentication provider supports runtime metadata, OAuth flows, and introspection", async () => {
   const provider = await loadProviderFromTarget(fixturePath("auth-provider"));
   const runtime = createRuntimeService(provider);
   const auth = createAuthenticationService(provider as any);
@@ -1014,17 +1014,6 @@ test("authentication provider supports runtime metadata, login flows, and token 
       }),
     ),
     Code.FailedPrecondition,
-  );
-
-  const defaultBegin = await (auth.beginLogin as any)(
-    create(BeginLoginRequestSchema, {
-      callbackUrl: "https://app.example.test/callback",
-      hostState: "host-state",
-      scopes: ["openid"],
-    }),
-  );
-  expect(defaultBegin.authorizationUrl).toContain(
-    "https://issuer.example.test/authorize",
   );
 
   const configuredAuth = await (runtime.configureProvider as any)(
@@ -1046,35 +1035,35 @@ test("authentication provider supports runtime metadata, login flows, and token 
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
-  const begin = await (auth.beginLogin as any)(
-    create(BeginLoginRequestSchema, {
-      callbackUrl: "https://app.example.test/callback",
-      hostState: "host-state",
-      scopes: ["openid"],
+  const authorize = await (auth.authorize as any)(
+    create(AuthorizeRequestSchema, {
+      responseType: "code",
+      clientId: "gestaltd",
+      redirectUri: "https://app.example.test/callback",
+      scope: "openid",
+      state: "host-state",
     }),
   );
-  expect(begin.authorizationUrl).toContain(
-    "https://login.example.test/authorize",
-  );
+  expect(authorize.redirectUri).toContain("code=fixture-auth-code");
 
-  const user = await (auth.completeLogin as any)(
-    create(CompleteLoginRequestSchema, {
-      query: {
-        code: "code-123",
-      },
-      callbackUrl: "https://app.example.test/callback",
-      providerState: new Uint8Array([1, 2, 3]),
+  const token = await (auth.token as any)(
+    create(TokenRequestSchema, {
+      grantType: "authorization_code",
+      code: "fixture-auth-code",
+      redirectUri: "https://app.example.test/callback",
+      clientId: "gestaltd",
     }),
   );
-  expect(user.subject).toBe("code-123");
-  expect(user.claims.issuer).toBe("https://login.example.test");
+  expect(token.accessToken).toBe("fixture-access-token");
 
-  const validated = await (auth.validateExternalToken as any)(
-    create(ValidateExternalTokenRequestSchema, {
-      token: "api-token",
+  const introspected = await (auth.introspect as any)(
+    create(IntrospectRequestSchema, {
+      token: token.accessToken,
+      tokenTypeHint: "access_token",
     }),
   );
-  expect(validated.email).toBe("api-token@example.com");
+  expect(introspected.active).toBe(true);
+  expect(introspected.subject).toBe("user:fixture@example.com");
 });
 
 test("runtime lifecycle labels provider identity failures", async () => {

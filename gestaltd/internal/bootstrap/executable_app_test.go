@@ -3852,9 +3852,8 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		SubjectID:        "user:user-123",
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           append([]string{"echoext"}, principal.PermissionApps(perms)...),
+		Source:           principal.SourceBearer,
+		Scopes: append([]string{"echoext"}, principal.ScopeStringsFromPermissionSet(perms)...),
 	})
 
 	result, err := prov.Execute(ctx, "agent_manager_roundtrip", nil, "")
@@ -3988,7 +3987,7 @@ func TestAppWorkflowManagerDefinitionLifecycleUsesRequestContext(t *testing.T) {
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
 		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
+		Source:    principal.SourceBearer,
 		Scopes:    []string{"echo"},
 	})
 
@@ -4222,7 +4221,7 @@ func TestAppWorkflowManagerHostMethodsUseAuthorizationProvider(t *testing.T) {
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
 		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
+		Source:    principal.SourceBearer,
 		Scopes:    []string{"echo"},
 	})
 
@@ -4334,7 +4333,7 @@ func TestPluginInvokesInheritAmbientConnectionAndAllowOverride(t *testing.T) {
 			callerPrincipal := &principal.Principal{
 				UserID:      user.ID,
 				Kind:        principal.KindUser,
-				Source:      principal.SourceSession,
+				Source:      principal.SourceBearer,
 				DisplayName: "Nested Success",
 				Scopes:      []string{"caller", "example"},
 			}
@@ -4400,7 +4399,7 @@ func TestPluginInvokesInheritResolvedCredentialConnection(t *testing.T) {
 		&principal.Principal{
 			UserID: user.ID,
 			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
+			Source: principal.SourceBearer,
 			Scopes: []string{"caller", "example"},
 		},
 		"caller",
@@ -4444,7 +4443,7 @@ func TestPluginInvokesPreserveCallerScopes(t *testing.T) {
 		&principal.Principal{
 			UserID: user.ID,
 			Kind:   principal.KindUser,
-			Source: principal.SourceAPIToken,
+			Source: principal.SourceBearer,
 			Scopes: []string{"caller"},
 		},
 		"caller",
@@ -4488,7 +4487,7 @@ func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
 		&principal.Principal{
 			UserID: user.ID,
 			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
+			Source: principal.SourceBearer,
 			Scopes: []string{"example"},
 		},
 		"example",
@@ -4580,7 +4579,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 		&principal.Principal{
 			UserID: user.ID,
 			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
+			Source: principal.SourceBearer,
 			Scopes: []string{"caller", "linear"},
 		},
 		"caller",
@@ -4651,7 +4650,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 		&principal.Principal{
 			UserID: missingUser.ID,
 			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
+			Source: principal.SourceBearer,
 			Scopes: []string{"caller", "linear"},
 		},
 		"caller",
@@ -4728,7 +4727,7 @@ func TestPluginInvokesDoNotLeakCallerAccessToPolicylessTargets(t *testing.T) {
 		&principal.Principal{
 			UserID: user.ID,
 			Kind:   principal.KindUser,
-			Source: principal.SourceSession,
+			Source: principal.SourceBearer,
 			Scopes: []string{"caller", "example"},
 		},
 		"caller",
@@ -4822,7 +4821,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				&principal.Principal{
 					UserID: user.ID,
 					Kind:   principal.KindUser,
-					Source: principal.SourceSession,
+					Source: principal.SourceBearer,
 					Scopes: []string{"caller", "example"},
 				},
 				"caller",
@@ -6216,7 +6215,7 @@ func TestRuntimePublicAppInvocationRelayRoundTripsThroughHostedApp(t *testing.T)
 		&principal.Principal{
 			UserID:      user.ID,
 			Kind:        principal.KindUser,
-			Source:      principal.SourceSession,
+			Source:      principal.SourceBearer,
 			DisplayName: "Runtime Relay",
 			Scopes:      []string{"caller", "example"},
 		},
@@ -6964,7 +6963,7 @@ func TestRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testing.
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
 		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
+		Source:    principal.SourceBearer,
 		Scopes:    []string{"echoext"},
 	})
 

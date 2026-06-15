@@ -183,7 +183,7 @@ func (h *UpstreamHandler) authorizationURL(baseURL, state string, scopes []strin
 	return u.String(), verifier
 }
 
-func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ...ExchangeOption) (*core.TokenResponse, error) {
+func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ...ExchangeOption) (*core.OAuthTokenResponse, error) {
 	var eo exchangeOptions
 	for _, opt := range opts {
 		opt(&eo)
@@ -214,11 +214,11 @@ func (h *UpstreamHandler) ExchangeCode(ctx context.Context, code string, opts ..
 	return h.tokenRequest(ctx, data, eo.tokenURL)
 }
 
-func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (h *UpstreamHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return h.RefreshTokenWithURL(ctx, refreshToken, "")
 }
 
-func (h *UpstreamHandler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURLOverride string) (*core.TokenResponse, error) {
+func (h *UpstreamHandler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURLOverride string) (*core.OAuthTokenResponse, error) {
 	data := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {refreshToken},
@@ -239,7 +239,7 @@ func (h *UpstreamHandler) RefreshTokenWithURL(ctx context.Context, refreshToken,
 	return h.tokenRequest(ctx, data, tokenURLOverride)
 }
 
-func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tokenURLOverride string) (*core.TokenResponse, error) {
+func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tokenURLOverride string) (*core.OAuthTokenResponse, error) {
 	var reader io.Reader
 	var contentType string
 
@@ -330,7 +330,7 @@ func (h *UpstreamHandler) tokenRequest(ctx context.Context, data url.Values, tok
 	}
 	tokenType, _ := raw["token_type"].(string)
 
-	return &core.TokenResponse{
+	return &core.OAuthTokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresIn:    int(expiresIn),
@@ -370,11 +370,11 @@ func (h *CredentialExchanger) TokenURL() string {
 	return h.upstream.TokenURL()
 }
 
-func (h *CredentialExchanger) ExchangeCredentials(ctx context.Context, credentialJSON string) (*core.TokenResponse, error) {
+func (h *CredentialExchanger) ExchangeCredentials(ctx context.Context, credentialJSON string) (*core.OAuthTokenResponse, error) {
 	return h.ExchangeCredentialsWithURL(ctx, credentialJSON, "")
 }
 
-func (h *CredentialExchanger) ExchangeCredentialsWithURL(ctx context.Context, credentialJSON, tokenURLOverride string) (*core.TokenResponse, error) {
+func (h *CredentialExchanger) ExchangeCredentialsWithURL(ctx context.Context, credentialJSON, tokenURLOverride string) (*core.OAuthTokenResponse, error) {
 	if h == nil || h.upstream == nil {
 		return nil, fmt.Errorf("credential exchanger is not configured")
 	}
@@ -402,11 +402,11 @@ func (h *CredentialExchanger) ExchangeCredentialsWithURL(ctx context.Context, cr
 	return resp, nil
 }
 
-func (h *CredentialExchanger) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (h *CredentialExchanger) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return h.ExchangeCredentials(ctx, refreshToken)
 }
 
-func (h *CredentialExchanger) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+func (h *CredentialExchanger) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.OAuthTokenResponse, error) {
 	return h.ExchangeCredentialsWithURL(ctx, refreshToken, tokenURL)
 }
 

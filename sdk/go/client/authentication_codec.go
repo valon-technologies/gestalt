@@ -6,144 +6,306 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAuthSessionSettings(value *AuthSessionSettings) *proto.AuthSessionSettings {
+func toWireAuthorizeRequest(value *AuthorizeRequest) *proto.AuthorizeRequest {
 	if value == nil {
 		return nil
 	}
-	out := &proto.AuthSessionSettings{
-		SessionTtlSeconds: value.SessionTtlSeconds,
+	out := &proto.AuthorizeRequest{
+		ResponseType: value.ResponseType,
+		ClientId:     value.ClientId,
+		RedirectUri:  value.RedirectUri,
+		Scope:        value.Scope,
+		State:        value.State,
 	}
 	return out
 }
 
-func fromWireAuthSessionSettings(value *proto.AuthSessionSettings) *AuthSessionSettings {
+func fromWireAuthorizeRequest(value *proto.AuthorizeRequest) *AuthorizeRequest {
 	if value == nil {
 		return nil
 	}
-	out := &AuthSessionSettings{
-		SessionTtlSeconds: value.SessionTtlSeconds,
+	out := &AuthorizeRequest{
+		ResponseType: value.ResponseType,
+		ClientId:     value.ClientId,
+		RedirectUri:  value.RedirectUri,
+		Scope:        value.Scope,
+		State:        value.State,
 	}
 	return out
 }
 
-func toWireAuthenticatedUser(value *AuthenticatedUser) *proto.AuthenticatedUser {
+func toWireAuthorizeResponse(value *AuthorizeResponse) *proto.AuthorizeResponse {
 	if value == nil {
 		return nil
 	}
-	out := &proto.AuthenticatedUser{
-		Subject:       value.Subject,
-		Email:         value.Email,
-		EmailVerified: value.EmailVerified,
-		DisplayName:   value.DisplayName,
-		AvatarUrl:     value.AvatarUrl,
-		Claims:        value.Claims,
+	out := &proto.AuthorizeResponse{
+		RedirectUri: value.RedirectUri,
 	}
 	return out
 }
 
-func fromWireAuthenticatedUser(value *proto.AuthenticatedUser) *AuthenticatedUser {
+func fromWireAuthorizeResponse(value *proto.AuthorizeResponse) *AuthorizeResponse {
 	if value == nil {
 		return nil
 	}
-	out := &AuthenticatedUser{
-		Subject:       value.Subject,
-		Email:         value.Email,
-		EmailVerified: value.EmailVerified,
-		DisplayName:   value.DisplayName,
-		AvatarUrl:     value.AvatarUrl,
-		Claims:        value.Claims,
+	out := &AuthorizeResponse{
+		RedirectUri: value.RedirectUri,
 	}
 	return out
 }
 
-func toWireBeginLoginRequest(value *BeginLoginRequest) *proto.BeginLoginRequest {
+func toWireGetGrantRequest(value *GetGrantRequest) *proto.GetGrantRequest {
 	if value == nil {
 		return nil
 	}
-	out := &proto.BeginLoginRequest{
-		CallbackUrl: value.CallbackUrl,
-		HostState:   value.HostState,
-		Scopes:      value.Scopes,
-		Options:     value.Options,
+	out := &proto.GetGrantRequest{
+		GrantId: value.GrantId,
 	}
 	return out
 }
 
-func fromWireBeginLoginRequest(value *proto.BeginLoginRequest) *BeginLoginRequest {
+func fromWireGetGrantRequest(value *proto.GetGrantRequest) *GetGrantRequest {
 	if value == nil {
 		return nil
 	}
-	out := &BeginLoginRequest{
-		CallbackUrl: value.CallbackUrl,
-		HostState:   value.HostState,
-		Scopes:      value.Scopes,
-		Options:     value.Options,
+	out := &GetGrantRequest{
+		GrantId: value.GrantId,
 	}
 	return out
 }
 
-func toWireBeginLoginResponse(value *BeginLoginResponse) *proto.BeginLoginResponse {
+func toWireGetGrantResponse(value *GetGrantResponse) *proto.GetGrantResponse {
 	if value == nil {
 		return nil
 	}
-	out := &proto.BeginLoginResponse{
-		AuthorizationUrl: value.AuthorizationUrl,
-		ProviderState:    value.ProviderState,
+	out := &proto.GetGrantResponse{
+		CreatedAt: value.CreatedAt,
+		ExpiresAt: value.ExpiresAt,
+	}
+	for _, item := range value.Scopes {
+		out.Scopes = append(out.Scopes, toWireGrantScope(item))
 	}
 	return out
 }
 
-func fromWireBeginLoginResponse(value *proto.BeginLoginResponse) *BeginLoginResponse {
+func fromWireGetGrantResponse(value *proto.GetGrantResponse) *GetGrantResponse {
 	if value == nil {
 		return nil
 	}
-	out := &BeginLoginResponse{
-		AuthorizationUrl: value.AuthorizationUrl,
-		ProviderState:    value.ProviderState,
+	out := &GetGrantResponse{
+		CreatedAt: value.CreatedAt,
+		ExpiresAt: value.ExpiresAt,
+	}
+	for _, item := range value.Scopes {
+		out.Scopes = append(out.Scopes, fromWireGrantScope(item))
 	}
 	return out
 }
 
-func toWireCompleteLoginRequest(value *CompleteLoginRequest) *proto.CompleteLoginRequest {
+func toWireGrantScope(value *GrantScope) *proto.GrantScope {
 	if value == nil {
 		return nil
 	}
-	out := &proto.CompleteLoginRequest{
-		Query:         value.Query,
-		ProviderState: value.ProviderState,
-		CallbackUrl:   value.CallbackUrl,
+	out := &proto.GrantScope{
+		Scope:    value.Scope,
+		Resource: value.Resource,
 	}
 	return out
 }
 
-func fromWireCompleteLoginRequest(value *proto.CompleteLoginRequest) *CompleteLoginRequest {
+func fromWireGrantScope(value *proto.GrantScope) *GrantScope {
 	if value == nil {
 		return nil
 	}
-	out := &CompleteLoginRequest{
-		Query:         value.Query,
-		ProviderState: value.ProviderState,
-		CallbackUrl:   value.CallbackUrl,
+	out := &GrantScope{
+		Scope:    value.Scope,
+		Resource: value.Resource,
 	}
 	return out
 }
 
-func toWireValidateExternalTokenRequest(value *ValidateExternalTokenRequest) *proto.ValidateExternalTokenRequest {
+func toWireIntrospectRequest(value *IntrospectRequest) *proto.IntrospectRequest {
 	if value == nil {
 		return nil
 	}
-	out := &proto.ValidateExternalTokenRequest{
-		Token: value.Token,
+	out := &proto.IntrospectRequest{
+		Token:         value.Token,
+		TokenTypeHint: value.TokenTypeHint,
 	}
 	return out
 }
 
-func fromWireValidateExternalTokenRequest(value *proto.ValidateExternalTokenRequest) *ValidateExternalTokenRequest {
+func fromWireIntrospectRequest(value *proto.IntrospectRequest) *IntrospectRequest {
 	if value == nil {
 		return nil
 	}
-	out := &ValidateExternalTokenRequest{
-		Token: value.Token,
+	out := &IntrospectRequest{
+		Token:         value.Token,
+		TokenTypeHint: value.TokenTypeHint,
+	}
+	return out
+}
+
+func toWireIntrospectResponse(value *IntrospectResponse) *proto.IntrospectResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.IntrospectResponse{
+		Active:   value.Active,
+		Subject:  value.Subject,
+		Scope:    value.Scope,
+		ClientId: value.ClientId,
+		Audience: value.Audience,
+	}
+	return out
+}
+
+func fromWireIntrospectResponse(value *proto.IntrospectResponse) *IntrospectResponse {
+	if value == nil {
+		return nil
+	}
+	out := &IntrospectResponse{
+		Active:   value.Active,
+		Subject:  value.Subject,
+		Scope:    value.Scope,
+		ClientId: value.ClientId,
+		Audience: value.Audience,
+	}
+	return out
+}
+
+func toWireListGrantsRequest(value *ListGrantsRequest) *proto.ListGrantsRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ListGrantsRequest{}
+	return out
+}
+
+func fromWireListGrantsRequest(value *proto.ListGrantsRequest) *ListGrantsRequest {
+	if value == nil {
+		return nil
+	}
+	out := &ListGrantsRequest{}
+	return out
+}
+
+func toWireListGrantsResponse(value *ListGrantsResponse) *proto.ListGrantsResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.ListGrantsResponse{
+		GrantIds: value.GrantIds,
+	}
+	return out
+}
+
+func fromWireListGrantsResponse(value *proto.ListGrantsResponse) *ListGrantsResponse {
+	if value == nil {
+		return nil
+	}
+	out := &ListGrantsResponse{
+		GrantIds: value.GrantIds,
+	}
+	return out
+}
+
+func toWireRevokeGrantRequest(value *RevokeGrantRequest) *proto.RevokeGrantRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.RevokeGrantRequest{
+		GrantId: value.GrantId,
+	}
+	return out
+}
+
+func fromWireRevokeGrantRequest(value *proto.RevokeGrantRequest) *RevokeGrantRequest {
+	if value == nil {
+		return nil
+	}
+	out := &RevokeGrantRequest{
+		GrantId: value.GrantId,
+	}
+	return out
+}
+
+func toWireRevokeGrantResponse(value *RevokeGrantResponse) *proto.RevokeGrantResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.RevokeGrantResponse{}
+	return out
+}
+
+func fromWireRevokeGrantResponse(value *proto.RevokeGrantResponse) *RevokeGrantResponse {
+	if value == nil {
+		return nil
+	}
+	out := &RevokeGrantResponse{}
+	return out
+}
+
+func toWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
+	if value == nil {
+		return nil
+	}
+	out := &proto.TokenRequest{
+		GrantType:        value.GrantType,
+		Code:             value.Code,
+		RedirectUri:      value.RedirectUri,
+		ClientId:         value.ClientId,
+		State:            value.State,
+		Scope:            value.Scope,
+		SubjectToken:     value.SubjectToken,
+		SubjectTokenType: value.SubjectTokenType,
+	}
+	return out
+}
+
+func fromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
+	if value == nil {
+		return nil
+	}
+	out := &TokenRequest{
+		GrantType:        value.GrantType,
+		Code:             value.Code,
+		RedirectUri:      value.RedirectUri,
+		ClientId:         value.ClientId,
+		State:            value.State,
+		Scope:            value.Scope,
+		SubjectToken:     value.SubjectToken,
+		SubjectTokenType: value.SubjectTokenType,
+	}
+	return out
+}
+
+func toWireTokenResponse(value *TokenResponse) *proto.TokenResponse {
+	if value == nil {
+		return nil
+	}
+	out := &proto.TokenResponse{
+		AccessToken:  value.AccessToken,
+		TokenType:    value.TokenType,
+		ExpiresIn:    value.ExpiresIn,
+		RefreshToken: value.RefreshToken,
+		Scope:        value.Scope,
+		GrantId:      value.GrantId,
+	}
+	return out
+}
+
+func fromWireTokenResponse(value *proto.TokenResponse) *TokenResponse {
+	if value == nil {
+		return nil
+	}
+	out := &TokenResponse{
+		AccessToken:  value.AccessToken,
+		TokenType:    value.TokenType,
+		ExpiresIn:    value.ExpiresIn,
+		RefreshToken: value.RefreshToken,
+		Scope:        value.Scope,
+		GrantId:      value.GrantId,
 	}
 	return out
 }

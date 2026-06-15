@@ -63,32 +63,13 @@ type AccessPermission struct {
 	Operations []string `json:"operations,omitempty"`
 }
 
-type APIToken struct {
-	ID                  string
-	OwnerKind           string
-	OwnerID             string
-	CredentialSubjectID string
-	Name                string
-	HashedToken         string
-	Scopes              string
-	Permissions         []AccessPermission
-	ExpiresAt           *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-}
-
-const (
-	APITokenOwnerKindUser    = "user"
-	APITokenOwnerKindSubject = "subject"
-)
-
 type UserIdentity struct {
 	Email       string
 	DisplayName string
 	AvatarURL   string
 }
 
-type TokenResponse struct {
+type OAuthTokenResponse struct {
 	AccessToken  string
 	RefreshToken string
 	ExpiresIn    int

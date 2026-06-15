@@ -10,6 +10,7 @@ import {
   Code,
   ConnectError,
   type ConnectRouter,
+  type HandlerContext,
   type ServiceImpl,
 } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
@@ -22,11 +23,13 @@ import {
 } from "../internal/gen/v1/authorization_pb.ts";
 import {
   Authentication as AuthenticationProviderService,
-  AuthSessionSettingsSchema,
-  AuthenticatedUserSchema,
-  BeginLoginResponseSchema,
-  type CompleteLoginRequest as AuthCompleteLoginRequest,
-  type ValidateExternalTokenRequest,
+  AuthorizeResponseSchema,
+  GetGrantResponseSchema,
+  GrantScopeSchema,
+  IntrospectResponseSchema,
+  ListGrantsResponseSchema,
+  RevokeGrantResponseSchema,
+  TokenResponseSchema,
 } from "../internal/gen/v1/authentication_pb.ts";
 import {
   Cache as CacheService,
@@ -98,8 +101,9 @@ import type { RequestContext as WireRequestContext } from "../internal/gen/v1/ap
 import type { RequestContext } from "../app.ts";
 import {
   AuthenticationProvider,
+  CALLER_BEARER_TOKEN_METADATA_KEY,
   isAuthenticationProvider,
-  type AuthenticatedUser,
+  type AuthCallContext,
 } from "../auth.ts";
 import {
   AuthorizationProvider,
@@ -676,68 +680,135 @@ export function createAuthenticationService(
   provider: AuthenticationProvider,
 ): Partial<ServiceImpl<typeof AuthenticationProviderService>> {
   return {
-    async beginLogin(request) {
-      const response = await provider.beginLogin({
-        callbackUrl: request.callbackUrl,
-        hostState: request.hostState,
-        scopes: [...request.scopes],
-        options: {
-          ...request.options,
-        },
+    async authorize(request) {
+      const response = await provider.authorize({
+        responseType: request.responseType,
+        clientId: request.clientId,
+        redirectUri: request.redirectUri,
+        scope: request.scope,
+        state: request.state,
+      });
+      if (!response?.redirectUri) {
+        throw new ConnectError(
+          "authentication provider returned empty redirect URI",
+          Code.Internal,
+        );
+      }
+      return create(AuthorizeResponseSchema, {
+        redirectUri: response.redirectUri,
+      });
+    },
+    async token(request) {
+      const response = await provider.token({
+        grantType: request.grantType,
+        code: request.code,
+        redirectUri: request.redirectUri,
+        clientId: request.clientId,
+        state: request.state,
+        scope: request.scope,
+        subjectToken: request.subjectToken,
+        subjectTokenType: request.subjectTokenType,
+      });
+      if (!response?.accessToken) {
+        throw new ConnectError(
+          "authentication provider returned empty access token",
+          Code.Internal,
+        );
+      }
+      return create(TokenResponseSchema, {
+        accessToken: response.accessToken,
+        tokenType: response.tokenType || "Bearer",
+        expiresIn: normalizeBigInt(response.expiresIn ?? 0),
+        refreshToken: response.refreshToken ?? "",
+        scope: response.scope ?? "",
+        grantId: response.grantId ?? "",
+      });
+    },
+    async introspect(request) {
+      const response = await provider.introspect({
+        token: request.token,
+        tokenTypeHint: request.tokenTypeHint,
       });
       if (!response) {
         throw new ConnectError(
-          "authentication provider returned nil response",
+          "authentication provider returned nil introspection",
           Code.Internal,
         );
       }
-      return create(BeginLoginResponseSchema, {
-        authorizationUrl: response.authorizationUrl,
-        providerState: response.providerState ?? new Uint8Array(),
+      return create(IntrospectResponseSchema, {
+        active: response.active,
+        subject: response.subject ?? "",
+        scope: response.scope ?? "",
+        clientId: response.clientId ?? "",
+        audience: [...(response.audience ?? [])],
       });
     },
-    async completeLogin(request: AuthCompleteLoginRequest) {
-      const user = await provider.completeLogin({
-        query: {
-          ...request.query,
-        },
-        providerState: cloneUint8Array(request.providerState),
-        callbackUrl: request.callbackUrl,
+    async listGrants(request, context) {
+      const response = await provider.listGrants(
+        {},
+        authCallContextFromHandler(context),
+      );
+      return create(ListGrantsResponseSchema, {
+        grantIds: [...(response.grantIds ?? [])],
       });
-      if (!user) {
-        throw new ConnectError(
-          "authentication provider returned nil user",
-          Code.Internal,
-        );
-      }
-      return authenticatedUserToProto(user);
     },
-    async validateExternalToken(request: ValidateExternalTokenRequest) {
-      if (!provider.supportsExternalTokenValidation()) {
-        throw new ConnectError(
-          "authentication provider does not support external token validation",
-          Code.Unimplemented,
+    async getGrant(request, context) {
+      try {
+        const response = await provider.getGrant(
+          { grantId: request.grantId },
+          authCallContextFromHandler(context),
         );
+        return create(GetGrantResponseSchema, {
+          scopes: (response.scopes ?? []).map((scope) =>
+            create(GrantScopeSchema, {
+              scope: scope.scope,
+              resource: [...(scope.resource ?? [])],
+            }),
+          ),
+          createdAt: normalizeBigInt(response.createdAt ?? 0),
+          expiresAt: normalizeBigInt(response.expiresAt ?? 0),
+        });
+      } catch (error) {
+        throw grantRPCError(error);
       }
-      const user = await provider.validateExternalToken(request.token);
-      if (!user) {
-        throw new ConnectError("token not recognized", Code.NotFound);
-      }
-      return authenticatedUserToProto(user);
     },
-    async getSessionSettings() {
-      if (!provider.supportsSessionSettings()) {
-        throw new ConnectError(
-          "authentication provider does not expose session settings",
-          Code.Unimplemented,
+    async revokeGrant(request, context) {
+      try {
+        await provider.revokeGrant(
+          { grantId: request.grantId },
+          authCallContextFromHandler(context),
         );
+        return create(RevokeGrantResponseSchema, {});
+      } catch (error) {
+        throw grantRPCError(error);
       }
-      const settings = await provider.sessionSettings();
-      return create(AuthSessionSettingsSchema, {
-        sessionTtlSeconds: normalizeBigInt(settings?.sessionTtlSeconds ?? 0),
-      });
     },
   };
+}
+
+function authCallContextFromHandler(context: HandlerContext): AuthCallContext {
+  return {
+    callerBearerToken:
+      context.requestHeader.get(CALLER_BEARER_TOKEN_METADATA_KEY) ?? "",
+  };
+}
+
+function grantRPCError(error: unknown): ConnectError {
+  if (error instanceof ConnectError) {
+    return error;
+  }
+  const message =
+    error instanceof Error ? error.message : "grant management failed";
+  if (/not found/i.test(message)) {
+    return new ConnectError(message, Code.NotFound);
+  }
+  if (/unauthorized|forbidden|denied/i.test(message)) {
+    return new ConnectError(message, Code.PermissionDenied);
+  }
+  if (/not support/i.test(message)) {
+    return new ConnectError(message, Code.Unimplemented);
+  }
+  return new ConnectError(message, Code.Internal);
 }
 
 /**
@@ -1042,19 +1113,6 @@ function catalogSchemaToWire(schema: unknown): string {
     return schema;
   }
   return JSON.stringify(schema);
-}
-
-function authenticatedUserToProto(user: AuthenticatedUser) {
-  return create(AuthenticatedUserSchema, {
-    subject: user.subject,
-    email: user.email ?? "",
-    emailVerified: user.emailVerified ?? false,
-    displayName: user.displayName ?? "",
-    avatarUrl: user.avatarUrl ?? "",
-    claims: {
-      ...(user.claims ?? {}),
-    },
-  });
 }
 
 function normalizeBigInt(value: number | bigint): bigint {

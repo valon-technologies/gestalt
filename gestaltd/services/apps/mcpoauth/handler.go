@@ -237,7 +237,7 @@ func (h *Handler) StartOAuthWithOverride(authBaseURL, state string, scopes []str
 	return upstream.AuthorizationURLWithOverride(authBaseURL, state, scopes)
 }
 
-func (h *Handler) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (h *Handler) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
@@ -245,7 +245,7 @@ func (h *Handler) ExchangeCode(ctx context.Context, code string) (*core.TokenRes
 	return upstream.ExchangeCode(ctx, code)
 }
 
-func (h *Handler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+func (h *Handler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error) {
 	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
@@ -258,7 +258,7 @@ func (h *Handler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier s
 	return upstream.ExchangeCode(ctx, code, opts...)
 }
 
-func (h *Handler) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (h *Handler) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err
@@ -266,7 +266,7 @@ func (h *Handler) RefreshToken(ctx context.Context, refreshToken string) (*core.
 	return upstream.RefreshToken(ctx, refreshToken)
 }
 
-func (h *Handler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+func (h *Handler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.OAuthTokenResponse, error) {
 	upstream, err := h.ensure(ctx)
 	if err != nil {
 		return nil, err

@@ -240,7 +240,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	var tokenResp *core.TokenResponse
+	var tokenResp *core.OAuthTokenResponse
 	tokenResp, err = handler.ExchangeCodeWithVerifier(r.Context(), code, state.Verifier, exchangeOpts...)
 	if err != nil {
 		auditErr = errors.New("token exchange failed")

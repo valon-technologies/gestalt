@@ -1383,8 +1383,8 @@ func TestAuthorizeAppInvocationUsesPersistedTurnScope(t *testing.T) {
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
 		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
 	}
-	if _, ok := authorized.Principal.TokenPermissions["slack"]["chat.postMessage"]; !ok {
-		t.Fatalf("authorized permissions = %#v, want only persisted slack chat.postMessage scope", authorized.Principal.TokenPermissions)
+	if _, ok := authorized.Principal.EffectivePermissions()["slack"]["chat.postMessage"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want only persisted slack chat.postMessage scope", authorized.Principal.EffectivePermissions())
 	}
 	if authorized.CredentialMode != core.ConnectionModeSubject {
 		t.Fatalf("credential mode = %q, want subject", authorized.CredentialMode)
@@ -1575,11 +1575,11 @@ func TestAuthorizeWorkflowInvocationUsesPersistedTurnScope(t *testing.T) {
 	if authorized.Principal == nil || authorized.Principal.SubjectID != p.SubjectID || authorized.Principal.CredentialSubjectID != p.CredentialSubjectID {
 		t.Fatalf("authorized principal = %#v, want %s/%s", authorized.Principal, p.SubjectID, p.CredentialSubjectID)
 	}
-	if _, ok := authorized.Principal.TokenPermissions["slack"]["chat.postMessage"]; !ok {
-		t.Fatalf("authorized permissions = %#v, want slack chat.postMessage scope", authorized.Principal.TokenPermissions)
+	if _, ok := authorized.Principal.EffectivePermissions()["slack"]["chat.postMessage"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want slack chat.postMessage scope", authorized.Principal.EffectivePermissions())
 	}
-	if _, ok := authorized.Principal.TokenPermissions["alpha"]; !ok {
-		t.Fatalf("authorized permissions = %#v, want current agent provider scope for self-agent step", authorized.Principal.TokenPermissions)
+	if _, ok := authorized.Principal.EffectivePermissions()["alpha"]; !ok {
+		t.Fatalf("authorized permissions = %#v, want current agent provider scope for self-agent step", authorized.Principal.EffectivePermissions())
 	}
 	if alpha.getTurnCalls != 1 {
 		t.Fatalf("GetTurn calls = %d, want 1 live-turn validation", alpha.getTurnCalls)
@@ -2533,9 +2533,8 @@ func TestAgentTurnPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing
 		SubjectID:        principal.UserSubjectID("user-1"),
 		UserID:           "user-1",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceAPIToken,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2557,9 +2556,8 @@ func TestAgentTurnPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 		SubjectID:        principal.UserSubjectID("user-1"),
 		UserID:           "user-1",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceAPIToken,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2589,9 +2587,8 @@ func TestAgentTurnPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
 		SubjectID:        principal.UserSubjectID("user-1"),
 		UserID:           "user-1",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceAPIToken,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2637,9 +2634,8 @@ func TestAgentTurnPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 		SubjectID:        principal.UserSubjectID("user-1"),
 		UserID:           "user-1",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceAPIToken,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2664,8 +2660,7 @@ func TestAgentTurnPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testi
 		SubjectID:        principal.UserSubjectID("user-1"),
 		UserID:           "user-1",
 		Kind:             principal.KindUser,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 

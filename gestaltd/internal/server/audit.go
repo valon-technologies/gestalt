@@ -31,7 +31,7 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	if principal.IsNonUserPrincipal(p) {
 		return p, nil
 	}
-	if p.UserID != "" {
+	if p.UserID != "" && !strings.Contains(p.UserID, "@") {
 		return p, nil
 	}
 	if p.Identity == nil || p.Identity.Email == "" {
@@ -49,6 +49,8 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	clone := *p
 	clone.UserID = dbUser.ID
 	clone.Kind = principal.KindUser
+	clone.SubjectID = principal.UserSubjectID(dbUser.ID)
+	clone.CredentialSubjectID = clone.SubjectID
 	return principal.Canonicalize(&clone), nil
 }
 

@@ -1,6 +1,6 @@
 # Data Model
 
-Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users, API tokens, and managed subject metadata. Provider-owned state, such as upstream credentials, workflow state, and agent sessions/turns, is provisioned by those providers instead of by gestaltd core.
+Gestalt stores most persistent state through configured providers. Gestaltd core provisions only the object stores it directly owns through the configured [IndexedDB provider](/providers/indexeddb): users and managed subject metadata. Authentication grants (including user-facing API tokens) and upstream credentials live in provider-owned IndexedDB stores.
 
 For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a provider, see [Configuration](/reference/configuration).
 
@@ -8,7 +8,8 @@ For encryption mechanics, see [Security Internals](/architecture/security-intern
 
 | Owner | Persistent state |
 | --- | --- |
-| `gestaltd` core | `users`, `managed_subjects`, `api_tokens` |
+| `gestaltd` core | `users`, `managed_subjects` |
+| Authentication provider | `authentication_grants`, `authentication_token_hashes` |
 | External credentials provider | `external_credentials` |
 | Agent provider | Provider-defined agent session, turn, interaction, event, and idempotency state |
 | Workflow provider | Provider-defined schedule, event trigger, run, execution ref, and idempotency state |
@@ -83,23 +84,16 @@ Owned by the configured external credentials provider, not gestaltd core. Every 
 
 `CreateCredential` is insert-only and fails with `ALREADY_EXISTS` on a `(subject, audience, qualifier)` conflict, which gives first-writer-wins convergence when multiple server instances race RFC 7591 dynamic client registration. Reconnecting overwrites the existing record via `UpsertCredential`.
 
-### `api_tokens`
+### `authentication_grants` and `authentication_token_hashes`
 
-Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way hash.
+Owned by the configured authentication provider, not gestaltd core. Grant records hold metadata for each issued bearer grant. Token-hash records map SHA-256 hashes back to grants for introspection; plaintext bearer tokens are never stored.
 
-| Field | Type | Notes |
+| Store | Key fields | Notes |
 | --- | --- | --- |
-| `id` | string, PK | UUID. |
-| `owner_kind` | string | Token owner kind (`user` or `subject`). |
-| `owner_id` | string | Owner ID within `owner_kind`; subject-owned tokens use a canonical non-system subject ID. |
-| `credential_subject_id` | string | Subject whose upstream credentials the token may use. |
-| `name` | string | Display name (e.g., `automation`, `cli-token`). |
-| `hashed_token` | string, unique | **SHA-256 hash.** Plaintext returned once at creation. |
-| `scopes` | string | Plaintext. Space-separated provider names. |
-| `permissions_json` | string | JSON-encoded provider operation permissions. |
-| `expires_at` | time | Null for non-expiring tokens. |
-| `created_at` | time | |
-| `updated_at` | time | |
+| `authentication_grants` | `id`, `subject`, `scope`, `client_id`, `created_at`, `expires_at`, `revoked` | One row per grant. `subject` is the canonical owner such as `user:<id>`. |
+| `authentication_token_hashes` | `id` (SHA-256 hash), `grant_id`, `subject`, `scope`, `client_id`, `expires_at` | Hash-only lookup table for bearer validation. |
+
+User-facing API token management (`/api/v1/tokens`) lists, inspects, and revokes these provider-owned grants.
 
 ## Encryption summary
 
@@ -111,7 +105,7 @@ Credentials are encrypted. Everything else is plaintext.
 | Refresh tokens | `external_credentials.refresh_token_encrypted` | AES-256-GCM |
 | MCP OAuth client secrets | `external_credentials.client_secret_encrypted` | AES-256-GCM |
 | Manual credential fields | `external_credentials.fields_encrypted` | AES-256-GCM |
-| API tokens | `api_tokens.hashed_token` | One-way SHA-256 |
+| Authentication grant hashes | `authentication_token_hashes.id` | One-way SHA-256 |
 | Emails, names, metadata, scopes, timestamps | Various | Plaintext |
 
 All encrypted fields use the same key derived from `server.encryptionKey`. There is no per-user or per-provider key separation.

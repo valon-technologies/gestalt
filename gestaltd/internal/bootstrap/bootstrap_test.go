@@ -1608,8 +1608,8 @@ func TestBootstrap(t *testing.T) {
 	if result.Auth == nil {
 		t.Fatal("Auth is nil")
 	}
-	if result.Auth.Name() != "test-auth" {
-		t.Errorf("Auth.Name: got %q, want %q", result.Auth.Name(), "test-auth")
+	if result.SelectedAuthProvider != "default" {
+		t.Errorf("SelectedAuthProvider: got %q, want %q", result.SelectedAuthProvider, "default")
 	}
 	if result.Services == nil {
 		t.Fatal("IndexedDB is nil")
@@ -1848,7 +1848,7 @@ func TestBootstrap(t *testing.T) {
 
 				principal := &principal.Principal{
 					UserID: user.ID,
-					Source: principal.SourceSession,
+					Source: principal.SourceBearer,
 					Scopes: []string{"slack"},
 				}
 				got, err := result.Invoker.Invoke(ctx, principal, "slack", "", "users.list", nil)
@@ -2182,9 +2182,8 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		UserID:              "user-123",
 		CredentialSubjectID: "service_account:agent-credential",
 		Kind:                principal.KindUser,
-		Source:              principal.SourceSession,
-		TokenPermissions:    perms,
-		Scopes:              principal.PermissionApps(perms),
+		Source:              principal.SourceBearer,
+		Scopes:              principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 	reqContext := bootstrapAgentRequestContext(t, p, "managed")
@@ -2481,9 +2480,8 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 		SubjectID:        "user:user-123",
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 	reqContext := bootstrapAgentRequestContext(t, p, "managed")
@@ -3163,9 +3161,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		SubjectID:        "user:user-123",
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: perms,
-		Scopes:           principal.PermissionApps(perms),
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(perms),
 	}
 	fullCtx := principal.WithPrincipal(context.Background(), full)
 
@@ -3201,9 +3198,8 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		SubjectID:        "user:user-123",
 		UserID:           "user-123",
 		Kind:             principal.KindUser,
-		Source:           principal.SourceSession,
-		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{App: "managed"}}),
-		Scopes:           []string{"managed"},
+		Source:           principal.SourceBearer,
+		Scopes: principal.ScopeStringsFromPermissionSet(principal.CompilePermissions([]core.AccessPermission{{App: "managed"}})),
 	}
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
 

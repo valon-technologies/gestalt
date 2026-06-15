@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -419,18 +420,12 @@ func (s *Server) mcpOAuthRefreshAccessToken(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) writeMCPOAuthTokenResponse(w http.ResponseWriter, identity *core.UserIdentity, scope, refreshToken string) {
-	auth := s.serverAuthRuntime()
-	accessToken, err := s.issueSessionToken(auth.provider, identity)
+	// MCP OAuth token issuance still uses host-issued JWTs until provider-backed migration.
+	ttl := defaultSessionCookieTTL
+	accessToken, err := session.IssueToken(identity, s.sessionIssuer, ttl)
 	if err != nil {
 		writeMCPOAuthError(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
 		return
-	}
-
-	ttl := defaultSessionCookieTTL
-	if auth.provider != nil {
-		if providerWithTTL, ok := auth.provider.(SessionTokenTTLProvider); ok {
-			ttl = providerWithTTL.SessionTokenTTL()
-		}
 	}
 
 	setMCPOAuthNoStoreHeaders(w)

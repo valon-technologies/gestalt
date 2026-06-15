@@ -65,11 +65,11 @@ func (p *connectedCapabilityProvider) InvokeGraphQL(_ context.Context, _ core.Gr
 func (p *connectedCapabilityProvider) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/start?state=" + state
 }
-func (p *connectedCapabilityProvider) ExchangeCode(_ context.Context, _ string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "access-token"}, nil
+func (p *connectedCapabilityProvider) ExchangeCode(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
+	return &core.OAuthTokenResponse{AccessToken: "access-token"}, nil
 }
-func (p *connectedCapabilityProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
+func (p *connectedCapabilityProvider) RefreshToken(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
+	return &core.OAuthTokenResponse{AccessToken: "refreshed-token"}, nil
 }
 func TestBindProviderConnectionResolvesInnerStaticOperationConnection(t *testing.T) {
 	t.Parallel()
@@ -163,11 +163,11 @@ func (p *connectedBasicProvider) InvokeGraphQL(_ context.Context, _ core.GraphQL
 func (p *connectedBasicProvider) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/start?state=" + state
 }
-func (p *connectedBasicProvider) ExchangeCode(_ context.Context, _ string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "access-token"}, nil
+func (p *connectedBasicProvider) ExchangeCode(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
+	return &core.OAuthTokenResponse{AccessToken: "access-token"}, nil
 }
-func (p *connectedBasicProvider) RefreshToken(_ context.Context, _ string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "refreshed-token"}, nil
+func (p *connectedBasicProvider) RefreshToken(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
+	return &core.OAuthTokenResponse{AccessToken: "refreshed-token"}, nil
 }
 
 type connectedNoSessionCatalogProvider struct {

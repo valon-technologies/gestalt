@@ -48,8 +48,7 @@ func testWorkflowManagerPrincipal() *principal.Principal {
 		SubjectID:        principal.UserSubjectID("ada"),
 		UserID:           "ada",
 		Kind:             principal.KindUser,
-		TokenPermissions: permissions,
-		Scopes:           principal.PermissionApps(permissions),
+		Scopes:    principal.ScopeStringsFromPermissionSet(permissions),
 	})
 }
 

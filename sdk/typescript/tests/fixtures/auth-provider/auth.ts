@@ -1,6 +1,8 @@
 import { defineAuthenticationProvider } from "../../../src/index.ts";
 
 let configuredIssuer = "https://issuer.example.test";
+const fixtureCode = "fixture-auth-code";
+const fixtureAccessToken = "fixture-access-token";
 
 export const provider = defineAuthenticationProvider({
   displayName: "Fixture Auth",
@@ -8,38 +10,63 @@ export const provider = defineAuthenticationProvider({
   configure(_name, config) {
     configuredIssuer = String(config.issuer ?? configuredIssuer);
   },
-  beginLogin(request) {
+  authorize(request) {
+    const redirect = new URL(request.redirectUri);
+    redirect.searchParams.set("code", fixtureCode);
+    redirect.searchParams.set("state", request.state);
     return {
-      authorizationUrl: `${configuredIssuer}/authorize?state=upstream-state&host=${encodeURIComponent(request.hostState)}`,
-      providerState: new Uint8Array([1, 2, 3]),
+      redirectUri: redirect.toString(),
     };
   },
-  completeLogin(request) {
-    return {
-      subject: request.query.code || "subject-1",
-      email: "fixture@example.com",
-      emailVerified: true,
-      displayName: "Fixture Auth User",
-      avatarUrl: `${configuredIssuer}/avatar.png`,
-      claims: {
-        issuer: configuredIssuer,
-        callback: request.callbackUrl,
-      },
-    };
-  },
-  validateExternalToken(token) {
-    if (!token) {
-      return null;
+  token(request) {
+    if (request.code !== fixtureCode) {
+      throw new Error("invalid authorization code");
     }
     return {
-      subject: token,
-      email: `${token}@example.com`,
-      displayName: "Validated User",
+      accessToken: fixtureAccessToken,
+      tokenType: "Bearer",
+      expiresIn: 5400,
+      scope: request.grantType === "authorization_code" ? "openid email" : "",
+      grantId: "grant-fixture-1",
     };
   },
-  sessionSettings() {
+  introspect(request) {
+    if (!request.token || request.token !== fixtureAccessToken) {
+      return { active: false };
+    }
     return {
-      sessionTtlSeconds: 5400,
+      active: true,
+      subject: "user:fixture@example.com",
+      scope: "openid email",
+      clientId: "gestaltd",
+      audience: [configuredIssuer],
     };
+  },
+  listGrants(_request, call) {
+    if (!call.callerBearerToken) {
+      throw new Error("caller bearer token required");
+    }
+    return { grantIds: ["grant-fixture-1"] };
+  },
+  getGrant(request, call) {
+    if (!call.callerBearerToken) {
+      throw new Error("caller bearer token required");
+    }
+    if (request.grantId !== "grant-fixture-1") {
+      throw new Error("grant not found");
+    }
+    return {
+      scopes: [{ scope: "openid", resource: [] }],
+      createdAt: 1_700_000_000,
+      expiresAt: 1_800_000_000,
+    };
+  },
+  revokeGrant(request, call) {
+    if (!call.callerBearerToken) {
+      throw new Error("caller bearer token required");
+    }
+    if (request.grantId !== "grant-fixture-1") {
+      throw new Error("grant not found");
+    }
   },
 });

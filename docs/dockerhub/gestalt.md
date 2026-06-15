@@ -35,7 +35,7 @@ Point the CLI at a running `gestaltd` server:
 ```sh
 docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
+  -e GESTALT_API_KEY=<api-grant> \
   valontechnologies/gestalt:latest \
   app list
 ```
@@ -45,7 +45,7 @@ docker run --rm \
 ```sh
 docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_api_... \
+  -e GESTALT_API_KEY=<api-grant> \
   valontechnologies/gestalt:latest \
   app invoke github search_code -p "query=gestalt org:my-org"
 ```

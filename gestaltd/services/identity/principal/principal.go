@@ -12,8 +12,7 @@ type Source int
 
 const (
 	SourceUnknown Source = iota
-	SourceSession
-	SourceAPIToken
+	SourceBearer
 	SourceEnv
 )
 
@@ -32,7 +31,8 @@ type Principal struct {
 	Kind                Kind
 	Source              Source
 	Scopes              []string
-	TokenPermissions    PermissionSet
+	ClientID            string
+	Audience            []string
 }
 
 type PermissionSet map[string]map[string]struct{}
@@ -58,10 +58,8 @@ func ClonePermissionSet(src PermissionSet) PermissionSet {
 
 func (s Source) String() string {
 	switch s {
-	case SourceSession:
-		return "session"
-	case SourceAPIToken:
-		return "api_token"
+	case SourceBearer:
+		return "bearer"
 	case SourceEnv:
 		return "env"
 	default:
@@ -71,10 +69,8 @@ func (s Source) String() string {
 
 func ParseSource(value string) Source {
 	switch strings.TrimSpace(value) {
-	case SourceSession.String():
-		return SourceSession
-	case SourceAPIToken.String():
-		return SourceAPIToken
+	case SourceBearer.String(), "session", "api_token":
+		return SourceBearer
 	case SourceEnv.String():
 		return SourceEnv
 	default:
@@ -86,7 +82,7 @@ func (p *Principal) AuthSource() string {
 	if p == nil {
 		return ""
 	}
-	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil {
+	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 {
 		return ""
 	}
 	return p.Source.String()
@@ -268,18 +264,15 @@ func PermissionApps(set PermissionSet) []string {
 }
 
 func AllowsProviderPermission(p *Principal, provider string) bool {
-	if p == nil {
+	if p == nil || provider == "" {
 		return false
 	}
-	if p.TokenPermissions != nil {
-		_, ok := p.TokenPermissions[provider]
-		return ok
-	}
-	if p.Scopes == nil {
+	if len(p.Scopes) == 0 {
 		return true
 	}
+	prefix := provider + ":"
 	for _, scope := range p.Scopes {
-		if scope == provider {
+		if scope == provider || strings.HasPrefix(scope, prefix) {
 			return true
 		}
 	}
@@ -287,21 +280,19 @@ func AllowsProviderPermission(p *Principal, provider string) bool {
 }
 
 func AllowsOperationPermission(p *Principal, provider, operation string) bool {
-	if p == nil {
+	if p == nil || provider == "" || operation == "" {
 		return false
 	}
-	if p.TokenPermissions != nil {
-		ops, ok := p.TokenPermissions[provider]
-		if !ok {
-			return false
-		}
-		if len(ops) == 0 {
+	if len(p.Scopes) == 0 {
+		return true
+	}
+	opScope := provider + ":" + operation
+	for _, scope := range p.Scopes {
+		if scope == provider || scope == opScope {
 			return true
 		}
-		_, ok = ops[operation]
-		return ok
 	}
-	return AllowsProviderPermission(p, provider)
+	return false
 }
 
 func clonePermissionOps(src map[string]struct{}) map[string]struct{} {
@@ -313,6 +304,72 @@ func clonePermissionOps(src map[string]struct{}) map[string]struct{} {
 		dst[key] = struct{}{}
 	}
 	return dst
+}
+
+// PermissionSetFromScopes converts OAuth scope strings into a permission set.
+// App-wide scopes use "<app>"; operation scopes use "<app>:<operation>".
+func PermissionSetFromScopes(scopes []string) PermissionSet {
+	if len(scopes) == 0 {
+		return nil
+	}
+	set := make(PermissionSet)
+	for _, scope := range scopes {
+		scope = strings.TrimSpace(scope)
+		if scope == "" {
+			continue
+		}
+		app, op, hasOp := strings.Cut(scope, ":")
+		if hasOp && op != "" {
+			ops := set[app]
+			if ops == nil && set[app] != nil {
+				continue
+			}
+			if ops == nil {
+				ops = map[string]struct{}{}
+				set[app] = ops
+			}
+			ops[op] = struct{}{}
+			continue
+		}
+		set[scope] = nil
+	}
+	if len(set) == 0 {
+		return PermissionSet{}
+	}
+	return set
+}
+
+// ScopeStringsFromPermissionSet flattens a permission set into OAuth scope strings.
+func ScopeStringsFromPermissionSet(set PermissionSet) []string {
+	if set == nil {
+		return nil
+	}
+	appNames := PermissionApps(set)
+	out := make([]string, 0, len(appNames))
+	for _, appName := range appNames {
+		ops := set[appName]
+		if len(ops) == 0 {
+			out = append(out, appName)
+			continue
+		}
+		opNames := make([]string, 0, len(ops))
+		for op := range ops {
+			opNames = append(opNames, op)
+		}
+		sort.Strings(opNames)
+		for _, op := range opNames {
+			out = append(out, appName+":"+op)
+		}
+	}
+	return out
+}
+
+// EffectivePermissions returns the caller's permission set derived from OAuth scopes.
+func (p *Principal) EffectivePermissions() PermissionSet {
+	if p == nil {
+		return nil
+	}
+	return PermissionSetFromScopes(p.Scopes)
 }
 
 type contextKey struct{}
@@ -340,9 +397,18 @@ func Canonicalize(p *Principal) *Principal {
 	}
 	if p.UserID == "" && p.SubjectID != "" {
 		if userID := UserIDFromSubjectID(p.SubjectID); userID != "" {
-			p.UserID = userID
-			if p.Kind == "" {
-				p.Kind = KindUser
+			if strings.Contains(userID, "@") {
+				if p.Identity == nil {
+					p.Identity = &core.UserIdentity{Email: userID}
+				}
+				if p.Kind == "" {
+					p.Kind = KindUser
+				}
+			} else {
+				p.UserID = userID
+				if p.Kind == "" {
+					p.Kind = KindUser
+				}
 			}
 		}
 	}

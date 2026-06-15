@@ -203,15 +203,47 @@ func GeneratedAuthPackageSource() string {
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
-type Provider struct{}
+type Provider struct {
+	mu     sync.Mutex
+	codes  map[string]pendingAuth
+	tokens map[string]issuedToken
+	grants map[string]grantRecord
+}
 
-func New() *Provider { return &Provider{} }
+type pendingAuth struct {
+	state       string
+	redirectURI string
+	scope       string
+	prompt      string
+}
+
+type issuedToken struct {
+	subject string
+	scope   string
+	grantID string
+}
+
+type grantRecord struct {
+	scope     string
+	createdAt int64
+	expiresAt int64
+}
+
+func New() *Provider {
+	return &Provider{
+		codes:  map[string]pendingAuth{},
+		tokens: map[string]issuedToken{},
+		grants: map[string]grantRecord{},
+	}
+}
 
 func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
 
@@ -223,42 +255,157 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) BeginLogin(_ context.Context, req *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{
-		AuthorizationUrl: "https://auth.example.test/login?state=idp-state&prompt=consent",
+func (p *Provider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("authorize request is required")
+	}
+	redirectURI := strings.TrimSpace(req.RedirectURI)
+	if redirectURI == "" {
+		return nil, fmt.Errorf("redirect_uri is required")
+	}
+	parsed, err := url.Parse("https://auth.example.test/login")
+	if err != nil {
+		return nil, err
+	}
+	query := parsed.Query()
+	query.Set("state", req.State)
+	query.Set("prompt", "consent")
+	code := "idp-auth-code"
+	query.Set("code", code)
+	parsed.RawQuery = query.Encode()
+
+	p.mu.Lock()
+	p.codes[code] = pendingAuth{
+		state:       req.State,
+		redirectURI: redirectURI,
+		scope:       req.Scope,
+		prompt:      "consent",
+	}
+	p.mu.Unlock()
+
+	return &gestalt.AuthorizeResponse{RedirectURI: parsed.String()}, nil
+}
+
+func (p *Provider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	if req == nil || strings.TrimSpace(req.Code) == "" {
+		return nil, fmt.Errorf("authorization code is required")
+	}
+	p.mu.Lock()
+	pending, ok := p.codes[req.Code]
+	if ok {
+		delete(p.codes, req.Code)
+	}
+	p.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("invalid authorization code")
+	}
+	if pending.state != "idp-state" && pending.state != "host-state" && !strings.HasPrefix(pending.state, "grant-create:") {
+		return nil, fmt.Errorf("unexpected state %q", pending.state)
+	}
+	if pending.prompt != "consent" {
+		return nil, fmt.Errorf("unexpected prompt %q", pending.prompt)
+	}
+	subject := "user:generated-auth@example.com"
+	grantID := "grant-generated"
+	if strings.HasPrefix(pending.state, "grant-create:") {
+		grantID = "grant-" + strings.TrimPrefix(pending.state, "grant-create:")
+	}
+	accessToken := "generated-access-" + grantID
+	now := time.Now().UTC()
+	p.mu.Lock()
+	p.tokens[accessToken] = issuedToken{subject: subject, scope: pending.scope, grantID: grantID}
+	p.grants[grantID] = grantRecord{
+		scope:     pending.scope,
+		createdAt: now.Unix(),
+		expiresAt: now.Add(90 * time.Minute).Unix(),
+	}
+	p.mu.Unlock()
+	return &gestalt.TokenResponse{
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   int64((90 * time.Minute).Seconds()),
+		GrantID:     grantID,
+		Scope:       pending.scope,
 	}, nil
 }
 
-func (p *Provider) CompleteLogin(_ context.Context, req *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
-	if req.GetQuery()["state"] != "idp-state" {
-		return nil, fmt.Errorf("unexpected state %q", req.GetQuery()["state"])
+func (p *Provider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+	if req == nil || strings.TrimSpace(req.Token) == "" {
+		return &gestalt.IntrospectResponse{Active: false}, nil
 	}
-	if req.GetQuery()["prompt"] != "consent" {
-		return nil, fmt.Errorf("unexpected prompt %q", req.GetQuery()["prompt"])
-	}
-	return &gestalt.AuthenticatedUser{
-		Email:       "generated-auth@example.com",
-		DisplayName: "Generated Auth User",
-	}, nil
-}
-
-func (p *Provider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
-	if token == "" {
-		return nil, fmt.Errorf("token is required")
-	}
-	if strings.Count(token, ".") == 2 {
-		return &gestalt.AuthenticatedUser{
-			Email:       "jwt@example.com",
-			DisplayName: "Validated JWT User",
+	if strings.Count(req.Token, ".") == 2 {
+		return &gestalt.IntrospectResponse{
+			Active:   true,
+			Subject:  "user:jwt@example.com",
+			ClientID: "gestaltd",
 		}, nil
 	}
-	return &gestalt.AuthenticatedUser{
-		Email:       token + "@example.com",
-		DisplayName: "Validated User",
+	p.mu.Lock()
+	issued, ok := p.tokens[req.Token]
+	p.mu.Unlock()
+	if !ok {
+		if strings.HasPrefix(req.Token, "generated-access-") {
+			return &gestalt.IntrospectResponse{
+				Active:   true,
+				Subject:  "user:generated-auth@example.com",
+				ClientID: "gestaltd",
+			}, nil
+		}
+		return &gestalt.IntrospectResponse{Active: false}, nil
+	}
+	return &gestalt.IntrospectResponse{
+		Active:   true,
+		Subject:  issued.subject,
+		Scope:    issued.scope,
+		ClientID: "gestaltd",
 	}, nil
 }
 
-func (p *Provider) SessionTTL() time.Duration { return 90 * time.Minute }
+func (p *Provider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	grantIDs := make([]string, 0, len(p.grants))
+	for grantID := range p.grants {
+		grantIDs = append(grantIDs, grantID)
+	}
+	return &gestalt.ListGrantsResponse{GrantIDs: grantIDs}, nil
+}
+
+func (p *Provider) GetGrant(_ context.Context, req *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+	if req == nil || strings.TrimSpace(req.GrantID) == "" {
+		return nil, fmt.Errorf("grant_id is required")
+	}
+	p.mu.Lock()
+	grant, ok := p.grants[req.GrantID]
+	p.mu.Unlock()
+	if !ok {
+		return nil, fmt.Errorf("grant %q not found", req.GrantID)
+	}
+	scopes := []gestalt.GrantScope{}
+	if grant.scope != "" {
+		scopes = append(scopes, gestalt.GrantScope{Scope: grant.scope})
+	}
+	return &gestalt.GetGrantResponse{
+		Scopes:    scopes,
+		CreatedAt: grant.createdAt,
+		ExpiresAt: grant.expiresAt,
+	}, nil
+}
+
+func (p *Provider) RevokeGrant(_ context.Context, req *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+	if req == nil || strings.TrimSpace(req.GrantID) == "" {
+		return nil, fmt.Errorf("grant_id is required")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.grants, req.GrantID)
+	for token, issued := range p.tokens {
+		if issued.grantID == req.GrantID {
+			delete(p.tokens, token)
+		}
+	}
+	return &gestalt.RevokeGrantResponse{}, nil
+}
 `
 }
 

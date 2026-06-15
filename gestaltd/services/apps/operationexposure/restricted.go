@@ -207,11 +207,11 @@ func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string
 	return r.inner.AuthorizationURL(state, scopes)
 }
 
-func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return r.inner.ExchangeCode(ctx, code)
 }
 
-func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return r.inner.RefreshToken(ctx, refreshToken)
 }
 

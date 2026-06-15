@@ -496,8 +496,7 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 		prepare             func(t *testing.T) string
 		archiveName         func(version string) string
 		assertArtifact      func(t *testing.T, artifact providermanifestv1.Artifact)
-		assertSessionTTL    bool
-		assertExternalJWT   bool
+		assertIntrospectJWT bool
 	}{
 		{
 			name:    "go_source",
@@ -514,8 +513,7 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 				t.Helper()
 				assertExpectedGoArtifactPlatform(t, artifact, runtime.GOOS, runtime.GOARCH, "")
 			},
-			assertSessionTTL:  true,
-			assertExternalJWT: true,
+			assertIntrospectJWT: true,
 		},
 	}
 
@@ -568,7 +566,7 @@ func TestRun_ProviderPackageAndReleaseBuildsExecutableAuthProviders(t *testing.T
 				t.Fatalf("release metadata auth artifact = %+v, want path %q sha %q", authArtifact, archiveName, authDigest)
 			}
 
-			assertExecutableAuthProviderWorks(t, filepath.Join(extractDir, binaryName), tc.appName, tc.assertSessionTTL, tc.assertExternalJWT)
+			assertExecutableAuthProviderWorks(t, filepath.Join(extractDir, binaryName), tc.appName, tc.assertIntrospectJWT)
 		})
 	}
 }

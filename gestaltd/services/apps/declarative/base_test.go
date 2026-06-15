@@ -20,12 +20,12 @@ func (m mockAuth) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/auth?state=" + state
 }
 
-func (m mockAuth) ExchangeCode(_ context.Context, code string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "access-" + code, TokenType: "Bearer"}, nil
+func (m mockAuth) ExchangeCode(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
+	return &core.OAuthTokenResponse{AccessToken: "access-" + code, TokenType: "Bearer"}, nil
 }
 
-func (m mockAuth) RefreshToken(_ context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return &core.TokenResponse{AccessToken: "refresh-" + refreshToken, TokenType: "Bearer"}, nil
+func (m mockAuth) RefreshToken(_ context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
+	return &core.OAuthTokenResponse{AccessToken: "refresh-" + refreshToken, TokenType: "Bearer"}, nil
 }
 
 func TestBaseExecuteDispatchesToEndpoint(t *testing.T) {

@@ -19,13 +19,13 @@ The `server.encryptionKey` is the root deployment secret. If the key is a 64-cha
 
 Every encryption operation generates a fresh 12-byte nonce using `crypto/rand`. GCM provides authenticated encryption, so tampering with stored ciphertexts is detected at decryption time.
 
-Access tokens, refresh tokens, pending connection state, and OAuth state parameters are all encrypted with AES-256-GCM. OAuth state carries a 10-minute TTL. API tokens are stored as one-way SHA-256 hashes. User emails and display names are stored in plaintext.
+Access tokens, refresh tokens, pending connection state, and OAuth state parameters are all encrypted with AES-256-GCM. OAuth state carries a 10-minute TTL. Authentication grant bearer tokens are stored by the authentication provider as one-way SHA-256 hashes. User emails and display names are stored in plaintext.
 
 ## Token lifecycle
 
 **Platform sessions.** Users log in through the configured identity provider. Gestalt validates the callback, checks `email_verified`, and issues a session cookie. Sessions expire based on the authentication provider's TTL (default 24 hours).
 
-**API tokens.** Generated with 32 random bytes from `crypto/rand` and prefixed with `gst_api_`. The plaintext is returned once at creation time. Only the SHA-256 hash is stored. Default TTL is 30 days, configurable via `server.apiTokenTtl`.
+**API grants.** Long-lived API access is issued by the configured authentication provider through token exchange. The provider stores only SHA-256 hashes of bearer tokens plus grant metadata (owner subject, scopes, expiration, revocation). The plaintext bearer is returned once at creation. Use `POST /api/v1/tokens` to mint a grant and `GET`/`DELETE /api/v1/tokens` to list or revoke them.
 
 **App tokens (OAuth).** OAuth state is encrypted with a 10-minute TTL to prevent state injection. After the authorization code exchange, access and refresh tokens are encrypted separately and stored. Gestalt refreshes expiring tokens on demand during invocation, and connections that declare `credentialRefresh` can be maintained proactively by a supporting external credentials provider.
 
@@ -34,9 +34,8 @@ Access tokens, refresh tokens, pending connection state, and OAuth state paramet
 Requests are authenticated in the following order:
 
 1. Check for a `session_token` cookie
-2. Check for an `Authorization: Bearer` header with a `gst_api_` prefix (API token lookup via SHA-256 hash)
-3. Check for an `Authorization: Bearer` header with a provider-issued token
-4. If no valid credentials are found, return 401
+2. Check for an `Authorization: Bearer` header with a provider-issued grant or session token
+3. If no valid credentials are found, return 401
 
 ## Security headers
 

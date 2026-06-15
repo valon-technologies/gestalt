@@ -2,29 +2,26 @@ package authentication
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"io"
-	"net/url"
-	"time"
 
+	"github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type authenticationRPCClient interface {
-	BeginLogin(context.Context, *proto.BeginLoginRequest, ...grpc.CallOption) (*proto.BeginLoginResponse, error)
-	CompleteLogin(context.Context, *proto.CompleteLoginRequest, ...grpc.CallOption) (*proto.AuthenticatedUser, error)
-	ValidateExternalToken(context.Context, *proto.ValidateExternalTokenRequest, ...grpc.CallOption) (*proto.AuthenticatedUser, error)
-	GetSessionSettings(context.Context, *emptypb.Empty, ...grpc.CallOption) (*proto.AuthSessionSettings, error)
+	Authorize(context.Context, *proto.AuthorizeRequest, ...grpc.CallOption) (*proto.AuthorizeResponse, error)
+	Token(context.Context, *proto.TokenRequest, ...grpc.CallOption) (*proto.TokenResponse, error)
+	Introspect(context.Context, *proto.IntrospectRequest, ...grpc.CallOption) (*proto.IntrospectResponse, error)
+	ListGrants(context.Context, *proto.ListGrantsRequest, ...grpc.CallOption) (*proto.ListGrantsResponse, error)
+	GetGrant(context.Context, *proto.GetGrantRequest, ...grpc.CallOption) (*proto.GetGrantResponse, error)
+	RevokeGrant(context.Context, *proto.RevokeGrantRequest, ...grpc.CallOption) (*proto.RevokeGrantResponse, error)
 }
 
 type ExecConfig struct {
@@ -38,10 +35,7 @@ type ExecConfig struct {
 	Cleanup     func()
 	Name        string
 	CallbackURL string
-	SessionKey  []byte
 }
-
-const defaultSessionTokenTTL = 24 * time.Hour
 
 type remoteAuthenticationProvider struct {
 	runtime     proto.ProviderLifecycleClient
@@ -50,8 +44,6 @@ type remoteAuthenticationProvider struct {
 	displayName string
 	description string
 	callbackURL string
-	sessionTTL  time.Duration
-	sessionKey  []byte
 	closer      io.Closer
 }
 
@@ -87,8 +79,6 @@ func newRemoteAuthenticationProvider(ctx context.Context, runtimeClient proto.Pr
 		client:      client,
 		name:        cfg.Name,
 		callbackURL: cfg.CallbackURL,
-		sessionKey:  append([]byte(nil), cfg.SessionKey...),
-		sessionTTL:  defaultSessionTokenTTL,
 	}
 	if err := provider.configure(ctx, cfg.Name, cfg.Config); err != nil {
 		return nil, err
@@ -112,14 +102,7 @@ func (p *remoteAuthenticationProvider) configure(ctx context.Context, name strin
 		p.displayName = meta.DisplayName
 		p.description = meta.Description
 	}
-	if ttl := getAuthenticationSessionTTL(ctx, p.client); ttl > 0 {
-		p.sessionTTL = ttl
-	}
 	return nil
-}
-
-func (p *remoteAuthenticationProvider) Name() string {
-	return p.name
 }
 
 func (p *remoteAuthenticationProvider) DisplayName() string {
@@ -133,116 +116,73 @@ func (p *remoteAuthenticationProvider) Description() string {
 	return p.description
 }
 
-func (p *remoteAuthenticationProvider) SessionTokenTTL() time.Duration {
-	return p.sessionTTL
-}
-
-func (p *remoteAuthenticationProvider) LoginURL(state string) (string, error) {
-	return p.LoginURLContext(context.Background(), state)
-}
-
-func (p *remoteAuthenticationProvider) LoginURLContext(ctx context.Context, state string) (string, error) {
+func (p *remoteAuthenticationProvider) Authorize(ctx context.Context, req *core.AuthorizeRequest) (*core.AuthorizeResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := p.client.BeginLogin(ctx, &proto.BeginLoginRequest{
-		CallbackUrl: p.callbackURL,
-		HostState:   state,
-	})
+	resp, err := p.client.Authorize(ctx, authorizeRequestToProto(req))
 	if err != nil {
-		return "", fmt.Errorf("begin login: %w", err)
+		return nil, err
 	}
-	if resp == nil {
-		return "", fmt.Errorf("begin login: provider returned nil response")
-	}
-	rewrittenURL, upstreamState, err := withWrappedStateParam(resp.GetAuthorizationUrl(), "")
-	if err != nil {
-		return "", err
-	}
-	encodedState, err := encodeAuthCallbackState(state, resp.GetProviderState(), upstreamState)
-	if err != nil {
-		return "", err
-	}
-	wrappedURL, _, err := withWrappedStateParam(rewrittenURL, encodedState)
-	if err != nil {
-		return "", err
-	}
-	return wrappedURL, nil
+	return authorizeResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) HandleCallback(ctx context.Context, code string) (*core.UserIdentity, error) {
-	identity, _, err := p.HandleCallbackWithState(ctx, code, "")
-	return identity, err
-}
-
-func (p *remoteAuthenticationProvider) HandleCallbackWithState(ctx context.Context, code, rawState string) (*core.UserIdentity, string, error) {
-	values := url.Values{}
-	if code != "" {
-		values.Set("code", code)
-	}
-	if rawState != "" {
-		values.Set("state", rawState)
-	}
-	return p.HandleCallbackRequest(ctx, values)
-}
-
-func (p *remoteAuthenticationProvider) HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error) {
-	if query == nil {
-		query = url.Values{}
-	}
-	hostState, providerState, upstreamState, err := decodeAuthCallbackState(query.Get("state"))
-	if err != nil {
-		return nil, "", err
-	}
-	normalizedQuery := cloneQueryValues(query)
-	if upstreamState != "" {
-		normalizedQuery.Set("state", upstreamState)
-	} else {
-		normalizedQuery.Del("state")
-	}
-
+func (p *remoteAuthenticationProvider) Token(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	resp, err := p.client.CompleteLogin(ctx, &proto.CompleteLoginRequest{
-		Query:         firstQueryValues(normalizedQuery),
-		ProviderState: append([]byte(nil), providerState...),
-		CallbackUrl:   p.callbackURL,
-	})
+	resp, err := p.client.Token(ctx, tokenRequestToProto(req))
 	if err != nil {
-		return nil, "", fmt.Errorf("complete login: %w", err)
+		return nil, err
 	}
-	user := authenticatedUserFromProto(resp)
-	if user == nil {
-		return nil, "", fmt.Errorf("complete login: provider returned nil user")
-	}
-	return user, hostState, nil
+	return tokenResponseFromProto(resp), nil
 }
 
-func (p *remoteAuthenticationProvider) ValidateToken(ctx context.Context, token string) (*core.UserIdentity, error) {
-	identity, jwtErr := p.validateSessionToken(token)
-	if jwtErr == nil {
-		return identity, nil
-	}
-
+func (p *remoteAuthenticationProvider) Introspect(ctx context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 
-	user, err := p.client.ValidateExternalToken(ctx, &proto.ValidateExternalTokenRequest{Token: token})
+	resp, err := p.client.Introspect(ctx, introspectRequestToProto(req))
 	if err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			if jwtErr != nil && jwtErr != session.ErrNotJWT {
-				return nil, jwtErr
-			}
-			return nil, fmt.Errorf("validate token: authentication provider does not support external token validation")
-		}
-		return nil, fmt.Errorf("validate token: %w", err)
+		return nil, err
 	}
-	authenticated := authenticatedUserFromProto(user)
-	if authenticated == nil {
-		return nil, fmt.Errorf("validate token: provider returned nil user")
+	return introspectResponseFromProto(resp), nil
+}
+
+func (p *remoteAuthenticationProvider) ListGrants(ctx context.Context, req *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	ctx = p.outgoingAuthCallContext(ctx)
+
+	resp, err := p.client.ListGrants(ctx, &proto.ListGrantsRequest{})
+	if err != nil {
+		return nil, mapAuthenticationProviderRPCError(err)
 	}
-	return authenticated, nil
+	return listGrantsResponseFromProto(resp), nil
+}
+
+func (p *remoteAuthenticationProvider) GetGrant(ctx context.Context, req *core.GetGrantRequest) (*core.GetGrantResponse, error) {
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	ctx = p.outgoingAuthCallContext(ctx)
+
+	resp, err := p.client.GetGrant(ctx, getGrantRequestToProto(req))
+	if err != nil {
+		return nil, mapAuthenticationProviderRPCError(err)
+	}
+	return getGrantResponseFromProto(resp), nil
+}
+
+func (p *remoteAuthenticationProvider) RevokeGrant(ctx context.Context, req *core.RevokeGrantRequest) (*core.RevokeGrantResponse, error) {
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	ctx = p.outgoingAuthCallContext(ctx)
+
+	_, err := p.client.RevokeGrant(ctx, revokeGrantRequestToProto(req))
+	if err != nil {
+		return nil, mapAuthenticationProviderRPCError(err)
+	}
+	return &core.RevokeGrantResponse{}, nil
 }
 
 func (p *remoteAuthenticationProvider) Close() error {
@@ -252,134 +192,138 @@ func (p *remoteAuthenticationProvider) Close() error {
 	return p.closer.Close()
 }
 
-func (p *remoteAuthenticationProvider) validateSessionToken(token string) (*core.UserIdentity, error) {
-	if len(p.sessionKey) == 0 {
-		return nil, session.ErrNotJWT
-	}
-	return session.ValidateToken(token, p.sessionKey)
+func (p *remoteAuthenticationProvider) outgoingAuthCallContext(ctx context.Context) context.Context {
+	return gestalt.AppendAuthCallMetadata(ctx)
 }
 
-func getAuthenticationSessionTTL(ctx context.Context, client authenticationRPCClient) time.Duration {
-	if client == nil {
-		return 0
-	}
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-
-	resp, err := client.GetSessionSettings(ctx, &emptypb.Empty{})
-	if err != nil {
-		if status.Code(err) == codes.Unimplemented {
-			return 0
-		}
-		return 0
-	}
-	if resp == nil || resp.GetSessionTtlSeconds() <= 0 {
-		return 0
-	}
-	return time.Duration(resp.GetSessionTtlSeconds()) * time.Second
-}
-
-func authenticatedUserFromProto(user *proto.AuthenticatedUser) *core.UserIdentity {
-	if user == nil {
+func authorizeRequestToProto(req *core.AuthorizeRequest) *proto.AuthorizeRequest {
+	if req == nil {
 		return nil
 	}
-	return &core.UserIdentity{
-		Email:       user.GetEmail(),
-		DisplayName: user.GetDisplayName(),
-		AvatarURL:   user.GetAvatarUrl(),
+	return &proto.AuthorizeRequest{
+		ResponseType: req.ResponseType,
+		ClientId:     req.ClientID,
+		RedirectUri:  req.RedirectURI,
+		Scope:        req.Scope,
+		State:        req.State,
 	}
 }
 
-type authCallbackState struct {
-	HostState     string `json:"host_state"`
-	ProviderState string `json:"provider_state,omitempty"`
-	UpstreamState string `json:"upstream_state,omitempty"`
-}
-
-func encodeAuthCallbackState(hostState string, providerState []byte, upstreamState string) (string, error) {
-	payload := authCallbackState{HostState: hostState}
-	if len(providerState) > 0 {
-		payload.ProviderState = base64.RawURLEncoding.EncodeToString(providerState)
-	}
-	if upstreamState != "" {
-		payload.UpstreamState = upstreamState
-	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("encode auth callback state: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
-}
-
-func decodeAuthCallbackState(raw string) (string, []byte, string, error) {
-	if raw == "" {
-		return "", nil, "", nil
-	}
-	data, ok := decodeOptionalBase64URL(raw)
-	if !ok {
-		return raw, nil, raw, nil
-	}
-	payload, ok := decodeOptionalAuthCallbackState(data)
-	if !ok {
-		return raw, nil, raw, nil
-	}
-	if payload.ProviderState == "" {
-		return payload.HostState, nil, payload.UpstreamState, nil
-	}
-	providerState, err := base64.RawURLEncoding.DecodeString(payload.ProviderState)
-	if err != nil {
-		return "", nil, "", fmt.Errorf("decode auth callback state: %w", err)
-	}
-	return payload.HostState, providerState, payload.UpstreamState, nil
-}
-
-func decodeOptionalBase64URL(raw string) ([]byte, bool) {
-	data, err := base64.RawURLEncoding.DecodeString(raw)
-	return data, err == nil
-}
-
-func decodeOptionalAuthCallbackState(data []byte) (authCallbackState, bool) {
-	var payload authCallbackState
-	if err := json.Unmarshal(data, &payload); err != nil || payload.HostState == "" {
-		return authCallbackState{}, false
-	}
-	return payload, true
-}
-
-func withWrappedStateParam(rawURL, state string) (string, string, error) {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
-		return "", "", fmt.Errorf("parse authorization URL: %w", err)
-	}
-	values := parsed.Query()
-	originalState := values.Get("state")
-	values.Set("state", state)
-	parsed.RawQuery = values.Encode()
-	return parsed.String(), originalState, nil
-}
-
-func firstQueryValues(values url.Values) map[string]string {
-	if len(values) == 0 {
+func authorizeResponseFromProto(resp *proto.AuthorizeResponse) *core.AuthorizeResponse {
+	if resp == nil {
 		return nil
 	}
-	out := make(map[string]string, len(values))
-	for key, candidates := range values {
-		if len(candidates) > 0 {
-			out[key] = candidates[0]
+	return &core.AuthorizeResponse{RedirectURI: resp.GetRedirectUri()}
+}
+
+func tokenRequestToProto(req *core.TokenRequest) *proto.TokenRequest {
+	if req == nil {
+		return nil
+	}
+	return &proto.TokenRequest{
+		GrantType:        req.GrantType,
+		Code:             req.Code,
+		RedirectUri:      req.RedirectURI,
+		ClientId:         req.ClientID,
+		State:            req.State,
+		Scope:            req.Scope,
+		SubjectToken:     req.SubjectToken,
+		SubjectTokenType: req.SubjectTokenType,
+	}
+}
+
+func tokenResponseFromProto(resp *proto.TokenResponse) *core.TokenResponse {
+	if resp == nil {
+		return nil
+	}
+	return &core.TokenResponse{
+		AccessToken:  resp.GetAccessToken(),
+		TokenType:    resp.GetTokenType(),
+		ExpiresIn:    int(resp.GetExpiresIn()),
+		RefreshToken: resp.GetRefreshToken(),
+		Scope:        resp.GetScope(),
+		GrantID:      resp.GetGrantId(),
+	}
+}
+
+func introspectRequestToProto(req *core.IntrospectRequest) *proto.IntrospectRequest {
+	if req == nil {
+		return nil
+	}
+	return &proto.IntrospectRequest{
+		Token:         req.Token,
+		TokenTypeHint: req.TokenTypeHint,
+	}
+}
+
+func introspectResponseFromProto(resp *proto.IntrospectResponse) *core.IntrospectResponse {
+	if resp == nil {
+		return nil
+	}
+	return &core.IntrospectResponse{
+		Active:   resp.GetActive(),
+		Subject:  resp.GetSubject(),
+		Scope:    resp.GetScope(),
+		ClientID: resp.GetClientId(),
+		Audience: append([]string(nil), resp.GetAudience()...),
+	}
+}
+
+func listGrantsResponseFromProto(resp *proto.ListGrantsResponse) *core.ListGrantsResponse {
+	if resp == nil {
+		return nil
+	}
+	return &core.ListGrantsResponse{GrantIDs: append([]string(nil), resp.GetGrantIds()...)}
+}
+
+func getGrantRequestToProto(req *core.GetGrantRequest) *proto.GetGrantRequest {
+	if req == nil {
+		return nil
+	}
+	return &proto.GetGrantRequest{GrantId: req.GrantID}
+}
+
+func getGrantResponseFromProto(resp *proto.GetGrantResponse) *core.GetGrantResponse {
+	if resp == nil {
+		return nil
+	}
+	out := &core.GetGrantResponse{
+		CreatedAt: resp.GetCreatedAt(),
+		ExpiresAt: resp.GetExpiresAt(),
+	}
+	for _, scope := range resp.GetScopes() {
+		if scope == nil {
+			continue
 		}
+		out.Scopes = append(out.Scopes, core.GrantScope{
+			Scope:    scope.GetScope(),
+			Resource: append([]string(nil), scope.GetResource()...),
+		})
 	}
 	return out
 }
 
-func cloneQueryValues(values url.Values) url.Values {
-	if len(values) == 0 {
-		return url.Values{}
+func revokeGrantRequestToProto(req *core.RevokeGrantRequest) *proto.RevokeGrantRequest {
+	if req == nil {
+		return nil
 	}
-	cloned := make(url.Values, len(values))
-	for key, candidates := range values {
-		cloned[key] = append([]string(nil), candidates...)
+	return &proto.RevokeGrantRequest{GrantId: req.GrantID}
+}
+
+// WithCallerBearerToken attaches the caller bearer token for grant-management RPCs.
+func WithCallerBearerToken(ctx context.Context, token string) context.Context {
+	ctx = gestalt.WithAuthCallContext(ctx, gestalt.AuthCallContext{CallerBearerToken: token})
+	return metadata.AppendToOutgoingContext(ctx, gestalt.CallerBearerTokenMetadataKey, token)
+}
+
+func mapAuthenticationProviderRPCError(err error) error {
+	if err == nil {
+		return nil
 	}
-	return cloned
+	if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+		return core.ErrNotFound
+	}
+	return err
 }
 
 var (
@@ -387,9 +331,6 @@ var (
 	_ interface {
 		DisplayName() string
 		Description() string
-		SessionTokenTTL() time.Duration
-		HandleCallbackWithState(context.Context, string, string) (*core.UserIdentity, string, error)
-		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
 	} = (*remoteAuthenticationProvider)(nil)
 	_ interface{ Close() error } = (*remoteAuthenticationProvider)(nil)
 )

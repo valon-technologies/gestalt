@@ -135,7 +135,7 @@ func TestPreparedProviderBuildsStartAfterHostServiceTargetsAvailable(t *testing.
 		session, err := deps.AgentManager.CreateSession(ctx, &principal.Principal{
 			SubjectID: "user:startup",
 			Kind:      principal.KindUser,
-			Source:    principal.SourceSession,
+			Source:    principal.SourceBearer,
 		}, &proto.CreateAgentProviderSessionRequest{
 			ProviderName: "managed",
 			Model:        "gpt-startup",

@@ -34,11 +34,12 @@ from ._providers import (
     AgentProvider,
     AppProvider,
     AppProviderAdapter,
+    AuthCallContext,
     AuthenticationProvider,
     AuthorizationProvider,
+    CALLER_BEARER_TOKEN_METADATA_KEY,
     CacheProvider,
     Closer,
-    ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
     ProviderKind,
@@ -49,7 +50,6 @@ from ._providers import (
     S3PreconditionFailedError,
     S3Provider,
     SecretsProvider,
-    SessionTTLProvider,
     Starter,
     WarningsProvider,
     WorkflowProvider,
@@ -1539,6 +1539,21 @@ def _runtime_servicer(*, provider: AppProvider, kind: ProviderKind) -> Any:
     return RuntimeServicer()
 
 
+def _auth_call_context_from_handler(context: Any) -> AuthCallContext:
+    invocation_metadata = getattr(context, "invocation_metadata", None)
+    if invocation_metadata is None:
+        return AuthCallContext()
+    for key, value in invocation_metadata():
+        if key != CALLER_BEARER_TOKEN_METADATA_KEY:
+            continue
+        if isinstance(value, bytes):
+            token = value.decode("utf-8")
+        else:
+            token = str(value)
+        return AuthCallContext(caller_bearer_token=token.strip())
+    return AuthCallContext()
+
+
 def _authentication_servicer(*, provider: AppProvider) -> Any:
     _ensure_grpc_runtime()
     auth_provider = cast(AuthenticationProvider, provider)
@@ -1546,62 +1561,81 @@ def _authentication_servicer(*, provider: AppProvider) -> Any:
     class AuthenticationServicer(
         authentication_pb2_grpc.AuthenticationServicer
     ):
-        @_grpc_handler("begin login")
-        def BeginLogin(self, request: Any, context: Any) -> Any:
-            response = auth_provider.begin_login(
-                _authentication_codec.from_wire_begin_login_request(request)
+        @_grpc_handler("authorize")
+        def Authorize(self, request: Any, context: Any) -> Any:
+            response = auth_provider.authorize(
+                _authentication_codec.from_wire_authorize_request(request)
             )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_begin_login_response(response)
+            return _authentication_codec.to_wire_authorize_response(response)
 
-        @_grpc_handler("complete login")
-        def CompleteLogin(self, request: Any, context: Any) -> Any:
-            user = auth_provider.complete_login(
-                _authentication_codec.from_wire_complete_login_request(request)
+        @_grpc_handler("token")
+        def Token(self, request: Any, context: Any) -> Any:
+            response = auth_provider.token(
+                _authentication_codec.from_wire_token_request(request)
             )
-            if user is None:
+            if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    "authentication provider returned nil user",
+                    "authentication provider returned nil response",
                 )
-            return _authentication_codec.to_wire_authenticated_user(user)
+            return _authentication_codec.to_wire_token_response(response)
 
-        def ValidateExternalToken(self, request: Any, context: Any) -> Any:
-            if not isinstance(auth_provider, ExternalTokenValidator):
+        @_grpc_handler("introspect")
+        def Introspect(self, request: Any, context: Any) -> Any:
+            response = auth_provider.introspect(
+                _authentication_codec.from_wire_introspect_request(request)
+            )
+            if response is None:
                 return context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    "authentication provider does not support external token validation",
+                    grpc.StatusCode.INTERNAL,
+                    "authentication provider returned nil response",
                 )
-            try:
-                user = auth_provider.validate_external_token(request.token)
-            except Exception as error:
-                traceback.print_exception(error)
-                return context.abort(
-                    grpc.StatusCode.UNKNOWN,
-                    f"validate external token: {error}",
-                )
-            if user is None:
-                return context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    "token not recognized",
-                )
-            return _authentication_codec.to_wire_authenticated_user(user)
+            return _authentication_codec.to_wire_introspect_response(response)
 
-        def GetSessionSettings(self, request: Any, context: Any) -> Any:
-            if not isinstance(auth_provider, SessionTTLProvider):
+        @_grpc_handler("list grants")
+        def ListGrants(self, request: Any, context: Any) -> Any:
+            _ = request
+            response = auth_provider.list_grants(
+                _authentication_codec.from_wire_list_grants_request(request),
+                _auth_call_context_from_handler(context),
+            )
+            if response is None:
                 return context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    "authentication provider does not expose session settings",
+                    grpc.StatusCode.INTERNAL,
+                    "authentication provider returned nil response",
                 )
-            ttl = auth_provider.session_ttl()
-            seconds = int(ttl.total_seconds())
-            if seconds < 0:
-                seconds = 0
-            return authentication_pb2.AuthSessionSettings(session_ttl_seconds=seconds)
+            return _authentication_codec.to_wire_list_grants_response(response)
+
+        @_grpc_handler("get grant")
+        def GetGrant(self, request: Any, context: Any) -> Any:
+            response = auth_provider.get_grant(
+                _authentication_codec.from_wire_get_grant_request(request),
+                _auth_call_context_from_handler(context),
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authentication provider returned nil response",
+                )
+            return _authentication_codec.to_wire_get_grant_response(response)
+
+        @_grpc_handler("revoke grant")
+        def RevokeGrant(self, request: Any, context: Any) -> Any:
+            response = auth_provider.revoke_grant(
+                _authentication_codec.from_wire_revoke_grant_request(request),
+                _auth_call_context_from_handler(context),
+            )
+            if response is None:
+                return context.abort(
+                    grpc.StatusCode.INTERNAL,
+                    "authentication provider returned nil response",
+                )
+            return _authentication_codec.to_wire_revoke_grant_response(response)
 
     return AuthenticationServicer()
 

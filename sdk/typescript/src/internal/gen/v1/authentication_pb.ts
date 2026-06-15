@@ -4,8 +4,6 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty } from "@bufbuild/protobuf/wkt";
 import { file_v1_annotations } from "./annotations_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -13,195 +11,385 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/authentication.proto.
  */
 export const file_v1_authentication: GenFile = /*@__PURE__*/
-  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSLoAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJCCgZjbGFpbXMYBiADKAsyMi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyLkNsYWltc0VudHJ5Gi0KC0NsYWltc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiwwEKEUJlZ2luTG9naW5SZXF1ZXN0EhQKDGNhbGxiYWNrX3VybBgBIAEoCRISCgpob3N0X3N0YXRlGAIgASgJEg4KBnNjb3BlcxgDIAMoCRJECgdvcHRpb25zGAQgAygLMjMuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpbkxvZ2luUmVxdWVzdC5PcHRpb25zRW50cnkaLgoMT3B0aW9uc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiRwoSQmVnaW5Mb2dpblJlc3BvbnNlEhkKEWF1dGhvcml6YXRpb25fdXJsGAEgASgJEhYKDnByb3ZpZGVyX3N0YXRlGAIgASgMIrcBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJDCgVxdWVyeRgBIAMoCzI0Lmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QuUXVlcnlFbnRyeRIWCg5wcm92aWRlcl9zdGF0ZRgCIAEoDBIUCgxjYWxsYmFja191cmwYAyABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIi0KHFZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiMgoTQXV0aFNlc3Npb25TZXR0aW5ncxIbChNzZXNzaW9uX3R0bF9zZWNvbmRzGAEgASgDMoMECg5BdXRoZW50aWNhdGlvbhKHAQoKQmVnaW5Mb2dpbhImLmdlc3RhbHQucHJvdmlkZXIudjEuQmVnaW5Mb2dpblJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkJlZ2luTG9naW5SZXNwb25zZSIoirUYDGNhbGxiYWNrX3VybIq1GApob3N0X3N0YXRlirUYBnNjb3BlcxKPAQoNQ29tcGxldGVMb2dpbhIpLmdlc3RhbHQucHJvdmlkZXIudjEuQ29tcGxldGVMb2dpblJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhlbnRpY2F0ZWRVc2VyIiuKtRgOcHJvdmlkZXJfc3RhdGWKtRgMY2FsbGJhY2tfdXJsirUYBXF1ZXJ5En0KFVZhbGlkYXRlRXh0ZXJuYWxUb2tlbhIxLmdlc3RhbHQucHJvdmlkZXIudjEuVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBomLmdlc3RhbHQucHJvdmlkZXIudjEuQXV0aGVudGljYXRlZFVzZXIiCYq1GAV0b2tlbhJWChJHZXRTZXNzaW9uU2V0dGluZ3MSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhTZXNzaW9uU2V0dGluZ3NiBnByb3RvMw", [file_google_protobuf_empty, file_v1_annotations]);
+  fileDesc("Chd2MS9hdXRoZW50aWNhdGlvbi5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSJwChBBdXRob3JpemVSZXF1ZXN0EhUKDXJlc3BvbnNlX3R5cGUYASABKAkSEQoJY2xpZW50X2lkGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRINCgVzY29wZRgEIAEoCRINCgVzdGF0ZRgFIAEoCSIpChFBdXRob3JpemVSZXNwb25zZRIUCgxyZWRpcmVjdF91cmkYASABKAkivwEKDFRva2VuUmVxdWVzdBISCgpncmFudF90eXBlGAEgASgJEgwKBGNvZGUYAiABKAkSFAoMcmVkaXJlY3RfdXJpGAMgASgJEhEKCWNsaWVudF9pZBgFIAEoCRINCgVzdGF0ZRgGIAEoCRINCgVzY29wZRgHIAEoCRIVCg1zdWJqZWN0X3Rva2VuGAggASgJEhoKEnN1YmplY3RfdG9rZW5fdHlwZRgJIAEoCUoECAQQBVINcmVmcmVzaF90b2tlbiKFAQoNVG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSEgoKdG9rZW5fdHlwZRgCIAEoCRISCgpleHBpcmVzX2luGAMgASgDEhUKDXJlZnJlc2hfdG9rZW4YBCABKAkSDQoFc2NvcGUYBSABKAkSEAoIZ3JhbnRfaWQYBiABKAkiOwoRSW50cm9zcGVjdFJlcXVlc3QSDQoFdG9rZW4YASABKAkSFwoPdG9rZW5fdHlwZV9oaW50GAIgASgJImkKEkludHJvc3BlY3RSZXNwb25zZRIOCgZhY3RpdmUYASABKAgSDwoHc3ViamVjdBgCIAEoCRINCgVzY29wZRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIYXVkaWVuY2UYBSADKAkiEwoRTGlzdEdyYW50c1JlcXVlc3QiJwoSTGlzdEdyYW50c1Jlc3BvbnNlEhEKCWdyYW50X2lkcxgBIAMoCSIjCg9HZXRHcmFudFJlcXVlc3QSEAoIZ3JhbnRfaWQYASABKAkiLQoKR3JhbnRTY29wZRINCgVzY29wZRgBIAEoCRIQCghyZXNvdXJjZRgCIAMoCSJrChBHZXRHcmFudFJlc3BvbnNlEi8KBnNjb3BlcxgBIAMoCzIfLmdlc3RhbHQucHJvdmlkZXIudjEuR3JhbnRTY29wZRISCgpjcmVhdGVkX2F0GAIgASgDEhIKCmV4cGlyZXNfYXQYAyABKAMiJgoSUmV2b2tlR3JhbnRSZXF1ZXN0EhAKCGdyYW50X2lkGAEgASgJIhUKE1Jldm9rZUdyYW50UmVzcG9uc2UyoQYKDkF1dGhlbnRpY2F0aW9uEpwBCglBdXRob3JpemUSJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6ZVJlcXVlc3QaJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkF1dGhvcml6ZVJlc3BvbnNlIkCKtRgNcmVzcG9uc2VfdHlwZYq1GAljbGllbnRfaWSKtRgMcmVkaXJlY3RfdXJpirUYBXNjb3BlirUYBXN0YXRlErwBCgVUb2tlbhIhLmdlc3RhbHQucHJvdmlkZXIudjEuVG9rZW5SZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Ub2tlblJlc3BvbnNlImyKtRgKZ3JhbnRfdHlwZYq1GARjb2RlirUYDHJlZGlyZWN0X3VyaYq1GAljbGllbnRfaWSKtRgFc3RhdGWKtRgFc2NvcGWKtRgNc3ViamVjdF90b2tlboq1GBJzdWJqZWN0X3Rva2VuX3R5cGUSewoKSW50cm9zcGVjdBImLmdlc3RhbHQucHJvdmlkZXIudjEuSW50cm9zcGVjdFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkludHJvc3BlY3RSZXNwb25zZSIcirUYBXRva2VuirUYD3Rva2VuX3R5cGVfaGludBJdCgpMaXN0R3JhbnRzEiYuZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0R3JhbnRzUmVxdWVzdBonLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdEdyYW50c1Jlc3BvbnNlEmUKCEdldEdyYW50EiQuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRHcmFudFJlcXVlc3QaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLkdldEdyYW50UmVzcG9uc2UiDIq1GAhncmFudF9pZBJuCgtSZXZva2VHcmFudBInLmdlc3RhbHQucHJvdmlkZXIudjEuUmV2b2tlR3JhbnRSZXF1ZXN0GiguZ2VzdGFsdC5wcm92aWRlci52MS5SZXZva2VHcmFudFJlc3BvbnNlIgyKtRgIZ3JhbnRfaWRiBnByb3RvMw", [file_v1_annotations]);
 
 /**
- * AuthenticatedUser is the normalized user identity returned by an authentication
- * provider after a login or token-validation flow.
+ * AuthorizeRequest models RFC 6749 authorization endpoint parameters.
  *
- * @generated from message gestalt.provider.v1.AuthenticatedUser
+ * @generated from message gestalt.provider.v1.AuthorizeRequest
  */
-export type AuthenticatedUser = Message<"gestalt.provider.v1.AuthenticatedUser"> & {
+export type AuthorizeRequest = Message<"gestalt.provider.v1.AuthorizeRequest"> & {
   /**
-   * @generated from field: string subject = 1;
+   * response_type is typically "code".
+   *
+   * @generated from field: string response_type = 1;
    */
-  subject: string;
+  responseType: string;
 
   /**
-   * @generated from field: string email = 2;
+   * @generated from field: string client_id = 2;
    */
-  email: string;
+  clientId: string;
 
   /**
-   * @generated from field: bool email_verified = 3;
+   * @generated from field: string redirect_uri = 3;
    */
-  emailVerified: boolean;
+  redirectUri: string;
 
   /**
-   * @generated from field: string display_name = 4;
+   * @generated from field: string scope = 4;
    */
-  displayName: string;
+  scope: string;
 
   /**
-   * @generated from field: string avatar_url = 5;
+   * @generated from field: string state = 5;
    */
-  avatarUrl: string;
-
-  /**
-   * @generated from field: map<string, string> claims = 6;
-   */
-  claims: { [key: string]: string };
+  state: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.AuthenticatedUser.
- * Use `create(AuthenticatedUserSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AuthorizeRequest.
+ * Use `create(AuthorizeRequestSchema)` to create a new message.
  */
-export const AuthenticatedUserSchema: GenMessage<AuthenticatedUser> = /*@__PURE__*/
+export const AuthorizeRequestSchema: GenMessage<AuthorizeRequest> = /*@__PURE__*/
   messageDesc(file_v1_authentication, 0);
 
 /**
- * BeginLoginRequest starts an interactive login flow.
+ * AuthorizeResponse returns the HTTP Location redirect URI containing RFC 6749
+ * response parameters.
  *
- * @generated from message gestalt.provider.v1.BeginLoginRequest
+ * @generated from message gestalt.provider.v1.AuthorizeResponse
  */
-export type BeginLoginRequest = Message<"gestalt.provider.v1.BeginLoginRequest"> & {
+export type AuthorizeResponse = Message<"gestalt.provider.v1.AuthorizeResponse"> & {
   /**
-   * callback_url is the host-managed URL the provider should redirect back to.
-   *
-   * @generated from field: string callback_url = 1;
+   * @generated from field: string redirect_uri = 1;
    */
-  callbackUrl: string;
-
-  /**
-   * host_state is opaque state generated by the host and echoed back on
-   * completion.
-   *
-   * @generated from field: string host_state = 2;
-   */
-  hostState: string;
-
-  /**
-   * scopes are the provider-specific scopes the host is requesting.
-   *
-   * @generated from field: repeated string scopes = 3;
-   */
-  scopes: string[];
-
-  /**
-   * options carries provider-specific login parameters.
-   *
-   * @generated from field: map<string, string> options = 4;
-   */
-  options: { [key: string]: string };
+  redirectUri: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.BeginLoginRequest.
- * Use `create(BeginLoginRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.AuthorizeResponse.
+ * Use `create(AuthorizeResponseSchema)` to create a new message.
  */
-export const BeginLoginRequestSchema: GenMessage<BeginLoginRequest> = /*@__PURE__*/
+export const AuthorizeResponseSchema: GenMessage<AuthorizeResponse> = /*@__PURE__*/
   messageDesc(file_v1_authentication, 1);
 
 /**
- * BeginLoginResponse returns the provider-managed authorization URL and opaque
- * provider state that must be preserved until completion.
+ * TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
+ * exchange inputs.
  *
- * @generated from message gestalt.provider.v1.BeginLoginResponse
+ * @generated from message gestalt.provider.v1.TokenRequest
  */
-export type BeginLoginResponse = Message<"gestalt.provider.v1.BeginLoginResponse"> & {
+export type TokenRequest = Message<"gestalt.provider.v1.TokenRequest"> & {
   /**
-   * @generated from field: string authorization_url = 1;
+   * grant_type is "authorization_code" or
+   * "urn:ietf:params:oauth:grant-type:token-exchange".
+   *
+   * @generated from field: string grant_type = 1;
    */
-  authorizationUrl: string;
+  grantType: string;
 
   /**
-   * @generated from field: bytes provider_state = 2;
+   * @generated from field: string code = 2;
    */
-  providerState: Uint8Array;
+  code: string;
+
+  /**
+   * @generated from field: string redirect_uri = 3;
+   */
+  redirectUri: string;
+
+  /**
+   * @generated from field: string client_id = 5;
+   */
+  clientId: string;
+
+  /**
+   * state correlates authorization-code exchanges with Authorize.
+   *
+   * @generated from field: string state = 6;
+   */
+  state: string;
+
+  /**
+   * scope is the requested scope for issued tokens.
+   *
+   * @generated from field: string scope = 7;
+   */
+  scope: string;
+
+  /**
+   * subject_token is the bearer token being exchanged per RFC 8693.
+   *
+   * @generated from field: string subject_token = 8;
+   */
+  subjectToken: string;
+
+  /**
+   * subject_token_type is the RFC 8693 token type for subject_token.
+   *
+   * @generated from field: string subject_token_type = 9;
+   */
+  subjectTokenType: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.BeginLoginResponse.
- * Use `create(BeginLoginResponseSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.TokenRequest.
+ * Use `create(TokenRequestSchema)` to create a new message.
  */
-export const BeginLoginResponseSchema: GenMessage<BeginLoginResponse> = /*@__PURE__*/
+export const TokenRequestSchema: GenMessage<TokenRequest> = /*@__PURE__*/
   messageDesc(file_v1_authentication, 2);
 
 /**
- * CompleteLoginRequest finishes an interactive login flow.
+ * TokenResponse models RFC 6749 token endpoint response fields.
  *
- * @generated from message gestalt.provider.v1.CompleteLoginRequest
+ * @generated from message gestalt.provider.v1.TokenResponse
  */
-export type CompleteLoginRequest = Message<"gestalt.provider.v1.CompleteLoginRequest"> & {
+export type TokenResponse = Message<"gestalt.provider.v1.TokenResponse"> & {
   /**
-   * query contains the callback URL query parameters returned by the identity
-   * provider.
-   *
-   * @generated from field: map<string, string> query = 1;
+   * @generated from field: string access_token = 1;
    */
-  query: { [key: string]: string };
+  accessToken: string;
 
   /**
-   * provider_state is the opaque state returned from BeginLoginResponse.
-   *
-   * @generated from field: bytes provider_state = 2;
+   * @generated from field: string token_type = 2;
    */
-  providerState: Uint8Array;
+  tokenType: string;
 
   /**
-   * callback_url is the fully qualified callback URL used by the host.
-   *
-   * @generated from field: string callback_url = 3;
+   * @generated from field: int64 expires_in = 3;
    */
-  callbackUrl: string;
+  expiresIn: bigint;
+
+  /**
+   * @generated from field: string refresh_token = 4;
+   */
+  refreshToken: string;
+
+  /**
+   * @generated from field: string scope = 5;
+   */
+  scope: string;
+
+  /**
+   * grant_id is the OIDF Grant Management extension when available.
+   *
+   * @generated from field: string grant_id = 6;
+   */
+  grantId: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.CompleteLoginRequest.
- * Use `create(CompleteLoginRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.TokenResponse.
+ * Use `create(TokenResponseSchema)` to create a new message.
  */
-export const CompleteLoginRequestSchema: GenMessage<CompleteLoginRequest> = /*@__PURE__*/
+export const TokenResponseSchema: GenMessage<TokenResponse> = /*@__PURE__*/
   messageDesc(file_v1_authentication, 3);
 
 /**
- * ValidateExternalTokenRequest asks the provider to validate a token minted
- * outside the interactive login flow.
+ * IntrospectRequest models RFC 7662 token introspection parameters.
  *
- * @generated from message gestalt.provider.v1.ValidateExternalTokenRequest
+ * @generated from message gestalt.provider.v1.IntrospectRequest
  */
-export type ValidateExternalTokenRequest = Message<"gestalt.provider.v1.ValidateExternalTokenRequest"> & {
+export type IntrospectRequest = Message<"gestalt.provider.v1.IntrospectRequest"> & {
   /**
    * @generated from field: string token = 1;
    */
   token: string;
+
+  /**
+   * token_type_hint is "access_token" or "refresh_token".
+   *
+   * @generated from field: string token_type_hint = 2;
+   */
+  tokenTypeHint: string;
 };
 
 /**
- * Describes the message gestalt.provider.v1.ValidateExternalTokenRequest.
- * Use `create(ValidateExternalTokenRequestSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.IntrospectRequest.
+ * Use `create(IntrospectRequestSchema)` to create a new message.
  */
-export const ValidateExternalTokenRequestSchema: GenMessage<ValidateExternalTokenRequest> = /*@__PURE__*/
+export const IntrospectRequestSchema: GenMessage<IntrospectRequest> = /*@__PURE__*/
   messageDesc(file_v1_authentication, 4);
 
 /**
- * AuthSessionSettings configures how the host persists authenticated sessions.
+ * IntrospectResponse models RFC 7662 token introspection response fields.
  *
- * @generated from message gestalt.provider.v1.AuthSessionSettings
+ * @generated from message gestalt.provider.v1.IntrospectResponse
  */
-export type AuthSessionSettings = Message<"gestalt.provider.v1.AuthSessionSettings"> & {
+export type IntrospectResponse = Message<"gestalt.provider.v1.IntrospectResponse"> & {
   /**
-   * @generated from field: int64 session_ttl_seconds = 1;
+   * @generated from field: bool active = 1;
    */
-  sessionTtlSeconds: bigint;
+  active: boolean;
+
+  /**
+   * @generated from field: string subject = 2;
+   */
+  subject: string;
+
+  /**
+   * @generated from field: string scope = 3;
+   */
+  scope: string;
+
+  /**
+   * @generated from field: string client_id = 4;
+   */
+  clientId: string;
+
+  /**
+   * @generated from field: repeated string audience = 5;
+   */
+  audience: string[];
 };
 
 /**
- * Describes the message gestalt.provider.v1.AuthSessionSettings.
- * Use `create(AuthSessionSettingsSchema)` to create a new message.
+ * Describes the message gestalt.provider.v1.IntrospectResponse.
+ * Use `create(IntrospectResponseSchema)` to create a new message.
  */
-export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__PURE__*/
+export const IntrospectResponseSchema: GenMessage<IntrospectResponse> = /*@__PURE__*/
   messageDesc(file_v1_authentication, 5);
+
+/**
+ * ListGrantsRequest lists grant IDs visible to the caller.
+ *
+ * @generated from message gestalt.provider.v1.ListGrantsRequest
+ */
+export type ListGrantsRequest = Message<"gestalt.provider.v1.ListGrantsRequest"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListGrantsRequest.
+ * Use `create(ListGrantsRequestSchema)` to create a new message.
+ */
+export const ListGrantsRequestSchema: GenMessage<ListGrantsRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 6);
+
+/**
+ * ListGrantsResponse returns grant IDs owned by the caller.
+ *
+ * @generated from message gestalt.provider.v1.ListGrantsResponse
+ */
+export type ListGrantsResponse = Message<"gestalt.provider.v1.ListGrantsResponse"> & {
+  /**
+   * @generated from field: repeated string grant_ids = 1;
+   */
+  grantIds: string[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ListGrantsResponse.
+ * Use `create(ListGrantsResponseSchema)` to create a new message.
+ */
+export const ListGrantsResponseSchema: GenMessage<ListGrantsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 7);
+
+/**
+ * GetGrantRequest retrieves one grant by ID.
+ *
+ * @generated from message gestalt.provider.v1.GetGrantRequest
+ */
+export type GetGrantRequest = Message<"gestalt.provider.v1.GetGrantRequest"> & {
+  /**
+   * @generated from field: string grant_id = 1;
+   */
+  grantId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.GetGrantRequest.
+ * Use `create(GetGrantRequestSchema)` to create a new message.
+ */
+export const GetGrantRequestSchema: GenMessage<GetGrantRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 8);
+
+/**
+ * GrantScope describes one authorized scope and optional resources.
+ *
+ * @generated from message gestalt.provider.v1.GrantScope
+ */
+export type GrantScope = Message<"gestalt.provider.v1.GrantScope"> & {
+  /**
+   * @generated from field: string scope = 1;
+   */
+  scope: string;
+
+  /**
+   * @generated from field: repeated string resource = 2;
+   */
+  resource: string[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.GrantScope.
+ * Use `create(GrantScopeSchema)` to create a new message.
+ */
+export const GrantScopeSchema: GenMessage<GrantScope> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 9);
+
+/**
+ * GetGrantResponse returns OIDF-shaped grant details.
+ *
+ * @generated from message gestalt.provider.v1.GetGrantResponse
+ */
+export type GetGrantResponse = Message<"gestalt.provider.v1.GetGrantResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.GrantScope scopes = 1;
+   */
+  scopes: GrantScope[];
+
+  /**
+   * @generated from field: int64 created_at = 2;
+   */
+  createdAt: bigint;
+
+  /**
+   * @generated from field: int64 expires_at = 3;
+   */
+  expiresAt: bigint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.GetGrantResponse.
+ * Use `create(GetGrantResponseSchema)` to create a new message.
+ */
+export const GetGrantResponseSchema: GenMessage<GetGrantResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 10);
+
+/**
+ * RevokeGrantRequest revokes one grant by ID.
+ *
+ * @generated from message gestalt.provider.v1.RevokeGrantRequest
+ */
+export type RevokeGrantRequest = Message<"gestalt.provider.v1.RevokeGrantRequest"> & {
+  /**
+   * @generated from field: string grant_id = 1;
+   */
+  grantId: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RevokeGrantRequest.
+ * Use `create(RevokeGrantRequestSchema)` to create a new message.
+ */
+export const RevokeGrantRequestSchema: GenMessage<RevokeGrantRequest> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 11);
+
+/**
+ * RevokeGrantResponse acknowledges grant revocation.
+ *
+ * @generated from message gestalt.provider.v1.RevokeGrantResponse
+ */
+export type RevokeGrantResponse = Message<"gestalt.provider.v1.RevokeGrantResponse"> & {
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RevokeGrantResponse.
+ * Use `create(RevokeGrantResponseSchema)` to create a new message.
+ */
+export const RevokeGrantResponseSchema: GenMessage<RevokeGrantResponse> = /*@__PURE__*/
+  messageDesc(file_v1_authentication, 12);
 
 /**
  * Authentication models the shared Gestalt authentication protocol.
@@ -210,36 +398,52 @@ export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__P
  */
 export const Authentication: GenService<{
   /**
-   * @generated from rpc gestalt.provider.v1.Authentication.BeginLogin
+   * @generated from rpc gestalt.provider.v1.Authentication.Authorize
    */
-  beginLogin: {
+  authorize: {
     methodKind: "unary";
-    input: typeof BeginLoginRequestSchema;
-    output: typeof BeginLoginResponseSchema;
+    input: typeof AuthorizeRequestSchema;
+    output: typeof AuthorizeResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.Authentication.CompleteLogin
+   * @generated from rpc gestalt.provider.v1.Authentication.Token
    */
-  completeLogin: {
+  token: {
     methodKind: "unary";
-    input: typeof CompleteLoginRequestSchema;
-    output: typeof AuthenticatedUserSchema;
+    input: typeof TokenRequestSchema;
+    output: typeof TokenResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.Authentication.ValidateExternalToken
+   * @generated from rpc gestalt.provider.v1.Authentication.Introspect
    */
-  validateExternalToken: {
+  introspect: {
     methodKind: "unary";
-    input: typeof ValidateExternalTokenRequestSchema;
-    output: typeof AuthenticatedUserSchema;
+    input: typeof IntrospectRequestSchema;
+    output: typeof IntrospectResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.provider.v1.Authentication.GetSessionSettings
+   * @generated from rpc gestalt.provider.v1.Authentication.ListGrants
    */
-  getSessionSettings: {
+  listGrants: {
     methodKind: "unary";
-    input: typeof EmptySchema;
-    output: typeof AuthSessionSettingsSchema;
+    input: typeof ListGrantsRequestSchema;
+    output: typeof ListGrantsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.Authentication.GetGrant
+   */
+  getGrant: {
+    methodKind: "unary";
+    input: typeof GetGrantRequestSchema;
+    output: typeof GetGrantResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.provider.v1.Authentication.RevokeGrant
+   */
+  revokeGrant: {
+    methodKind: "unary";
+    input: typeof RevokeGrantRequestSchema;
+    output: typeof RevokeGrantResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_authentication, 0);

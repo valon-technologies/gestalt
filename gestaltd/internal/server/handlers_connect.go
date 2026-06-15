@@ -172,7 +172,7 @@ func manualTokenExchangeConfigured(auth config.ConnectionAuthDef) bool {
 	return (auth.Type == "" || auth.Type == providermanifestv1.AuthTypeManual) && strings.TrimSpace(auth.TokenURL) != ""
 }
 
-func (s *Server) exchangeManualCredential(ctx context.Context, req connectManualRequest, connection, connectionID, subjectID, instance string, auth config.ConnectionAuthDef, credential string, connParams map[string]string, tokenExchange bool) (*core.TokenResponse, error) {
+func (s *Server) exchangeManualCredential(ctx context.Context, req connectManualRequest, connection, connectionID, subjectID, instance string, auth config.ConnectionAuthDef, credential string, connParams map[string]string, tokenExchange bool) (*core.OAuthTokenResponse, error) {
 	if !tokenExchange {
 		return nil, nil
 	}
@@ -197,7 +197,7 @@ func (s *Server) exchangeManualCredential(ctx context.Context, req connectManual
 	if refreshToken == "" {
 		refreshToken = tokenResp.RefreshToken
 	}
-	return &core.TokenResponse{
+	return &core.OAuthTokenResponse{
 		AccessToken:  tokenResp.AccessToken,
 		RefreshToken: refreshToken,
 		ExpiresIn:    tokenResp.ExpiresIn,
@@ -258,7 +258,7 @@ func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided 
 	return result, nil
 }
 
-func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams map[string]string, tokenResp *core.TokenResponse) (string, error) {
+func buildConnectionMetadata(defs map[string]core.ConnectionParamDef, userParams map[string]string, tokenResp *core.OAuthTokenResponse) (string, error) {
 	metadata := make(map[string]string)
 	for k, v := range userParams {
 		metadata[k] = v
