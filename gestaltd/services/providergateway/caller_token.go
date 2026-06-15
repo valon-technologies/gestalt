@@ -128,6 +128,14 @@ func Verify(token string, publicKeyPEM string) (CallerTokenClaims, error) {
 	return claims, nil
 }
 
+func CallerTokenSubjectID(token string, publicKeyPEM string) (string, error) {
+	claims, err := Verify(token, publicKeyPEM)
+	if err != nil {
+		return "", err
+	}
+	return claims.SubjectID, nil
+}
+
 func parseCallerTokenPrivateKey(privateKeyPEM string) (ed25519.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(strings.TrimSpace(privateKeyPEM)))
 	if block == nil {

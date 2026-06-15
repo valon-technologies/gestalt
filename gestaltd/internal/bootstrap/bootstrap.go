@@ -33,6 +33,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimeprovider"
@@ -178,14 +179,14 @@ type Deps struct {
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
 	Telemetry             core.TelemetryProvider
-	ProviderGateway       providergateway.ProviderGateway
+	ProviderTransport     providergateway.Transport
 	CallerTokenPublicKey  string
 
 	hostedAgentPoolClock hostedAgentPoolClock
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthenticationProvider, error)
-type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.AuthorizationProvider, error)
+type AuthorizationFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (providerdrivers.AuthorizationBuildResult, error)
 type ExternalCredentialFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (core.ExternalCredentialProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
@@ -253,7 +254,7 @@ type Result struct {
 	Telemetry            core.TelemetryProvider
 	Runtimes             RuntimeInspector
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	ProviderGateway      *providergateway.Gateway
+	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 
 	runtimeRegistry                     *runtimeRegistry
 	workflowConfigReconcileTasks        []workflowConfigReconcileTask
@@ -670,7 +671,7 @@ type preparedCore struct {
 	WorkflowManager      *lazyWorkflowManager
 	AgentManager         *lazyAgentManager
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
-	ProviderGateway      *providergateway.Gateway
+	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 
 	runtimeRegistry *runtimeRegistry
 }
@@ -976,8 +977,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = closeAuthProviders(authProviders)
 		return nil, fmt.Errorf("bootstrap: caller token private key: %w", err)
 	}
-	providerGateway := providergateway.New(providergateway.WithCallerTokenIssuer(callerTokenIssuer))
-	deps.ProviderGateway = providerGateway
+	providerTransport := providergateway.DirectTransport{}
+	deps.ProviderTransport = providerTransport
 	callerTokenPublicKey, err := resolveCallerTokenPublicKey(ctx, sm)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)
@@ -992,17 +993,19 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeAuthorizationOnError := true
 	defer func() {
 		if closeAuthorizationOnError {
-			_ = closeAuthorizationProviders(authorizationProviders)
+			_ = closeAuthorizationProviders(authorizationProviders.Guarded)
 		}
 	}()
-	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders); err != nil {
+	if err := bootstrapAuthorizationProviderState(ctx, cfg, authorizationProviders.Raw); err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
 	}
-	if _, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders); err != nil {
+	_, authorizationProvider, err := selectedAuthorizationProviderInstance(cfg, authorizationProviders.Guarded)
+	if err != nil {
 		_ = closeAuthProviders(authProviders)
 		return nil, err
-	} else {
+	}
+	if authorizationProvider != nil {
 		deps.Authorization = authorizationProvider
 	}
 	closeExternalCredentialsOnError := true
@@ -1033,7 +1036,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		Auth:                 auth,
 		SelectedAuthProvider: selectedAuthName,
 		AuthProviders:        authProviders,
-		Authorization:        authorizationProviders,
+		Authorization:        authorizationProviders.Guarded,
 		Services:             svc,
 		ExtraIndexedDBs:      extraIndexedDBs,
 		ExtraCaches:          extraCaches,
@@ -1045,7 +1048,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		WorkflowManager:      workflowManager,
 		AgentManager:         agentManager,
 		PublicHostServices:   publicHostServices,
-		ProviderGateway:      providerGateway,
+		CallerTokenIssuer:    callerTokenIssuer,
 		runtimeRegistry:      runtimeRegistry,
 	}, nil
 }
@@ -1274,7 +1277,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:                    prepared.Telemetry,
 		Runtimes:                     prepared.runtimeRegistry,
 		PublicHostServices:           publicHostServices,
-		ProviderGateway:              prepared.ProviderGateway,
+		CallerTokenIssuer:            prepared.CallerTokenIssuer,
 		runtimeRegistry:              prepared.runtimeRegistry,
 		workflowConfigReconcileTasks: deferredWorkflowConfigReconcileTasks,
 		auditClose:                   auditClose,
@@ -1847,50 +1850,58 @@ func buildNamedAuthProvider(name string, authEntry *config.ProviderEntry, factor
 	return auth, nil
 }
 
-func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (map[string]core.AuthorizationProvider, error) {
+type authorizationProviderSets struct {
+	Raw     map[string]core.AuthorizationProvider
+	Guarded map[string]core.AuthorizationProvider
+}
+
+func buildAuthorizationProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (authorizationProviderSets, error) {
 	if len(cfg.Providers.Authorization) == 0 {
-		return nil, nil
+		return authorizationProviderSets{}, nil
 	}
 	if factories.Authorization == nil {
-		return nil, fmt.Errorf("bootstrap: authorization factory is not registered")
+		return authorizationProviderSets{}, fmt.Errorf("bootstrap: authorization factory is not registered")
 	}
 	name, entry, err := cfg.SelectedAuthorizationProvider()
 	if err != nil {
-		return nil, err
+		return authorizationProviderSets{}, err
 	}
 	if entry == nil {
-		return nil, nil
+		return authorizationProviderSets{}, nil
 	}
-	provider, err := buildNamedAuthorizationProvider(ctx, name, entry, factories, deps)
+	providers, err := buildNamedAuthorizationProvider(ctx, name, entry, factories, deps)
 	if err != nil {
-		return nil, err
+		return authorizationProviderSets{}, err
 	}
-	return map[string]core.AuthorizationProvider{name: provider}, nil
+	return authorizationProviderSets{
+		Raw:     map[string]core.AuthorizationProvider{name: providers.Raw},
+		Guarded: map[string]core.AuthorizationProvider{name: providers.Guarded},
+	}, nil
 }
 
-func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (core.AuthorizationProvider, error) {
+func buildNamedAuthorizationProvider(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
 	logicalName := strings.TrimSpace(name)
 	if logicalName == "" {
 		logicalName = "authorization"
 	}
 	if entry == nil {
-		return nil, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
+		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q is not configured", logicalName)
 	}
 	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
 		node, err = config.BuildComponentRuntimeConfigNode(logicalName, providermanifestv1.KindAuthorization, entry, entry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+			return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 		}
 	}
 	hostServices, err := buildProviderHostServices(logicalName, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
 	provider, err := factories.Authorization(ctx, logicalName, node, hostServices, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
+		return providerdrivers.AuthorizationBuildResult{}, fmt.Errorf("bootstrap: authorization provider %q: %w", logicalName, err)
 	}
 	return provider, nil
 }

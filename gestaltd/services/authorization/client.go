@@ -2,7 +2,9 @@ package authorization
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	rpcauthorization "github.com/valon-technologies/gestalt/server/rpc/authorization"
@@ -10,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -24,7 +27,7 @@ type ExecConfig struct {
 	Cleanup      func()
 	HostServices []runtimehost.HostService
 	Name         string
-	Gateway      providergateway.ProviderGateway
+	Transport    providergateway.Transport
 }
 
 type remoteAuthorizationProvider struct {
@@ -33,7 +36,16 @@ type remoteAuthorizationProvider struct {
 	closer  io.Closer
 }
 
-func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvider, error) {
+type Executable struct {
+	conn    grpc.ClientConnInterface
+	runtime proto.ProviderLifecycleClient
+	closer  io.Closer
+
+	once sync.Once
+	err  error
+}
+
+func StartExecutable(ctx context.Context, cfg ExecConfig) (*Executable, error) {
 	proc, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
@@ -56,11 +68,61 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvi
 		return nil, err
 	}
 
-	client := rpcauthorization.NewConn(proc.Conn(), rpcauthorization.Options{
+	return &Executable{
+		conn:    proc.Conn(),
+		runtime: runtimeClient,
+		closer:  proc,
+	}, nil
+}
+
+func (e *Executable) Conn() grpc.ClientConnInterface {
+	if e == nil {
+		return nil
+	}
+	return e.conn
+}
+
+func (e *Executable) Runtime() proto.ProviderLifecycleClient {
+	if e == nil {
+		return nil
+	}
+	return e.runtime
+}
+
+func (e *Executable) Close() error {
+	if e == nil {
+		return nil
+	}
+	e.once.Do(func() {
+		if e.closer != nil {
+			e.err = e.closer.Close()
+		}
+	})
+	return e.err
+}
+
+func NewFromExecutable(exec *Executable, cfg ExecConfig) (core.AuthorizationProvider, error) {
+	if exec == nil {
+		return nil, fmt.Errorf("authorization executable is required")
+	}
+	client := rpcauthorization.NewConn(exec.Conn(), rpcauthorization.Options{
 		UnaryTimeout: runtimehost.ProviderRPCTimeout,
 		ProviderID:   cfg.Name,
-	}, cfg.Gateway)
-	return &remoteAuthorizationProvider{Client: client, runtime: runtimeClient, closer: proc}, nil
+	}, cfg.Transport)
+	return &remoteAuthorizationProvider{Client: client, runtime: exec.Runtime(), closer: exec}, nil
+}
+
+func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthorizationProvider, error) {
+	exec, err := StartExecutable(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := NewFromExecutable(exec, cfg)
+	if err != nil {
+		_ = exec.Close()
+		return nil, err
+	}
+	return provider, nil
 }
 
 func (r *remoteAuthorizationProvider) Ping(ctx context.Context) error {
