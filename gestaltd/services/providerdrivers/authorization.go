@@ -20,10 +20,15 @@ type AuthorizationDeps struct {
 	CallerTokenPublicKey string
 }
 
-func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AuthorizationDeps) (core.AuthorizationProvider, error) {
+type AuthorizationBuildResult struct {
+	Raw     core.AuthorizationProvider
+	Guarded core.AuthorizationProvider
+}
+
+func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps AuthorizationDeps) (AuthorizationBuildResult, error) {
 	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("authorization provider: parsing config: %w", err)
+		return AuthorizationBuildResult{}, fmt.Errorf("authorization provider: parsing config: %w", err)
 	}
 	cfg.Env = authorizationEnvWithCallerTokenPublicKey(cfg.Env, deps.CallerTokenPublicKey)
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
@@ -33,11 +38,15 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		Config:               cfg,
 	})
 	if err != nil {
-		return nil, err
+		return AuthorizationBuildResult{}, err
 	}
 	cfg = prepared.YAMLConfig
 
-	return authorizationservice.NewExecutable(ctx, authorizationservice.ExecConfig{
+	transport := deps.Transport
+	if transport == nil {
+		transport = providergateway.DirectTransport{}
+	}
+	execCfg := authorizationservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Workdir:      cfg.Workdir,
@@ -48,8 +57,34 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 		Cleanup:      prepared.Cleanup,
 		HostServices: hostServices,
 		Name:         name,
-		Transport:    deps.Transport,
-	})
+		Transport:    transport,
+	}
+
+	exec, err := authorizationservice.StartExecutable(ctx, execCfg)
+	if err != nil {
+		return AuthorizationBuildResult{}, err
+	}
+
+	raw, err := authorizationservice.NewFromExecutable(exec, execCfg)
+	if err != nil {
+		_ = exec.Close()
+		return AuthorizationBuildResult{}, err
+	}
+
+	gatewayTransport := providergateway.NewProviderGatewayTransport()
+	gatewayTransport.SetAuthorizationProvider(raw)
+
+	execCfg.Transport = gatewayTransport
+	guarded, err := authorizationservice.NewFromExecutable(exec, execCfg)
+	if err != nil {
+		_ = exec.Close()
+		return AuthorizationBuildResult{}, err
+	}
+
+	return AuthorizationBuildResult{
+		Raw:     raw,
+		Guarded: guarded,
+	}, nil
 }
 
 func authorizationEnvWithCallerTokenPublicKey(env map[string]string, publicKey string) map[string]string {

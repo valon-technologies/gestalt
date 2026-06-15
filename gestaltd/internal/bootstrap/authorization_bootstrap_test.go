@@ -12,6 +12,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -201,10 +202,11 @@ config:
 	var capturedName string
 	var capturedHostServices []runtimehost.HostService
 	factories := &FactoryRegistry{
-		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, _ Deps) (core.AuthorizationProvider, error) {
+		Authorization: func(_ context.Context, name string, _ yaml.Node, hostServices []runtimehost.HostService, _ Deps) (providerdrivers.AuthorizationBuildResult, error) {
 			capturedName = name
 			capturedHostServices = append([]runtimehost.HostService(nil), hostServices...)
-			return &recordingAuthorizationProvider{}, nil
+			provider := &recordingAuthorizationProvider{}
+			return providerdrivers.AuthorizationBuildResult{Raw: provider, Guarded: provider}, nil
 		},
 	}
 	cfg := &config.Config{
@@ -227,8 +229,11 @@ config:
 	if err != nil {
 		t.Fatalf("buildAuthorizationProviders: %v", err)
 	}
-	if providers["indexeddb"] == nil {
-		t.Fatal("authorization provider was not built")
+	if providers.Guarded["indexeddb"] == nil {
+		t.Fatal("guarded authorization provider was not built")
+	}
+	if providers.Raw["indexeddb"] == nil {
+		t.Fatal("raw authorization provider was not built")
 	}
 	if capturedName != "indexeddb" {
 		t.Fatalf("authorization provider name = %q, want indexeddb", capturedName)
@@ -252,9 +257,10 @@ command: /bin/true
 	}
 	var capturedPublicKey string
 	factories := &FactoryRegistry{
-		Authorization: func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps Deps) (core.AuthorizationProvider, error) {
+		Authorization: func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps Deps) (providerdrivers.AuthorizationBuildResult, error) {
 			capturedPublicKey = deps.CallerTokenPublicKey
-			return &recordingAuthorizationProvider{}, nil
+			provider := &recordingAuthorizationProvider{}
+			return providerdrivers.AuthorizationBuildResult{Raw: provider, Guarded: provider}, nil
 		},
 	}
 	cfg := &config.Config{
