@@ -133,6 +133,7 @@ func toWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
 		IdempotencyKey: value.IdempotencyKey,
 		CredentialMode: value.CredentialMode,
 		Context:        toWireRequestContext(value.Context),
+		RunAs:          toWireSubjectContext(value.RunAs),
 	}
 	return out
 }
@@ -150,6 +151,7 @@ func fromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
 		IdempotencyKey: value.IdempotencyKey,
 		CredentialMode: value.CredentialMode,
 		Context:        fromWireRequestContext(value.Context),
+		RunAs:          fromWireSubjectContext(value.RunAs),
 	}
 	return out
 }

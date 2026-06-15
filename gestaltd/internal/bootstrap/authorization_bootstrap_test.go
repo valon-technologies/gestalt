@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	gproto "google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
@@ -189,163 +187,6 @@ func TestStaticAuthorizationModelCarriesResourceTypeDefaultAccessPolicy(t *testi
 	}
 }
 
-func TestStaticAuthorizationModelIncludesAppInvocationResourceTypes(t *testing.T) {
-	t.Parallel()
-
-	cfg := &config.Config{
-		Apps: map[string]*config.ProviderEntry{
-			"caller": {
-				Invokes: []config.AppInvocationDependency{
-					{App: "target", Operation: "documents.review"},
-					{App: "target", Surface: string(config.SpecSurfaceGraphQL)},
-				},
-			},
-		},
-	}
-
-	model, err := staticAuthorizationModel(cfg)
-	if err != nil {
-		t.Fatalf("staticAuthorizationModel: %v", err)
-	}
-	resourceTypes := map[string]*proto.AuthorizationModelResourceType{}
-	for _, resourceType := range model.GetResourceTypes() {
-		resourceTypes[resourceType.GetName()] = resourceType
-	}
-	for _, name := range []string{appInvocationAuthorizationResourceTypeOperation, appInvocationAuthorizationResourceTypeSurface} {
-		resourceType := resourceTypes[name]
-		if resourceType == nil {
-			t.Fatalf("generated resource type %q missing from model", name)
-		}
-		if got := resourceType.GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG {
-			t.Fatalf("%s source layer = %v, want static config", name, got)
-		}
-		if got := resourceType.GetDefaultAccessPolicy(); got != proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY {
-			t.Fatalf("%s default access policy = %v, want deny", name, got)
-		}
-		if got := resourceType.GetRelations()[0].GetName(); got != appInvocationAuthorizationRelationInvoker {
-			t.Fatalf("%s relation = %q, want invoker", name, got)
-		}
-		if got := resourceType.GetRelations()[0].GetAllowedTargets()[0].GetSubjectType(); got != appInvocationAuthorizationSubjectTypeApp {
-			t.Fatalf("%s allowed subject type = %q, want app", name, got)
-		}
-		action := resourceType.GetActions()[0]
-		if action.GetName() != appInvocationAuthorizationActionInvoke || !reflect.DeepEqual(action.GetRelations(), []string{appInvocationAuthorizationRelationInvoker}) {
-			t.Fatalf("%s action = %#v, want invoke through invoker", name, action)
-		}
-	}
-
-	conflictCfg := &config.Config{
-		Authorization: config.AuthorizationConfig{
-			Models: map[string]config.AuthorizationModelDef{
-				"default": {
-					ResourceTypes: map[string]config.AuthorizationResourceTypeDef{
-						appInvocationAuthorizationResourceTypeOperation: {
-							Relations: map[string]config.AuthorizationRelationDef{
-								"viewer": {SubjectTypes: []string{"subject"}},
-							},
-						},
-					},
-				},
-			},
-		},
-		Apps: map[string]*config.ProviderEntry{
-			"caller": {
-				Invokes: []config.AppInvocationDependency{{App: "target", Operation: "documents.review"}},
-			},
-		},
-	}
-	if _, err := staticAuthorizationModel(conflictCfg); err == nil || !strings.Contains(err.Error(), "generated app invocation resource type") {
-		t.Fatalf("staticAuthorizationModel conflict error = %v, want generated resource type conflict", err)
-	}
-}
-
-func TestBootstrapAuthorizationProviderStateAddsAppInvocationRelationships(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingAuthorizationProvider{}
-	cfg := &config.Config{
-		Server: config.ServerConfig{Providers: config.ServerProvidersConfig{Authorization: "authz"}},
-		Providers: config.ProvidersConfig{
-			Authorization: map[string]*config.ProviderEntry{"authz": {Default: true}},
-		},
-		Apps: map[string]*config.ProviderEntry{
-			"caller": {
-				Invokes: []config.AppInvocationDependency{
-					{
-						App:            "target",
-						Operation:      "documents.review",
-						CredentialMode: providermanifestv1.ConnectionModeNone,
-						RunAs: &config.AppInvocationRunAsConfig{
-							Subject: &config.AppInvocationRunAsSubjectConfig{
-								ID:                  "service_account:document-reviewer",
-								CredentialSubjectID: "user:reviewer",
-							},
-						},
-					},
-					{
-						App:     "target",
-						Surface: string(config.SpecSurfaceGraphQL),
-					},
-				},
-			},
-		},
-	}
-
-	err := bootstrapAuthorizationProviderState(context.Background(), cfg, map[string]core.AuthorizationProvider{"authz": provider})
-	if err != nil {
-		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
-	}
-
-	if provider.setAuthorizationState == nil {
-		t.Fatal("SetAuthorizationState was not called")
-	}
-	modelResourceTypes := map[string]struct{}{}
-	for _, resourceType := range provider.setAuthorizationState.GetModel().GetResourceTypes() {
-		modelResourceTypes[resourceType.GetName()] = struct{}{}
-	}
-	for _, name := range []string{appInvocationAuthorizationResourceTypeOperation, appInvocationAuthorizationResourceTypeSurface} {
-		if _, ok := modelResourceTypes[name]; !ok {
-			t.Fatalf("model missing generated resource type %q", name)
-		}
-	}
-	relationships := provider.setAuthorizationState.GetRelationships()
-	if got, want := len(relationships), 2; got != want {
-		t.Fatalf("SetAuthorizationState relationships count = %d, want %d", got, want)
-	}
-	byResourceID := map[string]*proto.Relationship{}
-	for _, relationship := range relationships {
-		byResourceID[relationship.GetTuple().GetResource().GetId()] = relationship
-	}
-	operation := byResourceID[appInvocationOperationResourceID("target", "documents.review")]
-	if operation == nil {
-		t.Fatalf("operation relationship missing: %#v", relationships)
-	}
-	assertAppInvocationRelationship(t, operation, appInvocationAuthorizationResourceTypeOperation)
-	if got := relationshipPropertyString(operation, "credential_mode"); got != string(providermanifestv1.ConnectionModeNone) {
-		t.Fatalf("operation credential_mode = %q, want none", got)
-	}
-	if got := relationshipPropertyString(operation, "run_as_subject_id"); got != "service_account:document-reviewer" {
-		t.Fatalf("operation run_as_subject_id = %q, want service account", got)
-	}
-	if got := relationshipPropertyString(operation, "run_as_credential_subject_id"); got != "user:reviewer" {
-		t.Fatalf("operation run_as_credential_subject_id = %q, want reviewer", got)
-	}
-	if got := relationshipPropertyString(operation, "run_as_apply_by_default"); got != "true" {
-		t.Fatalf("operation run_as_apply_by_default = %q, want true", got)
-	}
-	surface := byResourceID[appInvocationSurfaceResourceID("target", string(config.SpecSurfaceGraphQL))]
-	if surface == nil {
-		t.Fatalf("surface relationship missing: %#v", relationships)
-	}
-	assertAppInvocationRelationship(t, surface, appInvocationAuthorizationResourceTypeSurface)
-	if got := relationshipPropertyString(surface, "surface"); got != string(config.SpecSurfaceGraphQL) {
-		t.Fatalf("surface property = %q, want graphql", got)
-	}
-	if got := relationshipPropertyString(surface, "credential_mode"); got != "" {
-		t.Fatalf("surface credential_mode = %q, want omitted", got)
-	}
-}
-
 func TestBuildAuthorizationProviderPassesIndexedDBHostService(t *testing.T) {
 	t.Parallel()
 
@@ -475,37 +316,6 @@ func TestResolveCallerTokenPrivateKey(t *testing.T) {
 	if got != "private-key-pem" {
 		t.Fatalf("private key = %q, want private-key-pem", got)
 	}
-}
-
-func assertAppInvocationRelationship(t *testing.T, relationship *proto.Relationship, resourceType string) {
-	t.Helper()
-	tuple := relationship.GetTuple()
-	if got := relationship.GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG {
-		t.Fatalf("relationship source layer = %v, want static config", got)
-	}
-	subject := tuple.GetTarget().GetSubject()
-	if subject.GetType() != appInvocationAuthorizationSubjectTypeApp || subject.GetId() != "caller" {
-		t.Fatalf("relationship subject = %#v, want app:caller", subject)
-	}
-	if got := tuple.GetRelation(); got != appInvocationAuthorizationRelationInvoker {
-		t.Fatalf("relationship relation = %q, want invoker", got)
-	}
-	if got := tuple.GetResource().GetType(); got != resourceType {
-		t.Fatalf("relationship resource type = %q, want %q", got, resourceType)
-	}
-	if got := relationshipPropertyString(relationship, "caller_app"); got != "caller" {
-		t.Fatalf("caller_app property = %q, want caller", got)
-	}
-	if got := relationshipPropertyString(relationship, "target_app"); got != "target" {
-		t.Fatalf("target_app property = %q, want target", got)
-	}
-}
-
-func relationshipPropertyString(relationship *proto.Relationship, name string) string {
-	if relationship == nil || relationship.GetProperties() == nil {
-		return ""
-	}
-	return relationship.GetProperties().GetFields()[name].GetStringValue()
 }
 
 type recordingAuthorizationProvider struct {

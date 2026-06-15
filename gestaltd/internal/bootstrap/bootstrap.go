@@ -27,7 +27,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/agents/agenttoolid"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentturnscope"
-	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
 	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -173,7 +172,6 @@ type Deps struct {
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
 	AppInvocation         invocation.Invoker
-	AppAccessProfiles     map[string]appaccessservice.AppAccessProfiles
 	Runtime               runtimeprovider.Provider
 	RuntimeRegistry       *runtimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
@@ -968,7 +966,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.Caches = hostCaches
 	deps.S3 = hostS3s
-	deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
 	callerTokenPrivateKey, err := resolveCallerTokenPrivateKey(ctx, sm)
 	if err != nil {
 		_ = closeAuthProviders(authProviders)

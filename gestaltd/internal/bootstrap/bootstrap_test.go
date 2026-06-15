@@ -11,8 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -4856,113 +4854,6 @@ func TestValidate(t *testing.T) {
 
 		if _, err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
 			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("rejects invalid app invokes dependency", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "missing", Operation: "ping"},
-				},
-			},
-		}
-
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references unknown app "missing"`) {
-			t.Fatalf("Validate error = %v, want unknown app invokes error", err)
-		}
-	})
-
-	t.Run("accepts graphql surface app invokes dependency", func(t *testing.T) {
-		t.Parallel()
-
-		srv := startBootstrapGraphQLIntrospectionServer(t)
-		root := t.TempDir()
-		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
-			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
-		}
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
-				ResolvedManifestPath: callerManifestPath,
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "linear", Surface: "graphql"},
-				},
-			},
-			"linear": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							GraphQL: &providermanifestv1.GraphQLSurface{
-								URL: srv.URL,
-							},
-						},
-					},
-				},
-			},
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("rejects graphql surface invoke when target app has no graphql surface", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
-			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
-		}
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
-				ResolvedManifestPath: callerManifestPath,
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "linear", Surface: "graphql"},
-				},
-			},
-			"linear": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							REST: &providermanifestv1.RESTSurface{
-								BaseURL: "https://linear.example/api",
-								Operations: []providermanifestv1.ProviderOperation{
-									{Name: "status", Method: http.MethodGet, Path: "/status"},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references app "linear" surface "graphql", but that surface is not configured`) {
-			t.Fatalf("Validate error = %v, want missing graphql surface error", err)
 		}
 	})
 

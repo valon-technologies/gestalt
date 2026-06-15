@@ -840,7 +840,7 @@ apps:
 	}
 }
 
-func TestLockAtPathsValidatesCommittedProviderInvokes(t *testing.T) {
+func TestLockAtPathsRejectsCommittedProviderInvokesField(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -913,11 +913,11 @@ server:
     invokes:
       - app: target
         operation: missing`)
-	if _, err := NewLifecycle().LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err == nil || !strings.Contains(err.Error(), "unknown effective operation") || strings.Contains(err.Error(), "invokes is only supported") {
-		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths error = %v, want executable committed provider invokes validation error", err)
+	if _, err := NewLifecycle().LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err == nil || !strings.Contains(err.Error(), "field invokes not found") {
+		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths error = %v, want field invokes not found", err)
 	}
-	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "unknown effective operation") {
-		t.Fatalf("LockAtPathsWithStatePaths error = %v, want committed provider invokes validation error", err)
+	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "field invokes not found") {
+		t.Fatalf("LockAtPathsWithStatePaths error = %v, want field invokes not found", err)
 	}
 }
 

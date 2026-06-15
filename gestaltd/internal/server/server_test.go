@@ -713,14 +713,6 @@ func (i *callerTokenRecordingInvoker) token() string {
 	return i.callerToken
 }
 
-type relayAllowAuthorizationProvider struct {
-	core.AuthorizationProvider
-}
-
-func (relayAllowAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	return &proto.CheckAccessResponse{Allowed: true}, nil
-}
-
 func relayAppRequestContext() *proto.RequestContext {
 	return &proto.RequestContext{
 		Caller: &proto.ProviderContext{
@@ -1135,8 +1127,7 @@ func TestHostServiceRelayRoutesRegisteredAppService(t *testing.T) {
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAppServer(srv, appaccessservice.NewServer(
 				invoker,
-				appaccessservice.WithAuthorizationProvider(relayAllowAuthorizationProvider{}),
-				appaccessservice.WithCallerApp("support", nil),
+				appaccessservice.WithCallerApp("support"),
 			))
 		},
 	})
@@ -1353,17 +1344,12 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
-	invokes := []config.AppInvocationDependency{{
-		App:            "slack",
-		Operation:      "events.reply",
-		CredentialMode: providermanifestv1.ConnectionModeNone,
-	}}
 	ts := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfilePublic
 		cfg.StateSecret = secret
 		cfg.Invoker = invoker
 		cfg.AppDefs = map[string]*config.ProviderEntry{
-			"support": {Invokes: invokes},
+			"support": {},
 		}
 	}))
 	ts.EnableHTTP2 = true

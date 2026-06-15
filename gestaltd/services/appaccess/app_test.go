@@ -2,7 +2,6 @@ package appaccess
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"testing"
 
@@ -82,43 +81,6 @@ func (i *recordingAppInvocation) InvokeGraphQL(ctx context.Context, _ *principal
 	return &core.OperationResult{Status: 208, Body: []byte("graphql-accepted")}, nil
 }
 
-type recordingAuthorizationProvider struct {
-	allowed  bool
-	requests []*proto.CheckAccessRequest
-}
-
-func (p *recordingAuthorizationProvider) CheckAccess(_ context.Context, req *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
-	p.requests = append(p.requests, req)
-	return &proto.CheckAccessResponse{Allowed: p.allowed}, nil
-}
-
-func (p *recordingAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
-	return nil, fmt.Errorf("unexpected CheckAccessMany")
-}
-func (p *recordingAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
-	return nil, fmt.Errorf("unexpected ListRelationships")
-}
-func (p *recordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
-	return nil, fmt.Errorf("unexpected AddRelationship")
-}
-func (p *recordingAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
-	return nil, fmt.Errorf("unexpected DeleteRelationship")
-}
-func (p *recordingAuthorizationProvider) SetAuthorizationState(context.Context, *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
-	return nil, fmt.Errorf("unexpected SetAuthorizationState")
-}
-func (p *recordingAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
-	return nil, fmt.Errorf("unexpected GetActiveModelRef")
-}
-func (p *recordingAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
-	return nil, fmt.Errorf("unexpected SetActiveModel")
-}
-func (p *recordingAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
-	return nil, fmt.Errorf("unexpected ListActiveModelResourceTypes")
-}
-func (p *recordingAuthorizationProvider) Ping(context.Context) error { return nil }
-func (p *recordingAuthorizationProvider) Close() error               { return nil }
-
 type recordingAgentAppAuthorizer struct {
 	requests []invocation.AgentAppAuthorizationRequest
 	response invocation.AgentAppAuthorization
@@ -130,26 +92,11 @@ func (a *recordingAgentAppAuthorizer) AuthorizeAppInvocation(_ context.Context, 
 	return a.response, a.err
 }
 
-func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
+func TestAppServerInvokeOpenInvocationPropagatesRequestContext(t *testing.T) {
 	t.Parallel()
 
-	authz := &recordingAuthorizationProvider{allowed: true}
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(
-		invoker,
-		WithAuthorizationProvider(authz),
-		WithCallerApp("caller", AppAccessProfiles{
-			"target": {
-				Operations: map[string]core.ConnectionMode{"do.thing": core.ConnectionModeSubject},
-				OperationDelegations: map[string]AppAccessDelegation{
-					"do.thing": {RunAs: &core.RunAsSubject{
-						SubjectID:           "service_account:runner",
-						CredentialSubjectID: "service_account:runner",
-					}},
-				},
-			},
-		}),
-	)
+	server := NewAppServer(invoker, WithCallerApp("caller"))
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -163,6 +110,7 @@ func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
 		Operation:      " do.thing ",
 		Params:         params,
 		IdempotencyKey: " call-123 ",
+		CredentialMode: "subject",
 		Context: requestContext(t, "caller", map[string]any{
 			"providerName": "workflow-provider",
 			"runId":        "run-123",
@@ -174,24 +122,8 @@ func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
 	if resp.GetStatus() != 202 || string(resp.GetBody()) != "accepted" {
 		t.Fatalf("Invoke response = %+v, want accepted", resp)
 	}
-
-	if len(authz.requests) != 1 {
-		t.Fatalf("authorization requests = %d, want 1", len(authz.requests))
-	}
-	if got := authz.requests[0].GetSubject().GetType() + ":" + authz.requests[0].GetSubject().GetId(); got != "app:caller" {
-		t.Fatalf("authorization subject = %q, want app:caller", got)
-	}
-	if got := authz.requests[0].GetAction().GetName(); got != "invoke" {
-		t.Fatalf("authorization action = %q, want invoke", got)
-	}
-	if got := authz.requests[0].GetResource().GetType() + ":" + authz.requests[0].GetResource().GetId(); got != "gestalt.app.operation:target/operations/do.thing" {
-		t.Fatalf("authorization resource = %q", got)
-	}
-	if invoker.subjectID != "service_account:runner" || invoker.credentialSubjectID != "service_account:runner" {
-		t.Fatalf("principal = %s/%s, want delegated runner", invoker.subjectID, invoker.credentialSubjectID)
-	}
-	if invoker.agentSubjectID != "user:test-user" || invoker.runAsSubjectID != "service_account:runner" {
-		t.Fatalf("run-as audit = %s/%s, want user:test-user/service_account:runner", invoker.agentSubjectID, invoker.runAsSubjectID)
+	if invoker.subjectID != "user:test-user" || invoker.credentialSubjectID != "user:test-user" {
+		t.Fatalf("principal = %s/%s, want caller subject", invoker.subjectID, invoker.credentialSubjectID)
 	}
 	if invoker.credentialMode != core.ConnectionModeSubject {
 		t.Fatalf("credential mode = %q, want subject", invoker.credentialMode)
@@ -210,10 +142,41 @@ func TestAppServerInvokeUsesRequestContextAndAuthorization(t *testing.T) {
 	}
 }
 
+func TestAppServerInvokeAppliesRequestRunAs(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(invoker, WithCallerApp("caller"))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+
+	resp, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "target",
+		Operation: "do.thing",
+		RunAs: &proto.SubjectContext{
+			Id:                  "service_account:runner",
+			CredentialSubjectId: "service_account:runner",
+		},
+		Context: requestContext(t, "caller", nil),
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.GetStatus() != 202 {
+		t.Fatalf("Invoke response = %+v, want accepted", resp)
+	}
+	if invoker.subjectID != "service_account:runner" || invoker.credentialSubjectID != "service_account:runner" {
+		t.Fatalf("principal = %s/%s, want delegated runner", invoker.subjectID, invoker.credentialSubjectID)
+	}
+	if invoker.agentSubjectID != "user:test-user" || invoker.runAsSubjectID != "service_account:runner" {
+		t.Fatalf("run-as audit = %s/%s, want user:test-user/service_account:runner", invoker.agentSubjectID, invoker.runAsSubjectID)
+	}
+}
+
 func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	t.Parallel()
 
-	authz := &recordingAuthorizationProvider{allowed: false}
 	invoker := &recordingAppInvocation{}
 	agentAuth := &recordingAgentAppAuthorizer{
 		response: invocation.AgentAppAuthorization{
@@ -239,9 +202,8 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	}
 	server := NewAppServer(
 		invoker,
-		WithAuthorizationProvider(authz),
 		WithAgentAppInvocationAuthorizer(agentAuth),
-		WithCallerApp("alpha", nil),
+		WithCallerApp("alpha"),
 	)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
@@ -271,9 +233,6 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	}
 	if resp.GetStatus() != 202 || string(resp.GetBody()) != "accepted" {
 		t.Fatalf("Invoke response = %+v, want accepted", resp)
-	}
-	if len(authz.requests) != 0 {
-		t.Fatalf("authorization requests = %d, want 0 for agent turn", len(authz.requests))
 	}
 	if len(agentAuth.requests) != 1 {
 		t.Fatalf("agent authorization requests = %d, want 1", len(agentAuth.requests))
@@ -311,6 +270,89 @@ func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	}
 }
 
+func TestAppServerInvokeRejectsRequestRunAsForAgentCaller(t *testing.T) {
+	t.Parallel()
+
+	server := NewAppServer(
+		&recordingAppInvocation{},
+		WithAgentAppInvocationAuthorizer(&recordingAgentAppAuthorizer{
+			response: invocation.AgentAppAuthorization{
+				Principal: &principal.Principal{SubjectID: "user:runner"},
+			},
+		}),
+		WithCallerApp("alpha"),
+	)
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	reqCtx := requestContextWithCallerKind(t, "workflow", "temporal", nil)
+	reqCtx.Agent = &proto.AgentInvocationContext{
+		ProviderName: "alpha",
+		SessionId:    "session-1",
+		TurnId:       "turn-1",
+	}
+
+	_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "slack",
+		Operation: "chat.postMessage",
+		RunAs: &proto.SubjectContext{
+			Id: "service_account:forged",
+		},
+		Context: reqCtx,
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("Invoke status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+}
+
+func TestAppServerInvokeRejectsRequestRunAsForWorkflowCaller(t *testing.T) {
+	t.Parallel()
+
+	server := NewAppServer(&recordingAppInvocation{}, WithCallerApp("temporal"))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	workflow := map[string]any{
+		"providerName":         "temporal",
+		"runId":                "run-123",
+		"definitionId":         "slack_reactions",
+		"definitionGeneration": 3,
+		"workflowKey":          "thread:123",
+		"currentStepId":        "react",
+		"currentStep": map[string]any{
+			"id":    "react",
+			"index": 0,
+		},
+		"target": map[string]any{
+			"kind": "steps",
+			"steps": []any{
+				map[string]any{
+					"id":             "react",
+					"kind":           "app",
+					"app":            "slack",
+					"operation":      "events.addReaction",
+					"connection":     "team-primary",
+					"credentialMode": "subject",
+				},
+			},
+		},
+	}
+
+	_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:            "slack",
+		Operation:      "events.addReaction",
+		Connection:     "team-primary",
+		CredentialMode: "subject",
+		RunAs: &proto.SubjectContext{
+			Id: "service_account:forged",
+		},
+		Context: requestContextWithCallerKind(t, "workflow", "temporal", workflow),
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("Invoke status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+}
+
 func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
 	t.Parallel()
 
@@ -322,7 +364,7 @@ func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
 	server := NewAppServer(
 		&recordingAppInvocation{},
 		WithAgentAppInvocationAuthorizer(agentAuth),
-		WithCallerApp("beta", nil),
+		WithCallerApp("beta"),
 	)
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
@@ -347,16 +389,11 @@ func TestAppServerInvokeRejectsAgentContextOnWrongHostService(t *testing.T) {
 	}
 }
 
-func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
+func TestAppServerInvokeGraphQLAllowsOpenSurfaceInvocation(t *testing.T) {
 	t.Parallel()
 
-	authz := &recordingAuthorizationProvider{allowed: true}
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithAuthorizationProvider(authz), WithCallerApp("caller", AppAccessProfiles{
-		"graph": {
-			Surfaces: map[string]core.ConnectionMode{"graphql": core.ConnectionModeSubject},
-		},
-	}))
+	server := NewAppServer(invoker, WithCallerApp("caller"))
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -377,12 +414,6 @@ func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
 	if resp.GetStatus() != 208 || string(resp.GetBody()) != "graphql-accepted" {
 		t.Fatalf("InvokeGraphQL response = %+v, want graphql accepted", resp)
 	}
-	if got := authz.requests[0].GetResource().GetType() + ":" + authz.requests[0].GetResource().GetId(); got != "gestalt.app.surface:graph/surfaces/graphql" {
-		t.Fatalf("authorization resource = %q", got)
-	}
-	if invoker.credentialMode != core.ConnectionModeSubject {
-		t.Fatalf("credential mode = %q, want subject", invoker.credentialMode)
-	}
 	if invoker.graphQLProviderName != "graph" || invoker.graphQLDocument != "query Viewer { viewer { id } }" || invoker.graphQLVariables["team"] != "eng" {
 		t.Fatalf("graphql request = %s %q %v", invoker.graphQLProviderName, invoker.graphQLDocument, invoker.graphQLVariables)
 	}
@@ -391,9 +422,8 @@ func TestAppServerInvokeGraphQLAuthorizesSurface(t *testing.T) {
 func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	t.Parallel()
 
-	authz := &recordingAuthorizationProvider{allowed: false}
 	invoker := &recordingAppInvocation{}
-	server := NewAppServer(invoker, WithAuthorizationProvider(authz), WithCallerApp("temporal", nil))
+	server := NewAppServer(invoker, WithCallerApp("temporal"))
 	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterAppServer(srv, server)
 	}))
@@ -436,9 +466,6 @@ func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	if resp.GetStatus() != 202 || string(resp.GetBody()) != "accepted" {
 		t.Fatalf("Invoke response = %+v, want accepted", resp)
 	}
-	if len(authz.requests) != 0 {
-		t.Fatalf("authorization requests = %d, want 0 for workflow caller", len(authz.requests))
-	}
 	if invoker.subjectID != "user:test-user" || invoker.credentialMode != core.ConnectionModeSubject {
 		t.Fatalf("invocation principal/mode = %s/%q, want workflow subject/subject", invoker.subjectID, invoker.credentialMode)
 	}
@@ -458,39 +485,20 @@ func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	}
 }
 
-func TestAppServerInvokeFailsClosedWithoutAuthorizedCaller(t *testing.T) {
+func TestAppServerInvokeRejectsWrongCaller(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name    string
-		authz   *recordingAuthorizationProvider
-		context *proto.RequestContext
-		want    codes.Code
-	}{
-		{name: "missing authorization provider", context: requestContext(t, "caller", nil), want: codes.FailedPrecondition},
-		{name: "wrong caller", authz: &recordingAuthorizationProvider{allowed: true}, context: requestContext(t, "forged", nil), want: codes.PermissionDenied},
-		{name: "denied", authz: &recordingAuthorizationProvider{allowed: false}, context: requestContext(t, "caller", nil), want: codes.PermissionDenied},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			opts := []AppServerOption{WithCallerApp("caller", nil)}
-			if tc.authz != nil {
-				opts = append(opts, WithAuthorizationProvider(tc.authz))
-			}
-			server := NewAppServer(&recordingAppInvocation{}, opts...)
-			client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
-				proto.RegisterAppServer(srv, server)
-			}))
-			_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
-				App:       "target",
-				Operation: "do.thing",
-				Context:   tc.context,
-			})
-			if got := status.Code(err); got != tc.want {
-				t.Fatalf("Invoke status = %s, want %s (err=%v)", got, tc.want, err)
-			}
-		})
+	server := NewAppServer(&recordingAppInvocation{}, WithCallerApp("caller"))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	_, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "target",
+		Operation: "do.thing",
+		Context:   requestContext(t, "forged", nil),
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("Invoke status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
 	}
 }
 

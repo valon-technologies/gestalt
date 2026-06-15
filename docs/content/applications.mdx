@@ -658,19 +658,15 @@ Use the generated `App` client when executable app code needs to call another
 configured app as part of the same request. Open it with the request-scoped
 helper for your language (`gestalt.AppFromContext(ctx)` in Go, `request.app()`
 in Python and TypeScript, `App::connect().await?.with_context(...)` in Rust).
-The caller must declare the allowed call graph in `apps.<caller>.invokes`; at
-runtime the client sends the current request context to the host, and the host
+Hosted apps may call any other configured app without declaring a deploy-time
+dependency graph. The client sends the current request context to the host, which
 preserves the original subject, credential context, and permission ceiling for
-the nested call.
+the nested call unless you pass per-request execution options.
 
 ```yaml
 apps:
   triage:
     source: ./apps/triage/manifest.yaml
-    invokes:
-      - app: github
-        operations:
-          - issues.get
 
   github:
     source: ./apps/github/manifest.yaml
@@ -707,6 +703,10 @@ apps:
             &client.AppInvokeOptions{
                 Connection:     "default",
                 IdempotencyKey: request.IdempotencyKey,
+                RunAs: &client.SubjectContext{
+                    ID: "service_account:nightly-sync",
+                },
+                CredentialMode: "none",
             },
         ))
     }
@@ -812,10 +812,11 @@ apps:
   </Tabs.Tab>
 </Tabs>
 
-The nested call must fit inside the caller's configured `invokes` authorization relationship. Pass
-`connection`, `instance`, or an idempotency key when the target app should
-use a specific connected account, provider instance, or retry boundary. For raw
-GraphQL surfaces, use `InvokeGraphQL`, `invoke_graphql`, or `invokeGraphQL` in
+Pass `connection`, `instance`, `credentialMode`, `runAs`, or an idempotency key
+when the target app should use a specific connected account, provider instance,
+delegated service-account identity, credential resolution mode, or retry
+boundary. Agent tool calls and workflow steps still authorize their own targets;
+they cannot override authority with request `runAs`. For raw GraphQL surfaces, use `InvokeGraphQL`, `invoke_graphql`, or `invokeGraphQL` in
 the same SDK client; they return the raw result, and the SDK's
 `decodeGraphQLResult` helpers apply the same envelope decoding plus GraphQL
 `errors` handling.

@@ -201,6 +201,8 @@ pub struct AppInvokeRequest {
     pub credential_mode: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "11")]
     pub context: ::core::option::Option<RequestContext>,
+    #[prost(message, optional, tag = "12")]
+    pub run_as: ::core::option::Option<SubjectContext>,
 }
 /// AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through Gestalt.

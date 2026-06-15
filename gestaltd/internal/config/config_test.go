@@ -6392,46 +6392,27 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 	}
 }
 
-func TestValidateStructureCanonicalizesAppInvokeRunAs(t *testing.T) {
+func TestLoadRejectsAppInvokesField(t *testing.T) {
 	t.Parallel()
 
-	applyByDefault := false
-	cfg := &Config{
-		APIVersion: ConfigAPIVersion,
-		Apps: map[string]*ProviderEntry{
-			"source": {
-				Source: ProviderSource{Path: "./manifest.yaml"},
-				Invokes: []AppInvocationDependency{{
-					App:            "target",
-					Operation:      "tasks.create",
-					CredentialMode: providermanifestv1.ConnectionModeNone,
-					RunAs: &AppInvocationRunAsConfig{
-						Subject: &AppInvocationRunAsSubjectConfig{
-							ID: " service_account:automation ",
-						},
-						ApplyByDefault: &applyByDefault,
-					},
-				}},
-			},
-		},
-	}
+	path := mustWriteConfigFile(t, `
+apps:
+  caller:
+    source:
+      path: ./app/manifest.yaml
+    invokes:
+      - app: target
+        operation: tasks.create
+server:
+  encryptionKey: server-key
+`)
 
-	if err := ValidateStructure(cfg); err != nil {
-		t.Fatalf("ValidateStructure() error = %v", err)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("Load: expected error, got nil")
 	}
-	subject := cfg.Apps["source"].Invokes[0].RunAsSubject()
-	if subject == nil {
-		t.Fatal("RunAsSubject() = nil, want subject")
-		return
-	}
-	if subject.SubjectID != "service_account:automation" {
-		t.Fatalf("RunAsSubject().SubjectID = %q", subject.SubjectID)
-	}
-	if subject.CredentialSubjectID != subject.SubjectID {
-		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
-	}
-	if cfg.Apps["source"].Invokes[0].RunAsAppliesByDefault() {
-		t.Fatal("RunAsAppliesByDefault() = true, want false")
+	if !strings.Contains(err.Error(), `field invokes not found`) {
+		t.Fatalf("Load error = %v, want field invokes not found", err)
 	}
 }
 
@@ -6457,33 +6438,6 @@ func TestValidateStructureCredentialRefreshDurationContract(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "credentialRefresh.refreshInterval") {
 		t.Fatalf("ValidateStructure() error = %v, want credentialRefresh.refreshInterval", err)
-	}
-}
-
-func TestValidateStructureRejectsAppInvokeRunAsOnSurface(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		APIVersion: ConfigAPIVersion,
-		Apps: map[string]*ProviderEntry{
-			"source": {
-				Source: ProviderSource{Path: "./manifest.yaml"},
-				Invokes: []AppInvocationDependency{{
-					App:     "target",
-					Surface: string(SpecSurfaceGraphQL),
-					RunAs: &AppInvocationRunAsConfig{
-						Subject: &AppInvocationRunAsSubjectConfig{
-							ID: "service_account:automation",
-						},
-					},
-				}},
-			},
-		},
-	}
-
-	err := ValidateStructure(cfg)
-	if err == nil || !strings.Contains(err.Error(), "runAs is supported only for REST exact operation invokes") {
-		t.Fatalf("ValidateStructure() error = %v, want REST exact operation error", err)
 	}
 }
 

@@ -391,9 +391,6 @@ workflows:
             tools:
               - app: roadmap
                 operation: items.get
-      invokes:
-        - app: roadmap
-          operation: items.get
       on:
         roadmap_item:
           event:
