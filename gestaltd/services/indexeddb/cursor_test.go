@@ -87,29 +87,6 @@ func TestCursor_ForwardIteration(t *testing.T) {
 	}
 }
 
-func TestCursor_EmptyCursor(t *testing.T) {
-	t.Parallel()
-
-	stub := &coretesting.StubIndexedDB{}
-	ctx := context.Background()
-	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{})
-
-	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
-	})
-	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
-
-	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
-	if err != nil {
-		t.Fatalf("OpenCursor: %v", err)
-	}
-	defer func() { _ = cursor.Close() }()
-
-	if cursor.Continue() {
-		t.Fatal("Continue returned true on empty store")
-	}
-}
-
 func TestCursor_KeysOnly(t *testing.T) {
 	t.Parallel()
 
@@ -618,14 +595,23 @@ func TestCursor_StubSingleFieldIndexKeyMatchesRemoteShape(t *testing.T) {
 
 func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	t.Parallel()
+
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{})
+	schema := idb.ObjectStoreOptions{
+		Indexes: []idb.IndexSchema{
+			{Name: "by_status", KeyPath: []string{"status"}, Unique: false},
+		},
+	}
+	if _, err := stub.CreateObjectStore(ctx, "empty", schema); err != nil {
+		t.Fatal(err)
+	}
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
-	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
+	client := proto.NewIndexedDBClient(conn)
+	remote := &remoteIndexedDB{Database: rpcidb.NewClient(client, rpcidb.Options{})}
 
 	// Value cursor on empty store
 	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
@@ -653,6 +639,26 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	if kcursor.Err() != nil {
 		t.Fatalf("key cursor unexpected error: %v", kcursor.Err())
 	}
+	// Index cursor on empty store
+	icursor, err := remote.ObjectStore("empty").Index("by_status").OpenCursor(ctx, nil, idb.CursorNext)
+	if err != nil {
+		t.Fatalf("index OpenCursor: %v", err)
+	}
+	defer func() { _ = icursor.Close() }()
+
+	if icursor.Continue() {
+		t.Fatal("index cursor Continue returned true on empty store")
+	}
+	if icursor.Err() != nil {
+		t.Fatalf("index cursor unexpected error: %v", icursor.Err())
+	}
+
+	t.Run("client_half_close_after_open", func(t *testing.T) {
+		assertCursorStreamHalfCloseAfterOpen(t, client)
+	})
+	t.Run("client_half_close_after_exhaustion", func(t *testing.T) {
+		assertCursorStreamHalfCloseAfterExhaustion(t, client)
+	})
 }
 
 func TestCursor_ValueCursorExhaustionNoExtraEntry(t *testing.T) {
@@ -801,28 +807,10 @@ func TestCursor_CloseMakesFurtherCallsInert(t *testing.T) {
 	}
 }
 
-func newEmptyStoreConn(t *testing.T) *grpc.ClientConn {
+func assertCursorStreamHalfCloseAfterOpen(t *testing.T, client proto.IndexedDBClient) {
 	t.Helper()
 
-	stub := &coretesting.StubIndexedDB{}
-	ctx := context.Background()
-	if _, err := stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{}); err != nil {
-		t.Fatal(err)
-	}
-
-	return newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
-	})
-}
-
-func TestCursor_ClientHalfCloseAfterOpenIsNormal(t *testing.T) {
-	t.Parallel()
-
-	conn := newEmptyStoreConn(t)
-	client := proto.NewIndexedDBClient(conn)
-	ctx := context.Background()
-
-	stream, err := client.OpenCursor(ctx)
+	stream, err := client.OpenCursor(context.Background())
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -851,29 +839,13 @@ func TestCursor_ClientHalfCloseAfterOpenIsNormal(t *testing.T) {
 		t.Fatalf("CloseSend: %v", err)
 	}
 
-	for {
-		_, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return
-		}
-		if err == nil {
-			continue
-		}
-		if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-			t.Fatalf("terminal Recv error = %v (code=%v), want io.EOF", err, st.Code())
-		}
-		t.Fatalf("terminal Recv error = %v, want io.EOF", err)
-	}
+	assertCursorStreamTerminalEOF(t, stream)
 }
 
-func TestCursor_ClientHalfCloseAfterExhaustionIsNormal(t *testing.T) {
-	t.Parallel()
+func assertCursorStreamHalfCloseAfterExhaustion(t *testing.T, client proto.IndexedDBClient) {
+	t.Helper()
 
-	conn := newEmptyStoreConn(t)
-	client := proto.NewIndexedDBClient(conn)
-	ctx := context.Background()
-
-	stream, err := client.OpenCursor(ctx)
+	stream, err := client.OpenCursor(context.Background())
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -916,12 +888,22 @@ func TestCursor_ClientHalfCloseAfterExhaustionIsNormal(t *testing.T) {
 		t.Fatalf("CloseSend: %v", err)
 	}
 
-	_, err = stream.Recv()
-	if !errors.Is(err, io.EOF) {
-		if err != nil {
-			if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-				t.Fatalf("terminal Recv error = %v (code=%v), want io.EOF", err, st.Code())
-			}
+	assertCursorStreamTerminalEOF(t, stream)
+}
+
+func assertCursorStreamTerminalEOF(t *testing.T, stream grpc.BidiStreamingClient[proto.CursorClientMessage, proto.CursorResponse]) {
+	t.Helper()
+
+	for {
+		_, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			return
+		}
+		if err == nil {
+			continue
+		}
+		if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
+			t.Fatalf("terminal Recv error = %v (code=%v), want io.EOF", err, st.Code())
 		}
 		t.Fatalf("terminal Recv error = %v, want io.EOF", err)
 	}

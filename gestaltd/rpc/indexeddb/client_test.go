@@ -79,47 +79,47 @@ func (s *cursorStreamStub) Recv() (*proto.CursorResponse, error) {
 
 func (s *cursorStreamStub) CloseSend() error { return nil }
 
-func TestCursorStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
+func TestBidiStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
 	t.Parallel()
 
-	stub := &cursorStreamClient{}
-	db := NewClient(stub, Options{UnaryTimeout: 5 * time.Millisecond})
+	t.Run("transaction", func(t *testing.T) {
+		stub := &txnStreamClient{}
+		db := NewClient(stub, Options{UnaryTimeout: 5 * time.Millisecond})
 
-	cursor, err := db.ObjectStore("events").OpenCursor(context.Background(), nil, idb.CursorNext)
-	if err != nil {
-		t.Fatalf("OpenCursor: %v", err)
-	}
+		tx, err := db.Transaction(context.Background(), []string{"events"}, idb.TransactionReadwrite, idb.TransactionOptions{})
+		if err != nil {
+			t.Fatalf("Transaction: %v", err)
+		}
 
-	time.Sleep(15 * time.Millisecond)
-	if err := stub.streamCtx.Err(); err != nil {
-		t.Fatalf("cursor stream context cancelled after return: %v", err)
-	}
+		time.Sleep(15 * time.Millisecond)
+		if err := stub.streamCtx.Err(); err != nil {
+			t.Fatalf("transaction stream context cancelled after return: %v", err)
+		}
 
-	if cursor.Continue() {
-		t.Fatal("Continue returned true, want false")
-	}
-	if err := cursor.Err(); err != nil {
-		t.Fatalf("cursor.Err() = %v, want nil", err)
-	}
-}
+		if err := tx.Abort(context.Background()); err != nil {
+			t.Fatalf("Abort: %v", err)
+		}
+	})
 
-func TestTransactionStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
-	t.Parallel()
+	t.Run("cursor", func(t *testing.T) {
+		stub := &cursorStreamClient{}
+		db := NewClient(stub, Options{UnaryTimeout: 5 * time.Millisecond})
 
-	stub := &txnStreamClient{}
-	db := NewClient(stub, Options{UnaryTimeout: 5 * time.Millisecond})
+		cursor, err := db.ObjectStore("events").OpenCursor(context.Background(), nil, idb.CursorNext)
+		if err != nil {
+			t.Fatalf("OpenCursor: %v", err)
+		}
 
-	tx, err := db.Transaction(context.Background(), []string{"events"}, idb.TransactionReadwrite, idb.TransactionOptions{})
-	if err != nil {
-		t.Fatalf("Transaction: %v", err)
-	}
+		time.Sleep(15 * time.Millisecond)
+		if err := stub.streamCtx.Err(); err != nil {
+			t.Fatalf("cursor stream context cancelled after return: %v", err)
+		}
 
-	time.Sleep(15 * time.Millisecond)
-	if err := stub.streamCtx.Err(); err != nil {
-		t.Fatalf("transaction stream context cancelled after return: %v", err)
-	}
-
-	if err := tx.Abort(context.Background()); err != nil {
-		t.Fatalf("Abort: %v", err)
-	}
+		if cursor.Continue() {
+			t.Fatal("Continue returned true, want false")
+		}
+		if err := cursor.Err(); err != nil {
+			t.Fatalf("cursor.Err() = %v, want nil", err)
+		}
+	})
 }
