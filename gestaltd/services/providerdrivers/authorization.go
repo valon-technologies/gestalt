@@ -73,6 +73,7 @@ func AuthorizationFactory(ctx context.Context, name string, node yaml.Node, host
 
 	gatewayTransport := providergateway.NewProviderGatewayTransport()
 	gatewayTransport.SetAuthorizationProvider(raw)
+	gatewayTransport.SetCallerTokenPublicKey(deps.CallerTokenPublicKey)
 
 	execCfg.Transport = gatewayTransport
 	guarded, err := authorizationservice.NewFromExecutable(exec, execCfg)
