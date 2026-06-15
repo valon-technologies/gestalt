@@ -37,7 +37,6 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
@@ -53,10 +52,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
-
-func bootstrapGraphQLStringPtr(value string) *string {
-	return &value
-}
 
 func bootstrapTextAgentOutput() *proto.AgentOutput {
 	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
@@ -78,58 +73,6 @@ func bootstrapAgentRequestContext(t testing.TB, p *principal.Principal, callerNa
 		t.Fatalf("RequestContextProto: %v", err)
 	}
 	return reqCtx
-}
-
-func bootstrapGraphQLSchema() graphqlschema.Schema {
-	return graphqlschema.Schema{
-		QueryType: &graphqlschema.TypeName{Name: "Query"},
-		Types: []graphqlschema.FullType{
-			{
-				Kind: "OBJECT",
-				Name: "Query",
-				Fields: []graphqlschema.Field{
-					{
-						Name: "viewer",
-						Args: []graphqlschema.InputValue{
-							{Name: "team", Type: graphqlschema.TypeRef{Kind: "NON_NULL", OfType: &graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}}},
-						},
-						Type: graphqlschema.TypeRef{Kind: "OBJECT", Name: bootstrapGraphQLStringPtr("Viewer")},
-					},
-				},
-			},
-			{
-				Kind: "OBJECT",
-				Name: "Viewer",
-				Fields: []graphqlschema.Field{
-					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("ID")}},
-					{Name: "name", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}},
-				},
-			},
-		},
-	}
-}
-
-func startBootstrapGraphQLIntrospectionServer(t *testing.T) *httptest.Server {
-	t.Helper()
-
-	schema := bootstrapGraphQLSchema()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			Query string `json:"query"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"__schema": schema,
-			},
-		})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
 }
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
