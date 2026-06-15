@@ -250,15 +250,11 @@ func (o *objectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, e
 
 // OpenCursor opens a full-value cursor over the object store.
 func (o *objectStore) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
-	defer cancel()
 	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
 }
 
 // OpenKeyCursor opens a key-only cursor over the object store.
 func (o *objectStore) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
-	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
-	defer cancel()
 	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
 }
 
@@ -410,15 +406,11 @@ func (idx *indexClient) DeleteRange(ctx context.Context, r *idb.KeyRange, values
 
 // OpenCursor opens a full-value cursor over one secondary index.
 func (idx *indexClient) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
-	defer cancel()
 	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
 }
 
 // OpenKeyCursor opens a key-only cursor over one secondary index.
 func (idx *indexClient) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
-	defer cancel()
 	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
 }
 

@@ -877,6 +877,9 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	for {
 		msg, recvErr := stream.Recv()
 		if recvErr != nil {
+			if errors.Is(recvErr, io.EOF) {
+				return nil
+			}
 			return recvErr
 		}
 		cmd := msg.GetCommand()

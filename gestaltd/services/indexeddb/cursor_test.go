@@ -86,29 +86,6 @@ func TestCursor_ForwardIteration(t *testing.T) {
 	}
 }
 
-func TestCursor_EmptyCursor(t *testing.T) {
-	t.Parallel()
-
-	stub := &coretesting.StubIndexedDB{}
-	ctx := context.Background()
-	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{})
-
-	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
-	})
-	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
-
-	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
-	if err != nil {
-		t.Fatalf("OpenCursor: %v", err)
-	}
-	defer func() { _ = cursor.Close() }()
-
-	if cursor.Continue() {
-		t.Fatal("Continue returned true on empty store")
-	}
-}
-
 func TestCursor_KeysOnly(t *testing.T) {
 	t.Parallel()
 
@@ -617,9 +594,17 @@ func TestCursor_StubSingleFieldIndexKeyMatchesRemoteShape(t *testing.T) {
 
 func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	t.Parallel()
+
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_, _ = stub.CreateObjectStore(ctx, "empty", idb.ObjectStoreOptions{})
+	schema := idb.ObjectStoreOptions{
+		Indexes: []idb.IndexSchema{
+			{Name: "by_status", KeyPath: []string{"status"}, Unique: false},
+		},
+	}
+	if _, err := stub.CreateObjectStore(ctx, "empty", schema); err != nil {
+		t.Fatal(err)
+	}
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
@@ -651,6 +636,19 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	}
 	if kcursor.Err() != nil {
 		t.Fatalf("key cursor unexpected error: %v", kcursor.Err())
+	}
+	// Index cursor on empty store
+	icursor, err := remote.ObjectStore("empty").Index("by_status").OpenCursor(ctx, nil, idb.CursorNext)
+	if err != nil {
+		t.Fatalf("index OpenCursor: %v", err)
+	}
+	defer func() { _ = icursor.Close() }()
+
+	if icursor.Continue() {
+		t.Fatal("index cursor Continue returned true on empty store")
+	}
+	if icursor.Err() != nil {
+		t.Fatalf("index cursor unexpected error: %v", icursor.Err())
 	}
 }
 
