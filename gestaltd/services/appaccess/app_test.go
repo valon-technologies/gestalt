@@ -419,6 +419,51 @@ func TestAppServerInvokeGraphQLAllowsOpenSurfaceInvocation(t *testing.T) {
 	}
 }
 
+func TestAppServerInvokeGraphQLRejectsWorkflowCaller(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(invoker, WithCallerApp("temporal"))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+	workflow := map[string]any{
+		"providerName":         "temporal",
+		"runId":                "run-123",
+		"definitionId":         "slack_reactions",
+		"definitionGeneration": 3,
+		"workflowKey":          "thread:123",
+		"currentStepId":        "react",
+		"currentStep": map[string]any{
+			"id":    "react",
+			"index": 0,
+		},
+		"target": map[string]any{
+			"kind": "steps",
+			"steps": []any{
+				map[string]any{
+					"id":        "react",
+					"kind":      "app",
+					"app":       "graph",
+					"operation": "events.addReaction",
+				},
+			},
+		},
+	}
+
+	_, err := client.InvokeGraphQL(context.Background(), &proto.AppInvokeGraphQLRequest{
+		App:      "graph",
+		Document: "query Viewer { viewer { id } }",
+		Context:  requestContextWithCallerKind(t, "workflow", "temporal", workflow),
+	})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("InvokeGraphQL status = %s, want %s (err=%v)", got, codes.PermissionDenied, err)
+	}
+	if invoker.graphQLProviderName != "" {
+		t.Fatalf("graphql provider was invoked, want no invocation")
+	}
+}
+
 func TestAppServerInvokeAuthorizesWorkflowCurrentAppStep(t *testing.T) {
 	t.Parallel()
 

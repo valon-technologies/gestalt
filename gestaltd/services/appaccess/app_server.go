@@ -219,6 +219,9 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *
 	if callCtx.agent != (invocation.AgentInvocationContext{}) || callCtx.callerProviderKind == invocation.ProviderKindAgent {
 		return requestInvocationContext{}, status.Error(codes.PermissionDenied, "agent callers may only invoke listed app operations")
 	}
+	if callCtx.callerProviderKind == invocation.ProviderKindWorkflow {
+		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "%s callers may only invoke authorized target app operations", callCtx.callerProviderKind)
+	}
 	_ = surface
 	_ = targetApp
 	return callCtx, nil
