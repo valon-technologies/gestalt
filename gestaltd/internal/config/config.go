@@ -1185,6 +1185,43 @@ type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
 	OwnerApp      string `yaml:"-"`
+
+	// Runtime-resolved theme paths (populated during sync from the entry's
+	// config.theme block, not from YAML).
+	ResolvedThemeStylesheet string `yaml:"-"`
+	ResolvedThemeAssetsDir  string `yaml:"-"`
+}
+
+// UIThemeConfig is the typed `theme` block of a ui mount's provider config.
+// It points at a deployment-supplied stylesheet served at <mount>/theme.css
+// and an optional asset directory served under <mount>/theme/. Paths are
+// relative to the deployment config file.
+type UIThemeConfig struct {
+	Stylesheet string `yaml:"stylesheet,omitempty"`
+	AssetsDir  string `yaml:"assetsDir,omitempty"`
+}
+
+// UIThemeConfigFromProviderConfig decodes the optional theme block of a ui
+// mount's provider config node. Keys other than theme belong to the mounted
+// provider's own config and are ignored here; keys inside theme are strict.
+func UIThemeConfigFromProviderConfig(node yaml.Node) (*UIThemeConfig, error) {
+	if node.Kind == 0 {
+		return nil, nil
+	}
+	var raw struct {
+		Theme yaml.Node `yaml:"theme"`
+	}
+	if err := node.Decode(&raw); err != nil {
+		return nil, err
+	}
+	if raw.Theme.Kind == 0 || raw.Theme.Tag == "!!null" {
+		return nil, nil
+	}
+	theme := &UIThemeConfig{}
+	if err := decodeYAMLNodeKnownFields(&raw.Theme, theme); err != nil {
+		return nil, fmt.Errorf("theme: %w", err)
+	}
+	return theme, nil
 }
 
 func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {

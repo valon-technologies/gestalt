@@ -2337,6 +2337,296 @@ func TestMountedUIRoutes_PrefersNestedMount(t *testing.T) {
 	}
 }
 
+func TestMountedUIThemeRoutes(t *testing.T) {
+	t.Parallel()
+
+	uiDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(uiDir, "index.html"), "<html>portal-shell</html>")
+
+	themeDir := t.TempDir()
+	const stylesheetBody = ":root{--brand:#123456;}"
+	writeTestUIAsset(t, filepath.Join(themeDir, "tenant.css"), stylesheetBody)
+	writeTestUIAsset(t, filepath.Join(themeDir, "secret.css"), "outside-theme-assets")
+	writeTestUIAsset(t, filepath.Join(themeDir, "assets", "fonts", "brand.woff2"), "woff2-bytes")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"portal": {
+				Path: "/portal",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: uiDir,
+				},
+				ResolvedThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
+				ResolvedThemeAssetsDir:  filepath.Join(themeDir, "assets"),
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/portal/theme.css")
+	if err != nil {
+		t.Fatalf("GET theme.css: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll theme.css: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("theme.css status = %d, want 200", resp.StatusCode)
+	}
+	if got := string(body); got != stylesheetBody {
+		t.Fatalf("theme.css body = %q, want %q", got, stylesheetBody)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/css; charset=utf-8" {
+		t.Fatalf("theme.css Content-Type = %q, want text/css; charset=utf-8", got)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("theme.css Cache-Control = %q, want no-cache", got)
+	}
+	sum := sha256.Sum256([]byte(stylesheetBody))
+	wantETag := `"` + hex.EncodeToString(sum[:]) + `"`
+	if got := resp.Header.Get("ETag"); got != wantETag {
+		t.Fatalf("theme.css ETag = %q, want %q", got, wantETag)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/portal/theme.css", nil)
+	req.Header.Set("If-None-Match", wantETag)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET theme.css revalidation: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("theme.css revalidation status = %d, want 304", resp.StatusCode)
+	}
+	if got := resp.Header.Get("ETag"); got != wantETag {
+		t.Fatalf("theme.css revalidation ETag = %q, want %q", got, wantETag)
+	}
+
+	resp, err = http.Get(ts.URL + "/portal/theme/fonts/brand.woff2")
+	if err != nil {
+		t.Fatalf("GET theme asset: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll theme asset: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("theme asset status = %d, want 200", resp.StatusCode)
+	}
+	if got := string(body); got != "woff2-bytes" {
+		t.Fatalf("theme asset body = %q, want woff2-bytes", got)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "font/woff2" {
+		t.Fatalf("theme asset Content-Type = %q, want font/woff2", got)
+	}
+
+	for _, traversal := range []string{
+		"/portal/theme/../secret.css",
+		"/portal/theme/%2e%2e/secret.css",
+		"/portal/theme/fonts/../../secret.css",
+	} {
+		req, err := http.NewRequest(http.MethodGet, ts.URL+traversal, nil)
+		if err != nil {
+			t.Fatalf("NewRequest %q: %v", traversal, err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET %q: %v", traversal, err)
+		}
+		body, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			t.Fatalf("ReadAll %q: %v", traversal, err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("traversal %q status = %d, want 404", traversal, resp.StatusCode)
+		}
+		if strings.Contains(string(body), "outside-theme-assets") {
+			t.Fatalf("traversal %q leaked file outside the theme assets dir", traversal)
+		}
+	}
+
+	resp, err = http.Get(ts.URL + "/portal/theme/missing.css")
+	if err != nil {
+		t.Fatalf("GET missing theme asset: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing theme asset status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestMountedUIThemeStylesheetUnconfigured(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(rootDir, "index.html"), "<html>root-shell</html>")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ProviderUIs = map[string]*config.UIEntry{
+			"root": {
+				Path: "/",
+				ProviderEntry: config.ProviderEntry{
+					ResolvedAssetRoot: rootDir,
+				},
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/theme.css")
+	if err != nil {
+		t.Fatalf("GET theme.css: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll theme.css: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("theme.css status = %d, want 200", resp.StatusCode)
+	}
+	if len(body) != 0 {
+		t.Fatalf("theme.css body = %q, want empty (must not fall through to index.html)", body)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/css; charset=utf-8" {
+		t.Fatalf("theme.css Content-Type = %q, want text/css; charset=utf-8", got)
+	}
+	if got := resp.Header.Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("theme.css Cache-Control = %q, want no-cache", got)
+	}
+	etag := resp.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("theme.css ETag missing")
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/theme.css", nil)
+	req.Header.Set("If-None-Match", etag)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET theme.css revalidation: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("theme.css revalidation status = %d, want 304", resp.StatusCode)
+	}
+
+	// The SPA fallback still answers navigations; only /theme.css is intercepted.
+	resp, err = http.Get(ts.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("GET SPA navigation: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll SPA navigation: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("SPA navigation status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "root-shell") {
+		t.Fatalf("SPA navigation body = %q, want root shell", body)
+	}
+}
+
+func TestPolicyBoundMountedUIThemeKeepsAuthSemantics(t *testing.T) {
+	t.Parallel()
+
+	uiDir := t.TempDir()
+	writeTestUIAsset(t, filepath.Join(uiDir, "index.html"), "<html>brand-shell</html>")
+	themeDir := t.TempDir()
+	const stylesheetBody = ":root{--brand:#654321;}"
+	writeTestUIAsset(t, filepath.Join(themeDir, "tenant.css"), stylesheetBody)
+
+	handler, err := testutilUIHandler(uiDir)
+	if err != nil {
+		t.Fatalf("ui handler: %v", err)
+	}
+
+	svc := testutil.NewStubServices(t)
+	user := seedUserRecord(t, svc, "theme-user", "theme-user@example.test", time.Now())
+	authz := &serverTestAuthorizationProvider{
+		resourceTypes: []*proto.AuthorizationModelResourceType{{
+			Name:                "brandPolicy",
+			DefaultAccessPolicy: proto.DefaultAccessPolicy_DEFAULT_ACCESS_POLICY_DENY,
+		}},
+		relationships: []*proto.Relationship{
+			testAuthorizationRelationship(
+				principal.UserSubjectID(user.ID),
+				"viewer",
+				"brandPolicy",
+				"brandPolicy",
+			),
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "theme-user@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorization = authz
+		cfg.MountedUIs = []server.MountedUI{{
+			Name:                "brand-ui",
+			Path:                "/brand",
+			AppName:             "brand",
+			AuthorizationPolicy: "brandPolicy",
+			Routes: []server.MountedUIRoute{{
+				Path:         "/*",
+				AllowedRoles: []string{"viewer"},
+			}},
+			Handler:         handler,
+			ThemeStylesheet: filepath.Join(themeDir, "tenant.css"),
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := noRedirect.Get(ts.URL + "/brand/theme.css")
+	if err != nil {
+		t.Fatalf("GET theme.css unauthenticated: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("unauthenticated theme.css status = %d, want 302", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); !strings.HasPrefix(got, "/api/v1/auth/login") {
+		t.Fatalf("unauthenticated theme.css Location = %q, want login redirect", got)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/brand/theme.css", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET theme.css authorized: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll theme.css authorized: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("authorized theme.css status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if got := string(body); got != stylesheetBody {
+		t.Fatalf("authorized theme.css body = %q, want %q", got, stylesheetBody)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "text/css; charset=utf-8" {
+		t.Fatalf("authorized theme.css Content-Type = %q, want text/css; charset=utf-8", got)
+	}
+}
+
 func TestPolicyBoundMountedUIUsesAuthorizationRelationships(t *testing.T) {
 	t.Parallel()
 

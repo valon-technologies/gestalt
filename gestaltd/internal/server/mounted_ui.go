@@ -143,6 +143,8 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 			AuthorizationPolicy: entry.AuthorizationPolicy,
 			Routes:              routes,
 			Handler:             handler,
+			ThemeStylesheet:     entry.ResolvedThemeStylesheet,
+			ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
 		})
 	}
 
@@ -327,6 +329,11 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	if inner == nil {
 		return http.NotFoundHandler()
 	}
+	// The theme interceptor wraps the static handler under StripPrefix (it
+	// matches mount-relative paths) and runs inside protectedUIHandler:
+	// policy-bound mounts keep their auth semantics for /theme.css and
+	// /theme/* exactly like any other mount path.
+	inner = mountedUIThemeHandler(mounted, inner)
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}

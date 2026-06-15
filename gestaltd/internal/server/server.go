@@ -54,7 +54,12 @@ type MountedUI struct {
 	AuthorizationPolicy string
 	Routes              []MountedUIRoute
 	Handler             http.Handler
-	builtInAdmin        bool
+	// ThemeStylesheet and ThemeAssetsDir are resolved absolute paths to a
+	// deployment-configured theme, served at <mount>/theme.css and under
+	// <mount>/theme/ respectively. Both are optional.
+	ThemeStylesheet string
+	ThemeAssetsDir  string
+	builtInAdmin    bool
 }
 
 type MountedHTTPBinding struct {

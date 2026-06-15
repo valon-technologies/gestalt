@@ -97,12 +97,13 @@ func (s *Server) mountAdminAPIRoutes(r chi.Router) {
 
 func (s *Server) mountMountedUIRoutes(r chi.Router) {
 	var rootHandler http.Handler
-	for _, mounted := range s.mountedUIs {
+	for i := range s.mountedUIs {
+		mounted := &s.mountedUIs[i]
 		if mounted.Handler == nil || mounted.Path == "" {
 			continue
 		}
 		path := mounted.Path
-		handler := s.mountedUIHandler(mounted)
+		handler := s.mountedUIHandler(*mounted)
 		if path == "/" {
 			rootHandler = handler
 			continue
