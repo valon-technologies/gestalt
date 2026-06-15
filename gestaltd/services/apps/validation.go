@@ -126,36 +126,6 @@ func validateDependencies(ctx context.Context, cfg *ValidationConfig, cache *cat
 	return nil
 }
 
-func isExecutablePlugin(entry *ValidationApp) bool {
-	if entry == nil {
-		return false
-	}
-	manifest := entry.Manifest
-	spec := entry.manifestSpec()
-	if manifest == nil || spec == nil {
-		return false
-	}
-	if spec.IsSpecLoaded() && manifest.Entrypoint == nil {
-		return false
-	}
-	if spec.IsDeclarative() && manifest.Entrypoint == nil {
-		return false
-	}
-	return true
-}
-
-func pluginSupportsSurface(entry *ValidationApp, surface SpecSurface) bool {
-	if entry == nil {
-		return false
-	}
-	spec := entry.manifestSpec()
-	if spec == nil {
-		return false
-	}
-	_, ok := resolvedSurfaceURL(entry, spec, surface)
-	return ok
-}
-
 func resolveStaticCatalog(ctx context.Context, name string, entry *ValidationApp) (*catalog.Catalog, bool, error) {
 	if entry != nil && (entry.EffectiveCatalogAvailable || entry.EffectiveCatalog != nil || entry.EffectiveCatalogSessionOnly) {
 		return entry.EffectiveCatalog.Clone(), entry.EffectiveCatalogSessionOnly, nil
@@ -369,18 +339,6 @@ func mergeCatalogs(name string, first, second *catalog.Catalog) (*catalog.Catalo
 		merged.Operations = append(merged.Operations, second.Operations[i])
 	}
 	return merged, nil
-}
-
-func hasCatalogOperation(cat *catalog.Catalog, operation string) bool {
-	if cat == nil {
-		return false
-	}
-	for i := range cat.Operations {
-		if cat.Operations[i].ID == operation {
-			return true
-		}
-	}
-	return false
 }
 
 func effectiveAllowedOperations(entry *ValidationApp, spec *providermanifestv1.Spec) map[string]*OperationOverride {
