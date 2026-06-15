@@ -174,6 +174,35 @@ func TestAppServerInvokeAppliesRequestRunAs(t *testing.T) {
 	}
 }
 
+func TestAppServerInvokeIgnoresEmptyRequestRunAs(t *testing.T) {
+	t.Parallel()
+
+	invoker := &recordingAppInvocation{}
+	server := NewAppServer(invoker, WithCallerApp("caller"))
+	client := proto.NewAppClient(newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterAppServer(srv, server)
+	}))
+
+	resp, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
+		App:       "target",
+		Operation: "do.thing",
+		RunAs:     &proto.SubjectContext{},
+		Context:   requestContext(t, "caller", nil),
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.GetStatus() != 202 {
+		t.Fatalf("Invoke response = %+v, want accepted", resp)
+	}
+	if invoker.subjectID != "user:test-user" {
+		t.Fatalf("principal = %s, want original caller subject", invoker.subjectID)
+	}
+	if invoker.runAsSubjectID != "" {
+		t.Fatalf("run-as audit subject = %q, want no delegation", invoker.runAsSubjectID)
+	}
+}
+
 func TestAppServerInvokeAuthorizesAgentTurnAppOperation(t *testing.T) {
 	t.Parallel()
 

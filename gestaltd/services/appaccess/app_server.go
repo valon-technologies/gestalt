@@ -205,7 +205,7 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.R
 	if credentialMode != "" {
 		callCtx.credentialModeOverride = credentialMode
 	}
-	if runAs := agentwire.RunAsSubjectFromProto(requestRunAs); runAs != nil {
+	if runAs := agentwire.RunAsSubjectFromProto(requestRunAs); runAs != nil && strings.TrimSpace(runAs.SubjectID) != "" {
 		callCtx.delegationRunAs = runAs
 	}
 	return callCtx, nil
