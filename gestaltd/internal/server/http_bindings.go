@@ -232,7 +232,8 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs 
 				return fmt.Errorf("http binding %s.%s path %q conflicts with core route namespace %q", binding.AppName, binding.Name, binding.Path, prefix)
 			}
 		}
-		for _, mounted := range mountedUIs {
+		for i := range mountedUIs {
+			mounted := &mountedUIs[i]
 			if mounted.Path == "" || mounted.Path == "/" {
 				continue
 			}

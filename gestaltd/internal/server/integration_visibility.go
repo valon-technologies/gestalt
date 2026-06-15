@@ -51,19 +51,21 @@ func (s *Server) integrationMountedPathForPrincipalContext(ctx context.Context, 
 }
 
 func (s *Server) mountedUIForProvider(provider, mountedPath string) (MountedUI, bool) {
-	for _, mounted := range s.mountedUIs {
+	for i := range s.mountedUIs {
+		mounted := &s.mountedUIs[i]
 		if mounted.Handler == nil || mounted.Path != mountedPath {
 			continue
 		}
 		if mounted.AppName == provider {
-			return mounted, true
+			return *mounted, true
 		}
 	}
-	for _, mounted := range s.mountedUIs {
+	for i := range s.mountedUIs {
+		mounted := &s.mountedUIs[i]
 		if mounted.Handler == nil || mounted.Path != mountedPath {
 			continue
 		}
-		return mounted, true
+		return *mounted, true
 	}
 	return MountedUI{}, false
 }
