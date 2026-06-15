@@ -19,7 +19,7 @@ func (t *ProviderGatewayTransport) Authorize(ctx context.Context, params Authori
 	if t == nil || t.authorization == nil {
 		return true, nil
 	}
-	req, err := t.checkAccessRequest(ctx, params)
+	req, err := t.checkAccessRequest(params)
 	if err != nil {
 		return false, err
 	}
@@ -96,7 +96,7 @@ func (t *ProviderGatewayTransport) Invoke(ctx context.Context, req ProviderGatew
 	return next(ctx, req)
 }
 
-func (t *ProviderGatewayTransport) checkAccessRequest(ctx context.Context, params AuthorizationParams) (*proto.CheckAccessRequest, error) {
+func (t *ProviderGatewayTransport) checkAccessRequest(params AuthorizationParams) (*proto.CheckAccessRequest, error) {
 	subject, err := t.authorizationSubject(params.CallerToken)
 	if err != nil {
 		return nil, err
