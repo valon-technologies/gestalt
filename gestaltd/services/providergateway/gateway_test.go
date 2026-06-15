@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
@@ -159,6 +159,8 @@ func (p *stubAuthorizationProvider) Ping(context.Context) error { return nil }
 func (p *stubAuthorizationProvider) Close() error { return nil }
 
 func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 	req := ProviderGatewayRequest{
@@ -184,6 +186,8 @@ func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
 }
 
 func TestDirectTransportInvokeRecordsErrorMetrics(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 	req := ProviderGatewayRequest{
@@ -210,6 +214,8 @@ func TestDirectTransportInvokeRecordsErrorMetrics(t *testing.T) {
 }
 
 func TestProviderGatewayTransportInvokeRecordsMetrics(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 	transport := NewProviderGatewayTransport()
@@ -236,6 +242,8 @@ func TestProviderGatewayTransportInvokeRecordsMetrics(t *testing.T) {
 }
 
 func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 	transport := NewProviderGatewayTransport()
@@ -264,11 +272,11 @@ func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
 
 func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
 	return map[string]string{
-		"gestaltd.provider_gateway.provider.id":       req.ProviderID,
-		"gestaltd.provider_gateway.provider.kind":     string(req.ProviderKind),
-		"gestaltd.provider_gateway.service.name":      req.ServiceName,
-		"gestaltd.provider_gateway.operation.name":    req.Operation,
-		"gestaltd.provider_gateway.source":            string(req.Source),
-		"gestaltd.provider_gateway.transport.path":    string(transportPath),
+		"gestaltd.provider_gateway.provider.id":    req.ProviderID,
+		"gestaltd.provider_gateway.provider.kind":  string(req.ProviderKind),
+		"gestaltd.provider_gateway.service.name":   req.ServiceName,
+		"gestaltd.provider_gateway.operation.name": req.Operation,
+		"gestaltd.provider_gateway.source":         string(req.Source),
+		"gestaltd.provider_gateway.transport.path": string(transportPath),
 	}
 }

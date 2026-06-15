@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	attrProviderGatewayProviderID   = attribute.Key("gestaltd.provider_gateway.provider.id")
-	attrProviderGatewayProviderKind = attribute.Key("gestaltd.provider_gateway.provider.kind")
-	attrProviderGatewayServiceName  = attribute.Key("gestaltd.provider_gateway.service.name")
-	attrProviderGatewayOperation    = attribute.Key("gestaltd.provider_gateway.operation.name")
+	attrProviderGatewayProviderID    = attribute.Key("gestaltd.provider_gateway.provider.id")
+	attrProviderGatewayProviderKind  = attribute.Key("gestaltd.provider_gateway.provider.kind")
+	attrProviderGatewayServiceName   = attribute.Key("gestaltd.provider_gateway.service.name")
+	attrProviderGatewayOperation     = attribute.Key("gestaltd.provider_gateway.operation.name")
 	attrProviderGatewaySource        = attribute.Key("gestaltd.provider_gateway.source")
 	attrProviderGatewayTransportPath = attribute.Key("gestaltd.provider_gateway.transport.path")
 
