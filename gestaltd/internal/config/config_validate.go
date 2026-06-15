@@ -869,33 +869,6 @@ func validateApp(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := normalizeProviderRuntimeConfig("apps."+name, entry, false); err != nil {
 		return err
 	}
-	seenInvokes := make(map[string]int, len(entry.Invokes))
-	for i := range entry.Invokes {
-		entry.Invokes[i].App = strings.TrimSpace(entry.Invokes[i].App)
-		entry.Invokes[i].Operation = strings.TrimSpace(entry.Invokes[i].Operation)
-		entry.Invokes[i].Surface = strings.ToLower(strings.TrimSpace(entry.Invokes[i].Surface))
-		entry.Invokes[i].CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(entry.Invokes[i].CredentialMode)
-		switch {
-		case entry.Invokes[i].App == "":
-			return fmt.Errorf("config validation: apps.%s.invokes[%d].app is required", name, i)
-		case entry.Invokes[i].Operation == "" && entry.Invokes[i].Surface == "":
-			return fmt.Errorf("config validation: apps.%s.invokes[%d].operation or .surface is required", name, i)
-		case entry.Invokes[i].Operation != "" && entry.Invokes[i].Surface != "":
-			return fmt.Errorf("config validation: apps.%s.invokes[%d] may set only one of .operation or .surface", name, i)
-		case entry.Invokes[i].Surface != "" && entry.Invokes[i].Surface != string(SpecSurfaceGraphQL):
-			return fmt.Errorf("config validation: apps.%s.invokes[%d].surface %q is not supported", name, i, entry.Invokes[i].Surface)
-		case entry.Invokes[i].CredentialMode != "" && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeNone && entry.Invokes[i].CredentialMode != providermanifestv1.ConnectionModeSubject:
-			return fmt.Errorf("config validation: apps.%s.invokes[%d].credentialMode %q is not supported", name, i, entry.Invokes[i].CredentialMode)
-		}
-		if err := normalizeAppInvocationRunAs("apps."+name+".invokes["+strconv.Itoa(i)+"]", &entry.Invokes[i]); err != nil {
-			return err
-		}
-		key := entry.Invokes[i].App + "\x00op:" + entry.Invokes[i].Operation + "\x00surface:" + entry.Invokes[i].Surface
-		if prev, ok := seenInvokes[key]; ok {
-			return fmt.Errorf("config validation: apps.%s.invokes[%d] duplicates invokes[%d]", name, i, prev)
-		}
-		seenInvokes[key] = i
-	}
 	if err := validateAppCapabilities("apps."+name+".capabilities", entry.Capabilities); err != nil {
 		return err
 	}
@@ -969,26 +942,6 @@ func validateAppRouteAuth(cfg *Config, name string, entry *ProviderEntry) error 
 	}
 	if _, ok := cfg.Providers.Authentication[entry.RouteAuth.Provider]; !ok {
 		return fmt.Errorf("config validation: apps.%s.auth.provider references unknown authentication provider %q", name, entry.RouteAuth.Provider)
-	}
-	return nil
-}
-
-func normalizeAppInvocationRunAs(path string, invoke *AppInvocationDependency) error {
-	if invoke == nil || invoke.RunAs == nil {
-		return nil
-	}
-	if strings.TrimSpace(invoke.Surface) != "" {
-		return fmt.Errorf("config validation: %s.runAs is supported only for REST exact operation invokes", path)
-	}
-	runAs := invoke.RunAs
-	if runAs.Subject == nil {
-		return fmt.Errorf("config validation: %s.runAs.subject is required", path)
-	}
-	subject := runAs.Subject
-	subject.ID = strings.TrimSpace(subject.ID)
-	subject.CredentialSubjectID = strings.TrimSpace(subject.CredentialSubjectID)
-	if subject.ID == "" {
-		return fmt.Errorf("config validation: %s.runAs.subject.id is required", path)
 	}
 	return nil
 }
@@ -1129,9 +1082,6 @@ func validateAgentProviderFields(cfg *Config, name string, entry *ProviderEntry)
 	}
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on apps.*", subject)
-	}
-	if len(entry.Invokes) > 0 {
-		return fmt.Errorf("config validation: %s.invokes is only supported on apps.*", subject)
 	}
 	if entry.Capabilities != nil {
 		return fmt.Errorf("config validation: %s.capabilities is only supported on apps.*", subject)
@@ -1362,9 +1312,6 @@ func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEnt
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on apps.*", subject)
 	}
-	if len(entry.Invokes) > 0 {
-		return fmt.Errorf("config validation: %s.invokes is only supported on apps.*", subject)
-	}
 	if entry.Capabilities != nil {
 		return fmt.Errorf("config validation: %s.capabilities is only supported on apps.*", subject)
 	}
@@ -1429,9 +1376,6 @@ func validateAppOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	}
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on apps.*", subject)
-	}
-	if len(entry.Invokes) > 0 {
-		return fmt.Errorf("config validation: %s.invokes is only supported on apps.*", subject)
 	}
 	if entry.Capabilities != nil {
 		return fmt.Errorf("config validation: %s.capabilities is only supported on apps.*", subject)

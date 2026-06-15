@@ -104,9 +104,9 @@ func TestEmitSpikeSurface(t *testing.T) {
 		// the faithful Raw sibling keeps the full result. optional_signature
 		// fields ride a trailing nilable options struct.
 		"func (c *App) Invoke(ctx context.Context, app string, operation string, params map[string]any, opts *AppInvokeOptions) (any, error) {",
-		"type AppInvokeOptions struct {\n\tConnection     string\n\tInstance       string\n\tIdempotencyKey string\n\tCredentialMode string\n}",
+		"type AppInvokeOptions struct {\n\tConnection     string\n\tInstance       string\n\tIdempotencyKey string\n\tCredentialMode string\n\tRunAs          *SubjectContext\n}",
 		"\tif opts == nil {\n\t\topts = &AppInvokeOptions{}\n\t}",
-		"Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, Context: c.context}",
+		"Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Context: c.context}",
 		"\treturn DecodeAppResult(request.App, request.Operation, out.Status, out.Body)",
 		"func (c *App) InvokeRaw(ctx context.Context, request *AppInvokeRequest) (*OperationResult, error) {",
 		// GraphQL stays faithful by design: decoding remains a helper.

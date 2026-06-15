@@ -13,37 +13,21 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-)
-
-const (
-	appInvocationAuthorizationSubjectTypeApp        = "app"
-	appInvocationAuthorizationResourceTypeOperation = "gestalt.app.operation"
-	appInvocationAuthorizationResourceTypeSurface   = "gestalt.app.surface"
-	appInvocationAuthorizationActionInvoke          = "invoke"
 )
 
 type AppServer struct {
 	proto.UnimplementedAppServer
 
-	invoker        invocation.Invoker
-	authorization  core.AuthorizationProvider
-	callerName     string
-	accessProfiles AppAccessProfiles
-	agentAppAuth   interface {
+	invoker      invocation.Invoker
+	callerName   string
+	agentAppAuth interface {
 		AuthorizeAppInvocation(context.Context, invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error)
 	}
 }
 
 type AppServerOption func(*AppServer)
-
-func WithAuthorizationProvider(provider core.AuthorizationProvider) AppServerOption {
-	return func(s *AppServer) {
-		s.authorization = provider
-	}
-}
 
 func WithAgentAppInvocationAuthorizer(authorizer interface {
 	AuthorizeAppInvocation(context.Context, invocation.AgentAppAuthorizationRequest) (invocation.AgentAppAuthorization, error)
@@ -53,10 +37,9 @@ func WithAgentAppInvocationAuthorizer(authorizer interface {
 	}
 }
 
-func WithCallerApp(callerApp string, profiles AppAccessProfiles) AppServerOption {
+func WithCallerApp(callerApp string) AppServerOption {
 	return func(s *AppServer) {
 		s.callerName = strings.TrimSpace(callerApp)
-		s.accessProfiles = CloneAppAccessProfiles(profiles)
 	}
 }
 
@@ -89,7 +72,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	if targetOperation == "" {
 		return nil, status.Error(codes.InvalidArgument, "operation is required")
 	}
-	callCtx, err := s.requestContextForInvoke(ctx, req.GetContext(), targetApp, targetOperation, req.GetConnection(), req.GetInstance(), req.GetCredentialMode())
+	callCtx, err := s.requestContextForInvoke(ctx, req.GetContext(), targetApp, targetOperation, req.GetConnection(), req.GetInstance(), req.GetCredentialMode(), req.GetRunAs())
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +90,7 @@ func (s *AppServer) Invoke(ctx context.Context, req *proto.AppInvokeRequest) (*p
 	invokeCtx, invokePrincipal = invocation.ApplyDelegation(
 		invokeCtx,
 		invokePrincipal,
-		callCtx.operationProfile.Delegation.RunAs,
+		callCtx.delegationRunAs,
 	)
 
 	result, err := s.invoker.Invoke(invokeCtx, invokePrincipal, targetApp, instance, targetOperation, params)
@@ -161,7 +144,7 @@ type requestInvocationContext struct {
 	principal              *principal.Principal
 	credential             invocation.CredentialContext
 	credentialModeOverride core.ConnectionMode
-	operationProfile       AppOperationProfile
+	delegationRunAs        *core.RunAsSubject
 	workflow               map[string]any
 	agent                  invocation.AgentInvocationContext
 	agentToolRefs          []coreagent.ToolRef
@@ -172,13 +155,16 @@ type requestInvocationContext struct {
 	requestContext         *proto.RequestContext
 }
 
-func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, targetOperation, rawConnection, rawInstance, rawCredentialMode string) (requestInvocationContext, error) {
+func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.RequestContext, targetApp, targetOperation, rawConnection, rawInstance, rawCredentialMode string, requestRunAs *proto.SubjectContext) (requestInvocationContext, error) {
 	callCtx, err := s.requestContext(reqCtx)
 	if err != nil {
 		return requestInvocationContext{}, err
 	}
 	credentialMode, err := appInvokeCredentialMode(rawCredentialMode)
 	if err != nil {
+		return requestInvocationContext{}, err
+	}
+	if err := rejectRequestRunAsForSpecialCallers(callCtx, requestRunAs); err != nil {
 		return requestInvocationContext{}, err
 	}
 	if callCtx.agent != (invocation.AgentInvocationContext{}) {
@@ -196,7 +182,7 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.R
 		callCtx.authorizedInstance = strings.TrimSpace(authorized.Instance)
 		callCtx.authorizedSelectors = true
 		if runAs := core.NormalizeRunAsSubject(authorized.RunAs); runAs != nil {
-			callCtx.operationProfile.Delegation.RunAs = runAs
+			callCtx.delegationRunAs = runAs
 		}
 		if authorized.ToolRefsSet {
 			callCtx.agentToolRefs = append([]coreagent.ToolRef(nil), authorized.ToolRefs...)
@@ -216,24 +202,11 @@ func (s *AppServer) requestContextForInvoke(ctx context.Context, reqCtx *proto.R
 	if callCtx.callerProviderKind == invocation.ProviderKindAgent {
 		return requestInvocationContext{}, status.Error(codes.FailedPrecondition, "agent app invocation context is required")
 	}
-	if err := s.authorizeAppInvocation(ctx, callCtx, appInvocationAuthorizationResourceTypeOperation, appInvocationOperationResourceID(targetApp, targetOperation), targetApp, targetOperation); err != nil {
-		return requestInvocationContext{}, err
-	}
-	profile, profileOK := EffectiveAppOperationProfile(s.accessProfiles, targetApp, targetOperation)
 	if credentialMode != "" {
-		if !profileOK {
-			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callCtx.callerName, targetApp, targetOperation, credentialMode)
-		}
-		if profileOK && !appInvokeCredentialModeAllowed(credentialMode, profile) {
-			return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s with credential_mode %q", callCtx.callerName, targetApp, targetOperation, credentialMode)
-		}
 		callCtx.credentialModeOverride = credentialMode
-		callCtx.operationProfile = profile
-		return callCtx, nil
 	}
-	if profileOK {
-		callCtx.credentialModeOverride = profile.CredentialMode
-		callCtx.operationProfile = profile
+	if runAs := agentwire.RunAsSubjectFromProto(requestRunAs); runAs != nil && strings.TrimSpace(runAs.SubjectID) != "" {
+		callCtx.delegationRunAs = runAs
 	}
 	return callCtx, nil
 }
@@ -246,15 +219,29 @@ func (s *AppServer) requestContextForSurfaceInvoke(ctx context.Context, reqCtx *
 	if callCtx.agent != (invocation.AgentInvocationContext{}) || callCtx.callerProviderKind == invocation.ProviderKindAgent {
 		return requestInvocationContext{}, status.Error(codes.PermissionDenied, "agent callers may only invoke listed app operations")
 	}
-	if err := s.authorizeAppInvocation(ctx, callCtx, appInvocationAuthorizationResourceTypeSurface, appInvocationSurfaceResourceID(targetApp, surface), targetApp, surface); err != nil {
-		return requestInvocationContext{}, err
+	if callCtx.callerProviderKind == invocation.ProviderKindWorkflow {
+		return requestInvocationContext{}, status.Errorf(codes.PermissionDenied, "%s callers may only invoke authorized target app operations", callCtx.callerProviderKind)
 	}
-	if profile, ok := EffectiveAppSurfaceProfile(s.accessProfiles, targetApp, surface); ok {
-		callCtx.credentialModeOverride = profile.CredentialMode
-	}
-	// Surface invocations do not carry delegation metadata. Config validation
-	// rejects runAs on surfaces so GraphQL cannot silently ignore it.
+	_ = surface
+	_ = targetApp
 	return callCtx, nil
+}
+
+func rejectRequestRunAsForSpecialCallers(callCtx requestInvocationContext, requestRunAs *proto.SubjectContext) error {
+	if requestRunAs == nil || strings.TrimSpace(requestRunAs.GetId()) == "" {
+		return nil
+	}
+	switch callCtx.callerProviderKind {
+	case invocation.ProviderKindWorkflow:
+		return status.Error(codes.PermissionDenied, "workflow callers may not set request run_as")
+	case invocation.ProviderKindAgent:
+		return status.Error(codes.PermissionDenied, "agent callers may not set request run_as")
+	default:
+		if callCtx.agent != (invocation.AgentInvocationContext{}) {
+			return status.Error(codes.PermissionDenied, "agent callers may not set request run_as")
+		}
+	}
+	return nil
 }
 
 func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocationContext, error) {
@@ -289,34 +276,6 @@ func (s *AppServer) requestContext(reqCtx *proto.RequestContext) (requestInvocat
 		agent:              agent,
 		requestContext:     reqCtx,
 	}, nil
-}
-
-func (s *AppServer) authorizeAppInvocation(ctx context.Context, callCtx requestInvocationContext, resourceType, resourceID, targetApp, target string) error {
-	if callCtx.callerProviderKind == invocation.ProviderKindWorkflow || callCtx.callerProviderKind == invocation.ProviderKindAgent {
-		return status.Errorf(codes.PermissionDenied, "%s callers may only invoke authorized target app operations", callCtx.callerProviderKind)
-	}
-	if s == nil || s.authorization == nil {
-		return status.Error(codes.FailedPrecondition, "authorization provider is required for app invocation")
-	}
-	ctx = providergateway.WithRequestContext(ctx, callCtx.requestContext)
-	resp, err := s.authorization.CheckAccess(ctx, &proto.CheckAccessRequest{
-		Subject: &proto.Subject{
-			Type: appInvocationAuthorizationSubjectTypeApp,
-			Id:   callCtx.callerName,
-		},
-		Action: &proto.Action{Name: appInvocationAuthorizationActionInvoke},
-		Resource: &proto.Resource{
-			Type: resourceType,
-			Id:   resourceID,
-		},
-	})
-	if err != nil {
-		return status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s: %v", callCtx.callerName, targetApp, target, err)
-	}
-	if resp == nil || !resp.GetAllowed() {
-		return status.Errorf(codes.PermissionDenied, "plugin %q may not invoke %s.%s", callCtx.callerName, targetApp, target)
-	}
-	return nil
 }
 
 func (s *AppServer) authorizeAgentAppInvocation(ctx context.Context, callCtx requestInvocationContext, targetApp, targetOperation, rawConnection, rawInstance string, credentialMode core.ConnectionMode) (invocation.AgentAppAuthorization, error) {
@@ -365,14 +324,6 @@ func authorizeWorkflowAppInvocation(callCtx requestInvocationContext, targetApp,
 	return nil
 }
 
-func appInvocationOperationResourceID(appName, operation string) string {
-	return strings.TrimSpace(appName) + "/operations/" + strings.TrimSpace(operation)
-}
-
-func appInvocationSurfaceResourceID(appName, surface string) string {
-	return strings.TrimSpace(appName) + "/surfaces/" + strings.ToLower(strings.TrimSpace(surface))
-}
-
 func appInvokeCredentialMode(raw string) (core.ConnectionMode, error) {
 	mode := core.NormalizeOptionalConnectionMode(core.ConnectionMode(raw))
 	switch mode {
@@ -381,17 +332,6 @@ func appInvokeCredentialMode(raw string) (core.ConnectionMode, error) {
 	default:
 		return "", status.Errorf(codes.InvalidArgument, "credential_mode %q is not supported", strings.TrimSpace(raw))
 	}
-}
-
-func appInvokeCredentialModeAllowed(mode core.ConnectionMode, profile AppOperationProfile) bool {
-	mode = core.NormalizeOptionalConnectionMode(mode)
-	if mode == "" {
-		return true
-	}
-	if profile.CredentialMode != "" {
-		return profile.CredentialMode == mode
-	}
-	return true
 }
 
 func prepareInvocationSelectors(ctx context.Context, callCtx requestInvocationContext, rawConnection, rawInstance string) (context.Context, string, error) {
@@ -535,8 +475,6 @@ func applyInheritedRequestContext(ctx context.Context, reqCtx *proto.RequestCont
 
 func appOperationResult(result *core.OperationResult, err error) (*proto.OperationResult, error) {
 	if err != nil {
-		// Some target invocation errors are operation-level failures so SDK callers can
-		// inspect status/body; transport, authz, and malformed invoke errors remain RPC errors.
 		if statusCode, ok := invocation.OperationErrorResultStatus(err); ok {
 			return &proto.OperationResult{
 				Status: int32(statusCode),

@@ -625,6 +625,7 @@ pub mod app_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        ///
         pub async fn invoke(
             &mut self,
             request: impl tonic::IntoRequest<super::AppInvokeRequest>,
@@ -670,6 +671,7 @@ pub mod app_server {
     /// Generated trait containing gRPC methods that should be implemented for use with AppServer.
     #[async_trait]
     pub trait App: std::marker::Send + std::marker::Sync + 'static {
+        ///
         async fn invoke(
             &self,
             request: tonic::Request<super::AppInvokeRequest>,

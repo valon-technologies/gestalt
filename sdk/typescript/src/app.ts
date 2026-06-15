@@ -98,6 +98,7 @@ export interface AppInvokeRequest {
   idempotencyKey: string;
   credentialMode: string;
   context?: RequestContext;
+  runAs?: SubjectContext;
 }
 
 /**
@@ -419,6 +420,7 @@ export class App {
       instance?: string | undefined;
       idempotencyKey?: string | undefined;
       credentialMode?: string | undefined;
+      runAs?: Init<SubjectContext> | undefined;
     },
   ): Promise<T> {
     const request = {
@@ -429,6 +431,7 @@ export class App {
       idempotencyKey: options?.idempotencyKey ?? "",
       credentialMode: options?.credentialMode ?? "",
       ...(params !== undefined ? { params } : {}),
+      ...(options?.runAs !== undefined ? { runAs: options.runAs } : {}),
       ...(this.context !== undefined ? { context: this.context } : {}),
     } satisfies Init<AppInvokeRequest>;
     const response = fromWireOperationResult(

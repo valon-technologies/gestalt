@@ -155,6 +155,9 @@ export function toWireAppInvokeRequest(
     ...(value.context !== undefined
       ? { context: toWireRequestContext(value.context) }
       : {}),
+    ...(value.runAs !== undefined
+      ? { runAs: toWireSubjectContext(value.runAs) }
+      : {}),
   });
 }
 
@@ -171,6 +174,9 @@ export function fromWireAppInvokeRequest(
     credentialMode: value.credentialMode,
     ...(value.context !== undefined
       ? { context: fromWireRequestContext(value.context) }
+      : {}),
+    ...(value.runAs !== undefined
+      ? { runAs: fromWireSubjectContext(value.runAs) }
       : {}),
   };
 }

@@ -148,7 +148,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 	// method and the unannotated InvokeGraphQL keep the HTTP-shaped result.
 	// optional_signature fields move into the trailing options object.
 	assertContains(t, files, "app.ts",
-		"async invoke<T = unknown>(app: string, operation: string, params?: JsonObject, options?: { connection?: string | undefined; instance?: string | undefined; idempotencyKey?: string | undefined; credentialMode?: string | undefined }): Promise<T> {",
+		"async invoke<T = unknown>(app: string, operation: string, params?: JsonObject, options?: { connection?: string | undefined; instance?: string | undefined; idempotencyKey?: string | undefined; credentialMode?: string | undefined; runAs?: Init<SubjectContext> | undefined }): Promise<T> {",
 		"connection: options?.connection ?? \"\"",
 		"return decodeAppResult<T>(request.app, request.operation, response);",
 		"async invokeRaw(request: Init<AppInvokeRequest>): Promise<OperationResult> {",

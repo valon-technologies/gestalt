@@ -104,6 +104,7 @@ message AppInvokeRequest {
   string idempotency_key = 8;
   string credential_mode = 9;
   RequestContext context = 11;
+  SubjectContext run_as = 12;
 }
 
 // AppInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
@@ -333,6 +334,7 @@ service App {
     option (optional_signature) = "instance";
     option (optional_signature) = "idempotency_key";
     option (optional_signature) = "credential_mode";
+    option (optional_signature) = "run_as";
   }
   rpc InvokeGraphQL(AppInvokeGraphQLRequest) returns (OperationResult) {
     option (signature) = "app";

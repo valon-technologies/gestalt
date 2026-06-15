@@ -11,8 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -39,7 +37,6 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
@@ -55,10 +52,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
-
-func bootstrapGraphQLStringPtr(value string) *string {
-	return &value
-}
 
 func bootstrapTextAgentOutput() *proto.AgentOutput {
 	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
@@ -80,58 +73,6 @@ func bootstrapAgentRequestContext(t testing.TB, p *principal.Principal, callerNa
 		t.Fatalf("RequestContextProto: %v", err)
 	}
 	return reqCtx
-}
-
-func bootstrapGraphQLSchema() graphqlschema.Schema {
-	return graphqlschema.Schema{
-		QueryType: &graphqlschema.TypeName{Name: "Query"},
-		Types: []graphqlschema.FullType{
-			{
-				Kind: "OBJECT",
-				Name: "Query",
-				Fields: []graphqlschema.Field{
-					{
-						Name: "viewer",
-						Args: []graphqlschema.InputValue{
-							{Name: "team", Type: graphqlschema.TypeRef{Kind: "NON_NULL", OfType: &graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}}},
-						},
-						Type: graphqlschema.TypeRef{Kind: "OBJECT", Name: bootstrapGraphQLStringPtr("Viewer")},
-					},
-				},
-			},
-			{
-				Kind: "OBJECT",
-				Name: "Viewer",
-				Fields: []graphqlschema.Field{
-					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("ID")}},
-					{Name: "name", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}},
-				},
-			},
-		},
-	}
-}
-
-func startBootstrapGraphQLIntrospectionServer(t *testing.T) *httptest.Server {
-	t.Helper()
-
-	schema := bootstrapGraphQLSchema()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			Query string `json:"query"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"__schema": schema,
-			},
-		})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
 }
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
@@ -4856,113 +4797,6 @@ func TestValidate(t *testing.T) {
 
 		if _, err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
 			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("rejects invalid app invokes dependency", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "missing", Operation: "ping"},
-				},
-			},
-		}
-
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references unknown app "missing"`) {
-			t.Fatalf("Validate error = %v, want unknown app invokes error", err)
-		}
-	})
-
-	t.Run("accepts graphql surface app invokes dependency", func(t *testing.T) {
-		t.Parallel()
-
-		srv := startBootstrapGraphQLIntrospectionServer(t)
-		root := t.TempDir()
-		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
-			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
-		}
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
-				ResolvedManifestPath: callerManifestPath,
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "linear", Surface: "graphql"},
-				},
-			},
-			"linear": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							GraphQL: &providermanifestv1.GraphQLSurface{
-								URL: srv.URL,
-							},
-						},
-					},
-				},
-			},
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("rejects graphql surface invoke when target app has no graphql surface", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
-			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
-		}
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
-				ResolvedManifestPath: callerManifestPath,
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "linear", Surface: "graphql"},
-				},
-			},
-			"linear": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							REST: &providermanifestv1.RESTSurface{
-								BaseURL: "https://linear.example/api",
-								Operations: []providermanifestv1.ProviderOperation{
-									{Name: "status", Method: http.MethodGet, Path: "/status"},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references app "linear" surface "graphql", but that surface is not configured`) {
-			t.Fatalf("Validate error = %v, want missing graphql surface error", err)
 		}
 	})
 

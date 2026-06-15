@@ -80,6 +80,7 @@ type AppInvokeRequest struct {
 	IdempotencyKey string
 	CredentialMode string
 	Context        *RequestContext
+	RunAs          *SubjectContext
 }
 
 // Catalog is the native message type for gestalt.provider.v1.Catalog.
@@ -397,6 +398,7 @@ type AppInvokeOptions struct {
 	Instance       string
 	IdempotencyKey string
 	CredentialMode string
+	RunAs          *SubjectContext
 }
 
 // Invoke is the ergonomic form of [App.InvokeRaw].
@@ -406,7 +408,7 @@ func (c *App) Invoke(ctx context.Context, app string, operation string, params m
 	if opts == nil {
 		opts = &AppInvokeOptions{}
 	}
-	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, Context: c.context}
+	request := &AppInvokeRequest{App: app, Operation: operation, Params: params, Connection: opts.Connection, Instance: opts.Instance, IdempotencyKey: opts.IdempotencyKey, CredentialMode: opts.CredentialMode, RunAs: opts.RunAs, Context: c.context}
 	response, err := c.client.Invoke(ctx, toWireAppInvokeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)

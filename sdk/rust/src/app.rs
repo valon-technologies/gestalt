@@ -117,6 +117,8 @@ pub struct AppInvokeRequest {
     pub credential_mode: String,
     /// The `context` field; None when unset.
     pub context: Option<RequestContext>,
+    /// The `run_as` field; None when unset.
+    pub run_as: Option<SubjectContext>,
 }
 
 /// Catalog is the static or request-scoped executable surface exposed by a
@@ -598,6 +600,7 @@ impl App {
             instance: options.instance,
             idempotency_key: options.idempotency_key,
             credential_mode: options.credential_mode,
+            run_as: options.run_as,
             context: self.context.clone(),
         };
         let invoke_context_app = request.app.clone();
@@ -692,6 +695,8 @@ pub struct AppInvokeOptions {
     pub idempotency_key: String,
     /// The `credential_mode` field.
     pub credential_mode: String,
+    /// The `run_as` field; None when unset.
+    pub run_as: Option<SubjectContext>,
 }
 
 /// Optional parameters of [`App::invoke_graphql`]; the default value leaves every

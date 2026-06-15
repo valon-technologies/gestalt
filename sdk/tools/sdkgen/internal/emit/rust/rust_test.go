@@ -161,6 +161,7 @@ func TestEmitSpikeSurface(t *testing.T) {
 		"#[derive(Clone, Debug, Default)]\npub struct AppInvokeOptions {",
 		"    pub connection: String,",
 		"    pub credential_mode: String,",
+		"    pub run_as: Option<SubjectContext>,",
 		"pub struct AppInvokeGraphQLOptions {",
 		"connection: options.connection",
 		"idempotency_key: options.idempotency_key",

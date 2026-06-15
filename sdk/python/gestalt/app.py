@@ -95,6 +95,7 @@ class AppInvokeRequest:
     idempotency_key: str = ""
     credential_mode: str = ""
     context: RequestContext | None = None
+    run_as: SubjectContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,6 +427,7 @@ class App:
         instance: str = ...,
         idempotency_key: str = ...,
         credential_mode: str = ...,
+        run_as: SubjectContext | None = ...,
     ) -> Any: ...
 
     def invoke(
@@ -439,6 +441,7 @@ class App:
         instance: str | None = None,
         idempotency_key: str | None = None,
         credential_mode: str | None = None,
+        run_as: SubjectContext | None = None,
     ) -> Any:
         """The result decodes with the standard JSON operation envelope
         semantics; envelope failures raise InvokeError.
@@ -452,6 +455,7 @@ class App:
                 instance=instance or "",
                 idempotency_key=idempotency_key or "",
                 credential_mode=credential_mode or "",
+                run_as=run_as,
             )
         elif (
             app is not None
@@ -461,6 +465,7 @@ class App:
             or instance is not None
             or idempotency_key is not None
             or credential_mode is not None
+            or run_as is not None
         ):
             raise ValueError("pass either request or keyword arguments, not both")
         if request.context is None and self._context is not None:
