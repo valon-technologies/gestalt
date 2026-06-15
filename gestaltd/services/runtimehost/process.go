@@ -32,6 +32,13 @@ const (
 	processStartRetryDelay = 100 * time.Millisecond
 )
 
+// providerMaxGRPCMessageSize raises the host-side gRPC client cap above the
+// grpc-go default of 4 MiB. Provider RPCs traverse a local unix socket and
+// can carry large payloads (for example, the valon-profile provider returns
+// base64-encoded photos that exceed 4 MiB for some employees). The cap is
+// still bounded by local memory.
+const providerMaxGRPCMessageSize = 64 * 1024 * 1024
+
 type ProcessConfig struct {
 	Command      string
 	Args         []string
@@ -596,6 +603,14 @@ func dialUnixSocket(ctx context.Context, socket string, cfg ProcessConfig) (*grp
 			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(providerClientGRPCOptions(cfg.ProviderName, cfg.Telemetry)...)),
+		// Lift recv/send caps above the grpc-go 4 MiB default so the host can
+		// exchange large provider payloads (e.g., base64-encoded photos) without
+		// surfacing ResourceExhausted to callers. The payload is still bounded
+		// by local memory because the connection is a local unix socket.
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(providerMaxGRPCMessageSize),
+			grpc.MaxCallSendMsgSize(providerMaxGRPCMessageSize),
+		),
 	)
 	if err != nil {
 		return nil, err

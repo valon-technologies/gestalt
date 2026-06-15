@@ -21,6 +21,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// hostedMaxGRPCMessageSize mirrors providerMaxGRPCMessageSize in the sibling
+// runtimehost package (process.go). It raises the host-side gRPC client cap
+// above the grpc-go 4 MiB default so that hosted provider dials handle the
+// same large payloads (e.g., base64-encoded provider responses) as the
+// in-process plugin path. The cap is still bounded by local memory.
+const hostedMaxGRPCMessageSize = 64 * 1024 * 1024
+
 type dialedHostedAppConn struct {
 	conn      *grpc.ClientConn
 	lifecycle proto.ProviderLifecycleClient
@@ -289,6 +296,10 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(hostedMaxGRPCMessageSize),
+			grpc.MaxCallSendMsgSize(hostedMaxGRPCMessageSize),
+		),
 	)
 	if err != nil {
 		return nil, err
@@ -302,6 +313,10 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(hostedMaxGRPCMessageSize),
+			grpc.MaxCallSendMsgSize(hostedMaxGRPCMessageSize),
+		),
 	)
 	if err != nil {
 		return nil, err
@@ -323,6 +338,10 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			NextProtos: []string{"h2"},
 		})),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(hostedMaxGRPCMessageSize),
+			grpc.MaxCallSendMsgSize(hostedMaxGRPCMessageSize),
+		),
 	)
 	if err != nil {
 		return nil, err
