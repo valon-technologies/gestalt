@@ -145,6 +145,7 @@ jobs:
             gestalt
             homebrew-gestalt
           permission-contents: write
+          permission-pull-requests: write
 
       - name: Checkout repository main branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -251,15 +252,33 @@ jobs:
         run: |
           echo "${{ steps.gcp-auth.outputs.access_token }}" | helm registry login "${ARTIFACT_REGISTRY_HOST}" --username oauth2accesstoken --password-stdin
           helm push "/tmp/charts/gestaltd-${VERSION}.tgz" "${CHART_REPOSITORY}"
-      - name: Commit and push repository updates
+      - name: Open pull request for repository updates
+        env:
+          GH_TOKEN: ${{ steps.release-bot-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BRANCH: release/gestaltd-v${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/gestaltd.rb gestaltd/deploy/helm/gestaltd/Chart.yaml
           git diff --cached --quiet && { echo "No repository changes"; exit 0; }
-          git commit -m "Update gestaltd formula and chart to v${{ steps.version.outputs.version }}"
-          git pull --rebase origin main
-          git push
+
+          git checkout -b "$BRANCH"
+          git commit -m "Update gestaltd formula and chart to v${VERSION}"
+          git push -u origin "$BRANCH" --force-with-lease
+
+          existing_pr="$(gh pr list --head "$BRANCH" --base main --json url --jq '.[0].url')"
+          if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
+            echo "Pull request already exists: ${existing_pr}"
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Update gestaltd formula and chart to v${VERSION}" \
+            --body "Automated release housekeeping for ${TAG}. Updates the Homebrew formula and Helm chart after publishing https://github.com/${{ github.repository }}/releases/tag/${TAG}."
 
       - name: Commit and push Homebrew tap
         run: |
