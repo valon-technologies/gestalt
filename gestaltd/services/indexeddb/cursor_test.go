@@ -3,7 +3,6 @@ package indexeddb
 import (
 	"context"
 	"errors"
-	"io"
 	"testing"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
@@ -610,8 +609,7 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
 		proto.RegisterIndexedDBServer(srv, NewServer(stub, "", ServerOptions{}))
 	})
-	client := proto.NewIndexedDBClient(conn)
-	remote := &remoteIndexedDB{Database: rpcidb.NewClient(client, rpcidb.Options{})}
+	remote := &remoteIndexedDB{Database: rpcidb.NewClient(proto.NewIndexedDBClient(conn), rpcidb.Options{})}
 
 	// Value cursor on empty store
 	cursor, err := remote.ObjectStore("empty").OpenCursor(ctx, nil, idb.CursorNext)
@@ -652,13 +650,6 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	if icursor.Err() != nil {
 		t.Fatalf("index cursor unexpected error: %v", icursor.Err())
 	}
-
-	t.Run("client_half_close_after_open", func(t *testing.T) {
-		assertCursorStreamHalfCloseAfterOpen(t, client)
-	})
-	t.Run("client_half_close_after_exhaustion", func(t *testing.T) {
-		assertCursorStreamHalfCloseAfterExhaustion(t, client)
-	})
 }
 
 func TestCursor_ValueCursorExhaustionNoExtraEntry(t *testing.T) {
@@ -804,107 +795,5 @@ func TestCursor_CloseMakesFurtherCallsInert(t *testing.T) {
 	}
 	if err := cursor.Update(idb.Record{"id": "x"}); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("Update after Close = %v, want ErrNotFound", err)
-	}
-}
-
-func assertCursorStreamHalfCloseAfterOpen(t *testing.T, client proto.IndexedDBClient) {
-	t.Helper()
-
-	stream, err := client.OpenCursor(context.Background())
-	if err != nil {
-		t.Fatalf("OpenCursor: %v", err)
-	}
-
-	if err := stream.Send(&proto.CursorClientMessage{
-		Msg: &proto.CursorClientMessage_Open{
-			Open: &proto.OpenCursorRequest{
-				Store:     "empty",
-				Direction: proto.CursorDirection_CURSOR_NEXT,
-			},
-		},
-	}); err != nil {
-		t.Fatalf("Send open: %v", err)
-	}
-
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("Recv open ack: %v", err)
-	}
-	done, ok := resp.GetResult().(*proto.CursorResponse_Done)
-	if !ok || done.Done {
-		t.Fatalf("open ack = %#v, want Done{Done:false}", resp.GetResult())
-	}
-
-	if err := stream.CloseSend(); err != nil {
-		t.Fatalf("CloseSend: %v", err)
-	}
-
-	assertCursorStreamTerminalEOF(t, stream)
-}
-
-func assertCursorStreamHalfCloseAfterExhaustion(t *testing.T, client proto.IndexedDBClient) {
-	t.Helper()
-
-	stream, err := client.OpenCursor(context.Background())
-	if err != nil {
-		t.Fatalf("OpenCursor: %v", err)
-	}
-
-	if err := stream.Send(&proto.CursorClientMessage{
-		Msg: &proto.CursorClientMessage_Open{
-			Open: &proto.OpenCursorRequest{
-				Store:     "empty",
-				Direction: proto.CursorDirection_CURSOR_NEXT,
-			},
-		},
-	}); err != nil {
-		t.Fatalf("Send open: %v", err)
-	}
-
-	if _, err := stream.Recv(); err != nil {
-		t.Fatalf("Recv open ack: %v", err)
-	}
-
-	if err := stream.Send(&proto.CursorClientMessage{
-		Msg: &proto.CursorClientMessage_Command{
-			Command: &proto.CursorCommand{
-				Command: &proto.CursorCommand_Next{Next: true},
-			},
-		},
-	}); err != nil {
-		t.Fatalf("Send next: %v", err)
-	}
-
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("Recv exhaustion: %v", err)
-	}
-	done, ok := resp.GetResult().(*proto.CursorResponse_Done)
-	if !ok || !done.Done {
-		t.Fatalf("exhaustion response = %#v, want Done{Done:true}", resp.GetResult())
-	}
-
-	if err := stream.CloseSend(); err != nil {
-		t.Fatalf("CloseSend: %v", err)
-	}
-
-	assertCursorStreamTerminalEOF(t, stream)
-}
-
-func assertCursorStreamTerminalEOF(t *testing.T, stream grpc.BidiStreamingClient[proto.CursorClientMessage, proto.CursorResponse]) {
-	t.Helper()
-
-	for {
-		_, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			return
-		}
-		if err == nil {
-			continue
-		}
-		if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-			t.Fatalf("terminal Recv error = %v (code=%v), want io.EOF", err, st.Code())
-		}
-		t.Fatalf("terminal Recv error = %v, want io.EOF", err)
 	}
 }

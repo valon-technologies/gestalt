@@ -79,6 +79,15 @@ func (s *cursorStreamStub) Recv() (*proto.CursorResponse, error) {
 
 func (s *cursorStreamStub) CloseSend() error { return nil }
 
+func assertStreamContextSurvivesUnaryTimeout(t *testing.T, streamCtx context.Context) {
+	t.Helper()
+
+	time.Sleep(15 * time.Millisecond)
+	if err := streamCtx.Err(); err != nil {
+		t.Fatalf("stream context cancelled after return: %v", err)
+	}
+}
+
 func TestBidiStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
 	t.Parallel()
 
@@ -91,10 +100,7 @@ func TestBidiStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
 			t.Fatalf("Transaction: %v", err)
 		}
 
-		time.Sleep(15 * time.Millisecond)
-		if err := stub.streamCtx.Err(); err != nil {
-			t.Fatalf("transaction stream context cancelled after return: %v", err)
-		}
+		assertStreamContextSurvivesUnaryTimeout(t, stub.streamCtx)
 
 		if err := tx.Abort(context.Background()); err != nil {
 			t.Fatalf("Abort: %v", err)
@@ -110,10 +116,7 @@ func TestBidiStreamSurvivesUnaryTimeoutAfterReturn(t *testing.T) {
 			t.Fatalf("OpenCursor: %v", err)
 		}
 
-		time.Sleep(15 * time.Millisecond)
-		if err := stub.streamCtx.Err(); err != nil {
-			t.Fatalf("cursor stream context cancelled after return: %v", err)
-		}
+		assertStreamContextSurvivesUnaryTimeout(t, stub.streamCtx)
 
 		if cursor.Continue() {
 			t.Fatal("Continue returned true, want false")
