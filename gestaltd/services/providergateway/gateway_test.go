@@ -2,9 +2,12 @@ package providergateway
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 func TestAuthorizeAllowsRequests(t *testing.T) {
@@ -154,3 +157,126 @@ func (p *stubAuthorizationProvider) ListActiveModelResourceTypes(context.Context
 func (p *stubAuthorizationProvider) Ping(context.Context) error { return nil }
 
 func (p *stubAuthorizationProvider) Close() error { return nil }
+
+func TestDirectTransportInvokeRecordsMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	req := ProviderGatewayRequest{
+		ProviderID:   "authz",
+		ProviderKind: ProviderKindAuthorization,
+		ServiceName:  "gestalt.v1.Authorization",
+		Operation:    "CheckAccess",
+		Source:       GatewaySourceSDKGRPC,
+	}
+
+	_, err := (DirectTransport{}).Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
+		return ProviderGatewayResponse{Payload: []byte("ok")}, nil
+	})
+	if err != nil {
+		t.Fatalf("Invoke error = %v", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := providerGatewayMetricAttrs(req, TransportPathDirect)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", attrs)
+}
+
+func TestDirectTransportInvokeRecordsErrorMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	req := ProviderGatewayRequest{
+		ProviderID:   "authz",
+		ProviderKind: ProviderKindAuthorization,
+		ServiceName:  "gestalt.v1.Authorization",
+		Operation:    "CheckAccess",
+		Source:       GatewaySourceInternal,
+	}
+	wantErr := errors.New("provider failed")
+
+	_, err := (DirectTransport{}).Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
+		return ProviderGatewayResponse{}, wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Invoke error = %v, want %v", err, wantErr)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := providerGatewayMetricAttrs(req, TransportPathDirect)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", 1, attrs)
+}
+
+func TestProviderGatewayTransportInvokeRecordsMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	transport := NewProviderGatewayTransport()
+	req := ProviderGatewayRequest{
+		ProviderID:   "authz",
+		ProviderKind: ProviderKindAuthorization,
+		ServiceName:  "gestalt.v1.Authorization",
+		Operation:    "CheckAccess",
+		Source:       GatewaySourceSDKGRPC,
+	}
+
+	_, err := transport.Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
+		return ProviderGatewayResponse{Payload: []byte("ok")}, nil
+	})
+	if err != nil {
+		t.Fatalf("Invoke error = %v", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := providerGatewayMetricAttrs(req, TransportPathProviderGateway)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", attrs)
+}
+
+func TestProviderGatewayTransportInvokeRecordsErrorMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
+	transport := NewProviderGatewayTransport()
+	req := ProviderGatewayRequest{
+		ProviderID:   "authz",
+		ProviderKind: ProviderKindAuthorization,
+		ServiceName:  "gestalt.v1.Authorization",
+		Operation:    "CheckAccess",
+		Source:       GatewaySourceInternal,
+	}
+	wantErr := errors.New("provider failed")
+
+	_, err := transport.Invoke(ctx, req, func(ctx context.Context, req ProviderGatewayRequest) (ProviderGatewayResponse, error) {
+		return ProviderGatewayResponse{}, wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Invoke error = %v, want %v", err, wantErr)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := providerGatewayMetricAttrs(req, TransportPathProviderGateway)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.provider_gateway.operation.duration", attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.provider_gateway.operation.error_count", 1, attrs)
+}
+
+func providerGatewayMetricAttrs(req ProviderGatewayRequest, transportPath TransportPath) map[string]string {
+	return map[string]string{
+		"gestaltd.provider_gateway.provider.id":    req.ProviderID,
+		"gestaltd.provider_gateway.provider.kind":  string(req.ProviderKind),
+		"gestaltd.provider_gateway.service.name":   req.ServiceName,
+		"gestaltd.provider_gateway.operation.name": req.Operation,
+		"gestaltd.provider_gateway.source":         string(req.Source),
+		"gestaltd.provider_gateway.transport.path": string(transportPath),
+	}
+}
