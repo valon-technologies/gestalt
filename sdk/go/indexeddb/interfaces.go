@@ -30,6 +30,7 @@ type ObjectStore interface {
 }
 
 // Index maps to IDBIndex for the supported Gestalt protocol subset.
+// Compound index query semantics: see IndexQueryRequest in indexeddb.proto.
 type Index interface {
 	Get(ctx context.Context, values ...any) (Record, error)
 	GetKey(ctx context.Context, values ...any) (string, error)

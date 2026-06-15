@@ -134,6 +134,7 @@ export interface ObjectStore {
 
 /**
  * Fakeable IndexedDB secondary-index contract.
+ * Compound index query semantics: see IndexQueryRequest in indexeddb.proto.
  */
 export interface Index {
   get(...values: unknown[]): Promise<Record>;

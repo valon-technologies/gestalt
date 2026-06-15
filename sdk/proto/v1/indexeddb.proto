@@ -109,6 +109,13 @@ message DeleteObjectStoreRequest {
 
 // IndexQueryRequest addresses a secondary index plus optional key values and
 // range constraints.
+//
+// W3C IndexedDB uses one key or IDBKeyRange over the full index key (scalar or
+// array). Gestalt convenience: values pins a compound key prefix; scalar range
+// is valid only when len(values) + 1 == key path length (lowers to a compound
+// array range). Otherwise pass a full compound array range with values empty.
+// Invalid: complete index key in values plus range; prefix plus range with
+// unpinned trailing key-path components.
 message IndexQueryRequest {
   string store = 1;
   string index = 2;
@@ -138,7 +145,7 @@ message OpenCursorRequest {
   bool keys_only = 4;
   // index selects a secondary index when non-empty.
   string index = 5;
-  // values selects a compound index key prefix when index is set.
+  // values pins leading compound index key components; see IndexQueryRequest.
   repeated TypedValue values = 6;
 }
 
