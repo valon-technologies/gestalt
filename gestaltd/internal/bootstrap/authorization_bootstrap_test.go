@@ -17,7 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *testing.T) {
+func TestBootstrapAuthorizationProviderStateReconcilesStaticRelationshipsAndSetsActiveModel(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingAuthorizationProvider{
@@ -39,14 +39,14 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 		listRelationshipsPages: []*proto.ListRelationshipsResponse{
 			{
 				Relationships: []*proto.Relationship{
-					testAuthorizationRelationship("user:runtime", "viewer", "github", "repo-1", proto.SourceLayer_SOURCE_LAYER_RUNTIME),
-					testAuthorizationRelationship("user:static", "viewer", "github", "repo-1", proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG),
+					testAuthorizationRelationship("user:alice", "viewer", "github", "repo-1", proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG),
+					testAuthorizationRelationship("user:stale", "viewer", "github", "repo-1", proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG),
 				},
 				NextPageToken: "next",
 			},
 			{
 				Relationships: []*proto.Relationship{
-					testAuthorizationRelationship("user:runtime-2", "editor", "team", "servicing", proto.SourceLayer_SOURCE_LAYER_RUNTIME),
+					testAuthorizationRelationship("user:runtime", "editor", "team", "servicing", proto.SourceLayer_SOURCE_LAYER_RUNTIME),
 				},
 			},
 		},
@@ -85,10 +85,13 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 		t.Fatalf("bootstrapAuthorizationProviderState: %v", err)
 	}
 
-	if provider.setAuthorizationState == nil {
-		t.Fatal("SetAuthorizationState was not called")
+	if provider.setAuthorizationState != nil {
+		t.Fatal("SetAuthorizationState was called")
 	}
-	model := provider.setAuthorizationState.GetModel()
+	if provider.setActiveModel == nil {
+		t.Fatal("SetActiveModel was not called")
+	}
+	model := provider.setActiveModel.GetModel()
 	wantID, err := authorizationModelContentHash(model)
 	if err != nil {
 		t.Fatalf("authorizationModelContentHash: %v", err)
@@ -124,22 +127,25 @@ func TestBootstrapAuthorizationProviderStatePreservesRuntimeRelationships(t *tes
 	}
 	if got := provider.listRequests; len(got) != 2 {
 		t.Fatalf("ListRelationships requests = %d, want 2", len(got))
-	} else if got[0].GetFilter().GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME || got[0].GetPageToken() != "" || got[1].GetPageToken() != "next" {
+	} else if got[0].GetFilter().GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG || got[0].GetPageToken() != "" || got[1].GetPageToken() != "next" {
 		t.Fatalf("ListRelationships requests = %#v", got)
 	}
-	relationships := provider.setAuthorizationState.GetRelationships()
-	if got, want := len(relationships), 3; got != want {
-		t.Fatalf("SetAuthorizationState relationships count = %d, want %d", got, want)
+	if got, want := len(provider.deleteRelationshipRequests), 1; got != want {
+		t.Fatalf("DeleteRelationship calls = %d, want %d", got, want)
 	}
-	if got := relationships[0].GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG {
-		t.Fatalf("static relationship source layer = %v, want static config", got)
+	deleted := provider.deleteRelationshipRequests[0].GetRelationshipTuple()
+	if got := deleted.GetTarget().GetSubject().GetId(); got != "user:stale" {
+		t.Fatalf("deleted subject = %q, want stale static relationship", got)
 	}
-	runtimeSubjects := []string{
-		relationships[1].GetTuple().GetTarget().GetSubject().GetId(),
-		relationships[2].GetTuple().GetTarget().GetSubject().GetId(),
+	if got, want := len(provider.addRelationshipRequests), 1; got != want {
+		t.Fatalf("AddRelationship calls = %d, want %d", got, want)
 	}
-	if want := []string{"user:runtime", "user:runtime-2"}; !reflect.DeepEqual(runtimeSubjects, want) {
-		t.Fatalf("runtime subjects = %#v, want %#v", runtimeSubjects, want)
+	added := provider.addRelationshipRequests[0].GetRelationship()
+	if got := added.GetSourceLayer(); got != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG {
+		t.Fatalf("added relationship source layer = %v, want static config", got)
+	}
+	if got := added.GetTuple().GetTarget().GetSubject().GetId(); got != "user:alice" {
+		t.Fatalf("added subject = %q, want desired static relationship", got)
 	}
 }
 
@@ -319,11 +325,14 @@ func TestResolveCallerTokenPrivateKey(t *testing.T) {
 }
 
 type recordingAuthorizationProvider struct {
-	listRelationshipsPages []*proto.ListRelationshipsResponse
-	listResourceTypePages  []*proto.ListActiveModelResourceTypesResponse
-	listRequests           []*proto.ListRelationshipsRequest
-	resourceTypeRequests   []*proto.ListActiveModelResourceTypesRequest
-	setAuthorizationState  *proto.SetAuthorizationStateRequest
+	listRelationshipsPages     []*proto.ListRelationshipsResponse
+	listResourceTypePages      []*proto.ListActiveModelResourceTypesResponse
+	listRequests               []*proto.ListRelationshipsRequest
+	resourceTypeRequests       []*proto.ListActiveModelResourceTypesRequest
+	addRelationshipRequests    []*proto.AddRelationshipRequest
+	deleteRelationshipRequests []*proto.DeleteRelationshipRequest
+	setAuthorizationState      *proto.SetAuthorizationStateRequest
+	setActiveModel             *proto.SetActiveModelRequest
 }
 
 func (p *recordingAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
@@ -344,11 +353,13 @@ func (p *recordingAuthorizationProvider) ListRelationships(_ context.Context, re
 	return gproto.Clone(resp).(*proto.ListRelationshipsResponse), nil
 }
 
-func (p *recordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+func (p *recordingAuthorizationProvider) AddRelationship(_ context.Context, req *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	p.addRelationshipRequests = append(p.addRelationshipRequests, gproto.Clone(req).(*proto.AddRelationshipRequest))
 	return &proto.AddRelationshipResponse{}, nil
 }
 
-func (p *recordingAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+func (p *recordingAuthorizationProvider) DeleteRelationship(_ context.Context, req *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	p.deleteRelationshipRequests = append(p.deleteRelationshipRequests, gproto.Clone(req).(*proto.DeleteRelationshipRequest))
 	return &proto.DeleteRelationshipResponse{}, nil
 }
 
@@ -365,6 +376,7 @@ func (p *recordingAuthorizationProvider) GetActiveModelRef(context.Context) (*pr
 }
 
 func (p *recordingAuthorizationProvider) SetActiveModel(_ context.Context, req *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	p.setActiveModel = gproto.Clone(req).(*proto.SetActiveModelRequest)
 	return &proto.SetActiveModelResponse{Model: &proto.AuthorizationModelRef{Id: req.GetModel().GetId(), Version: req.GetModel().GetVersion()}}, nil
 }
 

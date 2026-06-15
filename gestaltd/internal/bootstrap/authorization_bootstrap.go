@@ -53,16 +53,11 @@ func bootstrapAuthorizationProviderState(ctx context.Context, cfg *config.Config
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
 	staticRelationships = append(staticRelationships, workflowRelationships...)
-	runtimeRelationships, err := listRuntimeAuthorizationRelationships(ctx, provider)
-	if err != nil {
+	if err := reconcileStaticAuthorizationRelationships(ctx, provider, staticRelationships); err != nil {
 		return fmt.Errorf("bootstrap: authorization provider %q: %w", name, err)
 	}
-	staticRelationships = append(staticRelationships, runtimeRelationships...)
-	if _, err := provider.SetAuthorizationState(ctx, &proto.SetAuthorizationStateRequest{
-		Model:         model,
-		Relationships: staticRelationships,
-	}); err != nil {
-		return fmt.Errorf("bootstrap: authorization provider %q: set authorization state: %w", name, err)
+	if _, err := provider.SetActiveModel(ctx, &proto.SetActiveModelRequest{Model: model}); err != nil {
+		return fmt.Errorf("bootstrap: authorization provider %q: set active model: %w", name, err)
 	}
 	return nil
 }
@@ -294,22 +289,74 @@ func stringPropertiesStruct(properties map[string]string) (*structpb.Struct, err
 	return protoutil.StructFromMap(values)
 }
 
-func listRuntimeAuthorizationRelationships(ctx context.Context, provider core.AuthorizationProvider) ([]*proto.Relationship, error) {
+func reconcileStaticAuthorizationRelationships(ctx context.Context, provider core.AuthorizationProvider, desired []*proto.Relationship) error {
+	desiredByTuple := make(map[string]*proto.Relationship, len(desired))
+	for _, relationship := range desired {
+		if relationship == nil || relationship.GetTuple() == nil {
+			continue
+		}
+		key, err := authorizationRelationshipTupleKey(relationship.GetTuple())
+		if err != nil {
+			return fmt.Errorf("hash desired static relationship: %w", err)
+		}
+		desiredByTuple[key] = relationship
+	}
+
+	existing, err := listStaticAuthorizationRelationships(ctx, provider)
+	if err != nil {
+		return err
+	}
+	for _, relationship := range existing {
+		tuple := relationship.GetTuple()
+		if tuple == nil {
+			continue
+		}
+		key, err := authorizationRelationshipTupleKey(tuple)
+		if err != nil {
+			return fmt.Errorf("hash existing static relationship: %w", err)
+		}
+		if _, ok := desiredByTuple[key]; ok {
+			continue
+		}
+		if _, err := provider.DeleteRelationship(ctx, &proto.DeleteRelationshipRequest{RelationshipTuple: tuple}); err != nil {
+			return fmt.Errorf("delete stale static relationship: %w", err)
+		}
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(desiredByTuple)) {
+		relationship := desiredByTuple[key]
+		if _, err := provider.AddRelationship(ctx, &proto.AddRelationshipRequest{Relationship: relationship}); err != nil {
+			return fmt.Errorf("add static relationship: %w", err)
+		}
+	}
+	return nil
+}
+
+func authorizationRelationshipTupleKey(tuple *proto.RelationshipTuple) (string, error) {
+	data, err := gproto.MarshalOptions{Deterministic: true}.Marshal(tuple)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func listStaticAuthorizationRelationships(ctx context.Context, provider core.AuthorizationProvider) ([]*proto.Relationship, error) {
 	var out []*proto.Relationship
 	pageToken := ""
 	for {
 		resp, err := provider.ListRelationships(ctx, &proto.ListRelationshipsRequest{
 			Filter: &proto.RelationshipFilter{
-				SourceLayer: proto.SourceLayer_SOURCE_LAYER_RUNTIME,
+				SourceLayer: proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG,
 			},
 			PageSize:  500,
 			PageToken: pageToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("list runtime relationships: %w", err)
+			return nil, fmt.Errorf("list static relationships: %w", err)
 		}
 		for _, relationship := range resp.GetRelationships() {
-			if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_RUNTIME {
+			if relationship.GetSourceLayer() != proto.SourceLayer_SOURCE_LAYER_STATIC_CONFIG {
 				continue
 			}
 			out = append(out, gproto.Clone(relationship).(*proto.Relationship))
