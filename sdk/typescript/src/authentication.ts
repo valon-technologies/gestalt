@@ -50,7 +50,7 @@ export interface AuthorizeResponse {
 }
 
 /**
- * GetGrantRequest retrieves one grant by ID.
+ * GetGrantRequest retrieves one API-token grant by ID.
  */
 export interface GetGrantRequest {
   grantId: string;
@@ -86,6 +86,10 @@ export interface IntrospectRequest {
 
 /**
  * IntrospectResponse models RFC 7662 token introspection response fields.
+ * subject must be a canonical Gestalt subject ID, for example a user: subject
+ * using a stable user identifier or verified email. It must not be a raw
+ * upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+ * that grant.
  */
 export interface IntrospectResponse {
   active: boolean;
@@ -96,19 +100,20 @@ export interface IntrospectResponse {
 }
 
 /**
- * ListGrantsRequest lists grant IDs visible to the caller.
+ * ListGrantsRequest lists API-token grant IDs visible to the caller.
  */
 export interface ListGrantsRequest {}
 
 /**
- * ListGrantsResponse returns grant IDs owned by the caller.
+ * ListGrantsResponse returns caller-visible API-token grant IDs created via
+ * token exchange. It must not include transient login or session grants.
  */
 export interface ListGrantsResponse {
   grantIds: string[];
 }
 
 /**
- * RevokeGrantRequest revokes one grant by ID.
+ * RevokeGrantRequest revokes one caller-visible API-token grant by ID.
  */
 export interface RevokeGrantRequest {
   grantId: string;

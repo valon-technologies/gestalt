@@ -235,6 +235,7 @@ type grantRecord struct {
 	scope     string
 	createdAt int64
 	expiresAt int64
+	apiToken  bool
 }
 
 func New() *Provider {
@@ -325,6 +326,7 @@ func (p *Provider) Token(ctx context.Context, req *gestalt.TokenRequest) (*gesta
 		scope:     pending.scope,
 		createdAt: now.Unix(),
 		expiresAt: now.Add(90 * time.Minute).Unix(),
+		apiToken:  strings.HasPrefix(pending.state, "grant-create:"),
 	}
 	p.mu.Unlock()
 	return &gestalt.TokenResponse{
@@ -351,6 +353,7 @@ func (p *Provider) tokenExchange(ctx context.Context, req *gestalt.TokenRequest)
 		scope:     scope,
 		createdAt: now.Unix(),
 		expiresAt: now.Add(30 * 24 * time.Hour).Unix(),
+		apiToken:  true,
 	}
 	p.mu.Unlock()
 	return &gestalt.TokenResponse{
@@ -398,7 +401,10 @@ func (p *Provider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	grantIDs := make([]string, 0, len(p.grants))
-	for grantID := range p.grants {
+	for grantID, grant := range p.grants {
+		if !grant.apiToken {
+			continue
+		}
 		grantIDs = append(grantIDs, grantID)
 	}
 	return &gestalt.ListGrantsResponse{GrantIDs: grantIDs}, nil
@@ -411,7 +417,7 @@ func (p *Provider) GetGrant(_ context.Context, req *gestalt.GetGrantRequest) (*g
 	p.mu.Lock()
 	grant, ok := p.grants[req.GrantID]
 	p.mu.Unlock()
-	if !ok {
+	if !ok || !grant.apiToken {
 		return nil, fmt.Errorf("grant %q not found", req.GrantID)
 	}
 	scopes := []gestalt.GrantScope{}
@@ -431,6 +437,10 @@ func (p *Provider) RevokeGrant(_ context.Context, req *gestalt.RevokeGrantReques
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	grant, ok := p.grants[req.GrantID]
+	if !ok || !grant.apiToken {
+		return nil, fmt.Errorf("grant %q not found", req.GrantID)
+	}
 	delete(p.grants, req.GrantID)
 	for token, issued := range p.tokens {
 		if issued.grantID == req.GrantID {

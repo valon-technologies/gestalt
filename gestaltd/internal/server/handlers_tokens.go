@@ -221,23 +221,30 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 
 	ctx := s.callerAuthContext(r.Context(), r)
 	resp, err := s.auth.ListGrants(ctx, &core.ListGrantsRequest{})
-	if err != nil {
+	if err != nil || resp == nil {
 		auditErr = errors.New("failed to list grants")
 		writeError(w, http.StatusInternalServerError, "failed to list grants")
 		return
 	}
 	count := 0
-	var revokeErrs []error
+	var failed []map[string]string
 	for _, grantID := range resp.GrantIDs {
 		if _, revokeErr := s.auth.RevokeGrant(ctx, &core.RevokeGrantRequest{GrantID: grantID}); revokeErr != nil {
-			revokeErrs = append(revokeErrs, revokeErr)
+			failed = append(failed, map[string]string{
+				"id":    grantID,
+				"error": "failed to revoke grant",
+			})
 			continue
 		}
 		count++
 	}
-	if len(revokeErrs) > 0 {
+	if len(failed) > 0 {
 		auditErr = errors.New("failed to revoke one or more grants")
-		writeError(w, http.StatusInternalServerError, "failed to revoke one or more grants")
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"status": "partial",
+			"count":  count,
+			"failed": failed,
+		})
 		return
 	}
 	auditAllowed = true

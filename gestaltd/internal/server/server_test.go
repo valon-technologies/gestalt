@@ -9809,6 +9809,153 @@ func TestRevokeAllAPITokens_NoneExist(t *testing.T) {
 	}
 }
 
+func TestRevokeAllAPITokens_ListGrantsNil(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		stub := configureGrantTestAuthForUser(cfg, u.ID)
+		stub.ListGrantsFn = func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+			return nil, nil
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestRevokeAllAPITokens_PartialFailure(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	now := time.Now().UTC()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		stub := configureGrantTestAuthForUser(cfg, u.ID)
+		for _, name := range []string{"tok-a", "tok-b"} {
+			stub.grants[name] = &core.GetGrantResponse{
+				CreatedAt: now.Unix(),
+				ExpiresAt: now.Add(24 * time.Hour).Unix(),
+			}
+		}
+		stub.RevokeGrantFn = func(_ context.Context, req *core.RevokeGrantRequest) (*core.RevokeGrantResponse, error) {
+			if req == nil || req.GrantID == "" {
+				return nil, core.ErrNotFound
+			}
+			if req.GrantID == "tok-b" {
+				return nil, fmt.Errorf("failed to revoke grant")
+			}
+			stub.mu.Lock()
+			defer stub.mu.Unlock()
+			if _, ok := stub.grants[req.GrantID]; !ok {
+				return nil, core.ErrNotFound
+			}
+			stub.revoked[req.GrantID] = struct{}{}
+			return &core.RevokeGrantResponse{}, nil
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "partial" {
+		t.Fatalf("expected status partial, got %q", result["status"])
+	}
+	if count, ok := result["count"].(float64); !ok || count != 1 {
+		t.Fatalf("expected count 1, got %v", result["count"])
+	}
+	failed, ok := result["failed"].([]any)
+	if !ok || len(failed) != 1 {
+		t.Fatalf("expected one failed entry, got %v", result["failed"])
+	}
+	entry, ok := failed[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected failed entry object, got %T", failed[0])
+	}
+	if entry["id"] != "tok-b" {
+		t.Fatalf("expected failed id tok-b, got %v", entry["id"])
+	}
+}
+
+func TestRevokeAllAPITokens_ExcludesSessionGrants(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	now := time.Now().UTC()
+	var stub *grantTrackingAuthStub
+	ts := newTestServer(t, func(cfg *server.Config) {
+		stub = configureGrantTestAuthForUser(cfg, u.ID)
+		stub.grants["grant-stub"] = &core.GetGrantResponse{
+			CreatedAt: now.Unix(),
+			ExpiresAt: now.Add(24 * time.Hour).Unix(),
+		}
+		stub.grants["tok-a"] = &core.GetGrantResponse{
+			CreatedAt: now.Unix(),
+			ExpiresAt: now.Add(24 * time.Hour).Unix(),
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if count, ok := result["count"].(float64); !ok || count != 1 {
+		t.Fatalf("expected count 1, got %v", result["count"])
+	}
+	stub.mu.Lock()
+	_, sessionRevoked := stub.revoked["grant-stub"]
+	_, apiRevoked := stub.revoked["tok-a"]
+	stub.mu.Unlock()
+	if sessionRevoked {
+		t.Fatal("expected session grant-stub to remain active")
+	}
+	if !apiRevoked {
+		t.Fatal("expected API token tok-a to be revoked")
+	}
+}
+
 func TestExecuteOperation_POST(t *testing.T) {
 	t.Parallel()
 

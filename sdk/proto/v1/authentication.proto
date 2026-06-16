@@ -60,10 +60,10 @@ message IntrospectRequest {
 }
 
 // IntrospectResponse models RFC 7662 token introspection response fields.
-// subject must be a canonical Gestalt subject ID (user:<stable identifier>),
-// such as user:<verified email> or user:<coredata user id>, not a raw upstream
-// identity like an OIDC sub. Empty scope means full first-party/Gestalt access
-// for that grant.
+// subject must be a canonical Gestalt subject ID, for example a user: subject
+// using a stable user identifier or verified email. It must not be a raw
+// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+// that grant.
 message IntrospectResponse {
   bool active = 1;
   string subject = 2;
@@ -72,15 +72,16 @@ message IntrospectResponse {
   repeated string audience = 5;
 }
 
-// ListGrantsRequest lists grant IDs visible to the caller.
+// ListGrantsRequest lists API-token grant IDs visible to the caller.
 message ListGrantsRequest {}
 
-// ListGrantsResponse returns grant IDs owned by the caller.
+// ListGrantsResponse returns caller-visible API-token grant IDs created via
+// token exchange. It must not include transient login or session grants.
 message ListGrantsResponse {
   repeated string grant_ids = 1;
 }
 
-// GetGrantRequest retrieves one grant by ID.
+// GetGrantRequest retrieves one API-token grant by ID.
 message GetGrantRequest {
   string grant_id = 1;
 }
@@ -98,7 +99,7 @@ message GetGrantResponse {
   int64 expires_at = 3;
 }
 
-// RevokeGrantRequest revokes one grant by ID.
+// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 message RevokeGrantRequest {
   string grant_id = 1;
 }

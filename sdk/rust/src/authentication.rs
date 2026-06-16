@@ -40,7 +40,7 @@ pub struct AuthorizeResponse {
     pub redirect_uri: String,
 }
 
-/// GetGrantRequest retrieves one grant by ID.
+/// GetGrantRequest retrieves one API-token grant by ID.
 ///
 /// Native message type for `gestalt.provider.v1.GetGrantRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -87,6 +87,10 @@ pub struct IntrospectRequest {
 }
 
 /// IntrospectResponse models RFC 7662 token introspection response fields.
+/// subject must be a canonical Gestalt subject ID, for example a user: subject
+/// using a stable user identifier or verified email. It must not be a raw
+/// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+/// that grant.
 ///
 /// Native message type for `gestalt.provider.v1.IntrospectResponse`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -103,13 +107,14 @@ pub struct IntrospectResponse {
     pub audience: Vec<String>,
 }
 
-/// ListGrantsRequest lists grant IDs visible to the caller.
+/// ListGrantsRequest lists API-token grant IDs visible to the caller.
 ///
 /// Native message type for `gestalt.provider.v1.ListGrantsRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListGrantsRequest {}
 
-/// ListGrantsResponse returns grant IDs owned by the caller.
+/// ListGrantsResponse returns caller-visible API-token grant IDs created via
+/// token exchange. It must not include transient login or session grants.
 ///
 /// Native message type for `gestalt.provider.v1.ListGrantsResponse`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -118,7 +123,7 @@ pub struct ListGrantsResponse {
     pub grant_ids: Vec<String>,
 }
 
-/// RevokeGrantRequest revokes one grant by ID.
+/// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 ///
 /// Native message type for `gestalt.provider.v1.RevokeGrantRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]

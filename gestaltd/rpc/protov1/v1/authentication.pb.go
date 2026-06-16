@@ -394,6 +394,10 @@ func (x *IntrospectRequest) GetTokenTypeHint() string {
 }
 
 // IntrospectResponse models RFC 7662 token introspection response fields.
+// subject must be a canonical Gestalt subject ID, for example a user: subject
+// using a stable user identifier or verified email. It must not be a raw
+// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+// that grant.
 type IntrospectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Active        bool                   `protobuf:"varint,1,opt,name=active,proto3" json:"active,omitempty"`
@@ -470,7 +474,7 @@ func (x *IntrospectResponse) GetAudience() []string {
 	return nil
 }
 
-// ListGrantsRequest lists grant IDs visible to the caller.
+// ListGrantsRequest lists API-token grant IDs visible to the caller.
 type ListGrantsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -507,7 +511,8 @@ func (*ListGrantsRequest) Descriptor() ([]byte, []int) {
 	return file_v1_authentication_proto_rawDescGZIP(), []int{6}
 }
 
-// ListGrantsResponse returns grant IDs owned by the caller.
+// ListGrantsResponse returns caller-visible API-token grant IDs created via
+// token exchange. It must not include transient login or session grants.
 type ListGrantsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GrantIds      []string               `protobuf:"bytes,1,rep,name=grant_ids,json=grantIds,proto3" json:"grant_ids,omitempty"`
@@ -552,7 +557,7 @@ func (x *ListGrantsResponse) GetGrantIds() []string {
 	return nil
 }
 
-// GetGrantRequest retrieves one grant by ID.
+// GetGrantRequest retrieves one API-token grant by ID.
 type GetGrantRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GrantId       string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`
@@ -711,7 +716,7 @@ func (x *GetGrantResponse) GetExpiresAt() int64 {
 	return 0
 }
 
-// RevokeGrantRequest revokes one grant by ID.
+// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 type RevokeGrantRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	GrantId       string                 `protobuf:"bytes,1,opt,name=grant_id,json=grantId,proto3" json:"grant_id,omitempty"`

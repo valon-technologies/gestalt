@@ -35,13 +35,18 @@ type AuthenticationProvider interface {
 	//     gestaltd treats that as a server error, not an invalid token.
 	Introspect(ctx context.Context, req *IntrospectRequest) (*IntrospectResponse, error)
 
-	// ListGrants lists grant IDs visible to the caller.
+	// ListGrants returns grant IDs for caller-visible, user-managed API tokens
+	// created via token exchange. It must not include transient login or session
+	// grants.
 	ListGrants(ctx context.Context, req *ListGrantsRequest) (*ListGrantsResponse, error)
 
-	// GetGrant retrieves one grant's OIDF-shaped details.
+	// GetGrant retrieves OIDF-shaped details for one API-token grant visible to
+	// the caller. Non-visible, non-owned, or session/login grants must be
+	// reported as not found.
 	GetGrant(ctx context.Context, req *GetGrantRequest) (*GetGrantResponse, error)
 
-	// RevokeGrant revokes one grant and invalidates associated credentials.
+	// RevokeGrant revokes one caller-visible API-token grant and invalidates its
+	// credentials. Session/login grants must be reported as not found.
 	RevokeGrant(ctx context.Context, req *RevokeGrantRequest) (*RevokeGrantResponse, error)
 }
 
@@ -90,9 +95,9 @@ type IntrospectRequest struct {
 
 // IntrospectResponse models RFC 7662 token introspection response fields.
 //
-// Subject must be a canonical Gestalt subject ID (user:<stable identifier>), such
-// as user:<verified email> or user:<coredata user id>, not a raw upstream
-// identity like an OIDC sub.
+// Subject must be a canonical Gestalt subject ID, for example a user: subject
+// using a stable user identifier or verified email. It must not be a raw
+// upstream OIDC sub.
 //
 // Scope uses space-delimited OAuth scope values. An empty Scope means full
 // first-party/Gestalt access for that grant.
@@ -104,10 +109,10 @@ type IntrospectResponse struct {
 	Audience []string
 }
 
-// ListGrantsRequest lists grant IDs visible to the caller.
+// ListGrantsRequest lists API-token grant IDs visible to the caller.
 type ListGrantsRequest struct{}
 
-// ListGrantsResponse returns grant IDs owned by the caller.
+// ListGrantsResponse returns caller-visible API-token grant IDs.
 type ListGrantsResponse struct {
 	GrantIDs []string
 }

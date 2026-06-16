@@ -1379,6 +1379,10 @@ pub struct IntrospectRequest {
     pub token_type_hint: ::prost::alloc::string::String,
 }
 /// IntrospectResponse models RFC 7662 token introspection response fields.
+/// subject must be a canonical Gestalt subject ID, for example a user: subject
+/// using a stable user identifier or verified email. It must not be a raw
+/// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+/// that grant.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IntrospectResponse {
     #[prost(bool, tag = "1")]
@@ -1392,16 +1396,17 @@ pub struct IntrospectResponse {
     #[prost(string, repeated, tag = "5")]
     pub audience: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-/// ListGrantsRequest lists grant IDs visible to the caller.
+/// ListGrantsRequest lists API-token grant IDs visible to the caller.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListGrantsRequest {}
-/// ListGrantsResponse returns grant IDs owned by the caller.
+/// ListGrantsResponse returns caller-visible API-token grant IDs created via
+/// token exchange. It must not include transient login or session grants.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListGrantsResponse {
     #[prost(string, repeated, tag = "1")]
     pub grant_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
-/// GetGrantRequest retrieves one grant by ID.
+/// GetGrantRequest retrieves one API-token grant by ID.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetGrantRequest {
     #[prost(string, tag = "1")]
@@ -1425,7 +1430,7 @@ pub struct GetGrantResponse {
     #[prost(int64, tag = "3")]
     pub expires_at: i64,
 }
-/// RevokeGrantRequest revokes one grant by ID.
+/// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RevokeGrantRequest {
     #[prost(string, tag = "1")]

@@ -37,7 +37,7 @@ class AuthorizeResponse:
 
 @dataclass(frozen=True, slots=True)
 class GetGrantRequest:
-    """GetGrantRequest retrieves one grant by ID."""
+    """GetGrantRequest retrieves one API-token grant by ID."""
 
     grant_id: str = ""
 
@@ -70,7 +70,12 @@ class IntrospectRequest:
 
 @dataclass(frozen=True, slots=True)
 class IntrospectResponse:
-    """IntrospectResponse models RFC 7662 token introspection response fields."""
+    """IntrospectResponse models RFC 7662 token introspection response fields.
+    subject must be a canonical Gestalt subject ID, for example a user: subject
+    using a stable user identifier or verified email. It must not be a raw
+    upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+    that grant.
+    """
 
     active: bool = False
     subject: str = ""
@@ -81,19 +86,21 @@ class IntrospectResponse:
 
 @dataclass(frozen=True, slots=True)
 class ListGrantsRequest:
-    """ListGrantsRequest lists grant IDs visible to the caller."""
+    """ListGrantsRequest lists API-token grant IDs visible to the caller."""
 
 
 @dataclass(frozen=True, slots=True)
 class ListGrantsResponse:
-    """ListGrantsResponse returns grant IDs owned by the caller."""
+    """ListGrantsResponse returns caller-visible API-token grant IDs created via
+    token exchange. It must not include transient login or session grants.
+    """
 
     grant_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
 class RevokeGrantRequest:
-    """RevokeGrantRequest revokes one grant by ID."""
+    """RevokeGrantRequest revokes one caller-visible API-token grant by ID."""
 
     grant_id: str = ""
 

@@ -67,10 +67,10 @@ export interface IntrospectRequest {
 /**
  * RFC 7662 token introspection response fields.
  *
- * subject must be a canonical Gestalt subject ID (user:<stable identifier>),
- * such as user:<verified email> or user:<coredata user id>, not a raw upstream
- * identity like an OIDC sub. Empty scope means full first-party/Gestalt access
- * for that grant.
+ * subject must be a canonical Gestalt subject ID, for example a user: subject
+ * using a stable user identifier or verified email. It must not be a raw
+ * upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+ * that grant.
  */
 export interface IntrospectResponse {
   active: boolean;
@@ -104,14 +104,17 @@ export interface AuthenticationProviderOptions extends ProviderBaseOptions {
   authorize: (request: AuthorizeRequest) => MaybePromise<AuthorizeResponse>;
   token: (request: TokenRequest) => MaybePromise<TokenResponse>;
   introspect: (request: IntrospectRequest) => MaybePromise<IntrospectResponse>;
+  /** Returns caller-visible API-token grant IDs only, not login/session grants. */
   listGrants: (
     request: Record<string, never>,
     call: AuthCallContext,
   ) => MaybePromise<{ grantIds: string[] }>;
+  /** Returns details for one API-token grant; session/login grants are not found. */
   getGrant: (
     request: { grantId: string },
     call: AuthCallContext,
   ) => MaybePromise<GrantDetails>;
+  /** Revokes one API-token grant; session/login grants are not found. */
   revokeGrant: (
     request: { grantId: string },
     call: AuthCallContext,

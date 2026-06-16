@@ -31,7 +31,7 @@ type AuthorizeResponse struct {
 
 // GetGrantRequest is the native message type for gestalt.provider.v1.GetGrantRequest.
 //
-// GetGrantRequest retrieves one grant by ID.
+// GetGrantRequest retrieves one API-token grant by ID.
 type GetGrantRequest struct {
 	GrantId string
 }
@@ -65,6 +65,10 @@ type IntrospectRequest struct {
 // IntrospectResponse is the native message type for gestalt.provider.v1.IntrospectResponse.
 //
 // IntrospectResponse models RFC 7662 token introspection response fields.
+// subject must be a canonical Gestalt subject ID, for example a user: subject
+// using a stable user identifier or verified email. It must not be a raw
+// upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+// that grant.
 type IntrospectResponse struct {
 	Active   bool
 	Subject  string
@@ -75,19 +79,20 @@ type IntrospectResponse struct {
 
 // ListGrantsRequest is the native message type for gestalt.provider.v1.ListGrantsRequest.
 //
-// ListGrantsRequest lists grant IDs visible to the caller.
+// ListGrantsRequest lists API-token grant IDs visible to the caller.
 type ListGrantsRequest struct{}
 
 // ListGrantsResponse is the native message type for gestalt.provider.v1.ListGrantsResponse.
 //
-// ListGrantsResponse returns grant IDs owned by the caller.
+// ListGrantsResponse returns caller-visible API-token grant IDs created via
+// token exchange. It must not include transient login or session grants.
 type ListGrantsResponse struct {
 	GrantIds []string
 }
 
 // RevokeGrantRequest is the native message type for gestalt.provider.v1.RevokeGrantRequest.
 //
-// RevokeGrantRequest revokes one grant by ID.
+// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 type RevokeGrantRequest struct {
 	GrantId string
 }

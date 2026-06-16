@@ -214,6 +214,10 @@ export const IntrospectRequestSchema: GenMessage<IntrospectRequest> = /*@__PURE_
 
 /**
  * IntrospectResponse models RFC 7662 token introspection response fields.
+ * subject must be a canonical Gestalt subject ID, for example a user: subject
+ * using a stable user identifier or verified email. It must not be a raw
+ * upstream OIDC sub. Empty scope means full first-party/Gestalt access for
+ * that grant.
  *
  * @generated from message gestalt.provider.v1.IntrospectResponse
  */
@@ -252,7 +256,7 @@ export const IntrospectResponseSchema: GenMessage<IntrospectResponse> = /*@__PUR
   messageDesc(file_v1_authentication, 5);
 
 /**
- * ListGrantsRequest lists grant IDs visible to the caller.
+ * ListGrantsRequest lists API-token grant IDs visible to the caller.
  *
  * @generated from message gestalt.provider.v1.ListGrantsRequest
  */
@@ -267,7 +271,8 @@ export const ListGrantsRequestSchema: GenMessage<ListGrantsRequest> = /*@__PURE_
   messageDesc(file_v1_authentication, 6);
 
 /**
- * ListGrantsResponse returns grant IDs owned by the caller.
+ * ListGrantsResponse returns caller-visible API-token grant IDs created via
+ * token exchange. It must not include transient login or session grants.
  *
  * @generated from message gestalt.provider.v1.ListGrantsResponse
  */
@@ -286,7 +291,7 @@ export const ListGrantsResponseSchema: GenMessage<ListGrantsResponse> = /*@__PUR
   messageDesc(file_v1_authentication, 7);
 
 /**
- * GetGrantRequest retrieves one grant by ID.
+ * GetGrantRequest retrieves one API-token grant by ID.
  *
  * @generated from message gestalt.provider.v1.GetGrantRequest
  */
@@ -358,7 +363,7 @@ export const GetGrantResponseSchema: GenMessage<GetGrantResponse> = /*@__PURE__*
   messageDesc(file_v1_authentication, 10);
 
 /**
- * RevokeGrantRequest revokes one grant by ID.
+ * RevokeGrantRequest revokes one caller-visible API-token grant by ID.
  *
  * @generated from message gestalt.provider.v1.RevokeGrantRequest
  */

@@ -59,9 +59,9 @@ type IntrospectRequest struct {
 
 // IntrospectResponse models RFC 7662 token introspection response fields.
 //
-// Subject must be a canonical Gestalt subject ID (user:<stable identifier>), such
-// as user:<verified email> or user:<coredata user id>, not a raw upstream
-// identity like an OIDC sub.
+// Subject must be a canonical Gestalt subject ID, for example a user: subject
+// using a stable user identifier or verified email. It must not be a raw
+// upstream OIDC sub.
 //
 // Scope uses space-delimited OAuth scope values. An empty Scope means full
 // first-party/Gestalt access for that grant.
@@ -73,15 +73,16 @@ type IntrospectResponse struct {
 	Audience []string
 }
 
-// ListGrantsRequest lists grant IDs visible to the caller.
+// ListGrantsRequest lists API-token grant IDs visible to the caller.
 type ListGrantsRequest struct{}
 
-// ListGrantsResponse returns grant IDs owned by the caller.
+// ListGrantsResponse returns caller-visible API-token grant IDs created via
+// token exchange. It must not include transient login or session grants.
 type ListGrantsResponse struct {
 	GrantIDs []string
 }
 
-// GetGrantRequest retrieves one grant by ID.
+// GetGrantRequest retrieves one API-token grant by ID.
 type GetGrantRequest struct {
 	GrantID string
 }
@@ -99,15 +100,21 @@ type GetGrantResponse struct {
 	ExpiresAt int64
 }
 
-// RevokeGrantRequest revokes one grant by ID.
+// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
 type RevokeGrantRequest struct {
 	GrantID string
 }
 
-// RevokeGrantResponse acknowledges grant revocation.
+// RevokeGrantResponse acknowledges API-token grant revocation.
 type RevokeGrantResponse struct{}
 
 // AuthenticationProvider serves the Gestalt authentication protocol.
+//
+// ListGrants, GetGrant, and RevokeGrant are the grant-management surface used
+// by Gestalt API-token management. ListGrants must return only caller-visible,
+// user-managed API-token/token-exchange grants, not transient login/session
+// grants. GetGrant and RevokeGrant must treat non-visible session/login grants
+// as not found.
 type AuthenticationProvider interface {
 	Provider
 	Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error)

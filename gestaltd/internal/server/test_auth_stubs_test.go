@@ -170,6 +170,9 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 		defer stub.mu.Unlock()
 		ids := make([]string, 0, len(stub.grants))
 		for id := range stub.grants {
+			if !isManageableAPITokenGrantID(id) {
+				continue
+			}
 			if _, revoked := stub.revoked[id]; revoked {
 				continue
 			}
@@ -179,6 +182,9 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 	}
 	stub.GetGrantFn = func(_ context.Context, req *core.GetGrantRequest) (*core.GetGrantResponse, error) {
 		if req == nil || req.GrantID == "" {
+			return nil, core.ErrNotFound
+		}
+		if !isManageableAPITokenGrantID(req.GrantID) {
 			return nil, core.ErrNotFound
 		}
 		stub.mu.Lock()
@@ -196,6 +202,9 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 		if req == nil || req.GrantID == "" {
 			return nil, core.ErrNotFound
 		}
+		if !isManageableAPITokenGrantID(req.GrantID) {
+			return nil, core.ErrNotFound
+		}
 		stub.mu.Lock()
 		defer stub.mu.Unlock()
 		if _, ok := stub.grants[req.GrantID]; !ok {
@@ -205,6 +214,10 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 		return &core.RevokeGrantResponse{}, nil
 	}
 	return stub
+}
+
+func isManageableAPITokenGrantID(id string) bool {
+	return id != "grant-stub" && id != "grant-generated"
 }
 
 func scopesFromString(scope string) []core.GrantScope {
