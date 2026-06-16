@@ -113,6 +113,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		if err := validateUIDevProxy("ui."+name, entry); err != nil {
 			return err
 		}
+		if entry.HasDevProxy() {
+			continue
+		}
 		if err := validateAppOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}

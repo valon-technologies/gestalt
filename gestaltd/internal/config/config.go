@@ -598,12 +598,14 @@ type providerEntryMarshalYAML struct {
 
 type uiEntryYAML struct {
 	providerEntryYAML `yaml:",inline"`
-	Path              string `yaml:"path,omitempty"`
+	Path              string      `yaml:"path,omitempty"`
+	DevProxy          *UIDevProxy `yaml:"devProxy,omitempty"`
 }
 
 type uiEntryMarshalYAML struct {
 	providerEntryMarshalYAML `yaml:",inline"`
-	Path                     string `yaml:"path,omitempty"`
+	Path                     string      `yaml:"path,omitempty"`
+	DevProxy                 *UIDevProxy `yaml:"devProxy,omitempty"`
 }
 
 func (e *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
@@ -1261,9 +1263,16 @@ func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
 	if err != nil {
 		return err
 	}
+	if raw.DevProxy != nil && strings.TrimSpace(raw.DevProxy.URL) != "" {
+		// A dev-proxy mount is served from a live dev server and is never
+		// built. Drop the source so no lifecycle path (lock, sync, serve,
+		// validate) treats it as source-backed and tries to prepare it.
+		decoded.Source = ProviderSource{}
+	}
 	*e = UIEntry{
 		ProviderEntry: decoded,
 		Path:          raw.Path,
+		DevProxy:      raw.DevProxy,
 	}
 	return nil
 }
@@ -1280,6 +1289,7 @@ func (e UIEntry) MarshalYAML() (any, error) {
 	return uiEntryMarshalYAML{
 		providerEntryMarshalYAML: entry,
 		Path:                     e.Path,
+		DevProxy:                 e.DevProxy,
 	}, nil
 }
 
