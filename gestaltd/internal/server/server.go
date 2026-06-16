@@ -285,7 +285,7 @@ func New(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	managedSubjects := cfg.Services.ManagedSubjects
-	resolver := principal.NewResolverNamed(cfg.SelectedAuthProvider, cfg.Auth)
+	resolver := principal.NewResolverNamed(cfg.SelectedAuthProvider, cfg.Auth, cfg.StateSecret)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
 		if provider == nil {
@@ -300,7 +300,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	authResolvers := make(map[string]*principal.Resolver, len(authProviders))
 	for name, provider := range authProviders {
-		authResolvers[name] = principal.NewResolverNamed(name, provider)
+		authResolvers[name] = principal.NewResolverNamed(name, provider, cfg.StateSecret)
 	}
 
 	router := chi.NewRouter()

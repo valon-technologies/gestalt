@@ -286,8 +286,15 @@ func (p *Provider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (
 	return &gestalt.AuthorizeResponse{RedirectURI: parsed.String()}, nil
 }
 
-func (p *Provider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
-	if req == nil || strings.TrimSpace(req.Code) == "" {
+func (p *Provider) Token(ctx context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("token request is required")
+	}
+	grantType := strings.TrimSpace(req.GrantType)
+	if grantType == "urn:ietf:params:oauth:grant-type:token-exchange" {
+		return p.tokenExchange(ctx, req)
+	}
+	if strings.TrimSpace(req.Code) == "" {
 		return nil, fmt.Errorf("authorization code is required")
 	}
 	p.mu.Lock()
@@ -326,6 +333,32 @@ func (p *Provider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt
 		ExpiresIn:   int64((90 * time.Minute).Seconds()),
 		GrantID:     grantID,
 		Scope:       pending.scope,
+	}, nil
+}
+
+func (p *Provider) tokenExchange(ctx context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	intro, err := p.Introspect(ctx, &gestalt.IntrospectRequest{Token: req.SubjectToken})
+	if err != nil || intro == nil || !intro.Active {
+		return nil, fmt.Errorf("inactive subject token")
+	}
+	scope := strings.TrimSpace(req.Scope)
+	grantID := "grant-exchange"
+	accessToken := "generated-access-" + grantID
+	now := time.Now().UTC()
+	p.mu.Lock()
+	p.tokens[accessToken] = issuedToken{subject: intro.Subject, scope: scope, grantID: grantID}
+	p.grants[grantID] = grantRecord{
+		scope:     scope,
+		createdAt: now.Unix(),
+		expiresAt: now.Add(30 * 24 * time.Hour).Unix(),
+	}
+	p.mu.Unlock()
+	return &gestalt.TokenResponse{
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   int64((30 * 24 * time.Hour).Seconds()),
+		GrantID:     grantID,
+		Scope:       scope,
 	}, nil
 }
 

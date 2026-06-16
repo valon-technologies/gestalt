@@ -7,7 +7,6 @@ mod helpers;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use generated::v1::authentication_client::AuthenticationClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
@@ -34,7 +33,6 @@ use gestalt::{AuthenticationProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
-use tonic::Code;
 use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
 use tower::service_fn;

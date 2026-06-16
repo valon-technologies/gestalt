@@ -5368,7 +5368,7 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailClosed(t *testing.T) {
+func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicates(t *testing.T) {
 	t.Parallel()
 
 	for _, email := range []string{"user@example.com", "USER@example.com"} {
@@ -5404,8 +5404,9 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 			}
 			defer func() { _ = resp.Body.Close() }()
 
-			if resp.StatusCode != http.StatusInternalServerError {
-				t.Fatalf("expected 500, got %d", resp.StatusCode)
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 			}
 		})
 	}
@@ -9168,11 +9169,12 @@ func TestCreateAndListAPITokens(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		configureGrantTestAuth(cfg)
+		cfg.Providers = grantTestProviders(t)
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"my-token"}`)
+	body := bytes.NewBufferString(`{"name":"my-token","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	addGrantTestSessionCookie(req)
@@ -9186,15 +9188,215 @@ func TestCreateAndListAPITokens(t *testing.T) {
 		t.Fatalf("expected 201, got %d", resp.StatusCode)
 	}
 
-	var result map[string]string
+	var result struct {
+		Token  string   `json:"token"`
+		Name   string   `json:"name"`
+		Scopes []string `json:"scopes"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["token"] == "" {
+	if result.Token == "" {
 		t.Fatal("expected non-empty token in response")
 	}
-	if result["name"] != "my-token" {
-		t.Fatalf("expected name my-token, got %q", result["name"])
+	if result.Name != "my-token" {
+		t.Fatalf("expected name my-token, got %q", result.Name)
+	}
+}
+
+func TestCreateAPITokenRejectsEmptyScopes(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuth(cfg)
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"empty-scope-token"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create status = %d, want 400: %s", resp.StatusCode, respBody)
+	}
+	if !strings.Contains(string(respBody), "scopes are required") {
+		t.Fatalf("create response = %s, want scopes are required error", respBody)
+	}
+}
+
+func TestCreateAPITokenRejectsMissingGrantID(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	stub.TokenFn = func(_ context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+		if req != nil {
+			copied := *req
+			stub.lastTokenExchangeReq = &copied
+		}
+		return &core.TokenResponse{
+			AccessToken: "grant-access-no-id",
+			TokenType:   "Bearer",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Providers = grantTestProviders(t)
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"missing-grant-id","scopes":"testapp"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("create status = %d, want 500: %s", resp.StatusCode, respBody)
+	}
+}
+
+func TestCreateAPITokenDoesNotUseStateForName(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Providers = grantTestProviders(t)
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"named-token","scopes":"testapp"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create status = %d, want 201: %s", resp.StatusCode, respBody)
+	}
+
+	if stub.lastTokenExchangeReq == nil {
+		t.Fatal("expected token exchange request to be recorded")
+	}
+	if stub.lastTokenExchangeReq.State != "" {
+		t.Fatalf("token exchange state = %q, want empty", stub.lastTokenExchangeReq.State)
+	}
+}
+
+func TestListAPITokensSkipsNotFoundGrant(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	now := time.Now().UTC()
+	stub.grants["grant-live"] = &core.GetGrantResponse{
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(time.Hour).Unix(),
+		Scopes:    []core.GrantScope{{Scope: "testapp"}},
+	}
+	stub.ListGrantsFn = func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+		return &core.ListGrantsResponse{GrantIDs: []string{"grant-live", "grant-stale"}}, nil
+	}
+	stub.GetGrantFn = func(_ context.Context, req *core.GetGrantRequest) (*core.GetGrantResponse, error) {
+		if req == nil {
+			return nil, fmt.Errorf("missing grant request")
+		}
+		switch req.GrantID {
+		case "grant-live":
+			return stub.grants["grant-live"], nil
+		case "grant-stale":
+			return nil, core.ErrNotFound
+		default:
+			return nil, core.ErrNotFound
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	var tokens []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].ID != "grant-live" {
+		t.Fatalf("tokens = %+v, want only grant-live", tokens)
+	}
+	if tokens[0].Name != "" {
+		t.Fatalf("listed token name = %q, want empty", tokens[0].Name)
+	}
+}
+
+func TestListAPITokensGetGrantFailureReturns500(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	stub.ListGrantsFn = func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+		return &core.ListGrantsResponse{GrantIDs: []string{"grant-live"}}, nil
+	}
+	stub.GetGrantFn = func(context.Context, *core.GetGrantRequest) (*core.GetGrantResponse, error) {
+		return nil, fmt.Errorf("storage unavailable")
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list status = %d, want 500: %s", resp.StatusCode, respBody)
 	}
 }
 
@@ -9240,11 +9442,12 @@ func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		configureGrantTestAuth(cfg)
+		cfg.Providers = grantTestProviders(t)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"owned-token"}`)
+	body := bytes.NewBufferString(`{"name":"owned-token","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	addGrantTestSessionCookie(req)
@@ -9369,13 +9572,14 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		configureGrantTestAuthForUser(cfg, existing.ID)
+		cfg.Providers = grantTestProviders(t)
 		cfg.Now = func() time.Time { return fixedNow }
 		cfg.AuditSink = auditSink
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"expiry-test"}`)
+	body := bytes.NewBufferString(`{"name":"expiry-test","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	addGrantTestSessionCookie(req)
@@ -9482,6 +9686,7 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = authStubWithSessionEmail("user@example.com")
+		cfg.Providers = grantTestProviders(t)
 		cfg.AuditSink = auditSink
 		cfg.Services = svc
 	})
@@ -9489,7 +9694,7 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 
 	stubDB.Err = fmt.Errorf("database unavailable")
 
-	body := bytes.NewBufferString(`{"name":"failure-test"}`)
+	body := bytes.NewBufferString(`{"name":"failure-test","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
 	addGrantTestSessionCookie(req)
@@ -9509,14 +9714,14 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
 		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
 	}
-	if auditRecord["operation"] != "auth.authenticate" {
-		t.Fatalf("expected audit operation auth.authenticate, got %v", auditRecord["operation"])
+	if auditRecord["operation"] != "grant.create" {
+		t.Fatalf("expected audit operation grant.create, got %v", auditRecord["operation"])
 	}
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
 	}
-	if auditRecord["error"] != "find user: database unavailable" {
-		t.Fatalf("expected audit error find user: database unavailable, got %v", auditRecord["error"])
+	if auditRecord["error"] != "failed to resolve user" {
+		t.Fatalf("expected audit error failed to resolve user, got %v", auditRecord["error"])
 	}
 }
 

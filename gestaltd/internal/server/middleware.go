@@ -121,6 +121,15 @@ func requestBearerToken(r *http.Request) (string, error) {
 	return bearer, nil
 }
 
+func requestSessionOrBearerToken(r *http.Request) (string, error) {
+	if c, err := r.Cookie(sessionCookieName); err == nil {
+		if token := strings.TrimSpace(c.Value); token != "" {
+			return token, nil
+		}
+	}
+	return requestBearerToken(r)
+}
+
 func requestedAuthSource(r *http.Request) string {
 	if token, err := requestBearerToken(r); err == nil && token != "" {
 		return principal.SourceBearer.String()
@@ -201,9 +210,6 @@ func (s *Server) serveAuthenticated(w http.ResponseWriter, r *http.Request, next
 			p = enriched
 		case enrichErr != nil:
 			slog.WarnContext(r.Context(), "auth: unable to resolve user ID", "error", enrichErr)
-			s.auditRequestEventWithAuthSource(r, requestedAuthSource(r), auditProvider, "auth.authenticate", false, enrichErr)
-			writeError(w, http.StatusInternalServerError, "failed to resolve user")
-			return
 		}
 		ctx := principal.WithPrincipal(r.Context(), p)
 		next.ServeHTTP(w, r.WithContext(ctx))

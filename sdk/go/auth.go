@@ -58,6 +58,13 @@ type IntrospectRequest struct {
 }
 
 // IntrospectResponse models RFC 7662 token introspection response fields.
+//
+// Subject must be a canonical Gestalt subject ID (user:<stable identifier>), such
+// as user:<verified email> or user:<coredata user id>, not a raw upstream
+// identity like an OIDC sub.
+//
+// Scope uses space-delimited OAuth scope values. An empty Scope means full
+// first-party/Gestalt access for that grant.
 type IntrospectResponse struct {
 	Active   bool
 	Subject  string

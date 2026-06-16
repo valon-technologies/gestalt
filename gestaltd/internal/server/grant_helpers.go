@@ -21,35 +21,29 @@ type createGrantResponse struct {
 
 type grantInfo struct {
 	ID        string   `json:"id"`
+	Name      string   `json:"name,omitempty"`
 	Scopes    []string `json:"scopes,omitempty"`
 	CreatedAt int64    `json:"createdAt,omitempty"`
 	ExpiresAt int64    `json:"expiresAt,omitempty"`
 }
 
 func (s *Server) callerAuthContext(ctx context.Context, r *http.Request) context.Context {
-	token, err := requestBearerToken(r)
+	token, err := requestSessionOrBearerToken(r)
 	if err != nil || strings.TrimSpace(token) == "" {
-		if c, cookieErr := r.Cookie(sessionCookieName); cookieErr == nil {
-			token = strings.TrimSpace(c.Value)
-		}
-	}
-	if strings.TrimSpace(token) == "" {
 		return ctx
 	}
 	return authentication.WithCallerBearerToken(ctx, token)
 }
 
 func (s *Server) callerBearerToken(r *http.Request) (string, error) {
-	token, err := requestBearerToken(r)
-	if err == nil && strings.TrimSpace(token) != "" {
-		return strings.TrimSpace(token), nil
+	token, err := requestSessionOrBearerToken(r)
+	if err != nil {
+		return "", err
 	}
-	if c, cookieErr := r.Cookie(sessionCookieName); cookieErr == nil {
-		if v := strings.TrimSpace(c.Value); v != "" {
-			return v, nil
-		}
+	if strings.TrimSpace(token) == "" {
+		return "", errors.New("caller bearer token required")
 	}
-	return "", errors.New("caller bearer token required")
+	return strings.TrimSpace(token), nil
 }
 
 func grantInfoFromResponse(grantID string, resp *core.GetGrantResponse) grantInfo {

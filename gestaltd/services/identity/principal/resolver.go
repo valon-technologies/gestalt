@@ -6,19 +6,21 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type Resolver struct {
-	auth         core.AuthenticationProvider
-	providerName string
+	auth          core.AuthenticationProvider
+	providerName  string
+	sessionSecret []byte
 }
 
 func NewResolver(auth core.AuthenticationProvider) *Resolver {
-	return NewResolverNamed("", auth)
+	return NewResolverNamed("", auth, nil)
 }
 
-func NewResolverNamed(providerName string, auth core.AuthenticationProvider) *Resolver {
+func NewResolverNamed(providerName string, auth core.AuthenticationProvider, sessionSecret []byte) *Resolver {
 	name := strings.TrimSpace(providerName)
 	switch {
 	case auth == nil && name == "":
@@ -26,7 +28,7 @@ func NewResolverNamed(providerName string, auth core.AuthenticationProvider) *Re
 	case name == "":
 		name = "authentication"
 	}
-	return &Resolver{auth: auth, providerName: name}
+	return &Resolver{auth: auth, providerName: name, sessionSecret: sessionSecret}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
@@ -44,10 +46,24 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 
 	resp, err := r.auth.Introspect(ctx, &core.IntrospectRequest{Token: token})
 	metricutil.RecordAuthMetrics(ctx, startedAt, provider, "introspect", err != nil || resp == nil || !resp.Active)
-	if err != nil || resp == nil || !resp.Active {
-		return nil, ErrInvalidToken
+	if err != nil {
+		return nil, err
 	}
-	return principalFromIntrospection(resp), nil
+	if resp != nil && resp.Active {
+		subject := strings.TrimSpace(resp.Subject)
+		if _, _, ok := core.ParseSubjectID(subject); !ok {
+			return nil, ErrInvalidToken
+		}
+		resp.Subject = subject
+		return principalFromIntrospection(resp), nil
+	}
+	if len(r.sessionSecret) > 0 {
+		identity, jwtErr := session.ValidateToken(token, r.sessionSecret)
+		if jwtErr == nil && identity != nil && strings.TrimSpace(identity.Email) != "" {
+			return principalFromSessionIdentity(identity), nil
+		}
+	}
+	return nil, ErrInvalidToken
 }
 
 func (r *Resolver) ResolveEmail(email string) *Principal {
@@ -79,6 +95,25 @@ func principalFromIntrospection(resp *core.IntrospectResponse) *Principal {
 		}
 	} else if kind := KindFromSubjectID(p.SubjectID); kind != "" {
 		p.Kind = kind
+	}
+	p.CredentialSubjectID = p.SubjectID
+	return Canonicalize(p)
+}
+
+func principalFromSessionIdentity(identity *core.UserIdentity) *Principal {
+	if identity == nil || strings.TrimSpace(identity.Email) == "" {
+		return nil
+	}
+	email := strings.TrimSpace(identity.Email)
+	p := &Principal{
+		SubjectID: "user:" + email,
+		Identity: &core.UserIdentity{
+			Email:       email,
+			DisplayName: identity.DisplayName,
+			AvatarURL:   identity.AvatarURL,
+		},
+		Kind:   KindUser,
+		Source: SourceBearer,
 	}
 	p.CredentialSubjectID = p.SubjectID
 	return Canonicalize(p)

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use tonic::codegen::async_trait;
 
 use crate::authentication::{
@@ -11,8 +9,11 @@ use crate::error::Result;
 
 pub const CALLER_BEARER_TOKEN_METADATA_KEY: &str = "x-gestalt-caller-bearer-token";
 
+/// OAuth 2.0 authorization code grant type.
 pub const GRANT_TYPE_AUTHORIZATION_CODE: &str = "authorization_code";
+/// OAuth 2.0 token exchange grant type (RFC 8693).
 pub const GRANT_TYPE_TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
+/// OAuth 2.0 access token subject token type (RFC 8693).
 pub const SUBJECT_TOKEN_TYPE_ACCESS_TOKEN: &str = "urn:ietf:params:oauth:token-type:access_token";
 
 /// Caller-scoped authentication metadata for grant-management RPCs.
@@ -98,15 +99,4 @@ pub(crate) fn caller_bearer_token_from_metadata(metadata: &tonic::metadata::Meta
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_default()
-}
-
-pub(crate) struct AuthProviderState<P> {
-    pub provider: Arc<P>,
-    pub call: AuthCallContext,
-}
-
-impl<P> AuthProviderState<P> {
-    pub fn new(provider: Arc<P>, call: AuthCallContext) -> Self {
-        Self { provider, call }
-    }
 }

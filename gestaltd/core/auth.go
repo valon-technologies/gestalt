@@ -25,6 +25,14 @@ type AuthenticationProvider interface {
 	Token(ctx context.Context, req *TokenRequest) (*TokenResponse, error)
 
 	// Introspect implements the RFC 7662 token introspection endpoint.
+	//
+	// Contract:
+	//   - active=true with a populated Subject means the token is valid for this
+	//     configured Gestalt deployment/API. The provider owns upstream
+	//     issuer/audience/deployment validation internally.
+	//   - active=false with nil error means the token is invalid, expired, or revoked.
+	//   - nil response with non-nil error means provider/storage/transport failure.
+	//     gestaltd treats that as a server error, not an invalid token.
 	Introspect(ctx context.Context, req *IntrospectRequest) (*IntrospectResponse, error)
 
 	// ListGrants lists grant IDs visible to the caller.
@@ -81,6 +89,13 @@ type IntrospectRequest struct {
 }
 
 // IntrospectResponse models RFC 7662 token introspection response fields.
+//
+// Subject must be a canonical Gestalt subject ID (user:<stable identifier>), such
+// as user:<verified email> or user:<coredata user id>, not a raw upstream
+// identity like an OIDC sub.
+//
+// Scope uses space-delimited OAuth scope values. An empty Scope means full
+// first-party/Gestalt access for that grant.
 type IntrospectResponse struct {
 	Active   bool
 	Subject  string

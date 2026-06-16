@@ -8,7 +8,7 @@ use crate::authentication::{
     TokenRequest,
 };
 use crate::authentication::{
-    GetGrantResponse, IntrospectResponse, ListGrantsResponse, RevokeGrantResponse, TokenResponse,
+    GetGrantResponse, IntrospectResponse, ListGrantsResponse, TokenResponse,
 };
 use crate::generated::v1::authentication_server::Authentication as AuthenticationProviderGrpc;
 use crate::generated::v1::{

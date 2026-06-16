@@ -66,6 +66,11 @@ export interface IntrospectRequest {
 
 /**
  * RFC 7662 token introspection response fields.
+ *
+ * subject must be a canonical Gestalt subject ID (user:<stable identifier>),
+ * such as user:<verified email> or user:<coredata user id>, not a raw upstream
+ * identity like an OIDC sub. Empty scope means full first-party/Gestalt access
+ * for that grant.
  */
 export interface IntrospectResponse {
   active: boolean;

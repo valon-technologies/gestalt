@@ -31,13 +31,13 @@ from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE, JSON_CONTENT_TYPE
 from ._protocol import string_lists_from_proto_map
 from ._providers import (
+    CALLER_BEARER_TOKEN_METADATA_KEY,
     AgentProvider,
     AppProvider,
     AppProviderAdapter,
     AuthCallContext,
     AuthenticationProvider,
     AuthorizationProvider,
-    CALLER_BEARER_TOKEN_METADATA_KEY,
     CacheProvider,
     Closer,
     HealthChecker,

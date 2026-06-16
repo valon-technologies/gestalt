@@ -21,7 +21,7 @@ func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, err
 	}
 	scope := strings.TrimSpace(req.Scopes)
 	if scope == "" {
-		return "", nil
+		return "", errors.New("scopes are required")
 	}
 	for _, part := range strings.Fields(scope) {
 		appName, _, _ := strings.Cut(part, ":")
@@ -95,17 +95,21 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		Scope:            scope,
 		ClientID:         core.DefaultOAuthClientID,
 	})
-	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
+	grantID := ""
+	if tokenResp != nil {
+		grantID = strings.TrimSpace(tokenResp.GrantID)
+	}
+	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" || grantID == "" {
 		auditErr = errors.New("failed to issue grant token")
 		writeError(w, http.StatusInternalServerError, "failed to issue grant token")
 		return
 	}
-	auditTarget = apiTokenAuditTarget(tokenResp.GrantID, req.Name)
+	auditTarget = apiTokenAuditTarget(grantID, req.Name)
 
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusCreated, createGrantResponse{
-		ID:        tokenResp.GrantID,
+		ID:        grantID,
 		Name:      req.Name,
 		Token:     tokenResp.AccessToken,
 		Scopes:    principal.ParseScopeString(tokenResp.Scope),
@@ -138,7 +142,7 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 
 	ctx := s.callerAuthContext(r.Context(), r)
 	resp, err := s.auth.ListGrants(ctx, &core.ListGrantsRequest{})
-	if err != nil {
+	if err != nil || resp == nil {
 		auditErr = errors.New("failed to list grants")
 		writeError(w, http.StatusInternalServerError, "failed to list grants")
 		return
@@ -148,8 +152,12 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 	for _, grantID := range resp.GrantIDs {
 		detail, detailErr := s.auth.GetGrant(ctx, &core.GetGrantRequest{GrantID: grantID})
 		if detailErr != nil {
-			out = append(out, grantInfo{ID: grantID})
-			continue
+			if errors.Is(detailErr, core.ErrNotFound) {
+				continue
+			}
+			auditErr = errors.New("failed to list grants")
+			writeError(w, http.StatusInternalServerError, "failed to list grants")
+			return
 		}
 		out = append(out, grantInfoFromResponse(grantID, detail))
 	}
@@ -219,10 +227,18 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	count := 0
+	var revokeErrs []error
 	for _, grantID := range resp.GrantIDs {
-		if _, revokeErr := s.auth.RevokeGrant(ctx, &core.RevokeGrantRequest{GrantID: grantID}); revokeErr == nil {
-			count++
+		if _, revokeErr := s.auth.RevokeGrant(ctx, &core.RevokeGrantRequest{GrantID: grantID}); revokeErr != nil {
+			revokeErrs = append(revokeErrs, revokeErr)
+			continue
 		}
+		count++
+	}
+	if len(revokeErrs) > 0 {
+		auditErr = errors.New("failed to revoke one or more grants")
+		writeError(w, http.StatusInternalServerError, "failed to revoke one or more grants")
+		return
 	}
 	auditAllowed = true
 	auditErr = nil

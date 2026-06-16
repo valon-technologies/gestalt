@@ -178,6 +178,9 @@ func (s *StubAuthProvider) GetGrant(ctx context.Context, req *core.GetGrantReque
 	if s.GetGrantFn != nil {
 		return s.GetGrantFn(ctx, req)
 	}
+	if req == nil || strings.TrimSpace(req.GrantID) == "" {
+		return &core.GetGrantResponse{}, nil
+	}
 	return &core.GetGrantResponse{}, nil
 }
 

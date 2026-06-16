@@ -449,11 +449,22 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Query().Get("cli") == "1" {
+		apiGrant, exchangeErr := auth.provider.Token(r.Context(), &core.TokenRequest{
+			GrantType:        core.GrantTypeTokenExchange,
+			SubjectToken:     tokenResp.AccessToken,
+			SubjectTokenType: core.SubjectTokenTypeAccessToken,
+			ClientID:         core.DefaultOAuthClientID,
+		})
+		if exchangeErr != nil || apiGrant == nil || strings.TrimSpace(apiGrant.AccessToken) == "" || strings.TrimSpace(apiGrant.GrantID) == "" {
+			auditErr = errors.New("failed to issue CLI grant")
+			writeError(w, http.StatusInternalServerError, "failed to issue CLI grant")
+			return
+		}
 		auditAllowed = true
 		auditErr = nil
 		writeJSON(w, http.StatusOK, createGrantResponse{
-			ID:    tokenResp.GrantID,
-			Token: tokenResp.AccessToken,
+			ID:    strings.TrimSpace(apiGrant.GrantID),
+			Token: apiGrant.AccessToken,
 		})
 		return
 	}

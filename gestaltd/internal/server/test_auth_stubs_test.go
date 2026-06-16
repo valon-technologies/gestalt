@@ -7,19 +7,31 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/server"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 const (
 	testSessionToken       = "session-token"
 	testGrantSessionCookie = "grant-session-token"
+	grantTestScope         = "testapp"
 )
+
+func grantTestProviders(t *testing.T) *registry.ProviderMap[core.Provider] {
+	t.Helper()
+	return testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+		N:        grantTestScope,
+		ConnMode: core.ConnectionModeNone,
+	})
+}
 
 func testAuthStubWithIntrospect(fn func(context.Context, string) (*core.IntrospectResponse, error)) *coretesting.StubAuthProvider {
 	return &coretesting.StubAuthProvider{
@@ -44,11 +56,12 @@ func testIntrospectActive(subjectID, scope string) *core.IntrospectResponse {
 
 type grantTrackingAuthStub struct {
 	coretesting.StubAuthProvider
-	mu           sync.Mutex
-	grants       map[string]*core.GetGrantResponse
-	revoked      map[string]struct{}
-	pendingScope string
-	pendingState string
+	mu                   sync.Mutex
+	grants               map[string]*core.GetGrantResponse
+	revoked              map[string]struct{}
+	pendingScope         string
+	pendingState         string
+	lastTokenExchangeReq *core.TokenRequest
 }
 
 func newGrantTrackingAuthStub() *grantTrackingAuthStub {
@@ -99,6 +112,10 @@ func newGrantTrackingAuthStub() *grantTrackingAuthStub {
 		}
 		switch grantType {
 		case core.GrantTypeTokenExchange:
+			if req != nil {
+				copied := *req
+				stub.lastTokenExchangeReq = &copied
+			}
 			intro, introErr := stub.IntrospectFn(context.Background(), &core.IntrospectRequest{Token: req.SubjectToken})
 			if introErr != nil || intro == nil || !intro.Active {
 				return nil, fmt.Errorf("inactive subject token")
@@ -237,19 +254,46 @@ func newHostIssuedSessionAuthStub(secret []byte, opts hostIssuedSessionAuthOpts)
 			return identity, nil
 		},
 		TokenFn: func(_ context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
-			if req == nil || req.Code != "good-code" {
-				return nil, fmt.Errorf("invalid code")
+			if req == nil {
+				return nil, fmt.Errorf("token request is required")
 			}
-			token, err := session.IssueToken(identity, secret, time.Hour)
-			if err != nil {
-				return nil, err
+			grantType := strings.TrimSpace(req.GrantType)
+			if grantType == "" {
+				grantType = core.GrantTypeAuthorizationCode
 			}
-			return &core.TokenResponse{
-				AccessToken: token,
-				TokenType:   "Bearer",
-				ExpiresIn:   3600,
-				GrantID:     "grant-host-session",
-			}, nil
+			switch grantType {
+			case core.GrantTypeTokenExchange:
+				claims, err := session.ValidateToken(strings.TrimSpace(req.SubjectToken), secret)
+				if err != nil || claims == nil {
+					return nil, fmt.Errorf("inactive subject token")
+				}
+				apiToken, err := session.IssueToken(identity, secret, 30*24*time.Hour)
+				if err != nil {
+					return nil, err
+				}
+				return &core.TokenResponse{
+					AccessToken: apiToken,
+					TokenType:   "Bearer",
+					ExpiresIn:   30 * 24 * 3600,
+					GrantID:     "grant-host-api",
+				}, nil
+			case core.GrantTypeAuthorizationCode:
+				if req.Code != "good-code" {
+					return nil, fmt.Errorf("invalid code")
+				}
+				token, err := session.IssueToken(identity, secret, time.Hour)
+				if err != nil {
+					return nil, err
+				}
+				return &core.TokenResponse{
+					AccessToken: token,
+					TokenType:   "Bearer",
+					ExpiresIn:   3600,
+					GrantID:     "grant-host-session",
+				}, nil
+			default:
+				return nil, fmt.Errorf("unsupported grant_type %q", grantType)
+			}
 		},
 		IntrospectFn: func(_ context.Context, req *core.IntrospectRequest) (*core.IntrospectResponse, error) {
 			if req == nil || strings.TrimSpace(req.Token) == "" {
