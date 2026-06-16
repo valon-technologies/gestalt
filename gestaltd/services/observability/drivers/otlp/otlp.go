@@ -220,6 +220,7 @@ func buildProviderTelemetryEnv(cfg yamlConfig) map[string]string {
 	if interval, err := time.ParseDuration(cfg.Metrics.Interval); err == nil && interval > 0 {
 		env["OTEL_METRIC_EXPORT_INTERVAL"] = strconv.FormatInt(interval.Milliseconds(), 10)
 	}
+	env["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"] = "delta"
 	return env
 }
 
@@ -325,7 +326,9 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 	var exporter sdkmetric.Exporter
 	switch strings.ToLower(cfg.Protocol) {
 	case "http":
-		opts := []otlpmetrichttp.Option{}
+		opts := []otlpmetrichttp.Option{
+			otlpmetrichttp.WithTemporalitySelector(sdkmetric.DeltaTemporalitySelector),
+		}
 		if cfg.Endpoint != "" {
 			opts = append(opts, otlpmetrichttp.WithEndpoint(cfg.Endpoint))
 		}
@@ -337,7 +340,9 @@ func buildMeterProvider(ctx context.Context, cfg yamlConfig, res *resource.Resou
 		}
 		exporter, err = otlpmetrichttp.New(ctx, opts...)
 	default:
-		opts := []otlpmetricgrpc.Option{}
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithTemporalitySelector(sdkmetric.DeltaTemporalitySelector),
+		}
 		if cfg.Endpoint != "" {
 			opts = append(opts, otlpmetricgrpc.WithEndpoint(cfg.Endpoint))
 		}

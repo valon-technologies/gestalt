@@ -46,6 +46,9 @@ func TestProviderTelemetryEnvUsesOTLPConfig(t *testing.T) {
 	if got := env["OTEL_METRIC_EXPORT_INTERVAL"]; got != "15000" {
 		t.Fatalf("OTEL_METRIC_EXPORT_INTERVAL = %q, want 15000", got)
 	}
+	if got := env["OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE"]; got != "delta" {
+		t.Fatalf("OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE = %q, want delta", got)
+	}
 	if got := env["OTEL_EXPORTER_OTLP_HEADERS"]; got != "x-api-key=secret%20value%3D" {
 		t.Fatalf("OTEL_EXPORTER_OTLP_HEADERS = %q, want encoded header", got)
 	}
