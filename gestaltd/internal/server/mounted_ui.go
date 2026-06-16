@@ -103,7 +103,7 @@ func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, error) {
+func mountedUIsFromEntries(entries map[string]*config.UIEntry, devHandlers map[string]http.Handler) ([]MountedUI, error) {
 	names := make([]string, 0, len(entries))
 	for name := range entries {
 		names = append(names, name)
@@ -116,6 +116,28 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 		if entry == nil {
 			continue
 		}
+
+		routes := mountedUIRoutesFromEntry(entry)
+
+		if entry.DevActive {
+			handler := devHandlers[name]
+			if handler == nil {
+				return nil, fmt.Errorf("ui %q is dev-active but no dev handler was started", name)
+			}
+			mounted = append(mounted, MountedUI{
+				Name:                name,
+				Path:                entry.Path,
+				AppName:             entry.OwnerApp,
+				AuthorizationPolicy: entry.AuthorizationPolicy,
+				Routes:              routes,
+				Handler:             handler,
+				ThemeStylesheet:     entry.ResolvedThemeStylesheet,
+				ThemeAssetsDir:      entry.ResolvedThemeAssetsDir,
+				IsDev:               true,
+			})
+			continue
+		}
+
 		if entry.ResolvedAssetRoot == "" {
 			return nil, fmt.Errorf("ui %q configured but asset root not resolved", name)
 		}
@@ -123,17 +145,6 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 		handler, err := ui.DirHandler(entry.ResolvedAssetRoot)
 		if err != nil {
 			return nil, fmt.Errorf("ui %q: %w", name, err)
-		}
-
-		routes := []MountedUIRoute(nil)
-		if spec := entry.ManifestSpec(); spec != nil && len(spec.Routes) > 0 {
-			routes = make([]MountedUIRoute, 0, len(spec.Routes))
-			for _, route := range spec.Routes {
-				routes = append(routes, MountedUIRoute{
-					Path:         route.Path,
-					AllowedRoles: append([]string(nil), route.AllowedRoles...),
-				})
-			}
 		}
 
 		mounted = append(mounted, MountedUI{
@@ -149,6 +160,20 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 	}
 
 	return mounted, nil
+}
+
+func mountedUIRoutesFromEntry(entry *config.UIEntry) []MountedUIRoute {
+	routes := []MountedUIRoute(nil)
+	if spec := entry.ManifestSpec(); spec != nil && len(spec.Routes) > 0 {
+		routes = make([]MountedUIRoute, 0, len(spec.Routes))
+		for _, route := range spec.Routes {
+			routes = append(routes, MountedUIRoute{
+				Path:         route.Path,
+				AllowedRoles: append([]string(nil), route.AllowedRoles...),
+			})
+		}
+	}
+	return routes
 }
 
 func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
@@ -328,6 +353,12 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	inner := mounted.Handler
 	if inner == nil {
 		return http.NotFoundHandler()
+	}
+	if mounted.IsDev {
+		if mounted.ThemeStylesheet != "" || mounted.ThemeAssetsDir != "" {
+			inner = mountedUIThemeHandlerFullPath(mounted, inner)
+		}
+		return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
 	}
 	// The theme interceptor wraps the static handler under StripPrefix (it
 	// matches mount-relative paths) and runs inside protectedUIHandler:

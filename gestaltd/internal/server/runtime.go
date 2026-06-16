@@ -18,6 +18,7 @@ import (
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -127,6 +128,18 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 	}
 	publicConfig.MCPHandler = mcpSlot
 	publicConfig.ProviderUIs = cfg.Providers.UI
+
+	var devSupervisor *providerdev.Supervisor
+	if targets, err := providerdev.TargetsFromConfig(cfg); err != nil {
+		return err
+	} else if len(targets) > 0 {
+		devSupervisor, err = providerdev.Start(ctx, slog.Default(), targets)
+		if err != nil {
+			return fmt.Errorf("start dev servers: %w", err)
+		}
+		publicConfig.DevHandlers = devSupervisor.Handlers()
+	}
+
 	publicConfig.BuiltinAdminUI = &BuiltinAdminUIOptions{
 		BrandHref: publicBrandHref,
 		LoginBase: browserLoginPath,
@@ -134,6 +147,9 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 
 	publicHandler, err := New(publicConfig)
 	if err != nil {
+		if devSupervisor != nil {
+			devSupervisor.Stop()
+		}
 		return fmt.Errorf("creating public server: %w", err)
 	}
 
@@ -158,6 +174,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		managementConfig := baseConfig
 		managementConfig.RouteProfile = RouteProfileManagement
 		managementConfig.ProviderUIs = cfg.Providers.UI
+		managementConfig.DevHandlers = publicConfig.DevHandlers
 		managementLoginBase := browserLoginPath
 		if baseURL := strings.TrimRight(cfg.Server.BaseURL, "/"); baseURL != "" {
 			managementLoginBase = baseURL + browserLoginPath
@@ -169,6 +186,9 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 
 		managementHandler, err := New(managementConfig)
 		if err != nil {
+			if devSupervisor != nil {
+				devSupervisor.Stop()
+			}
 			return fmt.Errorf("creating management server: %w", err)
 		}
 		servers = append(servers, namedHTTPServer{
@@ -177,7 +197,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		})
 	}
 
-	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady)
+	return serveRuntime(ctx, cfg, connMaps, result, mcpInvoker, servers, mcpSlot, workflowProvidersReady, devSupervisor)
 }
 
 type indexedDBPinger interface {
@@ -210,7 +230,10 @@ func runtimeReadinessStatus(providersReady, workflowProvidersReady <-chan struct
 	}
 }
 
-func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}) error {
+func serveRuntime(ctx context.Context, cfg *config.Config, connMaps bootstrap.ConnectionMaps, result *bootstrap.Result, mcpInvoker invocation.Invoker, servers []namedHTTPServer, mcpSlot *switchableHandler, workflowProvidersReady chan<- struct{}, devSupervisor *providerdev.Supervisor) error {
+	if devSupervisor != nil {
+		defer devSupervisor.Stop()
+	}
 	listenErr := make(chan namedListenFailure, len(servers))
 	for _, entry := range servers {
 		entry := entry
