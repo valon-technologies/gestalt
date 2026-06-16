@@ -55,6 +55,17 @@ type dialTelemetryProviders struct {
 
 const hostedGRPCReadyTimeout = 30 * time.Second
 
+// hostedGRPCMaxMessageBytes is the per-call gRPC send/recv cap used when
+// dialing hosted provider runtimes. It must be large enough to carry the
+// largest payload any hosted provider operation can return or accept. The
+// Slack provider, for example, base64-encodes file bodies up to
+// HARD_FILE_MAX_BYTES (5 MiB raw ~= 6.7 MiB encoded) for files.get /
+// get_thread_context, and accepts uploads up to MAX_UPLOAD_BYTES
+// (20 MiB raw ~= 26.7 MiB encoded). 32 MiB gives comfortable headroom for
+// both directions plus gRPC framing overhead. Without this override, the
+// default 4 MiB cap surfaces to callers as ResourceExhausted from gestaltd.
+const hostedGRPCMaxMessageBytes = 32 * 1024 * 1024
+
 func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
 	return p.meterProvider
 }
@@ -279,6 +290,18 @@ func dialTarget(raw string) (network string, address string, err error) {
 	return "unix", filepath.Clean(raw), nil
 }
 
+// hostedGRPCCallOptions returns the shared grpc.DialOption that lifts the
+// default 4 MiB send/recv message-size cap to hostedGRPCMaxMessageBytes for
+// every call made on the hosted-provider connection. It is applied uniformly
+// by the unix, tcp, and tls dial helpers so the transport layer never becomes
+// the size bottleneck for provider payloads.
+func hostedGRPCCallOptions() grpc.DialOption {
+	return grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(hostedGRPCMaxMessageBytes),
+		grpc.MaxCallSendMsgSize(hostedGRPCMaxMessageBytes),
+	)
+}
+
 func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
@@ -289,6 +312,7 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedGRPCCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -302,6 +326,7 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedGRPCCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -323,6 +348,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			NextProtos: []string{"h2"},
 		})),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedGRPCCallOptions(),
 	)
 	if err != nil {
 		return nil, err
