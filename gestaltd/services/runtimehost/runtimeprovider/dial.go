@@ -55,6 +55,14 @@ type dialTelemetryProviders struct {
 
 const hostedGRPCReadyTimeout = 30 * time.Second
 
+// hostedAppGRPCMaxMessageBytes mirrors INTERNAL_GRPC_MAX_MESSAGE_BYTES in
+// sdk/python/gestalt/_grpc_transport.py so that gestaltd's host-dial client
+// and the Python provider SDK agree on the per-RPC message ceiling. The Go
+// gRPC default is 4 MiB, which is below several provider HARD_FILE_MAX_BYTES
+// limits (e.g. slack files.get at 5 MiB) and was causing deterministic
+// ResourceExhausted failures on the receive path.
+const hostedAppGRPCMaxMessageBytes = 64 * 1024 * 1024
+
 func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
 	return p.meterProvider
 }
@@ -280,16 +288,15 @@ func dialTarget(raw string) (network string, address string, err error) {
 }
 
 func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(
-		"passthrough:///localhost",
+	opts := append(hostedAppDialOptions(cfg),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithAuthority("localhost"),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
 		}),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
+	conn, err := grpc.NewClient("passthrough:///localhost", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -298,11 +305,10 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 }
 
 func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
-	conn, err := grpc.NewClient(
-		address,
+	opts := append(hostedAppDialOptions(cfg),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
+	conn, err := grpc.NewClient(address, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -315,20 +321,34 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse hosted app tls dial target %q: %w", address, err)
 	}
-	conn, err := grpc.NewClient(
-		address,
+	opts := append(hostedAppDialOptions(cfg),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			MinVersion: tls.VersionTLS12,
 			ServerName: host,
 			NextProtos: []string{"h2"},
 		})),
-		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
+	conn, err := grpc.NewClient(address, opts...)
 	if err != nil {
 		return nil, err
 	}
 	conn.Connect()
 	return conn, nil
+}
+
+// hostedAppDialOptions returns the per-call DialOptions shared by every hosted
+// app gRPC client: the per-RPC max-message ceiling that mirrors the Python SDK
+// (see hostedAppGRPCMaxMessageBytes) and the otelgrpc stats handler. Concrete
+// dial paths append their transport credentials and any transport-specific
+// options on top of this slice.
+func hostedAppDialOptions(cfg dialConfig) []grpc.DialOption {
+	return []grpc.DialOption{
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(hostedAppGRPCMaxMessageBytes),
+			grpc.MaxCallSendMsgSize(hostedAppGRPCMaxMessageBytes),
+		),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+	}
 }
 
 func hostedAppGRPCOptions(cfg dialConfig) []otelgrpc.Option {
