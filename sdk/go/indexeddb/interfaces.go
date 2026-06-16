@@ -20,26 +20,25 @@ type ObjectStore interface {
 	GetKey(ctx context.Context, id string) (string, error)
 	Delete(ctx context.Context, id string) error
 	Clear(ctx context.Context) error
-	GetAll(ctx context.Context, r *KeyRange) ([]Record, error)
-	GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error)
-	Count(ctx context.Context, r *KeyRange) (int64, error)
-	DeleteRange(ctx context.Context, r KeyRange) (int64, error)
+	GetAll(ctx context.Context, query any, count ...uint32) ([]Record, error)
+	GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error)
+	Count(ctx context.Context, query any) (int64, error)
+	DeleteRange(ctx context.Context, query any) (int64, error)
 	Index(name string) Index
-	OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (Cursor, error)
-	OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (Cursor, error)
+	OpenCursor(ctx context.Context, query any, dir CursorDirection) (Cursor, error)
+	OpenKeyCursor(ctx context.Context, query any, dir CursorDirection) (Cursor, error)
 }
 
 // Index maps to IDBIndex for the supported Gestalt protocol subset.
 type Index interface {
-	Get(ctx context.Context, values ...any) (Record, error)
-	GetKey(ctx context.Context, values ...any) (string, error)
-	GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error)
-	GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error)
-	Count(ctx context.Context, r *KeyRange, values ...any) (int64, error)
-	Delete(ctx context.Context, values ...any) (int64, error)
-	DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error)
-	OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)
-	OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)
+	Get(ctx context.Context, query any) (Record, error)
+	GetKey(ctx context.Context, query any) (string, error)
+	GetAll(ctx context.Context, query any, count ...uint32) ([]Record, error)
+	GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error)
+	Count(ctx context.Context, query any) (int64, error)
+	Delete(ctx context.Context, query any) (int64, error)
+	OpenCursor(ctx context.Context, query any, dir CursorDirection) (Cursor, error)
+	OpenKeyCursor(ctx context.Context, query any, dir CursorDirection) (Cursor, error)
 }
 
 // Transaction maps to IDBTransaction (cursor ops remain on stores/indexes).
@@ -57,22 +56,21 @@ type TransactionObjectStore interface {
 	Put(ctx context.Context, record Record) error
 	Delete(ctx context.Context, id string) error
 	Clear(ctx context.Context) error
-	GetAll(ctx context.Context, r *KeyRange) ([]Record, error)
-	GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error)
-	Count(ctx context.Context, r *KeyRange) (int64, error)
-	DeleteRange(ctx context.Context, r KeyRange) (int64, error)
+	GetAll(ctx context.Context, query any, count ...uint32) ([]Record, error)
+	GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error)
+	Count(ctx context.Context, query any) (int64, error)
+	DeleteRange(ctx context.Context, query any) (int64, error)
 	Index(name string) TransactionIndex
 }
 
 // TransactionIndex provides transaction-scoped index operations.
 type TransactionIndex interface {
-	Get(ctx context.Context, values ...any) (Record, error)
-	GetKey(ctx context.Context, values ...any) (string, error)
-	GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error)
-	GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error)
-	Count(ctx context.Context, r *KeyRange, values ...any) (int64, error)
-	Delete(ctx context.Context, values ...any) (int64, error)
-	DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error)
+	Get(ctx context.Context, query any) (Record, error)
+	GetKey(ctx context.Context, query any) (string, error)
+	GetAll(ctx context.Context, query any, count ...uint32) ([]Record, error)
+	GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error)
+	Count(ctx context.Context, query any) (int64, error)
+	Delete(ctx context.Context, query any) (int64, error)
 }
 
 // Cursor maps to IDBCursor / IDBCursorWithValue.

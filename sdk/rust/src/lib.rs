@@ -32,6 +32,7 @@ mod generated;
 /// Generated IndexedDB client and native types.
 pub mod indexeddb;
 mod indexeddb_provider;
+mod indexeddb_query_codec;
 /// Decoded app invocation results and the canonical invoke error.
 pub mod invoke_support;
 mod protocol;
@@ -112,10 +113,11 @@ pub use error::{Error, Result};
 pub use indexeddb_provider::{
     Cursor, CursorApi, CursorDirection, Index, IndexApi, IndexSchema, IndexedDB, IndexedDBApi,
     IndexedDBCursorSnapshot, IndexedDBCursorSnapshotEntry, IndexedDBError,
-    IndexedDBOpenCursorRequest, KeyRange, ObjectStore, ObjectStoreApi, ObjectStoreSchema, Record,
-    Transaction, TransactionApi, TransactionDurabilityHint, TransactionIndex, TransactionIndexApi,
-    TransactionMode, TransactionObjectStore, TransactionObjectStoreApi, TransactionOptions,
-    compare_indexeddb_values, indexeddb_range_bounds, new_indexeddb_cursor_snapshot,
+    IndexedDBOpenCursorRequest, Key, KeyRange, ObjectStore, ObjectStoreApi, ObjectStoreSchema,
+    Query, Record, Transaction, TransactionApi, TransactionDurabilityHint, TransactionIndex,
+    TransactionIndexApi, TransactionMode, TransactionObjectStore, TransactionObjectStoreApi,
+    TransactionOptions, compare_indexeddb_values, compare_keys, indexeddb_range_bounds,
+    key_in_range, match_query, new_indexeddb_cursor_snapshot,
 };
 pub use invoke_support::{
     InvokeError, InvokeResultError, decode_app_result, decode_graphql_result, error_for_status,

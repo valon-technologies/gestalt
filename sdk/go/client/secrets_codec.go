@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireGetSecretRequest(value *GetSecretRequest) *proto.GetSecretRequest {
+func ToWireGetSecretRequest(value *GetSecretRequest) *proto.GetSecretRequest {
 	if value == nil {
 		return nil
 	}
@@ -16,7 +16,7 @@ func toWireGetSecretRequest(value *GetSecretRequest) *proto.GetSecretRequest {
 	return out
 }
 
-func fromWireGetSecretRequest(value *proto.GetSecretRequest) *GetSecretRequest {
+func FromWireGetSecretRequest(value *proto.GetSecretRequest) *GetSecretRequest {
 	if value == nil {
 		return nil
 	}
@@ -26,7 +26,7 @@ func fromWireGetSecretRequest(value *proto.GetSecretRequest) *GetSecretRequest {
 	return out
 }
 
-func toWireGetSecretResponse(value *GetSecretResponse) *proto.GetSecretResponse {
+func ToWireGetSecretResponse(value *GetSecretResponse) *proto.GetSecretResponse {
 	if value == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func toWireGetSecretResponse(value *GetSecretResponse) *proto.GetSecretResponse 
 	return out
 }
 
-func fromWireGetSecretResponse(value *proto.GetSecretResponse) *GetSecretResponse {
+func FromWireGetSecretResponse(value *proto.GetSecretResponse) *GetSecretResponse {
 	if value == nil {
 		return nil
 	}

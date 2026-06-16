@@ -85,6 +85,49 @@ func TestStubIndexCursorOrdersBinaryKeysBytewise(t *testing.T) {
 	}
 }
 
+func TestStubIndexCompoundArrayRange(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	if _, err := db.CreateObjectStore(ctx, "events", idb.ObjectStoreOptions{
+		Indexes: []idb.IndexSchema{{Name: "by_vendor_date", KeyPath: []string{"vendor", "date"}}},
+	}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+
+	store := db.ObjectStore("events")
+	for _, record := range []idb.Record{
+		{"id": "1", "vendor": "claude_code", "date": "2026-03-15"},
+		{"id": "2", "vendor": "claude_code", "date": "2026-04-10"},
+		{"id": "3", "vendor": "claude_code", "date": "2026-04-30"},
+		{"id": "4", "vendor": "claude_code", "date": "2026-05-01"},
+		{"id": "5", "vendor": "other", "date": "2026-04-15"},
+	} {
+		if err := store.Add(ctx, record); err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+	}
+
+	rangeQuery := idb.Bound(
+		[]any{"claude_code", "2026-04-01"},
+		[]any{"claude_code", "2026-04-30"},
+		false, false,
+	)
+
+	records, err := store.Index("by_vendor_date").GetAll(ctx, rangeQuery)
+	if err != nil {
+		t.Fatalf("GetAll: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("GetAll len = %d, want 2 (April claude_code rows)", len(records))
+	}
+	ids := []string{records[0]["id"].(string), records[1]["id"].(string)}
+	if ids[0] != "2" || ids[1] != "3" {
+		t.Fatalf("GetAll ids = %v, want [2 3]", ids)
+	}
+}
+
 func TestStubTransactionAbortsOnOperationError(t *testing.T) {
 	t.Parallel()
 

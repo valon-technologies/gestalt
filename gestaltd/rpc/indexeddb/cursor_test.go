@@ -5,21 +5,22 @@ import (
 	"strings"
 	"testing"
 
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func TestCursor_ContinueToKeyRejectsUnsupportedKey(t *testing.T) {
+func TestCursor_ContinueToKeyRejectsNilKey(t *testing.T) {
 	cursor := &rpcCursor{}
 
-	if cursor.ContinueToKey(make(chan int)) {
+	if cursor.ContinueToKey(nil) {
 		t.Fatal("ContinueToKey returned true")
 	}
 	if cursor.Err() == nil {
-		t.Fatal("Err() = nil, want conversion error")
+		t.Fatal("Err() = nil, want error")
 	}
-	if !strings.Contains(cursor.Err().Error(), "marshal") {
-		t.Fatalf("Err() = %v, want marshal error", cursor.Err())
+	if !strings.Contains(cursor.Err().Error(), "continue key is required") {
+		t.Fatalf("Err() = %v, want continue key error", cursor.Err())
 	}
 }
 
@@ -31,7 +32,7 @@ func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
 
 	cursor := &rpcCursor{
 		entry: &proto.CursorEntry{
-			Key:        []*proto.KeyValue{kv},
+			Key:        sdkclient.ToWireKeyValue(kv),
 			PrimaryKey: "a",
 		},
 	}

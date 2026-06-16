@@ -520,28 +520,28 @@ func TestTransport_TransactionIndexAndBulkRollback(t *testing.T) {
 		t.Fatalf("Transaction: %v", err)
 	}
 	txs := tx.ObjectStore(store)
-	active, err := txs.Index("by_status").GetAll(ctx, nil, "active")
+	active, err := txs.Index("by_status").GetAll(ctx, "active")
 	if err != nil {
 		t.Fatalf("tx index GetAll active: %v", err)
 	}
 	if len(active) != 3 {
 		t.Fatalf("active len = %d, want 3", len(active))
 	}
-	keys, err := txs.Index("by_status").GetAllKeys(ctx, nil, "active")
+	keys, err := txs.Index("by_status").GetAllKeys(ctx, "active")
 	if err != nil {
 		t.Fatalf("tx index GetAllKeys active: %v", err)
 	}
 	if len(keys) != 3 {
 		t.Fatalf("active keys len = %d, want 3", len(keys))
 	}
-	deletedRange, err := txs.DeleteRange(ctx, gestalt.KeyRange{Lower: "b", Upper: "c"})
+	deletedRange, err := txs.DeleteRange(ctx, gestalt.Bound("b", "c", false, false))
 	if err != nil {
 		t.Fatalf("tx DeleteRange: %v", err)
 	}
 	if deletedRange != 2 {
 		t.Fatalf("DeleteRange deleted = %d, want 2", deletedRange)
 	}
-	deletedIndex, err := txs.Index("by_status").DeleteRange(ctx, &gestalt.KeyRange{Lower: "active", Upper: "active"})
+	deletedIndex, err := txs.Index("by_status").Delete(ctx, "active")
 	if err != nil {
 		t.Fatalf("tx index DeleteRange active: %v", err)
 	}
@@ -560,22 +560,22 @@ func TestTransport_TransactionIndexAndBulkRollback(t *testing.T) {
 	if count, err := s.Count(ctx, nil); err != nil || count != 4 {
 		t.Fatalf("public Count after abort = %d, %v; want 4, nil", count, err)
 	}
-	if inactive, err := s.Index("by_status").Count(ctx, nil, "inactive"); err != nil || inactive != 1 {
+	if inactive, err := s.Index("by_status").Count(ctx, "inactive"); err != nil || inactive != 1 {
 		t.Fatalf("public inactive count after abort = %d, %v; want 1, nil", inactive, err)
 	}
 }
 
-func TestTransport_IndexDeleteRange(t *testing.T) {
+func TestTransport_IndexDelete(t *testing.T) {
 	ctx := context.Background()
 	store := seedStore(t)
 	s := testClient.ObjectStore(store)
 
-	deleted, err := s.Index("by_status").DeleteRange(ctx, &gestalt.KeyRange{Lower: "active", Upper: "active"})
+	deleted, err := s.Index("by_status").Delete(ctx, "active")
 	if err != nil {
-		t.Fatalf("Index DeleteRange active: %v", err)
+		t.Fatalf("Index Delete active: %v", err)
 	}
 	if deleted != 3 {
-		t.Fatalf("Index DeleteRange deleted = %d, want 3", deleted)
+		t.Fatalf("Index Delete deleted = %d, want 3", deleted)
 	}
 
 	remaining, err := s.GetAll(ctx, nil)
@@ -806,7 +806,7 @@ func TestTransport_PostExhaustion(t *testing.T) {
 func TestTransport_IndexCursor(t *testing.T) {
 	store := seedStore(t)
 	ctx := context.Background()
-	cursor, err := testClient.ObjectStore(store).Index("by_status").OpenCursor(ctx, nil, gestalt.CursorNext, "active")
+	cursor, err := testClient.ObjectStore(store).Index("by_status").OpenCursor(ctx, "active", gestalt.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -860,12 +860,9 @@ func TestTransport_IndexContinueToKeyRoundTrip(t *testing.T) {
 		t.Fatal("Continue returned false")
 	}
 
-	key, ok := cursor.Key().([]any)
-	if !ok {
-		t.Fatalf("Key() type = %T, want []any", cursor.Key())
-	}
-	if len(key) != 1 || key[0] != int64(1) {
-		t.Fatalf("Key() = %#v, want []any{int64(1)}", key)
+	key := cursor.Key()
+	if key != int64(1) {
+		t.Fatalf("Key() = %#v, want int64(1)", key)
 	}
 
 	if !cursor.ContinueToKey(cursor.Key()) {

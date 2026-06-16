@@ -114,27 +114,27 @@ func (c *ProviderLifecycle) GetProviderIdentity(ctx context.Context) (*ProviderI
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireProviderIdentity(response), nil
+	return FromWireProviderIdentity(response), nil
 }
 
 // ConfigureProvider is the ergonomic form of [ProviderLifecycle.ConfigureProviderRaw].
 // The response collapses to its protocolVersion field.
 func (c *ProviderLifecycle) ConfigureProvider(ctx context.Context, name string, protocolVersion int32, config map[string]any) (int32, error) {
 	request := &ConfigureProviderRequest{Name: name, ProtocolVersion: protocolVersion, Config: config}
-	response, err := c.client.ConfigureProvider(ctx, toWireConfigureProviderRequest(request))
+	response, err := c.client.ConfigureProvider(ctx, ToWireConfigureProviderRequest(request))
 	if err != nil {
 		return 0, toGestaltError(err)
 	}
-	return fromWireConfigureProviderResponse(response).ProtocolVersion, nil
+	return FromWireConfigureProviderResponse(response).ProtocolVersion, nil
 }
 
 // ConfigureProviderRaw is the faithful form of [ProviderLifecycle.ConfigureProvider].
 func (c *ProviderLifecycle) ConfigureProviderRaw(ctx context.Context, request *ConfigureProviderRequest) (*ConfigureProviderResponse, error) {
-	response, err := c.client.ConfigureProvider(ctx, toWireConfigureProviderRequest(request))
+	response, err := c.client.ConfigureProvider(ctx, ToWireConfigureProviderRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireConfigureProviderResponse(response), nil
+	return FromWireConfigureProviderResponse(response), nil
 }
 
 // HealthCheck calls the HealthCheck RPC of ProviderLifecycle.
@@ -143,7 +143,7 @@ func (c *ProviderLifecycle) HealthCheck(ctx context.Context) (*HealthCheckRespon
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireHealthCheckResponse(response), nil
+	return FromWireHealthCheckResponse(response), nil
 }
 
 // StartProvider is the ergonomic form of [ProviderLifecycle.StartProviderRaw].
@@ -153,7 +153,7 @@ func (c *ProviderLifecycle) StartProvider(ctx context.Context) (int32, error) {
 	if err != nil {
 		return 0, toGestaltError(err)
 	}
-	return fromWireStartRuntimeProviderResponse(response).ProtocolVersion, nil
+	return FromWireStartRuntimeProviderResponse(response).ProtocolVersion, nil
 }
 
 // StartProviderRaw is the faithful form of [ProviderLifecycle.StartProvider].
@@ -162,5 +162,5 @@ func (c *ProviderLifecycle) StartProviderRaw(ctx context.Context) (*StartRuntime
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireStartRuntimeProviderResponse(response), nil
+	return FromWireStartRuntimeProviderResponse(response), nil
 }

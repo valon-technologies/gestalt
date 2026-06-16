@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/host"
 	rpcidb "github.com/valon-technologies/gestalt/server/rpc/indexeddb"
@@ -19,6 +20,8 @@ import (
 type (
 	Record                    = indexeddb.Record
 	KeyRange                  = indexeddb.KeyRange
+	KeyValue                  = client.KeyValue
+	IndexedDBQuery            = client.IndexedDBQuery
 	CursorDirection           = indexeddb.CursorDirection
 	TransactionMode           = indexeddb.TransactionMode
 	TransactionDurabilityHint = indexeddb.TransactionDurabilityHint
@@ -52,6 +55,45 @@ const (
 	TypeJSON   = indexeddb.TypeJSON
 )
 
+// Only returns a range containing only key v (re-export).
+func Only(v any) *KeyRange {
+	return indexeddb.Only(v)
+}
+
+// Bound returns a range between lower and upper (re-export).
+func Bound(lower, upper any, lowerOpen, upperOpen bool) *KeyRange {
+	return indexeddb.Bound(lower, upper, lowerOpen, upperOpen)
+}
+
+// LowerBound returns a range with only a lower bound (re-export).
+func LowerBound(v any, open bool) *KeyRange {
+	return indexeddb.LowerBound(v, open)
+}
+
+// UpperBound returns a range with only an upper bound (re-export).
+func UpperBound(v any, open bool) *KeyRange {
+	return indexeddb.UpperBound(v, open)
+}
+
+// CompareKeys compares native IndexedDB keys using W3C ordering (re-export).
+func CompareKeys(a, b any) int {
+	return indexeddb.CompareKeys(a, b)
+}
+
+// KeyInRange reports whether key satisfies kr (re-export).
+func KeyInRange(key any, kr *KeyRange) (bool, error) {
+	return indexeddb.KeyInRange(key, kr)
+}
+
+// MatchQuery reports whether key satisfies query (re-export).
+func MatchQuery(key any, query *IndexedDBQuery) (bool, error) {
+	return indexeddb.MatchQuery(key, query)
+}
+
+// MatchIndexedDBQuery is an alias for MatchQuery.
+func MatchIndexedDBQuery(key any, query *IndexedDBQuery) (bool, error) {
+	return MatchQuery(key, query)
+}
 // Aliases to the IndexedDB sentinel errors in sdk/go/indexeddb.
 //
 //nolint:revive // grouped aliases documented at their canonical definitions

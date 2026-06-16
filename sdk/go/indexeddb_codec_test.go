@@ -106,7 +106,7 @@ func TestTypedValueRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("typedValueFromAny() error = %v", err)
 			}
-			got, err := anyFromTypedValue(pbValue)
+			got, err := indexeddb.AnyFromTypedValue(pbValue)
 			if err != nil {
 				t.Fatalf("anyFromTypedValue() error = %v", err)
 			}

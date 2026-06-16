@@ -163,12 +163,11 @@ pub struct CursorCommand {
 /// Native message type for `gestalt.provider.v1.CursorEntry`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CursorEntry {
-    /// Key components per index KeyPath field. Each component is a KeyValue
-    /// that can be a scalar or a nested array, preserving the full W3C IndexedDB
-    /// key structure including array-valued keys.
+    /// One full IndexedDB key (scalar or array).
+    /// <https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key>
     ///
-    /// The `key` field.
-    pub key: Vec<KeyValue>,
+    /// The `key` field; None when unset.
+    pub key: Option<KeyValue>,
     /// The `primary_key` field.
     pub primary_key: String,
     /// The `record` field; None when unset.
@@ -180,8 +179,8 @@ pub struct CursorEntry {
 /// Native message type for `gestalt.provider.v1.CursorKeyTarget`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CursorKeyTarget {
-    /// The `key` field.
-    pub key: Vec<KeyValue>,
+    /// The `key` field; None when unset.
+    pub key: Option<KeyValue>,
 }
 
 /// Values of the `result` oneof in `CursorResponse`; the message field is None when unset.
@@ -221,8 +220,7 @@ pub struct DeleteResponse {
     pub deleted: i64,
 }
 
-/// IndexQueryRequest addresses a secondary index plus optional key values and
-/// range constraints.
+/// IndexQueryRequest addresses a secondary index plus an optional query.
 ///
 /// Native message type for `gestalt.provider.v1.IndexQueryRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -231,10 +229,10 @@ pub struct IndexQueryRequest {
     pub store: String,
     /// The `index` field.
     pub index: String,
-    /// The `values` field.
-    pub values: Vec<TypedValue>,
-    /// The `range` field; None when unset.
-    pub range: Option<KeyRange>,
+    /// The `query` field; None when unset.
+    pub query: Option<IndexedDBQuery>,
+    /// The `count` field; None when unset.
+    pub count: Option<u32>,
 }
 
 /// IndexSchema describes one secondary index on an object store.
@@ -250,15 +248,39 @@ pub struct IndexSchema {
     pub unique: bool,
 }
 
-/// KeyRange constrains a query or cursor by lower and upper bounds.
+/// Values of the `query` oneof in `IndexedDBQuery`; the message field is None when unset.
+#[allow(clippy::enum_variant_names, clippy::large_enum_variant)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum IndexedDBQueryQuery {
+    /// The `key` variant.
+    Key(KeyValue),
+    /// The `range` variant.
+    Range(KeyRange),
+}
+
+/// IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+/// range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+/// matching a W3C query argument of undefined/null.
+///
+/// Native message type for `gestalt.provider.v1.IndexedDBQuery`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct IndexedDBQuery {
+    /// The `query` oneof; None when unset.
+    pub query: Option<IndexedDBQueryQuery>,
+}
+
+/// KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+/// full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+/// lower/upper means unbounded on that side.
+/// <https://www.w3.org/TR/IndexedDB/#keyrange>
 ///
 /// Native message type for `gestalt.provider.v1.KeyRange`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct KeyRange {
     /// The `lower` field; None when unset.
-    pub lower: Option<TypedValue>,
+    pub lower: Option<KeyValue>,
     /// The `upper` field; None when unset.
-    pub upper: Option<TypedValue>,
+    pub upper: Option<KeyValue>,
     /// The `lower_open` field.
     pub lower_open: bool,
     /// The `upper_open` field.
@@ -284,8 +306,9 @@ pub enum KeyValueKind {
     Array(KeyValueArray),
 }
 
-/// KeyValue represents a single IndexedDB key, which can be a scalar
-/// (string, number, date, binary) or a nested array of keys per the W3C spec.
+/// KeyValue represents one IndexedDB key: a scalar (string, number, date,
+/// binary) or a nested array of keys, per the W3C spec.
+/// <https://www.w3.org/TR/IndexedDB/#key-construct>
 ///
 /// Native message type for `gestalt.provider.v1.KeyValue`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -319,15 +342,17 @@ pub struct ObjectStoreNameRequest {
     pub store: String,
 }
 
-/// ObjectStoreRangeRequest addresses an object store plus an optional key range.
+/// ObjectStoreRangeRequest addresses an object store plus an optional query.
 ///
 /// Native message type for `gestalt.provider.v1.ObjectStoreRangeRequest`.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ObjectStoreRangeRequest {
     /// The `store` field.
     pub store: String,
-    /// The `range` field; None when unset.
-    pub range: Option<KeyRange>,
+    /// The `query` field; None when unset.
+    pub query: Option<IndexedDBQuery>,
+    /// The `count` field; None when unset.
+    pub count: Option<u32>,
 }
 
 /// ObjectStoreRequest addresses one object store row by primary key.
@@ -360,22 +385,16 @@ pub struct ObjectStoreSchema {
 pub struct OpenCursorRequest {
     /// The `store` field.
     pub store: String,
-    /// The `range` field; None when unset.
-    pub range: Option<KeyRange>,
+    /// The `index` field.
+    pub index: String,
+    /// The `query` field; None when unset.
+    pub query: Option<IndexedDBQuery>,
     /// The `direction` field.
     pub direction: CursorDirection,
     /// keys_only suppresses row payloads and returns only keys.
     ///
     /// The `keys_only` field.
     pub keys_only: bool,
-    /// index selects a secondary index when non-empty.
-    ///
-    /// The `index` field.
-    pub index: String,
-    /// values selects a compound index key prefix when index is set.
-    ///
-    /// The `values` field.
-    pub values: Vec<TypedValue>,
 }
 
 /// Record is one JSON-like row in an object store.
@@ -825,7 +844,7 @@ impl IndexedDB {
         Ok(())
     }
 
-    /// Bulk operations (with optional key range)
+    /// Bulk operations (with optional query)
     ///
     /// Calls `gestalt.provider.v1.IndexedDB.Clear`.
     pub async fn clear(&mut self, store: String) -> Result<(), GestaltError> {
@@ -838,7 +857,7 @@ impl IndexedDB {
         Ok(())
     }
 
-    /// Bulk operations (with optional key range)
+    /// Bulk operations (with optional query)
     ///
     /// Calls `gestalt.provider.v1.IndexedDB.Clear` with the full request and response messages.
     pub async fn clear_raw(&mut self, request: ObjectStoreNameRequest) -> Result<(), GestaltError> {
@@ -854,9 +873,14 @@ impl IndexedDB {
     pub async fn get_all(
         &mut self,
         store: String,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
+        options: IndexedDBGetAllOptions,
     ) -> Result<RecordsResponse, GestaltError> {
-        let request = ObjectStoreRangeRequest { store, range };
+        let request = ObjectStoreRangeRequest {
+            store,
+            query,
+            count: options.count,
+        };
         let mut tonic_request = tonic::Request::new(to_wire_object_store_range_request(request));
         if let Some(timeout) = self.timeout {
             tonic_request.set_timeout(timeout);
@@ -882,9 +906,14 @@ impl IndexedDB {
     pub async fn get_all_keys(
         &mut self,
         store: String,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
+        options: IndexedDBGetAllKeysOptions,
     ) -> Result<KeysResponse, GestaltError> {
-        let request = ObjectStoreRangeRequest { store, range };
+        let request = ObjectStoreRangeRequest {
+            store,
+            query,
+            count: options.count,
+        };
         let mut tonic_request = tonic::Request::new(to_wire_object_store_range_request(request));
         if let Some(timeout) = self.timeout {
             tonic_request.set_timeout(timeout);
@@ -910,15 +939,20 @@ impl IndexedDB {
     pub async fn count(
         &mut self,
         store: String,
-        range: Option<KeyRange>,
-    ) -> Result<CountResponse, GestaltError> {
-        let request = ObjectStoreRangeRequest { store, range };
+        query: Option<IndexedDBQuery>,
+    ) -> Result<i64, GestaltError> {
+        let request = ObjectStoreRangeRequest {
+            store,
+            query,
+            ..Default::default()
+        };
         let mut tonic_request = tonic::Request::new(to_wire_object_store_range_request(request));
         if let Some(timeout) = self.timeout {
             tonic_request.set_timeout(timeout);
         }
-        let response = self.inner.count(tonic_request).await?;
-        Ok(from_wire_count_response(response.into_inner()))
+        let response =
+            from_wire_count_response(self.inner.count(tonic_request).await?.into_inner());
+        Ok(response.count)
     }
 
     /// Calls `gestalt.provider.v1.IndexedDB.Count` with the full request and response messages.
@@ -938,9 +972,13 @@ impl IndexedDB {
     pub async fn delete_range(
         &mut self,
         store: String,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
     ) -> Result<DeleteResponse, GestaltError> {
-        let request = ObjectStoreRangeRequest { store, range };
+        let request = ObjectStoreRangeRequest {
+            store,
+            query,
+            ..Default::default()
+        };
         let mut tonic_request = tonic::Request::new(to_wire_object_store_range_request(request));
         if let Some(timeout) = self.timeout {
             tonic_request.set_timeout(timeout);
@@ -969,14 +1007,13 @@ impl IndexedDB {
         &mut self,
         store: String,
         index: String,
-        values: Vec<TypedValue>,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
     ) -> Result<RecordResponse, GestaltError> {
         let request = IndexQueryRequest {
             store,
             index,
-            values,
-            range,
+            query,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
@@ -1006,14 +1043,13 @@ impl IndexedDB {
         &mut self,
         store: String,
         index: String,
-        values: Vec<TypedValue>,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
     ) -> Result<KeyResponse, GestaltError> {
         let request = IndexQueryRequest {
             store,
             index,
-            values,
-            range,
+            query,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
@@ -1041,14 +1077,14 @@ impl IndexedDB {
         &mut self,
         store: String,
         index: String,
-        values: Vec<TypedValue>,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
+        options: IndexedDBIndexGetAllOptions,
     ) -> Result<RecordsResponse, GestaltError> {
         let request = IndexQueryRequest {
             store,
             index,
-            values,
-            range,
+            query,
+            count: options.count,
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
@@ -1076,14 +1112,14 @@ impl IndexedDB {
         &mut self,
         store: String,
         index: String,
-        values: Vec<TypedValue>,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
+        options: IndexedDBIndexGetAllKeysOptions,
     ) -> Result<KeysResponse, GestaltError> {
         let request = IndexQueryRequest {
             store,
             index,
-            values,
-            range,
+            query,
+            count: options.count,
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
@@ -1111,21 +1147,21 @@ impl IndexedDB {
         &mut self,
         store: String,
         index: String,
-        values: Vec<TypedValue>,
-        range: Option<KeyRange>,
-    ) -> Result<CountResponse, GestaltError> {
+        query: Option<IndexedDBQuery>,
+    ) -> Result<i64, GestaltError> {
         let request = IndexQueryRequest {
             store,
             index,
-            values,
-            range,
+            query,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
             tonic_request.set_timeout(timeout);
         }
-        let response = self.inner.index_count(tonic_request).await?;
-        Ok(from_wire_count_response(response.into_inner()))
+        let response =
+            from_wire_count_response(self.inner.index_count(tonic_request).await?.into_inner());
+        Ok(response.count)
     }
 
     /// Calls `gestalt.provider.v1.IndexedDB.IndexCount` with the full request and response messages.
@@ -1146,14 +1182,13 @@ impl IndexedDB {
         &mut self,
         store: String,
         index: String,
-        values: Vec<TypedValue>,
-        range: Option<KeyRange>,
+        query: Option<IndexedDBQuery>,
     ) -> Result<DeleteResponse, GestaltError> {
         let request = IndexQueryRequest {
             store,
             index,
-            values,
-            range,
+            query,
+            ..Default::default()
         };
         let mut tonic_request = tonic::Request::new(to_wire_index_query_request(request));
         if let Some(timeout) = self.timeout {
@@ -1208,6 +1243,38 @@ impl IndexedDB {
             inner: response.into_inner(),
         })
     }
+}
+
+/// Optional parameters of [`IndexedDB::get_all`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct IndexedDBGetAllOptions {
+    /// The `count` field; None when unset.
+    pub count: Option<u32>,
+}
+
+/// Optional parameters of [`IndexedDB::get_all_keys`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct IndexedDBGetAllKeysOptions {
+    /// The `count` field; None when unset.
+    pub count: Option<u32>,
+}
+
+/// Optional parameters of [`IndexedDB::index_get_all`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct IndexedDBIndexGetAllOptions {
+    /// The `count` field; None when unset.
+    pub count: Option<u32>,
+}
+
+/// Optional parameters of [`IndexedDB::index_get_all_keys`]; the default value leaves every
+/// option unset.
+#[derive(Clone, Debug, Default)]
+pub struct IndexedDBIndexGetAllKeysOptions {
+    /// The `count` field; None when unset.
+    pub count: Option<u32>,
 }
 
 /// Cursor iteration (bidirectional stream)

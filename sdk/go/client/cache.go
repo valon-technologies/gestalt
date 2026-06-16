@@ -155,11 +155,11 @@ func ConnectCache(ctx context.Context, name string) (*Cache, error) {
 // The response collapses to a comma-ok pair: the value is meaningful only when ok is true.
 func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	request := &CacheGetRequest{Key: key}
-	response, err := c.client.Get(ctx, toWireCacheGetRequest(request))
+	response, err := c.client.Get(ctx, ToWireCacheGetRequest(request))
 	if err != nil {
 		return nil, false, toGestaltError(err)
 	}
-	out := fromWireCacheGetResponse(response)
+	out := FromWireCacheGetResponse(response)
 	if !out.Found {
 		return nil, false, nil
 	}
@@ -168,23 +168,23 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, bool, error) {
 
 // GetRaw is the faithful form of [Cache.Get].
 func (c *Cache) GetRaw(ctx context.Context, request *CacheGetRequest) (*CacheGetResponse, error) {
-	response, err := c.client.Get(ctx, toWireCacheGetRequest(request))
+	response, err := c.client.Get(ctx, ToWireCacheGetRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireCacheGetResponse(response), nil
+	return FromWireCacheGetResponse(response), nil
 }
 
 // GetMany is the ergonomic form of [Cache.GetManyRaw].
 // The response collapses to a map keyed by key; entries whose found is false are omitted.
 func (c *Cache) GetMany(ctx context.Context, keys []string) (map[string][]byte, error) {
 	request := &CacheGetManyRequest{Keys: keys}
-	response, err := c.client.GetMany(ctx, toWireCacheGetManyRequest(request))
+	response, err := c.client.GetMany(ctx, ToWireCacheGetManyRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
 	out := make(map[string][]byte)
-	for _, entry := range fromWireCacheGetManyResponse(response).Entries {
+	for _, entry := range FromWireCacheGetManyResponse(response).Entries {
 		if entry.Found {
 			out[entry.Key] = entry.Value
 		}
@@ -194,17 +194,17 @@ func (c *Cache) GetMany(ctx context.Context, keys []string) (map[string][]byte, 
 
 // GetManyRaw is the faithful form of [Cache.GetMany].
 func (c *Cache) GetManyRaw(ctx context.Context, request *CacheGetManyRequest) (*CacheGetManyResponse, error) {
-	response, err := c.client.GetMany(ctx, toWireCacheGetManyRequest(request))
+	response, err := c.client.GetMany(ctx, ToWireCacheGetManyRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireCacheGetManyResponse(response), nil
+	return FromWireCacheGetManyResponse(response), nil
 }
 
 // Set is the ergonomic form of [Cache.SetRaw].
 func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl *time.Duration) error {
 	request := &CacheSetRequest{Key: key, Value: value, Ttl: ttl}
-	if _, err := c.client.Set(ctx, toWireCacheSetRequest(request)); err != nil {
+	if _, err := c.client.Set(ctx, ToWireCacheSetRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -212,7 +212,7 @@ func (c *Cache) Set(ctx context.Context, key string, value []byte, ttl *time.Dur
 
 // SetRaw is the faithful form of [Cache.Set].
 func (c *Cache) SetRaw(ctx context.Context, request *CacheSetRequest) error {
-	if _, err := c.client.Set(ctx, toWireCacheSetRequest(request)); err != nil {
+	if _, err := c.client.Set(ctx, ToWireCacheSetRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -221,7 +221,7 @@ func (c *Cache) SetRaw(ctx context.Context, request *CacheSetRequest) error {
 // SetMany is the ergonomic form of [Cache.SetManyRaw].
 func (c *Cache) SetMany(ctx context.Context, entries []*CacheSetEntry, ttl *time.Duration) error {
 	request := &CacheSetManyRequest{Entries: entries, Ttl: ttl}
-	if _, err := c.client.SetMany(ctx, toWireCacheSetManyRequest(request)); err != nil {
+	if _, err := c.client.SetMany(ctx, ToWireCacheSetManyRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -229,7 +229,7 @@ func (c *Cache) SetMany(ctx context.Context, entries []*CacheSetEntry, ttl *time
 
 // SetManyRaw is the faithful form of [Cache.SetMany].
 func (c *Cache) SetManyRaw(ctx context.Context, request *CacheSetManyRequest) error {
-	if _, err := c.client.SetMany(ctx, toWireCacheSetManyRequest(request)); err != nil {
+	if _, err := c.client.SetMany(ctx, ToWireCacheSetManyRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -239,58 +239,58 @@ func (c *Cache) SetManyRaw(ctx context.Context, request *CacheSetManyRequest) er
 // The response collapses to its deleted field.
 func (c *Cache) Delete(ctx context.Context, key string) (bool, error) {
 	request := &CacheDeleteRequest{Key: key}
-	response, err := c.client.Delete(ctx, toWireCacheDeleteRequest(request))
+	response, err := c.client.Delete(ctx, ToWireCacheDeleteRequest(request))
 	if err != nil {
 		return false, toGestaltError(err)
 	}
-	return fromWireCacheDeleteResponse(response).Deleted, nil
+	return FromWireCacheDeleteResponse(response).Deleted, nil
 }
 
 // DeleteRaw is the faithful form of [Cache.Delete].
 func (c *Cache) DeleteRaw(ctx context.Context, request *CacheDeleteRequest) (*CacheDeleteResponse, error) {
-	response, err := c.client.Delete(ctx, toWireCacheDeleteRequest(request))
+	response, err := c.client.Delete(ctx, ToWireCacheDeleteRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireCacheDeleteResponse(response), nil
+	return FromWireCacheDeleteResponse(response), nil
 }
 
 // DeleteMany is the ergonomic form of [Cache.DeleteManyRaw].
 // The response collapses to its deleted field.
 func (c *Cache) DeleteMany(ctx context.Context, keys []string) (int64, error) {
 	request := &CacheDeleteManyRequest{Keys: keys}
-	response, err := c.client.DeleteMany(ctx, toWireCacheDeleteManyRequest(request))
+	response, err := c.client.DeleteMany(ctx, ToWireCacheDeleteManyRequest(request))
 	if err != nil {
 		return 0, toGestaltError(err)
 	}
-	return fromWireCacheDeleteManyResponse(response).Deleted, nil
+	return FromWireCacheDeleteManyResponse(response).Deleted, nil
 }
 
 // DeleteManyRaw is the faithful form of [Cache.DeleteMany].
 func (c *Cache) DeleteManyRaw(ctx context.Context, request *CacheDeleteManyRequest) (*CacheDeleteManyResponse, error) {
-	response, err := c.client.DeleteMany(ctx, toWireCacheDeleteManyRequest(request))
+	response, err := c.client.DeleteMany(ctx, ToWireCacheDeleteManyRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireCacheDeleteManyResponse(response), nil
+	return FromWireCacheDeleteManyResponse(response), nil
 }
 
 // Touch is the ergonomic form of [Cache.TouchRaw].
 // The response collapses to its touched field.
 func (c *Cache) Touch(ctx context.Context, key string, ttl *time.Duration) (bool, error) {
 	request := &CacheTouchRequest{Key: key, Ttl: ttl}
-	response, err := c.client.Touch(ctx, toWireCacheTouchRequest(request))
+	response, err := c.client.Touch(ctx, ToWireCacheTouchRequest(request))
 	if err != nil {
 		return false, toGestaltError(err)
 	}
-	return fromWireCacheTouchResponse(response).Touched, nil
+	return FromWireCacheTouchResponse(response).Touched, nil
 }
 
 // TouchRaw is the faithful form of [Cache.Touch].
 func (c *Cache) TouchRaw(ctx context.Context, request *CacheTouchRequest) (*CacheTouchResponse, error) {
-	response, err := c.client.Touch(ctx, toWireCacheTouchRequest(request))
+	response, err := c.client.Touch(ctx, ToWireCacheTouchRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireCacheTouchResponse(response), nil
+	return FromWireCacheTouchResponse(response), nil
 }

@@ -53,17 +53,205 @@ pub enum IndexedDBError {
 /// JSON-like value stored in an object store row.
 pub type Record = BTreeMap<String, serde_json::Value>;
 
+/// One IndexedDB key: number, date, string, binary, or array of keys.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Key {
+    /// Integer number key.
+    Int(i64),
+    /// Floating-point number key.
+    Float(f64),
+    /// String key.
+    Str(String),
+    /// Date key.
+    Date(std::time::SystemTime),
+    /// Binary key.
+    Bytes(Vec<u8>),
+    /// Composite array key.
+    Array(Vec<Key>),
+}
+
+impl From<&str> for Key {
+    fn from(value: &str) -> Self {
+        Self::Str(value.to_string())
+    }
+}
+
+impl From<String> for Key {
+    fn from(value: String) -> Self {
+        Self::Str(value)
+    }
+}
+
+impl From<i64> for Key {
+    fn from(value: i64) -> Self {
+        Self::Int(value)
+    }
+}
+
+impl From<i32> for Key {
+    fn from(value: i32) -> Self {
+        Self::Int(i64::from(value))
+    }
+}
+
+impl From<u64> for Key {
+    fn from(value: u64) -> Self {
+        Self::Int(value as i64)
+    }
+}
+
+impl From<f64> for Key {
+    fn from(value: f64) -> Self {
+        Self::Float(value)
+    }
+}
+
+impl From<bool> for Key {
+    fn from(value: bool) -> Self {
+        Self::Int(i64::from(value))
+    }
+}
+
+impl From<std::time::SystemTime> for Key {
+    fn from(value: std::time::SystemTime) -> Self {
+        Self::Date(value)
+    }
+}
+
+impl From<Vec<u8>> for Key {
+    fn from(value: Vec<u8>) -> Self {
+        Self::Bytes(value)
+    }
+}
+
+impl From<&[u8]> for Key {
+    fn from(value: &[u8]) -> Self {
+        Self::Bytes(value.to_vec())
+    }
+}
+
+impl<T: Into<Key>> From<Vec<T>> for Key {
+    fn from(values: Vec<T>) -> Self {
+        if values.len() == 1 {
+            values.into_iter().next().expect("one value").into()
+        } else {
+            Self::Array(values.into_iter().map(Into::into).collect())
+        }
+    }
+}
+
 /// Constrains a query or cursor by lower and upper bounds.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyRange {
     /// Lower bound, inclusive unless `lower_open` is true.
-    pub lower: Option<serde_json::Value>,
+    pub lower: Option<Key>,
     /// Upper bound, inclusive unless `upper_open` is true.
-    pub upper: Option<serde_json::Value>,
+    pub upper: Option<Key>,
     /// Whether the lower bound is exclusive.
     pub lower_open: bool,
     /// Whether the upper bound is exclusive.
     pub upper_open: bool,
+}
+
+impl KeyRange {
+    /// Returns a range containing only `key`.
+    pub fn only(key: impl Into<Key>) -> Self {
+        let key = key.into();
+        Self {
+            lower: Some(key.clone()),
+            upper: Some(key),
+            lower_open: false,
+            upper_open: false,
+        }
+    }
+
+    /// Returns a range between optional lower and upper bounds.
+    pub fn bound(
+        lower: impl Into<Key>,
+        upper: impl Into<Key>,
+        lower_open: bool,
+        upper_open: bool,
+    ) -> Self {
+        Self {
+            lower: Some(lower.into()),
+            upper: Some(upper.into()),
+            lower_open,
+            upper_open,
+        }
+    }
+
+    /// Returns a range with only a lower bound.
+    pub fn lower_bound(key: impl Into<Key>, open: bool) -> Self {
+        Self {
+            lower: Some(key.into()),
+            upper: None,
+            lower_open: open,
+            upper_open: false,
+        }
+    }
+
+    /// Returns a range with only an upper bound.
+    pub fn upper_bound(key: impl Into<Key>, open: bool) -> Self {
+        Self {
+            lower: None,
+            upper: Some(key.into()),
+            lower_open: false,
+            upper_open: open,
+        }
+    }
+}
+
+/// Describes one IndexedDB query: all records, one exact key, or a key range.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Query {
+    /// Every record in scope (absent wire query).
+    All,
+    /// One exact key (scalar or composite array).
+    Key(Key),
+    /// Records whose keys fall within bounds.
+    Range(KeyRange),
+}
+
+impl Query {
+    /// Query that matches every record in scope.
+    pub fn all() -> Self {
+        Self::All
+    }
+
+    fn to_proto(&self) -> Option<pb::IndexedDbQuery> {
+        use crate::indexeddb_query_codec::{QueryKind, query_to_proto};
+        query_to_proto(match self {
+            Self::All => QueryKind::All,
+            Self::Key(key) => QueryKind::Key(key),
+            Self::Range(range) => QueryKind::Range {
+                lower: range.lower.as_ref(),
+                upper: range.upper.as_ref(),
+                lower_open: range.lower_open,
+                upper_open: range.upper_open,
+            },
+        })
+    }
+}
+
+impl From<KeyRange> for Query {
+    fn from(range: KeyRange) -> Self {
+        Self::Range(range)
+    }
+}
+
+impl<T: Into<Key>> From<T> for Query {
+    fn from(value: T) -> Self {
+        Self::Key(value.into())
+    }
+}
+
+impl From<Option<KeyRange>> for Query {
+    fn from(range: Option<KeyRange>) -> Self {
+        match range {
+            None => Self::All,
+            Some(range) => Self::Range(range),
+        }
+    }
 }
 
 /// Describes one secondary index on an object store.
@@ -211,20 +399,17 @@ pub trait ObjectStoreApi: Send {
     /// Deletes every row in the object store.
     async fn clear(&mut self) -> Result<(), IndexedDBError>;
 
-    /// Loads every row that matches range.
-    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError>;
+    /// Loads every row that matches query.
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError>;
 
-    /// Loads every primary key that matches range.
-    async fn get_all_keys(
-        &mut self,
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError>;
+    /// Loads every primary key that matches query.
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError>;
 
-    /// Counts rows that match range.
-    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError>;
+    /// Counts rows that match query.
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
-    /// Deletes rows that match range and returns the delete count.
-    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
+    /// Deletes rows that match query and returns the delete count.
+    async fn delete_range(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
     /// Returns a typed handle for one secondary index.
     fn index(&self, name: &str) -> Self::Index;
@@ -232,14 +417,14 @@ pub trait ObjectStoreApi: Send {
     /// Opens a full-value cursor over the object store.
     async fn open_cursor(
         &mut self,
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Self::Cursor, IndexedDBError>;
 
     /// Opens a key-only cursor over the object store.
     async fn open_key_cursor(
         &mut self,
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Self::Cursor, IndexedDBError>;
 }
@@ -250,56 +435,35 @@ pub trait IndexApi: Send {
     /// The cursor handle this scope yields.
     type Cursor: CursorApi;
 
-    /// Loads the first row that matches values.
-    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
+    /// Loads the first row that matches query.
+    async fn get(&mut self, query: Query) -> Result<Record, IndexedDBError>;
 
-    /// Resolves the primary key for the first row that matches values.
-    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError>;
+    /// Resolves the primary key for the first row that matches query.
+    async fn get_key(&mut self, query: Query) -> Result<String, IndexedDBError>;
 
-    /// Loads every row that matches values and range.
-    async fn get_all(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<Record>, IndexedDBError>;
+    /// Loads every row that matches query.
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError>;
 
-    /// Loads every primary key that matches values and range.
-    async fn get_all_keys(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError>;
+    /// Loads every primary key that matches query.
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError>;
 
-    /// Counts rows that match values and range.
-    async fn count(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<i64, IndexedDBError>;
+    /// Counts rows that match query.
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
-    /// Deletes rows that match values and returns the delete count.
-    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError>;
-
-    /// Deletes rows that match values and range and returns the delete count.
-    async fn delete_range(
-        &mut self,
-        values: &[serde_json::Value],
-        range: KeyRange,
-    ) -> Result<i64, IndexedDBError>;
+    /// Deletes rows that match query and returns the delete count.
+    async fn delete(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
     /// Opens a full-value cursor over the secondary index.
     async fn open_cursor(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Self::Cursor, IndexedDBError>;
 
     /// Opens a key-only cursor over the secondary index.
     async fn open_key_cursor(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Self::Cursor, IndexedDBError>;
 }
@@ -348,20 +512,17 @@ pub trait TransactionObjectStoreApi: Send {
     /// Deletes every row in the object store inside the transaction.
     async fn clear(&mut self) -> Result<(), IndexedDBError>;
 
-    /// Loads every row that matches range inside the transaction.
-    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError>;
+    /// Loads every row that matches query inside the transaction.
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError>;
 
-    /// Loads every primary key that matches range inside the transaction.
-    async fn get_all_keys(
-        &mut self,
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError>;
+    /// Loads every primary key that matches query inside the transaction.
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError>;
 
-    /// Counts rows that match range inside the transaction.
-    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError>;
+    /// Counts rows that match query inside the transaction.
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
-    /// Deletes rows that match range inside the transaction.
-    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError>;
+    /// Deletes rows that match query inside the transaction.
+    async fn delete_range(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
     /// Returns a transaction-scoped secondary index.
     fn index<'a>(&'a mut self, name: &str) -> Self::Index<'a>;
@@ -370,49 +531,30 @@ pub trait TransactionObjectStoreApi: Send {
 #[async_trait]
 /// Fakeable transaction-scoped secondary-index contract.
 pub trait TransactionIndexApi: Send {
-    /// Loads the first row that matches values inside the transaction.
-    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError>;
+    /// Loads the first row that matches query inside the transaction.
+    async fn get(&mut self, query: Query) -> Result<Record, IndexedDBError>;
 
     /// Resolves the primary key for the first matching row inside the transaction.
-    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError>;
+    async fn get_key(&mut self, query: Query) -> Result<String, IndexedDBError>;
 
-    /// Loads every row that matches values and range inside the transaction.
-    async fn get_all(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<Record>, IndexedDBError>;
+    /// Loads every row that matches query inside the transaction.
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError>;
 
-    /// Loads every primary key that matches values and range inside the transaction.
-    async fn get_all_keys(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError>;
+    /// Loads every primary key that matches query inside the transaction.
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError>;
 
-    /// Counts rows that match values and range inside the transaction.
-    async fn count(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<i64, IndexedDBError>;
+    /// Counts rows that match query inside the transaction.
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 
-    /// Deletes rows that match values inside the transaction.
-    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError>;
-
-    /// Deletes rows that match values and range inside the transaction.
-    async fn delete_range(
-        &mut self,
-        values: &[serde_json::Value],
-        range: KeyRange,
-    ) -> Result<i64, IndexedDBError>;
+    /// Deletes rows that match query inside the transaction.
+    async fn delete(&mut self, query: Query) -> Result<i64, IndexedDBError>;
 }
 
 #[async_trait]
 /// Fakeable IndexedDB cursor contract.
 pub trait CursorApi: Send {
     /// Returns the current cursor key.
-    fn key(&self) -> Option<serde_json::Value>;
+    fn key(&self) -> Option<Key>;
 
     /// Returns the current row's primary key.
     fn primary_key(&self) -> &str;
@@ -424,7 +566,8 @@ pub trait CursorApi: Send {
     async fn continue_next(&mut self) -> Result<bool, IndexedDBError>;
 
     /// Advances the cursor to key, or exhausts it if key does not exist.
-    async fn continue_to_key(&mut self, key: serde_json::Value) -> Result<bool, IndexedDBError>;
+    async fn continue_to_key(&mut self, key: impl Into<Key> + Send)
+    -> Result<bool, IndexedDBError>;
 
     /// Skips count rows ahead.
     async fn advance(&mut self, count: i32) -> Result<bool, IndexedDBError>;
@@ -475,11 +618,11 @@ impl Default for IndexedDBOpenCursorRequest {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IndexedDBCursorSnapshotEntry {
     /// Object-store key, or secondary-index key for index cursors.
-    pub key: serde_json::Value,
+    pub key: Key,
     /// Canonical primary key for the object-store row.
     pub primary_key: String,
     /// Native primary-key value used as a stable tie-breaker for duplicate index keys.
-    pub primary_key_value: serde_json::Value,
+    pub primary_key_value: Key,
     /// Row value returned by full-value cursors.
     pub record: Record,
 }
@@ -609,7 +752,7 @@ impl IndexedDBCursorSnapshot {
     /// Advances to `target` or the next entry past it for this direction.
     pub fn continue_to_key(
         &mut self,
-        target: &serde_json::Value,
+        target: &Key,
     ) -> Result<Option<&IndexedDBCursorSnapshotEntry>, IndexedDBError> {
         let previous = if self.unique
             && self.index_cursor
@@ -687,7 +830,7 @@ pub fn new_indexeddb_cursor_snapshot(req: &IndexedDBOpenCursorRequest) -> Indexe
 pub fn indexeddb_range_bounds(
     range: Option<&KeyRange>,
     index_cursor: bool,
-) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
+) -> (Option<Key>, Option<Key>) {
     let Some(range) = range else {
         return (None, None);
     };
@@ -703,74 +846,133 @@ pub fn indexeddb_range_bounds(
 }
 
 /// Compares native IndexedDB key values.
-pub fn compare_indexeddb_values(left: &serde_json::Value, right: &serde_json::Value) -> Ordering {
+pub fn compare_indexeddb_values(left: &Key, right: &Key) -> Ordering {
+    compare_keys(left, right)
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
+enum KeyKind {
+    Number,
+    Date,
+    String,
+    Binary,
+    Array,
+}
+
+fn key_kind(key: &Key) -> KeyKind {
+    match key {
+        Key::Int(_) | Key::Float(_) => KeyKind::Number,
+        Key::Date(_) => KeyKind::Date,
+        Key::Str(_) => KeyKind::String,
+        Key::Bytes(_) => KeyKind::Binary,
+        Key::Array(_) => KeyKind::Array,
+    }
+}
+
+/// Compares native IndexedDB key values using W3C ordering.
+pub fn compare_keys(left: &Key, right: &Key) -> Ordering {
+    let left_kind = key_kind(left);
+    let right_kind = key_kind(right);
+    if left_kind != right_kind {
+        return left_kind.cmp(&right_kind);
+    }
     match (left, right) {
-        (serde_json::Value::Array(left), serde_json::Value::Array(right)) => {
-            for (i, left_value) in left.iter().enumerate() {
-                let Some(right_value) = right.get(i) else {
-                    return Ordering::Greater;
-                };
-                let cmp = compare_indexeddb_values(left_value, right_value);
+        (Key::Int(left), Key::Int(right)) => left.cmp(right),
+        (Key::Float(left), Key::Float(right)) => compare_float_keys(*left, *right),
+        (Key::Int(left), Key::Float(right)) => compare_int_float_keys(*left, *right),
+        (Key::Float(left), Key::Int(right)) => compare_int_float_keys(*right, *left).reverse(),
+        (Key::Date(left), Key::Date(right)) => left.cmp(right),
+        (Key::Str(left), Key::Str(right)) => compare_utf16_strings(left, right),
+        (Key::Bytes(left), Key::Bytes(right)) => left.cmp(right),
+        (Key::Array(left), Key::Array(right)) => {
+            for (left_value, right_value) in left.iter().zip(right.iter()) {
+                let cmp = compare_keys(left_value, right_value);
                 if cmp != Ordering::Equal {
                     return cmp;
                 }
             }
             left.len().cmp(&right.len())
         }
-        (serde_json::Value::String(left), serde_json::Value::String(right)) => left.cmp(right),
-        (serde_json::Value::Bool(left), serde_json::Value::Bool(right)) => left.cmp(right),
-        (serde_json::Value::Number(left), serde_json::Value::Number(right)) => {
-            compare_json_numbers(left, right)
-        }
-        _ => left.to_string().cmp(&right.to_string()),
+        _ => Ordering::Equal,
     }
 }
 
-fn normalize_indexeddb_bound(value: &serde_json::Value, index_cursor: bool) -> serde_json::Value {
+/// Reports whether `key` satisfies `range`. A range with no bounds matches every key.
+pub fn key_in_range(key: &Key, range: &KeyRange) -> bool {
+    if let Some(lower) = &range.lower {
+        let cmp = compare_keys(key, lower);
+        if range.lower_open {
+            if cmp != Ordering::Greater {
+                return false;
+            }
+        } else if cmp == Ordering::Less {
+            return false;
+        }
+    }
+    if let Some(upper) = &range.upper {
+        let cmp = compare_keys(key, upper);
+        if range.upper_open {
+            if cmp != Ordering::Less {
+                return false;
+            }
+        } else if cmp == Ordering::Greater {
+            return false;
+        }
+    }
+    true
+}
+
+/// Reports whether `key` satisfies `query`.
+pub fn match_query(key: &Key, query: &Query) -> bool {
+    match query {
+        Query::All => true,
+        Query::Key(target) => compare_keys(key, target) == Ordering::Equal,
+        Query::Range(range) => key_in_range(key, range),
+    }
+}
+
+fn normalize_indexeddb_bound(value: &Key, index_cursor: bool) -> Key {
     if !index_cursor {
         return value.clone();
     }
-    if matches!(value, serde_json::Value::Array(_)) {
+    if matches!(value, Key::Array(_)) {
         return value.clone();
     }
-    serde_json::Value::Array(vec![value.clone()])
+    Key::Array(vec![value.clone()])
 }
 
-fn compare_json_numbers(left: &serde_json::Number, right: &serde_json::Number) -> Ordering {
-    if let (Some(left), Some(right)) = (left.as_i64(), right.as_i64()) {
-        return left.cmp(&right);
-    }
-    if let (Some(left), Some(right)) = (left.as_u64(), right.as_u64()) {
-        return left.cmp(&right);
-    }
-    if let (Some(left), Some(right)) = (left.as_i64(), right.as_u64()) {
-        if left < 0 {
-            return Ordering::Less;
+fn compare_utf16_strings(left: &str, right: &str) -> Ordering {
+    let left: Vec<u16> = left.encode_utf16().collect();
+    let right: Vec<u16> = right.encode_utf16().collect();
+    for (left_unit, right_unit) in left.iter().zip(right.iter()) {
+        match left_unit.cmp(right_unit) {
+            Ordering::Equal => {}
+            other => return other,
         }
-        return (left as u64).cmp(&right);
     }
-    if let (Some(left), Some(right)) = (left.as_u64(), right.as_i64()) {
-        if right < 0 {
-            return Ordering::Greater;
-        }
-        return left.cmp(&(right as u64));
+    left.len().cmp(&right.len())
+}
+
+fn compare_int_float_keys(left: i64, right: f64) -> Ordering {
+    if right.is_nan() {
+        return Ordering::Equal;
     }
-    match (left.as_f64(), right.as_f64()) {
-        (Some(left), Some(right)) => left.partial_cmp(&right).unwrap_or(Ordering::Equal),
-        _ => left.to_string().cmp(&right.to_string()),
+    match (left as f64).partial_cmp(&right) {
+        Some(ordering) => ordering,
+        None => left.cmp(&(right as i64)),
     }
+}
+
+fn compare_float_keys(left: f64, right: f64) -> Ordering {
+    left.partial_cmp(&right).unwrap_or(Ordering::Equal)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use std::time::{Duration, UNIX_EPOCH};
 
-    fn entry(
-        key: serde_json::Value,
-        primary_key: &str,
-        primary_key_value: serde_json::Value,
-    ) -> IndexedDBCursorSnapshotEntry {
+    fn entry(key: Key, primary_key: &str, primary_key_value: Key) -> IndexedDBCursorSnapshotEntry {
         IndexedDBCursorSnapshotEntry {
             key,
             primary_key: primary_key.to_string(),
@@ -790,13 +992,25 @@ mod tests {
         snapshot
             .load(
                 vec![
-                    entry(json!(["todo"]), "issue-2", json!("issue-2")),
-                    entry(json!(["done"]), "issue-3", json!("issue-3")),
-                    entry(json!(["todo"]), "issue-1", json!("issue-1")),
+                    entry(
+                        Key::Array(vec![Key::from("todo")]),
+                        "issue-2",
+                        Key::from("issue-2"),
+                    ),
+                    entry(
+                        Key::Array(vec![Key::from("done")]),
+                        "issue-3",
+                        Key::from("issue-3"),
+                    ),
+                    entry(
+                        Key::Array(vec![Key::from("todo")]),
+                        "issue-1",
+                        Key::from("issue-1"),
+                    ),
                 ],
                 Some(&KeyRange {
-                    lower: Some(json!(["done"])),
-                    upper: Some(json!(["todo"])),
+                    lower: Some(Key::Array(vec![Key::from("done")])),
+                    upper: Some(Key::Array(vec![Key::from("todo")])),
                     lower_open: false,
                     upper_open: false,
                 }),
@@ -820,9 +1034,9 @@ mod tests {
         snapshot
             .load(
                 vec![
-                    entry(json!("a"), "a", json!("a")),
-                    entry(json!("b"), "b", json!("b")),
-                    entry(json!("c"), "c", json!("c")),
+                    entry(Key::from("a"), "a", Key::from("a")),
+                    entry(Key::from("b"), "b", Key::from("b")),
+                    entry(Key::from("c"), "c", Key::from("c")),
                 ],
                 None,
             )
@@ -848,12 +1062,12 @@ mod tests {
         snapshot
             .load(
                 vec![
-                    entry(json!("done"), "issue-2", json!("issue-2")),
-                    entry(json!("active"), "issue-1", json!("issue-1")),
+                    entry(Key::from("done"), "issue-2", Key::from("issue-2")),
+                    entry(Key::from("active"), "issue-1", Key::from("issue-1")),
                 ],
                 Some(&KeyRange {
-                    lower: Some(json!("active")),
-                    upper: Some(json!("active")),
+                    lower: Some(Key::from("active")),
+                    upper: Some(Key::from("active")),
                     lower_open: false,
                     upper_open: false,
                 }),
@@ -862,7 +1076,7 @@ mod tests {
 
         let first = snapshot.next().expect("first").unwrap();
         assert_eq!(first.primary_key, "issue-1");
-        assert_eq!(first.key, json!("active"));
+        assert_eq!(first.key, Key::from("active"));
         assert!(snapshot.next().expect("exhausted").is_none());
     }
 
@@ -870,30 +1084,39 @@ mod tests {
     fn range_bounds_normalize_scalar_index_bounds() {
         let (lower, upper) = indexeddb_range_bounds(
             Some(&KeyRange {
-                lower: Some(json!("active")),
-                upper: Some(json!(["done"])),
+                lower: Some(Key::from("active")),
+                upper: Some(Key::Array(vec![Key::from("done")])),
                 lower_open: false,
                 upper_open: false,
             }),
             true,
         );
 
-        assert_eq!(lower, Some(json!(["active"])));
-        assert_eq!(upper, Some(json!(["done"])));
+        assert_eq!(lower, Some(Key::Array(vec![Key::from("active")])));
+        assert_eq!(upper, Some(Key::Array(vec![Key::from("done")])));
     }
 
     #[test]
     fn compare_values_orders_composite_keys() {
         assert_eq!(
-            compare_indexeddb_values(&json!(["active", 1]), &json!(["active", 2])),
+            compare_indexeddb_values(
+                &Key::Array(vec![Key::from("active"), Key::Int(1)]),
+                &Key::Array(vec![Key::from("active"), Key::Int(2)])
+            ),
             Ordering::Less
         );
         assert_eq!(
-            compare_indexeddb_values(&json!(["active", 2]), &json!(["active", 2])),
+            compare_indexeddb_values(
+                &Key::Array(vec![Key::from("active"), Key::Int(2)]),
+                &Key::Array(vec![Key::from("active"), Key::Int(2)])
+            ),
             Ordering::Equal
         );
         assert_eq!(
-            compare_indexeddb_values(&json!(["active", 3]), &json!(["active", 2])),
+            compare_indexeddb_values(
+                &Key::Array(vec![Key::from("active"), Key::Int(3)]),
+                &Key::Array(vec![Key::from("active"), Key::Int(2)])
+            ),
             Ordering::Greater
         );
     }
@@ -902,15 +1125,43 @@ mod tests {
     fn compare_values_orders_large_integer_keys_exactly() {
         assert_eq!(
             compare_indexeddb_values(
-                &json!(9_007_199_254_740_993u64),
-                &json!(9_007_199_254_740_992u64)
+                &Key::Int(9_007_199_254_740_993),
+                &Key::Int(9_007_199_254_740_992)
             ),
             Ordering::Greater
         );
         assert_eq!(
-            compare_indexeddb_values(&json!(i64::MAX), &json!(u64::MAX)),
+            compare_indexeddb_values(&Key::Int(i64::MAX), &Key::Float(u64::MAX as f64)),
             Ordering::Less
         );
+    }
+
+    #[test]
+    fn compare_keys_orders_date_before_string_and_bytes_after_string() {
+        let date = Key::Date(UNIX_EPOCH + Duration::from_secs(1_700_000_000));
+        assert_eq!(compare_keys(&Key::Int(1), &date), Ordering::Less);
+        assert_eq!(compare_keys(&date, &Key::from("a")), Ordering::Less);
+        assert_eq!(
+            compare_keys(&Key::from("a"), &Key::Bytes(vec![0x00])),
+            Ordering::Less
+        );
+    }
+
+    #[test]
+    fn date_and_bytes_keys_match_exact_queries() {
+        let date = Key::Date(UNIX_EPOCH + Duration::from_secs(1_700_000_000));
+        let bytes = Key::Bytes(vec![0x01, 0x02]);
+        assert!(match_query(&date, &Query::Key(date.clone())));
+        assert!(match_query(&bytes, &Query::Key(bytes.clone())));
+        assert!(key_in_range(
+            &date,
+            &KeyRange {
+                lower: Some(date.clone()),
+                upper: Some(date.clone()),
+                lower_open: false,
+                upper_open: false,
+            }
+        ));
     }
 }
 
@@ -919,22 +1170,18 @@ pub struct Cursor {
     tx: mpsc::Sender<pb::CursorClientMessage>,
     stream: tonic::Streaming<pb::CursorResponse>,
     keys_only: bool,
-    index_cursor: bool,
     entry: Option<pb::CursorEntry>,
     done: bool,
 }
 
 impl Cursor {
     /// Returns the current cursor key.
-    pub fn key(&self) -> Option<serde_json::Value> {
+    pub fn key(&self) -> Option<Key> {
         let entry = self.entry.as_ref()?;
-        match entry.key.len() {
-            0 => None,
-            1 if !self.index_cursor => Some(key_value_to_json(&entry.key[0])),
-            _ => Some(serde_json::Value::Array(
-                entry.key.iter().map(key_value_to_json).collect(),
-            )),
-        }
+        entry
+            .key
+            .as_ref()
+            .map(crate::indexeddb_query_codec::key_from_wire_key_value)
     }
 
     /// Returns the current row's primary key.
@@ -965,12 +1212,10 @@ impl Cursor {
     }
 
     /// Advances the cursor to key, or exhausts it if key does not exist.
-    pub async fn continue_to_key(
-        &mut self,
-        key: serde_json::Value,
-    ) -> Result<bool, IndexedDBError> {
+    pub async fn continue_to_key(&mut self, key: impl Into<Key>) -> Result<bool, IndexedDBError> {
+        let key = key.into();
         let cmd = pb::cursor_command::Command::ContinueToKey(pb::CursorKeyTarget {
-            key: cursor_key_to_proto(&key, self.index_cursor),
+            key: Some(crate::indexeddb_query_codec::cursor_key_to_proto(&key)),
         });
         self.send_and_recv(cmd).await
     }
@@ -1104,7 +1349,6 @@ async fn open_cursor_inner(
     req: pb::OpenCursorRequest,
 ) -> Result<Cursor, IndexedDBError> {
     let keys_only = req.keys_only;
-    let is_index = !req.index.is_empty();
     let (tx, rx) = mpsc::channel::<pb::CursorClientMessage>(CURSOR_CHANNEL_BUFFER);
 
     let open_msg = pb::CursorClientMessage {
@@ -1145,7 +1389,6 @@ async fn open_cursor_inner(
         keys_only,
         entry: None,
         done: false,
-        index_cursor: is_index,
     })
 }
 
@@ -1544,17 +1787,20 @@ impl TransactionObjectStore<'_> {
         Ok(())
     }
 
-    /// Loads every row that matches range inside the transaction.
+    /// Loads every row that matches query inside the transaction.
     pub async fn get_all(
         &mut self,
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<Record>, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::GetAll(
                 pb::ObjectStoreRangeRequest {
                     store: self.store.clone(),
-                    range: range.map(key_range_to_pb),
+                    query: query.to_proto(),
+                    count,
                 },
             ))
             .await?;
@@ -1566,17 +1812,20 @@ impl TransactionObjectStore<'_> {
         }
     }
 
-    /// Loads every primary key that matches range inside the transaction.
+    /// Loads every primary key that matches query inside the transaction.
     pub async fn get_all_keys(
         &mut self,
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<String>, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::GetAllKeys(
                 pb::ObjectStoreRangeRequest {
                     store: self.store.clone(),
-                    range: range.map(key_range_to_pb),
+                    query: query.to_proto(),
+                    count,
                 },
             ))
             .await?;
@@ -1586,14 +1835,16 @@ impl TransactionObjectStore<'_> {
         }
     }
 
-    /// Counts rows that match range inside the transaction.
-    pub async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
+    /// Counts rows that match query inside the transaction.
+    pub async fn count(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::Count(
                 pb::ObjectStoreRangeRequest {
                     store: self.store.clone(),
-                    range: range.map(key_range_to_pb),
+                    query: query.to_proto(),
+                    count: None,
                 },
             ))
             .await?;
@@ -1603,14 +1854,16 @@ impl TransactionObjectStore<'_> {
         }
     }
 
-    /// Deletes rows that match range inside the transaction.
-    pub async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
+    /// Deletes rows that match query inside the transaction.
+    pub async fn delete_range(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::DeleteRange(
                 pb::ObjectStoreRangeRequest {
                     store: self.store.clone(),
-                    range: Some(key_range_to_pb(range)),
+                    query: query.to_proto(),
+                    count: None,
                 },
             ))
             .await?;
@@ -1640,12 +1893,12 @@ pub struct TransactionIndex<'a> {
 }
 
 impl TransactionIndex<'_> {
-    /// Loads the first row that matches values inside the transaction.
-    pub async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
+    /// Loads the first row that matches query inside the transaction.
+    pub async fn get(&mut self, query: impl Into<Query>) -> Result<Record, IndexedDBError> {
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::IndexGet(
-                self.index_request(values, None),
+                self.index_request(query.into(), None),
             ))
             .await?;
         match resp.result {
@@ -1659,14 +1912,11 @@ impl TransactionIndex<'_> {
     }
 
     /// Resolves the primary key for the first matching row inside the transaction.
-    pub async fn get_key(
-        &mut self,
-        values: &[serde_json::Value],
-    ) -> Result<String, IndexedDBError> {
+    pub async fn get_key(&mut self, query: impl Into<Query>) -> Result<String, IndexedDBError> {
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::IndexGetKey(
-                self.index_request(values, None),
+                self.index_request(query.into(), None),
             ))
             .await?;
         match resp.result {
@@ -1675,16 +1925,16 @@ impl TransactionIndex<'_> {
         }
     }
 
-    /// Loads every row that matches values and range inside the transaction.
+    /// Loads every row that matches query inside the transaction.
     pub async fn get_all(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<Record>, IndexedDBError> {
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::IndexGetAll(
-                self.index_request(values, range),
+                self.index_request(query.into(), count),
             ))
             .await?;
         match resp.result {
@@ -1695,16 +1945,16 @@ impl TransactionIndex<'_> {
         }
     }
 
-    /// Loads every primary key that matches values and range inside the transaction.
+    /// Loads every primary key that matches query inside the transaction.
     pub async fn get_all_keys(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<String>, IndexedDBError> {
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::IndexGetAllKeys(
-                self.index_request(values, range),
+                self.index_request(query.into(), count),
             ))
             .await?;
         match resp.result {
@@ -1713,16 +1963,12 @@ impl TransactionIndex<'_> {
         }
     }
 
-    /// Counts rows that match values and range inside the transaction.
-    pub async fn count(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<i64, IndexedDBError> {
+    /// Counts rows that match query inside the transaction.
+    pub async fn count(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::IndexCount(
-                self.index_request(values, range),
+                self.index_request(query.into(), None),
             ))
             .await?;
         match resp.result {
@@ -1731,12 +1977,12 @@ impl TransactionIndex<'_> {
         }
     }
 
-    /// Deletes rows that match values inside the transaction.
-    pub async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
+    /// Deletes rows that match query inside the transaction.
+    pub async fn delete(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
         let resp = self
             .tx
             .send_operation(pb::transaction_operation::Operation::IndexDelete(
-                self.index_request(values, None),
+                self.index_request(query.into(), None),
             ))
             .await?;
         match resp.result {
@@ -1747,36 +1993,12 @@ impl TransactionIndex<'_> {
         }
     }
 
-    /// Deletes rows that match values and range inside the transaction.
-    pub async fn delete_range(
-        &mut self,
-        values: &[serde_json::Value],
-        range: KeyRange,
-    ) -> Result<i64, IndexedDBError> {
-        let resp = self
-            .tx
-            .send_operation(pb::transaction_operation::Operation::IndexDelete(
-                self.index_request(values, Some(range)),
-            ))
-            .await?;
-        match resp.result {
-            Some(pb::transaction_operation_response::Result::Delete(deleted)) => {
-                Ok(deleted.deleted)
-            }
-            _ => Err(unexpected_transaction_result()),
-        }
-    }
-
-    fn index_request(
-        &self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> pb::IndexQueryRequest {
+    fn index_request(&self, query: Query, count: Option<u32>) -> pb::IndexQueryRequest {
         pb::IndexQueryRequest {
             store: self.store.clone(),
             index: self.index.clone(),
-            values: values.iter().map(json_to_typed_value).collect(),
-            range: range.map(key_range_to_pb),
+            query: query.to_proto(),
+            count,
         }
     }
 }
@@ -1915,16 +2137,19 @@ impl ObjectStore {
         Ok(())
     }
 
-    /// Loads every row that matches range.
+    /// Loads every row that matches query.
     pub async fn get_all(
         &mut self,
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<Record>, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .client
             .get_all(pb::ObjectStoreRangeRequest {
                 store: self.store.clone(),
-                range: range.map(key_range_to_pb),
+                query: query.to_proto(),
+                count,
             })
             .await
             .map_err(map_status)?;
@@ -1936,42 +2161,49 @@ impl ObjectStore {
             .collect())
     }
 
-    /// Loads every primary key that matches range.
+    /// Loads every primary key that matches query.
     pub async fn get_all_keys(
         &mut self,
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<String>, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .client
             .get_all_keys(pb::ObjectStoreRangeRequest {
                 store: self.store.clone(),
-                range: range.map(key_range_to_pb),
+                query: query.to_proto(),
+                count,
             })
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().keys)
     }
 
-    /// Counts rows that match range.
-    pub async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
+    /// Counts rows that match query.
+    pub async fn count(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .client
             .count(pb::ObjectStoreRangeRequest {
                 store: self.store.clone(),
-                range: range.map(key_range_to_pb),
+                query: query.to_proto(),
+                count: None,
             })
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().count)
     }
 
-    /// Deletes rows that match range and returns the delete count.
-    pub async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
+    /// Deletes rows that match query and returns the delete count.
+    pub async fn delete_range(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
+        let query = query.into();
         let resp = self
             .client
             .delete_range(pb::ObjectStoreRangeRequest {
                 store: self.store.clone(),
-                range: Some(key_range_to_pb(range)),
+                query: query.to_proto(),
+                count: None,
             })
             .await
             .map_err(map_status)?;
@@ -1990,16 +2222,16 @@ impl ObjectStore {
     /// Opens a full-value cursor over the object store.
     pub async fn open_cursor(
         &mut self,
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
+        let query = query.into();
         let req = pb::OpenCursorRequest {
             store: self.store.clone(),
-            range: range.map(key_range_to_pb),
+            index: String::new(),
+            query: query.to_proto(),
             direction: direction.to_proto(),
             keys_only: false,
-            index: String::new(),
-            values: vec![],
         };
         open_cursor_inner(&mut self.client, req).await
     }
@@ -2007,16 +2239,16 @@ impl ObjectStore {
     /// Opens a key-only cursor over the object store.
     pub async fn open_key_cursor(
         &mut self,
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
+        let query = query.into();
         let req = pb::OpenCursorRequest {
             store: self.store.clone(),
-            range: range.map(key_range_to_pb),
+            index: String::new(),
+            query: query.to_proto(),
             direction: direction.to_proto(),
             keys_only: true,
-            index: String::new(),
-            values: vec![],
         };
         open_cursor_inner(&mut self.client, req).await
     }
@@ -2030,16 +2262,20 @@ pub struct Index {
 }
 
 impl Index {
-    /// Loads the first row that matches values.
-    pub async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
+    fn index_request(&self, query: Query, count: Option<u32>) -> pb::IndexQueryRequest {
+        pb::IndexQueryRequest {
+            store: self.store.clone(),
+            index: self.index.clone(),
+            query: query.to_proto(),
+            count,
+        }
+    }
+
+    /// Loads the first row that matches query.
+    pub async fn get(&mut self, query: impl Into<Query>) -> Result<Record, IndexedDBError> {
         let resp = self
             .client
-            .index_get(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: None,
-            })
+            .index_get(self.index_request(query.into(), None))
             .await
             .map_err(map_status)?;
         Ok(resp
@@ -2050,38 +2286,25 @@ impl Index {
             .unwrap_or_default())
     }
 
-    /// Resolves the primary key for the first row that matches values.
-    pub async fn get_key(
-        &mut self,
-        values: &[serde_json::Value],
-    ) -> Result<String, IndexedDBError> {
+    /// Resolves the primary key for the first row that matches query.
+    pub async fn get_key(&mut self, query: impl Into<Query>) -> Result<String, IndexedDBError> {
         let resp = self
             .client
-            .index_get_key(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: None,
-            })
+            .index_get_key(self.index_request(query.into(), None))
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().key)
     }
 
-    /// Loads every row that matches values and range.
+    /// Loads every row that matches query.
     pub async fn get_all(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<Record>, IndexedDBError> {
         let resp = self
             .client
-            .index_get_all(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: range.map(key_range_to_pb),
-            })
+            .index_get_all(self.index_request(query.into(), count))
             .await
             .map_err(map_status)?;
         Ok(resp
@@ -2092,73 +2315,35 @@ impl Index {
             .collect())
     }
 
-    /// Loads every primary key that matches values and range.
+    /// Loads every primary key that matches query.
     pub async fn get_all_keys(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
+        count: Option<u32>,
     ) -> Result<Vec<String>, IndexedDBError> {
         let resp = self
             .client
-            .index_get_all_keys(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: range.map(key_range_to_pb),
-            })
+            .index_get_all_keys(self.index_request(query.into(), count))
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().keys)
     }
 
-    /// Counts rows that match values and range.
-    pub async fn count(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<i64, IndexedDBError> {
+    /// Counts rows that match query.
+    pub async fn count(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
         let resp = self
             .client
-            .index_count(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: range.map(key_range_to_pb),
-            })
+            .index_count(self.index_request(query.into(), None))
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().count)
     }
 
-    /// Deletes rows that match values and returns the delete count.
-    pub async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
+    /// Deletes rows that match query and returns the delete count.
+    pub async fn delete(&mut self, query: impl Into<Query>) -> Result<i64, IndexedDBError> {
         let resp = self
             .client
-            .index_delete(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: None,
-            })
-            .await
-            .map_err(map_status)?;
-        Ok(resp.into_inner().deleted)
-    }
-
-    /// Deletes rows that match values and range and returns the delete count.
-    pub async fn delete_range(
-        &mut self,
-        values: &[serde_json::Value],
-        range: KeyRange,
-    ) -> Result<i64, IndexedDBError> {
-        let resp = self
-            .client
-            .index_delete(pb::IndexQueryRequest {
-                store: self.store.clone(),
-                index: self.index.clone(),
-                values: values.iter().map(json_to_typed_value).collect(),
-                range: Some(key_range_to_pb(range)),
-            })
+            .index_delete(self.index_request(query.into(), None))
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().deleted)
@@ -2167,17 +2352,16 @@ impl Index {
     /// Opens a full-value cursor over the secondary index.
     pub async fn open_cursor(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
+        let query = query.into();
         let req = pb::OpenCursorRequest {
             store: self.store.clone(),
-            range: range.map(key_range_to_pb),
+            index: self.index.clone(),
+            query: query.to_proto(),
             direction: direction.to_proto(),
             keys_only: false,
-            index: self.index.clone(),
-            values: values.iter().map(json_to_typed_value).collect(),
         };
         open_cursor_inner(&mut self.client, req).await
     }
@@ -2185,17 +2369,16 @@ impl Index {
     /// Opens a key-only cursor over the secondary index.
     pub async fn open_key_cursor(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: impl Into<Query>,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
+        let query = query.into();
         let req = pb::OpenCursorRequest {
             store: self.store.clone(),
-            range: range.map(key_range_to_pb),
+            index: self.index.clone(),
+            query: query.to_proto(),
             direction: direction.to_proto(),
             keys_only: true,
-            index: self.index.clone(),
-            values: values.iter().map(json_to_typed_value).collect(),
         };
         open_cursor_inner(&mut self.client, req).await
     }
@@ -2261,23 +2444,20 @@ impl ObjectStoreApi for ObjectStore {
         ObjectStore::clear(self).await
     }
 
-    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError> {
-        ObjectStore::get_all(self, range).await
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError> {
+        ObjectStore::get_all(self, query, None).await
     }
 
-    async fn get_all_keys(
-        &mut self,
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError> {
-        ObjectStore::get_all_keys(self, range).await
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError> {
+        ObjectStore::get_all_keys(self, query, None).await
     }
 
-    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
-        ObjectStore::count(self, range).await
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        ObjectStore::count(self, query).await
     }
 
-    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
-        ObjectStore::delete_range(self, range).await
+    async fn delete_range(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        ObjectStore::delete_range(self, query).await
     }
 
     fn index(&self, name: &str) -> Index {
@@ -2286,18 +2466,18 @@ impl ObjectStoreApi for ObjectStore {
 
     async fn open_cursor(
         &mut self,
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
-        ObjectStore::open_cursor(self, range, direction).await
+        ObjectStore::open_cursor(self, query, direction).await
     }
 
     async fn open_key_cursor(
         &mut self,
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
-        ObjectStore::open_key_cursor(self, range, direction).await
+        ObjectStore::open_key_cursor(self, query, direction).await
     }
 }
 
@@ -2305,66 +2485,44 @@ impl ObjectStoreApi for ObjectStore {
 impl IndexApi for Index {
     type Cursor = Cursor;
 
-    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
-        Index::get(self, values).await
+    async fn get(&mut self, query: Query) -> Result<Record, IndexedDBError> {
+        Index::get(self, query).await
     }
 
-    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError> {
-        Index::get_key(self, values).await
+    async fn get_key(&mut self, query: Query) -> Result<String, IndexedDBError> {
+        Index::get_key(self, query).await
     }
 
-    async fn get_all(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<Record>, IndexedDBError> {
-        Index::get_all(self, values, range).await
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError> {
+        Index::get_all(self, query, None).await
     }
 
-    async fn get_all_keys(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError> {
-        Index::get_all_keys(self, values, range).await
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError> {
+        Index::get_all_keys(self, query, None).await
     }
 
-    async fn count(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<i64, IndexedDBError> {
-        Index::count(self, values, range).await
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        Index::count(self, query).await
     }
 
-    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
-        Index::delete(self, values).await
-    }
-
-    async fn delete_range(
-        &mut self,
-        values: &[serde_json::Value],
-        range: KeyRange,
-    ) -> Result<i64, IndexedDBError> {
-        Index::delete_range(self, values, range).await
+    async fn delete(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        Index::delete(self, query).await
     }
 
     async fn open_cursor(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
-        Index::open_cursor(self, values, range, direction).await
+        Index::open_cursor(self, query, direction).await
     }
 
     async fn open_key_cursor(
         &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
+        query: Query,
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
-        Index::open_key_cursor(self, values, range, direction).await
+        Index::open_key_cursor(self, query, direction).await
     }
 }
 
@@ -2416,23 +2574,20 @@ impl<'tx> TransactionObjectStoreApi for TransactionObjectStore<'tx> {
         TransactionObjectStore::clear(self).await
     }
 
-    async fn get_all(&mut self, range: Option<KeyRange>) -> Result<Vec<Record>, IndexedDBError> {
-        TransactionObjectStore::get_all(self, range).await
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError> {
+        TransactionObjectStore::get_all(self, query, None).await
     }
 
-    async fn get_all_keys(
-        &mut self,
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError> {
-        TransactionObjectStore::get_all_keys(self, range).await
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError> {
+        TransactionObjectStore::get_all_keys(self, query, None).await
     }
 
-    async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
-        TransactionObjectStore::count(self, range).await
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        TransactionObjectStore::count(self, query).await
     }
 
-    async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
-        TransactionObjectStore::delete_range(self, range).await
+    async fn delete_range(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        TransactionObjectStore::delete_range(self, query).await
     }
 
     fn index<'a>(&'a mut self, name: &str) -> TransactionIndex<'a> {
@@ -2442,54 +2597,34 @@ impl<'tx> TransactionObjectStoreApi for TransactionObjectStore<'tx> {
 
 #[async_trait]
 impl TransactionIndexApi for TransactionIndex<'_> {
-    async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
-        TransactionIndex::get(self, values).await
+    async fn get(&mut self, query: Query) -> Result<Record, IndexedDBError> {
+        TransactionIndex::get(self, query).await
     }
 
-    async fn get_key(&mut self, values: &[serde_json::Value]) -> Result<String, IndexedDBError> {
-        TransactionIndex::get_key(self, values).await
+    async fn get_key(&mut self, query: Query) -> Result<String, IndexedDBError> {
+        TransactionIndex::get_key(self, query).await
     }
 
-    async fn get_all(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<Record>, IndexedDBError> {
-        TransactionIndex::get_all(self, values, range).await
+    async fn get_all(&mut self, query: Query) -> Result<Vec<Record>, IndexedDBError> {
+        TransactionIndex::get_all(self, query, None).await
     }
 
-    async fn get_all_keys(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<Vec<String>, IndexedDBError> {
-        TransactionIndex::get_all_keys(self, values, range).await
+    async fn get_all_keys(&mut self, query: Query) -> Result<Vec<String>, IndexedDBError> {
+        TransactionIndex::get_all_keys(self, query, None).await
     }
 
-    async fn count(
-        &mut self,
-        values: &[serde_json::Value],
-        range: Option<KeyRange>,
-    ) -> Result<i64, IndexedDBError> {
-        TransactionIndex::count(self, values, range).await
+    async fn count(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        TransactionIndex::count(self, query).await
     }
 
-    async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
-        TransactionIndex::delete(self, values).await
-    }
-
-    async fn delete_range(
-        &mut self,
-        values: &[serde_json::Value],
-        range: KeyRange,
-    ) -> Result<i64, IndexedDBError> {
-        TransactionIndex::delete_range(self, values, range).await
+    async fn delete(&mut self, query: Query) -> Result<i64, IndexedDBError> {
+        TransactionIndex::delete(self, query).await
     }
 }
 
 #[async_trait]
 impl CursorApi for Cursor {
-    fn key(&self) -> Option<serde_json::Value> {
+    fn key(&self) -> Option<Key> {
         Cursor::key(self)
     }
 
@@ -2505,7 +2640,10 @@ impl CursorApi for Cursor {
         Cursor::continue_next(self).await
     }
 
-    async fn continue_to_key(&mut self, key: serde_json::Value) -> Result<bool, IndexedDBError> {
+    async fn continue_to_key(
+        &mut self,
+        key: impl Into<Key> + Send,
+    ) -> Result<bool, IndexedDBError> {
         Cursor::continue_to_key(self, key).await
     }
 
@@ -2652,39 +2790,6 @@ fn json_to_prost_value(v: &serde_json::Value) -> prost_types::Value {
     prost_types::Value { kind: Some(kind) }
 }
 
-fn key_value_to_json(kv: &pb::KeyValue) -> serde_json::Value {
-    match &kv.kind {
-        Some(pb::key_value::Kind::Scalar(tv)) => typed_value_to_json(tv),
-        Some(pb::key_value::Kind::Array(arr)) => {
-            serde_json::Value::Array(arr.elements.iter().map(key_value_to_json).collect())
-        }
-        None => serde_json::Value::Null,
-    }
-}
-
-fn json_to_key_value(v: &serde_json::Value) -> pb::KeyValue {
-    if let serde_json::Value::Array(arr) = v {
-        pb::KeyValue {
-            kind: Some(pb::key_value::Kind::Array(pb::KeyValueArray {
-                elements: arr.iter().map(json_to_key_value).collect(),
-            })),
-        }
-    } else {
-        pb::KeyValue {
-            kind: Some(pb::key_value::Kind::Scalar(json_to_typed_value(v))),
-        }
-    }
-}
-
-fn cursor_key_to_proto(key: &serde_json::Value, index_cursor: bool) -> Vec<pb::KeyValue> {
-    if index_cursor {
-        if let serde_json::Value::Array(parts) = key {
-            return parts.iter().map(json_to_key_value).collect();
-        }
-    }
-    vec![json_to_key_value(key)]
-}
-
 fn typed_value_to_json(v: &pb::TypedValue) -> serde_json::Value {
     use pb::typed_value::Kind;
     match &v.kind {
@@ -2702,14 +2807,6 @@ fn typed_value_to_json(v: &pb::TypedValue) -> serde_json::Value {
     }
 }
 
-fn key_range_to_pb(kr: KeyRange) -> pb::KeyRange {
-    pb::KeyRange {
-        lower: kr.lower.map(|v| json_to_typed_value(&v)),
-        upper: kr.upper.map(|v| json_to_typed_value(&v)),
-        lower_open: kr.lower_open,
-        upper_open: kr.upper_open,
-    }
-}
 fn relay_token_interceptor(
     token: &str,
     binding: &str,

@@ -18,10 +18,10 @@ from gestalt import (
     AlreadyExistsError,
     IndexedDB,
     IndexSchema,
-    KeyRange,
     NotFoundError,
     ObjectStoreSchema,
     TransactionError,
+    bound,
 )
 
 
@@ -328,16 +328,16 @@ class TestTransaction(unittest.TestCase):
 
         tx = c.transaction(["transaction_index_bulk_rollback"], "readwrite")
         txs = tx.object_store("transaction_index_bulk_rollback")
-        self.assertEqual(txs.index("by_status").count("active"), 3)
-        self.assertEqual(len(txs.index("by_status").get_all_keys("active")), 3)
-        self.assertEqual(txs.delete_range(KeyRange(lower="b", upper="c")), 2)
-        self.assertEqual(txs.index("by_status").delete("active"), 2)
+        self.assertEqual(txs.index("by_status").count(query="active"), 3)
+        self.assertEqual(len(txs.index("by_status").get_all_keys(query="active")), 3)
+        self.assertEqual(txs.delete_range(query=bound("b", "c")), 2)
+        self.assertEqual(txs.index("by_status").delete(query="active"), 2)
         txs.clear()
         self.assertEqual(txs.count(), 0)
         tx.abort()
 
         self.assertEqual(s.count(), 4)
-        self.assertEqual(s.index("by_status").count("inactive"), 1)
+        self.assertEqual(s.index("by_status").count(query="inactive"), 1)
         c.close()
 
 
@@ -592,7 +592,7 @@ class TestIndexCursor(unittest.TestCase):
         _seed_store(c, "index_cursor")
         s = c.object_store("index_cursor")
         with s.index("by_status").open_cursor(
-            "active", direction=CURSOR_NEXT
+            query="active", direction=CURSOR_NEXT
         ) as cursor:
             count = 0
             while cursor.continue_():
@@ -618,9 +618,43 @@ class TestIndexContinueToKey(unittest.TestCase):
 
         with s.index("by_num").open_cursor(direction=CURSOR_NEXT) as cursor:
             self.assertTrue(cursor.continue_())
-            self.assertEqual(cursor.key, [1])
+            self.assertEqual(cursor.key, 1)
             self.assertTrue(cursor.continue_to_key(cursor.key))
             self.assertEqual(cursor.primary_key, "b")
+        c.close()
+
+
+class TestIndexCompoundRange(unittest.TestCase):
+    def test_bound_compound_array_range(self) -> None:
+        c = _client()
+        c.create_object_store(
+            "index_compound_range",
+            ObjectStoreSchema(
+                indexes=[
+                    IndexSchema(
+                        name="by_vendor_date",
+                        key_path=["vendor", "date"],
+                    )
+                ]
+            ),
+        )
+        s = c.object_store("index_compound_range")
+        for row in [
+            {"id": "1", "vendor": "claude_code", "date": "2026-03-15"},
+            {"id": "2", "vendor": "claude_code", "date": "2026-04-10"},
+            {"id": "3", "vendor": "claude_code", "date": "2026-04-30"},
+            {"id": "4", "vendor": "claude_code", "date": "2026-05-01"},
+            {"id": "5", "vendor": "other", "date": "2026-04-15"},
+        ]:
+            s.add(row)
+
+        range_query = bound(
+            ["claude_code", "2026-04-01"],
+            ["claude_code", "2026-04-30"],
+        )
+        records = s.index("by_vendor_date").get_all(query=range_query)
+        self.assertEqual(len(records), 2)
+        self.assertEqual([records[0]["id"], records[1]["id"]], ["2", "3"])
         c.close()
 
 

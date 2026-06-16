@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
+	sdkclient "github.com/valon-technologies/gestalt/sdk/go/client"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc/codes"
@@ -125,7 +126,7 @@ func (o *objectStore) Get(ctx context.Context, id string) (idb.Record, error) {
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	record, err := idb.RecordFromProto(resp.GetRecord())
+	record, err := idb.RecordFromProto(sdkclient.FromWireRecord(resp.GetRecord()))
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -151,7 +152,7 @@ func (o *objectStore) Add(ctx context.Context, record idb.Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: sdkclient.ToWireRecord(pbRecord)})
 	return grpcErr(err)
 }
 
@@ -163,7 +164,7 @@ func (o *objectStore) Put(ctx context.Context, record idb.Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: sdkclient.ToWireRecord(pbRecord)})
 	return grpcErr(err)
 }
 
@@ -183,65 +184,48 @@ func (o *objectStore) Clear(ctx context.Context) error {
 	return grpcErr(err)
 }
 
-// GetAll loads all records that match r.
-func (o *objectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
+// GetAll loads all records that match query.
+func (o *objectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
 	defer cancel()
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := o.client.GetAll(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAll(ctx, objectStoreRangeRequest(o.store, query, count...))
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	records, err := idb.RecordsFromProto(resp.GetRecords())
+	records, err := recordsFromWire(resp.GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
 	return records, nil
 }
 
-// GetAllKeys loads the primary keys for all records that match r.
-func (o *objectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
+// GetAllKeys loads the primary keys for all records that match query.
+func (o *objectStore) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
 	defer cancel()
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := o.client.GetAllKeys(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAllKeys(ctx, objectStoreRangeRequest(o.store, query, count...))
 	if err != nil {
 		return nil, grpcErr(err)
 	}
 	return resp.GetKeys(), nil
 }
 
-// Count returns the number of records that match r.
-func (o *objectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
+// Count returns the number of records that match query.
+func (o *objectStore) Count(ctx context.Context, query any) (int64, error) {
 	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
 	defer cancel()
-	kr, err := krToProto(r)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Query: toWireQuery(query)})
 	if err != nil {
 		return 0, grpcErr(err)
 	}
 	return resp.GetCount(), nil
 }
 
-// DeleteRange removes all records that match r and reports how many were
-// deleted.
-func (o *objectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
+// DeleteRange removes all records that match query and reports how many were deleted.
+func (o *objectStore) DeleteRange(ctx context.Context, query any) (int64, error) {
 	ctx, cancel := attachTimeout(ctx, o.opts.UnaryTimeout)
 	defer cancel()
-	kr, err := krToProto(&r)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Query: toWireQuery(query)})
 	if err != nil {
 		return 0, grpcErr(err)
 	}
@@ -249,13 +233,13 @@ func (o *objectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, e
 }
 
 // OpenCursor opens a full-value cursor over the object store.
-func (o *objectStore) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
-	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+func (o *objectStore) OpenCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
+	return openCursor(ctx, o.client, o.store, "", query, dir, false)
 }
 
 // OpenKeyCursor opens a key-only cursor over the object store.
-func (o *objectStore) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
-	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+func (o *objectStore) OpenKeyCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
+	return openCursor(ctx, o.client, o.store, "", query, dir, true)
 }
 
 // idb.Index returns a typed handle for a secondary index on the object store.
@@ -271,133 +255,74 @@ type indexClient struct {
 	opts   Options
 }
 
-// Get loads the first record that matches the supplied index key.
-func (idx *indexClient) Get(ctx context.Context, values ...any) (idb.Record, error) {
+// Get loads the first record that matches query.
+func (idx *indexClient) Get(ctx context.Context, query any) (idb.Record, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := idx.client.IndexGet(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals,
-	})
+	resp, err := idx.client.IndexGet(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	record, err := idb.RecordFromProto(resp.GetRecord())
+	record, err := idb.RecordFromProto(sdkclient.FromWireRecord(resp.GetRecord()))
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
 	return record, nil
 }
 
-// GetKey resolves the primary key for the first row that matches values.
-func (idx *indexClient) GetKey(ctx context.Context, values ...any) (string, error) {
+// GetKey resolves the primary key for the first row that matches query.
+func (idx *indexClient) GetKey(ctx context.Context, query any) (string, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return "", err
-	}
-	resp, err := idx.client.IndexGetKey(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals,
-	})
+	resp, err := idx.client.IndexGetKey(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
 		return "", grpcErr(err)
 	}
 	return resp.GetKey(), nil
 }
 
-// GetAll loads every record that matches values and r.
-func (idx *indexClient) GetAll(ctx context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
+// GetAll loads every record that matches query.
+func (idx *indexClient) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return nil, err
-	}
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := idx.client.IndexGetAll(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
-	})
+	resp, err := idx.client.IndexGetAll(ctx, indexQueryRequest(idx.store, idx.index, query, count...))
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	records, err := idb.RecordsFromProto(resp.GetRecords())
+	records, err := recordsFromWire(resp.GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
 	return records, nil
 }
 
-// GetAllKeys loads every primary key that matches values and r.
-func (idx *indexClient) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
+// GetAllKeys loads every primary key that matches query.
+func (idx *indexClient) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return nil, err
-	}
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := idx.client.IndexGetAllKeys(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
-	})
+	resp, err := idx.client.IndexGetAllKeys(ctx, indexQueryRequest(idx.store, idx.index, query, count...))
 	if err != nil {
 		return nil, grpcErr(err)
 	}
 	return resp.GetKeys(), nil
 }
 
-// Count returns the number of rows that match values and r.
-func (idx *indexClient) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+// Count returns the number of rows that match query.
+func (idx *indexClient) Count(ctx context.Context, query any) (int64, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return 0, err
-	}
-	kr, err := krToProto(r)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := idx.client.IndexCount(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
-	})
+	resp, err := idx.client.IndexCount(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
 		return 0, grpcErr(err)
 	}
 	return resp.GetCount(), nil
 }
 
-// Delete removes all rows that match values.
-func (idx *indexClient) Delete(ctx context.Context, values ...any) (int64, error) {
+// Delete removes all rows that match query.
+func (idx *indexClient) Delete(ctx context.Context, query any) (int64, error) {
 	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
 	defer cancel()
-	return idx.DeleteRange(ctx, nil, values...)
-}
-
-// DeleteRange removes all rows that match values and r.
-func (idx *indexClient) DeleteRange(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
-	ctx, cancel := attachTimeout(ctx, idx.opts.UnaryTimeout)
-	defer cancel()
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return 0, err
-	}
-	kr, err := krToProto(r)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := idx.client.IndexDelete(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
-	})
+	resp, err := idx.client.IndexDelete(ctx, indexQueryRequest(idx.store, idx.index, query))
 	if err != nil {
 		return 0, grpcErr(err)
 	}
@@ -405,13 +330,13 @@ func (idx *indexClient) DeleteRange(ctx context.Context, r *idb.KeyRange, values
 }
 
 // OpenCursor opens a full-value cursor over one secondary index.
-func (idx *indexClient) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
-	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+func (idx *indexClient) OpenCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
+	return openCursor(ctx, idx.client, idx.store, idx.index, query, dir, false)
 }
 
 // OpenKeyCursor opens a key-only cursor over one secondary index.
-func (idx *indexClient) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
-	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+func (idx *indexClient) OpenKeyCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
+	return openCursor(ctx, idx.client, idx.store, idx.index, query, dir, true)
 }
 
 // hostTx is an explicit IndexedDB transaction over a fixed store scope.
@@ -574,7 +499,7 @@ func (s *txObjectStore) Get(ctx context.Context, id string) (idb.Record, error) 
 	if err != nil {
 		return nil, err
 	}
-	record, err := idb.RecordFromProto(resp.GetRecord().GetRecord())
+	record, err := idb.RecordFromProto(sdkclient.FromWireRecord(resp.GetRecord().GetRecord()))
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
@@ -596,7 +521,7 @@ func (s *txObjectStore) Add(ctx context.Context, record idb.Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Add{Add: &proto.RecordRequest{Store: s.store, Record: pbRecord}}})
+	_, err = s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Add{Add: &proto.RecordRequest{Store: s.store, Record: sdkclient.ToWireRecord(pbRecord)}}})
 	return err
 }
 
@@ -606,7 +531,7 @@ func (s *txObjectStore) Put(ctx context.Context, record idb.Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Put{Put: &proto.RecordRequest{Store: s.store, Record: pbRecord}}})
+	_, err = s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Put{Put: &proto.RecordRequest{Store: s.store, Record: sdkclient.ToWireRecord(pbRecord)}}})
 	return err
 }
 
@@ -622,56 +547,40 @@ func (s *txObjectStore) Clear(ctx context.Context) error {
 	return err
 }
 
-func (s *txObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
+func (s *txObjectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	_ = ctx
-	kr, err := krToProto(r)
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAll{GetAll: objectStoreRangeRequest(s.store, query, count...)}})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAll{GetAll: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
-	if err != nil {
-		return nil, err
-	}
-	records, err := idb.RecordsFromProto(resp.GetRecords().GetRecords())
+	records, err := recordsFromWire(resp.GetRecords().GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
 	return records, nil
 }
 
-func (s *txObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
+func (s *txObjectStore) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	_ = ctx
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAllKeys{GetAllKeys: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetAllKeys{GetAllKeys: objectStoreRangeRequest(s.store, query, count...)}})
 	if err != nil {
 		return nil, err
 	}
 	return resp.GetKeys().GetKeys(), nil
 }
 
-func (s *txObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
+func (s *txObjectStore) Count(ctx context.Context, query any) (int64, error) {
 	_ = ctx
-	kr, err := krToProto(r)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Count{Count: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Count{Count: objectStoreRangeRequest(s.store, query)}})
 	if err != nil {
 		return 0, err
 	}
 	return resp.GetCount().GetCount(), nil
 }
 
-func (s *txObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
+func (s *txObjectStore) DeleteRange(ctx context.Context, query any) (int64, error) {
 	_ = ctx
-	kr, err := krToProto(&r)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_DeleteRange{DeleteRange: &proto.ObjectStoreRangeRequest{Store: s.store, Range: kr}}})
+	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_DeleteRange{DeleteRange: objectStoreRangeRequest(s.store, query)}})
 	if err != nil {
 		return 0, err
 	}
@@ -689,118 +598,76 @@ type txIndex struct {
 	index string
 }
 
-func (idx *txIndex) Get(ctx context.Context, values ...any) (idb.Record, error) {
+func (idx *txIndex) Get(ctx context.Context, query any) (idb.Record, error) {
 	_ = ctx
-	req, err := idx.query(nil, values)
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGet{IndexGet: indexQueryRequest(idx.store, idx.index, query)}})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGet{IndexGet: req}})
-	if err != nil {
-		return nil, err
-	}
-	record, err := idb.RecordFromProto(resp.GetRecord().GetRecord())
+	record, err := idb.RecordFromProto(sdkclient.FromWireRecord(resp.GetRecord().GetRecord()))
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal record: %w", err)
 	}
 	return record, nil
 }
 
-func (idx *txIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+func (idx *txIndex) GetKey(ctx context.Context, query any) (string, error) {
 	_ = ctx
-	req, err := idx.query(nil, values)
-	if err != nil {
-		return "", err
-	}
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetKey{IndexGetKey: req}})
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetKey{IndexGetKey: indexQueryRequest(idx.store, idx.index, query)}})
 	if err != nil {
 		return "", err
 	}
 	return resp.GetKey().GetKey(), nil
 }
 
-func (idx *txIndex) GetAll(ctx context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
+func (idx *txIndex) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	_ = ctx
-	req, err := idx.query(r, values)
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAll{IndexGetAll: indexQueryRequest(idx.store, idx.index, query, count...)}})
 	if err != nil {
 		return nil, err
 	}
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAll{IndexGetAll: req}})
-	if err != nil {
-		return nil, err
-	}
-	records, err := idb.RecordsFromProto(resp.GetRecords().GetRecords())
+	records, err := recordsFromWire(resp.GetRecords().GetRecords())
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal records: %w", err)
 	}
 	return records, nil
 }
 
-func (idx *txIndex) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
+func (idx *txIndex) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	_ = ctx
-	req, err := idx.query(r, values)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: req}})
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: indexQueryRequest(idx.store, idx.index, query, count...)}})
 	if err != nil {
 		return nil, err
 	}
 	return resp.GetKeys().GetKeys(), nil
 }
 
-func (idx *txIndex) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+func (idx *txIndex) Count(ctx context.Context, query any) (int64, error) {
 	_ = ctx
-	req, err := idx.query(r, values)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexCount{IndexCount: req}})
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexCount{IndexCount: indexQueryRequest(idx.store, idx.index, query)}})
 	if err != nil {
 		return 0, err
 	}
 	return resp.GetCount().GetCount(), nil
 }
 
-func (idx *txIndex) Delete(ctx context.Context, values ...any) (int64, error) {
-	return idx.DeleteRange(ctx, nil, values...)
-}
-
-// DeleteRange removes all transaction-scoped rows that match values and r.
-func (idx *txIndex) DeleteRange(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+func (idx *txIndex) Delete(ctx context.Context, query any) (int64, error) {
 	_ = ctx
-	req, err := idx.query(r, values)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexDelete{IndexDelete: req}})
+	resp, err := idx.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_IndexDelete{IndexDelete: indexQueryRequest(idx.store, idx.index, query)}})
 	if err != nil {
 		return 0, err
 	}
 	return resp.GetDelete().GetDeleted(), nil
 }
 
-func (idx *txIndex) query(r *idb.KeyRange, values []any) (*proto.IndexQueryRequest, error) {
-	vals, err := anyToProtoValues(values)
-	if err != nil {
-		return nil, err
-	}
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.IndexQueryRequest{Store: idx.store, Index: idx.index, Values: vals, Range: kr}, nil
-}
-
 // idb.Cursor streams IndexedDB rows one at a time.
 type rpcCursor struct {
-	stream      proto.IndexedDB_OpenCursorClient
-	cancel      context.CancelFunc
-	keysOnly    bool
-	indexCursor bool
-	entry       *proto.CursorEntry
-	err         error
-	done        bool
+	stream   proto.IndexedDB_OpenCursorClient
+	cancel   context.CancelFunc
+	keysOnly bool
+	entry    *proto.CursorEntry
+	err      error
+	done     bool
 }
 
 // Continue advances the cursor by one row.
@@ -813,13 +680,16 @@ func (c *rpcCursor) Continue() bool {
 // ContinueToKey advances the cursor to the supplied key, or exhausts it if the
 // key does not exist.
 func (c *rpcCursor) ContinueToKey(key any) bool {
-	kvs, err := idb.CursorKeyToProto(key, c.indexCursor)
-	if err != nil {
-		c.err = err
+	if key == nil {
+		c.err = fmt.Errorf("continue key is required")
 		return false
 	}
+	kv, err := idb.CursorKeyToProto(key)
+	if err != nil {
+		panic(fmt.Errorf("indexeddb: invalid key: %w", err))
+	}
 	return c.sendAndRecv(&proto.CursorCommand{
-		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: kvs}},
+		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: sdkclient.ToWireKeyValue(kv)}},
 	})
 }
 
@@ -832,18 +702,15 @@ func (c *rpcCursor) Advance(count int) bool {
 
 // Key returns the current cursor key.
 func (c *rpcCursor) Key() any {
-	if c.entry == nil || len(c.entry.GetKey()) == 0 {
+	if c.entry == nil || c.entry.GetKey() == nil {
 		return nil
 	}
-	parts, err := idb.KeyValuesToAny(c.entry.GetKey())
+	key, err := idb.KeyValueToAny(sdkclient.FromWireKeyValue(c.entry.GetKey()))
 	if err != nil {
 		c.err = err
 		return nil
 	}
-	if !c.indexCursor && len(parts) == 1 {
-		return parts[0]
-	}
-	return parts
+	return key
 }
 
 // PrimaryKey returns the current record's primary key.
@@ -862,7 +729,7 @@ func (c *rpcCursor) Value() (idb.Record, error) {
 	if c.entry == nil || c.entry.GetRecord() == nil {
 		return nil, idb.ErrNotFound
 	}
-	return idb.RecordFromProto(c.entry.GetRecord())
+	return idb.RecordFromProto(sdkclient.FromWireRecord(c.entry.GetRecord()))
 }
 
 // Delete removes the current row and keeps the cursor open.
@@ -919,7 +786,7 @@ func (c *rpcCursor) Update(value idb.Record) error {
 	err = c.stream.Send(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Command{
 			Command: &proto.CursorCommand{
-				Command: &proto.CursorCommand_Update{Update: pbRecord},
+				Command: &proto.CursorCommand_Update{Update: sdkclient.ToWireRecord(pbRecord)},
 			},
 		},
 	})
@@ -941,7 +808,7 @@ func (c *rpcCursor) Update(value idb.Record) error {
 			c.done = true
 			c.entry = nil
 		} else if c.entry != nil {
-			c.entry.Record = pbRecord
+			c.entry.Record = sdkclient.ToWireRecord(pbRecord)
 		}
 	default:
 		return c.setErr(fmt.Errorf("indexeddb: unexpected cursor mutation ack"))
@@ -1047,15 +914,7 @@ func cursorDirectionToProto(dir idb.CursorDirection) proto.CursorDirection {
 	}
 }
 
-func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *idb.KeyRange, dir idb.CursorDirection, keysOnly bool, values []any) (idb.Cursor, error) {
-	kr, err := krToProto(r)
-	if err != nil {
-		return nil, err
-	}
-	vals, err := idb.TypedValuesFromAny(values)
-	if err != nil {
-		return nil, err
-	}
+func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, query any, dir idb.CursorDirection, keysOnly bool) (idb.Cursor, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1069,11 +928,10 @@ func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index 
 		Msg: &proto.CursorClientMessage_Open{
 			Open: &proto.OpenCursorRequest{
 				Store:     store,
-				Range:     kr,
+				Query:     toWireQuery(query),
 				Direction: cursorDirectionToProto(dir),
 				KeysOnly:  keysOnly,
 				Index:     index,
-				Values:    vals,
 			},
 		},
 	})
@@ -1100,33 +958,25 @@ func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index 
 		streamCancel()
 		return nil, fmt.Errorf("indexeddb: unexpected cursor open ack")
 	}
-	return &rpcCursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly, indexCursor: index != ""}, nil
+	return &rpcCursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly}, nil
 }
 
-func krToProto(r *idb.KeyRange) (*proto.KeyRange, error) {
-	if r == nil {
-		return nil, nil
+func objectStoreRangeRequest(store string, query any, count ...uint32) *proto.ObjectStoreRangeRequest {
+	req := &proto.ObjectStoreRangeRequest{Store: store, Query: toWireQuery(query)}
+	if len(count) > 0 && count[0] > 0 {
+		c := count[0]
+		req.Count = &c
 	}
-	kr := &proto.KeyRange{LowerOpen: r.LowerOpen, UpperOpen: r.UpperOpen}
-	if r.Lower != nil {
-		v, err := idb.TypedValueFromAny(r.Lower)
-		if err != nil {
-			return nil, fmt.Errorf("marshal key range lower: %w", err)
-		}
-		kr.Lower = v
-	}
-	if r.Upper != nil {
-		v, err := idb.TypedValueFromAny(r.Upper)
-		if err != nil {
-			return nil, fmt.Errorf("marshal key range upper: %w", err)
-		}
-		kr.Upper = v
-	}
-	return kr, nil
+	return req
 }
 
-func anyToProtoValues(values []any) ([]*proto.TypedValue, error) {
-	return idb.TypedValuesFromAny(values)
+func indexQueryRequest(store, index string, query any, count ...uint32) *proto.IndexQueryRequest {
+	req := &proto.IndexQueryRequest{Store: store, Index: index, Query: toWireQuery(query)}
+	if len(count) > 0 && count[0] > 0 {
+		c := count[0]
+		req.Count = &c
+	}
+	return req
 }
 
 func transactionModeToProto(mode idb.TransactionMode) proto.TransactionMode {
@@ -1144,6 +994,31 @@ func durabilityHintToProto(hint idb.TransactionDurabilityHint) proto.Transaction
 		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_RELAXED
 	default:
 		return proto.TransactionDurabilityHint_TRANSACTION_DURABILITY_DEFAULT
+	}
+}
+
+func recordsFromWire(records []*proto.Record) ([]idb.Record, error) {
+	native := make([]*sdkclient.Record, len(records))
+	for i, r := range records {
+		native[i] = sdkclient.FromWireRecord(r)
+	}
+	return idb.RecordsFromProto(native)
+}
+
+func toWireQuery(q any) *proto.IndexedDBQuery {
+	switch v := q.(type) {
+	case nil:
+		return nil
+	case *proto.IndexedDBQuery:
+		return v
+	case *sdkclient.IndexedDBQuery:
+		return sdkclient.ToWireIndexedDBQuery(v)
+	case *sdkclient.KeyRange:
+		return sdkclient.ToWireIndexedDBQuery(&sdkclient.IndexedDBQuery{
+			Query: &sdkclient.IndexedDBQueryQueryRange{Value: v},
+		})
+	default:
+		return sdkclient.ToWireIndexedDBQuery(idb.ToQuery(q))
 	}
 }
 

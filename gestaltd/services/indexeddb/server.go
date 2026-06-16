@@ -12,6 +12,7 @@ import (
 	idb "github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -219,15 +220,16 @@ func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameR
 }
 
 func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	recs, err := store.GetAll(ctx, keyRange)
+	var recs []idb.Record
+	if req.Count != nil && *req.Count > 0 {
+		recs, err = store.GetAll(ctx, req.GetQuery(), *req.Count)
+	} else {
+		recs, err = store.GetAll(ctx, req.GetQuery())
+	}
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -235,15 +237,16 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 }
 
 func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	keys, err := store.GetAllKeys(ctx, keyRange)
+	var keys []string
+	if req.Count != nil && *req.Count > 0 {
+		keys, err = store.GetAllKeys(ctx, req.GetQuery(), *req.Count)
+	} else {
+		keys, err = store.GetAllKeys(ctx, req.GetQuery())
+	}
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -251,15 +254,11 @@ func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStore
 }
 
 func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.CountResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	count, err := store.Count(ctx, keyRange)
+	count, err := store.Count(ctx, req.GetQuery())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -267,18 +266,14 @@ func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRange
 }
 
 func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.DeleteResponse, error) {
-	kr, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
-	if kr == nil {
-		return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
+	if req.GetQuery() == nil {
+		return nil, status.Error(codes.InvalidArgument, "query is required for DeleteRange")
 	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	deleted, err := store.DeleteRange(ctx, *kr)
+	deleted, err := store.DeleteRange(ctx, req.GetQuery())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -286,15 +281,11 @@ func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStor
 }
 
 func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	rec, err := store.Index(req.GetIndex()).Get(ctx, values...)
+	rec, err := store.Index(req.GetIndex()).Get(ctx, req.GetQuery())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -302,15 +293,11 @@ func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryReq
 }
 
 func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeyResponse, error) {
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	key, err := store.Index(req.GetIndex()).GetKey(ctx, values...)
+	key, err := store.Index(req.GetIndex()).GetKey(ctx, req.GetQuery())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -318,19 +305,16 @@ func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQuery
 }
 
 func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	recs, err := store.Index(req.GetIndex()).GetAll(ctx, keyRange, values...)
+	var recs []idb.Record
+	if req.Count != nil && *req.Count > 0 {
+		recs, err = store.Index(req.GetIndex()).GetAll(ctx, req.GetQuery(), *req.Count)
+	} else {
+		recs, err = store.Index(req.GetIndex()).GetAll(ctx, req.GetQuery())
+	}
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -338,19 +322,16 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 }
 
 func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeysResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	keys, err := store.Index(req.GetIndex()).GetAllKeys(ctx, keyRange, values...)
+	var keys []string
+	if req.Count != nil && *req.Count > 0 {
+		keys, err = store.Index(req.GetIndex()).GetAllKeys(ctx, req.GetQuery(), *req.Count)
+	} else {
+		keys, err = store.Index(req.GetIndex()).GetAllKeys(ctx, req.GetQuery())
+	}
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -358,19 +339,11 @@ func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQ
 }
 
 func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryRequest) (*proto.CountResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	count, err := store.Index(req.GetIndex()).Count(ctx, keyRange, values...)
+	count, err := store.Index(req.GetIndex()).Count(ctx, req.GetQuery())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -378,19 +351,11 @@ func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryR
 }
 
 func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQueryRequest) (*proto.DeleteResponse, error) {
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
 	store, err := s.objectStore(req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	deleted, err := store.Index(req.GetIndex()).DeleteRange(ctx, keyRange, values...)
+	deleted, err := store.Index(req.GetIndex()).Delete(ctx, req.GetQuery())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -594,15 +559,16 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 		}
 		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
 	case *proto.TransactionOperation_GetAll:
-		keyRange, err := protoToKeyRange(body.GetAll.Range)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-		}
 		store, err := s.transactionObjectStore(tx, body.GetAll.GetStore())
 		if err != nil {
 			return nil, err
 		}
-		recs, err := store.GetAll(ctx, keyRange)
+		var recs []idb.Record
+		if body.GetAll.Count != nil && *body.GetAll.Count > 0 {
+			recs, err = store.GetAll(ctx, body.GetAll.GetQuery(), *body.GetAll.Count)
+		} else {
+			recs, err = store.GetAll(ctx, body.GetAll.GetQuery())
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -612,46 +578,39 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 		}
 		resp.Result = &proto.TransactionOperationResponse_Records{Records: pbRecs}
 	case *proto.TransactionOperation_GetAllKeys:
-		keyRange, err := protoToKeyRange(body.GetAllKeys.Range)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-		}
 		store, err := s.transactionObjectStore(tx, body.GetAllKeys.GetStore())
 		if err != nil {
 			return nil, err
 		}
-		keys, err := store.GetAllKeys(ctx, keyRange)
+		var keys []string
+		if body.GetAllKeys.Count != nil && *body.GetAllKeys.Count > 0 {
+			keys, err = store.GetAllKeys(ctx, body.GetAllKeys.GetQuery(), *body.GetAllKeys.Count)
+		} else {
+			keys, err = store.GetAllKeys(ctx, body.GetAllKeys.GetQuery())
+		}
 		if err != nil {
 			return nil, err
 		}
 		resp.Result = &proto.TransactionOperationResponse_Keys{Keys: &proto.KeysResponse{Keys: keys}}
 	case *proto.TransactionOperation_Count:
-		keyRange, err := protoToKeyRange(body.Count.Range)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-		}
 		store, err := s.transactionObjectStore(tx, body.Count.GetStore())
 		if err != nil {
 			return nil, err
 		}
-		count, err := store.Count(ctx, keyRange)
+		count, err := store.Count(ctx, body.Count.GetQuery())
 		if err != nil {
 			return nil, err
 		}
 		resp.Result = &proto.TransactionOperationResponse_Count{Count: &proto.CountResponse{Count: count}}
 	case *proto.TransactionOperation_DeleteRange:
-		keyRange, err := protoToKeyRange(body.DeleteRange.Range)
-		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-		}
-		if keyRange == nil {
-			return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
+		if body.DeleteRange.GetQuery() == nil {
+			return nil, status.Error(codes.InvalidArgument, "query is required for DeleteRange")
 		}
 		store, err := s.transactionObjectStore(tx, body.DeleteRange.GetStore())
 		if err != nil {
 			return nil, err
 		}
-		deleted, err := store.DeleteRange(ctx, *keyRange)
+		deleted, err := store.DeleteRange(ctx, body.DeleteRange.GetQuery())
 		if err != nil {
 			return nil, err
 		}
@@ -698,28 +657,20 @@ func (s *indexedDBServer) executeTransactionOperation(ctx context.Context, tx id
 	return resp, nil
 }
 
-func (s *indexedDBServer) transactionIndex(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (idb.TransactionIndex, []any, *idb.KeyRange, error) {
-	values, err := protoValuesToAny(req.GetValues())
-	if err != nil {
-		return nil, nil, nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
-	}
-	keyRange, err := protoToKeyRange(req.Range)
-	if err != nil {
-		return nil, nil, nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
+func (s *indexedDBServer) transactionIndex(tx idb.Transaction, req *proto.IndexQueryRequest) (idb.TransactionIndex, error) {
 	store, err := s.transactionObjectStore(tx, req.GetStore())
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return store.Index(req.GetIndex()), values, keyRange, nil
-}
-
-func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
-	idx, values, _, err := s.transactionIndex(ctx, tx, req)
 	if err != nil {
 		return nil, err
 	}
-	rec, err := idx.Get(ctx, values...)
+	return store.Index(req.GetIndex()), nil
+}
+
+func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
+	idx, err := s.transactionIndex(tx, req)
+	if err != nil {
+		return nil, err
+	}
+	rec, err := idx.Get(ctx, req.GetQuery())
 	if err != nil {
 		return nil, err
 	}
@@ -727,19 +678,24 @@ func (s *indexedDBServer) executeTransactionIndexGet(ctx context.Context, tx idb
 }
 
 func (s *indexedDBServer) executeTransactionIndexGetKey(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (string, error) {
-	idx, values, _, err := s.transactionIndex(ctx, tx, req)
+	idx, err := s.transactionIndex(tx, req)
 	if err != nil {
 		return "", err
 	}
-	return idx.GetKey(ctx, values...)
+	return idx.GetKey(ctx, req.GetQuery())
 }
 
 func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
-	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	idx, err := s.transactionIndex(tx, req)
 	if err != nil {
 		return nil, err
 	}
-	recs, err := idx.GetAll(ctx, keyRange, values...)
+	var recs []idb.Record
+	if req.Count != nil && *req.Count > 0 {
+		recs, err = idx.GetAll(ctx, req.GetQuery(), *req.Count)
+	} else {
+		recs, err = idx.GetAll(ctx, req.GetQuery())
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -747,27 +703,30 @@ func (s *indexedDBServer) executeTransactionIndexGetAll(ctx context.Context, tx 
 }
 
 func (s *indexedDBServer) executeTransactionIndexGetAllKeys(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) ([]string, error) {
-	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	idx, err := s.transactionIndex(tx, req)
 	if err != nil {
 		return nil, err
 	}
-	return idx.GetAllKeys(ctx, keyRange, values...)
+	if req.Count != nil && *req.Count > 0 {
+		return idx.GetAllKeys(ctx, req.GetQuery(), *req.Count)
+	}
+	return idx.GetAllKeys(ctx, req.GetQuery())
 }
 
 func (s *indexedDBServer) executeTransactionIndexCount(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
-	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	idx, err := s.transactionIndex(tx, req)
 	if err != nil {
 		return 0, err
 	}
-	return idx.Count(ctx, keyRange, values...)
+	return idx.Count(ctx, req.GetQuery())
 }
 
 func (s *indexedDBServer) executeTransactionIndexDelete(ctx context.Context, tx idb.Transaction, req *proto.IndexQueryRequest) (int64, error) {
-	idx, values, keyRange, err := s.transactionIndex(ctx, tx, req)
+	idx, err := s.transactionIndex(tx, req)
 	if err != nil {
 		return 0, err
 	}
-	return idx.DeleteRange(ctx, keyRange, values...)
+	return idx.Delete(ctx, req.GetQuery())
 }
 
 func protoTransactionMode(mode proto.TransactionMode) idb.TransactionMode {
@@ -833,10 +792,6 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 		return status.Error(codes.InvalidArgument, "first message must be OpenCursorRequest")
 	}
 
-	keyRange, err := protoToKeyRange(openReq.Range)
-	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
-	}
 	dir := protoCursorDirection(openReq.GetDirection())
 	ctx := stream.Context()
 
@@ -847,21 +802,17 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	}
 
 	if openReq.GetIndex() != "" {
-		values, vErr := protoValuesToAny(openReq.GetValues())
-		if vErr != nil {
-			return status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", vErr)
-		}
 		idx := store.Index(openReq.GetIndex())
 		if openReq.GetKeysOnly() {
-			cursor, err = idx.OpenKeyCursor(ctx, keyRange, dir, values...)
+			cursor, err = idx.OpenKeyCursor(ctx, openReq.GetQuery(), dir)
 		} else {
-			cursor, err = idx.OpenCursor(ctx, keyRange, dir, values...)
+			cursor, err = idx.OpenCursor(ctx, openReq.GetQuery(), dir)
 		}
 	} else {
 		if openReq.GetKeysOnly() {
-			cursor, err = store.OpenKeyCursor(ctx, keyRange, dir)
+			cursor, err = store.OpenKeyCursor(ctx, openReq.GetQuery(), dir)
 		} else {
-			cursor, err = store.OpenCursor(ctx, keyRange, dir)
+			cursor, err = store.OpenCursor(ctx, openReq.GetQuery(), dir)
 		}
 	}
 	if err != nil {
@@ -908,23 +859,14 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 
 		case *proto.CursorCommand_ContinueToKey:
 			target := v.ContinueToKey.GetKey()
-			if len(target) == 0 {
+			if target == nil {
 				return status.Error(codes.InvalidArgument, "continue key is required")
 			}
-			parts, kErr := keyValuesToAny(target)
-			if kErr != nil {
-				return status.Errorf(codes.InvalidArgument, "unmarshal continue key: %v", kErr)
+			targetKey, dErr := indexeddbcodec.KeyValueToAny(target)
+			if dErr != nil {
+				return status.Error(codes.InvalidArgument, dErr.Error())
 			}
-			var key any
-			switch {
-			case openReq.GetIndex() != "":
-				key = parts
-			case len(parts) == 1:
-				key = parts[0]
-			default:
-				key = parts
-			}
-			if !cursor.ContinueToKey(key) {
+			if !cursor.ContinueToKey(targetKey) {
 				if cErr := cursor.Err(); cErr != nil {
 					return indexeddbToGRPCErr(cErr)
 				}
@@ -997,25 +939,12 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 
 func cursorEntryToProto(c idb.Cursor, keysOnly bool) (*proto.CursorEntry, error) {
 	entry := &proto.CursorEntry{PrimaryKey: c.PrimaryKey()}
-	key := c.Key()
-	if key != nil {
-		if parts, ok := key.([]any); ok {
-			kvs := make([]*proto.KeyValue, len(parts))
-			for i, p := range parts {
-				kv, err := anyToKeyValue(p)
-				if err != nil {
-					return nil, fmt.Errorf("marshal cursor key[%d]: %w", i, err)
-				}
-				kvs[i] = kv
-			}
-			entry.Key = kvs
-		} else {
-			kv, err := anyToKeyValue(key)
-			if err != nil {
-				return nil, fmt.Errorf("marshal cursor key: %w", err)
-			}
-			entry.Key = []*proto.KeyValue{kv}
+	if key := c.Key(); key != nil {
+		kv, err := anyToKeyValue(key)
+		if err != nil {
+			return nil, fmt.Errorf("marshal cursor key: %w", err)
 		}
+		entry.Key = kv
 	}
 	if !keysOnly {
 		rec, err := c.Value()
@@ -1067,35 +996,6 @@ func protoToSchema(ps *proto.ObjectStoreSchema) idb.ObjectStoreOptions {
 		}
 	}
 	return schema
-}
-
-func protoToKeyRange(kr *proto.KeyRange) (*idb.KeyRange, error) {
-	if kr == nil {
-		return nil, nil
-	}
-	r := &idb.KeyRange{
-		LowerOpen: kr.GetLowerOpen(),
-		UpperOpen: kr.GetUpperOpen(),
-	}
-	if kr.GetLower() != nil {
-		value, err := anyFromTypedValue(kr.GetLower())
-		if err != nil {
-			return nil, fmt.Errorf("key range lower: %w", err)
-		}
-		r.Lower = value
-	}
-	if kr.GetUpper() != nil {
-		value, err := anyFromTypedValue(kr.GetUpper())
-		if err != nil {
-			return nil, fmt.Errorf("key range upper: %w", err)
-		}
-		r.Upper = value
-	}
-	return r, nil
-}
-
-func protoValuesToAny(vals []*proto.TypedValue) ([]any, error) {
-	return anyFromTypedValues(vals)
 }
 
 func indexeddbToGRPCErr(err error) error {

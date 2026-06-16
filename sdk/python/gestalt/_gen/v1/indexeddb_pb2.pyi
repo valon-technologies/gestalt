@@ -106,17 +106,39 @@ class ColumnDef(_message.Message):
     unique: bool
     def __init__(self, name: _Optional[str] = ..., type: _Optional[int] = ..., primary_key: _Optional[bool] = ..., not_null: _Optional[bool] = ..., unique: _Optional[bool] = ...) -> None: ...
 
+class KeyValue(_message.Message):
+    __slots__ = ()
+    SCALAR_FIELD_NUMBER: _ClassVar[int]
+    ARRAY_FIELD_NUMBER: _ClassVar[int]
+    scalar: TypedValue
+    array: KeyValueArray
+    def __init__(self, scalar: _Optional[_Union[TypedValue, _Mapping]] = ..., array: _Optional[_Union[KeyValueArray, _Mapping]] = ...) -> None: ...
+
+class KeyValueArray(_message.Message):
+    __slots__ = ()
+    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
+    elements: _containers.RepeatedCompositeFieldContainer[KeyValue]
+    def __init__(self, elements: _Optional[_Iterable[_Union[KeyValue, _Mapping]]] = ...) -> None: ...
+
 class KeyRange(_message.Message):
     __slots__ = ()
     LOWER_FIELD_NUMBER: _ClassVar[int]
     UPPER_FIELD_NUMBER: _ClassVar[int]
     LOWER_OPEN_FIELD_NUMBER: _ClassVar[int]
     UPPER_OPEN_FIELD_NUMBER: _ClassVar[int]
-    lower: TypedValue
-    upper: TypedValue
+    lower: KeyValue
+    upper: KeyValue
     lower_open: bool
     upper_open: bool
-    def __init__(self, lower: _Optional[_Union[TypedValue, _Mapping]] = ..., upper: _Optional[_Union[TypedValue, _Mapping]] = ..., lower_open: _Optional[bool] = ..., upper_open: _Optional[bool] = ...) -> None: ...
+    def __init__(self, lower: _Optional[_Union[KeyValue, _Mapping]] = ..., upper: _Optional[_Union[KeyValue, _Mapping]] = ..., lower_open: _Optional[bool] = ..., upper_open: _Optional[bool] = ...) -> None: ...
+
+class IndexedDBQuery(_message.Message):
+    __slots__ = ()
+    KEY_FIELD_NUMBER: _ClassVar[int]
+    RANGE_FIELD_NUMBER: _ClassVar[int]
+    key: KeyValue
+    range: KeyRange
+    def __init__(self, key: _Optional[_Union[KeyValue, _Mapping]] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ...) -> None: ...
 
 class RecordRequest(_message.Message):
     __slots__ = ()
@@ -161,10 +183,12 @@ class ObjectStoreNameRequest(_message.Message):
 class ObjectStoreRangeRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
-    RANGE_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
     store: str
-    range: KeyRange
-    def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ...) -> None: ...
+    query: IndexedDBQuery
+    count: int
+    def __init__(self, store: _Optional[str] = ..., query: _Optional[_Union[IndexedDBQuery, _Mapping]] = ..., count: _Optional[int] = ...) -> None: ...
 
 class CreateObjectStoreRequest(_message.Message):
     __slots__ = ()
@@ -184,13 +208,13 @@ class IndexQueryRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
-    VALUES_FIELD_NUMBER: _ClassVar[int]
-    RANGE_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FIELD_NUMBER: _ClassVar[int]
+    COUNT_FIELD_NUMBER: _ClassVar[int]
     store: str
     index: str
-    values: _containers.RepeatedCompositeFieldContainer[TypedValue]
-    range: KeyRange
-    def __init__(self, store: _Optional[str] = ..., index: _Optional[str] = ..., values: _Optional[_Iterable[_Union[TypedValue, _Mapping]]] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ...) -> None: ...
+    query: IndexedDBQuery
+    count: int
+    def __init__(self, store: _Optional[str] = ..., index: _Optional[str] = ..., query: _Optional[_Union[IndexedDBQuery, _Mapping]] = ..., count: _Optional[int] = ...) -> None: ...
 
 class CountResponse(_message.Message):
     __slots__ = ()
@@ -201,38 +225,22 @@ class CountResponse(_message.Message):
 class OpenCursorRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
-    RANGE_FIELD_NUMBER: _ClassVar[int]
+    INDEX_FIELD_NUMBER: _ClassVar[int]
+    QUERY_FIELD_NUMBER: _ClassVar[int]
     DIRECTION_FIELD_NUMBER: _ClassVar[int]
     KEYS_ONLY_FIELD_NUMBER: _ClassVar[int]
-    INDEX_FIELD_NUMBER: _ClassVar[int]
-    VALUES_FIELD_NUMBER: _ClassVar[int]
     store: str
-    range: KeyRange
+    index: str
+    query: IndexedDBQuery
     direction: CursorDirection
     keys_only: bool
-    index: str
-    values: _containers.RepeatedCompositeFieldContainer[TypedValue]
-    def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ..., direction: _Optional[_Union[CursorDirection, str]] = ..., keys_only: _Optional[bool] = ..., index: _Optional[str] = ..., values: _Optional[_Iterable[_Union[TypedValue, _Mapping]]] = ...) -> None: ...
-
-class KeyValue(_message.Message):
-    __slots__ = ()
-    SCALAR_FIELD_NUMBER: _ClassVar[int]
-    ARRAY_FIELD_NUMBER: _ClassVar[int]
-    scalar: TypedValue
-    array: KeyValueArray
-    def __init__(self, scalar: _Optional[_Union[TypedValue, _Mapping]] = ..., array: _Optional[_Union[KeyValueArray, _Mapping]] = ...) -> None: ...
-
-class KeyValueArray(_message.Message):
-    __slots__ = ()
-    ELEMENTS_FIELD_NUMBER: _ClassVar[int]
-    elements: _containers.RepeatedCompositeFieldContainer[KeyValue]
-    def __init__(self, elements: _Optional[_Iterable[_Union[KeyValue, _Mapping]]] = ...) -> None: ...
+    def __init__(self, store: _Optional[str] = ..., index: _Optional[str] = ..., query: _Optional[_Union[IndexedDBQuery, _Mapping]] = ..., direction: _Optional[_Union[CursorDirection, str]] = ..., keys_only: _Optional[bool] = ...) -> None: ...
 
 class CursorKeyTarget(_message.Message):
     __slots__ = ()
     KEY_FIELD_NUMBER: _ClassVar[int]
-    key: _containers.RepeatedCompositeFieldContainer[KeyValue]
-    def __init__(self, key: _Optional[_Iterable[_Union[KeyValue, _Mapping]]] = ...) -> None: ...
+    key: KeyValue
+    def __init__(self, key: _Optional[_Union[KeyValue, _Mapping]] = ...) -> None: ...
 
 class CursorCommand(_message.Message):
     __slots__ = ()
@@ -263,10 +271,10 @@ class CursorEntry(_message.Message):
     KEY_FIELD_NUMBER: _ClassVar[int]
     PRIMARY_KEY_FIELD_NUMBER: _ClassVar[int]
     RECORD_FIELD_NUMBER: _ClassVar[int]
-    key: _containers.RepeatedCompositeFieldContainer[KeyValue]
+    key: KeyValue
     primary_key: str
     record: Record
-    def __init__(self, key: _Optional[_Iterable[_Union[KeyValue, _Mapping]]] = ..., primary_key: _Optional[str] = ..., record: _Optional[_Union[Record, _Mapping]] = ...) -> None: ...
+    def __init__(self, key: _Optional[_Union[KeyValue, _Mapping]] = ..., primary_key: _Optional[str] = ..., record: _Optional[_Union[Record, _Mapping]] = ...) -> None: ...
 
 class CursorResponse(_message.Message):
     __slots__ = ()

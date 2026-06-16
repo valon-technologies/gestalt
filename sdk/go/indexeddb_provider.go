@@ -1,6 +1,10 @@
 package gestalt
 
-import "context"
+import (
+	"context"
+
+	"github.com/valon-technologies/gestalt/sdk/go/client"
+)
 
 // IndexedDBProvider is implemented by providers that serve the IndexedDB
 // surface. The SDK owns the gRPC/protobuf transport adapter; provider code
@@ -45,28 +49,28 @@ type IndexedDBRecordRequest struct {
 	Record Record
 }
 
-// IndexedDBObjectStoreRangeRequest addresses a key range of a store.
+// IndexedDBObjectStoreRangeRequest addresses a query over a store.
 type IndexedDBObjectStoreRangeRequest struct {
 	Store string
-	Range *KeyRange
+	Query *client.IndexedDBQuery
+	Count *uint32
 }
 
 // IndexedDBIndexQueryRequest queries records through a secondary index.
 type IndexedDBIndexQueryRequest struct {
-	Store  string
-	Index  string
-	Values []any
-	Range  *KeyRange
+	Store string
+	Index string
+	Query *client.IndexedDBQuery
+	Count *uint32
 }
 
 // IndexedDBOpenCursorRequest opens a cursor over a store or index.
 type IndexedDBOpenCursorRequest struct {
 	Store     string
-	Range     *KeyRange
+	Index     string
+	Query     *client.IndexedDBQuery
 	Direction CursorDirection
 	KeysOnly  bool
-	Index     string
-	Values    []any
 }
 
 // IndexedDBCursorEntry is one record yielded by a cursor.

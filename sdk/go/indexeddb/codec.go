@@ -3,116 +3,186 @@ package indexeddb
 import (
 	"fmt"
 
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
-	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func typedValueFromAny(v any) (*proto.TypedValue, error) {
+func typedValueFromAny(v any) (*client.TypedValue, error) {
 	return TypedValueFromAny(v)
 }
 
 // TypedValueFromAny encodes one value for RPC requests.
-func TypedValueFromAny(v any) (*proto.TypedValue, error) {
-	return indexeddbcodec.TypedValueFromAny(v)
+func TypedValueFromAny(v any) (*client.TypedValue, error) {
+	wire, err := indexeddbcodec.TypedValueFromAny(v)
+	if err != nil {
+		return nil, err
+	}
+	return client.FromWireTypedValue(wire), nil
 }
 
-func anyFromTypedValue(v *proto.TypedValue) (any, error) {
+func anyFromTypedValue(v *client.TypedValue) (any, error) {
 	return AnyFromTypedValue(v)
 }
 
-// AnyFromTypedValue decodes one typed protobuf value.
-func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
-	return indexeddbcodec.AnyFromTypedValue(v)
+// AnyFromTypedValue decodes one typed value.
+func AnyFromTypedValue(v *client.TypedValue) (any, error) {
+	if v == nil {
+		return nil, nil
+	}
+	return indexeddbcodec.AnyFromTypedValue(client.ToWireTypedValue(v))
 }
 
-func typedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	return TypedValuesFromAny(values)
-}
-
-// TypedValuesFromAny encodes values for RPC requests.
-func TypedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	return indexeddbcodec.TypedValuesFromAny(values)
-}
-
-func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
+func anyFromTypedValues(values []*client.TypedValue) ([]any, error) {
 	return AnyFromTypedValues(values)
 }
 
-// AnyFromTypedValues decodes typed protobuf values.
-func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
-	return indexeddbcodec.AnyFromTypedValues(values)
+// AnyFromTypedValues decodes typed values.
+func AnyFromTypedValues(values []*client.TypedValue) ([]any, error) {
+	out := make([]any, len(values))
+	for i, v := range values {
+		item, err := AnyFromTypedValue(v)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = item
+	}
+	return out, nil
 }
 
-func recordToProto(record Record) (*proto.Record, error) {
+func recordToProto(record Record) (*client.Record, error) {
 	return RecordToProto(record)
 }
 
 // RecordToProto encodes a record.
-func RecordToProto(record Record) (*proto.Record, error) {
-	return indexeddbcodec.RecordToProto(record)
+func RecordToProto(record Record) (*client.Record, error) {
+	wire, err := indexeddbcodec.RecordToProto(record)
+	if err != nil {
+		return nil, err
+	}
+	return client.FromWireRecord(wire), nil
 }
 
-func recordFromProto(record *proto.Record) (Record, error) {
+func recordFromProto(record *client.Record) (Record, error) {
 	return RecordFromProto(record)
 }
 
-// RecordFromProto decodes a protobuf record.
-func RecordFromProto(record *proto.Record) (Record, error) {
-	return indexeddbcodec.RecordFromProto(record)
+// RecordFromProto decodes a record.
+func RecordFromProto(record *client.Record) (Record, error) {
+	if record == nil {
+		return nil, fmt.Errorf("record is required")
+	}
+	return indexeddbcodec.RecordFromProto(client.ToWireRecord(record))
 }
 
-func recordsFromProto(records []*proto.Record) ([]Record, error) {
+func recordsFromProto(records []*client.Record) ([]Record, error) {
 	return RecordsFromProto(records)
 }
 
-// RecordsFromProto decodes protobuf records.
-func RecordsFromProto(records []*proto.Record) ([]Record, error) {
-	return indexeddbcodec.RecordsFromProto(records)
+// RecordsFromProto decodes records.
+func RecordsFromProto(records []*client.Record) ([]Record, error) {
+	out := make([]Record, len(records))
+	for i, r := range records {
+		item, err := RecordFromProto(r)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = item
+	}
+	return out, nil
 }
 
-func recordsToProto(records []Record) ([]*proto.Record, error) {
+func recordsToProto(records []Record) ([]*client.Record, error) {
 	return RecordsToProto(records)
 }
 
 // RecordsToProto encodes records.
-func RecordsToProto(records []Record) ([]*proto.Record, error) {
-	return indexeddbcodec.RecordsToProto(records)
+func RecordsToProto(records []Record) ([]*client.Record, error) {
+	wire, err := indexeddbcodec.RecordsToProto(records)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*client.Record, len(wire))
+	for i, r := range wire {
+		out[i] = client.FromWireRecord(r)
+	}
+	return out, nil
 }
 
-func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
+func keyValuesToAny(kvs []*client.KeyValue) ([]any, error) {
 	return KeyValuesToAny(kvs)
 }
 
 // KeyValuesToAny decodes key values.
-func KeyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
-	return indexeddbcodec.KeyValuesToAny(kvs)
+func KeyValuesToAny(kvs []*client.KeyValue) ([]any, error) {
+	out := make([]any, len(kvs))
+	for i, kv := range kvs {
+		item, err := KeyValueToAny(kv)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = item
+	}
+	return out, nil
 }
 
-func keyValueToAny(kv *proto.KeyValue) (any, error) {
-	return indexeddbcodec.KeyValueToAny(kv)
+func keyValueToAny(kv *client.KeyValue) (any, error) {
+	return KeyValueToAny(kv)
 }
 
-func anyToKeyValue(v any) (*proto.KeyValue, error) {
+// KeyValueToAny decodes one key value.
+func KeyValueToAny(kv *client.KeyValue) (any, error) {
+	if kv == nil {
+		return nil, nil
+	}
+	return indexeddbcodec.KeyValueToAny(client.ToWireKeyValue(kv))
+}
+
+func anyToKeyValue(v any) (*client.KeyValue, error) {
 	return AnyToKeyValue(v)
 }
 
 // AnyToKeyValue encodes a key for RPC requests.
-func AnyToKeyValue(v any) (*proto.KeyValue, error) {
-	return indexeddbcodec.AnyToKeyValue(v)
+func AnyToKeyValue(v any) (*client.KeyValue, error) {
+	wire, err := indexeddbcodec.AnyToKeyValue(v)
+	if err != nil {
+		return nil, err
+	}
+	return client.FromWireKeyValue(wire), nil
 }
 
-func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	return CursorKeyToProto(key, indexCursor)
+func cursorKeyToProto(key any) (*client.KeyValue, error) {
+	return CursorKeyToProto(key)
 }
 
 // CursorKeyToProto encodes a cursor key.
-func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	return indexeddbcodec.CursorKeyToProto(key, indexCursor)
+func CursorKeyToProto(key any) (*client.KeyValue, error) {
+	wire, err := indexeddbcodec.CursorKeyToProto(key)
+	if err != nil {
+		return nil, err
+	}
+	return client.FromWireKeyValue(wire), nil
+}
+
+// CompareKeys compares native IndexedDB keys using W3C ordering.
+func CompareKeys(a, b any) int {
+	return indexeddbcodec.CompareKeys(a, b)
+}
+
+// KeyInRange reports whether key satisfies kr. A nil range includes all keys.
+func KeyInRange(key any, kr *client.KeyRange) (bool, error) {
+	if kr == nil {
+		return true, nil
+	}
+	return indexeddbcodec.KeyInRange(key, client.ToWireKeyRange(kr))
+}
+
+// MatchQuery reports whether key satisfies query.
+func MatchQuery(key any, query *client.IndexedDBQuery) (bool, error) {
+	return indexeddbcodec.MatchQuery(key, client.ToWireIndexedDBQuery(query))
 }
 
 // EncodeIndexedDBKey serializes an IndexedDB key using the SDK's stable
-// provider storage format. It preserves the previous protobuf-backed encoding
-// while keeping generated types out of provider code.
+// provider storage format.
 func EncodeIndexedDBKey(value any) ([]byte, error) {
 	return indexeddbcodec.EncodeKey(value)
 }
@@ -133,18 +203,6 @@ func EncodeIndexedDBRecord(record Record) ([]byte, error) {
 // EncodeIndexedDBRecord or by the older protobuf-based helper.
 func DecodeIndexedDBRecord(data []byte) (Record, error) {
 	return indexeddbcodec.DecodeRecord(data)
-}
-
-// EncodeIndexedDBIndexValues serializes an ordered index-key value list using
-// the SDK's previous deterministic protobuf record shape.
-func EncodeIndexedDBIndexValues(values []any) ([]byte, error) {
-	return indexeddbcodec.EncodeIndexValues(values)
-}
-
-// DecodeIndexedDBIndexValues decodes the stable index-key list encoding written
-// by EncodeIndexedDBIndexValues.
-func DecodeIndexedDBIndexValues(data []byte, keyParts int) ([]any, error) {
-	return indexeddbcodec.DecodeIndexValues(data, keyParts)
 }
 
 // CloneIndexedDBRecordWithField returns a shallow clone of record with one

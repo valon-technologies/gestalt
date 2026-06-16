@@ -3,8 +3,9 @@ import { expect, test } from "bun:test";
 import {
   CursorDirection,
   IndexedDBCursorSnapshot,
-  compareIndexedDBValues,
-  indexedDBRangeBounds,
+  bound,
+  compareKeys,
+  only,
 } from "../src/index.ts";
 
 test("IndexedDBCursorSnapshot sorts, ranges, and skips duplicate unique index keys", () => {
@@ -19,7 +20,7 @@ test("IndexedDBCursorSnapshot sorts, ranges, and skips duplicate unique index ke
       { key: ["done"], primaryKey: "issue-3", primaryKeyValue: "issue-3" },
       { key: ["todo"], primaryKey: "issue-1", primaryKeyValue: "issue-1" },
     ],
-    { lower: ["done"], upper: ["todo"] },
+    bound(["done"], ["todo"]),
   );
 
   expect(snapshot.next()?.primaryKey).toBe("issue-3");
@@ -47,7 +48,7 @@ test("IndexedDBCursorSnapshot index ranges accept scalar entry keys", () => {
       { key: "done", primaryKey: "issue-2", primaryKeyValue: "issue-2" },
       { key: "active", primaryKey: "issue-1", primaryKeyValue: "issue-1" },
     ],
-    { lower: "active", upper: "active" },
+    only("active"),
   );
 
   const first = snapshot.next();
@@ -56,25 +57,13 @@ test("IndexedDBCursorSnapshot index ranges accept scalar entry keys", () => {
   expect(snapshot.next()).toBeUndefined();
 });
 
-test("IndexedDB range bounds normalize scalar index bounds", () => {
-  expect(
-    indexedDBRangeBounds({ lower: "active", upper: ["done"] }, true),
-  ).toEqual([["active"], ["done"]]);
+test("compareKeys compares composite keys lexicographically", () => {
+  expect(compareKeys(["active", 1], ["active", 2])).toBeLessThan(0);
+  expect(compareKeys(["active", 2], ["active", 2])).toBe(0);
+  expect(compareKeys(["active", 3], ["active", 2])).toBeGreaterThan(0);
 });
 
-test("compareIndexedDBValues compares composite keys lexicographically", () => {
-  expect(compareIndexedDBValues(["active", 1], ["active", 2])).toBeLessThan(0);
-  expect(compareIndexedDBValues(["active", 2], ["active", 2])).toBe(0);
-  expect(compareIndexedDBValues(["active", 3], ["active", 2])).toBeGreaterThan(
-    0,
-  );
-});
-
-test("compareIndexedDBValues compares mixed bigint and number keys exactly", () => {
-  expect(compareIndexedDBValues(9007199254740993n, 9007199254740992)).toBeGreaterThan(
-    0,
-  );
-  expect(compareIndexedDBValues(9007199254740992, 9007199254740993n)).toBeLessThan(
-    0,
-  );
+test("compareKeys compares integer keys exactly", () => {
+  expect(compareKeys(42, 41)).toBeGreaterThan(0);
+  expect(compareKeys(41, 42)).toBeLessThan(0);
 });
