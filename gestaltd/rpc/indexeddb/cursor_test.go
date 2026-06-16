@@ -24,6 +24,20 @@ func TestCursor_ContinueToKeyRejectsNilKey(t *testing.T) {
 	}
 }
 
+func TestCursor_ContinueToKeyRejectsInvalidKey(t *testing.T) {
+	cursor := &rpcCursor{}
+
+	if cursor.ContinueToKey(make(chan int)) {
+		t.Fatal("ContinueToKey returned true")
+	}
+	if cursor.Err() == nil {
+		t.Fatal("Err() = nil, want error")
+	}
+	if !strings.Contains(cursor.Err().Error(), "invalid continue key") {
+		t.Fatalf("Err() = %v, want invalid continue key error", cursor.Err())
+	}
+}
+
 func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
 	kv, err := idb.AnyToKeyValue("active")
 	if err != nil {

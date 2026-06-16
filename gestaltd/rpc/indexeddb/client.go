@@ -686,7 +686,8 @@ func (c *rpcCursor) ContinueToKey(key any) bool {
 	}
 	kv, err := idb.CursorKeyToProto(key)
 	if err != nil {
-		panic(fmt.Errorf("indexeddb: invalid key: %w", err))
+		c.err = fmt.Errorf("indexeddb: invalid continue key: %w", err)
+		return false
 	}
 	return c.sendAndRecv(&proto.CursorCommand{
 		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: sdkclient.ToWireKeyValue(kv)}},
