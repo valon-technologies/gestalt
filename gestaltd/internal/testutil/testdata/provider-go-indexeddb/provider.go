@@ -187,16 +187,14 @@ func (p *Provider) IndexGet(_ context.Context, req gestalt.IndexedDBIndexQueryRe
 	if !ok {
 		return nil, gestalt.NotFound("not found")
 	}
-	for _, rec := range s.records {
-		match, err := indexMatches(rec, s.schema, req.Index, req.Query)
-		if err != nil {
-			return nil, err
-		}
-		if match {
-			return cloneRecord(rec), nil
-		}
+	recs, err := sortedIndexMatches(s, req.Index, req.Query)
+	if err != nil {
+		return nil, err
 	}
-	return nil, gestalt.NotFound("not found")
+	if len(recs) == 0 {
+		return nil, gestalt.NotFound("not found")
+	}
+	return recs[0], nil
 }
 
 func (p *Provider) IndexGetKey(ctx context.Context, req gestalt.IndexedDBIndexQueryRequest) (string, error) {
@@ -214,24 +212,10 @@ func (p *Provider) IndexGetAll(_ context.Context, req gestalt.IndexedDBIndexQuer
 	if !ok {
 		return nil, nil
 	}
-	var recs []gestalt.Record
-	for _, rec := range s.records {
-		match, err := indexMatches(rec, s.schema, req.Index, req.Query)
-		if err != nil {
-			return nil, err
-		}
-		if match {
-			recs = append(recs, cloneRecord(rec))
-		}
+	recs, err := sortedIndexMatches(s, req.Index, req.Query)
+	if err != nil {
+		return nil, err
 	}
-	sort.SliceStable(recs, func(i, j int) bool {
-		ki, _ := indexKey(recs[i], s.schema, req.Index)
-		kj, _ := indexKey(recs[j], s.schema, req.Index)
-		if c := indexeddb.CompareKeys(ki, kj); c != 0 {
-			return c < 0
-		}
-		return indexeddb.CompareKeys(recs[i]["id"], recs[j]["id"]) < 0
-	})
 	return limitRecords(recs, req.Count), nil
 }
 
@@ -343,6 +327,28 @@ func indexMatches(rec gestalt.Record, schema gestalt.ObjectStoreOptions, indexNa
 		return false, nil
 	}
 	return indexeddb.MatchQuery(key, query)
+}
+
+func sortedIndexMatches(s *objectStore, indexName string, query *gestalt.IndexedDBQuery) ([]gestalt.Record, error) {
+	var recs []gestalt.Record
+	for _, rec := range s.records {
+		match, err := indexMatches(rec, s.schema, indexName, query)
+		if err != nil {
+			return nil, err
+		}
+		if match {
+			recs = append(recs, cloneRecord(rec))
+		}
+	}
+	sort.SliceStable(recs, func(i, j int) bool {
+		ki, _ := indexKey(recs[i], s.schema, indexName)
+		kj, _ := indexKey(recs[j], s.schema, indexName)
+		if c := indexeddb.CompareKeys(ki, kj); c != 0 {
+			return c < 0
+		}
+		return indexeddb.CompareKeys(recs[i]["id"], recs[j]["id"]) < 0
+	})
+	return recs, nil
 }
 
 func fieldsMatch(a, b gestalt.Record, keyPath []string) bool {

@@ -142,7 +142,8 @@ func (c *stubCursor) ContinueToKey(key any) bool {
 	}
 	kv, err := idb.CursorKeyToProto(key)
 	if err != nil {
-		panic(fmt.Errorf("indexeddb: invalid key: %w", err))
+		c.err = fmt.Errorf("indexeddb: invalid continue key: %w", err)
+		return false
 	}
 	target, err := idb.KeyValueToAny(kv)
 	if err != nil {

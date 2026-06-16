@@ -128,6 +128,29 @@ func TestStubIndexCompoundArrayRange(t *testing.T) {
 	}
 }
 
+func TestStubCursorContinueToKeyRejectsInvalidKey(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	if _, err := db.CreateObjectStore(ctx, "items", idb.ObjectStoreOptions{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, idb.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer func() { _ = cursor.Close() }()
+
+	if cursor.ContinueToKey(make(chan int)) {
+		t.Fatal("ContinueToKey returned true")
+	}
+	if cursor.Err() == nil {
+		t.Fatal("Err() = nil, want error")
+	}
+}
+
 func TestStubTransactionAbortsOnOperationError(t *testing.T) {
 	t.Parallel()
 
