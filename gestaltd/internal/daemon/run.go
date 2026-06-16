@@ -108,11 +108,16 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if opts.allowLocked {
 		lockedFlag = fs.Bool("locked", false, "require exact lock state; do not auto lock/sync")
 	}
+	var onlyApps repeatedStringFlag
+	fs.Var(&onlyApps, "only", "serve only the named app and its dependencies (repeatable); prunes other apps and their providers")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+	if len(onlyApps) > 0 && strings.TrimSpace(flagStringValue(pathFlag)) != "" {
+		return fmt.Errorf("--only cannot be combined with --path")
 	}
 
 	var resolvedConfigPaths []string
@@ -155,13 +160,13 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		return runServeWatch(resolvedConfigPaths, operator.StatePaths{
 			ArtifactsDir: *artifactsDir,
 			LockfilePath: *lockfilePath,
-		})
+		}, []string(onlyApps))
 	}
 
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-	}, locked)
+	}, locked, []string(onlyApps))
 	if err != nil {
 		return err
 	}
@@ -486,6 +491,8 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "Use --path to serve one local source app or UI bundle inside a synthesized Gestalt config.")
 	writeUsageLine(w, "Use --watch to rebuild/restart after debounced local file changes.")
+	writeUsageLine(w, "Use --only NAME (repeatable) to boot just the named apps from the full config,")
+	writeUsageLine(w, "pruning other apps and their providers so unrelated builds and cloud deps are skipped.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
 	writeUsageLine(w, "lockfile and prepared artifacts instead of resolving or mutating state.")
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")

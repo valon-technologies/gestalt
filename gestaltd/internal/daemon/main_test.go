@@ -490,6 +490,11 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			args:     []string{"serve", "--path", ".", "--watch"},
 			wantPart: "--watch cannot be combined with --path",
 		},
+		{
+			name:     "serve only rejects path",
+			args:     []string{"serve", "--path", ".", "--only", "gIssues"},
+			wantPart: "--only cannot be combined with --path",
+		},
 	}
 
 	for _, tc := range cases {

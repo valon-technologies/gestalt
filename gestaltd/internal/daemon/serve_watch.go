@@ -20,11 +20,11 @@ type serveWatchCandidate struct {
 	done chan error
 }
 
-func runServeWatch(configPaths []string, state operator.StatePaths) error {
+func runServeWatch(configPaths []string, state operator.StatePaths, onlyApps []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	active, err := prepareServeWatchCandidate(ctx, configPaths, state)
+	active, err := prepareServeWatchCandidate(ctx, configPaths, state, onlyApps)
 	if err != nil {
 		return err
 	}
@@ -93,13 +93,13 @@ func runServeWatch(configPaths []string, state operator.StatePaths) error {
 			}
 		case <-timerC:
 			timerC = nil
-			active, watcher = reloadServeWatchCandidate(ctx, configPaths, state, active, watcher)
+			active, watcher = reloadServeWatchCandidate(ctx, configPaths, state, onlyApps, active, watcher)
 		}
 	}
 }
 
-func reloadServeWatchCandidate(ctx context.Context, configPaths []string, state operator.StatePaths, active *serveWatchCandidate, watcher *fsnotify.Watcher) (*serveWatchCandidate, *fsnotify.Watcher) {
-	next, err := prepareServeWatchCandidate(ctx, configPaths, state)
+func reloadServeWatchCandidate(ctx context.Context, configPaths []string, state operator.StatePaths, onlyApps []string, active *serveWatchCandidate, watcher *fsnotify.Watcher) (*serveWatchCandidate, *fsnotify.Watcher) {
+	next, err := prepareServeWatchCandidate(ctx, configPaths, state, onlyApps)
 	if err != nil {
 		slog.Error("watch reload failed; keeping current server", "error", err)
 		return active, watcher
@@ -125,9 +125,9 @@ func reloadServeWatchCandidate(ctx context.Context, configPaths []string, state 
 	return next, nextWatcher
 }
 
-func prepareServeWatchCandidate(parent context.Context, configPaths []string, state operator.StatePaths) (*serveWatchCandidate, error) {
+func prepareServeWatchCandidate(parent context.Context, configPaths []string, state operator.StatePaths, onlyApps []string) (*serveWatchCandidate, error) {
 	ctx, cancel := context.WithCancel(parent)
-	env, err := setupBootstrapWithConfigPathsContext(ctx, cancel, configPaths, state, false)
+	env, err := setupBootstrapWithConfigPathsContext(ctx, cancel, configPaths, state, false, onlyApps)
 	if err != nil {
 		return nil, err
 	}

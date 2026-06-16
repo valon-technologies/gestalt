@@ -37,8 +37,8 @@ func syncConfigWithStatePathsOptions(configFlags []string, state operator.StateP
 	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 }
 
-func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {
-	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
+func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool, onlyApps []string) (*config.Config, error) {
+	cfg, _, err := operatorLifecycle().WithRetainApps(onlyApps).LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
 	if err != nil {
 		return nil, err
 	}

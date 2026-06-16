@@ -99,6 +99,7 @@ type Lifecycle struct {
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
+	retainApps               []string
 }
 
 type StatePaths struct {
@@ -175,6 +176,15 @@ func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
 
 func (l *Lifecycle) WithProviderResolver(resolver *providerregistry.Resolver) *Lifecycle {
 	l.providerResolver = resolver
+	return l
+}
+
+// WithRetainApps restricts execution loads to the named apps and their
+// dependency closure, pruning the rest of the config before any preparation so
+// unrelated apps and providers are never built or bootstrapped. Empty is a
+// no-op. Only affects LoadForExecution; lock/sync/validation see the full config.
+func (l *Lifecycle) WithRetainApps(names []string) *Lifecycle {
+	l.retainApps = names
 	return l
 }
 
@@ -533,6 +543,9 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
+			continue
+		}
+		if entry.HasDevProxy() {
 			continue
 		}
 		if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() && pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
@@ -914,6 +927,16 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	cfg, err := loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if len(l.retainApps) > 0 {
+		result, err := config.RetainApps(cfg, l.retainApps)
+		if err != nil {
+			return nil, nil, err
+		}
+		slog.Info("serving app subset",
+			"only", result.Kept,
+			"dropped_workflows", result.DroppedWorkflows,
+		)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	mode := artifactModeMaterialize

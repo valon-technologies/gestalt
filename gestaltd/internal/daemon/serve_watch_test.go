@@ -14,7 +14,7 @@ func TestReloadServeWatchCandidateKeepsActiveWhenPrepareFails(t *testing.T) {
 	active := &serveWatchCandidate{}
 	missingConfigPath := filepath.Join(t.TempDir(), "missing.yaml")
 
-	gotActive, gotWatcher := reloadServeWatchCandidate(context.Background(), []string{missingConfigPath}, operator.StatePaths{}, active, nil)
+	gotActive, gotWatcher := reloadServeWatchCandidate(context.Background(), []string{missingConfigPath}, operator.StatePaths{}, nil, active, nil)
 	if gotActive != active {
 		t.Fatal("reload replaced active candidate after prepare failure")
 	}
