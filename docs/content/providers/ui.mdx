@@ -1,4 +1,5 @@
 import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
+import { Callout } from 'nextra/components'
 
 # UI
 
@@ -83,6 +84,38 @@ Plugin-backed mounted UIs inherit the owning plugin's dynamic grants when that
 plugin declares `authorizationPolicy`. They also inherit the plugin's route-auth
 provider when the app declares `auth.provider`. Direct `providers.ui` bundles
 and the built-in admin UI use the server-wide auth configuration.
+
+## Local dev server proxy (HMR)
+
+For UI development with hot module reload, point a mounted UI at a running
+framework dev server instead of prepared static assets. Add `devProxy` to the
+`providers.ui` entry, usually in a local overlay config layered on top of the
+deployment config:
+
+```yaml
+providers:
+  ui:
+    roadmap:
+      source: ./customer-roadmap-review/ui/manifest.yaml
+      path: /create-customer-roadmap-review
+      devProxy:
+        url: http://127.0.0.1:3000
+```
+
+When `devProxy.url` is set, Gestalt reverse-proxies the entire mount — including
+the HMR WebSocket — to that URL and **skips building the bundle** (no
+`assetRoot` is prepared). A frontend edit hot-reloads in the browser without a
+server restart, while the backend keeps serving `/api` from the same origin.
+
+Run the dev server under the **same base path** as the mount (for example
+`next dev` with `basePath: /create-customer-roadmap-review`) so its asset and
+HMR URLs line up; Gestalt forwards the full mount-prefixed path unchanged.
+
+<Callout type="warning">
+  Dev-proxy mounts are served without route authorization and bypass the static
+  build pipeline. Use them only in local overlay configs for development, never
+  in a deployment config.
+</Callout>
 
 ## The Admin UI
 

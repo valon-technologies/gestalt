@@ -1712,6 +1712,7 @@ When `authorizationPolicy` is set on a mounted UI, the referenced UI manifest mu
 | `source` | Package source, local UI manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
+| `devProxy.url` | Local-development only. When set, Gestalt reverse-proxies this mount (HMR WebSocket included) to the given `http(s)` dev server URL instead of serving prepared static assets, and skips building the bundle. Served without route authorization. See [UI dev server proxy](/providers/ui#local-dev-server-proxy-hmr). |
 
 ## Validation rules
 

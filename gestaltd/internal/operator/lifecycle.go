@@ -698,7 +698,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
-		if entry != nil && sourceBacked(&entry.ProviderEntry) {
+		if entry != nil && !entry.HasDevProxy() && sourceBacked(&entry.ProviderEntry) {
 			if _, existed := existingUIEntries[name]; !existed && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 				if app := cfg.Apps[name]; app != nil && strings.TrimSpace(app.UI) == "" && strings.TrimSpace(app.MountPath) != "" {
 					continue
@@ -3424,6 +3424,9 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
 		entry := cfg.Providers.UI[name]
 		if entry == nil {
+			continue
+		}
+		if entry.HasDevProxy() {
 			continue
 		}
 		configMap, err := config.NodeToMap(entry.Config)

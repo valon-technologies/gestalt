@@ -1186,10 +1186,38 @@ type UIEntry struct {
 	Path          string `yaml:"path,omitempty"`
 	OwnerApp      string `yaml:"-"`
 
+	// DevProxy, when set, makes this mount reverse-proxy to a local framework
+	// dev server (e.g. `next dev`) instead of serving prepared static assets,
+	// enabling hot module reload. It is intended for local overlay configs and
+	// short-circuits asset preparation: a dev-proxy mount is never built and has
+	// no ResolvedAssetRoot.
+	DevProxy *UIDevProxy `yaml:"devProxy,omitempty"`
+
 	// Runtime-resolved theme paths (populated during sync from the entry's
 	// config.theme block, not from YAML).
 	ResolvedThemeStylesheet string `yaml:"-"`
 	ResolvedThemeAssetsDir  string `yaml:"-"`
+}
+
+// UIDevProxy points a mounted UI at a running local dev server. The dev server
+// must serve the bundle under the same base path the mount is served at, so the
+// proxy can forward requests (and the HMR WebSocket) without rewriting paths.
+type UIDevProxy struct {
+	URL string `yaml:"url,omitempty"`
+}
+
+// HasDevProxy reports whether this UI mount serves from a live dev server
+// instead of prepared static assets.
+func (e *UIEntry) HasDevProxy() bool {
+	return e != nil && e.DevProxy != nil && strings.TrimSpace(e.DevProxy.URL) != ""
+}
+
+// DevProxyURL returns the trimmed dev server URL, or "" when not a dev-proxy mount.
+func (e *UIEntry) DevProxyURL() string {
+	if !e.HasDevProxy() {
+		return ""
+	}
+	return strings.TrimSpace(e.DevProxy.URL)
 }
 
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.

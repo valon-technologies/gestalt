@@ -60,6 +60,10 @@ type MountedUI struct {
 	ThemeStylesheet string
 	ThemeAssetsDir  string
 	builtInAdmin    bool
+	// devProxy marks a mount whose Handler reverse-proxies to a local dev
+	// server. Such mounts forward the full request path (no prefix strip) and
+	// are served without route authorization (local development only).
+	devProxy bool
 }
 
 type MountedHTTPBinding struct {

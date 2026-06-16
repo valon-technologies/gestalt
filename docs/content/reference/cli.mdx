@@ -188,6 +188,30 @@ gestaltd serve \
 Watch mode applies only to config-based serve. It cannot be combined with
 `--locked` or `--path`.
 
+## UI Dev Server Proxy
+
+For UI iteration with hot module reload, point a mounted UI at a running
+framework dev server (e.g. `next dev`) instead of prepared static assets by
+adding `devProxy` to its `providers.ui` entry — typically in a local overlay
+config:
+
+```yaml
+providers:
+  ui:
+    dashboard:
+      source: ./ui/manifest.yaml
+      path: /dashboard
+      devProxy:
+        url: http://127.0.0.1:3000
+```
+
+Gestalt then reverse-proxies the mount (the HMR WebSocket included) to that URL
+and skips building the bundle, so frontend edits hot-reload without a server
+restart while the backend keeps running. Run the dev server under the same base
+path as the mount so asset and HMR URLs line up. Dev-proxy mounts are served
+without route authorization and are intended for local development only. See
+[UI providers](/providers/ui#local-dev-server-proxy-hmr).
+
 ## Examples
 
 ```sh

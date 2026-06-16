@@ -110,6 +110,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: ui.%s is required", name)
 		}
+		if err := validateUIDevProxy("ui."+name, entry); err != nil {
+			return err
+		}
 		if err := validateAppOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}
@@ -743,6 +746,9 @@ func ValidateResolvedStructure(cfg *Config) error {
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
 			return fmt.Errorf("config validation: ui %q requires a source", name)
+		}
+		if entry.HasDevProxy() {
+			continue
 		}
 		if entry.AuthorizationPolicy == "" {
 			continue
@@ -2628,6 +2634,21 @@ func validateEgress(cfg *EgressConfig) error {
 	case "", "allow", "deny":
 	default:
 		return fmt.Errorf("config validation: egress.default_action must be \"allow\" or \"deny\", got %q", cfg.DefaultAction)
+	}
+	return nil
+}
+
+func validateUIDevProxy(label string, entry *UIEntry) error {
+	if entry == nil || entry.DevProxy == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(entry.DevProxy.URL)
+	if raw == "" {
+		return fmt.Errorf("config validation: %s.devProxy.url is required", label)
+	}
+	u, err := url.Parse(raw)
+	if err != nil || !u.IsAbs() || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("config validation: %s.devProxy.url must be an absolute http(s) URL, got %q", label, entry.DevProxy.URL)
 	}
 	return nil
 }

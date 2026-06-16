@@ -116,6 +116,20 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 		if entry == nil {
 			continue
 		}
+		if entry.HasDevProxy() {
+			handler, err := ui.DevProxyHandler(entry.DevProxyURL())
+			if err != nil {
+				return nil, fmt.Errorf("ui %q dev proxy: %w", name, err)
+			}
+			mounted = append(mounted, MountedUI{
+				Name:     name,
+				Path:     entry.Path,
+				AppName:  entry.OwnerApp,
+				Handler:  handler,
+				devProxy: true,
+			})
+			continue
+		}
 		if entry.ResolvedAssetRoot == "" {
 			return nil, fmt.Errorf("ui %q configured but asset root not resolved", name)
 		}
@@ -334,7 +348,7 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 	// policy-bound mounts keep their auth semantics for /theme.css and
 	// /theme/* exactly like any other mount path.
 	inner = mountedUIThemeHandler(mounted, inner)
-	if mounted.Path != "/" {
+	if mounted.Path != "/" && !mounted.devProxy {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
 	return mountedUITelemetryHandler(mounted, s.protectedUIHandler(mounted, inner, s.redirectMountedUILogin))
