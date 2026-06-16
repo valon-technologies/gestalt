@@ -109,8 +109,9 @@ jobs:
       version-prefix: 'gestaltd/v'
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
+      download-artifact-pattern: 'gestaltd-*'
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
-      target: static
+      target: static-prebuilt
 
   publish-image-alpine:
     name: Publish Docker Image (Alpine)
@@ -124,9 +125,10 @@ jobs:
       version-prefix: 'gestaltd/v'
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
+      download-artifact-pattern: 'gestaltd-*'
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
       tag-suffix: '-alpine'
-      target: alpine
+      target: alpine-prebuilt
 
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish

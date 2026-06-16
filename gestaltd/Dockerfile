@@ -20,6 +20,21 @@ RUN mkdir -p /out && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} \
     go build -ldflags "-X main.version=${GESTALT_VERSION}" -o /out/gestaltd ./cmd/gestaltd
 
+FROM --platform=$BUILDPLATFORM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS prebuilt-binary
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates && rm -f /usr/bin/wget
+COPY dist/ /dist/
+ARG TARGETARCH
+ARG TARGETVARIANT
+RUN set -eux; \
+    mkdir -p /out; \
+    case "${TARGETARCH}/${TARGETVARIANT}" in \
+      amd64/) suffix="linux-x86_64" ;; \
+      arm64/) suffix="linux-arm64" ;; \
+      arm/v7) suffix="linux-armv7" ;; \
+      *) echo "unsupported target platform: ${TARGETARCH}/${TARGETVARIANT}" >&2; exit 1 ;; \
+    esac; \
+    tar -xzf "/dist/gestaltd-${suffix}.tar.gz" -C /out gestaltd
+
 # --- Static (default) ---
 FROM scratch AS static
 ARG GESTALT_VERSION
@@ -42,6 +57,27 @@ EXPOSE 8080
 ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--config", "/etc/gestaltd/config.yaml", "--artifacts-dir", "/data"]
 
+FROM scratch AS static-prebuilt
+ARG GESTALT_VERSION
+ARG GESTALT_REVISION
+ARG GESTALT_CREATED
+ARG GESTALT_SOURCE
+ARG GESTALT_DOCUMENTATION
+ARG GESTALT_URL
+COPY --from=prebuilt-binary /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=prebuilt-binary /out/gestaltd /gestaltd
+LABEL org.opencontainers.image.title="gestaltd" \
+      org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
+      org.opencontainers.image.source="${GESTALT_SOURCE}" \
+      org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
+      org.opencontainers.image.url="${GESTALT_URL}" \
+      org.opencontainers.image.version="${GESTALT_VERSION}" \
+      org.opencontainers.image.revision="${GESTALT_REVISION}" \
+      org.opencontainers.image.created="${GESTALT_CREATED}"
+EXPOSE 8080
+ENTRYPOINT ["/gestaltd"]
+CMD ["serve", "--config", "/etc/gestaltd/config.yaml", "--artifacts-dir", "/data"]
+
 # --- Alpine ---
 FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS alpine
 ARG GESTALT_VERSION
@@ -52,6 +88,29 @@ ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
 RUN apk upgrade --no-cache && apk add --no-cache ca-certificates && rm -f /usr/bin/wget
 COPY --from=build-binary /out/ /usr/local/bin/
+RUN mkdir -p /data && chown nobody:nobody /data
+LABEL org.opencontainers.image.title="gestaltd" \
+      org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
+      org.opencontainers.image.source="${GESTALT_SOURCE}" \
+      org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
+      org.opencontainers.image.url="${GESTALT_URL}" \
+      org.opencontainers.image.version="${GESTALT_VERSION}" \
+      org.opencontainers.image.revision="${GESTALT_REVISION}" \
+      org.opencontainers.image.created="${GESTALT_CREATED}"
+USER nobody:nobody
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/gestaltd"]
+CMD ["serve", "--config", "/etc/gestaltd/config.yaml", "--artifacts-dir", "/data"]
+
+FROM alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS alpine-prebuilt
+ARG GESTALT_VERSION
+ARG GESTALT_REVISION
+ARG GESTALT_CREATED
+ARG GESTALT_SOURCE
+ARG GESTALT_DOCUMENTATION
+ARG GESTALT_URL
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates && rm -f /usr/bin/wget
+COPY --from=prebuilt-binary /out/gestaltd /usr/local/bin/gestaltd
 RUN mkdir -p /data && chown nobody:nobody /data
 LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
