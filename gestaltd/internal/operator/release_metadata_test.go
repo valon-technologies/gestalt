@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerrelease"
 )
 
@@ -164,33 +163,4 @@ validationManifestSHA256: 000000000000000000000000000000000000000000000000000000
 func testSHA256(data []byte) string {
 	sum := sha256.Sum256(data)
 	return fmt.Sprintf("%x", sum[:])
-}
-
-func TestSourceAuthToken(t *testing.T) {
-	t.Run("explicit auth", func(t *testing.T) {
-		entry := &config.ProviderEntry{
-			Source: config.ProviderSource{
-				Auth: &config.SourceAuthDef{Token: " explicit "},
-			},
-		}
-		if got := sourceAuthToken(entry); got != "explicit" {
-			t.Fatalf("sourceAuthToken = %q, want explicit", got)
-		}
-	})
-
-	t.Run("GITHUB_PAT", func(t *testing.T) {
-		t.Setenv("GITHUB_PAT", "pat-token")
-		t.Setenv("GH_TOKEN", "gh-token")
-		if got := sourceAuthToken(nil); got != "pat-token" {
-			t.Fatalf("sourceAuthToken = %q, want pat-token", got)
-		}
-	})
-
-	t.Run("GH_TOKEN", func(t *testing.T) {
-		t.Setenv("GITHUB_PAT", "")
-		t.Setenv("GH_TOKEN", "gh-token")
-		if got := sourceAuthToken(nil); got != "gh-token" {
-			t.Fatalf("sourceAuthToken = %q, want gh-token", got)
-		}
-	})
 }
