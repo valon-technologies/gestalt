@@ -66,3 +66,22 @@ func TestDialHostedAppRecordsRPCClientDurationWithTelemetryAttrs(t *testing.T) {
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", attrs, "gestalt.rpc.role")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "rpc.client.call.duration", attrs, "gestalt.provider")
 }
+
+// TestHostedGRPCMaxMessageBytesAboveDefault guards against silent regression
+// of the constant that raises grpc-go's 4 MiB per-call default. Provider
+// responses observed in production (e.g. profile photo binaries) routinely
+// exceed 4 MiB and would otherwise fail with code = ResourceExhausted.
+func TestHostedGRPCMaxMessageBytesAboveDefault(t *testing.T) {
+	t.Parallel()
+
+	const grpcGoDefault = 4 * 1024 * 1024
+	if hostedGRPCMaxMessageBytes <= grpcGoDefault {
+		t.Fatalf("hostedGRPCMaxMessageBytes = %d, want > grpc-go default of %d", hostedGRPCMaxMessageBytes, grpcGoDefault)
+	}
+	if hostedGRPCMaxMessageBytes < 8*1024*1024 {
+		t.Fatalf("hostedGRPCMaxMessageBytes = %d, want >= 8 MiB so observed >4 MiB provider payloads succeed", hostedGRPCMaxMessageBytes)
+	}
+	if hostedGRPCDefaultCallOptions() == nil {
+		t.Fatal("hostedGRPCDefaultCallOptions() = nil, want a non-nil grpc.DialOption")
+	}
+}

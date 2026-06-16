@@ -55,6 +55,23 @@ type dialTelemetryProviders struct {
 
 const hostedGRPCReadyTimeout = 30 * time.Second
 
+// hostedGRPCMaxMessageBytes raises grpc-go's 4 MiB default so provider
+// responses such as profile photo binaries do not fail with
+// ResourceExhausted ("received message larger than max"). Apply this on
+// both client and server sides via hostedGRPCDefaultCallOptions /
+// hostedGRPCServerOptions (sdk/go) to keep the limit symmetric.
+const hostedGRPCMaxMessageBytes = 64 * 1024 * 1024 // 64 MiB
+
+// hostedGRPCDefaultCallOptions returns grpc.DialOption defaults that raise
+// the per-call receive and send message limits above grpc-go's 4 MiB
+// default. Exposed via a helper so client dials and tests stay in sync.
+func hostedGRPCDefaultCallOptions() grpc.DialOption {
+	return grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(hostedGRPCMaxMessageBytes),
+		grpc.MaxCallSendMsgSize(hostedGRPCMaxMessageBytes),
+	)
+}
+
 func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
 	return p.meterProvider
 }
@@ -289,6 +306,7 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedGRPCDefaultCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -302,6 +320,7 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedGRPCDefaultCallOptions(),
 	)
 	if err != nil {
 		return nil, err
@@ -323,6 +342,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			NextProtos: []string{"h2"},
 		})),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
+		hostedGRPCDefaultCallOptions(),
 	)
 	if err != nil {
 		return nil, err

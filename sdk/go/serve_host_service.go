@@ -34,7 +34,7 @@ func ServeHostServiceGRPC(ctx context.Context, socketPath string, register func(
 		_ = os.Remove(socketPath)
 	}()
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(hostedGRPCServerOptions()...)
 	register(srv)
 
 	stopped := make(chan struct{})

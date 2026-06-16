@@ -16,6 +16,24 @@ import (
 
 const envWriteCatalog = "GESTALT_APP_WRITE_CATALOG"
 
+// hostedGRPCMaxMessageBytes mirrors gestaltd's hostedGRPCMaxMessageBytes
+// so the provider gRPC server accepts the same payload sizes the host
+// client is willing to receive. Keep this value in sync with
+// gestaltd/services/runtimehost/runtimeprovider/dial.go.
+const hostedGRPCMaxMessageBytes = 64 * 1024 * 1024 // 64 MiB
+
+// hostedGRPCServerOptions returns the gRPC server options that raise the
+// per-message receive and send limits above grpc-go's 4 MiB default so
+// provider responses (e.g. profile photo binaries) do not fail with
+// ResourceExhausted. Callers should prepend these so explicit caller opts
+// can still override them.
+func hostedGRPCServerOptions() []grpc.ServerOption {
+	return []grpc.ServerOption{
+		grpc.MaxRecvMsgSize(hostedGRPCMaxMessageBytes),
+		grpc.MaxSendMsgSize(hostedGRPCMaxMessageBytes),
+	}
+}
+
 type providerCloserContextKey struct{}
 
 // ServeProvider starts a gRPC server for the given [Provider] and typed
@@ -90,7 +108,7 @@ func serveProvider(ctx context.Context, register func(*grpc.Server), opts ...grp
 		_ = os.Remove(socket)
 	}()
 
-	srv := grpc.NewServer(opts...)
+	srv := grpc.NewServer(append(hostedGRPCServerOptions(), opts...)...)
 	register(srv)
 
 	closer, _ := ctx.Value(providerCloserContextKey{}).(Closer)
