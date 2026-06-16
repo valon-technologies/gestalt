@@ -111,6 +111,11 @@ Run the dev server under the **same base path** as the mount (for example
 `next dev` with `basePath: /create-customer-roadmap-review`) so its asset and
 HMR URLs line up; Gestalt forwards the full mount-prefixed path unchanged.
 
+Gestalt redirects the bare mount path to a trailing slash
+(`/dashboard` → `/dashboard/`). Configure the dev server **not** to issue the
+reverse redirect, or the two bounce in a loop — for Next.js, set
+`skipTrailingSlashRedirect: true`.
+
 <Callout type="warning">
   Dev-proxy mounts are served without route authorization and bypass the static
   build pipeline. Use them only in local overlay configs for development, never
