@@ -308,9 +308,6 @@ func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]ins
 }
 
 func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID string) (map[string][]instanceInfo, error) {
-	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
-		return map[string][]instanceInfo{}, nil
-	}
 	tokens, err := s.externalCredentials.ListCredentials(ctx, subjectID, "")
 	if err != nil {
 		return nil, fmt.Errorf("listing external credentials: %w", err)
@@ -414,11 +411,6 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 
 	if _, ok := s.getProvider(w, name); !ok {
 		auditErr = errors.New("integration not found")
-		return
-	}
-	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
-		auditErr = errors.New("external credentials unavailable")
-		writeError(w, http.StatusServiceUnavailable, "external credentials are not configured")
 		return
 	}
 	query := r.URL.Query()

@@ -290,6 +290,9 @@ func New(cfg Config) (*Server, error) {
 	}
 	users := cfg.Services.Users
 	externalCredentials := cfg.Services.ExternalCredentials
+	if core.ExternalCredentialProviderMissing(externalCredentials) {
+		return nil, fmt.Errorf("external credentials provider is required")
+	}
 	apiTokens := cfg.Services.APITokens
 	managedSubjects := cfg.Services.ManagedSubjects
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)

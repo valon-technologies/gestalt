@@ -3356,11 +3356,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
 	cfg.Providers.Authentication = nonNilProviderEntryMap(cfg.Providers.Authentication)
 	cfg.Providers.Authorization = nonNilProviderEntryMap(cfg.Providers.Authorization)
-	if strings.TrimSpace(cfg.Server.Providers.ExternalCredentials) != "" || len(cfg.Providers.ExternalCredentials) > 0 || externalCredentialsUsageReferenced(cfg) {
-		cfg.Providers.ExternalCredentials = applyDefaultSourceProviderEntries(cfg.Providers.ExternalCredentials, DefaultProviderInstance, DefaultProviderSource(DefaultExternalCredentialsProvider, DefaultExternalCredentialsVersion))
-	} else {
-		cfg.Providers.ExternalCredentials = nonNilProviderEntryMap(cfg.Providers.ExternalCredentials)
-	}
+	cfg.Providers.ExternalCredentials = applyDefaultSourceProviderEntries(cfg.Providers.ExternalCredentials, DefaultProviderInstance, DefaultProviderSource(DefaultExternalCredentialsProvider, DefaultExternalCredentialsVersion))
 	cfg.Providers.Secrets = applyDefaultBuiltinProviderEntries(cfg.Providers.Secrets, DefaultProviderInstance, "env")
 	cfg.Providers.Telemetry = applyDefaultBuiltinProviderEntries(cfg.Providers.Telemetry, DefaultProviderInstance, "stdout")
 	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")

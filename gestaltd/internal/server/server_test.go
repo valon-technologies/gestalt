@@ -2152,6 +2152,33 @@ func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
 	}
 }
 
+func TestNewServerRequiresExternalCredentialsProvider(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	providers := func() *registry.ProviderMap[core.Provider] {
+		reg := registry.New()
+		return &reg.Providers
+	}()
+
+	_, err = server.New(server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "none"},
+		Services:    svc,
+		Providers:   providers,
+		Invoker:     invocation.NewBroker(providers, svc.Users, nil),
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err == nil {
+		t.Fatal("expected error when external credentials provider is missing")
+	}
+	if !strings.Contains(err.Error(), "external credentials provider is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestMountedUIRoutes(t *testing.T) {
 	t.Parallel()
 
