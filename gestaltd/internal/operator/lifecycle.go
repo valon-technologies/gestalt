@@ -95,17 +95,15 @@ type StaticValidationOptions struct {
 }
 
 type Lifecycle struct {
-	configSecretResolver           func(context.Context, *config.Config) error
-	sourceAuthSecretResolver       func(context.Context, *config.Config) error
-	httpClient                     *http.Client
-	providerResolver               *providerregistry.Resolver
-	relaxProviderCatalogValidation bool
+	configSecretResolver     func(context.Context, *config.Config) error
+	sourceAuthSecretResolver func(context.Context, *config.Config) error
+	httpClient               *http.Client
+	providerResolver         *providerregistry.Resolver
 }
 
 type StatePaths struct {
-	ArtifactsDir                   string
-	LockfilePath                   string
-	RelaxProviderCatalogValidation bool
+	ArtifactsDir string
+	LockfilePath string
 }
 
 type SyncOptions struct {
@@ -167,14 +165,6 @@ func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *conf
 // secrets are not required during lock/sync.
 func (l *Lifecycle) WithSourceAuthSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
 	l.sourceAuthSecretResolver = resolve
-	return l
-}
-
-// WithRelaxedProviderCatalogValidation downgrades installed-vs-release catalog
-// mismatches to warnings during unlocked local serve. Production lock/sync paths
-// should leave this disabled.
-func (l *Lifecycle) WithRelaxedProviderCatalogValidation(relax bool) *Lifecycle {
-	l.relaxProviderCatalogValidation = relax
 	return l
 }
 
@@ -3139,7 +3129,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if entry.Runtime != installedRuntime {
 		return nil, LockEntry{}, fmt.Errorf("%s manifest runtime %q does not match metadata runtime %q", subject, installedRuntime, entry.Runtime)
 	}
-	if err := validateInstalledPackageMatchesReleaseBundle(subject, installed, entry, bundle, l.relaxProviderCatalogValidation); err != nil {
+	if err := validateInstalledPackageMatchesReleaseBundle(subject, installed, entry, bundle); err != nil {
 		return nil, LockEntry{}, err
 	}
 	entry.Package = installed.Manifest.Source
@@ -3152,7 +3142,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	return installed, entry, nil
 }
 
-func validateInstalledPackageMatchesReleaseBundle(subject string, installed *installedPackage, entry LockEntry, bundle providerReleaseValidationBundle, relax bool) error {
+func validateInstalledPackageMatchesReleaseBundle(subject string, installed *installedPackage, entry LockEntry, bundle providerReleaseValidationBundle) error {
 	manifest, err := staticvalidation.ProjectManifest(installed.Manifest, "", true)
 	if err != nil {
 		return fmt.Errorf("%s project installed validation manifest: %w", subject, err)
@@ -3169,10 +3159,6 @@ func validateInstalledPackageMatchesReleaseBundle(subject string, installed *ins
 		return fmt.Errorf("%s read installed validation catalog: %w", subject, err)
 	}
 	if !catalogsEqual(installedCatalog, bundle.Catalog) {
-		if relax {
-			slog.Warn("provider catalog drift ignored (relaxed local serve)", "provider", subject)
-			return nil
-		}
 		return fmt.Errorf("%s installed package catalog does not match provider release validation catalog", subject)
 	}
 	return nil
