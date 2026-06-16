@@ -416,6 +416,11 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("integration not found")
 		return
 	}
+	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
+		auditErr = errors.New("external credentials unavailable")
+		writeError(w, http.StatusServiceUnavailable, "external credentials are not configured")
+		return
+	}
 	query := r.URL.Query()
 	for param := range query {
 		switch param {

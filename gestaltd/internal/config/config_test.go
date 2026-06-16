@@ -1254,20 +1254,19 @@ server:
 			}
 		})
 	}
-}
 
-func TestValidateRuntimeRequiresIndexedDBWhenReferenced(t *testing.T) {
-	t.Parallel()
-
-	cfg := &Config{
-		Server: ServerConfig{EncryptionKey: "server-key"},
-		Apps: map[string]*ProviderEntry{
-			"demo": {IndexedDB: &IndexedDBBindingConfig{DB: "demo"}},
-		},
-	}
-	if err := ValidateRuntime(cfg); err == nil {
-		t.Fatal("ValidateRuntime: expected indexeddb required error, got nil")
-	}
+	t.Run("requires indexeddb when app binds it", func(t *testing.T) {
+		t.Parallel()
+		cfg := &Config{
+			Server: ServerConfig{EncryptionKey: "server-key"},
+			Apps: map[string]*ProviderEntry{
+				"demo": {IndexedDB: &IndexedDBBindingConfig{DB: "demo"}},
+			},
+		}
+		if err := ValidateRuntime(cfg); err == nil {
+			t.Fatal("ValidateRuntime: expected indexeddb required error, got nil")
+		}
+	})
 }
 
 func TestLoadConfigAdminBaseURLValidation(t *testing.T) {

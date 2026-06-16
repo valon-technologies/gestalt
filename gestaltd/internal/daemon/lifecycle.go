@@ -41,9 +41,9 @@ func syncConfigWithStatePathsOptions(configFlags []string, state operator.StateP
 	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 }
 
-func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool, relaxProviderCatalogValidation bool) (*config.Config, error) {
+func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {
 	lc := operatorLifecycle()
-	if relaxProviderCatalogValidation {
+	if state.RelaxProviderCatalogValidation {
 		lc = lc.WithRelaxedProviderCatalogValidation(true)
 	}
 	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)

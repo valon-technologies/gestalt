@@ -76,22 +76,21 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		authorizationProvider = result.Authorization[authorizationName]
 	}
 	baseConfig := Config{
-		Auth:                       result.Auth,
-		SelectedAuthProvider:       result.SelectedAuthProvider,
-		AuthProviders:              result.AuthProviders,
-		Authorization:              authorizationProvider,
-		AuditSink:                  result.AuditSink,
-		Services:                   result.Services,
-		Providers:                  result.Providers,
-		CallerTokenIssuer:          result.CallerTokenIssuer,
-		Agent:                      result.AgentControl,
-		AgentManager:               result.AgentManager,
-		Workflow:                   result.WorkflowControl,
-		Runtimes:                   result.Runtimes,
-		Invoker:                    httpInvoker,
-		AppInvocation:              result.AppInvocation,
-		DefaultConnection:          connMaps.DefaultConnection,
-		RequireExternalCredentials: config.ExternalCredentialsReferenced(cfg),
+		Auth:                 result.Auth,
+		SelectedAuthProvider: result.SelectedAuthProvider,
+		AuthProviders:        result.AuthProviders,
+		Authorization:        authorizationProvider,
+		AuditSink:            result.AuditSink,
+		Services:             result.Services,
+		Providers:            result.Providers,
+		CallerTokenIssuer:    result.CallerTokenIssuer,
+		Agent:                result.AgentControl,
+		AgentManager:         result.AgentManager,
+		Workflow:             result.WorkflowControl,
+		Runtimes:             result.Runtimes,
+		Invoker:              httpInvoker,
+		AppInvocation:        result.AppInvocation,
+		DefaultConnection:    connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
 		// resolution should follow the API surface by default. The MCP server keeps
 		// its own MCP-specific routing below.

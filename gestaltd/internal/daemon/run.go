@@ -165,9 +165,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	}
 
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
-		ArtifactsDir: *artifactsDir,
-		LockfilePath: *lockfilePath,
-	}, locked, relaxProviderCatalogValidation)
+		ArtifactsDir:                   *artifactsDir,
+		LockfilePath:                   *lockfilePath,
+		RelaxProviderCatalogValidation: relaxProviderCatalogValidation,
+	}, locked)
 	if err != nil {
 		return err
 	}

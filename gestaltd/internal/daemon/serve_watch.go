@@ -127,7 +127,7 @@ func reloadServeWatchCandidate(ctx context.Context, configPaths []string, state 
 
 func prepareServeWatchCandidate(parent context.Context, configPaths []string, state operator.StatePaths) (*serveWatchCandidate, error) {
 	ctx, cancel := context.WithCancel(parent)
-	env, err := setupBootstrapWithConfigPathsContext(ctx, cancel, configPaths, state, false, false)
+	env, err := setupBootstrapWithConfigPathsContext(ctx, cancel, configPaths, state, false)
 	if err != nil {
 		return nil, err
 	}

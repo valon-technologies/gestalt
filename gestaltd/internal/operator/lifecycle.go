@@ -103,8 +103,9 @@ type Lifecycle struct {
 }
 
 type StatePaths struct {
-	ArtifactsDir string
-	LockfilePath string
+	ArtifactsDir                   string
+	LockfilePath                   string
+	RelaxProviderCatalogValidation bool
 }
 
 type SyncOptions struct {

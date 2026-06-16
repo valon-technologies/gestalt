@@ -115,7 +115,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 	}
 	defer func() { _ = os.RemoveAll(session.Dir) }()
 
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, false, false)
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, false)
 	if err != nil {
 		return err
 	}
