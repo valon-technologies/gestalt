@@ -207,7 +207,7 @@ func (p *nativeIndexedDBProvider) Clear(_ context.Context, store string) error {
 }
 
 func (p *nativeIndexedDBProvider) GetAll(_ context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) ([]gestalt.Record, error) {
-	entries, err := p.objectEntries(req.Store, req.Range)
+	entries, err := p.objectEntries(req.Store, req.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (p *nativeIndexedDBProvider) GetAll(_ context.Context, req gestalt.IndexedD
 }
 
 func (p *nativeIndexedDBProvider) GetAllKeys(_ context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) ([]string, error) {
-	entries, err := p.objectEntries(req.Store, req.Range)
+	entries, err := p.objectEntries(req.Store, req.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -316,17 +316,17 @@ func (p *nativeIndexedDBProvider) OpenCursor(_ context.Context, req gestalt.Inde
 	var entries []gestalt.IndexedDBCursorSnapshotEntry
 	var err error
 	if req.Index == "" {
-		entries, err = p.objectEntries(req.Store, req.Range)
+		entries, err = p.objectEntries(req.Store, req.Query)
 	} else {
 		entries, err = p.indexEntries(gestalt.IndexedDBIndexQueryRequest{
-			Store: req.Store, Index: req.Index, Values: req.Values, Range: req.Range,
+			Store: req.Store, Index: req.Index, Query: req.Query,
 		})
 	}
 	if err != nil {
 		return nil, err
 	}
 	snapshot := gestalt.NewIndexedDBCursorSnapshot(req)
-	if err := snapshot.Load(entries, req.Range); err != nil {
+	if err := snapshot.Load(entries, req.Query); err != nil {
 		return nil, err
 	}
 	return &nativeIndexedDBCursor{provider: p, store: req.Store, snapshot: snapshot}, nil
@@ -339,7 +339,7 @@ func (p *nativeIndexedDBProvider) BeginTransaction(_ context.Context, req gestal
 	return &nativeIndexedDBTransaction{provider: p, mode: req.Mode}, nil
 }
 
-func (p *nativeIndexedDBProvider) objectEntries(store string, r *gestalt.KeyRange) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {
+func (p *nativeIndexedDBProvider) objectEntries(store string, query *gestalt.IndexedDBQuery) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	records := p.stores[store]
@@ -353,8 +353,7 @@ func (p *nativeIndexedDBProvider) objectEntries(store string, r *gestalt.KeyRang
 		}
 		entries = append(entries, entry)
 	}
-	snapshot := gestalt.NewIndexedDBCursorSnapshot(gestalt.IndexedDBOpenCursorRequest{})
-	return snapshot.ApplyRange(entries, r)
+	return gestalt.ApplyIndexedDBQuery(entries, query)
 }
 
 func (p *nativeIndexedDBProvider) indexEntries(req gestalt.IndexedDBIndexQueryRequest) ([]gestalt.IndexedDBCursorSnapshotEntry, error) {
@@ -364,7 +363,14 @@ func (p *nativeIndexedDBProvider) indexEntries(req gestalt.IndexedDBIndexQueryRe
 	entries := make([]gestalt.IndexedDBCursorSnapshotEntry, 0, len(records))
 	for id, record := range records {
 		key, ok := p.indexKey(req.Store, req.Index, record)
-		if !ok || !indexValuesMatch(key, req.Values) {
+		if !ok {
+			continue
+		}
+		match, err := gestalt.MatchIndexedDBQuery(key, req.Query)
+		if err != nil {
+			return nil, err
+		}
+		if !match {
 			continue
 		}
 		entries = append(entries, gestalt.IndexedDBCursorSnapshotEntry{
@@ -374,8 +380,7 @@ func (p *nativeIndexedDBProvider) indexEntries(req gestalt.IndexedDBIndexQueryRe
 			Record:          cloneRecord(record),
 		})
 	}
-	snapshot := gestalt.NewIndexedDBCursorSnapshot(gestalt.IndexedDBOpenCursorRequest{Index: req.Index})
-	return snapshot.ApplyRange(entries, req.Range)
+	return entries, nil
 }
 
 func (p *nativeIndexedDBProvider) indexKey(store, index string, record gestalt.Record) (any, bool) {
@@ -588,27 +593,6 @@ func cloneRecord(record gestalt.Record) gestalt.Record {
 		out[key] = value
 	}
 	return out
-}
-
-func indexValuesMatch(key any, values []any) bool {
-	if len(values) == 0 {
-		return true
-	}
-	var parts []any
-	if arr, ok := key.([]any); ok {
-		parts = arr
-	} else {
-		parts = []any{key}
-	}
-	if len(values) > len(parts) {
-		return false
-	}
-	for i, value := range values {
-		if gestalt.CompareIndexedDBValues(parts[i], value) != 0 {
-			return false
-		}
-	}
-	return true
 }
 
 func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {

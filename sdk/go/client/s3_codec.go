@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireByteRange(value *ByteRange) *proto.ByteRange {
+func ToWireByteRange(value *ByteRange) *proto.ByteRange {
 	if value == nil {
 		return nil
 	}
@@ -17,7 +17,7 @@ func toWireByteRange(value *ByteRange) *proto.ByteRange {
 	return out
 }
 
-func fromWireByteRange(value *proto.ByteRange) *ByteRange {
+func FromWireByteRange(value *proto.ByteRange) *ByteRange {
 	if value == nil {
 		return nil
 	}
@@ -28,58 +28,58 @@ func fromWireByteRange(value *proto.ByteRange) *ByteRange {
 	return out
 }
 
-func toWireCopyObjectRequest(value *CopyObjectRequest) *proto.CopyObjectRequest {
+func ToWireCopyObjectRequest(value *CopyObjectRequest) *proto.CopyObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CopyObjectRequest{
-		Source:      toWireS3ObjectRef(value.Source),
-		Destination: toWireS3ObjectRef(value.Destination),
+		Source:      ToWireS3ObjectRef(value.Source),
+		Destination: ToWireS3ObjectRef(value.Destination),
 		IfMatch:     value.IfMatch,
 		IfNoneMatch: value.IfNoneMatch,
 	}
 	return out
 }
 
-func fromWireCopyObjectRequest(value *proto.CopyObjectRequest) *CopyObjectRequest {
+func FromWireCopyObjectRequest(value *proto.CopyObjectRequest) *CopyObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CopyObjectRequest{
-		Source:      fromWireS3ObjectRef(value.Source),
-		Destination: fromWireS3ObjectRef(value.Destination),
+		Source:      FromWireS3ObjectRef(value.Source),
+		Destination: FromWireS3ObjectRef(value.Destination),
 		IfMatch:     value.IfMatch,
 		IfNoneMatch: value.IfNoneMatch,
 	}
 	return out
 }
 
-func toWireCopyObjectResponse(value *CopyObjectResponse) *proto.CopyObjectResponse {
+func ToWireCopyObjectResponse(value *CopyObjectResponse) *proto.CopyObjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CopyObjectResponse{
-		Meta: toWireS3ObjectMeta(value.Meta),
+		Meta: ToWireS3ObjectMeta(value.Meta),
 	}
 	return out
 }
 
-func fromWireCopyObjectResponse(value *proto.CopyObjectResponse) *CopyObjectResponse {
+func FromWireCopyObjectResponse(value *proto.CopyObjectResponse) *CopyObjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &CopyObjectResponse{
-		Meta: fromWireS3ObjectMeta(value.Meta),
+		Meta: FromWireS3ObjectMeta(value.Meta),
 	}
 	return out
 }
 
-func toWireCreateObjectAccessURLRequest(value *CreateObjectAccessURLRequest) *proto.CreateObjectAccessURLRequest {
+func ToWireCreateObjectAccessURLRequest(value *CreateObjectAccessURLRequest) *proto.CreateObjectAccessURLRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CreateObjectAccessURLRequest{
-		Ref:                toWireS3ObjectRef(value.Ref),
+		Ref:                ToWireS3ObjectRef(value.Ref),
 		Method:             proto.PresignMethod(value.Method),
 		ExpiresSeconds:     value.ExpiresSeconds,
 		ContentType:        value.ContentType,
@@ -89,12 +89,12 @@ func toWireCreateObjectAccessURLRequest(value *CreateObjectAccessURLRequest) *pr
 	return out
 }
 
-func fromWireCreateObjectAccessURLRequest(value *proto.CreateObjectAccessURLRequest) *CreateObjectAccessURLRequest {
+func FromWireCreateObjectAccessURLRequest(value *proto.CreateObjectAccessURLRequest) *CreateObjectAccessURLRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CreateObjectAccessURLRequest{
-		Ref:                fromWireS3ObjectRef(value.Ref),
+		Ref:                FromWireS3ObjectRef(value.Ref),
 		Method:             PresignMethod(value.Method),
 		ExpiresSeconds:     value.ExpiresSeconds,
 		ContentType:        value.ContentType,
@@ -104,7 +104,7 @@ func fromWireCreateObjectAccessURLRequest(value *proto.CreateObjectAccessURLRequ
 	return out
 }
 
-func toWireCreateObjectAccessURLResponse(value *CreateObjectAccessURLResponse) *proto.CreateObjectAccessURLResponse {
+func ToWireCreateObjectAccessURLResponse(value *CreateObjectAccessURLResponse) *proto.CreateObjectAccessURLResponse {
 	if value == nil {
 		return nil
 	}
@@ -117,7 +117,7 @@ func toWireCreateObjectAccessURLResponse(value *CreateObjectAccessURLResponse) *
 	return out
 }
 
-func fromWireCreateObjectAccessURLResponse(value *proto.CreateObjectAccessURLResponse) *CreateObjectAccessURLResponse {
+func FromWireCreateObjectAccessURLResponse(value *proto.CreateObjectAccessURLResponse) *CreateObjectAccessURLResponse {
 	if value == nil {
 		return nil
 	}
@@ -130,67 +130,67 @@ func fromWireCreateObjectAccessURLResponse(value *proto.CreateObjectAccessURLRes
 	return out
 }
 
-func toWireDeleteObjectRequest(value *DeleteObjectRequest) *proto.DeleteObjectRequest {
+func ToWireDeleteObjectRequest(value *DeleteObjectRequest) *proto.DeleteObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.DeleteObjectRequest{
-		Ref: toWireS3ObjectRef(value.Ref),
+		Ref: ToWireS3ObjectRef(value.Ref),
 	}
 	return out
 }
 
-func fromWireDeleteObjectRequest(value *proto.DeleteObjectRequest) *DeleteObjectRequest {
+func FromWireDeleteObjectRequest(value *proto.DeleteObjectRequest) *DeleteObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &DeleteObjectRequest{
-		Ref: fromWireS3ObjectRef(value.Ref),
+		Ref: FromWireS3ObjectRef(value.Ref),
 	}
 	return out
 }
 
-func toWireHeadObjectRequest(value *HeadObjectRequest) *proto.HeadObjectRequest {
+func ToWireHeadObjectRequest(value *HeadObjectRequest) *proto.HeadObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.HeadObjectRequest{
-		Ref: toWireS3ObjectRef(value.Ref),
+		Ref: ToWireS3ObjectRef(value.Ref),
 	}
 	return out
 }
 
-func fromWireHeadObjectRequest(value *proto.HeadObjectRequest) *HeadObjectRequest {
+func FromWireHeadObjectRequest(value *proto.HeadObjectRequest) *HeadObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &HeadObjectRequest{
-		Ref: fromWireS3ObjectRef(value.Ref),
+		Ref: FromWireS3ObjectRef(value.Ref),
 	}
 	return out
 }
 
-func toWireHeadObjectResponse(value *HeadObjectResponse) *proto.HeadObjectResponse {
+func ToWireHeadObjectResponse(value *HeadObjectResponse) *proto.HeadObjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.HeadObjectResponse{
-		Meta: toWireS3ObjectMeta(value.Meta),
+		Meta: ToWireS3ObjectMeta(value.Meta),
 	}
 	return out
 }
 
-func fromWireHeadObjectResponse(value *proto.HeadObjectResponse) *HeadObjectResponse {
+func FromWireHeadObjectResponse(value *proto.HeadObjectResponse) *HeadObjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &HeadObjectResponse{
-		Meta: fromWireS3ObjectMeta(value.Meta),
+		Meta: FromWireS3ObjectMeta(value.Meta),
 	}
 	return out
 }
 
-func toWireListObjectsRequest(value *ListObjectsRequest) *proto.ListObjectsRequest {
+func ToWireListObjectsRequest(value *ListObjectsRequest) *proto.ListObjectsRequest {
 	if value == nil {
 		return nil
 	}
@@ -204,7 +204,7 @@ func toWireListObjectsRequest(value *ListObjectsRequest) *proto.ListObjectsReque
 	return out
 }
 
-func fromWireListObjectsRequest(value *proto.ListObjectsRequest) *ListObjectsRequest {
+func FromWireListObjectsRequest(value *proto.ListObjectsRequest) *ListObjectsRequest {
 	if value == nil {
 		return nil
 	}
@@ -218,7 +218,7 @@ func fromWireListObjectsRequest(value *proto.ListObjectsRequest) *ListObjectsReq
 	return out
 }
 
-func toWireListObjectsResponse(value *ListObjectsResponse) *proto.ListObjectsResponse {
+func ToWireListObjectsResponse(value *ListObjectsResponse) *proto.ListObjectsResponse {
 	if value == nil {
 		return nil
 	}
@@ -228,12 +228,12 @@ func toWireListObjectsResponse(value *ListObjectsResponse) *proto.ListObjectsRes
 		HasMore:               value.HasMore,
 	}
 	for _, item := range value.Objects {
-		out.Objects = append(out.Objects, toWireS3ObjectMeta(item))
+		out.Objects = append(out.Objects, ToWireS3ObjectMeta(item))
 	}
 	return out
 }
 
-func fromWireListObjectsResponse(value *proto.ListObjectsResponse) *ListObjectsResponse {
+func FromWireListObjectsResponse(value *proto.ListObjectsResponse) *ListObjectsResponse {
 	if value == nil {
 		return nil
 	}
@@ -243,17 +243,17 @@ func fromWireListObjectsResponse(value *proto.ListObjectsResponse) *ListObjectsR
 		HasMore:               value.HasMore,
 	}
 	for _, item := range value.Objects {
-		out.Objects = append(out.Objects, fromWireS3ObjectMeta(item))
+		out.Objects = append(out.Objects, FromWireS3ObjectMeta(item))
 	}
 	return out
 }
 
-func toWirePresignObjectRequest(value *PresignObjectRequest) *proto.PresignObjectRequest {
+func ToWirePresignObjectRequest(value *PresignObjectRequest) *proto.PresignObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.PresignObjectRequest{
-		Ref:                toWireS3ObjectRef(value.Ref),
+		Ref:                ToWireS3ObjectRef(value.Ref),
 		Method:             proto.PresignMethod(value.Method),
 		ExpiresSeconds:     value.ExpiresSeconds,
 		ContentType:        value.ContentType,
@@ -263,12 +263,12 @@ func toWirePresignObjectRequest(value *PresignObjectRequest) *proto.PresignObjec
 	return out
 }
 
-func fromWirePresignObjectRequest(value *proto.PresignObjectRequest) *PresignObjectRequest {
+func FromWirePresignObjectRequest(value *proto.PresignObjectRequest) *PresignObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &PresignObjectRequest{
-		Ref:                fromWireS3ObjectRef(value.Ref),
+		Ref:                FromWireS3ObjectRef(value.Ref),
 		Method:             PresignMethod(value.Method),
 		ExpiresSeconds:     value.ExpiresSeconds,
 		ContentType:        value.ContentType,
@@ -278,7 +278,7 @@ func fromWirePresignObjectRequest(value *proto.PresignObjectRequest) *PresignObj
 	return out
 }
 
-func toWirePresignObjectResponse(value *PresignObjectResponse) *proto.PresignObjectResponse {
+func ToWirePresignObjectResponse(value *PresignObjectResponse) *proto.PresignObjectResponse {
 	if value == nil {
 		return nil
 	}
@@ -291,7 +291,7 @@ func toWirePresignObjectResponse(value *PresignObjectResponse) *proto.PresignObj
 	return out
 }
 
-func fromWirePresignObjectResponse(value *proto.PresignObjectResponse) *PresignObjectResponse {
+func FromWirePresignObjectResponse(value *proto.PresignObjectResponse) *PresignObjectResponse {
 	if value == nil {
 		return nil
 	}
@@ -304,41 +304,41 @@ func fromWirePresignObjectResponse(value *proto.PresignObjectResponse) *PresignO
 	return out
 }
 
-func toWireReadObjectChunk(value *ReadObjectChunk) *proto.ReadObjectChunk {
+func ToWireReadObjectChunk(value *ReadObjectChunk) *proto.ReadObjectChunk {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ReadObjectChunk{}
 	switch variant := value.Result.(type) {
 	case *ReadObjectChunkResultMeta:
-		out.Result = &proto.ReadObjectChunk_Meta{Meta: toWireS3ObjectMeta(variant.Value)}
+		out.Result = &proto.ReadObjectChunk_Meta{Meta: ToWireS3ObjectMeta(variant.Value)}
 	case *ReadObjectChunkResultData:
 		out.Result = &proto.ReadObjectChunk_Data{Data: variant.Value}
 	}
 	return out
 }
 
-func fromWireReadObjectChunk(value *proto.ReadObjectChunk) *ReadObjectChunk {
+func FromWireReadObjectChunk(value *proto.ReadObjectChunk) *ReadObjectChunk {
 	if value == nil {
 		return nil
 	}
 	out := &ReadObjectChunk{}
 	switch variant := value.Result.(type) {
 	case *proto.ReadObjectChunk_Meta:
-		out.Result = &ReadObjectChunkResultMeta{Value: fromWireS3ObjectMeta(variant.Meta)}
+		out.Result = &ReadObjectChunkResultMeta{Value: FromWireS3ObjectMeta(variant.Meta)}
 	case *proto.ReadObjectChunk_Data:
 		out.Result = &ReadObjectChunkResultData{Value: variant.Data}
 	}
 	return out
 }
 
-func toWireReadObjectRequest(value *ReadObjectRequest) *proto.ReadObjectRequest {
+func ToWireReadObjectRequest(value *ReadObjectRequest) *proto.ReadObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ReadObjectRequest{
-		Ref:               toWireS3ObjectRef(value.Ref),
-		Range:             toWireByteRange(value.Range),
+		Ref:               ToWireS3ObjectRef(value.Ref),
+		Range:             ToWireByteRange(value.Range),
 		IfMatch:           value.IfMatch,
 		IfNoneMatch:       value.IfNoneMatch,
 		IfModifiedSince:   toWireTimestamp(value.IfModifiedSince),
@@ -347,13 +347,13 @@ func toWireReadObjectRequest(value *ReadObjectRequest) *proto.ReadObjectRequest 
 	return out
 }
 
-func fromWireReadObjectRequest(value *proto.ReadObjectRequest) *ReadObjectRequest {
+func FromWireReadObjectRequest(value *proto.ReadObjectRequest) *ReadObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ReadObjectRequest{
-		Ref:               fromWireS3ObjectRef(value.Ref),
-		Range:             fromWireByteRange(value.Range),
+		Ref:               FromWireS3ObjectRef(value.Ref),
+		Range:             FromWireByteRange(value.Range),
 		IfMatch:           value.IfMatch,
 		IfNoneMatch:       value.IfNoneMatch,
 		IfModifiedSince:   fromWireTimestamp(value.IfModifiedSince),
@@ -362,12 +362,12 @@ func fromWireReadObjectRequest(value *proto.ReadObjectRequest) *ReadObjectReques
 	return out
 }
 
-func toWireS3ObjectMeta(value *S3ObjectMeta) *proto.S3ObjectMeta {
+func ToWireS3ObjectMeta(value *S3ObjectMeta) *proto.S3ObjectMeta {
 	if value == nil {
 		return nil
 	}
 	out := &proto.S3ObjectMeta{
-		Ref:          toWireS3ObjectRef(value.Ref),
+		Ref:          ToWireS3ObjectRef(value.Ref),
 		Etag:         value.Etag,
 		Size:         value.Size,
 		ContentType:  value.ContentType,
@@ -378,12 +378,12 @@ func toWireS3ObjectMeta(value *S3ObjectMeta) *proto.S3ObjectMeta {
 	return out
 }
 
-func fromWireS3ObjectMeta(value *proto.S3ObjectMeta) *S3ObjectMeta {
+func FromWireS3ObjectMeta(value *proto.S3ObjectMeta) *S3ObjectMeta {
 	if value == nil {
 		return nil
 	}
 	out := &S3ObjectMeta{
-		Ref:          fromWireS3ObjectRef(value.Ref),
+		Ref:          FromWireS3ObjectRef(value.Ref),
 		Etag:         value.Etag,
 		Size:         value.Size,
 		ContentType:  value.ContentType,
@@ -394,7 +394,7 @@ func fromWireS3ObjectMeta(value *proto.S3ObjectMeta) *S3ObjectMeta {
 	return out
 }
 
-func toWireS3ObjectRef(value *S3ObjectRef) *proto.S3ObjectRef {
+func ToWireS3ObjectRef(value *S3ObjectRef) *proto.S3ObjectRef {
 	if value == nil {
 		return nil
 	}
@@ -405,7 +405,7 @@ func toWireS3ObjectRef(value *S3ObjectRef) *proto.S3ObjectRef {
 	return out
 }
 
-func fromWireS3ObjectRef(value *proto.S3ObjectRef) *S3ObjectRef {
+func FromWireS3ObjectRef(value *proto.S3ObjectRef) *S3ObjectRef {
 	if value == nil {
 		return nil
 	}
@@ -416,12 +416,12 @@ func fromWireS3ObjectRef(value *proto.S3ObjectRef) *S3ObjectRef {
 	return out
 }
 
-func toWireWriteObjectOpen(value *WriteObjectOpen) *proto.WriteObjectOpen {
+func ToWireWriteObjectOpen(value *WriteObjectOpen) *proto.WriteObjectOpen {
 	if value == nil {
 		return nil
 	}
 	out := &proto.WriteObjectOpen{
-		Ref:                toWireS3ObjectRef(value.Ref),
+		Ref:                ToWireS3ObjectRef(value.Ref),
 		ContentType:        value.ContentType,
 		CacheControl:       value.CacheControl,
 		ContentDisposition: value.ContentDisposition,
@@ -434,12 +434,12 @@ func toWireWriteObjectOpen(value *WriteObjectOpen) *proto.WriteObjectOpen {
 	return out
 }
 
-func fromWireWriteObjectOpen(value *proto.WriteObjectOpen) *WriteObjectOpen {
+func FromWireWriteObjectOpen(value *proto.WriteObjectOpen) *WriteObjectOpen {
 	if value == nil {
 		return nil
 	}
 	out := &WriteObjectOpen{
-		Ref:                fromWireS3ObjectRef(value.Ref),
+		Ref:                FromWireS3ObjectRef(value.Ref),
 		ContentType:        value.ContentType,
 		CacheControl:       value.CacheControl,
 		ContentDisposition: value.ContentDisposition,
@@ -452,50 +452,50 @@ func fromWireWriteObjectOpen(value *proto.WriteObjectOpen) *WriteObjectOpen {
 	return out
 }
 
-func toWireWriteObjectRequest(value *WriteObjectRequest) *proto.WriteObjectRequest {
+func ToWireWriteObjectRequest(value *WriteObjectRequest) *proto.WriteObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.WriteObjectRequest{}
 	switch variant := value.Msg.(type) {
 	case *WriteObjectRequestMsgOpen:
-		out.Msg = &proto.WriteObjectRequest_Open{Open: toWireWriteObjectOpen(variant.Value)}
+		out.Msg = &proto.WriteObjectRequest_Open{Open: ToWireWriteObjectOpen(variant.Value)}
 	case *WriteObjectRequestMsgData:
 		out.Msg = &proto.WriteObjectRequest_Data{Data: variant.Value}
 	}
 	return out
 }
 
-func fromWireWriteObjectRequest(value *proto.WriteObjectRequest) *WriteObjectRequest {
+func FromWireWriteObjectRequest(value *proto.WriteObjectRequest) *WriteObjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &WriteObjectRequest{}
 	switch variant := value.Msg.(type) {
 	case *proto.WriteObjectRequest_Open:
-		out.Msg = &WriteObjectRequestMsgOpen{Value: fromWireWriteObjectOpen(variant.Open)}
+		out.Msg = &WriteObjectRequestMsgOpen{Value: FromWireWriteObjectOpen(variant.Open)}
 	case *proto.WriteObjectRequest_Data:
 		out.Msg = &WriteObjectRequestMsgData{Value: variant.Data}
 	}
 	return out
 }
 
-func toWireWriteObjectResponse(value *WriteObjectResponse) *proto.WriteObjectResponse {
+func ToWireWriteObjectResponse(value *WriteObjectResponse) *proto.WriteObjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.WriteObjectResponse{
-		Meta: toWireS3ObjectMeta(value.Meta),
+		Meta: ToWireS3ObjectMeta(value.Meta),
 	}
 	return out
 }
 
-func fromWireWriteObjectResponse(value *proto.WriteObjectResponse) *WriteObjectResponse {
+func FromWireWriteObjectResponse(value *proto.WriteObjectResponse) *WriteObjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &WriteObjectResponse{
-		Meta: fromWireS3ObjectMeta(value.Meta),
+		Meta: FromWireS3ObjectMeta(value.Meta),
 	}
 	return out
 }

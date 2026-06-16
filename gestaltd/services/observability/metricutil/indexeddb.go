@@ -120,30 +120,30 @@ func (s *instrumentedObjectStore) Clear(ctx context.Context) error {
 	return err
 }
 
-func (s *instrumentedObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
+func (s *instrumentedObjectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	startedAt := time.Now()
-	recs, err := s.inner.GetAll(ctx, r)
+	recs, err := s.inner.GetAll(ctx, query, count...)
 	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetAll", err)
 	return recs, err
 }
 
-func (s *instrumentedObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
+func (s *instrumentedObjectStore) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	startedAt := time.Now()
-	keys, err := s.inner.GetAllKeys(ctx, r)
+	keys, err := s.inner.GetAllKeys(ctx, query, count...)
 	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetAllKeys", err)
 	return keys, err
 }
 
-func (s *instrumentedObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
+func (s *instrumentedObjectStore) Count(ctx context.Context, query any) (int64, error) {
 	startedAt := time.Now()
-	n, err := s.inner.Count(ctx, r)
+	n, err := s.inner.Count(ctx, query)
 	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Count", err)
 	return n, err
 }
 
-func (s *instrumentedObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
+func (s *instrumentedObjectStore) DeleteRange(ctx context.Context, query any) (int64, error) {
 	startedAt := time.Now()
-	n, err := s.inner.DeleteRange(ctx, r)
+	n, err := s.inner.DeleteRange(ctx, query)
 	RecordIndexedDBOperation(ctx, startedAt, s.labels, "DeleteRange", err)
 	return n, err
 }
@@ -154,16 +154,16 @@ func (s *instrumentedObjectStore) Index(name string) idb.Index {
 	return &instrumentedIndex{inner: s.inner.Index(name), labels: labels}
 }
 
-func (s *instrumentedObjectStore) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
+func (s *instrumentedObjectStore) OpenCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
 	startedAt := time.Now()
-	c, err := s.inner.OpenCursor(ctx, r, dir)
+	c, err := s.inner.OpenCursor(ctx, query, dir)
 	RecordIndexedDBOperation(ctx, startedAt, s.labels, "OpenCursor", err)
 	return c, err
 }
 
-func (s *instrumentedObjectStore) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
+func (s *instrumentedObjectStore) OpenKeyCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
 	startedAt := time.Now()
-	c, err := s.inner.OpenKeyCursor(ctx, r, dir)
+	c, err := s.inner.OpenKeyCursor(ctx, query, dir)
 	RecordIndexedDBOperation(ctx, startedAt, s.labels, "OpenKeyCursor", err)
 	return c, err
 }
@@ -173,65 +173,58 @@ type instrumentedIndex struct {
 	labels IndexedDBMetricLabels
 }
 
-func (i *instrumentedIndex) Get(ctx context.Context, values ...any) (idb.Record, error) {
+func (i *instrumentedIndex) Get(ctx context.Context, query any) (idb.Record, error) {
 	startedAt := time.Now()
-	rec, err := i.inner.Get(ctx, values...)
+	rec, err := i.inner.Get(ctx, query)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Get", err)
 	return rec, err
 }
 
-func (i *instrumentedIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+func (i *instrumentedIndex) GetKey(ctx context.Context, query any) (string, error) {
 	startedAt := time.Now()
-	key, err := i.inner.GetKey(ctx, values...)
+	key, err := i.inner.GetKey(ctx, query)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetKey", err)
 	return key, err
 }
 
-func (i *instrumentedIndex) GetAll(ctx context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
+func (i *instrumentedIndex) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	startedAt := time.Now()
-	recs, err := i.inner.GetAll(ctx, r, values...)
+	recs, err := i.inner.GetAll(ctx, query, count...)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetAll", err)
 	return recs, err
 }
 
-func (i *instrumentedIndex) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
+func (i *instrumentedIndex) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	startedAt := time.Now()
-	keys, err := i.inner.GetAllKeys(ctx, r, values...)
+	keys, err := i.inner.GetAllKeys(ctx, query, count...)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetAllKeys", err)
 	return keys, err
 }
 
-func (i *instrumentedIndex) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+func (i *instrumentedIndex) Count(ctx context.Context, query any) (int64, error) {
 	startedAt := time.Now()
-	n, err := i.inner.Count(ctx, r, values...)
+	n, err := i.inner.Count(ctx, query)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Count", err)
 	return n, err
 }
 
-func (i *instrumentedIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+func (i *instrumentedIndex) Delete(ctx context.Context, query any) (int64, error) {
 	startedAt := time.Now()
-	n, err := i.inner.Delete(ctx, values...)
+	n, err := i.inner.Delete(ctx, query)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Delete", err)
 	return n, err
 }
 
-func (i *instrumentedIndex) DeleteRange(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+func (i *instrumentedIndex) OpenCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
 	startedAt := time.Now()
-	n, err := i.inner.DeleteRange(ctx, r, values...)
-	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.DeleteRange", err)
-	return n, err
-}
-
-func (i *instrumentedIndex) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
-	startedAt := time.Now()
-	c, err := i.inner.OpenCursor(ctx, r, dir, values...)
+	c, err := i.inner.OpenCursor(ctx, query, dir)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.OpenCursor", err)
 	return c, err
 }
 
-func (i *instrumentedIndex) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection, values ...any) (idb.Cursor, error) {
+func (i *instrumentedIndex) OpenKeyCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
 	startedAt := time.Now()
-	c, err := i.inner.OpenKeyCursor(ctx, r, dir, values...)
+	c, err := i.inner.OpenKeyCursor(ctx, query, dir)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.OpenKeyCursor", err)
 	return c, err
 }

@@ -2167,17 +2167,61 @@ pub struct ColumnDef {
     #[prost(bool, tag = "5")]
     pub unique: bool,
 }
-/// KeyRange constrains a query or cursor by lower and upper bounds.
+/// KeyValue represents one IndexedDB key: a scalar (string, number, date,
+/// binary) or a nested array of keys, per the W3C spec.
+/// <https://www.w3.org/TR/IndexedDB/#key-construct>
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyValue {
+    #[prost(oneof = "key_value::Kind", tags = "1, 2")]
+    pub kind: ::core::option::Option<key_value::Kind>,
+}
+/// Nested message and enum types in `KeyValue`.
+pub mod key_value {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "1")]
+        Scalar(super::TypedValue),
+        #[prost(message, tag = "2")]
+        Array(super::KeyValueArray),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyValueArray {
+    #[prost(message, repeated, tag = "1")]
+    pub elements: ::prost::alloc::vec::Vec<KeyValue>,
+}
+/// KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+/// full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+/// lower/upper means unbounded on that side.
+/// <https://www.w3.org/TR/IndexedDB/#keyrange>
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyRange {
     #[prost(message, optional, tag = "1")]
-    pub lower: ::core::option::Option<TypedValue>,
+    pub lower: ::core::option::Option<KeyValue>,
     #[prost(message, optional, tag = "2")]
-    pub upper: ::core::option::Option<TypedValue>,
+    pub upper: ::core::option::Option<KeyValue>,
     #[prost(bool, tag = "3")]
     pub lower_open: bool,
     #[prost(bool, tag = "4")]
     pub upper_open: bool,
+}
+/// IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+/// range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+/// matching a W3C query argument of undefined/null.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IndexedDbQuery {
+    #[prost(oneof = "indexed_db_query::Query", tags = "1, 2")]
+    pub query: ::core::option::Option<indexed_db_query::Query>,
+}
+/// Nested message and enum types in `IndexedDBQuery`.
+pub mod indexed_db_query {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Query {
+        #[prost(message, tag = "1")]
+        Key(super::KeyValue),
+        #[prost(message, tag = "2")]
+        Range(super::KeyRange),
+    }
 }
 /// RecordRequest addresses one object store and carries one row payload.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2219,13 +2263,15 @@ pub struct ObjectStoreNameRequest {
     #[prost(string, tag = "1")]
     pub store: ::prost::alloc::string::String,
 }
-/// ObjectStoreRangeRequest addresses an object store plus an optional key range.
+/// ObjectStoreRangeRequest addresses an object store plus an optional query.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ObjectStoreRangeRequest {
     #[prost(string, tag = "1")]
     pub store: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub range: ::core::option::Option<KeyRange>,
+    pub query: ::core::option::Option<IndexedDbQuery>,
+    #[prost(uint32, optional, tag = "3")]
+    pub count: ::core::option::Option<u32>,
 }
 /// CreateObjectStoreRequest creates a new object store.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2241,18 +2287,17 @@ pub struct DeleteObjectStoreRequest {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
 }
-/// IndexQueryRequest addresses a secondary index plus optional key values and
-/// range constraints.
+/// IndexQueryRequest addresses a secondary index plus an optional query.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IndexQueryRequest {
     #[prost(string, tag = "1")]
     pub store: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub index: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
-    pub values: ::prost::alloc::vec::Vec<TypedValue>,
-    #[prost(message, optional, tag = "4")]
-    pub range: ::core::option::Option<KeyRange>,
+    #[prost(message, optional, tag = "3")]
+    pub query: ::core::option::Option<IndexedDbQuery>,
+    #[prost(uint32, optional, tag = "4")]
+    pub count: ::core::option::Option<u32>,
 }
 /// CountResponse reports how many rows matched a query.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2265,47 +2310,21 @@ pub struct CountResponse {
 pub struct OpenCursorRequest {
     #[prost(string, tag = "1")]
     pub store: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub range: ::core::option::Option<KeyRange>,
-    #[prost(enumeration = "CursorDirection", tag = "3")]
+    #[prost(string, tag = "2")]
+    pub index: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub query: ::core::option::Option<IndexedDbQuery>,
+    #[prost(enumeration = "CursorDirection", tag = "4")]
     pub direction: i32,
     /// keys_only suppresses row payloads and returns only keys.
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag = "5")]
     pub keys_only: bool,
-    /// index selects a secondary index when non-empty.
-    #[prost(string, tag = "5")]
-    pub index: ::prost::alloc::string::String,
-    /// values selects a compound index key prefix when index is set.
-    #[prost(message, repeated, tag = "6")]
-    pub values: ::prost::alloc::vec::Vec<TypedValue>,
-}
-/// KeyValue represents a single IndexedDB key, which can be a scalar
-/// (string, number, date, binary) or a nested array of keys per the W3C spec.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct KeyValue {
-    #[prost(oneof = "key_value::Kind", tags = "1, 2")]
-    pub kind: ::core::option::Option<key_value::Kind>,
-}
-/// Nested message and enum types in `KeyValue`.
-pub mod key_value {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        Scalar(super::TypedValue),
-        #[prost(message, tag = "2")]
-        Array(super::KeyValueArray),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct KeyValueArray {
-    #[prost(message, repeated, tag = "1")]
-    pub elements: ::prost::alloc::vec::Vec<KeyValue>,
 }
 /// CursorKeyTarget addresses a specific cursor position.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CursorKeyTarget {
-    #[prost(message, repeated, tag = "1")]
-    pub key: ::prost::alloc::vec::Vec<KeyValue>,
+    #[prost(message, optional, tag = "1")]
+    pub key: ::core::option::Option<KeyValue>,
 }
 /// CursorCommand advances, mutates, or closes an open cursor.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2350,11 +2369,10 @@ pub mod cursor_client_message {
 /// CursorEntry is one streamed cursor row.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CursorEntry {
-    /// Key components per index KeyPath field. Each component is a KeyValue
-    /// that can be a scalar or a nested array, preserving the full W3C IndexedDB
-    /// key structure including array-valued keys.
-    #[prost(message, repeated, tag = "1")]
-    pub key: ::prost::alloc::vec::Vec<KeyValue>,
+    /// One full IndexedDB key (scalar or array).
+    /// <https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key>
+    #[prost(message, optional, tag = "1")]
+    pub key: ::core::option::Option<KeyValue>,
     #[prost(string, tag = "2")]
     pub primary_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]

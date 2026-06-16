@@ -2,12 +2,29 @@ import {
   createClient,
   type Client,
 } from "@connectrpc/connect";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import {
   IndexedDB as IndexedDBService,
   CursorDirection as ProtoCursorDirection,
   TransactionMode as ProtoTransactionMode,
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
+  IndexedDBQuerySchema,
+  KeyRangeSchema as ProtoKeyRangeSchema,
+  KeyValueSchema as ProtoKeyValueSchema,
 } from "../internal/gen/v1/indexeddb_pb.ts";
+import {
+  type IndexedDBQuery as NativeIndexedDBQuery,
+  type KeyRange as NativeKeyRange,
+  type KeyValue as NativeKeyValue,
+  indexedDBQueryQueryKey,
+  indexedDBQueryQueryRange,
+  typedValueKindBytesValue,
+  typedValueKindFloatValue,
+  typedValueKindIntValue,
+  typedValueKindStringValue,
+  typedValueKindTimeValue,
+} from "../indexeddb.ts";
+import { toWireIndexedDBQuery, toWireKeyValue } from "../internal/codec/indexeddb.ts";
 import { dateFromTimestamp, timestampFromDate } from "../protocol.ts";
 import {
   createHostServiceGrpcTransport,
@@ -91,7 +108,7 @@ const CURSOR_DIRECTION_TO_PROTO: {
  * Options for opening a cursor over an object store or index.
  */
 export interface OpenCursorOptions {
-  range?: KeyRange;
+  query?: Key | KeyRange;
   direction?: CursorDirection;
 }
 
@@ -123,10 +140,10 @@ export interface ObjectStore {
   put(record: Record): Promise<void>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
-  getAll(keyRange?: KeyRange): Promise<Record[]>;
-  getAllKeys(keyRange?: KeyRange): Promise<string[]>;
-  count(keyRange?: KeyRange): Promise<number>;
-  deleteRange(keyRange: KeyRange): Promise<number>;
+  getAll(query?: Key | KeyRange): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  count(query?: Key | KeyRange): Promise<number>;
+  deleteRange(query: Key | KeyRange): Promise<number>;
   openCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
   openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
   index(name: string): Index;
@@ -136,21 +153,15 @@ export interface ObjectStore {
  * Fakeable IndexedDB secondary-index contract.
  */
 export interface Index {
-  get(...values: unknown[]): Promise<Record>;
-  getKey(...values: unknown[]): Promise<string>;
-  getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]>;
-  getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
-  count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
-  delete(...values: unknown[]): Promise<number>;
-  deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number>;
-  openCursor(
-    options?: OpenCursorOptions,
-    ...values: unknown[]
-  ): Promise<Cursor | null>;
-  openKeyCursor(
-    options?: OpenCursorOptions,
-    ...values: unknown[]
-  ): Promise<Cursor | null>;
+  get(query?: Key | KeyRange): Promise<Record>;
+  getKey(query?: Key | KeyRange): Promise<string>;
+  getAll(query?: Key | KeyRange): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  count(query?: Key | KeyRange): Promise<number>;
+  delete(query?: Key | KeyRange): Promise<number>;
+  deleteRange(query: Key | KeyRange): Promise<number>;
+  openCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
+  openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
 }
 
 /**
@@ -172,10 +183,10 @@ export interface TransactionObjectStore {
   put(record: Record): Promise<void>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
-  getAll(keyRange?: KeyRange): Promise<Record[]>;
-  getAllKeys(keyRange?: KeyRange): Promise<string[]>;
-  count(keyRange?: KeyRange): Promise<number>;
-  deleteRange(keyRange: KeyRange): Promise<number>;
+  getAll(query?: Key | KeyRange): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  count(query?: Key | KeyRange): Promise<number>;
+  deleteRange(query: Key | KeyRange): Promise<number>;
   index(name: string): TransactionIndex;
 }
 
@@ -183,25 +194,25 @@ export interface TransactionObjectStore {
  * Fakeable transaction-scoped secondary-index contract.
  */
 export interface TransactionIndex {
-  get(...values: unknown[]): Promise<Record>;
-  getKey(...values: unknown[]): Promise<string>;
-  getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]>;
-  getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]>;
-  count(keyRange?: KeyRange, ...values: unknown[]): Promise<number>;
-  delete(...values: unknown[]): Promise<number>;
-  deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number>;
+  get(query?: Key | KeyRange): Promise<Record>;
+  getKey(query?: Key | KeyRange): Promise<string>;
+  getAll(query?: Key | KeyRange): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  count(query?: Key | KeyRange): Promise<number>;
+  delete(query?: Key | KeyRange): Promise<number>;
+  deleteRange(query: Key | KeyRange): Promise<number>;
 }
 
 /**
  * Fakeable IndexedDB cursor contract.
  */
 export interface Cursor {
-  readonly key: unknown;
+  readonly key: Key | undefined;
   readonly primaryKey: string;
   readonly value: Record | undefined;
   readonly done: boolean;
   continue(): Promise<boolean>;
-  continueToKey(key: unknown): Promise<boolean>;
+  continueToKey(key: Key): Promise<boolean>;
   advance(count: number): Promise<boolean>;
   delete(): Promise<void>;
   update(record: Record): Promise<void>;
@@ -214,7 +225,7 @@ export interface Cursor {
 class CursorImpl implements Cursor {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
-  private _key: unknown = undefined;
+  private _key: Key | undefined = undefined;
   private _primaryKey: string = "";
   private _value: Record | undefined = undefined;
   private _done = false;
@@ -242,7 +253,6 @@ class CursorImpl implements Cursor {
     options?: OpenCursorOptions & {
       keysOnly?: boolean;
       index?: string;
-      indexValues?: unknown[];
     },
   ): Promise<Cursor | null> {
     const sendQueue = new AsyncQueue<any>();
@@ -253,11 +263,10 @@ class CursorImpl implements Cursor {
         case: "open" as const,
         value: {
           store,
-          range: options?.range ? toProtoKeyRange(options.range) : undefined,
+          query: queryToWire(options?.query),
           direction: CURSOR_DIRECTION_TO_PROTO[direction],
           keysOnly: options?.keysOnly ?? false,
           index: options?.index ?? "",
-          values: (options?.indexValues ?? []).map(toProtoTypedValue),
         },
       },
     });
@@ -275,7 +284,7 @@ class CursorImpl implements Cursor {
   /**
    * Current cursor key.
    */
-  get key(): unknown {
+  get key(): Key | undefined {
     return this._key;
   }
 
@@ -316,14 +325,15 @@ class CursorImpl implements Cursor {
   /**
    * Advances the cursor to a specific key.
    */
-  async continueToKey(key: unknown): Promise<boolean> {
+  async continueToKey(key: Key): Promise<boolean> {
+    assertValidKey(key);
     this.sendQueue.push({
       msg: {
         case: "command" as const,
         value: {
           command: {
             case: "continueToKey" as const,
-            value: { key: toProtoCursorKey(key, this._indexCursor) },
+            value: { key: toProtoCursorKey(key) },
           },
         },
       },
@@ -470,10 +480,10 @@ class CursorImpl implements Cursor {
   }
 
   private refreshFromEntry(entry: any): void {
-    if (!this._indexCursor && entry.key.length === 1) {
-      this._key = fromProtoKeyValue(entry.key[0]);
-    } else if (entry.key.length > 0) {
-      this._key = entry.key.map(fromProtoKeyValue);
+    if (entry.key) {
+      const decoded = fromProtoKeyValue(entry.key);
+      assertValidKey(decoded);
+      this._key = decoded;
     } else {
       this._key = undefined;
     }
@@ -534,14 +544,149 @@ export interface TransactionOptions {
   durabilityHint?: TransactionDurabilityHint;
 }
 
+/** Native IndexedDB query (sdkgen type, not wire proto). */
+export type IndexedDBQuery = NativeIndexedDBQuery;
+
 /**
- * Key range used to filter object store and index operations.
+ * Scalar IndexedDB key values.
+ */
+export type KeyScalar = number | string | Date | Uint8Array;
+
+/**
+ * Native IndexedDB key (scalar or composite array key).
+ */
+export type Key = KeyScalar | readonly Key[];
+
+const keyRangeBrand = Symbol("KeyRange");
+
+/**
+ * W3C IDBKeyRange-shaped bound on full IndexedDB keys.
+ *
+ * Construct instances only via {@link bound}, {@link lowerBound},
+ * {@link upperBound}, or {@link only}.
  */
 export interface KeyRange {
-  lower?: unknown;
-  upper?: unknown;
+  readonly [keyRangeBrand]: true;
+  readonly lower?: Key;
+  readonly upper?: Key;
+  readonly lowerOpen: boolean;
+  readonly upperOpen: boolean;
+}
+
+function isKeyRange(value: unknown): value is KeyRange {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    keyRangeBrand in (value as object)
+  );
+}
+
+function createKeyRange(init: {
+  lower?: Key;
+  upper?: Key;
   lowerOpen?: boolean;
   upperOpen?: boolean;
+}): KeyRange {
+  return Object.freeze({
+    [keyRangeBrand]: true as const,
+    ...(init.lower !== undefined ? { lower: init.lower } : {}),
+    ...(init.upper !== undefined ? { upper: init.upper } : {}),
+    lowerOpen: init.lowerOpen ?? false,
+    upperOpen: init.upperOpen ?? false,
+  });
+}
+
+function isValidKeyScalar(value: unknown): value is KeyScalar {
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    value instanceof Date ||
+    value instanceof Uint8Array
+  );
+}
+
+function isValidKey(value: unknown): value is Key {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) {
+    return value.every((part) => isValidKey(part));
+  }
+  return isValidKeyScalar(value);
+}
+
+function assertValidKey(value: unknown): asserts value is Key {
+  if (!isValidKey(value)) {
+    throw new TypeError("Invalid key");
+  }
+}
+
+/**
+ * Returns a range containing only `key`.
+ */
+export function only(key: Key): KeyRange {
+  assertValidKey(key);
+  return createKeyRange({ lower: key, upper: key });
+}
+
+/**
+ * Returns a range between `lower` and `upper` with optional open bounds.
+ */
+export function bound(
+  lower: Key | null | undefined,
+  upper: Key | null | undefined,
+  lowerOpen = false,
+  upperOpen = false,
+): KeyRange {
+  if (lower != null) assertValidKey(lower);
+  if (upper != null) assertValidKey(upper);
+  return createKeyRange({
+    ...(lower != null ? { lower } : {}),
+    ...(upper != null ? { upper } : {}),
+    lowerOpen,
+    upperOpen,
+  });
+}
+
+/**
+ * Returns a range with only a lower bound.
+ */
+export function lowerBound(key: Key, open = false): KeyRange {
+  assertValidKey(key);
+  return createKeyRange({ lower: key, lowerOpen: open });
+}
+
+/**
+ * Returns a range with only an upper bound.
+ */
+export function upperBound(key: Key, open = false): KeyRange {
+  assertValidKey(key);
+  return createKeyRange({ upper: key, upperOpen: open });
+}
+
+type WireIndexedDBQuery = MessageInitShape<typeof IndexedDBQuerySchema>;
+
+/**
+ * Converts an ergonomic query (undefined, key, KeyRange, or native query).
+ */
+export function queryToProto(
+  query?: Key | KeyRange | NativeIndexedDBQuery,
+): NativeIndexedDBQuery | undefined {
+  if (query === undefined || query === null) return undefined;
+  if (isKeyRange(query)) {
+    return { query: indexedDBQueryQueryRange(keyRangeToNative(query)) };
+  }
+  if (typeof query === "object" && "query" in query) {
+    return query as NativeIndexedDBQuery;
+  }
+  assertValidKey(query);
+  return { query: indexedDBQueryQueryKey(toNativeKeyValue(query)) };
+}
+
+/** Converts a query to wire proto at the gRPC boundary. */
+export function queryToWire(
+  query?: Key | KeyRange | NativeIndexedDBQuery,
+): WireIndexedDBQuery | undefined {
+  const native = queryToProto(query);
+  return native === undefined ? undefined : toWireIndexedDBQuery(native);
 }
 
 /**
@@ -590,11 +735,10 @@ export interface ObjectStoreSchema {
  */
 export interface IndexedDBOpenCursorRequest {
   store?: string;
-  range?: KeyRange;
+  query?: Key | KeyRange;
   direction?: CursorDirection;
   keysOnly?: boolean;
   index?: string;
-  values?: unknown[];
 }
 
 /**
@@ -602,11 +746,11 @@ export interface IndexedDBOpenCursorRequest {
  */
 export interface IndexedDBCursorSnapshotEntry {
   /** Object-store key, or secondary-index key for index cursors. */
-  key: unknown;
+  key: Key;
   /** Canonical primary key for the object-store row. */
   primaryKey: string;
   /** Native primary-key value used as a stable tie-breaker for duplicate index keys. */
-  primaryKeyValue?: unknown;
+  primaryKeyValue?: Key;
   /** Row value returned by full-value cursors. */
   record?: Record;
 }
@@ -647,40 +791,31 @@ export class IndexedDBCursorSnapshot {
   /**
    * Sorts entries, applies the supplied key range, and stores the snapshot.
    */
-  load(entries: IndexedDBCursorSnapshotEntry[], range?: KeyRange): void {
+  load(entries: IndexedDBCursorSnapshotEntry[], query?: Key | KeyRange): void {
     const ordered = [...entries].sort((left, right) =>
       this.compareEntries(left, right),
     );
     if (this.reverse) ordered.reverse();
-    this.entries = this.applyRange(ordered, range);
+    this.entries = this.applyQuery(ordered, query);
     this.pos = -1;
   }
 
   /**
-   * Returns entries that satisfy the supplied key range without mutating state.
+   * Returns entries that satisfy the supplied query without mutating state.
    */
   applyRange(
     entries: IndexedDBCursorSnapshotEntry[],
-    range?: KeyRange,
+    query?: Key | KeyRange,
   ): IndexedDBCursorSnapshotEntry[] {
-    if (!range) return entries;
-    const [lower, upper] = indexedDBRangeBounds(range, this.indexCursor);
-    const filtered: IndexedDBCursorSnapshotEntry[] = [];
-    for (const entry of entries) {
-      const key = normalizeIndexedDBBound(entry.key, this.indexCursor);
-      if (lower !== undefined) {
-        const cmp = compareIndexedDBValues(key, lower);
-        if (range.lowerOpen && cmp <= 0) continue;
-        if (!range.lowerOpen && cmp < 0) continue;
-      }
-      if (upper !== undefined) {
-        const cmp = compareIndexedDBValues(key, upper);
-        if (range.upperOpen && cmp >= 0) continue;
-        if (!range.upperOpen && cmp > 0) continue;
-      }
-      filtered.push(entry);
-    }
-    return filtered;
+    return this.applyQuery(entries, query);
+  }
+
+  applyQuery(
+    entries: IndexedDBCursorSnapshotEntry[],
+    query?: Key | KeyRange,
+  ): IndexedDBCursorSnapshotEntry[] {
+    if (query === undefined) return entries;
+    return entries.filter((entry) => matchQuery(entry.key, query));
   }
 
   /**
@@ -696,7 +831,7 @@ export class IndexedDBCursorSnapshot {
       const previous = this.entries[this.pos]!.key;
       for (this.pos += 1; this.pos < this.entries.length; this.pos += 1) {
         if (
-          compareIndexedDBValues(this.entries[this.pos]!.key, previous) !== 0
+          compareKeys(this.entries[this.pos]!.key, previous) !== 0
         ) {
           return this.current();
         }
@@ -712,7 +847,8 @@ export class IndexedDBCursorSnapshot {
   /**
    * Advances to target or the next entry past target for this direction.
    */
-  continueToKey(target: unknown): IndexedDBCursorSnapshotEntry | undefined {
+  continueToKey(target: Key): IndexedDBCursorSnapshotEntry | undefined {
+    assertValidKey(target);
     const previous =
       this.unique &&
       this.indexCursor &&
@@ -726,11 +862,11 @@ export class IndexedDBCursorSnapshot {
         previous !== undefined &&
         this.unique &&
         this.indexCursor &&
-        compareIndexedDBValues(current, previous) === 0
+        compareKeys(current, previous) === 0
       ) {
         continue;
       }
-      const cmp = compareIndexedDBValues(current, target);
+      const cmp = compareKeys(current, target);
       if (this.reverse) {
         if (cmp <= 0) return this.current();
       } else if (cmp >= 0) {
@@ -767,9 +903,9 @@ export class IndexedDBCursorSnapshot {
     left: IndexedDBCursorSnapshotEntry,
     right: IndexedDBCursorSnapshotEntry,
   ): number {
-    let cmp = compareIndexedDBValues(left.key, right.key);
+    let cmp = compareKeys(left.key, right.key);
     if (cmp === 0) {
-      cmp = compareIndexedDBValues(
+      cmp = compareKeys(
         left.primaryKeyValue ?? left.primaryKey,
         right.primaryKeyValue ?? right.primaryKey,
       );
@@ -788,35 +924,69 @@ export function newIndexedDBCursorSnapshot(
 }
 
 /**
- * Normalizes object-store or index cursor range bounds.
- *
- * Scalar index bounds are compared as one-part composite keys so providers can
- * share the same comparison path for scalar and compound indexes.
+ * Normalizes object-store or index cursor range bounds (legacy helper).
  */
 export function indexedDBRangeBounds(
-  range: KeyRange | undefined,
+  query: Key | KeyRange | undefined,
   indexCursor: boolean,
 ): [unknown, unknown] {
-  if (!range) return [undefined, undefined];
-  const lower =
-    range.lower !== undefined
-      ? normalizeIndexedDBBound(range.lower, indexCursor)
-      : undefined;
-  const upper =
-    range.upper !== undefined
-      ? normalizeIndexedDBBound(range.upper, indexCursor)
-      : undefined;
-  return [lower, upper];
+  void indexCursor;
+  if (!query || !isKeyRange(query)) return [undefined, undefined];
+  return [query.lower, query.upper];
+}
+
+/** Returns whether key satisfies a query. */
+export function matchQuery(key: Key, query: Key | KeyRange | NativeIndexedDBQuery | undefined): boolean {
+  const nativeQuery = queryToProto(query);
+  if (nativeQuery === undefined) return true;
+  const variant = nativeQuery.query;
+  if (variant.case === "key") {
+    const target = keyValueToKey(variant.value);
+    return compareKeys(key, target) === 0;
+  }
+  if (variant.case === "range") {
+    return keyInRangeNative(key, variant.value);
+  }
+  return true;
+}
+
+/** @deprecated Use {@link matchQuery}. */
+export const matchIndexedDBQuery = matchQuery;
+
+function keyInRangeNative(key: Key, kr: NativeKeyRange): boolean {
+  if (kr.lower !== undefined) {
+    const cmp = compareKeys(key, keyValueToKey(kr.lower));
+    if (kr.lowerOpen ? cmp <= 0 : cmp < 0) return false;
+  }
+  if (kr.upper !== undefined) {
+    const cmp = compareKeys(key, keyValueToKey(kr.upper));
+    if (kr.upperOpen ? cmp >= 0 : cmp > 0) return false;
+  }
+  return true;
+}
+
+/** Reports whether key satisfies a KeyRange. */
+export function keyInRange(key: Key, kr: KeyRange | undefined): boolean {
+  if (!kr) return true;
+  if (kr.lower !== undefined) {
+    const cmp = compareKeys(key, kr.lower);
+    if (kr.lowerOpen ? cmp <= 0 : cmp < 0) return false;
+  }
+  if (kr.upper !== undefined) {
+    const cmp = compareKeys(key, kr.upper);
+    if (kr.upperOpen ? cmp >= 0 : cmp > 0) return false;
+  }
+  return true;
 }
 
 /**
- * Compares native IndexedDB key values.
+ * Compares native IndexedDB key values using W3C ordering.
  */
-export function compareIndexedDBValues(left: unknown, right: unknown): number {
+export function compareKeys(left: Key, right: Key): number {
   if (Array.isArray(left) && Array.isArray(right)) {
     for (let i = 0; i < left.length; i += 1) {
       if (i >= right.length) return 1;
-      const cmp = compareIndexedDBValues(left[i], right[i]);
+      const cmp = compareKeys(left[i], right[i]);
       if (cmp !== 0) return cmp;
     }
     if (left.length < right.length) return -1;
@@ -834,14 +1004,8 @@ export function compareIndexedDBValues(left: unknown, right: unknown): number {
   return compareScalars(String(left), String(right));
 }
 
-function normalizeIndexedDBBound(
-  value: unknown,
-  indexCursor: boolean,
-): unknown {
-  if (!indexCursor) return value;
-  if (Array.isArray(value)) return [...value];
-  return [value];
-}
+/** @deprecated Use {@link compareKeys}. */
+export const compareIndexedDBValues = compareKeys;
 
 function compareScalars<T extends bigint | number | string>(
   left: T,
@@ -1238,12 +1402,12 @@ class TransactionObjectStoreImpl implements TransactionObjectStore {
   /**
    * Reads all records inside the transaction.
    */
-  async getAll(keyRange?: KeyRange): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange): Promise<Record[]> {
     const resp = await this.tx.sendOperation({
       case: "getAll" as const,
       value: {
         store: this.store,
-        range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+        query: queryToWire(query),
       },
     });
     return resp.result.value.records.map((r: any) => fromProtoRecord(r));
@@ -1252,12 +1416,12 @@ class TransactionObjectStoreImpl implements TransactionObjectStore {
   /**
    * Reads all primary keys inside the transaction.
    */
-  async getAllKeys(keyRange?: KeyRange): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
     const resp = await this.tx.sendOperation({
       case: "getAllKeys" as const,
       value: {
         store: this.store,
-        range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+        query: queryToWire(query),
       },
     });
     return resp.result.value.keys;
@@ -1266,24 +1430,24 @@ class TransactionObjectStoreImpl implements TransactionObjectStore {
   /**
    * Counts records inside the transaction.
    */
-  async count(keyRange?: KeyRange): Promise<number> {
+  async count(query?: Key | KeyRange): Promise<number> {
     const resp = await this.tx.sendOperation({
       case: "count" as const,
       value: {
         store: this.store,
-        range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+        query: queryToWire(query),
       },
     });
     return Number(resp.result.value.count);
   }
 
   /**
-   * Deletes records in a key range inside the transaction.
+   * Deletes records matching a query inside the transaction.
    */
-  async deleteRange(keyRange: KeyRange): Promise<number> {
+  async deleteRange(query: Key | KeyRange): Promise<number> {
     const resp = await this.tx.sendOperation({
       case: "deleteRange" as const,
-      value: { store: this.store, range: toProtoKeyRange(keyRange) },
+      value: { store: this.store, query: queryToProto(query) },
     });
     return Number(resp.result.value.deleted);
   }
@@ -1312,10 +1476,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Reads the first matching indexed record inside the transaction.
    */
-  async get(...values: unknown[]): Promise<Record> {
+  async get(query?: Key | KeyRange): Promise<Record> {
     const resp = await this.tx.sendOperation({
       case: "indexGet" as const,
-      value: this.indexRequest(values),
+      value: this.indexRequest(query),
     });
     return fromProtoRecord(resp.result.value.record);
   }
@@ -1323,10 +1487,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Reads the primary key for the first matching index entry inside the transaction.
    */
-  async getKey(...values: unknown[]): Promise<string> {
+  async getKey(query?: Key | KeyRange): Promise<string> {
     const resp = await this.tx.sendOperation({
       case: "indexGetKey" as const,
-      value: this.indexRequest(values),
+      value: this.indexRequest(query),
     });
     return resp.result.value.key;
   }
@@ -1334,10 +1498,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Reads all indexed records inside the transaction.
    */
-  async getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange): Promise<Record[]> {
     const resp = await this.tx.sendOperation({
       case: "indexGetAll" as const,
-      value: this.indexRequest(values, keyRange),
+      value: this.indexRequest(query),
     });
     return resp.result.value.records.map((r: any) => fromProtoRecord(r));
   }
@@ -1345,13 +1509,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Reads all indexed primary keys inside the transaction.
    */
-  async getAllKeys(
-    keyRange?: KeyRange,
-    ...values: unknown[]
-  ): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
     const resp = await this.tx.sendOperation({
       case: "indexGetAllKeys" as const,
-      value: this.indexRequest(values, keyRange),
+      value: this.indexRequest(query),
     });
     return resp.result.value.keys;
   }
@@ -1359,10 +1520,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Counts indexed records inside the transaction.
    */
-  async count(keyRange?: KeyRange, ...values: unknown[]): Promise<number> {
+  async count(query?: Key | KeyRange): Promise<number> {
     const resp = await this.tx.sendOperation({
       case: "indexCount" as const,
-      value: this.indexRequest(values, keyRange),
+      value: this.indexRequest(query),
     });
     return Number(resp.result.value.count);
   }
@@ -1370,31 +1531,30 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Deletes indexed records inside the transaction.
    */
-  async delete(...values: unknown[]): Promise<number> {
+  async delete(query?: Key | KeyRange): Promise<number> {
     const resp = await this.tx.sendOperation({
       case: "indexDelete" as const,
-      value: this.indexRequest(values),
+      value: this.indexRequest(query),
     });
     return Number(resp.result.value.deleted);
   }
 
   /**
-   * Deletes indexed records inside the transaction that match a key range.
+   * Deletes indexed records inside the transaction that match a query.
    */
-  async deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number> {
+  async deleteRange(query: Key | KeyRange): Promise<number> {
     const resp = await this.tx.sendOperation({
       case: "indexDelete" as const,
-      value: this.indexRequest(values, keyRange),
+      value: this.indexRequest(query),
     });
     return Number(resp.result.value.deleted);
   }
 
-  private indexRequest(values: unknown[], keyRange?: KeyRange): any {
+  private indexRequest(query?: Key | KeyRange): any {
     return {
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoTypedValue),
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     };
   }
 }
@@ -1462,43 +1622,43 @@ class ObjectStoreImpl implements ObjectStore {
   /**
    * Reads all records in the object store or within a key range.
    */
-  async getAll(keyRange?: KeyRange): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange): Promise<Record[]> {
     const resp = await this.client.getAll({
       store: this.store,
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     });
     return resp.records.map((r) => fromProtoRecord(r));
   }
 
   /**
-   * Reads all primary keys in the object store or within a key range.
+   * Reads all primary keys in the object store or within a query.
    */
-  async getAllKeys(keyRange?: KeyRange): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
     const resp = await this.client.getAllKeys({
       store: this.store,
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     });
     return resp.keys;
   }
 
   /**
-   * Counts records in the object store or within a key range.
+   * Counts records in the object store or within a query.
    */
-  async count(keyRange?: KeyRange): Promise<number> {
+  async count(query?: Key | KeyRange): Promise<number> {
     const resp = await this.client.count({
       store: this.store,
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     });
     return Number(resp.count);
   }
 
   /**
-   * Deletes records within a key range.
+   * Deletes records matching a query.
    */
-  async deleteRange(keyRange: KeyRange): Promise<number> {
+  async deleteRange(query: Key | KeyRange): Promise<number> {
     const resp = await this.client.deleteRange({
       store: this.store,
-      range: toProtoKeyRange(keyRange),
+      query: queryToWire(query),
     });
     return Number(resp.deleted);
   }
@@ -1544,12 +1704,12 @@ class IndexImpl implements Index {
   /**
    * Reads the first record matching the supplied index values.
    */
-  async get(...values: unknown[]): Promise<Record> {
+  async get(query?: Key | KeyRange): Promise<Record> {
     const resp = await rpc(() =>
       this.client.indexGet({
         store: this.store,
         index: this.indexName,
-        values: values.map(toProtoTypedValue),
+        query: queryToWire(query),
       }),
     );
     return fromProtoRecord(resp.record);
@@ -1558,80 +1718,73 @@ class IndexImpl implements Index {
   /**
    * Reads the primary key for the first matching index entry.
    */
-  async getKey(...values: unknown[]): Promise<string> {
+  async getKey(query?: Key | KeyRange): Promise<string> {
     const resp = await rpc(() =>
       this.client.indexGetKey({
         store: this.store,
         index: this.indexName,
-        values: values.map(toProtoTypedValue),
+        query: queryToWire(query),
       }),
     );
     return resp.key;
   }
 
   /**
-   * Reads all records matching the supplied index values and optional range.
+   * Reads all records matching the supplied query.
    */
-  async getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange): Promise<Record[]> {
     const resp = await this.client.indexGetAll({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoTypedValue),
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     });
     return resp.records.map((r) => fromProtoRecord(r));
   }
 
   /**
-   * Reads all primary keys matching the supplied index values and optional range.
+   * Reads all primary keys matching the supplied query.
    */
-  async getAllKeys(
-    keyRange?: KeyRange,
-    ...values: unknown[]
-  ): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
     const resp = await this.client.indexGetAllKeys({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoTypedValue),
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     });
     return resp.keys;
   }
 
   /**
-   * Counts records matching the supplied index values and optional range.
+   * Counts records matching the supplied query.
    */
-  async count(keyRange?: KeyRange, ...values: unknown[]): Promise<number> {
+  async count(query?: Key | KeyRange): Promise<number> {
     const resp = await this.client.indexCount({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoTypedValue),
-      range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      query: queryToWire(query),
     });
     return Number(resp.count);
   }
 
   /**
-   * Deletes records matching the supplied index values.
+   * Deletes records matching the supplied query.
    */
-  async delete(...values: unknown[]): Promise<number> {
+  async delete(query?: Key | KeyRange): Promise<number> {
     const resp = await this.client.indexDelete({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoTypedValue),
+      query: queryToWire(query),
     });
     return Number(resp.deleted);
   }
 
   /**
-   * Deletes records matching the supplied index values and optional range.
+   * Deletes records matching the supplied query.
    */
-  async deleteRange(keyRange: KeyRange, ...values: unknown[]): Promise<number> {
+  async deleteRange(query: Key | KeyRange): Promise<number> {
     const resp = await this.client.indexDelete({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoTypedValue),
-      range: toProtoKeyRange(keyRange),
+      query: queryToWire(query),
     });
     return Number(resp.deleted);
   }
@@ -1639,29 +1792,21 @@ class IndexImpl implements Index {
   /**
    * Opens a cursor over the index.
    */
-  async openCursor(
-    options?: OpenCursorOptions,
-    ...values: unknown[]
-  ): Promise<Cursor | null> {
+  async openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
     return CursorImpl.open(this.client, this.store, {
       ...options,
       index: this.indexName,
-      indexValues: values,
     });
   }
 
   /**
    * Opens a key-only cursor over the index.
    */
-  async openKeyCursor(
-    options?: OpenCursorOptions,
-    ...values: unknown[]
-  ): Promise<Cursor | null> {
+  async openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
     return CursorImpl.open(this.client, this.store, {
       ...options,
       keysOnly: true,
       index: this.indexName,
-      indexValues: values,
     });
   }
 }
@@ -1673,7 +1818,53 @@ function fromProtoKeyValue(kv: any): unknown {
   return undefined;
 }
 
-function toProtoKeyValue(v: unknown): any {
+function toNativeKeyValue(v: Key): NativeKeyValue {
+  assertValidKey(v);
+  if (Array.isArray(v)) {
+    return {
+      kind: {
+        case: "array" as const,
+        value: { elements: v.map(toNativeKeyValue) },
+      },
+    };
+  }
+  const scalar = v as KeyScalar;
+  return { kind: { case: "scalar" as const, value: toNativeTypedValue(scalar) } };
+}
+
+function keyRangeToNative(kr: KeyRange): NativeKeyRange {
+  return {
+    ...(kr.lower !== undefined ? { lower: toNativeKeyValue(kr.lower) } : {}),
+    ...(kr.upper !== undefined ? { upper: toNativeKeyValue(kr.upper) } : {}),
+    lowerOpen: kr.lowerOpen,
+    upperOpen: kr.upperOpen,
+  };
+}
+
+function keyValueToKey(kv: NativeKeyValue): Key {
+  const decoded = fromProtoKeyValue(toWireKeyValue(kv));
+  assertValidKey(decoded);
+  return decoded;
+}
+
+function toNativeTypedValue(v: KeyScalar): import("../indexeddb.ts").TypedValue {
+  if (typeof v === "string") {
+    return { kind: typedValueKindStringValue(v) };
+  }
+  if (typeof v === "number") {
+    if (Number.isInteger(v) && Number.isSafeInteger(v)) {
+      return { kind: typedValueKindIntValue(BigInt(v)) };
+    }
+    return { kind: typedValueKindFloatValue(v) };
+  }
+  if (v instanceof Date) {
+    return { kind: typedValueKindTimeValue(v) };
+  }
+  return { kind: typedValueKindBytesValue(v) };
+}
+
+function toProtoKeyValue(v: unknown): MessageInitShape<typeof ProtoKeyValueSchema> {
+  assertValidKey(v);
   if (Array.isArray(v)) {
     return {
       kind: {
@@ -1685,11 +1876,17 @@ function toProtoKeyValue(v: unknown): any {
   return { kind: { case: "scalar" as const, value: toProtoTypedValue(v) } };
 }
 
-function toProtoCursorKey(key: unknown, indexCursor: boolean): any[] {
-  if (indexCursor && Array.isArray(key)) {
-    return key.map(toProtoKeyValue);
-  }
-  return [toProtoKeyValue(key)];
+function toProtoCursorKey(key: Key): MessageInitShape<typeof ProtoKeyValueSchema> {
+  return toProtoKeyValue(key);
+}
+
+function keyRangeToProto(kr: KeyRange): MessageInitShape<typeof ProtoKeyRangeSchema> {
+  return {
+    ...(kr.lower !== undefined ? { lower: toProtoKeyValue(kr.lower) } : {}),
+    ...(kr.upper !== undefined ? { upper: toProtoKeyValue(kr.upper) } : {}),
+    lowerOpen: kr.lowerOpen,
+    upperOpen: kr.upperOpen,
+  };
 }
 
 function toProtoRecord(record: Record): any {
@@ -1754,14 +1951,6 @@ function fromProtoTypedValue(v: any): unknown {
   }
 }
 
-function toProtoKeyRange(kr: KeyRange): any {
-  return {
-    lower: kr.lower !== undefined ? toProtoTypedValue(kr.lower) : undefined,
-    upper: kr.upper !== undefined ? toProtoTypedValue(kr.upper) : undefined,
-    lowerOpen: kr.lowerOpen ?? false,
-    upperOpen: kr.upperOpen ?? false,
-  };
-}
 
 function toJsInt(value: bigint): number | bigint {
   const asNumber = Number(value);

@@ -1,131 +1,53 @@
 package indexeddb
 
-// Only matches a single key value.
-func Only(value any) *KeyRange {
-	return &KeyRange{Lower: value, Upper: value}
+import (
+	"fmt"
+
+	"github.com/valon-technologies/gestalt/sdk/go/client"
+	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
+)
+
+// KeyRange is a W3C IDBKeyRange-shaped bound on full IndexedDB keys.
+type KeyRange = client.KeyRange
+
+// KeyValue is one IndexedDB key (scalar or nested array).
+type KeyValue = client.KeyValue
+
+// Query is a single IndexedDB query argument (exact key or key range).
+type Query = client.IndexedDBQuery
+
+func mustKeyValue(v any) *client.KeyValue {
+	wire, err := indexeddbcodec.AnyToKeyValue(v)
+	if err != nil {
+		panic(fmt.Errorf("indexeddb: invalid key: %w", err))
+	}
+	return client.FromWireKeyValue(wire)
 }
 
-// LowerBound sets a lower bound; open=true means exclusive (>).
-func LowerBound(value any, open bool) *KeyRange {
-	return &KeyRange{Lower: value, LowerOpen: open}
+// Only returns a range containing only key v.
+func Only(v any) *KeyRange {
+	kv := mustKeyValue(v)
+	return &KeyRange{Lower: kv, Upper: kv}
 }
 
-// UpperBound sets an upper bound; open=true means exclusive (<).
-func UpperBound(value any, open bool) *KeyRange {
-	return &KeyRange{Upper: value, UpperOpen: open}
-}
-
-// Bound sets both bounds.
+// Bound returns a range between lower and upper with optional open bounds.
 func Bound(lower, upper any, lowerOpen, upperOpen bool) *KeyRange {
-	return &KeyRange{Lower: lower, Upper: upper, LowerOpen: lowerOpen, UpperOpen: upperOpen}
+	kr := &KeyRange{LowerOpen: lowerOpen, UpperOpen: upperOpen}
+	if lower != nil {
+		kr.Lower = mustKeyValue(lower)
+	}
+	if upper != nil {
+		kr.Upper = mustKeyValue(upper)
+	}
+	return kr
 }
 
-// Includes reports whether key is within the range. Nil range includes all keys.
-func (r *KeyRange) Includes(key any) bool {
-	if r == nil {
-		return true
-	}
-	if r.Lower != nil {
-		if cmp, ok := compareKeys(key, r.Lower); ok {
-			if r.LowerOpen {
-				if cmp <= 0 {
-					return false
-				}
-			} else if cmp < 0 {
-				return false
-			}
-		}
-	}
-	if r.Upper != nil {
-		if cmp, ok := compareKeys(key, r.Upper); ok {
-			if r.UpperOpen {
-				if cmp >= 0 {
-					return false
-				}
-			} else if cmp > 0 {
-				return false
-			}
-		}
-	}
-	return true
+// LowerBound returns a range with only a lower bound.
+func LowerBound(v any, open bool) *KeyRange {
+	return &KeyRange{Lower: mustKeyValue(v), LowerOpen: open}
 }
 
-func compareKeys(a, b any) (int, bool) {
-	switch av := a.(type) {
-	case string:
-		bv, ok := b.(string)
-		if !ok {
-			return 0, false
-		}
-		switch {
-		case av < bv:
-			return -1, true
-		case av > bv:
-			return 1, true
-		default:
-			return 0, true
-		}
-	case int:
-		return compareIntKey(av, b)
-	case int64:
-		return compareInt64Key(av, b)
-	case float64:
-		return compareFloatKey(av, b)
-	default:
-		return 0, false
-	}
-}
-
-func compareIntKey(av int, b any) (int, bool) {
-	switch bv := b.(type) {
-	case int:
-		switch {
-		case av < bv:
-			return -1, true
-		case av > bv:
-			return 1, true
-		default:
-			return 0, true
-		}
-	case int64:
-		return compareInt64Key(int64(av), bv)
-	case float64:
-		return compareFloatKey(float64(av), bv)
-	default:
-		return 0, false
-	}
-}
-
-func compareInt64Key(av int64, b any) (int, bool) {
-	bv, ok := b.(int64)
-	if !ok {
-		if bi, ok := b.(int); ok {
-			bv = int64(bi)
-		} else {
-			return 0, false
-		}
-	}
-	switch {
-	case av < bv:
-		return -1, true
-	case av > bv:
-		return 1, true
-	default:
-		return 0, true
-	}
-}
-
-func compareFloatKey(av float64, b any) (int, bool) {
-	bv, ok := b.(float64)
-	if !ok {
-		return 0, false
-	}
-	switch {
-	case av < bv:
-		return -1, true
-	case av > bv:
-		return 1, true
-	default:
-		return 0, true
-	}
+// UpperBound returns a range with only an upper bound.
+func UpperBound(v any, open bool) *KeyRange {
+	return &KeyRange{Upper: mustKeyValue(v), UpperOpen: open}
 }

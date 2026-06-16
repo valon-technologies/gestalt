@@ -231,58 +231,58 @@ func ConnectExternalCredentials(ctx context.Context, name string) (*ExternalCred
 // CreateCredential is the ergonomic form of [ExternalCredentials.CreateCredentialRaw].
 func (c *ExternalCredentials) CreateCredential(ctx context.Context, credential *ExternalCredential) (*ExternalCredential, error) {
 	request := &CreateExternalCredentialRequest{Credential: credential}
-	response, err := c.client.CreateCredential(ctx, toWireCreateExternalCredentialRequest(request))
+	response, err := c.client.CreateCredential(ctx, ToWireCreateExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExternalCredential(response), nil
+	return FromWireExternalCredential(response), nil
 }
 
 // CreateCredentialRaw is the faithful form of [ExternalCredentials.CreateCredential].
 func (c *ExternalCredentials) CreateCredentialRaw(ctx context.Context, request *CreateExternalCredentialRequest) (*ExternalCredential, error) {
-	response, err := c.client.CreateCredential(ctx, toWireCreateExternalCredentialRequest(request))
+	response, err := c.client.CreateCredential(ctx, ToWireCreateExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExternalCredential(response), nil
+	return FromWireExternalCredential(response), nil
 }
 
 // UpsertCredential is the ergonomic form of [ExternalCredentials.UpsertCredentialRaw].
 func (c *ExternalCredentials) UpsertCredential(ctx context.Context, credential *ExternalCredential) (*ExternalCredential, error) {
 	request := &UpsertExternalCredentialRequest{Credential: credential}
-	response, err := c.client.UpsertCredential(ctx, toWireUpsertExternalCredentialRequest(request))
+	response, err := c.client.UpsertCredential(ctx, ToWireUpsertExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExternalCredential(response), nil
+	return FromWireExternalCredential(response), nil
 }
 
 // UpsertCredentialRaw is the faithful form of [ExternalCredentials.UpsertCredential].
 func (c *ExternalCredentials) UpsertCredentialRaw(ctx context.Context, request *UpsertExternalCredentialRequest) (*ExternalCredential, error) {
-	response, err := c.client.UpsertCredential(ctx, toWireUpsertExternalCredentialRequest(request))
+	response, err := c.client.UpsertCredential(ctx, ToWireUpsertExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExternalCredential(response), nil
+	return FromWireExternalCredential(response), nil
 }
 
 // GetCredential is the ergonomic form of [ExternalCredentials.GetCredentialRaw].
 func (c *ExternalCredentials) GetCredential(ctx context.Context, subject string, audience string, qualifier string) (*ExternalCredential, error) {
 	request := &GetExternalCredentialRequest{Subject: subject, Audience: audience, Qualifier: qualifier}
-	response, err := c.client.GetCredential(ctx, toWireGetExternalCredentialRequest(request))
+	response, err := c.client.GetCredential(ctx, ToWireGetExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExternalCredential(response), nil
+	return FromWireExternalCredential(response), nil
 }
 
 // GetCredentialRaw is the faithful form of [ExternalCredentials.GetCredential].
 func (c *ExternalCredentials) GetCredentialRaw(ctx context.Context, request *GetExternalCredentialRequest) (*ExternalCredential, error) {
-	response, err := c.client.GetCredential(ctx, toWireGetExternalCredentialRequest(request))
+	response, err := c.client.GetCredential(ctx, ToWireGetExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExternalCredential(response), nil
+	return FromWireExternalCredential(response), nil
 }
 
 // ExternalCredentialsListCredentialsOptions carries the optional parameters of [ExternalCredentials.ListCredentials].
@@ -298,26 +298,26 @@ func (c *ExternalCredentials) ListCredentials(ctx context.Context, subject strin
 		opts = &ExternalCredentialsListCredentialsOptions{}
 	}
 	request := &ListExternalCredentialsRequest{Subject: subject, Audience: opts.Audience}
-	response, err := c.client.ListCredentials(ctx, toWireListExternalCredentialsRequest(request))
+	response, err := c.client.ListCredentials(ctx, ToWireListExternalCredentialsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListExternalCredentialsResponse(response).Credentials, nil
+	return FromWireListExternalCredentialsResponse(response).Credentials, nil
 }
 
 // ListCredentialsRaw is the faithful form of [ExternalCredentials.ListCredentials].
 func (c *ExternalCredentials) ListCredentialsRaw(ctx context.Context, request *ListExternalCredentialsRequest) (*ListExternalCredentialsResponse, error) {
-	response, err := c.client.ListCredentials(ctx, toWireListExternalCredentialsRequest(request))
+	response, err := c.client.ListCredentials(ctx, ToWireListExternalCredentialsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListExternalCredentialsResponse(response), nil
+	return FromWireListExternalCredentialsResponse(response), nil
 }
 
 // DeleteCredential is the ergonomic form of [ExternalCredentials.DeleteCredentialRaw].
 func (c *ExternalCredentials) DeleteCredential(ctx context.Context, id string) error {
 	request := &DeleteExternalCredentialRequest{Id: id}
-	if _, err := c.client.DeleteCredential(ctx, toWireDeleteExternalCredentialRequest(request)); err != nil {
+	if _, err := c.client.DeleteCredential(ctx, ToWireDeleteExternalCredentialRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -325,7 +325,7 @@ func (c *ExternalCredentials) DeleteCredential(ctx context.Context, id string) e
 
 // DeleteCredentialRaw is the faithful form of [ExternalCredentials.DeleteCredential].
 func (c *ExternalCredentials) DeleteCredentialRaw(ctx context.Context, request *DeleteExternalCredentialRequest) error {
-	if _, err := c.client.DeleteCredential(ctx, toWireDeleteExternalCredentialRequest(request)); err != nil {
+	if _, err := c.client.DeleteCredential(ctx, ToWireDeleteExternalCredentialRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -334,7 +334,7 @@ func (c *ExternalCredentials) DeleteCredentialRaw(ctx context.Context, request *
 // ValidateCredentialConfig is the ergonomic form of [ExternalCredentials.ValidateCredentialConfigRaw].
 func (c *ExternalCredentials) ValidateCredentialConfig(ctx context.Context, provider string, connection string, connectionId string, mode string, auth *ExternalCredentialAuthConfig) error {
 	request := &ValidateExternalCredentialConfigRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, Mode: mode, Auth: auth}
-	if _, err := c.client.ValidateCredentialConfig(ctx, toWireValidateExternalCredentialConfigRequest(request)); err != nil {
+	if _, err := c.client.ValidateCredentialConfig(ctx, ToWireValidateExternalCredentialConfigRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -342,7 +342,7 @@ func (c *ExternalCredentials) ValidateCredentialConfig(ctx context.Context, prov
 
 // ValidateCredentialConfigRaw is the faithful form of [ExternalCredentials.ValidateCredentialConfig].
 func (c *ExternalCredentials) ValidateCredentialConfigRaw(ctx context.Context, request *ValidateExternalCredentialConfigRequest) error {
-	if _, err := c.client.ValidateCredentialConfig(ctx, toWireValidateExternalCredentialConfigRequest(request)); err != nil {
+	if _, err := c.client.ValidateCredentialConfig(ctx, ToWireValidateExternalCredentialConfigRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -351,38 +351,38 @@ func (c *ExternalCredentials) ValidateCredentialConfigRaw(ctx context.Context, r
 // ResolveCredential is the ergonomic form of [ExternalCredentials.ResolveCredentialRaw].
 func (c *ExternalCredentials) ResolveCredential(ctx context.Context, provider string, connection string, connectionId string, mode string, credentialSubjectId string, actorSubjectId string, instance string, auth *ExternalCredentialAuthConfig) (*ResolveExternalCredentialResponse, error) {
 	request := &ResolveExternalCredentialRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, Mode: mode, CredentialSubjectId: credentialSubjectId, ActorSubjectId: actorSubjectId, Instance: instance, Auth: auth}
-	response, err := c.client.ResolveCredential(ctx, toWireResolveExternalCredentialRequest(request))
+	response, err := c.client.ResolveCredential(ctx, ToWireResolveExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireResolveExternalCredentialResponse(response), nil
+	return FromWireResolveExternalCredentialResponse(response), nil
 }
 
 // ResolveCredentialRaw is the faithful form of [ExternalCredentials.ResolveCredential].
 func (c *ExternalCredentials) ResolveCredentialRaw(ctx context.Context, request *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
-	response, err := c.client.ResolveCredential(ctx, toWireResolveExternalCredentialRequest(request))
+	response, err := c.client.ResolveCredential(ctx, ToWireResolveExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireResolveExternalCredentialResponse(response), nil
+	return FromWireResolveExternalCredentialResponse(response), nil
 }
 
 // ExchangeCredential is the ergonomic form of [ExternalCredentials.ExchangeCredentialRaw].
 // The response collapses to its tokenResponse field.
 func (c *ExternalCredentials) ExchangeCredential(ctx context.Context, provider string, connection string, connectionId string, credentialSubjectId string, actorSubjectId string, instance string, credentialJson string, auth *ExternalCredentialAuthConfig) (*ExternalCredentialTokenResponse, error) {
 	request := &ExchangeExternalCredentialRequest{Provider: provider, Connection: connection, ConnectionId: connectionId, CredentialSubjectId: credentialSubjectId, ActorSubjectId: actorSubjectId, Instance: instance, CredentialJson: credentialJson, Auth: auth}
-	response, err := c.client.ExchangeCredential(ctx, toWireExchangeExternalCredentialRequest(request))
+	response, err := c.client.ExchangeCredential(ctx, ToWireExchangeExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExchangeExternalCredentialResponse(response).TokenResponse, nil
+	return FromWireExchangeExternalCredentialResponse(response).TokenResponse, nil
 }
 
 // ExchangeCredentialRaw is the faithful form of [ExternalCredentials.ExchangeCredential].
 func (c *ExternalCredentials) ExchangeCredentialRaw(ctx context.Context, request *ExchangeExternalCredentialRequest) (*ExchangeExternalCredentialResponse, error) {
-	response, err := c.client.ExchangeCredential(ctx, toWireExchangeExternalCredentialRequest(request))
+	response, err := c.client.ExchangeCredential(ctx, ToWireExchangeExternalCredentialRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireExchangeExternalCredentialResponse(response), nil
+	return FromWireExchangeExternalCredentialResponse(response), nil
 }

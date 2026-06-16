@@ -315,7 +315,7 @@ func TestCursor_KeyRange(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	kr := idb.Only("b")
+	kr := "b"
 	cursor, err := db.ObjectStore("items").OpenCursor(ctx, kr, idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
@@ -337,7 +337,7 @@ func TestCursor_IndexKeyRangeSingleField(t *testing.T) {
 	_, db := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, idb.Only("active"), idb.CursorNext)
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, "active", idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestCursor_IndexIteration(t *testing.T) {
 	ctx := context.Background()
 
 	// Filter by status=active (3 records)
-	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, idb.CursorNext, "active")
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, "active", idb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -501,14 +501,10 @@ func TestCursor_IndexKeyReturnsIndexValues(t *testing.T) {
 	}
 
 	key := cursor.Key()
-	keyArr, ok := key.([]any)
+	keyStr, ok := key.(string)
 	if !ok {
-		t.Fatalf("Key() type = %T, want []any", key)
+		t.Fatalf("Key() type = %T, want string", key)
 	}
-	if len(keyArr) != 1 {
-		t.Fatalf("Key() len = %d, want 1", len(keyArr))
-	}
-	keyStr, _ := keyArr[0].(string)
 	if keyStr != "active" && keyStr != "inactive" {
 		t.Errorf("Key() = %q, want active or inactive", keyStr)
 	}
@@ -581,12 +577,12 @@ func TestCursor_StubSingleFieldIndexKeyMatchesRemoteShape(t *testing.T) {
 		t.Fatal("Continue returned false")
 	}
 
-	key, ok := cursor.Key().([]any)
-	if !ok {
-		t.Fatalf("Key() type = %T, want []any", cursor.Key())
+	key := cursor.Key()
+	if key == nil {
+		t.Fatal("Key() = nil")
 	}
-	if len(key) != 1 {
-		t.Fatalf("Key() len = %d, want 1", len(key))
+	if s, ok := key.(string); !ok || s != "active" {
+		t.Fatalf("Key() = %v (%T), want active string", key, key)
 	}
 }
 

@@ -101,7 +101,7 @@ func (s *APITokenService) ListAPITokens(ctx context.Context, userID string) ([]*
 }
 
 func (s *APITokenService) ListAPITokensByOwner(ctx context.Context, ownerKind, ownerID string) ([]*core.APIToken, error) {
-	recs, err := s.store.Index("by_owner").GetAll(ctx, nil, ownerKind, ownerID)
+	recs, err := s.store.Index("by_owner").GetAll(ctx, []any{ownerKind, ownerID})
 	if err != nil {
 		return nil, fmt.Errorf("list api tokens: %w", err)
 	}
@@ -117,7 +117,7 @@ func (s *APITokenService) RevokeAPIToken(ctx context.Context, userID, id string)
 }
 
 func (s *APITokenService) RevokeAPITokenByOwner(ctx context.Context, ownerKind, ownerID, id string) error {
-	deleted, err := s.store.Index("by_owner_id").Delete(ctx, id, ownerKind, ownerID)
+	deleted, err := s.store.Index("by_owner_id").Delete(ctx, []any{id, ownerKind, ownerID})
 	if err != nil {
 		return fmt.Errorf("revoke api token: %w", err)
 	}
@@ -132,7 +132,7 @@ func (s *APITokenService) RevokeAllAPITokens(ctx context.Context, userID string)
 }
 
 func (s *APITokenService) RevokeAllAPITokensByOwner(ctx context.Context, ownerKind, ownerID string) (int64, error) {
-	deleted, err := s.store.Index("by_owner").Delete(ctx, ownerKind, ownerID)
+	deleted, err := s.store.Index("by_owner").Delete(ctx, []any{ownerKind, ownerID})
 	if err != nil {
 		return 0, fmt.Errorf("revoke all api tokens: %w", err)
 	}

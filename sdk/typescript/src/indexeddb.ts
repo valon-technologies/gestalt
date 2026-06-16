@@ -193,11 +193,10 @@ export interface CursorCommand {
  */
 export interface CursorEntry {
   /**
-   * Key components per index KeyPath field. Each component is a KeyValue
-   * that can be a scalar or a nested array, preserving the full W3C IndexedDB
-   * key structure including array-valued keys.
+   * One full IndexedDB key (scalar or array).
+   * https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key
    */
-  key: KeyValue[];
+  key?: KeyValue;
   primaryKey: string;
   record?: Record;
 }
@@ -206,7 +205,7 @@ export interface CursorEntry {
  * CursorKeyTarget addresses a specific cursor position.
  */
 export interface CursorKeyTarget {
-  key: KeyValue[];
+  key?: KeyValue;
 }
 
 export type CursorResponseResult =
@@ -246,14 +245,13 @@ export interface DeleteResponse {
 }
 
 /**
- * IndexQueryRequest addresses a secondary index plus optional key values and
- * range constraints.
+ * IndexQueryRequest addresses a secondary index plus an optional query.
  */
 export interface IndexQueryRequest {
   store: string;
   index: string;
-  values: TypedValue[];
-  range?: KeyRange;
+  query?: IndexedDBQuery;
+  count?: number;
 }
 
 /**
@@ -265,12 +263,37 @@ export interface IndexSchema {
   unique: boolean;
 }
 
+export type IndexedDBQueryQuery =
+  | { case: "key"; value: KeyValue }
+  | { case: "range"; value: KeyRange }
+  | { case: undefined; value?: undefined };
+
+export function indexedDBQueryQueryKey(value: KeyValue): IndexedDBQueryQuery {
+  return { case: "key", value };
+}
+
+export function indexedDBQueryQueryRange(value: KeyRange): IndexedDBQueryQuery {
+  return { case: "range", value };
+}
+
 /**
- * KeyRange constrains a query or cursor by lower and upper bounds.
+ * IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+ * range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+ * matching a W3C query argument of undefined/null.
+ */
+export interface IndexedDBQuery {
+  query: IndexedDBQueryQuery;
+}
+
+/**
+ * KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+ * full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+ * lower/upper means unbounded on that side.
+ * https://www.w3.org/TR/IndexedDB/#keyrange
  */
 export interface KeyRange {
-  lower?: TypedValue;
-  upper?: TypedValue;
+  lower?: KeyValue;
+  upper?: KeyValue;
   lowerOpen: boolean;
   upperOpen: boolean;
 }
@@ -296,8 +319,9 @@ export function keyValueKindArray(value: KeyValueArray): KeyValueKind {
 }
 
 /**
- * KeyValue represents a single IndexedDB key, which can be a scalar
- * (string, number, date, binary) or a nested array of keys per the W3C spec.
+ * KeyValue represents one IndexedDB key: a scalar (string, number, date,
+ * binary) or a nested array of keys, per the W3C spec.
+ * https://www.w3.org/TR/IndexedDB/#key-construct
  */
 export interface KeyValue {
   kind: KeyValueKind;
@@ -322,11 +346,12 @@ export interface ObjectStoreNameRequest {
 }
 
 /**
- * ObjectStoreRangeRequest addresses an object store plus an optional key range.
+ * ObjectStoreRangeRequest addresses an object store plus an optional query.
  */
 export interface ObjectStoreRangeRequest {
   store: string;
-  range?: KeyRange;
+  query?: IndexedDBQuery;
+  count?: number;
 }
 
 /**
@@ -351,20 +376,13 @@ export interface ObjectStoreSchema {
  */
 export interface OpenCursorRequest {
   store: string;
-  range?: KeyRange;
+  index: string;
+  query?: IndexedDBQuery;
   direction: CursorDirection;
   /**
    * keys_only suppresses row payloads and returns only keys.
    */
   keysOnly: boolean;
-  /**
-   * index selects a secondary index when non-empty.
-   */
-  index: string;
-  /**
-   * values selects a compound index key prefix when index is set.
-   */
-  values: TypedValue[];
 }
 
 /**
@@ -925,7 +943,7 @@ export class IndexedDB {
   }
 
   /**
-   * Bulk operations (with optional key range)
+   * Bulk operations (with optional query)
    */
   async clearRaw(request: Init<ObjectStoreNameRequest>): Promise<void> {
     await callUnary(() =>
@@ -938,11 +956,13 @@ export class IndexedDB {
 
   async getAll(
     store: string,
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
+    options?: { count?: number | undefined },
   ): Promise<RecordsResponse> {
     const request = {
       store,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
     const response = await callUnary(() =>
       this.client.getAll(
@@ -967,11 +987,13 @@ export class IndexedDB {
 
   async getAllKeys(
     store: string,
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
+    options?: { count?: number | undefined },
   ): Promise<KeysResponse> {
     const request = {
       store,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
     const response = await callUnary(() =>
       this.client.getAllKeys(
@@ -994,18 +1016,20 @@ export class IndexedDB {
     return fromWireKeysResponse(response);
   }
 
-  async count(store: string, range?: Init<KeyRange>): Promise<CountResponse> {
+  async count(store: string, query?: Init<IndexedDBQuery>): Promise<bigint> {
     const request = {
       store,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
-    const response = await callUnary(() =>
-      this.client.count(
-        toWireObjectStoreRangeRequest(request),
-        callOptions(this.timeoutMs),
+    const response = fromWireCountResponse(
+      await callUnary(() =>
+        this.client.count(
+          toWireObjectStoreRangeRequest(request),
+          callOptions(this.timeoutMs),
+        ),
       ),
     );
-    return fromWireCountResponse(response);
+    return response.count;
   }
 
   async countRaw(
@@ -1022,11 +1046,11 @@ export class IndexedDB {
 
   async deleteRange(
     store: string,
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
   ): Promise<DeleteResponse> {
     const request = {
       store,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
     } satisfies Init<ObjectStoreRangeRequest>;
     const response = await callUnary(() =>
       this.client.deleteRange(
@@ -1052,14 +1076,12 @@ export class IndexedDB {
   async indexGet(
     store: string,
     index: string,
-    values: Init<TypedValue>[],
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
   ): Promise<RecordResponse> {
     const request = {
       store,
       index,
-      values,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
       this.client.indexGet(
@@ -1086,14 +1108,12 @@ export class IndexedDB {
   async indexGetKey(
     store: string,
     index: string,
-    values: Init<TypedValue>[],
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
   ): Promise<KeyResponse> {
     const request = {
       store,
       index,
-      values,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
       this.client.indexGetKey(
@@ -1117,14 +1137,14 @@ export class IndexedDB {
   async indexGetAll(
     store: string,
     index: string,
-    values: Init<TypedValue>[],
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
+    options?: { count?: number | undefined },
   ): Promise<RecordsResponse> {
     const request = {
       store,
       index,
-      values,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
       this.client.indexGetAll(
@@ -1150,14 +1170,14 @@ export class IndexedDB {
   async indexGetAllKeys(
     store: string,
     index: string,
-    values: Init<TypedValue>[],
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
+    options?: { count?: number | undefined },
   ): Promise<KeysResponse> {
     const request = {
       store,
       index,
-      values,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
       this.client.indexGetAllKeys(
@@ -1183,22 +1203,22 @@ export class IndexedDB {
   async indexCount(
     store: string,
     index: string,
-    values: Init<TypedValue>[],
-    range?: Init<KeyRange>,
-  ): Promise<CountResponse> {
+    query?: Init<IndexedDBQuery>,
+  ): Promise<bigint> {
     const request = {
       store,
       index,
-      values,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
-    const response = await callUnary(() =>
-      this.client.indexCount(
-        toWireIndexQueryRequest(request),
-        callOptions(this.timeoutMs),
+    const response = fromWireCountResponse(
+      await callUnary(() =>
+        this.client.indexCount(
+          toWireIndexQueryRequest(request),
+          callOptions(this.timeoutMs),
+        ),
       ),
     );
-    return fromWireCountResponse(response);
+    return response.count;
   }
 
   async indexCountRaw(
@@ -1216,14 +1236,12 @@ export class IndexedDB {
   async indexDelete(
     store: string,
     index: string,
-    values: Init<TypedValue>[],
-    range?: Init<KeyRange>,
+    query?: Init<IndexedDBQuery>,
   ): Promise<DeleteResponse> {
     const request = {
       store,
       index,
-      values,
-      ...(range !== undefined ? { range } : {}),
+      ...(query !== undefined ? { query } : {}),
     } satisfies Init<IndexQueryRequest>;
     const response = await callUnary(() =>
       this.client.indexDelete(

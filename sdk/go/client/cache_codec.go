@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireCacheDeleteManyRequest(value *CacheDeleteManyRequest) *proto.CacheDeleteManyRequest {
+func ToWireCacheDeleteManyRequest(value *CacheDeleteManyRequest) *proto.CacheDeleteManyRequest {
 	if value == nil {
 		return nil
 	}
@@ -16,7 +16,7 @@ func toWireCacheDeleteManyRequest(value *CacheDeleteManyRequest) *proto.CacheDel
 	return out
 }
 
-func fromWireCacheDeleteManyRequest(value *proto.CacheDeleteManyRequest) *CacheDeleteManyRequest {
+func FromWireCacheDeleteManyRequest(value *proto.CacheDeleteManyRequest) *CacheDeleteManyRequest {
 	if value == nil {
 		return nil
 	}
@@ -26,7 +26,7 @@ func fromWireCacheDeleteManyRequest(value *proto.CacheDeleteManyRequest) *CacheD
 	return out
 }
 
-func toWireCacheDeleteManyResponse(value *CacheDeleteManyResponse) *proto.CacheDeleteManyResponse {
+func ToWireCacheDeleteManyResponse(value *CacheDeleteManyResponse) *proto.CacheDeleteManyResponse {
 	if value == nil {
 		return nil
 	}
@@ -36,7 +36,7 @@ func toWireCacheDeleteManyResponse(value *CacheDeleteManyResponse) *proto.CacheD
 	return out
 }
 
-func fromWireCacheDeleteManyResponse(value *proto.CacheDeleteManyResponse) *CacheDeleteManyResponse {
+func FromWireCacheDeleteManyResponse(value *proto.CacheDeleteManyResponse) *CacheDeleteManyResponse {
 	if value == nil {
 		return nil
 	}
@@ -46,7 +46,7 @@ func fromWireCacheDeleteManyResponse(value *proto.CacheDeleteManyResponse) *Cach
 	return out
 }
 
-func toWireCacheDeleteRequest(value *CacheDeleteRequest) *proto.CacheDeleteRequest {
+func ToWireCacheDeleteRequest(value *CacheDeleteRequest) *proto.CacheDeleteRequest {
 	if value == nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func toWireCacheDeleteRequest(value *CacheDeleteRequest) *proto.CacheDeleteReque
 	return out
 }
 
-func fromWireCacheDeleteRequest(value *proto.CacheDeleteRequest) *CacheDeleteRequest {
+func FromWireCacheDeleteRequest(value *proto.CacheDeleteRequest) *CacheDeleteRequest {
 	if value == nil {
 		return nil
 	}
@@ -66,7 +66,7 @@ func fromWireCacheDeleteRequest(value *proto.CacheDeleteRequest) *CacheDeleteReq
 	return out
 }
 
-func toWireCacheDeleteResponse(value *CacheDeleteResponse) *proto.CacheDeleteResponse {
+func ToWireCacheDeleteResponse(value *CacheDeleteResponse) *proto.CacheDeleteResponse {
 	if value == nil {
 		return nil
 	}
@@ -76,7 +76,7 @@ func toWireCacheDeleteResponse(value *CacheDeleteResponse) *proto.CacheDeleteRes
 	return out
 }
 
-func fromWireCacheDeleteResponse(value *proto.CacheDeleteResponse) *CacheDeleteResponse {
+func FromWireCacheDeleteResponse(value *proto.CacheDeleteResponse) *CacheDeleteResponse {
 	if value == nil {
 		return nil
 	}
@@ -86,7 +86,7 @@ func fromWireCacheDeleteResponse(value *proto.CacheDeleteResponse) *CacheDeleteR
 	return out
 }
 
-func toWireCacheGetManyRequest(value *CacheGetManyRequest) *proto.CacheGetManyRequest {
+func ToWireCacheGetManyRequest(value *CacheGetManyRequest) *proto.CacheGetManyRequest {
 	if value == nil {
 		return nil
 	}
@@ -96,7 +96,7 @@ func toWireCacheGetManyRequest(value *CacheGetManyRequest) *proto.CacheGetManyRe
 	return out
 }
 
-func fromWireCacheGetManyRequest(value *proto.CacheGetManyRequest) *CacheGetManyRequest {
+func FromWireCacheGetManyRequest(value *proto.CacheGetManyRequest) *CacheGetManyRequest {
 	if value == nil {
 		return nil
 	}
@@ -106,29 +106,29 @@ func fromWireCacheGetManyRequest(value *proto.CacheGetManyRequest) *CacheGetMany
 	return out
 }
 
-func toWireCacheGetManyResponse(value *CacheGetManyResponse) *proto.CacheGetManyResponse {
+func ToWireCacheGetManyResponse(value *CacheGetManyResponse) *proto.CacheGetManyResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CacheGetManyResponse{}
 	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, toWireCacheResult(item))
+		out.Entries = append(out.Entries, ToWireCacheResult(item))
 	}
 	return out
 }
 
-func fromWireCacheGetManyResponse(value *proto.CacheGetManyResponse) *CacheGetManyResponse {
+func FromWireCacheGetManyResponse(value *proto.CacheGetManyResponse) *CacheGetManyResponse {
 	if value == nil {
 		return nil
 	}
 	out := &CacheGetManyResponse{}
 	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, fromWireCacheResult(item))
+		out.Entries = append(out.Entries, FromWireCacheResult(item))
 	}
 	return out
 }
 
-func toWireCacheGetRequest(value *CacheGetRequest) *proto.CacheGetRequest {
+func ToWireCacheGetRequest(value *CacheGetRequest) *proto.CacheGetRequest {
 	if value == nil {
 		return nil
 	}
@@ -138,7 +138,7 @@ func toWireCacheGetRequest(value *CacheGetRequest) *proto.CacheGetRequest {
 	return out
 }
 
-func fromWireCacheGetRequest(value *proto.CacheGetRequest) *CacheGetRequest {
+func FromWireCacheGetRequest(value *proto.CacheGetRequest) *CacheGetRequest {
 	if value == nil {
 		return nil
 	}
@@ -148,7 +148,7 @@ func fromWireCacheGetRequest(value *proto.CacheGetRequest) *CacheGetRequest {
 	return out
 }
 
-func toWireCacheGetResponse(value *CacheGetResponse) *proto.CacheGetResponse {
+func ToWireCacheGetResponse(value *CacheGetResponse) *proto.CacheGetResponse {
 	if value == nil {
 		return nil
 	}
@@ -159,7 +159,7 @@ func toWireCacheGetResponse(value *CacheGetResponse) *proto.CacheGetResponse {
 	return out
 }
 
-func fromWireCacheGetResponse(value *proto.CacheGetResponse) *CacheGetResponse {
+func FromWireCacheGetResponse(value *proto.CacheGetResponse) *CacheGetResponse {
 	if value == nil {
 		return nil
 	}
@@ -170,7 +170,7 @@ func fromWireCacheGetResponse(value *proto.CacheGetResponse) *CacheGetResponse {
 	return out
 }
 
-func toWireCacheResult(value *CacheResult) *proto.CacheResult {
+func ToWireCacheResult(value *CacheResult) *proto.CacheResult {
 	if value == nil {
 		return nil
 	}
@@ -182,7 +182,7 @@ func toWireCacheResult(value *CacheResult) *proto.CacheResult {
 	return out
 }
 
-func fromWireCacheResult(value *proto.CacheResult) *CacheResult {
+func FromWireCacheResult(value *proto.CacheResult) *CacheResult {
 	if value == nil {
 		return nil
 	}
@@ -194,7 +194,7 @@ func fromWireCacheResult(value *proto.CacheResult) *CacheResult {
 	return out
 }
 
-func toWireCacheSetEntry(value *CacheSetEntry) *proto.CacheSetEntry {
+func ToWireCacheSetEntry(value *CacheSetEntry) *proto.CacheSetEntry {
 	if value == nil {
 		return nil
 	}
@@ -205,7 +205,7 @@ func toWireCacheSetEntry(value *CacheSetEntry) *proto.CacheSetEntry {
 	return out
 }
 
-func fromWireCacheSetEntry(value *proto.CacheSetEntry) *CacheSetEntry {
+func FromWireCacheSetEntry(value *proto.CacheSetEntry) *CacheSetEntry {
 	if value == nil {
 		return nil
 	}
@@ -216,7 +216,7 @@ func fromWireCacheSetEntry(value *proto.CacheSetEntry) *CacheSetEntry {
 	return out
 }
 
-func toWireCacheSetManyRequest(value *CacheSetManyRequest) *proto.CacheSetManyRequest {
+func ToWireCacheSetManyRequest(value *CacheSetManyRequest) *proto.CacheSetManyRequest {
 	if value == nil {
 		return nil
 	}
@@ -224,12 +224,12 @@ func toWireCacheSetManyRequest(value *CacheSetManyRequest) *proto.CacheSetManyRe
 		Ttl: toWireDuration(value.Ttl),
 	}
 	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, toWireCacheSetEntry(item))
+		out.Entries = append(out.Entries, ToWireCacheSetEntry(item))
 	}
 	return out
 }
 
-func fromWireCacheSetManyRequest(value *proto.CacheSetManyRequest) *CacheSetManyRequest {
+func FromWireCacheSetManyRequest(value *proto.CacheSetManyRequest) *CacheSetManyRequest {
 	if value == nil {
 		return nil
 	}
@@ -237,12 +237,12 @@ func fromWireCacheSetManyRequest(value *proto.CacheSetManyRequest) *CacheSetMany
 		Ttl: fromWireDuration(value.Ttl),
 	}
 	for _, item := range value.Entries {
-		out.Entries = append(out.Entries, fromWireCacheSetEntry(item))
+		out.Entries = append(out.Entries, FromWireCacheSetEntry(item))
 	}
 	return out
 }
 
-func toWireCacheSetRequest(value *CacheSetRequest) *proto.CacheSetRequest {
+func ToWireCacheSetRequest(value *CacheSetRequest) *proto.CacheSetRequest {
 	if value == nil {
 		return nil
 	}
@@ -254,7 +254,7 @@ func toWireCacheSetRequest(value *CacheSetRequest) *proto.CacheSetRequest {
 	return out
 }
 
-func fromWireCacheSetRequest(value *proto.CacheSetRequest) *CacheSetRequest {
+func FromWireCacheSetRequest(value *proto.CacheSetRequest) *CacheSetRequest {
 	if value == nil {
 		return nil
 	}
@@ -266,7 +266,7 @@ func fromWireCacheSetRequest(value *proto.CacheSetRequest) *CacheSetRequest {
 	return out
 }
 
-func toWireCacheTouchRequest(value *CacheTouchRequest) *proto.CacheTouchRequest {
+func ToWireCacheTouchRequest(value *CacheTouchRequest) *proto.CacheTouchRequest {
 	if value == nil {
 		return nil
 	}
@@ -277,7 +277,7 @@ func toWireCacheTouchRequest(value *CacheTouchRequest) *proto.CacheTouchRequest 
 	return out
 }
 
-func fromWireCacheTouchRequest(value *proto.CacheTouchRequest) *CacheTouchRequest {
+func FromWireCacheTouchRequest(value *proto.CacheTouchRequest) *CacheTouchRequest {
 	if value == nil {
 		return nil
 	}
@@ -288,7 +288,7 @@ func fromWireCacheTouchRequest(value *proto.CacheTouchRequest) *CacheTouchReques
 	return out
 }
 
-func toWireCacheTouchResponse(value *CacheTouchResponse) *proto.CacheTouchResponse {
+func ToWireCacheTouchResponse(value *CacheTouchResponse) *proto.CacheTouchResponse {
 	if value == nil {
 		return nil
 	}
@@ -298,7 +298,7 @@ func toWireCacheTouchResponse(value *CacheTouchResponse) *proto.CacheTouchRespon
 	return out
 }
 
-func fromWireCacheTouchResponse(value *proto.CacheTouchResponse) *CacheTouchResponse {
+func FromWireCacheTouchResponse(value *proto.CacheTouchResponse) *CacheTouchResponse {
 	if value == nil {
 		return nil
 	}

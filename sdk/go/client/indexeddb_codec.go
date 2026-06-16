@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func toWireBeginTransactionRequest(value *BeginTransactionRequest) *proto.BeginTransactionRequest {
+func ToWireBeginTransactionRequest(value *BeginTransactionRequest) *proto.BeginTransactionRequest {
 	if value == nil {
 		return nil
 	}
@@ -21,7 +21,7 @@ func toWireBeginTransactionRequest(value *BeginTransactionRequest) *proto.BeginT
 	return out
 }
 
-func fromWireBeginTransactionRequest(value *proto.BeginTransactionRequest) *BeginTransactionRequest {
+func FromWireBeginTransactionRequest(value *proto.BeginTransactionRequest) *BeginTransactionRequest {
 	if value == nil {
 		return nil
 	}
@@ -33,7 +33,7 @@ func fromWireBeginTransactionRequest(value *proto.BeginTransactionRequest) *Begi
 	return out
 }
 
-func toWireColumnDef(value *ColumnDef) *proto.ColumnDef {
+func ToWireColumnDef(value *ColumnDef) *proto.ColumnDef {
 	if value == nil {
 		return nil
 	}
@@ -47,7 +47,7 @@ func toWireColumnDef(value *ColumnDef) *proto.ColumnDef {
 	return out
 }
 
-func fromWireColumnDef(value *proto.ColumnDef) *ColumnDef {
+func FromWireColumnDef(value *proto.ColumnDef) *ColumnDef {
 	if value == nil {
 		return nil
 	}
@@ -61,7 +61,7 @@ func fromWireColumnDef(value *proto.ColumnDef) *ColumnDef {
 	return out
 }
 
-func toWireCountResponse(value *CountResponse) *proto.CountResponse {
+func ToWireCountResponse(value *CountResponse) *proto.CountResponse {
 	if value == nil {
 		return nil
 	}
@@ -71,7 +71,7 @@ func toWireCountResponse(value *CountResponse) *proto.CountResponse {
 	return out
 }
 
-func fromWireCountResponse(value *proto.CountResponse) *CountResponse {
+func FromWireCountResponse(value *proto.CountResponse) *CountResponse {
 	if value == nil {
 		return nil
 	}
@@ -81,57 +81,57 @@ func fromWireCountResponse(value *proto.CountResponse) *CountResponse {
 	return out
 }
 
-func toWireCreateObjectStoreRequest(value *CreateObjectStoreRequest) *proto.CreateObjectStoreRequest {
+func ToWireCreateObjectStoreRequest(value *CreateObjectStoreRequest) *proto.CreateObjectStoreRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CreateObjectStoreRequest{
 		Name:   value.Name,
-		Schema: toWireObjectStoreSchema(value.Schema),
+		Schema: ToWireObjectStoreSchema(value.Schema),
 	}
 	return out
 }
 
-func fromWireCreateObjectStoreRequest(value *proto.CreateObjectStoreRequest) *CreateObjectStoreRequest {
+func FromWireCreateObjectStoreRequest(value *proto.CreateObjectStoreRequest) *CreateObjectStoreRequest {
 	if value == nil {
 		return nil
 	}
 	out := &CreateObjectStoreRequest{
 		Name:   value.Name,
-		Schema: fromWireObjectStoreSchema(value.Schema),
+		Schema: FromWireObjectStoreSchema(value.Schema),
 	}
 	return out
 }
 
-func toWireCursorClientMessage(value *CursorClientMessage) *proto.CursorClientMessage {
+func ToWireCursorClientMessage(value *CursorClientMessage) *proto.CursorClientMessage {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CursorClientMessage{}
 	switch variant := value.Msg.(type) {
 	case *CursorClientMessageMsgOpen:
-		out.Msg = &proto.CursorClientMessage_Open{Open: toWireOpenCursorRequest(variant.Value)}
+		out.Msg = &proto.CursorClientMessage_Open{Open: ToWireOpenCursorRequest(variant.Value)}
 	case *CursorClientMessageMsgCommand:
-		out.Msg = &proto.CursorClientMessage_Command{Command: toWireCursorCommand(variant.Value)}
+		out.Msg = &proto.CursorClientMessage_Command{Command: ToWireCursorCommand(variant.Value)}
 	}
 	return out
 }
 
-func fromWireCursorClientMessage(value *proto.CursorClientMessage) *CursorClientMessage {
+func FromWireCursorClientMessage(value *proto.CursorClientMessage) *CursorClientMessage {
 	if value == nil {
 		return nil
 	}
 	out := &CursorClientMessage{}
 	switch variant := value.Msg.(type) {
 	case *proto.CursorClientMessage_Open:
-		out.Msg = &CursorClientMessageMsgOpen{Value: fromWireOpenCursorRequest(variant.Open)}
+		out.Msg = &CursorClientMessageMsgOpen{Value: FromWireOpenCursorRequest(variant.Open)}
 	case *proto.CursorClientMessage_Command:
-		out.Msg = &CursorClientMessageMsgCommand{Value: fromWireCursorCommand(variant.Command)}
+		out.Msg = &CursorClientMessageMsgCommand{Value: FromWireCursorCommand(variant.Command)}
 	}
 	return out
 }
 
-func toWireCursorCommand(value *CursorCommand) *proto.CursorCommand {
+func ToWireCursorCommand(value *CursorCommand) *proto.CursorCommand {
 	if value == nil {
 		return nil
 	}
@@ -140,11 +140,11 @@ func toWireCursorCommand(value *CursorCommand) *proto.CursorCommand {
 	case *CursorCommandCommandNext:
 		out.Command = &proto.CursorCommand_Next{Next: variant.Value}
 	case *CursorCommandCommandContinueToKey:
-		out.Command = &proto.CursorCommand_ContinueToKey{ContinueToKey: toWireCursorKeyTarget(variant.Value)}
+		out.Command = &proto.CursorCommand_ContinueToKey{ContinueToKey: ToWireCursorKeyTarget(variant.Value)}
 	case *CursorCommandCommandAdvance:
 		out.Command = &proto.CursorCommand_Advance{Advance: variant.Value}
 	case *CursorCommandCommandUpdate:
-		out.Command = &proto.CursorCommand_Update{Update: toWireRecord(variant.Value)}
+		out.Command = &proto.CursorCommand_Update{Update: ToWireRecord(variant.Value)}
 	case *CursorCommandCommandDelete:
 		out.Command = &proto.CursorCommand_Delete{Delete: variant.Value}
 	case *CursorCommandCommandClose:
@@ -153,7 +153,7 @@ func toWireCursorCommand(value *CursorCommand) *proto.CursorCommand {
 	return out
 }
 
-func fromWireCursorCommand(value *proto.CursorCommand) *CursorCommand {
+func FromWireCursorCommand(value *proto.CursorCommand) *CursorCommand {
 	if value == nil {
 		return nil
 	}
@@ -162,11 +162,11 @@ func fromWireCursorCommand(value *proto.CursorCommand) *CursorCommand {
 	case *proto.CursorCommand_Next:
 		out.Command = &CursorCommandCommandNext{Value: variant.Next}
 	case *proto.CursorCommand_ContinueToKey:
-		out.Command = &CursorCommandCommandContinueToKey{Value: fromWireCursorKeyTarget(variant.ContinueToKey)}
+		out.Command = &CursorCommandCommandContinueToKey{Value: FromWireCursorKeyTarget(variant.ContinueToKey)}
 	case *proto.CursorCommand_Advance:
 		out.Command = &CursorCommandCommandAdvance{Value: variant.Advance}
 	case *proto.CursorCommand_Update:
-		out.Command = &CursorCommandCommandUpdate{Value: fromWireRecord(variant.Update)}
+		out.Command = &CursorCommandCommandUpdate{Value: FromWireRecord(variant.Update)}
 	case *proto.CursorCommand_Delete:
 		out.Command = &CursorCommandCommandDelete{Value: variant.Delete}
 	case *proto.CursorCommand_Close:
@@ -175,85 +175,79 @@ func fromWireCursorCommand(value *proto.CursorCommand) *CursorCommand {
 	return out
 }
 
-func toWireCursorEntry(value *CursorEntry) *proto.CursorEntry {
+func ToWireCursorEntry(value *CursorEntry) *proto.CursorEntry {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CursorEntry{
+		Key:        ToWireKeyValue(value.Key),
 		PrimaryKey: value.PrimaryKey,
-		Record:     toWireRecord(value.Record),
-	}
-	for _, item := range value.Key {
-		out.Key = append(out.Key, toWireKeyValue(item))
+		Record:     ToWireRecord(value.Record),
 	}
 	return out
 }
 
-func fromWireCursorEntry(value *proto.CursorEntry) *CursorEntry {
+func FromWireCursorEntry(value *proto.CursorEntry) *CursorEntry {
 	if value == nil {
 		return nil
 	}
 	out := &CursorEntry{
+		Key:        FromWireKeyValue(value.Key),
 		PrimaryKey: value.PrimaryKey,
-		Record:     fromWireRecord(value.Record),
-	}
-	for _, item := range value.Key {
-		out.Key = append(out.Key, fromWireKeyValue(item))
+		Record:     FromWireRecord(value.Record),
 	}
 	return out
 }
 
-func toWireCursorKeyTarget(value *CursorKeyTarget) *proto.CursorKeyTarget {
+func ToWireCursorKeyTarget(value *CursorKeyTarget) *proto.CursorKeyTarget {
 	if value == nil {
 		return nil
 	}
-	out := &proto.CursorKeyTarget{}
-	for _, item := range value.Key {
-		out.Key = append(out.Key, toWireKeyValue(item))
+	out := &proto.CursorKeyTarget{
+		Key: ToWireKeyValue(value.Key),
 	}
 	return out
 }
 
-func fromWireCursorKeyTarget(value *proto.CursorKeyTarget) *CursorKeyTarget {
+func FromWireCursorKeyTarget(value *proto.CursorKeyTarget) *CursorKeyTarget {
 	if value == nil {
 		return nil
 	}
-	out := &CursorKeyTarget{}
-	for _, item := range value.Key {
-		out.Key = append(out.Key, fromWireKeyValue(item))
+	out := &CursorKeyTarget{
+		Key: FromWireKeyValue(value.Key),
 	}
 	return out
 }
 
-func toWireCursorResponse(value *CursorResponse) *proto.CursorResponse {
+func ToWireCursorResponse(value *CursorResponse) *proto.CursorResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.CursorResponse{}
 	switch variant := value.Result.(type) {
 	case *CursorResponseResultEntry:
-		out.Result = &proto.CursorResponse_Entry{Entry: toWireCursorEntry(variant.Value)}
+		out.Result = &proto.CursorResponse_Entry{Entry: ToWireCursorEntry(variant.Value)}
 	case *CursorResponseResultDone:
 		out.Result = &proto.CursorResponse_Done{Done: variant.Value}
 	}
 	return out
 }
 
-func fromWireCursorResponse(value *proto.CursorResponse) *CursorResponse {
+func FromWireCursorResponse(value *proto.CursorResponse) *CursorResponse {
 	if value == nil {
 		return nil
 	}
 	out := &CursorResponse{}
 	switch variant := value.Result.(type) {
 	case *proto.CursorResponse_Entry:
-		out.Result = &CursorResponseResultEntry{Value: fromWireCursorEntry(variant.Entry)}
+		out.Result = &CursorResponseResultEntry{Value: FromWireCursorEntry(variant.Entry)}
 	case *proto.CursorResponse_Done:
 		out.Result = &CursorResponseResultDone{Value: variant.Done}
 	}
 	return out
 }
 
-func toWireDeleteObjectStoreRequest(value *DeleteObjectStoreRequest) *proto.DeleteObjectStoreRequest {
+func ToWireDeleteObjectStoreRequest(value *DeleteObjectStoreRequest) *proto.DeleteObjectStoreRequest {
 	if value == nil {
 		return nil
 	}
@@ -263,7 +257,7 @@ func toWireDeleteObjectStoreRequest(value *DeleteObjectStoreRequest) *proto.Dele
 	return out
 }
 
-func fromWireDeleteObjectStoreRequest(value *proto.DeleteObjectStoreRequest) *DeleteObjectStoreRequest {
+func FromWireDeleteObjectStoreRequest(value *proto.DeleteObjectStoreRequest) *DeleteObjectStoreRequest {
 	if value == nil {
 		return nil
 	}
@@ -273,7 +267,7 @@ func fromWireDeleteObjectStoreRequest(value *proto.DeleteObjectStoreRequest) *De
 	return out
 }
 
-func toWireDeleteResponse(value *DeleteResponse) *proto.DeleteResponse {
+func ToWireDeleteResponse(value *DeleteResponse) *proto.DeleteResponse {
 	if value == nil {
 		return nil
 	}
@@ -283,7 +277,7 @@ func toWireDeleteResponse(value *DeleteResponse) *proto.DeleteResponse {
 	return out
 }
 
-func fromWireDeleteResponse(value *proto.DeleteResponse) *DeleteResponse {
+func FromWireDeleteResponse(value *proto.DeleteResponse) *DeleteResponse {
 	if value == nil {
 		return nil
 	}
@@ -293,37 +287,33 @@ func fromWireDeleteResponse(value *proto.DeleteResponse) *DeleteResponse {
 	return out
 }
 
-func toWireIndexQueryRequest(value *IndexQueryRequest) *proto.IndexQueryRequest {
+func ToWireIndexQueryRequest(value *IndexQueryRequest) *proto.IndexQueryRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.IndexQueryRequest{
 		Store: value.Store,
 		Index: value.Index,
-		Range: toWireKeyRange(value.Range),
-	}
-	for _, item := range value.Values {
-		out.Values = append(out.Values, toWireTypedValue(item))
+		Query: ToWireIndexedDBQuery(value.Query),
+		Count: value.Count,
 	}
 	return out
 }
 
-func fromWireIndexQueryRequest(value *proto.IndexQueryRequest) *IndexQueryRequest {
+func FromWireIndexQueryRequest(value *proto.IndexQueryRequest) *IndexQueryRequest {
 	if value == nil {
 		return nil
 	}
 	out := &IndexQueryRequest{
 		Store: value.Store,
 		Index: value.Index,
-		Range: fromWireKeyRange(value.Range),
-	}
-	for _, item := range value.Values {
-		out.Values = append(out.Values, fromWireTypedValue(item))
+		Query: FromWireIndexedDBQuery(value.Query),
+		Count: value.Count,
 	}
 	return out
 }
 
-func toWireIndexSchema(value *IndexSchema) *proto.IndexSchema {
+func ToWireIndexSchema(value *IndexSchema) *proto.IndexSchema {
 	if value == nil {
 		return nil
 	}
@@ -335,7 +325,7 @@ func toWireIndexSchema(value *IndexSchema) *proto.IndexSchema {
 	return out
 }
 
-func fromWireIndexSchema(value *proto.IndexSchema) *IndexSchema {
+func FromWireIndexSchema(value *proto.IndexSchema) *IndexSchema {
 	if value == nil {
 		return nil
 	}
@@ -347,33 +337,61 @@ func fromWireIndexSchema(value *proto.IndexSchema) *IndexSchema {
 	return out
 }
 
-func toWireKeyRange(value *KeyRange) *proto.KeyRange {
+func ToWireIndexedDBQuery(value *IndexedDBQuery) *proto.IndexedDBQuery {
+	if value == nil {
+		return nil
+	}
+	out := &proto.IndexedDBQuery{}
+	switch variant := value.Query.(type) {
+	case *IndexedDBQueryQueryKey:
+		out.Query = &proto.IndexedDBQuery_Key{Key: ToWireKeyValue(variant.Value)}
+	case *IndexedDBQueryQueryRange:
+		out.Query = &proto.IndexedDBQuery_Range{Range: ToWireKeyRange(variant.Value)}
+	}
+	return out
+}
+
+func FromWireIndexedDBQuery(value *proto.IndexedDBQuery) *IndexedDBQuery {
+	if value == nil {
+		return nil
+	}
+	out := &IndexedDBQuery{}
+	switch variant := value.Query.(type) {
+	case *proto.IndexedDBQuery_Key:
+		out.Query = &IndexedDBQueryQueryKey{Value: FromWireKeyValue(variant.Key)}
+	case *proto.IndexedDBQuery_Range:
+		out.Query = &IndexedDBQueryQueryRange{Value: FromWireKeyRange(variant.Range)}
+	}
+	return out
+}
+
+func ToWireKeyRange(value *KeyRange) *proto.KeyRange {
 	if value == nil {
 		return nil
 	}
 	out := &proto.KeyRange{
-		Lower:     toWireTypedValue(value.Lower),
-		Upper:     toWireTypedValue(value.Upper),
+		Lower:     ToWireKeyValue(value.Lower),
+		Upper:     ToWireKeyValue(value.Upper),
 		LowerOpen: value.LowerOpen,
 		UpperOpen: value.UpperOpen,
 	}
 	return out
 }
 
-func fromWireKeyRange(value *proto.KeyRange) *KeyRange {
+func FromWireKeyRange(value *proto.KeyRange) *KeyRange {
 	if value == nil {
 		return nil
 	}
 	out := &KeyRange{
-		Lower:     fromWireTypedValue(value.Lower),
-		Upper:     fromWireTypedValue(value.Upper),
+		Lower:     FromWireKeyValue(value.Lower),
+		Upper:     FromWireKeyValue(value.Upper),
 		LowerOpen: value.LowerOpen,
 		UpperOpen: value.UpperOpen,
 	}
 	return out
 }
 
-func toWireKeyResponse(value *KeyResponse) *proto.KeyResponse {
+func ToWireKeyResponse(value *KeyResponse) *proto.KeyResponse {
 	if value == nil {
 		return nil
 	}
@@ -383,7 +401,7 @@ func toWireKeyResponse(value *KeyResponse) *proto.KeyResponse {
 	return out
 }
 
-func fromWireKeyResponse(value *proto.KeyResponse) *KeyResponse {
+func FromWireKeyResponse(value *proto.KeyResponse) *KeyResponse {
 	if value == nil {
 		return nil
 	}
@@ -393,57 +411,57 @@ func fromWireKeyResponse(value *proto.KeyResponse) *KeyResponse {
 	return out
 }
 
-func toWireKeyValue(value *KeyValue) *proto.KeyValue {
+func ToWireKeyValue(value *KeyValue) *proto.KeyValue {
 	if value == nil {
 		return nil
 	}
 	out := &proto.KeyValue{}
 	switch variant := value.Kind.(type) {
 	case *KeyValueKindScalar:
-		out.Kind = &proto.KeyValue_Scalar{Scalar: toWireTypedValue(variant.Value)}
+		out.Kind = &proto.KeyValue_Scalar{Scalar: ToWireTypedValue(variant.Value)}
 	case *KeyValueKindArray:
-		out.Kind = &proto.KeyValue_Array{Array: toWireKeyValueArray(variant.Value)}
+		out.Kind = &proto.KeyValue_Array{Array: ToWireKeyValueArray(variant.Value)}
 	}
 	return out
 }
 
-func fromWireKeyValue(value *proto.KeyValue) *KeyValue {
+func FromWireKeyValue(value *proto.KeyValue) *KeyValue {
 	if value == nil {
 		return nil
 	}
 	out := &KeyValue{}
 	switch variant := value.Kind.(type) {
 	case *proto.KeyValue_Scalar:
-		out.Kind = &KeyValueKindScalar{Value: fromWireTypedValue(variant.Scalar)}
+		out.Kind = &KeyValueKindScalar{Value: FromWireTypedValue(variant.Scalar)}
 	case *proto.KeyValue_Array:
-		out.Kind = &KeyValueKindArray{Value: fromWireKeyValueArray(variant.Array)}
+		out.Kind = &KeyValueKindArray{Value: FromWireKeyValueArray(variant.Array)}
 	}
 	return out
 }
 
-func toWireKeyValueArray(value *KeyValueArray) *proto.KeyValueArray {
+func ToWireKeyValueArray(value *KeyValueArray) *proto.KeyValueArray {
 	if value == nil {
 		return nil
 	}
 	out := &proto.KeyValueArray{}
 	for _, item := range value.Elements {
-		out.Elements = append(out.Elements, toWireKeyValue(item))
+		out.Elements = append(out.Elements, ToWireKeyValue(item))
 	}
 	return out
 }
 
-func fromWireKeyValueArray(value *proto.KeyValueArray) *KeyValueArray {
+func FromWireKeyValueArray(value *proto.KeyValueArray) *KeyValueArray {
 	if value == nil {
 		return nil
 	}
 	out := &KeyValueArray{}
 	for _, item := range value.Elements {
-		out.Elements = append(out.Elements, fromWireKeyValue(item))
+		out.Elements = append(out.Elements, FromWireKeyValue(item))
 	}
 	return out
 }
 
-func toWireKeysResponse(value *KeysResponse) *proto.KeysResponse {
+func ToWireKeysResponse(value *KeysResponse) *proto.KeysResponse {
 	if value == nil {
 		return nil
 	}
@@ -453,7 +471,7 @@ func toWireKeysResponse(value *KeysResponse) *proto.KeysResponse {
 	return out
 }
 
-func fromWireKeysResponse(value *proto.KeysResponse) *KeysResponse {
+func FromWireKeysResponse(value *proto.KeysResponse) *KeysResponse {
 	if value == nil {
 		return nil
 	}
@@ -463,7 +481,7 @@ func fromWireKeysResponse(value *proto.KeysResponse) *KeysResponse {
 	return out
 }
 
-func toWireObjectStoreNameRequest(value *ObjectStoreNameRequest) *proto.ObjectStoreNameRequest {
+func ToWireObjectStoreNameRequest(value *ObjectStoreNameRequest) *proto.ObjectStoreNameRequest {
 	if value == nil {
 		return nil
 	}
@@ -473,7 +491,7 @@ func toWireObjectStoreNameRequest(value *ObjectStoreNameRequest) *proto.ObjectSt
 	return out
 }
 
-func fromWireObjectStoreNameRequest(value *proto.ObjectStoreNameRequest) *ObjectStoreNameRequest {
+func FromWireObjectStoreNameRequest(value *proto.ObjectStoreNameRequest) *ObjectStoreNameRequest {
 	if value == nil {
 		return nil
 	}
@@ -483,29 +501,31 @@ func fromWireObjectStoreNameRequest(value *proto.ObjectStoreNameRequest) *Object
 	return out
 }
 
-func toWireObjectStoreRangeRequest(value *ObjectStoreRangeRequest) *proto.ObjectStoreRangeRequest {
+func ToWireObjectStoreRangeRequest(value *ObjectStoreRangeRequest) *proto.ObjectStoreRangeRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ObjectStoreRangeRequest{
 		Store: value.Store,
-		Range: toWireKeyRange(value.Range),
+		Query: ToWireIndexedDBQuery(value.Query),
+		Count: value.Count,
 	}
 	return out
 }
 
-func fromWireObjectStoreRangeRequest(value *proto.ObjectStoreRangeRequest) *ObjectStoreRangeRequest {
+func FromWireObjectStoreRangeRequest(value *proto.ObjectStoreRangeRequest) *ObjectStoreRangeRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ObjectStoreRangeRequest{
 		Store: value.Store,
-		Range: fromWireKeyRange(value.Range),
+		Query: FromWireIndexedDBQuery(value.Query),
+		Count: value.Count,
 	}
 	return out
 }
 
-func toWireObjectStoreRequest(value *ObjectStoreRequest) *proto.ObjectStoreRequest {
+func ToWireObjectStoreRequest(value *ObjectStoreRequest) *proto.ObjectStoreRequest {
 	if value == nil {
 		return nil
 	}
@@ -516,7 +536,7 @@ func toWireObjectStoreRequest(value *ObjectStoreRequest) *proto.ObjectStoreReque
 	return out
 }
 
-func fromWireObjectStoreRequest(value *proto.ObjectStoreRequest) *ObjectStoreRequest {
+func FromWireObjectStoreRequest(value *proto.ObjectStoreRequest) *ObjectStoreRequest {
 	if value == nil {
 		return nil
 	}
@@ -527,69 +547,63 @@ func fromWireObjectStoreRequest(value *proto.ObjectStoreRequest) *ObjectStoreReq
 	return out
 }
 
-func toWireObjectStoreSchema(value *ObjectStoreSchema) *proto.ObjectStoreSchema {
+func ToWireObjectStoreSchema(value *ObjectStoreSchema) *proto.ObjectStoreSchema {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ObjectStoreSchema{}
 	for _, item := range value.Indexes {
-		out.Indexes = append(out.Indexes, toWireIndexSchema(item))
+		out.Indexes = append(out.Indexes, ToWireIndexSchema(item))
 	}
 	for _, item := range value.Columns {
-		out.Columns = append(out.Columns, toWireColumnDef(item))
+		out.Columns = append(out.Columns, ToWireColumnDef(item))
 	}
 	return out
 }
 
-func fromWireObjectStoreSchema(value *proto.ObjectStoreSchema) *ObjectStoreSchema {
+func FromWireObjectStoreSchema(value *proto.ObjectStoreSchema) *ObjectStoreSchema {
 	if value == nil {
 		return nil
 	}
 	out := &ObjectStoreSchema{}
 	for _, item := range value.Indexes {
-		out.Indexes = append(out.Indexes, fromWireIndexSchema(item))
+		out.Indexes = append(out.Indexes, FromWireIndexSchema(item))
 	}
 	for _, item := range value.Columns {
-		out.Columns = append(out.Columns, fromWireColumnDef(item))
+		out.Columns = append(out.Columns, FromWireColumnDef(item))
 	}
 	return out
 }
 
-func toWireOpenCursorRequest(value *OpenCursorRequest) *proto.OpenCursorRequest {
+func ToWireOpenCursorRequest(value *OpenCursorRequest) *proto.OpenCursorRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.OpenCursorRequest{
 		Store:     value.Store,
-		Range:     toWireKeyRange(value.Range),
+		Index:     value.Index,
+		Query:     ToWireIndexedDBQuery(value.Query),
 		Direction: proto.CursorDirection(value.Direction),
 		KeysOnly:  value.KeysOnly,
-		Index:     value.Index,
-	}
-	for _, item := range value.Values {
-		out.Values = append(out.Values, toWireTypedValue(item))
 	}
 	return out
 }
 
-func fromWireOpenCursorRequest(value *proto.OpenCursorRequest) *OpenCursorRequest {
+func FromWireOpenCursorRequest(value *proto.OpenCursorRequest) *OpenCursorRequest {
 	if value == nil {
 		return nil
 	}
 	out := &OpenCursorRequest{
 		Store:     value.Store,
-		Range:     fromWireKeyRange(value.Range),
+		Index:     value.Index,
+		Query:     FromWireIndexedDBQuery(value.Query),
 		Direction: CursorDirection(value.Direction),
 		KeysOnly:  value.KeysOnly,
-		Index:     value.Index,
-	}
-	for _, item := range value.Values {
-		out.Values = append(out.Values, fromWireTypedValue(item))
 	}
 	return out
 }
 
-func toWireRecord(value *Record) *proto.Record {
+func ToWireRecord(value *Record) *proto.Record {
 	if value == nil {
 		return nil
 	}
@@ -597,13 +611,13 @@ func toWireRecord(value *Record) *proto.Record {
 	if value.Fields != nil {
 		out.Fields = make(map[string]*proto.TypedValue, len(value.Fields))
 		for key, item := range value.Fields {
-			out.Fields[key] = toWireTypedValue(item)
+			out.Fields[key] = ToWireTypedValue(item)
 		}
 	}
 	return out
 }
 
-func fromWireRecord(value *proto.Record) *Record {
+func FromWireRecord(value *proto.Record) *Record {
 	if value == nil {
 		return nil
 	}
@@ -611,77 +625,77 @@ func fromWireRecord(value *proto.Record) *Record {
 	if value.Fields != nil {
 		out.Fields = make(map[string]*TypedValue, len(value.Fields))
 		for key, item := range value.Fields {
-			out.Fields[key] = fromWireTypedValue(item)
+			out.Fields[key] = FromWireTypedValue(item)
 		}
 	}
 	return out
 }
 
-func toWireRecordRequest(value *RecordRequest) *proto.RecordRequest {
+func ToWireRecordRequest(value *RecordRequest) *proto.RecordRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RecordRequest{
 		Store:  value.Store,
-		Record: toWireRecord(value.Record),
+		Record: ToWireRecord(value.Record),
 	}
 	return out
 }
 
-func fromWireRecordRequest(value *proto.RecordRequest) *RecordRequest {
+func FromWireRecordRequest(value *proto.RecordRequest) *RecordRequest {
 	if value == nil {
 		return nil
 	}
 	out := &RecordRequest{
 		Store:  value.Store,
-		Record: fromWireRecord(value.Record),
+		Record: FromWireRecord(value.Record),
 	}
 	return out
 }
 
-func toWireRecordResponse(value *RecordResponse) *proto.RecordResponse {
+func ToWireRecordResponse(value *RecordResponse) *proto.RecordResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RecordResponse{
-		Record: toWireRecord(value.Record),
+		Record: ToWireRecord(value.Record),
 	}
 	return out
 }
 
-func fromWireRecordResponse(value *proto.RecordResponse) *RecordResponse {
+func FromWireRecordResponse(value *proto.RecordResponse) *RecordResponse {
 	if value == nil {
 		return nil
 	}
 	out := &RecordResponse{
-		Record: fromWireRecord(value.Record),
+		Record: FromWireRecord(value.Record),
 	}
 	return out
 }
 
-func toWireRecordsResponse(value *RecordsResponse) *proto.RecordsResponse {
+func ToWireRecordsResponse(value *RecordsResponse) *proto.RecordsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RecordsResponse{}
 	for _, item := range value.Records {
-		out.Records = append(out.Records, toWireRecord(item))
+		out.Records = append(out.Records, ToWireRecord(item))
 	}
 	return out
 }
 
-func fromWireRecordsResponse(value *proto.RecordsResponse) *RecordsResponse {
+func FromWireRecordsResponse(value *proto.RecordsResponse) *RecordsResponse {
 	if value == nil {
 		return nil
 	}
 	out := &RecordsResponse{}
 	for _, item := range value.Records {
-		out.Records = append(out.Records, fromWireRecord(item))
+		out.Records = append(out.Records, FromWireRecord(item))
 	}
 	return out
 }
 
-func toWireTransactionAbortRequest(value *TransactionAbortRequest) *proto.TransactionAbortRequest {
+func ToWireTransactionAbortRequest(value *TransactionAbortRequest) *proto.TransactionAbortRequest {
 	if value == nil {
 		return nil
 	}
@@ -691,7 +705,7 @@ func toWireTransactionAbortRequest(value *TransactionAbortRequest) *proto.Transa
 	return out
 }
 
-func fromWireTransactionAbortRequest(value *proto.TransactionAbortRequest) *TransactionAbortRequest {
+func FromWireTransactionAbortRequest(value *proto.TransactionAbortRequest) *TransactionAbortRequest {
 	if value == nil {
 		return nil
 	}
@@ -701,7 +715,7 @@ func fromWireTransactionAbortRequest(value *proto.TransactionAbortRequest) *Tran
 	return out
 }
 
-func toWireTransactionAbortResponse(value *TransactionAbortResponse) *proto.TransactionAbortResponse {
+func ToWireTransactionAbortResponse(value *TransactionAbortResponse) *proto.TransactionAbortResponse {
 	if value == nil {
 		return nil
 	}
@@ -711,7 +725,7 @@ func toWireTransactionAbortResponse(value *TransactionAbortResponse) *proto.Tran
 	return out
 }
 
-func fromWireTransactionAbortResponse(value *proto.TransactionAbortResponse) *TransactionAbortResponse {
+func FromWireTransactionAbortResponse(value *proto.TransactionAbortResponse) *TransactionAbortResponse {
 	if value == nil {
 		return nil
 	}
@@ -721,7 +735,7 @@ func fromWireTransactionAbortResponse(value *proto.TransactionAbortResponse) *Tr
 	return out
 }
 
-func toWireTransactionBeginResponse(value *TransactionBeginResponse) *proto.TransactionBeginResponse {
+func ToWireTransactionBeginResponse(value *TransactionBeginResponse) *proto.TransactionBeginResponse {
 	if value == nil {
 		return nil
 	}
@@ -729,7 +743,7 @@ func toWireTransactionBeginResponse(value *TransactionBeginResponse) *proto.Tran
 	return out
 }
 
-func fromWireTransactionBeginResponse(value *proto.TransactionBeginResponse) *TransactionBeginResponse {
+func FromWireTransactionBeginResponse(value *proto.TransactionBeginResponse) *TransactionBeginResponse {
 	if value == nil {
 		return nil
 	}
@@ -737,43 +751,43 @@ func fromWireTransactionBeginResponse(value *proto.TransactionBeginResponse) *Tr
 	return out
 }
 
-func toWireTransactionClientMessage(value *TransactionClientMessage) *proto.TransactionClientMessage {
+func ToWireTransactionClientMessage(value *TransactionClientMessage) *proto.TransactionClientMessage {
 	if value == nil {
 		return nil
 	}
 	out := &proto.TransactionClientMessage{}
 	switch variant := value.Msg.(type) {
 	case *TransactionClientMessageMsgBegin:
-		out.Msg = &proto.TransactionClientMessage_Begin{Begin: toWireBeginTransactionRequest(variant.Value)}
+		out.Msg = &proto.TransactionClientMessage_Begin{Begin: ToWireBeginTransactionRequest(variant.Value)}
 	case *TransactionClientMessageMsgOperation:
-		out.Msg = &proto.TransactionClientMessage_Operation{Operation: toWireTransactionOperation(variant.Value)}
+		out.Msg = &proto.TransactionClientMessage_Operation{Operation: ToWireTransactionOperation(variant.Value)}
 	case *TransactionClientMessageMsgCommit:
-		out.Msg = &proto.TransactionClientMessage_Commit{Commit: toWireTransactionCommitRequest(variant.Value)}
+		out.Msg = &proto.TransactionClientMessage_Commit{Commit: ToWireTransactionCommitRequest(variant.Value)}
 	case *TransactionClientMessageMsgAbort:
-		out.Msg = &proto.TransactionClientMessage_Abort{Abort: toWireTransactionAbortRequest(variant.Value)}
+		out.Msg = &proto.TransactionClientMessage_Abort{Abort: ToWireTransactionAbortRequest(variant.Value)}
 	}
 	return out
 }
 
-func fromWireTransactionClientMessage(value *proto.TransactionClientMessage) *TransactionClientMessage {
+func FromWireTransactionClientMessage(value *proto.TransactionClientMessage) *TransactionClientMessage {
 	if value == nil {
 		return nil
 	}
 	out := &TransactionClientMessage{}
 	switch variant := value.Msg.(type) {
 	case *proto.TransactionClientMessage_Begin:
-		out.Msg = &TransactionClientMessageMsgBegin{Value: fromWireBeginTransactionRequest(variant.Begin)}
+		out.Msg = &TransactionClientMessageMsgBegin{Value: FromWireBeginTransactionRequest(variant.Begin)}
 	case *proto.TransactionClientMessage_Operation:
-		out.Msg = &TransactionClientMessageMsgOperation{Value: fromWireTransactionOperation(variant.Operation)}
+		out.Msg = &TransactionClientMessageMsgOperation{Value: FromWireTransactionOperation(variant.Operation)}
 	case *proto.TransactionClientMessage_Commit:
-		out.Msg = &TransactionClientMessageMsgCommit{Value: fromWireTransactionCommitRequest(variant.Commit)}
+		out.Msg = &TransactionClientMessageMsgCommit{Value: FromWireTransactionCommitRequest(variant.Commit)}
 	case *proto.TransactionClientMessage_Abort:
-		out.Msg = &TransactionClientMessageMsgAbort{Value: fromWireTransactionAbortRequest(variant.Abort)}
+		out.Msg = &TransactionClientMessageMsgAbort{Value: FromWireTransactionAbortRequest(variant.Abort)}
 	}
 	return out
 }
 
-func toWireTransactionCommitRequest(value *TransactionCommitRequest) *proto.TransactionCommitRequest {
+func ToWireTransactionCommitRequest(value *TransactionCommitRequest) *proto.TransactionCommitRequest {
 	if value == nil {
 		return nil
 	}
@@ -781,7 +795,7 @@ func toWireTransactionCommitRequest(value *TransactionCommitRequest) *proto.Tran
 	return out
 }
 
-func fromWireTransactionCommitRequest(value *proto.TransactionCommitRequest) *TransactionCommitRequest {
+func FromWireTransactionCommitRequest(value *proto.TransactionCommitRequest) *TransactionCommitRequest {
 	if value == nil {
 		return nil
 	}
@@ -789,7 +803,7 @@ func fromWireTransactionCommitRequest(value *proto.TransactionCommitRequest) *Tr
 	return out
 }
 
-func toWireTransactionCommitResponse(value *TransactionCommitResponse) *proto.TransactionCommitResponse {
+func ToWireTransactionCommitResponse(value *TransactionCommitResponse) *proto.TransactionCommitResponse {
 	if value == nil {
 		return nil
 	}
@@ -799,7 +813,7 @@ func toWireTransactionCommitResponse(value *TransactionCommitResponse) *proto.Tr
 	return out
 }
 
-func fromWireTransactionCommitResponse(value *proto.TransactionCommitResponse) *TransactionCommitResponse {
+func FromWireTransactionCommitResponse(value *proto.TransactionCommitResponse) *TransactionCommitResponse {
 	if value == nil {
 		return nil
 	}
@@ -809,7 +823,7 @@ func fromWireTransactionCommitResponse(value *proto.TransactionCommitResponse) *
 	return out
 }
 
-func toWireTransactionOperation(value *TransactionOperation) *proto.TransactionOperation {
+func ToWireTransactionOperation(value *TransactionOperation) *proto.TransactionOperation {
 	if value == nil {
 		return nil
 	}
@@ -818,42 +832,42 @@ func toWireTransactionOperation(value *TransactionOperation) *proto.TransactionO
 	}
 	switch variant := value.Operation.(type) {
 	case *TransactionOperationOperationGet:
-		out.Operation = &proto.TransactionOperation_Get{Get: toWireObjectStoreRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_Get{Get: ToWireObjectStoreRequest(variant.Value)}
 	case *TransactionOperationOperationGetKey:
-		out.Operation = &proto.TransactionOperation_GetKey{GetKey: toWireObjectStoreRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_GetKey{GetKey: ToWireObjectStoreRequest(variant.Value)}
 	case *TransactionOperationOperationAdd:
-		out.Operation = &proto.TransactionOperation_Add{Add: toWireRecordRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_Add{Add: ToWireRecordRequest(variant.Value)}
 	case *TransactionOperationOperationPut:
-		out.Operation = &proto.TransactionOperation_Put{Put: toWireRecordRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_Put{Put: ToWireRecordRequest(variant.Value)}
 	case *TransactionOperationOperationDelete:
-		out.Operation = &proto.TransactionOperation_Delete{Delete: toWireObjectStoreRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_Delete{Delete: ToWireObjectStoreRequest(variant.Value)}
 	case *TransactionOperationOperationClear:
-		out.Operation = &proto.TransactionOperation_Clear{Clear: toWireObjectStoreNameRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_Clear{Clear: ToWireObjectStoreNameRequest(variant.Value)}
 	case *TransactionOperationOperationGetAll:
-		out.Operation = &proto.TransactionOperation_GetAll{GetAll: toWireObjectStoreRangeRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_GetAll{GetAll: ToWireObjectStoreRangeRequest(variant.Value)}
 	case *TransactionOperationOperationGetAllKeys:
-		out.Operation = &proto.TransactionOperation_GetAllKeys{GetAllKeys: toWireObjectStoreRangeRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_GetAllKeys{GetAllKeys: ToWireObjectStoreRangeRequest(variant.Value)}
 	case *TransactionOperationOperationCount:
-		out.Operation = &proto.TransactionOperation_Count{Count: toWireObjectStoreRangeRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_Count{Count: ToWireObjectStoreRangeRequest(variant.Value)}
 	case *TransactionOperationOperationDeleteRange:
-		out.Operation = &proto.TransactionOperation_DeleteRange{DeleteRange: toWireObjectStoreRangeRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_DeleteRange{DeleteRange: ToWireObjectStoreRangeRequest(variant.Value)}
 	case *TransactionOperationOperationIndexGet:
-		out.Operation = &proto.TransactionOperation_IndexGet{IndexGet: toWireIndexQueryRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_IndexGet{IndexGet: ToWireIndexQueryRequest(variant.Value)}
 	case *TransactionOperationOperationIndexGetKey:
-		out.Operation = &proto.TransactionOperation_IndexGetKey{IndexGetKey: toWireIndexQueryRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_IndexGetKey{IndexGetKey: ToWireIndexQueryRequest(variant.Value)}
 	case *TransactionOperationOperationIndexGetAll:
-		out.Operation = &proto.TransactionOperation_IndexGetAll{IndexGetAll: toWireIndexQueryRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_IndexGetAll{IndexGetAll: ToWireIndexQueryRequest(variant.Value)}
 	case *TransactionOperationOperationIndexGetAllKeys:
-		out.Operation = &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: toWireIndexQueryRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_IndexGetAllKeys{IndexGetAllKeys: ToWireIndexQueryRequest(variant.Value)}
 	case *TransactionOperationOperationIndexCount:
-		out.Operation = &proto.TransactionOperation_IndexCount{IndexCount: toWireIndexQueryRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_IndexCount{IndexCount: ToWireIndexQueryRequest(variant.Value)}
 	case *TransactionOperationOperationIndexDelete:
-		out.Operation = &proto.TransactionOperation_IndexDelete{IndexDelete: toWireIndexQueryRequest(variant.Value)}
+		out.Operation = &proto.TransactionOperation_IndexDelete{IndexDelete: ToWireIndexQueryRequest(variant.Value)}
 	}
 	return out
 }
 
-func fromWireTransactionOperation(value *proto.TransactionOperation) *TransactionOperation {
+func FromWireTransactionOperation(value *proto.TransactionOperation) *TransactionOperation {
 	if value == nil {
 		return nil
 	}
@@ -862,42 +876,42 @@ func fromWireTransactionOperation(value *proto.TransactionOperation) *Transactio
 	}
 	switch variant := value.Operation.(type) {
 	case *proto.TransactionOperation_Get:
-		out.Operation = &TransactionOperationOperationGet{Value: fromWireObjectStoreRequest(variant.Get)}
+		out.Operation = &TransactionOperationOperationGet{Value: FromWireObjectStoreRequest(variant.Get)}
 	case *proto.TransactionOperation_GetKey:
-		out.Operation = &TransactionOperationOperationGetKey{Value: fromWireObjectStoreRequest(variant.GetKey)}
+		out.Operation = &TransactionOperationOperationGetKey{Value: FromWireObjectStoreRequest(variant.GetKey)}
 	case *proto.TransactionOperation_Add:
-		out.Operation = &TransactionOperationOperationAdd{Value: fromWireRecordRequest(variant.Add)}
+		out.Operation = &TransactionOperationOperationAdd{Value: FromWireRecordRequest(variant.Add)}
 	case *proto.TransactionOperation_Put:
-		out.Operation = &TransactionOperationOperationPut{Value: fromWireRecordRequest(variant.Put)}
+		out.Operation = &TransactionOperationOperationPut{Value: FromWireRecordRequest(variant.Put)}
 	case *proto.TransactionOperation_Delete:
-		out.Operation = &TransactionOperationOperationDelete{Value: fromWireObjectStoreRequest(variant.Delete)}
+		out.Operation = &TransactionOperationOperationDelete{Value: FromWireObjectStoreRequest(variant.Delete)}
 	case *proto.TransactionOperation_Clear:
-		out.Operation = &TransactionOperationOperationClear{Value: fromWireObjectStoreNameRequest(variant.Clear)}
+		out.Operation = &TransactionOperationOperationClear{Value: FromWireObjectStoreNameRequest(variant.Clear)}
 	case *proto.TransactionOperation_GetAll:
-		out.Operation = &TransactionOperationOperationGetAll{Value: fromWireObjectStoreRangeRequest(variant.GetAll)}
+		out.Operation = &TransactionOperationOperationGetAll{Value: FromWireObjectStoreRangeRequest(variant.GetAll)}
 	case *proto.TransactionOperation_GetAllKeys:
-		out.Operation = &TransactionOperationOperationGetAllKeys{Value: fromWireObjectStoreRangeRequest(variant.GetAllKeys)}
+		out.Operation = &TransactionOperationOperationGetAllKeys{Value: FromWireObjectStoreRangeRequest(variant.GetAllKeys)}
 	case *proto.TransactionOperation_Count:
-		out.Operation = &TransactionOperationOperationCount{Value: fromWireObjectStoreRangeRequest(variant.Count)}
+		out.Operation = &TransactionOperationOperationCount{Value: FromWireObjectStoreRangeRequest(variant.Count)}
 	case *proto.TransactionOperation_DeleteRange:
-		out.Operation = &TransactionOperationOperationDeleteRange{Value: fromWireObjectStoreRangeRequest(variant.DeleteRange)}
+		out.Operation = &TransactionOperationOperationDeleteRange{Value: FromWireObjectStoreRangeRequest(variant.DeleteRange)}
 	case *proto.TransactionOperation_IndexGet:
-		out.Operation = &TransactionOperationOperationIndexGet{Value: fromWireIndexQueryRequest(variant.IndexGet)}
+		out.Operation = &TransactionOperationOperationIndexGet{Value: FromWireIndexQueryRequest(variant.IndexGet)}
 	case *proto.TransactionOperation_IndexGetKey:
-		out.Operation = &TransactionOperationOperationIndexGetKey{Value: fromWireIndexQueryRequest(variant.IndexGetKey)}
+		out.Operation = &TransactionOperationOperationIndexGetKey{Value: FromWireIndexQueryRequest(variant.IndexGetKey)}
 	case *proto.TransactionOperation_IndexGetAll:
-		out.Operation = &TransactionOperationOperationIndexGetAll{Value: fromWireIndexQueryRequest(variant.IndexGetAll)}
+		out.Operation = &TransactionOperationOperationIndexGetAll{Value: FromWireIndexQueryRequest(variant.IndexGetAll)}
 	case *proto.TransactionOperation_IndexGetAllKeys:
-		out.Operation = &TransactionOperationOperationIndexGetAllKeys{Value: fromWireIndexQueryRequest(variant.IndexGetAllKeys)}
+		out.Operation = &TransactionOperationOperationIndexGetAllKeys{Value: FromWireIndexQueryRequest(variant.IndexGetAllKeys)}
 	case *proto.TransactionOperation_IndexCount:
-		out.Operation = &TransactionOperationOperationIndexCount{Value: fromWireIndexQueryRequest(variant.IndexCount)}
+		out.Operation = &TransactionOperationOperationIndexCount{Value: FromWireIndexQueryRequest(variant.IndexCount)}
 	case *proto.TransactionOperation_IndexDelete:
-		out.Operation = &TransactionOperationOperationIndexDelete{Value: fromWireIndexQueryRequest(variant.IndexDelete)}
+		out.Operation = &TransactionOperationOperationIndexDelete{Value: FromWireIndexQueryRequest(variant.IndexDelete)}
 	}
 	return out
 }
 
-func toWireTransactionOperationResponse(value *TransactionOperationResponse) *proto.TransactionOperationResponse {
+func ToWireTransactionOperationResponse(value *TransactionOperationResponse) *proto.TransactionOperationResponse {
 	if value == nil {
 		return nil
 	}
@@ -909,22 +923,22 @@ func toWireTransactionOperationResponse(value *TransactionOperationResponse) *pr
 	case *TransactionOperationResponseResultEmpty:
 		out.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
 	case *TransactionOperationResponseResultRecord:
-		out.Result = &proto.TransactionOperationResponse_Record{Record: toWireRecordResponse(variant.Value)}
+		out.Result = &proto.TransactionOperationResponse_Record{Record: ToWireRecordResponse(variant.Value)}
 	case *TransactionOperationResponseResultRecords:
-		out.Result = &proto.TransactionOperationResponse_Records{Records: toWireRecordsResponse(variant.Value)}
+		out.Result = &proto.TransactionOperationResponse_Records{Records: ToWireRecordsResponse(variant.Value)}
 	case *TransactionOperationResponseResultKey:
-		out.Result = &proto.TransactionOperationResponse_Key{Key: toWireKeyResponse(variant.Value)}
+		out.Result = &proto.TransactionOperationResponse_Key{Key: ToWireKeyResponse(variant.Value)}
 	case *TransactionOperationResponseResultKeys:
-		out.Result = &proto.TransactionOperationResponse_Keys{Keys: toWireKeysResponse(variant.Value)}
+		out.Result = &proto.TransactionOperationResponse_Keys{Keys: ToWireKeysResponse(variant.Value)}
 	case *TransactionOperationResponseResultCount:
-		out.Result = &proto.TransactionOperationResponse_Count{Count: toWireCountResponse(variant.Value)}
+		out.Result = &proto.TransactionOperationResponse_Count{Count: ToWireCountResponse(variant.Value)}
 	case *TransactionOperationResponseResultDelete:
-		out.Result = &proto.TransactionOperationResponse_Delete{Delete: toWireDeleteResponse(variant.Value)}
+		out.Result = &proto.TransactionOperationResponse_Delete{Delete: ToWireDeleteResponse(variant.Value)}
 	}
 	return out
 }
 
-func fromWireTransactionOperationResponse(value *proto.TransactionOperationResponse) *TransactionOperationResponse {
+func FromWireTransactionOperationResponse(value *proto.TransactionOperationResponse) *TransactionOperationResponse {
 	if value == nil {
 		return nil
 	}
@@ -936,58 +950,58 @@ func fromWireTransactionOperationResponse(value *proto.TransactionOperationRespo
 	case *proto.TransactionOperationResponse_Empty:
 		out.Result = &TransactionOperationResponseResultEmpty{}
 	case *proto.TransactionOperationResponse_Record:
-		out.Result = &TransactionOperationResponseResultRecord{Value: fromWireRecordResponse(variant.Record)}
+		out.Result = &TransactionOperationResponseResultRecord{Value: FromWireRecordResponse(variant.Record)}
 	case *proto.TransactionOperationResponse_Records:
-		out.Result = &TransactionOperationResponseResultRecords{Value: fromWireRecordsResponse(variant.Records)}
+		out.Result = &TransactionOperationResponseResultRecords{Value: FromWireRecordsResponse(variant.Records)}
 	case *proto.TransactionOperationResponse_Key:
-		out.Result = &TransactionOperationResponseResultKey{Value: fromWireKeyResponse(variant.Key)}
+		out.Result = &TransactionOperationResponseResultKey{Value: FromWireKeyResponse(variant.Key)}
 	case *proto.TransactionOperationResponse_Keys:
-		out.Result = &TransactionOperationResponseResultKeys{Value: fromWireKeysResponse(variant.Keys)}
+		out.Result = &TransactionOperationResponseResultKeys{Value: FromWireKeysResponse(variant.Keys)}
 	case *proto.TransactionOperationResponse_Count:
-		out.Result = &TransactionOperationResponseResultCount{Value: fromWireCountResponse(variant.Count)}
+		out.Result = &TransactionOperationResponseResultCount{Value: FromWireCountResponse(variant.Count)}
 	case *proto.TransactionOperationResponse_Delete:
-		out.Result = &TransactionOperationResponseResultDelete{Value: fromWireDeleteResponse(variant.Delete)}
+		out.Result = &TransactionOperationResponseResultDelete{Value: FromWireDeleteResponse(variant.Delete)}
 	}
 	return out
 }
 
-func toWireTransactionServerMessage(value *TransactionServerMessage) *proto.TransactionServerMessage {
+func ToWireTransactionServerMessage(value *TransactionServerMessage) *proto.TransactionServerMessage {
 	if value == nil {
 		return nil
 	}
 	out := &proto.TransactionServerMessage{}
 	switch variant := value.Msg.(type) {
 	case *TransactionServerMessageMsgBegin:
-		out.Msg = &proto.TransactionServerMessage_Begin{Begin: toWireTransactionBeginResponse(variant.Value)}
+		out.Msg = &proto.TransactionServerMessage_Begin{Begin: ToWireTransactionBeginResponse(variant.Value)}
 	case *TransactionServerMessageMsgOperation:
-		out.Msg = &proto.TransactionServerMessage_Operation{Operation: toWireTransactionOperationResponse(variant.Value)}
+		out.Msg = &proto.TransactionServerMessage_Operation{Operation: ToWireTransactionOperationResponse(variant.Value)}
 	case *TransactionServerMessageMsgCommit:
-		out.Msg = &proto.TransactionServerMessage_Commit{Commit: toWireTransactionCommitResponse(variant.Value)}
+		out.Msg = &proto.TransactionServerMessage_Commit{Commit: ToWireTransactionCommitResponse(variant.Value)}
 	case *TransactionServerMessageMsgAbort:
-		out.Msg = &proto.TransactionServerMessage_Abort{Abort: toWireTransactionAbortResponse(variant.Value)}
+		out.Msg = &proto.TransactionServerMessage_Abort{Abort: ToWireTransactionAbortResponse(variant.Value)}
 	}
 	return out
 }
 
-func fromWireTransactionServerMessage(value *proto.TransactionServerMessage) *TransactionServerMessage {
+func FromWireTransactionServerMessage(value *proto.TransactionServerMessage) *TransactionServerMessage {
 	if value == nil {
 		return nil
 	}
 	out := &TransactionServerMessage{}
 	switch variant := value.Msg.(type) {
 	case *proto.TransactionServerMessage_Begin:
-		out.Msg = &TransactionServerMessageMsgBegin{Value: fromWireTransactionBeginResponse(variant.Begin)}
+		out.Msg = &TransactionServerMessageMsgBegin{Value: FromWireTransactionBeginResponse(variant.Begin)}
 	case *proto.TransactionServerMessage_Operation:
-		out.Msg = &TransactionServerMessageMsgOperation{Value: fromWireTransactionOperationResponse(variant.Operation)}
+		out.Msg = &TransactionServerMessageMsgOperation{Value: FromWireTransactionOperationResponse(variant.Operation)}
 	case *proto.TransactionServerMessage_Commit:
-		out.Msg = &TransactionServerMessageMsgCommit{Value: fromWireTransactionCommitResponse(variant.Commit)}
+		out.Msg = &TransactionServerMessageMsgCommit{Value: FromWireTransactionCommitResponse(variant.Commit)}
 	case *proto.TransactionServerMessage_Abort:
-		out.Msg = &TransactionServerMessageMsgAbort{Value: fromWireTransactionAbortResponse(variant.Abort)}
+		out.Msg = &TransactionServerMessageMsgAbort{Value: FromWireTransactionAbortResponse(variant.Abort)}
 	}
 	return out
 }
 
-func toWireTypedValue(value *TypedValue) *proto.TypedValue {
+func ToWireTypedValue(value *TypedValue) *proto.TypedValue {
 	if value == nil {
 		return nil
 	}
@@ -1013,7 +1027,7 @@ func toWireTypedValue(value *TypedValue) *proto.TypedValue {
 	return out
 }
 
-func fromWireTypedValue(value *proto.TypedValue) *TypedValue {
+func FromWireTypedValue(value *proto.TypedValue) *TypedValue {
 	if value == nil {
 		return nil
 	}
