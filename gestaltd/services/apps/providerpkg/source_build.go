@@ -182,6 +182,7 @@ func sourceBuildEnv(base []string, opts SourceBuildOptions) []string {
 		"GESTALT_TARGET_OS="+goos,
 		"GESTALT_TARGET_ARCH="+goarch,
 		"GESTALT_TARGET_PLATFORM="+goos+"/"+goarch,
+		"GOWORK=off", // each provider builds against its own go.mod, ignoring ambient workspaces
 	)
 	if opts.LibC != "" {
 		env = append(env, "GESTALT_TARGET_LIBC="+opts.LibC)

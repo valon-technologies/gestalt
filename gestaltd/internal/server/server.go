@@ -190,9 +190,10 @@ type Config struct {
 	Admin                AdminRouteConfig
 	AdminUIProvider      string
 	AdminUI              http.Handler
-	BuiltinAdminUI       *BuiltinAdminUIOptions
-	RouteProfile         RouteProfile
-	MeterProvider        metric.MeterProvider
+	BuiltinAdminUI             *BuiltinAdminUIOptions
+	RouteProfile               RouteProfile
+	RequireExternalCredentials bool
+	MeterProvider              metric.MeterProvider
 	TracerProvider       trace.TracerProvider
 }
 
@@ -290,7 +291,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	users := cfg.Services.Users
 	externalCredentials := cfg.Services.ExternalCredentials
-	if core.ExternalCredentialProviderMissing(externalCredentials) {
+	if cfg.RequireExternalCredentials && core.ExternalCredentialProviderMissing(externalCredentials) {
 		return nil, fmt.Errorf("external credentials provider is required")
 	}
 	apiTokens := cfg.Services.APITokens

@@ -8,12 +8,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
-func operatorLifecycle() *operator.Lifecycle {
-	return operator.NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+func operatorLifecycle(opts ...func(*operator.Lifecycle)) *operator.Lifecycle {
+	lc := operator.NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, buildFactories())
 	}).WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, buildFactories())
 	})
+	for _, opt := range opts {
+		opt(lc)
+	}
+	return lc
 }
 
 func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, check bool) error {
@@ -37,8 +41,12 @@ func syncConfigWithStatePathsOptions(configFlags []string, state operator.StateP
 	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 }
 
-func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {
-	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
+func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool, relaxProviderCatalogValidation bool) (*config.Config, error) {
+	lc := operatorLifecycle()
+	if relaxProviderCatalogValidation {
+		lc = lc.WithRelaxedProviderCatalogValidation(true)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
 	if err != nil {
 		return nil, err
 	}

@@ -71,10 +71,24 @@ type sidecarProviderReleaseMetadata struct {
 }
 
 func sourceAuthToken(entry *config.ProviderEntry) string {
-	if entry == nil || entry.Source.Auth == nil {
-		return ""
+	if entry != nil && entry.Source.Auth != nil {
+		if t := strings.TrimSpace(entry.Source.Auth.Token); t != "" {
+			return t
+		}
 	}
-	return strings.TrimSpace(entry.Source.Auth.Token)
+	// Local-dev fallback: authenticate private-repo release fetches with the
+	// same token used for git operations. github.com strips this on redirect
+	// to objects.githubusercontent.com, so the presigned asset URL is unaffected.
+	return firstNonEmpty(os.Getenv("GITHUB_PAT"), os.Getenv("GH_TOKEN"))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func fetchProviderReleaseBundle(ctx context.Context, client *http.Client, metadataLocation, token string) (providerReleaseValidationBundle, string, map[string]string, error) {

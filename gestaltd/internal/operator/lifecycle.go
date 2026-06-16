@@ -95,10 +95,11 @@ type StaticValidationOptions struct {
 }
 
 type Lifecycle struct {
-	configSecretResolver     func(context.Context, *config.Config) error
-	sourceAuthSecretResolver func(context.Context, *config.Config) error
-	httpClient               *http.Client
-	providerResolver         *providerregistry.Resolver
+	configSecretResolver           func(context.Context, *config.Config) error
+	sourceAuthSecretResolver       func(context.Context, *config.Config) error
+	httpClient                     *http.Client
+	providerResolver               *providerregistry.Resolver
+	relaxProviderCatalogValidation bool
 }
 
 type StatePaths struct {
@@ -165,6 +166,14 @@ func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *conf
 // secrets are not required during lock/sync.
 func (l *Lifecycle) WithSourceAuthSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
 	l.sourceAuthSecretResolver = resolve
+	return l
+}
+
+// WithRelaxedProviderCatalogValidation downgrades installed-vs-release catalog
+// mismatches to warnings during unlocked local serve. Production lock/sync paths
+// should leave this disabled.
+func (l *Lifecycle) WithRelaxedProviderCatalogValidation(relax bool) *Lifecycle {
+	l.relaxProviderCatalogValidation = relax
 	return l
 }
 
@@ -1370,7 +1379,10 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 		validatedDuringPrepare = err == nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		if isLockMetadataMissing(err) {
+			return nil, false, fmt.Errorf("provider state is not prepared; run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		}
+		return nil, false, fmt.Errorf("preparing providers for local serve: %w", err)
 	}
 	return lock, validatedDuringPrepare, nil
 }
@@ -3126,7 +3138,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if entry.Runtime != installedRuntime {
 		return nil, LockEntry{}, fmt.Errorf("%s manifest runtime %q does not match metadata runtime %q", subject, installedRuntime, entry.Runtime)
 	}
-	if err := validateInstalledPackageMatchesReleaseBundle(subject, installed, entry, bundle); err != nil {
+	if err := validateInstalledPackageMatchesReleaseBundle(subject, installed, entry, bundle, l.relaxProviderCatalogValidation); err != nil {
 		return nil, LockEntry{}, err
 	}
 	entry.Package = installed.Manifest.Source
@@ -3139,7 +3151,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	return installed, entry, nil
 }
 
-func validateInstalledPackageMatchesReleaseBundle(subject string, installed *installedPackage, entry LockEntry, bundle providerReleaseValidationBundle) error {
+func validateInstalledPackageMatchesReleaseBundle(subject string, installed *installedPackage, entry LockEntry, bundle providerReleaseValidationBundle, relax bool) error {
 	manifest, err := staticvalidation.ProjectManifest(installed.Manifest, "", true)
 	if err != nil {
 		return fmt.Errorf("%s project installed validation manifest: %w", subject, err)
@@ -3156,9 +3168,24 @@ func validateInstalledPackageMatchesReleaseBundle(subject string, installed *ins
 		return fmt.Errorf("%s read installed validation catalog: %w", subject, err)
 	}
 	if !catalogsEqual(installedCatalog, bundle.Catalog) {
+		if relax {
+			slog.Warn("provider catalog drift ignored (relaxed local serve)", "provider", subject)
+			return nil
+		}
 		return fmt.Errorf("%s installed package catalog does not match provider release validation catalog", subject)
 	}
 	return nil
+}
+
+func isLockMetadataMissing(err error) bool {
+	if err == nil {
+		return false
+	}
+	if os.IsNotExist(err) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "lockfile is missing") || strings.Contains(msg, "lockfile is out of date")
 }
 
 func providerManifestsEqual(a, b *providermanifestv1.Manifest) bool {
@@ -3582,7 +3609,10 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 		validatedDuringPrepare = err == nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --path PATH` or a layered local config; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		if isLockMetadataMissing(err) {
+			return false, fmt.Errorf("provider state is not prepared; run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		}
+		return false, fmt.Errorf("preparing providers for local serve: %w", err)
 	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
 		return false, err

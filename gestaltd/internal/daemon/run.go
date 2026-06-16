@@ -105,8 +105,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		watchFlag = fs.Bool("watch", false, "watch local source files and restart/rebuild after changes")
 	}
 	var lockedFlag *bool
+	var relaxProviderCatalogValidationFlag *bool
 	if opts.allowLocked {
 		lockedFlag = fs.Bool("locked", false, "require exact lock state; do not auto lock/sync")
+		relaxProviderCatalogValidationFlag = fs.Bool("relax-provider-catalog-validation", false, "downgrade provider catalog drift to warnings during unlocked local serve")
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -129,6 +131,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	locked := false
 	if lockedFlag != nil {
 		locked = *lockedFlag
+	}
+	relaxProviderCatalogValidation := flagBoolValue(relaxProviderCatalogValidationFlag)
+	if relaxProviderCatalogValidation && locked {
+		return fmt.Errorf("--relax-provider-catalog-validation cannot be combined with --locked")
 	}
 	watch := flagBoolValue(watchFlag)
 	if watch && locked {
@@ -161,7 +167,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-	}, locked)
+	}, locked, relaxProviderCatalogValidation)
 	if err != nil {
 		return err
 	}
@@ -457,7 +463,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--relax-provider-catalog-validation] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
@@ -480,7 +486,7 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--relax-provider-catalog-validation] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")

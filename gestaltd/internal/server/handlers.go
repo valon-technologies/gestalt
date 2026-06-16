@@ -308,6 +308,9 @@ func (s *Server) subjectConnectedIntegrations(r *http.Request) (map[string][]ins
 }
 
 func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID string) (map[string][]instanceInfo, error) {
+	if core.ExternalCredentialProviderMissing(s.externalCredentials) {
+		return map[string][]instanceInfo{}, nil
+	}
 	tokens, err := s.externalCredentials.ListCredentials(ctx, subjectID, "")
 	if err != nil {
 		return nil, fmt.Errorf("listing external credentials: %w", err)

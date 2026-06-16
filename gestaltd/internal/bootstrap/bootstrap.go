@@ -1668,6 +1668,9 @@ func buildExternalCredentialsProvider(ctx context.Context, cfg *config.Config, f
 		return nil, err
 	}
 	if entry == nil {
+		if !config.ExternalCredentialsReferenced(cfg) {
+			return nil, nil
+		}
 		name = config.DefaultProviderInstance
 		entry = defaultExternalCredentialsProviderEntry()
 	}

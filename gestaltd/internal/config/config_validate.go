@@ -767,7 +767,7 @@ func ValidateRuntime(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	if name == "" {
+	if name == "" && IndexedDBIsReferenced(cfg) {
 		return fmt.Errorf("config validation: server.providers.indexeddb is required (set server.providers.indexeddb or mark one providers.indexeddb entry default: true)")
 	}
 	if cfg.Server.EncryptionKey == "" {

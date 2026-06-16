@@ -2165,11 +2165,12 @@ func TestNewServerRequiresExternalCredentialsProvider(t *testing.T) {
 	}()
 
 	_, err = server.New(server.Config{
-		Auth:        &coretesting.StubAuthProvider{N: "none"},
-		Services:    svc,
-		Providers:   providers,
-		Invoker:     invocation.NewBroker(providers, svc.Users, nil),
-		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		Auth:                       &coretesting.StubAuthProvider{N: "none"},
+		Services:                   svc,
+		Providers:                  providers,
+		Invoker:                    invocation.NewBroker(providers, svc.Users, nil),
+		StateSecret:                []byte("0123456789abcdef0123456789abcdef"),
+		RequireExternalCredentials: true,
 	})
 	if err == nil {
 		t.Fatal("expected error when external credentials provider is missing")
