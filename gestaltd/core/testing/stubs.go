@@ -230,7 +230,6 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 	return "", core.ErrSecretNotFound
 }
 
-
 type StubIntegration struct {
 	N              string
 	DN             string

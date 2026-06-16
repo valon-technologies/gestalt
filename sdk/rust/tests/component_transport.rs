@@ -16,8 +16,8 @@ use generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, ConfigureProviderRequest,
     HeadObjectRequest as ProtoHeadObjectRequest, IntrospectRequest as ProtoIntrospectRequest,
     ListObjectsRequest as ProtoListObjectsRequest, ProviderKind,
-    ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef,
-    TokenRequest as ProtoTokenRequest, WriteObjectRequest as ProtoWriteObjectRequest,
+    ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, TokenRequest as ProtoTokenRequest,
+    WriteObjectRequest as ProtoWriteObjectRequest,
 };
 use gestalt::authentication::{
     AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,

@@ -2477,11 +2477,11 @@ func TestBootstrapAgentToolCatalogExecutesExactAppIssueTool(t *testing.T) {
 	permissions = append(permissions, unavailableIssuePermissions...)
 	perms := principal.CompilePermissions(permissions)
 	p := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := principal.WithPrincipal(context.Background(), p)
 	reqContext := bootstrapAgentRequestContext(t, p, "managed")
@@ -3158,11 +3158,11 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		App: "managed",
 	}})
 	full := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	fullCtx := principal.WithPrincipal(context.Background(), full)
 
@@ -3195,11 +3195,11 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	}
 
 	restricted := &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(principal.CompilePermissions([]core.AccessPermission{{App: "managed"}})),
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(principal.CompilePermissions([]core.AccessPermission{{App: "managed"}})),
 	}
 	restrictedCtx := principal.WithPrincipal(context.Background(), restricted)
 

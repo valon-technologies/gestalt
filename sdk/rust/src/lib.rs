@@ -98,7 +98,7 @@ pub use api::{
     Subject, current_native_request_context, current_request_context, ok, with_request_context,
 };
 pub use app::App;
-pub use auth::{AuthenticationProvider, AuthCallContext};
+pub use auth::{AuthCallContext, AuthenticationProvider};
 pub use cache::Cache;
 pub use cache_provider::{CacheEntry, CacheProvider, CacheSetOptions};
 pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};

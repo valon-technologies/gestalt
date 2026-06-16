@@ -11,8 +11,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authentication"
 )
 
-const cliLoginTokenName = "cli-token"
-
 type createGrantResponse struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name,omitempty"`

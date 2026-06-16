@@ -17,13 +17,13 @@ from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 
 from gestalt import (
+    CALLER_BEARER_TOKEN_METADATA_KEY,
     App,
     ApplyWorkflowProviderDefinitionRequest,
     AppProviderAdapter,
     AuthCallContext,
     AuthenticationProvider,
     AuthorizeRequest,
-    CALLER_BEARER_TOKEN_METADATA_KEY,
     CacheProvider,
     CacheSetEntry,
     Catalog,

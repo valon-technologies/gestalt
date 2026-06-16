@@ -3849,11 +3849,11 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		App: "managed",
 	}})
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
-		SubjectID:        "user:user-123",
-		UserID:           "user-123",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: append([]string{"echoext"}, principal.ScopeStringsFromPermissionSet(perms)...),
+		SubjectID: "user:user-123",
+		UserID:    "user-123",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    append([]string{"echoext"}, principal.ScopeStringsFromPermissionSet(perms)...),
 	})
 
 	result, err := prov.Execute(ctx, "agent_manager_roundtrip", nil, "")

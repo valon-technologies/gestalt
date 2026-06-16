@@ -135,9 +135,9 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	srv, err := server.New(server.Config{
 		SelectedAuthProvider: "none",
 		Services:             svc,
-		Providers:   providers,
-		Invoker:     guarded,
-		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		Providers:            providers,
+		Invoker:              guarded,
+		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
 		t.Fatalf("creating server: %v", err)

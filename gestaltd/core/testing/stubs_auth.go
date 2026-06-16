@@ -131,7 +131,10 @@ func (s *StubAuthProvider) Introspect(ctx context.Context, req *core.IntrospectR
 	}
 	if s.ValidateTokenFn != nil {
 		identity, err := s.ValidateTokenFn(ctx, req.Token)
-		if err != nil || identity == nil {
+		if err != nil {
+			identity = nil
+		}
+		if identity == nil {
 			return &core.IntrospectResponse{Active: false}, nil
 		}
 		subject := "user:test"

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
@@ -255,7 +255,11 @@ func newHostIssuedSessionAuthStub(secret []byte, opts hostIssuedSessionAuthOpts)
 			if req == nil || strings.TrimSpace(req.Token) == "" {
 				return &core.IntrospectResponse{Active: false}, nil
 			}
-			if _, err := session.ValidateToken(req.Token, secret); err != nil {
+			claims, err := session.ValidateToken(req.Token, secret)
+			if err != nil {
+				claims = nil
+			}
+			if claims == nil {
 				return &core.IntrospectResponse{Active: false}, nil
 			}
 			return &core.IntrospectResponse{
@@ -365,17 +369,4 @@ func testAuthStubForScopedBearer() *coretesting.StubAuthProvider {
 		}
 		return testIntrospectActive(principal.UserSubjectID(userID), scope), nil
 	})
-}
-
-func authorizeRedirectURL(loginURL, state string) string {
-	parsed, _ := url.Parse(loginURL)
-	if parsed == nil {
-		return loginURL
-	}
-	q := parsed.Query()
-	if state != "" {
-		q.Set("state", state)
-	}
-	parsed.RawQuery = q.Encode()
-	return parsed.String()
 }

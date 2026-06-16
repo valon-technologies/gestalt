@@ -119,8 +119,6 @@ func decodeCreateTokenRequest(r io.Reader, req *createTokenRequest) error {
 	return decoder.Decode(req)
 }
 
-type apiTokenInfo = grantInfo
-
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("grant list failed")

@@ -402,10 +402,6 @@ func New(cfg Config) (*Server, error) {
 	return s, nil
 }
 
-func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider, selected string) bool {
-	return strings.TrimSpace(selected) == "none"
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
 }

@@ -150,10 +150,10 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) {
 	srv, err := server.New(server.Config{
 		SelectedAuthProvider: "none",
 		Services:             ds,
-		Providers:      providers,
-		Invoker:        broker,
-		StateSecret:    []byte("0123456789abcdef0123456789abcdef"),
-		TracerProvider: tp,
+		Providers:            providers,
+		Invoker:              broker,
+		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
+		TracerProvider:       tp,
 	})
 	if err != nil {
 		t.Fatalf("creating server: %v", err)

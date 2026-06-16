@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/valon-technologies/gestalt/sdk/go"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"

@@ -90,9 +90,7 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
     ) -> Result<RevokeGrantResponse>;
 }
 
-pub(crate) fn caller_bearer_token_from_metadata(
-    metadata: &tonic::metadata::MetadataMap,
-) -> String {
+pub(crate) fn caller_bearer_token_from_metadata(metadata: &tonic::metadata::MetadataMap) -> String {
     metadata
         .get(CALLER_BEARER_TOKEN_METADATA_KEY)
         .and_then(|value| value.to_str().ok())

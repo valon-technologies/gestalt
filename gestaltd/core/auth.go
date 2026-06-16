@@ -9,9 +9,9 @@ const BearerScheme = "Bearer "
 const DefaultOAuthClientID = "gestaltd"
 
 const (
-	GrantTypeAuthorizationCode = "authorization_code"
-	GrantTypeTokenExchange       = "urn:ietf:params:oauth:grant-type:token-exchange"
-	SubjectTokenTypeAccessToken  = "urn:ietf:params:oauth:token-type:access_token"
+	GrantTypeAuthorizationCode  = "authorization_code"
+	GrantTypeTokenExchange      = "urn:ietf:params:oauth:grant-type:token-exchange"
+	SubjectTokenTypeAccessToken = "urn:ietf:params:oauth:token-type:access_token"
 )
 
 // AuthenticationProvider is the RFC 6749 / RFC 7662 / OIDF Grant Management

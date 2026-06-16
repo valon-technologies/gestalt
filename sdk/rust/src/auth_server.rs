@@ -2,25 +2,23 @@ use std::sync::Arc;
 
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::auth::{
-    AuthCallContext, AuthenticationProvider, caller_bearer_token_from_metadata,
-};
+use crate::auth::{AuthCallContext, AuthenticationProvider, caller_bearer_token_from_metadata};
 use crate::authentication::{
     AuthorizeRequest, GetGrantRequest, IntrospectRequest, ListGrantsRequest, RevokeGrantRequest,
     TokenRequest,
 };
-use crate::codec::authentication::{
-    to_wire_get_grant_response, to_wire_introspect_response, to_wire_list_grants_response,
-    to_wire_revoke_grant_response, to_wire_token_response,
+use crate::authentication::{
+    GetGrantResponse, IntrospectResponse, ListGrantsResponse, RevokeGrantResponse, TokenResponse,
 };
 use crate::generated::v1::authentication_server::Authentication as AuthenticationProviderGrpc;
 use crate::generated::v1::{
     AuthorizeRequest as ProtoAuthorizeRequest, AuthorizeResponse as ProtoAuthorizeResponse,
     GetGrantRequest as ProtoGetGrantRequest, GetGrantResponse as ProtoGetGrantResponse,
-    IntrospectRequest as ProtoIntrospectRequest, IntrospectResponse as ProtoIntrospectResponse,
-    ListGrantsRequest as ProtoListGrantsRequest, ListGrantsResponse as ProtoListGrantsResponse,
-    RevokeGrantRequest as ProtoRevokeGrantRequest, RevokeGrantResponse as ProtoRevokeGrantResponse,
-    TokenRequest as ProtoTokenRequest, TokenResponse as ProtoTokenResponse,
+    GrantScope as ProtoGrantScope, IntrospectRequest as ProtoIntrospectRequest,
+    IntrospectResponse as ProtoIntrospectResponse, ListGrantsRequest as ProtoListGrantsRequest,
+    ListGrantsResponse as ProtoListGrantsResponse, RevokeGrantRequest as ProtoRevokeGrantRequest,
+    RevokeGrantResponse as ProtoRevokeGrantResponse, TokenRequest as ProtoTokenRequest,
+    TokenResponse as ProtoTokenResponse,
 };
 use crate::rpc_status::rpc_status;
 
@@ -84,6 +82,48 @@ fn introspect_request_from_proto(value: ProtoIntrospectRequest) -> IntrospectReq
     }
 }
 
+fn token_response_to_proto(value: TokenResponse) -> ProtoTokenResponse {
+    ProtoTokenResponse {
+        access_token: value.access_token,
+        token_type: value.token_type,
+        expires_in: value.expires_in,
+        refresh_token: value.refresh_token,
+        scope: value.scope,
+        grant_id: value.grant_id,
+    }
+}
+
+fn introspect_response_to_proto(value: IntrospectResponse) -> ProtoIntrospectResponse {
+    ProtoIntrospectResponse {
+        active: value.active,
+        subject: value.subject,
+        scope: value.scope,
+        client_id: value.client_id,
+        audience: value.audience,
+    }
+}
+
+fn list_grants_response_to_proto(value: ListGrantsResponse) -> ProtoListGrantsResponse {
+    ProtoListGrantsResponse {
+        grant_ids: value.grant_ids,
+    }
+}
+
+fn get_grant_response_to_proto(value: GetGrantResponse) -> ProtoGetGrantResponse {
+    ProtoGetGrantResponse {
+        scopes: value
+            .scopes
+            .into_iter()
+            .map(|scope| ProtoGrantScope {
+                scope: scope.scope,
+                resource: scope.resource,
+            })
+            .collect(),
+        created_at: value.created_at,
+        expires_at: value.expires_at,
+    }
+}
+
 #[tonic::async_trait]
 impl<P> AuthenticationProviderGrpc for AuthenticationServer<P>
 where
@@ -112,7 +152,7 @@ where
             .token(token_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("token", error))?;
-        Ok(GrpcResponse::new(to_wire_token_response(response)))
+        Ok(GrpcResponse::new(token_response_to_proto(response)))
     }
 
     async fn introspect(
@@ -124,7 +164,7 @@ where
             .introspect(introspect_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("introspect", error))?;
-        Ok(GrpcResponse::new(to_wire_introspect_response(response)))
+        Ok(GrpcResponse::new(introspect_response_to_proto(response)))
     }
 
     async fn list_grants(
@@ -139,7 +179,7 @@ where
             .list_grants(call, ListGrantsRequest {})
             .await
             .map_err(|error| rpc_status("list grants", error))?;
-        Ok(GrpcResponse::new(to_wire_list_grants_response(response)))
+        Ok(GrpcResponse::new(list_grants_response_to_proto(response)))
     }
 
     async fn get_grant(
@@ -154,7 +194,7 @@ where
             .get_grant(call, get_grant_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("get grant", error))?;
-        Ok(GrpcResponse::new(to_wire_get_grant_response(response)))
+        Ok(GrpcResponse::new(get_grant_response_to_proto(response)))
     }
 
     async fn revoke_grant(
@@ -168,8 +208,6 @@ where
             .revoke_grant(call, revoke_grant_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("revoke grant", error))?;
-        Ok(GrpcResponse::new(to_wire_revoke_grant_response(
-            crate::authentication::RevokeGrantResponse {},
-        )))
+        Ok(GrpcResponse::new(ProtoRevokeGrantResponse {}))
     }
 }

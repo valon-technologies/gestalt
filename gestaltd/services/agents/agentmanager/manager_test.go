@@ -2530,11 +2530,11 @@ func TestAgentTurnPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing
 		Operations: []string{"issues"},
 	}})
 	p := &principal.Principal{
-		SubjectID:        principal.UserSubjectID("user-1"),
-		UserID:           "user-1",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: principal.UserSubjectID("user-1"),
+		UserID:    "user-1",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2553,11 +2553,11 @@ func TestAgentTurnPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 		{App: "github"},
 	})
 	p := &principal.Principal{
-		SubjectID:        principal.UserSubjectID("user-1"),
-		UserID:           "user-1",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: principal.UserSubjectID("user-1"),
+		UserID:    "user-1",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2584,11 +2584,11 @@ func TestAgentTurnPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
 		{App: "slack"},
 	})
 	p := &principal.Principal{
-		SubjectID:        principal.UserSubjectID("user-1"),
-		UserID:           "user-1",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: principal.UserSubjectID("user-1"),
+		UserID:    "user-1",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2631,11 +2631,11 @@ func TestAgentTurnPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 		{App: "slack"},
 	})
 	p := &principal.Principal{
-		SubjectID:        principal.UserSubjectID("user-1"),
-		UserID:           "user-1",
-		Kind:             principal.KindUser,
-		Source:           principal.SourceBearer,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: principal.UserSubjectID("user-1"),
+		UserID:    "user-1",
+		Kind:      principal.KindUser,
+		Source:    principal.SourceBearer,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
@@ -2657,10 +2657,10 @@ func TestAgentTurnPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testi
 		Operations: []string{"events.reply"},
 	}})
 	p := &principal.Principal{
-		SubjectID:        principal.UserSubjectID("user-1"),
-		UserID:           "user-1",
-		Kind:             principal.KindUser,
-		Scopes: principal.ScopeStringsFromPermissionSet(perms),
+		SubjectID: principal.UserSubjectID("user-1"),
+		UserID:    "user-1",
+		Kind:      principal.KindUser,
+		Scopes:    principal.ScopeStringsFromPermissionSet(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
