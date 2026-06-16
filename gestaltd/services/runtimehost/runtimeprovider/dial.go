@@ -55,6 +55,14 @@ type dialTelemetryProviders struct {
 
 const hostedGRPCReadyTimeout = 30 * time.Second
 
+// hostedAppMaxMsgSize raises the gRPC client receive and send caps for hosted
+// app, agent, and workflow connections. The gRPC default of 4 MiB rejects
+// legitimate provider responses (for example Slack files.get returns around
+// 5-7 MB) with ResourceExhausted, which surfaces as 5xxs on
+// /api/v1/_integration_/_operation. 64 MiB leaves comfortable headroom while
+// still bounding host memory.
+const hostedAppMaxMsgSize = 64 * 1024 * 1024
+
 func (p dialTelemetryProviders) MeterProvider() metric.MeterProvider {
 	return p.meterProvider
 }
@@ -283,6 +291,7 @@ func dialUnixTarget(ctx context.Context, socket string, cfg dialConfig) (*grpc.C
 	conn, err := grpc.NewClient(
 		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		hostedAppCallOptions(),
 		grpc.WithAuthority("localhost"),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			var d net.Dialer
@@ -301,6 +310,7 @@ func dialTCPTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		hostedAppCallOptions(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {
@@ -322,6 +332,7 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 			ServerName: host,
 			NextProtos: []string{"h2"},
 		})),
+		hostedAppCallOptions(),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler(hostedAppGRPCOptions(cfg)...)),
 	)
 	if err != nil {
@@ -329,6 +340,16 @@ func dialTLSTarget(address string, cfg dialConfig) (*grpc.ClientConn, error) {
 	}
 	conn.Connect()
 	return conn, nil
+}
+
+// hostedAppCallOptions centralizes the gRPC default call options applied on
+// every hosted-app dial path so the receive and send caps stay in sync. See
+// hostedAppMaxMsgSize for the rationale behind the 64 MiB ceiling.
+func hostedAppCallOptions() grpc.DialOption {
+	return grpc.WithDefaultCallOptions(
+		grpc.MaxCallRecvMsgSize(hostedAppMaxMsgSize),
+		grpc.MaxCallSendMsgSize(hostedAppMaxMsgSize),
+	)
 }
 
 func hostedAppGRPCOptions(cfg dialConfig) []otelgrpc.Option {
