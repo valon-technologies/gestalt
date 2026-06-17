@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,7 +22,6 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
-	"github.com/valon-technologies/gestalt/server/services/ui"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,10 +33,16 @@ const (
 )
 
 type providerLocalCommandOptions struct {
-	Path        string
-	ConfigPaths []string
-	Name        string
-	Port        int
+	Paths        []string
+	ConfigPaths  []string
+	Name         string
+	Port         int
+	Locked       bool
+	ArtifactsDir string
+	LockfilePath string
+	// FleetOverlay is true for serve --path with --config. Validate always leaves
+	// this false so it keeps the synthesized baseline even with --config.
+	FleetOverlay bool
 }
 
 type providerLocalSession struct {
@@ -46,12 +50,24 @@ type providerLocalSession struct {
 	Kind              string
 	ManifestPath      string
 	TargetKey         string
+	TargetKeys        []string
+	DevUIKeys         []string
 	ConfigPaths       []string
 	State             operator.StatePaths
+	Locked            bool
 	PublicURL         string
 	AdminURL          string
 	PublicUIPaths     []string
 	AutoMountedUIPath string
+}
+
+type providerLocalTargetOverlay struct {
+	overlayPath  string
+	targetKey    string
+	devUIKey     string
+	kind         string
+	manifestPath string
+	mountPath    string
 }
 
 func runProviderValidate(args []string) error {
@@ -69,7 +85,7 @@ func runProviderValidate(args []string) error {
 	}
 
 	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-		Path:        *pathFlag,
+		Paths:       []string{*pathFlag},
 		ConfigPaths: []string(configPaths),
 		Name:        *nameFlag,
 		Port:        8080,
@@ -94,33 +110,120 @@ func runProviderValidate(args []string) error {
 }
 
 func runServeProviderLocal(opts providerLocalCommandOptions) error {
-	port := opts.Port
-	if port == 0 {
-		selectedPort, err := reserveLocalPort()
-		if err != nil {
-			return err
-		}
-		port = selectedPort
-	}
-	opts.Port = port
-
-	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-		Path:        opts.Path,
-		ConfigPaths: opts.ConfigPaths,
-		Name:        opts.Name,
-		Port:        port,
-	})
+	opts.FleetOverlay = len(opts.ConfigPaths) > 0
+	session, err := prepareProviderLocalSession(opts)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(session.Dir) }()
 
-	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, false)
+	var forcedDevUIKeys []string
+	if session.Locked {
+		forcedDevUIKeys = session.DevUIKeys
+	}
+	env, err := setupBootstrapWithConfigPaths(session.ConfigPaths, session.State, session.Locked, forcedDevUIKeys...)
 	if err != nil {
 		return err
 	}
 	logProviderLocalSummary("local provider ready", session)
 	return runServer(env)
+}
+
+func buildProviderLocalTargetOverlay(sessionDir string, index int, opts providerLocalCommandOptions, path string, port int, configPathsSoFar []string) (*providerLocalTargetOverlay, error) {
+	manifestPath, manifest, err := resolveProviderTargetManifest(path)
+	if err != nil {
+		return nil, err
+	}
+	kind, err := providerpkg.ManifestKind(manifest)
+	if err != nil {
+		return nil, err
+	}
+	if kind != providermanifestv1.KindApp && kind != providermanifestv1.KindUI {
+		return nil, fmt.Errorf("gestaltd serve --path and provider validate only support kind: app or ui in v1 (got %q)", kind)
+	}
+	targetManifestPath, err := canonicalPath(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+
+	overlayPath := filepath.Join(sessionDir, fmt.Sprintf("provider-target-%d.yaml", index))
+	result := &providerLocalTargetOverlay{
+		overlayPath:  overlayPath,
+		kind:         kind,
+		manifestPath: targetManifestPath,
+	}
+
+	switch kind {
+	case providermanifestv1.KindUI:
+		resolvedKey, err := resolveProviderLocalUIKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
+		if err != nil {
+			return nil, err
+		}
+		mountPath := defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
+		if configuredUIs, loadErr := loadConfiguredUIs(opts.ConfigPaths); loadErr == nil {
+			if entry := configuredUIs[resolvedKey]; entry != nil && strings.TrimSpace(entry.Path) != "" {
+				mountPath = strings.TrimSpace(entry.Path)
+			}
+		}
+		if err := writeProviderLocalUIOverlayConfig(overlayPath, resolvedKey, targetManifestPath, port, mountPath); err != nil {
+			return nil, err
+		}
+		result.targetKey = resolvedKey
+		result.devUIKey = resolvedKey
+		result.mountPath = mountPath
+		return result, nil
+	case providermanifestv1.KindApp:
+		resolvedKey, err := resolveProviderLocalPluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
+		if err != nil {
+			return nil, err
+		}
+		autoMountPath, uiName, uiManifestPath, err := resolveProviderLocalAppMount(configPathsSoFar, resolvedKey, targetManifestPath, manifest)
+		if err != nil {
+			return nil, err
+		}
+		if err := writeProviderLocalPluginOverlayConfig(overlayPath, resolvedKey, targetManifestPath, port, autoMountPath, uiName, uiManifestPath); err != nil {
+			return nil, err
+		}
+		result.targetKey = resolvedKey
+		result.mountPath = autoMountPath
+		return result, nil
+	default:
+		return nil, fmt.Errorf("unsupported provider local target kind %q", kind)
+	}
+}
+
+func resolveProviderLocalAppMount(configPaths []string, resolvedKey, targetManifestPath string, manifest *providermanifestv1.Manifest) (autoMountPath, uiName, uiManifestPath string, err error) {
+	siblingUIManifestPath, err := findSiblingUIManifestPath(targetManifestPath, manifest)
+	if err != nil {
+		return "", "", "", err
+	}
+	loadedCfg, loadErr := config.LoadPaths(configPaths)
+	if loadErr != nil {
+		return "", "", "", fmt.Errorf("load provider overlay config: %w", loadErr)
+	}
+	switch {
+	case shouldAutoMountOwnedUI(loadedCfg, resolvedKey, manifest):
+		autoMountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
+		if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
+			return "", "", "", err
+		}
+	case siblingUIManifestPath != "":
+		if entry := loadedCfg.Apps[resolvedKey]; entry != nil {
+			uiName = strings.TrimSpace(entry.UI)
+			autoMountPath = strings.TrimSpace(entry.MountPath)
+		}
+		if uiName == "" {
+			uiName = resolvedKey
+		}
+		if autoMountPath == "" {
+			autoMountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
+			if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
+				return "", "", "", err
+			}
+		}
+		uiManifestPath = siblingUIManifestPath
+	}
+	return autoMountPath, uiName, uiManifestPath, nil
 }
 
 type validatedConfigResult struct {
@@ -152,22 +255,8 @@ func validateConfigWithStatePaths(configFlags []string, state operator.StatePath
 }
 
 func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLocalSession, error) {
-	manifestPath, manifest, err := resolveProviderTargetManifest(opts.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return nil, err
-	}
-	if kind != providermanifestv1.KindApp && kind != providermanifestv1.KindUI {
-		return nil, fmt.Errorf("gestaltd serve --path and provider validate only support kind: app or ui in v1 (got %q)", kind)
-	}
-
-	targetManifestPath, err := canonicalPath(manifestPath)
-	if err != nil {
-		return nil, err
+	if len(opts.Paths) == 0 {
+		return nil, fmt.Errorf("at least one --path is required")
 	}
 
 	sessionDir, err := os.MkdirTemp("", "gestaltd-provider-*")
@@ -181,186 +270,91 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		}
 	}()
 
-	baseConfigPath := filepath.Join(sessionDir, "provider-base.yaml")
-	dbPath := filepath.Join(sessionDir, "provider.db")
-	if err := writeProviderLocalBaseConfig(baseConfigPath, dbPath); err != nil {
-		return nil, err
-	}
+	var configPaths []string
 	state := operator.StatePaths{
-		ArtifactsDir: filepath.Join(sessionDir, "artifacts"),
-		LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json"),
+		ArtifactsDir: opts.ArtifactsDir,
+		LockfilePath: opts.LockfilePath,
+	}
+	locked := opts.Locked && opts.FleetOverlay
+	port := opts.Port
+	if opts.FleetOverlay {
+		configPaths = append([]string(nil), opts.ConfigPaths...)
+		port = 0
+	} else {
+		baseConfigPath := filepath.Join(sessionDir, "provider-base.yaml")
+		dbPath := filepath.Join(sessionDir, "provider.db")
+		if err := writeProviderLocalBaseConfig(baseConfigPath, dbPath); err != nil {
+			return nil, err
+		}
+		configPaths = append([]string{baseConfigPath}, opts.ConfigPaths...)
+		state = operator.StatePaths{
+			ArtifactsDir: filepath.Join(sessionDir, "artifacts"),
+			LockfilePath: filepath.Join(sessionDir, "gestalt.lock.json"),
+		}
+		locked = false
+		if port == 0 {
+			selectedPort, err := reserveLocalPort()
+			if err != nil {
+				return nil, err
+			}
+			port = selectedPort
+		}
 	}
 
-	var session *providerLocalSession
-	switch kind {
-	case providermanifestv1.KindApp:
-		session, err = preparePluginLocalSession(sessionDir, baseConfigPath, state, opts, targetManifestPath, manifest)
-	case providermanifestv1.KindUI:
-		session, err = prepareUILocalSession(sessionDir, baseConfigPath, state, opts, targetManifestPath, manifest)
-	default:
-		err = fmt.Errorf("unsupported provider local target kind %q", kind)
+	var (
+		targetKeys  []string
+		devUIKeys   []string
+		publicPaths []string
+		lastOverlay *providerLocalTargetOverlay
+	)
+	for i, path := range opts.Paths {
+		overlay, err := buildProviderLocalTargetOverlay(sessionDir, i, opts, path, port, configPaths)
+		if err != nil {
+			return nil, err
+		}
+		configPaths = append(configPaths, overlay.overlayPath)
+		targetKeys = append(targetKeys, overlay.targetKey)
+		if overlay.devUIKey != "" && locked {
+			devUIKeys = append(devUIKeys, overlay.devUIKey)
+		}
+		if overlay.mountPath != "" {
+			publicPaths = append(publicPaths, overlay.mountPath)
+		}
+		lastOverlay = overlay
 	}
+
+	loadedCfg, err := config.LoadPaths(configPaths)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("loading local provider config: %w", err)
+	}
+	publicUIPaths := mountedPublicUIPaths(loadedCfg)
+	for _, mountPath := range publicPaths {
+		if mountPath != "" && !slices.Contains(publicUIPaths, mountPath) {
+			publicUIPaths = append(publicUIPaths, mountPath)
+		}
+	}
+	slices.Sort(publicUIPaths)
+	publicUIPaths = slices.Compact(publicUIPaths)
+
+	session := &providerLocalSession{
+		Dir:           sessionDir,
+		TargetKeys:    targetKeys,
+		DevUIKeys:     devUIKeys,
+		ConfigPaths:   configPaths,
+		State:         state,
+		Locked:        locked,
+		PublicURL:     providerLocalPublicURL(loadedCfg),
+		AdminURL:      strings.TrimRight(providerLocalPublicURL(loadedCfg), "/") + "/admin/",
+		PublicUIPaths: publicUIPaths,
+	}
+	if lastOverlay != nil {
+		session.Kind = lastOverlay.kind
+		session.ManifestPath = lastOverlay.manifestPath
+		session.TargetKey = lastOverlay.targetKey
+		session.AutoMountedUIPath = lastOverlay.mountPath
 	}
 	cleanupSessionDir = false
 	return session, nil
-}
-
-func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator.StatePaths, opts providerLocalCommandOptions, targetManifestPath string, manifest *providermanifestv1.Manifest) (*providerLocalSession, error) {
-	resolvedKey, err := resolveProviderLocalPluginKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
-	if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, "", "", ""); err != nil {
-		return nil, err
-	}
-
-	configPaths := append([]string{baseConfigPath}, opts.ConfigPaths...)
-	configPaths = append(configPaths, overlayConfigPath)
-
-	loadedCfg, err := config.LoadPaths(configPaths)
-	if err != nil {
-		return nil, fmt.Errorf("loading local provider config: %w", err)
-	}
-
-	autoMountPath := ""
-	siblingUIManifestPath, err := findSiblingUIManifestPath(targetManifestPath, manifest)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case shouldAutoMountOwnedUI(loadedCfg, resolvedKey, manifest):
-		autoMountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
-		if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
-			return nil, err
-		}
-		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, "", ""); err != nil {
-			return nil, err
-		}
-	case siblingUIManifestPath != "":
-		var uiName string
-		if entry := loadedCfg.Apps[resolvedKey]; entry != nil {
-			uiName = strings.TrimSpace(entry.UI)
-			autoMountPath = strings.TrimSpace(entry.MountPath)
-		}
-		if uiName == "" {
-			uiName = resolvedKey
-		}
-		if autoMountPath == "" {
-			autoMountPath = defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
-			if err := ensureNoPublicUIPathCollision(loadedCfg, resolvedKey, autoMountPath); err != nil {
-				return nil, err
-			}
-		}
-		if err := writeProviderLocalPluginOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath, uiName, siblingUIManifestPath); err != nil {
-			return nil, err
-		}
-	}
-
-	loadedCfg, err = config.LoadPaths(configPaths)
-	if err != nil {
-		return nil, fmt.Errorf("loading local provider config with mounted ui: %w", err)
-	}
-
-	publicURL := providerLocalPublicURL(loadedCfg)
-	publicUIPaths := mountedPublicUIPaths(loadedCfg)
-	if autoMountPath != "" && !slices.Contains(publicUIPaths, autoMountPath) {
-		publicUIPaths = append(publicUIPaths, autoMountPath)
-		slices.Sort(publicUIPaths)
-	}
-
-	return &providerLocalSession{
-		Dir:               sessionDir,
-		Kind:              providermanifestv1.KindApp,
-		ManifestPath:      targetManifestPath,
-		TargetKey:         resolvedKey,
-		ConfigPaths:       configPaths,
-		State:             state,
-		PublicURL:         publicURL,
-		AdminURL:          strings.TrimRight(publicURL, "/") + "/admin/",
-		PublicUIPaths:     publicUIPaths,
-		AutoMountedUIPath: autoMountPath,
-	}, nil
-}
-
-func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.StatePaths, opts providerLocalCommandOptions, targetManifestPath string, manifest *providermanifestv1.Manifest) (*providerLocalSession, error) {
-	resolvedKey, err := resolveProviderLocalUIKey(opts.ConfigPaths, targetManifestPath, manifest, opts.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	autoMountPath := defaultProviderLocalMountPath(manifest, targetManifestPath, resolvedKey)
-	if configuredUIs, err := loadConfiguredUIs(opts.ConfigPaths); err == nil {
-		if entry := configuredUIs[resolvedKey]; entry != nil && strings.TrimSpace(entry.Path) != "" {
-			autoMountPath = strings.TrimSpace(entry.Path)
-		}
-	}
-
-	overlayConfigPath := filepath.Join(sessionDir, "provider-target.yaml")
-	if err := writeProviderLocalUIOverlayConfig(overlayConfigPath, resolvedKey, targetManifestPath, opts.Port, autoMountPath); err != nil {
-		return nil, err
-	}
-
-	configPaths := append([]string{baseConfigPath}, opts.ConfigPaths...)
-	configPaths = append(configPaths, overlayConfigPath)
-
-	loadedCfg, err := config.LoadPaths(configPaths)
-	if err != nil {
-		return nil, fmt.Errorf("loading local provider config: %w", err)
-	}
-
-	publicURL := providerLocalPublicURL(loadedCfg)
-	publicUIPaths := mountedPublicUIPaths(loadedCfg)
-	if autoMountPath != "" && !slices.Contains(publicUIPaths, autoMountPath) {
-		publicUIPaths = append(publicUIPaths, autoMountPath)
-		slices.Sort(publicUIPaths)
-	}
-
-	return &providerLocalSession{
-		Dir:               sessionDir,
-		Kind:              providermanifestv1.KindUI,
-		ManifestPath:      targetManifestPath,
-		TargetKey:         resolvedKey,
-		ConfigPaths:       configPaths,
-		State:             state,
-		PublicURL:         publicURL,
-		AdminURL:          strings.TrimRight(publicURL, "/") + "/admin/",
-		PublicUIPaths:     publicUIPaths,
-		AutoMountedUIPath: autoMountPath,
-	}, nil
-}
-
-func sourceUIHandler(manifestPath string) (http.Handler, error) {
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return nil, err
-	}
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return nil, err
-	}
-	if kind != providermanifestv1.KindUI {
-		return nil, fmt.Errorf("ui manifest %q must have kind %q (got %q)", manifestPath, providermanifestv1.KindUI, kind)
-	}
-	if err := providerpkg.RunSourceBuild(manifestPath, manifest, providerpkg.SourceBuildOptions{}); err != nil {
-		return nil, err
-	}
-	_, manifest, err = providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read ui manifest after source build: %w", err)
-	}
-	assetRootValue := providerpkg.SourceUIBuildOutput(manifest)
-	if strings.TrimSpace(assetRootValue) == "" {
-		return nil, fmt.Errorf("ui manifest %q missing spec.assetRoot", manifestPath)
-	}
-	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(assetRootValue))
-	if _, err := os.Stat(assetRoot); err != nil {
-		return nil, fmt.Errorf("ui asset root not found at %s: %w", assetRoot, err)
-	}
-	return ui.DirHandler(assetRoot)
 }
 
 func resolveProviderTargetManifest(pathFlag string) (string, *providermanifestv1.Manifest, error) {
@@ -490,16 +484,18 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 
 	cfg := map[string]any{
 		"apiVersion": config.ConfigAPIVersion,
-		"server": map[string]any{
+		"apps": map[string]any{
+			pluginKey: pluginEntry,
+		},
+	}
+	if port > 0 {
+		cfg["server"] = map[string]any{
 			"baseUrl": providerLocalBaseURL(port),
 			"public": map[string]any{
 				"host": providerLocalHost,
 				"port": port,
 			},
-		},
-		"apps": map[string]any{
-			pluginKey: pluginEntry,
-		},
+		}
 	}
 	if uiName != "" && uiManifestPath != "" {
 		cfg["providers"] = map[string]any{
@@ -523,18 +519,20 @@ func writeProviderLocalUIOverlayConfig(path, uiKey, manifestPath string, port in
 
 	cfg := map[string]any{
 		"apiVersion": config.ConfigAPIVersion,
-		"server": map[string]any{
-			"baseUrl": providerLocalBaseURL(port),
-			"public": map[string]any{
-				"host": providerLocalHost,
-				"port": port,
-			},
-		},
 		"providers": map[string]any{
 			"ui": map[string]any{
 				uiKey: uiEntry,
 			},
 		},
+	}
+	if port > 0 {
+		cfg["server"] = map[string]any{
+			"baseUrl": providerLocalBaseURL(port),
+			"public": map[string]any{
+				"host": providerLocalHost,
+				"port": port,
+			},
+		}
 	}
 	return writeYAMLFile(path, cfg)
 }
@@ -694,19 +692,31 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 		publicUIPaths = nil
 	}
 	args := []any{
-		"kind", session.Kind,
-		"manifest", session.ManifestPath,
+		"config_files", session.ConfigPaths,
 		"public_url", session.PublicURL,
 		"admin_url", session.AdminURL,
 		"mounted_ui_paths", publicUIPaths,
-		"auto_mounted_ui_path", session.AutoMountedUIPath,
-		"config_files", session.ConfigPaths,
 	}
-	switch session.Kind {
-	case providermanifestv1.KindUI:
-		args = append(args, "ui", session.TargetKey)
-	default:
-		args = append(args, "app", session.TargetKey)
+	if session.Locked || len(session.DevUIKeys) > 0 || len(session.TargetKeys) > 0 {
+		args = append(args,
+			"dev_ui_keys", session.DevUIKeys,
+			"target_keys", session.TargetKeys,
+			"artifacts_dir", session.State.ArtifactsDir,
+			"lockfile", session.State.LockfilePath,
+		)
+	}
+	if session.ManifestPath != "" {
+		args = append(args,
+			"kind", session.Kind,
+			"manifest", session.ManifestPath,
+			"auto_mounted_ui_path", session.AutoMountedUIPath,
+		)
+		switch session.Kind {
+		case providermanifestv1.KindUI:
+			args = append(args, "ui", session.TargetKey)
+		default:
+			args = append(args, "app", session.TargetKey)
+		}
 	}
 	slog.Info(message, args...)
 }

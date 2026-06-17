@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -297,5 +298,121 @@ server:
 	wantStylesheet := filepath.Join(dir, "theme", "tenant.css")
 	if entry.ResolvedThemeStylesheet != wantStylesheet {
 		t.Fatalf("ResolvedThemeStylesheet = %q, want %q", entry.ResolvedThemeStylesheet, wantStylesheet)
+	}
+}
+
+func TestForcedDevUIKeysActivatesUnderLocked(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	uiDir := filepath.Join(dir, "ui")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: ui
+source: github.com/acme/apps/demo-ui
+version: "1.0.0"
+dev:
+  command: [sh, -c, echo]
+build:
+  command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
+spec:
+  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer]
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v6
+providers:
+  ui:
+    demo:
+      path: /demo
+      source:
+        path: ./ui
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	cfg, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	if err != nil {
+		t.Fatalf("loadConfigForLifecycle: %v", err)
+	}
+	entry := cfg.Providers.UI["demo"]
+	if entry == nil {
+		t.Fatal("expected ui.demo entry")
+	}
+	if !entry.DevActive {
+		t.Fatal("forced dev key should mark UI dev-active even when devServeEligible is false")
+	}
+}
+
+func TestForcedDevUIKeyWithoutDevBlockErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	uiDir := filepath.Join(dir, "ui")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	manifest := `kind: ui
+source: github.com/acme/apps/demo-ui
+version: "1.0.0"
+build:
+  command: [sh, -c, "mkdir -p out && echo ok > out/index.html"]
+spec:
+  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer]
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v6
+providers:
+  ui:
+    demo:
+      path: /demo
+      source:
+        path: ./ui
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	if err == nil || !strings.Contains(err.Error(), `no dev: block`) {
+		t.Fatalf("loadConfigForLifecycle error = %v, want no dev: block error", err)
+	}
+}
+
+func TestForcedDevUIKeyWithUnreadableSourceErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `apiVersion: gestaltd.config/v6
+providers:
+  ui:
+    demo:
+      path: /demo
+      source:
+        path: ./missing-ui
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	_, err := NewLifecycle().WithForcedDevUIKeys([]string{"demo"}).loadConfigForLifecycle([]string{cfgPath}, StatePaths{}, false)
+	if err == nil || !strings.Contains(err.Error(), `--path target "demo"`) {
+		t.Fatalf("loadConfigForLifecycle error = %v, want forced --path target error", err)
 	}
 }
