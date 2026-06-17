@@ -23,6 +23,32 @@ const (
 // index.html as text/html. An unconfigured mount serves an empty stylesheet
 // (200, text/css) instead of falling through; /theme/* falls through unless
 // an assets directory is configured.
+func mountedUIThemeHandlerFullPath(mounted MountedUI, next http.Handler) http.Handler {
+	stylesheetPath, assetsPrefix := mountedUIThemePaths(mounted.Path)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		switch {
+		case r.URL.Path == stylesheetPath:
+			serveMountedUIThemeStylesheet(w, r, mounted.ThemeStylesheet)
+		case mounted.ThemeAssetsDir != "" && strings.HasPrefix(r.URL.Path, assetsPrefix):
+			serveMountedUIThemeAsset(w, r, mounted.ThemeAssetsDir)
+		default:
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
+func mountedUIThemePaths(mountPath string) (stylesheetPath, assetsPrefix string) {
+	mountPath = strings.TrimRight(mountPath, "/")
+	if mountPath == "" {
+		return mountedUIThemeStylesheetPath, mountedUIThemeAssetsPrefix
+	}
+	return mountPath + mountedUIThemeStylesheetPath, mountPath + mountedUIThemeAssetsPrefix
+}
+
 func mountedUIThemeHandler(mounted MountedUI, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {

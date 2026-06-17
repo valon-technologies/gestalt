@@ -59,6 +59,7 @@ type MountedUI struct {
 	// <mount>/theme/ respectively. Both are optional.
 	ThemeStylesheet string
 	ThemeAssetsDir  string
+	IsDev           bool
 	builtInAdmin    bool
 }
 
@@ -187,6 +188,7 @@ type Config struct {
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	S3                   map[string]s3sdk.S3
 	MountedUIs           []MountedUI
+	DevHandlers          map[string]http.Handler
 	Admin                AdminRouteConfig
 	AdminUIProvider      string
 	AdminUI              http.Handler
@@ -254,7 +256,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	mountedUIs := cfg.MountedUIs
 	if len(mountedUIs) == 0 && len(cfg.ProviderUIs) != 0 {
-		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs)
+		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs, cfg.DevHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
 		}

@@ -99,6 +99,10 @@ type Lifecycle struct {
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
+	// devServeEligible enables manifest dev: activation. Set true only for an
+	// unlocked `gestaltd serve`; false for lock/sync/validate and serve --locked,
+	// so committed lockfiles build and pin dev UIs normally.
+	devServeEligible bool
 }
 
 type StatePaths struct {
@@ -175,6 +179,11 @@ func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
 
 func (l *Lifecycle) WithProviderResolver(resolver *providerregistry.Resolver) *Lifecycle {
 	l.providerResolver = resolver
+	return l
+}
+
+func (l *Lifecycle) WithDevServeEligible(v bool) *Lifecycle {
+	l.devServeEligible = v
 	return l
 }
 
@@ -320,7 +329,7 @@ func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, s
 }
 
 func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
@@ -357,7 +366,7 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 }
 
 func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
@@ -535,6 +544,9 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if entry == nil {
 			continue
 		}
+		if entry.DevActive {
+			continue
+		}
 		if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() && pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
 			if _, err := l.applyConfiguredUIProvider(paths, nil, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
 				return nil, err
@@ -699,6 +711,9 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && sourceBacked(&entry.ProviderEntry) {
+			if entry.DevActive {
+				continue
+			}
 			if _, existed := existingUIEntries[name]; !existed && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 				if app := cfg.Apps[name]; app != nil && strings.TrimSpace(app.UI) == "" && strings.TrimSpace(app.MountPath) != "" {
 					continue
@@ -895,11 +910,60 @@ func defaultLockfilePath(configPath string) string {
 	return filepath.Join(dir, LockfileName)
 }
 
-func loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
+func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
+	var cfg *config.Config
+	var err error
 	if allowMissingEnv {
-		return config.LoadAllowMissingEnvPaths(configPaths)
+		cfg, err = config.LoadAllowMissingEnvPaths(configPaths)
+	} else {
+		cfg, err = config.LoadPaths(configPaths)
 	}
-	return config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, err
+	}
+	if l != nil && l.devServeEligible {
+		if err := markDevActiveUIProviders(cfg); err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
+func markDevActiveUIProviders(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+		entry := cfg.Providers.UI[name]
+		if entry == nil || !entry.HasLocalSource() {
+			continue
+		}
+		normalized, err := normalizeLocalSource(entry.SourcePath())
+		if err != nil {
+			continue
+		}
+		_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
+		if err != nil {
+			continue
+		}
+		if providerpkg.EffectiveDev(manifest) == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("ui %q: decode config: %w", name, err)
+		}
+		if err := bindResolvedUIManifest(&entry.ProviderEntry, normalized.manifestPath, manifest, configMap); err != nil {
+			return fmt.Errorf("ui %q: %w", name, err)
+		}
+		workdir := normalized.sourceDir
+		if w := strings.TrimSpace(manifest.Dev.Workdir); w != "" && w != "." {
+			workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
+		}
+		entry.DevActive = true
+		entry.ResolvedDevWorkdir = workdir
+	}
+	return nil
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
@@ -911,11 +975,21 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (
 }
 
 func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked bool) (*config.Config, map[string]string, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, false)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	if l.devServeEligible {
+		for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+			entry := cfg.Providers.UI[name]
+			if entry != nil && entry.DevActive {
+				if err := resolveUIThemeConfig(paths, name, entry); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+	}
 	mode := artifactModeMaterialize
 	if locked {
 		mode = artifactModeReadOnly
@@ -950,7 +1024,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 }
 
 func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string, state StatePaths) (*config.Config, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, false)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -975,7 +1049,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 }
 
 func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []string, state StatePaths, opts StaticValidationOptions) (*config.Config, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -1043,7 +1117,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if recorder != nil {
 		recorder.Begin(syncActionForArtifactMode(mode), configPaths, mode == artifactModeCheck, opts.Parallelism)
 	}
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
@@ -1709,7 +1783,7 @@ func configHasLocalProviderSources(cfg *config.Config) bool {
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
+		if entry != nil && !entry.DevActive && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 			return true
 		}
 	}
@@ -2286,6 +2360,9 @@ func lockFreshForConfig(cfg *config.Config, paths lifecyclePaths, lock *Lockfile
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || !providerRequiresCommittedLock(&entry.ProviderEntry) {
+			continue
+		}
+		if entry.DevActive {
 			continue
 		}
 		lockEntry, found := lock.Providers.UI[name]
@@ -3426,6 +3503,9 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 		if entry == nil {
 			continue
 		}
+		if entry.DevActive {
+			continue
+		}
 		configMap, err := config.NodeToMap(entry.Config)
 		if err != nil {
 			return fmt.Errorf("decode ui %q config: %w", name, err)
@@ -3476,7 +3556,7 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 }
 
 func localUIParallelPrepareCandidate(paths lifecyclePaths, entry *config.UIEntry, mode artifactMode) bool {
-	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
+	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() || entry.DevActive {
 		return false
 	}
 	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {

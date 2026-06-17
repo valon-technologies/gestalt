@@ -21,7 +21,7 @@ the platform where they run.
 | --- | --- |
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
 | `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. |
-| `gestaltd serve --config PATH --watch` | Start from layered config and restart after debounced local config, source provider, or local release metadata changes. |
+| `gestaltd serve --config PATH` | Start from layered config; local UIs with a manifest `dev:` block are proxied to hot-reload dev servers. |
 | `gestaltd serve --locked --config PATH` | Start read-only from an existing lockfile and prepared artifacts. Repeat `--config` to layer overrides. |
 | `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd serve --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
@@ -166,27 +166,42 @@ the action is `check`, cache writes remain zero, and `output.measured` is
 | `output.files`, `output.bytes` | Aggregate prepared output measurement over known prepared artifact roots, not the entire artifacts directory. |
 | `output.roots` | All measured prepared output roots, sorted by bytes descending. |
 
-## Config Watch Mode
+## Local UI Development
 
-Use `gestaltd serve --watch` for config-based local development when your
-layered config points at local provider source paths or local
-`provider-release.yaml` metadata. Watch mode starts normally, then restarts the
-server after local file changes settle. If reload preparation fails, the current
-server keeps running and the failure is logged.
+When a UI manifest declares a `dev:` block and your layered config points the
+UI provider at a local working tree (`source.path`), `gestaltd serve` spawns the
+declared dev command and reverse-proxies the mount path to it. Framework hot
+reload (for example Next.js Fast Refresh) works through the proxy, including
+websocket traffic.
 
-For faster iteration on one local plugin, either use `gestaltd serve --path`
+```yaml
+dev:
+  command: [npm, run, dev:gestalt]
+```
+
+gestaltd injects:
+
+| Variable | Purpose |
+| --- | --- |
+| `GESTALT_DEV` | Set to `1` |
+| `GESTALT_DEV_PORT` | Port the dev server must bind on `127.0.0.1` |
+| `GESTALT_DEV_BASE_PATH` | Mount path the dev server must serve under (for example `/g-issues`) |
+
+Map these in your framework dev script, for example
+`NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT`.
+
+Production and `gestaltd serve --locked` ignore `dev:` and continue to serve the
+static `build` output. Config or provider changes require restarting gestaltd.
+
+For faster iteration on one local plugin, use `gestaltd serve --path`
 for a standalone source tree or layer a small local config that includes only
 the app under test:
 
 ```sh
 gestaltd serve \
   --config ./config.yaml \
-  --config ./support-local.yaml \
-  --watch
+  --config ./support-local.yaml
 ```
-
-Watch mode applies only to config-based serve. It cannot be combined with
-`--locked` or `--path`.
 
 ## Examples
 
@@ -203,7 +218,6 @@ gestaltd validate --config ./config.yaml
 gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
-gestaltd serve --config ./config.yaml --watch
 gestaltd serve --path ./apps/support/manifest.yaml
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml

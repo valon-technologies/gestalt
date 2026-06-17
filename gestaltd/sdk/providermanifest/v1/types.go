@@ -39,6 +39,7 @@ type Manifest struct {
 	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string       `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Build       *SourceBuild `json:"build,omitempty" yaml:"build,omitempty"`
+	Dev         *SourceDev   `json:"dev,omitempty" yaml:"dev,omitempty"`
 	Run         []string     `json:"run,omitempty" yaml:"run,omitempty"`
 	Artifacts   []Artifact   `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoint  *Entrypoint  `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
@@ -145,6 +146,79 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 		Command: b.Command,
 		Inputs:  b.Inputs,
 	}, nil
+}
+
+// SourceDev declares a long-running development command that owns its own file
+// watching and hot reload. Honored only in an unlocked local serve when the
+// provider's source is a local working tree; ignored by lock/sync/--locked/prod.
+type SourceDev struct {
+	Command      []string          `json:"command" yaml:"command"`
+	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+}
+
+type sourceDevWire struct {
+	Command      []string          `json:"command" yaml:"command"`
+	Workdir      string            `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	ReadyTimeout string            `json:"readyTimeout,omitempty" yaml:"readyTimeout,omitempty"`
+	Env          map[string]string `json:"env,omitempty" yaml:"env,omitempty"`
+}
+
+func (d *SourceDev) UnmarshalJSON(data []byte) error {
+	if d == nil {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		*d = SourceDev{}
+		return nil
+	}
+	if err := validateJSONWireObjectFields(trimmed, sourceDevWireFields); err != nil {
+		return err
+	}
+	var raw sourceDevWire
+	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
+		return err
+	}
+	if len(raw.Command) == 0 {
+		return fmt.Errorf("dev.command is required")
+	}
+	*d = SourceDev(raw)
+	return nil
+}
+
+func (d SourceDev) MarshalJSON() ([]byte, error) {
+	return json.Marshal(sourceDevWire(d))
+}
+
+func (d *SourceDev) UnmarshalYAML(value *yaml.Node) error {
+	if d == nil {
+		return nil
+	}
+	if value == nil {
+		*d = SourceDev{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		return fmt.Errorf("dev must be a mapping")
+	}
+	if err := validateYAMLWireObjectFields(value, sourceDevWireFields, "dev"); err != nil {
+		return err
+	}
+	var raw sourceDevWire
+	if err := decodeYAMLKnownFields(value, &raw); err != nil {
+		return err
+	}
+	if len(raw.Command) == 0 {
+		return fmt.Errorf("dev.command is required")
+	}
+	*d = SourceDev(raw)
+	return nil
+}
+
+func (d SourceDev) MarshalYAML() (any, error) {
+	return sourceDevWire(d), nil
 }
 
 // Spec is a union type validated per kind. For auth/indexeddb/secrets only
@@ -931,6 +1005,13 @@ var sourceBuildWireFields = map[string]struct{}{
 	"workdir": {},
 	"command": {},
 	"inputs":  {},
+}
+
+var sourceDevWireFields = map[string]struct{}{
+	"command":      {},
+	"workdir":      {},
+	"readyTimeout": {},
+	"env":          {},
 }
 
 var specWireFields = map[string]struct{}{

@@ -168,6 +168,14 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			return err
 		}
 	}
+	if manifest.Dev != nil {
+		if !sourceMode {
+			return fmt.Errorf("dev metadata is only allowed in source manifests")
+		}
+		if err := validateSourceDev(manifest.Dev); err != nil {
+			return err
+		}
+	}
 
 	if sourceMode && len(manifest.Artifacts) > 0 {
 		return fmt.Errorf("artifacts are not allowed in source manifests; prepared and released manifests generate them")
@@ -475,6 +483,26 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 		}
 		if err := validateRelativeSourcePath(input, label); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateSourceDev(dev *providermanifestv1.SourceDev) error {
+	if dev == nil {
+		return nil
+	}
+	if dev.Workdir != "" {
+		if err := validateRelativeSourcePath(dev.Workdir, "dev.workdir"); err != nil {
+			return err
+		}
+	}
+	if len(dev.Command) == 0 {
+		return fmt.Errorf("dev.command is required")
+	}
+	for i, arg := range dev.Command {
+		if strings.TrimSpace(arg) == "" {
+			return fmt.Errorf("dev.command[%d] is required", i)
 		}
 	}
 	return nil

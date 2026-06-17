@@ -1190,6 +1190,11 @@ type UIEntry struct {
 	// config.theme block, not from YAML).
 	ResolvedThemeStylesheet string `yaml:"-"`
 	ResolvedThemeAssetsDir  string `yaml:"-"`
+
+	// DevActive is set when the provider has a local source and its manifest
+	// declares dev:. ResolvedDevWorkdir is the absolute cwd for the dev command.
+	DevActive          bool   `yaml:"-"`
+	ResolvedDevWorkdir string `yaml:"-"`
 }
 
 // UIThemeConfig is the typed `theme` block of a ui mount's provider config.
