@@ -79,6 +79,45 @@ func TestSupervisorNotReadyReturns503(t *testing.T) {
 	}
 }
 
+func TestSupervisorProbeStopsOnRestart(t *testing.T) {
+	t.Parallel()
+	fakeServerBin := buildFakeDevServer(t)
+	workdir := t.TempDir()
+	attemptsFile := filepath.Join(workdir, "attempts")
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	sup, err := providerdev.Start(ctx, nil, []providerdev.Target{{
+		Name:         "flaky",
+		Kind:         "ui",
+		BasePath:     "/flaky",
+		Workdir:      workdir,
+		Command:      []string{fakeServerBin},
+		Env: map[string]string{
+			"GESTALT_FAKE_ATTEMPTS_FILE": attemptsFile,
+			"GESTALT_FAKE_FAIL_UNTIL":    "2",
+			"GESTALT_FAKE_PID_FILE":      filepath.Join(workdir, "pid"),
+		},
+		ReadyTimeout: 10 * time.Second,
+	}})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(sup.Stop)
+
+	handler := sup.Handlers()["flaky"]
+	waitForHandlerStatus(t, handler, "/flaky/", http.StatusOK)
+
+	pid := readPIDFile(t, filepath.Join(workdir, "pid"))
+	if proc, err := os.FindProcess(pid); err == nil {
+		_ = proc.Signal(syscall.SIGKILL)
+	}
+	waitUntilProcessDead(t, pid)
+
+	waitForHandlerStatus(t, handler, "/flaky/", http.StatusServiceUnavailable)
+	waitForHandlerStatus(t, handler, "/flaky/", http.StatusOK)
+}
+
 func TestSupervisorStopTerminatesChild(t *testing.T) {
 	t.Parallel()
 	fakeServerBin := buildFakeDevServer(t)
@@ -128,16 +167,21 @@ func moduleRoot(t *testing.T) string {
 
 func waitForHandlerReady(t *testing.T, handler http.Handler, path string) {
 	t.Helper()
+	waitForHandlerStatus(t, handler, path, http.StatusOK)
+}
+
+func waitForHandlerStatus(t *testing.T, handler http.Handler, path string, want int) {
+	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code == http.StatusOK {
+		if rec.Code == want {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for handler readiness on %s", path)
+	t.Fatalf("timed out waiting for handler status %d on %s", want, path)
 }
 
 func readPIDFile(t *testing.T, path string) int {

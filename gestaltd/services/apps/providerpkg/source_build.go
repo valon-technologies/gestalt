@@ -24,7 +24,10 @@ type ResolvedSourceDev struct {
 	Workdir      string
 	Command      []string
 	ReadyTimeout string
-	Env          map[string]string
+	// Env is copied into the child process before the reserved GESTALT_DEV*
+	// contract variables (GESTALT_DEV, GESTALT_DEV_PORT, GESTALT_DEV_BASE_PATH),
+	// which cannot be overridden via manifest dev.env.
+	Env map[string]string
 }
 
 type SourceBuildOptions struct {

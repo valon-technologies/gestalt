@@ -1,11 +1,13 @@
 package providerdev
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
@@ -48,13 +50,15 @@ type Supervisor struct {
 }
 
 type managedProc struct {
-	target  Target
-	port    int
-	ready   atomic.Bool
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	done    chan struct{}
-	waitErr error
+	target    Target
+	port      int
+	proxy     *httputil.ReverseProxy
+	proxyPort int
+	ready     atomic.Bool
+	mu        sync.Mutex
+	cmd       *exec.Cmd
+	done      chan struct{}
+	waitErr   error
 }
 
 func TargetsFromConfig(cfg *config.Config) ([]Target, error) {
@@ -188,14 +192,28 @@ func (p *managedProc) handler() http.Handler {
 			serveNotReady(w)
 			return
 		}
-		port := p.currentPort()
-		upstream, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", port))
+		proxy, err := p.reverseProxy()
 		if err != nil {
 			http.Error(w, "dev server unavailable", http.StatusBadGateway)
 			return
 		}
-		newReverseProxy(upstream).ServeHTTP(w, r)
+		proxy.ServeHTTP(w, r)
 	})
+}
+
+func (p *managedProc) reverseProxy() (*httputil.ReverseProxy, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.proxy != nil && p.proxyPort == p.port {
+		return p.proxy, nil
+	}
+	upstream, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", p.port))
+	if err != nil {
+		return nil, err
+	}
+	p.proxy = newReverseProxy(upstream)
+	p.proxyPort = p.port
+	return p.proxy, nil
 }
 
 func (p *managedProc) currentPort() int {
@@ -216,6 +234,13 @@ func (p *managedProc) start(ctx context.Context, logger *slog.Logger) error {
 	p.ready.Store(false)
 
 	cmd := exec.CommandContext(ctx, p.target.Command[0], p.target.Command[1:]...)
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	}
+	cmd.WaitDelay = devShutdownGrace
 	cmd.Dir = p.target.Workdir
 	cmd.Env = devCommandEnv(port, p.target)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -228,28 +253,33 @@ func (p *managedProc) start(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	p.cmd = cmd
-	p.done = make(chan struct{})
+	done := make(chan struct{})
+	p.done = done
 	go func() {
 		p.waitErr = cmd.Wait()
-		close(p.done)
+		close(done)
 	}()
-	go p.probeReadiness(ctx, logger)
+	go p.probeReadiness(ctx, logger, port, done)
 	return nil
 }
 
-func (p *managedProc) probeReadiness(ctx context.Context, logger *slog.Logger) {
+func (p *managedProc) probeReadiness(ctx context.Context, logger *slog.Logger, port int, done chan struct{}) {
 	deadline := time.Now().Add(p.target.ReadyTimeout)
-	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(p.port))
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	warned := false
 	for {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return
+		case <-done:
+			return
+		default:
 		}
 		conn, err := net.DialTimeout("tcp", addr, time.Second)
 		if err == nil {
 			_ = conn.Close()
 			p.ready.Store(true)
-			logger.Info("dev process ready", "provider", p.target.Name, "port", p.port)
+			logger.Info("dev process ready", "provider", p.target.Name, "port", port)
 			return
 		}
 		if !warned && time.Now().After(deadline) {
@@ -259,6 +289,9 @@ func (p *managedProc) probeReadiness(ctx context.Context, logger *slog.Logger) {
 		timer := time.NewTimer(devReadinessProbeTick)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-done:
 			timer.Stop()
 			return
 		case <-timer.C:
@@ -297,16 +330,19 @@ func (p *managedProc) stop() {
 	}
 }
 
+// devCommandEnv builds the child process environment. GESTALT_DEV,
+// GESTALT_DEV_PORT, and GESTALT_DEV_BASE_PATH are reserved contract
+// variables and are appended last so manifest dev.env cannot override them.
 func devCommandEnv(port int, target Target) []string {
 	env := append([]string(nil), os.Environ()...)
+	for key, value := range target.Env {
+		env = append(env, key+"="+value)
+	}
 	env = append(env,
 		"GESTALT_DEV=1",
 		"GESTALT_DEV_PORT="+strconv.Itoa(port),
 		"GESTALT_DEV_BASE_PATH="+target.BasePath,
 	)
-	for key, value := range target.Env {
-		env = append(env, key+"="+value)
-	}
 	return env
 }
 
@@ -337,7 +373,7 @@ func newPrefixedLineWriter(logger *slog.Logger, provider, stream string) *prefix
 func (w *prefixedLineWriter) Write(p []byte) (int, error) {
 	w.buf = append(w.buf, p...)
 	for {
-		idx := bytesIndexByte(w.buf, '\n')
+		idx := bytes.IndexByte(w.buf, '\n')
 		if idx < 0 {
 			break
 		}
@@ -348,13 +384,4 @@ func (w *prefixedLineWriter) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
-}
-
-func bytesIndexByte(b []byte, c byte) int {
-	for i, v := range b {
-		if v == c {
-			return i
-		}
-	}
-	return -1
 }
