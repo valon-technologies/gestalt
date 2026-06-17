@@ -590,6 +590,75 @@ func TestTransport_IndexDelete(t *testing.T) {
 	}
 }
 
+func TestTransport_GetAllCount(t *testing.T) {
+	ctx := context.Background()
+	store := "getall_count_" + t.Name()
+	if _, err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreOptions{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	s := testClient.ObjectStore(store)
+	for _, id := range []string{"a", "b", "c", "d", "e"} {
+		if err := s.Put(ctx, gestalt.Record{"id": id, "val": id}); err != nil {
+			t.Fatalf("Put %s: %v", id, err)
+		}
+	}
+
+	page, err := s.GetAll(ctx, nil, 2)
+	if err != nil {
+		t.Fatalf("GetAll count=2: %v", err)
+	}
+	if got := len(page); got != 2 {
+		t.Fatalf("GetAll page len = %d, want 2", got)
+	}
+	if page[0]["id"] != "a" || page[1]["id"] != "b" {
+		t.Fatalf("GetAll page ids = %v %v, want a b", page[0]["id"], page[1]["id"])
+	}
+
+	keys, err := s.GetAllKeys(ctx, nil, 3)
+	if err != nil {
+		t.Fatalf("GetAllKeys count=3: %v", err)
+	}
+	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
+		t.Fatalf("GetAllKeys = %v, want [a b c]", keys)
+	}
+
+	if _, err := testClient.CreateObjectStore(ctx, store+"_idx", gestalt.ObjectStoreOptions{
+		Indexes: []gestalt.IndexSchema{{Name: "by_status", KeyPath: []string{"status"}}},
+	}); err != nil {
+		t.Fatalf("CreateObjectStore indexed: %v", err)
+	}
+	idxStore := testClient.ObjectStore(store + "_idx")
+	for _, id := range []string{"a", "b", "c", "d"} {
+		if err := idxStore.Put(ctx, gestalt.Record{"id": id, "status": "active"}); err != nil {
+			t.Fatalf("Put indexed %s: %v", id, err)
+		}
+	}
+	if err := idxStore.Put(ctx, gestalt.Record{"id": "e", "status": "inactive"}); err != nil {
+		t.Fatalf("Put inactive: %v", err)
+	}
+
+	active, err := idxStore.Index("by_status").GetAll(ctx, "active", 2)
+	if err != nil {
+		t.Fatalf("Index GetAll count=2: %v", err)
+	}
+	if len(active) != 2 || active[0]["id"] != "a" || active[1]["id"] != "b" {
+		t.Fatalf("Index GetAll = %#v, want first two active rows", active)
+	}
+
+	tx, err := testClient.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	defer tx.Abort(ctx)
+	txPage, err := tx.ObjectStore(store).GetAll(ctx, nil, 2)
+	if err != nil {
+		t.Fatalf("tx GetAll count=2: %v", err)
+	}
+	if len(txPage) != 2 || txPage[0]["id"] != "a" || txPage[1]["id"] != "b" {
+		t.Fatalf("tx GetAll = %#v, want first two rows", txPage)
+	}
+}
+
 func TestTransport_TransactionReadwriteSerializesScope(t *testing.T) {
 	ctx := context.Background()
 	store := "tx_serialize_" + t.Name()
