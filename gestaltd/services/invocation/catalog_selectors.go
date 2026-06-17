@@ -76,33 +76,46 @@ func (cfg CatalogSelectorConfig) APICatalogTargets(providerName string, explicit
 }
 
 func (cfg CatalogSelectorConfig) SessionCatalogTargets(providerName string, explicit, instance string) []CatalogResolutionTarget {
+	return cfg.catalogTargetsForConnections(providerName, explicit, instance, core.CatalogSurfaceAll)
+}
+
+func (cfg CatalogSelectorConfig) catalogTargetsForConnections(providerName, explicit, instance string, surface core.CatalogSurface) []CatalogResolutionTarget {
 	connections := cfg.SessionCatalogConnections(providerName, explicit)
 	targets := make([]CatalogResolutionTarget, 0, len(connections))
 	for _, connection := range connections {
 		targets = append(targets, CatalogResolutionTarget{
 			Connection: connection,
 			Instance:   instance,
-			Surface:    core.CatalogSurfaceMCP,
+			Surface:    surface,
 		})
 	}
 	return targets
 }
 
 // HTTPListCatalogTargets returns catalog resolution targets for HTTP operation listing.
-// Default listing uses the API/OAuth surface. An explicit MCP connection selects the MCP surface.
+// Default listing uses the API/OAuth surface. An explicit connection selects MCP scope
+// only when it matches the configured MCP connection but not the API/catalog connection.
 func (cfg CatalogSelectorConfig) HTTPListCatalogTargets(providerName string, explicit, instance string) []CatalogResolutionTarget {
-	if explicit != "" {
-		resolved := core.ResolveConnectionAlias(explicit)
-		if mcpConn := cfg.MCPConnection[providerName]; mcpConn != "" && resolved == mcpConn {
-			return cfg.SessionCatalogTargets(providerName, explicit, instance)
-		}
-		if broker, ok := cfg.Invoker.(interface{ MCPConnection(string) string }); ok {
-			if mcpConn := broker.MCPConnection(providerName); mcpConn != "" && resolved == mcpConn {
-				return cfg.SessionCatalogTargets(providerName, explicit, instance)
-			}
-		}
+	if explicit != "" && cfg.explicitConnectionUsesMCPListingScope(providerName, core.ResolveConnectionAlias(explicit)) {
+		return cfg.catalogTargetsForConnections(providerName, explicit, instance, core.CatalogSurfaceMCP)
 	}
 	return cfg.APICatalogTargets(providerName, explicit, instance)
+}
+
+func (cfg CatalogSelectorConfig) explicitConnectionUsesMCPListingScope(providerName, resolvedConnection string) bool {
+	mcpConn := cfg.MCPConnection[providerName]
+	if mcpConn == "" {
+		if broker, ok := cfg.Invoker.(interface{ MCPConnection(string) string }); ok {
+			mcpConn = broker.MCPConnection(providerName)
+		}
+	}
+	if mcpConn == "" || resolvedConnection != mcpConn {
+		return false
+	}
+	if apiConn := cfg.CatalogConnection[providerName]; apiConn != "" && resolvedConnection == apiConn {
+		return false
+	}
+	return true
 }
 
 // ClassifySessionCatalogError maps known MCP/session catalog auth failures to

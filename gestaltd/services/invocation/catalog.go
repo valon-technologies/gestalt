@@ -83,7 +83,11 @@ func ResolveCatalogForTargetsWithMetadata(ctx context.Context, prov core.Provide
 	}
 
 	if firstErr != nil && sawSessionUnavailable {
-		if staticCat := prov.Catalog(); staticCat != nil {
+		surface := core.CatalogSurfaceAll
+		if len(targets) > 0 {
+			surface = targets[0].Surface
+		}
+		if staticCat := filterCatalogBySurface(prov.Catalog(), surface); staticCat != nil {
 			slog.WarnContext(ctx, "catalog resolution falling back to static catalog", "provider", provName, "error", firstErr)
 			return staticCat.Clone(), CatalogResolutionMetadata{
 				SessionAttempted: sessionAttempted,
@@ -244,15 +248,23 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 }
 
 func filterCatalogBySurface(cat *catalog.Catalog, surface core.CatalogSurface) *catalog.Catalog {
-	if cat == nil || surface != core.CatalogSurfaceAPI {
+	if cat == nil || surface == core.CatalogSurfaceAll {
 		return cat
 	}
 	filtered := cat.Clone()
 	filtered.Operations = filtered.Operations[:0]
 	for i := range cat.Operations {
 		op := cat.Operations[i]
-		if op.Transport != catalog.TransportMCPPassthrough {
-			filtered.Operations = append(filtered.Operations, op)
+		transport := OperationTransport(op)
+		switch surface {
+		case core.CatalogSurfaceAPI:
+			if transport != catalog.TransportMCPPassthrough {
+				filtered.Operations = append(filtered.Operations, op)
+			}
+		case core.CatalogSurfaceMCP:
+			if transport == catalog.TransportMCPPassthrough {
+				filtered.Operations = append(filtered.Operations, op)
+			}
 		}
 	}
 	if len(filtered.Operations) == 0 {

@@ -500,7 +500,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 		pluginProv.Description(),
 		firstProviderIconSVG(pluginProv, specProv),
 		composite.BoundProvider{Provider: pluginProv, Connection: hybridPluginOperationConnection(plan, configuredSpecConnection(plan)), Surface: core.CatalogSurfaceAPI},
-		composite.BoundProvider{Provider: specProv, Surface: core.CatalogSurfaceMCP},
+		composite.BoundProvider{Provider: specProv, Surface: core.CatalogSurfaceAll},
 	)
 	if err != nil {
 		closeIfPossible(specProv, pluginProv)

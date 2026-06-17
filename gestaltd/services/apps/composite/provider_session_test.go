@@ -216,6 +216,71 @@ func TestCompositeCatalogForRequestMCPSurfaceSkipsAPI(t *testing.T) {
 	}
 }
 
+type nilStaticCatalogProvider struct {
+	*fakeSessionProvider
+}
+
+func (p *nilStaticCatalogProvider) Catalog() *catalog.Catalog { return nil }
+
+func TestCompositeCatalogForRequestNilStaticCatalogDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
+	api := &nilStaticCatalogProvider{
+		fakeSessionProvider: &fakeSessionProvider{
+			fakeProvider: &fakeProvider{name: "api", connMode: core.ConnectionModeSubject},
+			sessionCat: &catalog.Catalog{
+				Name: "test",
+				Operations: []catalog.CatalogOperation{{
+					ID:        "search",
+					Transport: catalog.TransportREST,
+					Method:    http.MethodPost,
+				}},
+			},
+		},
+	}
+	mcp := &fakeMCPUpstream{
+		fakeSessionProvider: &fakeSessionProvider{
+			fakeProvider: &fakeProvider{name: "mcp", connMode: core.ConnectionModeSubject},
+			sessionCat: &catalog.Catalog{
+				Name: "test",
+				Operations: []catalog.CatalogOperation{{
+					ID: "get_page_content",
+				}},
+			},
+		},
+	}
+
+	prov := composite.New("test", api, mcp)
+	scp, ok := prov.(core.SessionCatalogProvider)
+	if !ok {
+		t.Fatal("expected composite provider to expose SessionCatalogProvider")
+	}
+
+	t.Run("API surface", func(t *testing.T) {
+		t.Parallel()
+		ctx := core.WithCatalogSurface(context.Background(), core.CatalogSurfaceAPI)
+		cat, err := scp.CatalogForRequest(ctx, "token-123")
+		if err != nil {
+			t.Fatalf("CatalogForRequest: %v", err)
+		}
+		if _, ok := catalogOperation(cat, "search"); !ok {
+			t.Fatalf("operations = %#v, want search", cat.Operations)
+		}
+	})
+
+	t.Run("MCP surface", func(t *testing.T) {
+		t.Parallel()
+		ctx := core.WithCatalogSurface(context.Background(), core.CatalogSurfaceMCP)
+		cat, err := scp.CatalogForRequest(ctx, "token-123")
+		if err != nil {
+			t.Fatalf("CatalogForRequest: %v", err)
+		}
+		if _, ok := catalogOperation(cat, "get_page_content"); !ok {
+			t.Fatalf("operations = %#v, want get_page_content", cat.Operations)
+		}
+	})
+}
+
 func TestCompositeExecuteDelegatesDynamicAPISessionOperation(t *testing.T) {
 	t.Parallel()
 

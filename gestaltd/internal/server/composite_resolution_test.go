@@ -414,3 +414,134 @@ func TestListOperations_CompositeExplicitMCPReturnsProjectedOperations(t *testin
 		t.Fatalf("operations = %#v, want [get_page_content]", ops)
 	}
 }
+
+func TestListOperations_CompositeExplicitMCPFiltersStaticRESTOperations(t *testing.T) {
+	t.Parallel()
+
+	env := setupCompositeNotion(t, compositeNotionConfig{
+		apiOperations: []catalog.CatalogOperation{
+			{ID: "search", Description: "Search", Method: http.MethodPost, Transport: catalog.TransportREST},
+		},
+		seedMCP: true,
+		mcpCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "mcp-token" {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{
+				Name: "notion",
+				Operations: []catalog.CatalogOperation{
+					{ID: "get_page_content", Description: "Get page content", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+				},
+			}, nil
+		},
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, env.ts.URL+"/api/v1/apps/notion/operations?_connection=MCP", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(ops) != 1 || ops[0]["id"] != "get_page_content" {
+		t.Fatalf("operations = %#v, want [get_page_content]", ops)
+	}
+}
+
+type compositeLinearConfig struct {
+	apiOperations []catalog.CatalogOperation
+	mcpCatalogFn  func(context.Context, string) (*catalog.Catalog, error)
+}
+
+func setupCompositeLinear(t *testing.T, cfg compositeLinearConfig) compositeNotionEnv {
+	t.Helper()
+
+	apiProv := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{N: "linear", ConnMode: core.ConnectionModeSubject},
+		catalog:         serverTestCatalog("linear", cfg.apiOperations),
+	}
+	mcpUpstream := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "linear", ConnMode: core.ConnectionModeSubject},
+		},
+		catalogForRequestFn: cfg.mcpCatalogFn,
+	}
+
+	providers := testutil.NewProviderRegistry(t, composite.New("linear", apiProv, mcpUpstream))
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "tok-oauth",
+		Subject:   principal.UserSubjectID(u.ID),
+		Audience:  "linear:OAuth",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "oauth-token"},
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.ExternalCredentials,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"linear": "OAuth"})),
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"linear": "OAuth"})),
+	)
+
+	ts := newTestServer(t, func(serverCfg *server.Config) {
+		serverCfg.Providers = providers
+		serverCfg.Services = svc
+		serverCfg.Invoker = broker
+		serverCfg.CatalogConnection = map[string]string{"linear": "OAuth"}
+		serverCfg.MCPConnection = map[string]string{"linear": "OAuth"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	return compositeNotionEnv{ts: ts}
+}
+
+func TestListOperations_CompositeSharedOAuthConnectionUsesAPIScope(t *testing.T) {
+	t.Parallel()
+
+	var mcpCatalogCalls atomic.Int32
+
+	env := setupCompositeLinear(t, compositeLinearConfig{
+		apiOperations: []catalog.CatalogOperation{
+			{ID: "viewer", Description: "Viewer", Transport: "graphql", Query: "query Viewer { viewer { id } }"},
+		},
+		mcpCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			mcpCatalogCalls.Add(1)
+			return nil, fmt.Errorf("mcpupstream linear: initialize: transport error: unauthorized (401) for %q", token)
+		},
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, env.ts.URL+"/api/v1/apps/linear/operations?_connection=OAuth", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(ops) != 1 || ops[0]["id"] != "viewer" {
+		t.Fatalf("operations = %#v, want [viewer]", ops)
+	}
+	if got := mcpCatalogCalls.Load(); got != 0 {
+		t.Fatalf("MCP catalog calls = %d, want 0", got)
+	}
+}

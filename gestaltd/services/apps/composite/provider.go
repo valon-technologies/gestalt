@@ -277,6 +277,9 @@ func (p *Provider) buildCatalogFromSources(apiCat, mcpCat *catalog.Catalog) *cat
 }
 
 func tagCatalog(src *catalog.Catalog, transport string) *catalog.Catalog {
+	if src == nil {
+		return nil
+	}
 	out := src.Clone()
 	for i := range out.Operations {
 		out.Operations[i].Transport = transport

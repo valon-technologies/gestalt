@@ -111,15 +111,15 @@ func TestAPICatalogTargets_SetsAPISurface(t *testing.T) {
 	}
 }
 
-func TestSessionCatalogTargets_SetsMCPSurface(t *testing.T) {
+func TestSessionCatalogTargets_UsesAllSurface(t *testing.T) {
 	t.Parallel()
 
 	cfg := CatalogSelectorConfig{
 		MCPConnection: map[string]string{"notion": "MCP"},
 	}
 	targets := cfg.SessionCatalogTargets("notion", "", "")
-	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceMCP {
-		t.Fatalf("SessionCatalogTargets() = %#v, want MCP surface", targets)
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceAll {
+		t.Fatalf("SessionCatalogTargets() = %#v, want all surfaces", targets)
 	}
 }
 
@@ -146,5 +146,31 @@ func TestHTTPListCatalogTargets_ExplicitMCPUsesMCPSurface(t *testing.T) {
 	targets := cfg.HTTPListCatalogTargets("notion", "MCP", "")
 	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceMCP || targets[0].Connection != "MCP" {
 		t.Fatalf("HTTPListCatalogTargets() = %#v, want MCP surface", targets)
+	}
+}
+
+func TestHTTPListCatalogTargets_SharedOAuthConnectionUsesAPIScope(t *testing.T) {
+	t.Parallel()
+
+	cfg := CatalogSelectorConfig{
+		CatalogConnection: map[string]string{"linear": "OAuth"},
+		MCPConnection:     map[string]string{"linear": "OAuth"},
+	}
+	targets := cfg.HTTPListCatalogTargets("linear", "OAuth", "")
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceAPI || targets[0].Connection != "OAuth" {
+		t.Fatalf("HTTPListCatalogTargets() = %#v, want OAuth/API surface", targets)
+	}
+}
+
+func TestHTTPListCatalogTargets_SharedOAuthConnectionUsesBrokerMCPMap(t *testing.T) {
+	t.Parallel()
+
+	cfg := CatalogSelectorConfig{
+		CatalogConnection: map[string]string{"linear": "OAuth"},
+		Invoker:           stubMCPConnectionBroker{connections: map[string]string{"linear": "OAuth"}},
+	}
+	targets := cfg.HTTPListCatalogTargets("linear", "OAuth", "")
+	if len(targets) != 1 || targets[0].Surface != core.CatalogSurfaceAPI || targets[0].Connection != "OAuth" {
+		t.Fatalf("HTTPListCatalogTargets() = %#v, want OAuth/API surface", targets)
 	}
 }
