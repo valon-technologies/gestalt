@@ -191,7 +191,7 @@ pub enum TokenCommands {
         /// Display name for the token
         #[arg(long)]
         name: Option<String>,
-        /// OAuth scopes for the token (e.g. slack or slack:post_message)
+        /// OAuth scopes for the token (e.g. my-app or my-app:operation)
         #[arg(long)]
         scopes: String,
     },
