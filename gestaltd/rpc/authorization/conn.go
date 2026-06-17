@@ -14,12 +14,12 @@ type Options struct {
 	ProviderID   string
 }
 
-func NewClient(grpcClient proto.AuthorizationClient, opts Options, gateway providergateway.ProviderGateway) *Client {
-	return &Client{grpc: grpcClient, opts: opts, gateway: gateway}
+func NewClient(grpcClient proto.AuthorizationClient, opts Options, transport providergateway.Transport) *Client {
+	return &Client{grpc: grpcClient, opts: opts, transport: transport}
 }
 
-func NewConn(conn grpc.ClientConnInterface, opts Options, gateway providergateway.ProviderGateway) *Client {
-	return NewClient(proto.NewAuthorizationClient(conn), opts, gateway)
+func NewConn(conn grpc.ClientConnInterface, opts Options, transport providergateway.Transport) *Client {
+	return NewClient(proto.NewAuthorizationClient(conn), opts, transport)
 }
 
 func attachTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

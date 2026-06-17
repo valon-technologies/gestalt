@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/indexeddb.proto.
  */
 export const file_v1_indexeddb: GenFile = /*@__PURE__*/
-  fileDesc("ChJ2MS9pbmRleGVkZGIucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEilwIKClR5cGVkVmFsdWUSMAoKbnVsbF92YWx1ZRgBIAEoDjIaLmdvb2dsZS5wcm90b2J1Zi5OdWxsVmFsdWVIABIWCgxzdHJpbmdfdmFsdWUYAiABKAlIABITCglpbnRfdmFsdWUYAyABKANIABIVCgtmbG9hdF92YWx1ZRgEIAEoAUgAEhQKCmJvb2xfdmFsdWUYBSABKAhIABIwCgp0aW1lX3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgAEhUKC2J5dGVzX3ZhbHVlGAcgASgMSAASLAoKanNvbl92YWx1ZRgIIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZUgAQgYKBGtpbmQikQEKBlJlY29yZBI3CgZmaWVsZHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZC5GaWVsZHNFbnRyeRpOCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWU6AjgBIncKEU9iamVjdFN0b3JlU2NoZW1hEjEKB2luZGV4ZXMYASADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4U2NoZW1hEi8KB2NvbHVtbnMYAiADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbHVtbkRlZiI9CgtJbmRleFNjaGVtYRIMCgRuYW1lGAEgASgJEhAKCGtleV9wYXRoGAIgAygJEg4KBnVuaXF1ZRgDIAEoCCJeCglDb2x1bW5EZWYSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgFEhMKC3ByaW1hcnlfa2V5GAMgASgIEhAKCG5vdF9udWxsGAQgASgIEg4KBnVuaXF1ZRgFIAEoCCKSAQoIS2V5UmFuZ2USLgoFbG93ZXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSLgoFdXBwZXIYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSEgoKbG93ZXJfb3BlbhgDIAEoCBISCgp1cHBlcl9vcGVuGAQgASgIIksKDVJlY29yZFJlcXVlc3QSDQoFc3RvcmUYASABKAkSKwoGcmVjb3JkGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPQoOUmVjb3JkUmVzcG9uc2USKwoGcmVjb3JkGAEgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPwoPUmVjb3Jkc1Jlc3BvbnNlEiwKB3JlY29yZHMYASADKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZCIcCgxLZXlzUmVzcG9uc2USDAoEa2V5cxgBIAMoCSIvChJPYmplY3RTdG9yZVJlcXVlc3QSDQoFc3RvcmUYASABKAkSCgoCaWQYAiABKAkiJwoWT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBINCgVzdG9yZRgBIAEoCSJlChdPYmplY3RTdG9yZVJhbmdlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBAUIICgZfcmFuZ2UiYAoYQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkSNgoGc2NoZW1hGAIgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVNjaGVtYSIoChhEZWxldGVPYmplY3RTdG9yZVJlcXVlc3QSDAoEbmFtZRgBIAEoCSKfAQoRSW5kZXhRdWVyeVJlcXVlc3QSDQoFc3RvcmUYASABKAkSDQoFaW5kZXgYAiABKAkSLwoGdmFsdWVzGAMgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlEjEKBXJhbmdlGAQgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSYW5nZUgAiAEBQggKBl9yYW5nZSIeCg1Db3VudFJlc3BvbnNlEg0KBWNvdW50GAEgASgDIusBChFPcGVuQ3Vyc29yUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBARI3CglkaXJlY3Rpb24YAyABKA4yJC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckRpcmVjdGlvbhIRCglrZXlzX29ubHkYBCABKAgSDQoFaW5kZXgYBSABKAkSLwoGdmFsdWVzGAYgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlQggKBl9yYW5nZSJ6CghLZXlWYWx1ZRIxCgZzY2FsYXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWVIABIzCgVhcnJheRgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWVBcnJheUgAQgYKBGtpbmQiQAoNS2V5VmFsdWVBcnJheRIvCghlbGVtZW50cxgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUiPQoPQ3Vyc29yS2V5VGFyZ2V0EioKA2tleRgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUi0AEKDUN1cnNvckNvbW1hbmQSDgoEbmV4dBgBIAEoCEgAEj8KD2NvbnRpbnVlX3RvX2tleRgCIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yS2V5VGFyZ2V0SAASEQoHYWR2YW5jZRgDIAEoBUgAEi0KBnVwZGF0ZRgEIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkSAASEAoGZGVsZXRlGAUgASgISAASDwoFY2xvc2UYBiABKAhIAEIJCgdjb21tYW5kIosBChNDdXJzb3JDbGllbnRNZXNzYWdlEjYKBG9wZW4YASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZW5DdXJzb3JSZXF1ZXN0SAASNQoHY29tbWFuZBgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yQ29tbWFuZEgAQgUKA21zZyJ7CgtDdXJzb3JFbnRyeRIqCgNrZXkYASADKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVZhbHVlEhMKC3ByaW1hcnlfa2V5GAIgASgJEisKBnJlY29yZBgDIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIl0KDkN1cnNvclJlc3BvbnNlEjEKBWVudHJ5GAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JFbnRyeUgAEg4KBGRvbmUYAiABKAhIAEIICgZyZXN1bHQiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAkipgEKF0JlZ2luVHJhbnNhY3Rpb25SZXF1ZXN0Eg4KBnN0b3JlcxgBIAMoCRIyCgRtb2RlGAIgASgOMiQuZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbk1vZGUSRwoPZHVyYWJpbGl0eV9oaW50GAMgASgOMi4uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkR1cmFiaWxpdHlIaW50IhoKGFRyYW5zYWN0aW9uQmVnaW5SZXNwb25zZSIaChhUcmFuc2FjdGlvbkNvbW1pdFJlcXVlc3QiPgoZVHJhbnNhY3Rpb25Db21taXRSZXNwb25zZRIhCgVlcnJvchgBIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzIikKF1RyYW5zYWN0aW9uQWJvcnRSZXF1ZXN0Eg4KBnJlYXNvbhgBIAEoCSI9ChhUcmFuc2FjdGlvbkFib3J0UmVzcG9uc2USIQoFZXJyb3IYASABKAsyEi5nb29nbGUucnBjLlN0YXR1cyKaCAoUVHJhbnNhY3Rpb25PcGVyYXRpb24SEgoKcmVxdWVzdF9pZBgBIAEoBBI2CgNnZXQYCiABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdEgAEjoKB2dldF9rZXkYCyABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdEgAEjEKA2FkZBgMIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdEgAEjEKA3B1dBgNIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdEgAEjkKBmRlbGV0ZRgOIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0SAASPAoFY2xlYXIYDyABKAsyKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3RIABI/CgdnZXRfYWxsGBAgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdEgAEkQKDGdldF9hbGxfa2V5cxgRIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3RIABI9CgVjb3VudBgSIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3RIABJECgxkZWxldGVfcmFuZ2UYEyABKAsyLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0SAASOwoJaW5kZXhfZ2V0GBQgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdEgAEj8KDWluZGV4X2dldF9rZXkYFSABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPwoNaW5kZXhfZ2V0X2FsbBgWIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3RIABJEChJpbmRleF9nZXRfYWxsX2tleXMYFyABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPQoLaW5kZXhfY291bnQYGCABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPgoMaW5kZXhfZGVsZXRlGBkgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdEgAQgsKCW9wZXJhdGlvbiLIAwocVHJhbnNhY3Rpb25PcGVyYXRpb25SZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgEEiEKBWVycm9yGAIgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXMSJwoFZW1wdHkYCiABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABI1CgZyZWNvcmQYCyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlc3BvbnNlSAASNwoHcmVjb3JkcxgMIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlSAASLwoDa2V5GA0gASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSZXNwb25zZUgAEjEKBGtleXMYDiABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZUgAEjMKBWNvdW50GA8gASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlSAASNQoGZGVsZXRlGBAgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZUgAQggKBnJlc3VsdCKgAgoYVHJhbnNhY3Rpb25DbGllbnRNZXNzYWdlEj0KBWJlZ2luGAEgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpblRyYW5zYWN0aW9uUmVxdWVzdEgAEj4KCW9wZXJhdGlvbhgCIAEoCzIpLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25PcGVyYXRpb25IABI/CgZjb21taXQYAyABKAsyLS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ29tbWl0UmVxdWVzdEgAEj0KBWFib3J0GAQgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkFib3J0UmVxdWVzdEgAQgUKA21zZyKrAgoYVHJhbnNhY3Rpb25TZXJ2ZXJNZXNzYWdlEj4KBWJlZ2luGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkJlZ2luUmVzcG9uc2VIABJGCglvcGVyYXRpb24YAiABKAsyMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uT3BlcmF0aW9uUmVzcG9uc2VIABJACgZjb21taXQYAyABKAsyLi5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ29tbWl0UmVzcG9uc2VIABI+CgVhYm9ydBgEIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25BYm9ydFJlc3BvbnNlSABCBQoDbXNnKmMKD0N1cnNvckRpcmVjdGlvbhIPCgtDVVJTT1JfTkVYVBAAEhYKEkNVUlNPUl9ORVhUX1VOSVFVRRABEg8KC0NVUlNPUl9QUkVWEAISFgoSQ1VSU09SX1BSRVZfVU5JUVVFEAMqRgoPVHJhbnNhY3Rpb25Nb2RlEhgKFFRSQU5TQUNUSU9OX1JFQURPTkxZEAASGQoVVFJBTlNBQ1RJT05fUkVBRFdSSVRFEAEqhgEKGVRyYW5zYWN0aW9uRHVyYWJpbGl0eUhpbnQSIgoeVFJBTlNBQ1RJT05fRFVSQUJJTElUWV9ERUZBVUxUEAASIQodVFJBTlNBQ1RJT05fRFVSQUJJTElUWV9TVFJJQ1QQARIiCh5UUkFOU0FDVElPTl9EVVJBQklMSVRZX1JFTEFYRUQQAjLNEQoJSW5kZXhlZERCEm4KEUNyZWF0ZU9iamVjdFN0b3JlEi0uZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVPYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiEoq1GARuYW1lirUYBnNjaGVtYRJkChFEZWxldGVPYmplY3RTdG9yZRItLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5IgiKtRgEbmFtZRJkCgNHZXQSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2UiD4q1GAVzdG9yZYq1GAJpZBJkCgZHZXRLZXkSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBogLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmVzcG9uc2UiD4q1GAVzdG9yZYq1GAJpZBJWCgNBZGQSIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiE4q1GAVzdG9yZYq1GAZyZWNvcmQSVgoDUHV0EiIuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5IhOKtRgFc3RvcmWKtRgGcmVjb3JkEloKBkRlbGV0ZRInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ig+KtRgFc3RvcmWKtRgCaWQSVwoFQ2xlYXISKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiCYq1GAVzdG9yZRJwCgZHZXRBbGwSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRzUmVzcG9uc2UiEoq1GAVzdG9yZYq1GAVyYW5nZRJxCgpHZXRBbGxLZXlzEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBohLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5c1Jlc3BvbnNlIhKKtRgFc3RvcmWKtRgFcmFuZ2USbQoFQ291bnQSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlIhKKtRgFc3RvcmWKtRgFcmFuZ2USdAoLRGVsZXRlUmFuZ2USLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZSISirUYBXN0b3JlirUYBXJhbmdlEn4KCEluZGV4R2V0EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2UiJYq1GAVzdG9yZYq1GAVpbmRleIq1GAZ2YWx1ZXOKtRgFcmFuZ2USfgoLSW5kZXhHZXRLZXkSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiAuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSZXNwb25zZSIlirUYBXN0b3JlirUYBWluZGV4irUYBnZhbHVlc4q1GAVyYW5nZRKCAQoLSW5kZXhHZXRBbGwSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRzUmVzcG9uc2UiJYq1GAVzdG9yZYq1GAVpbmRleIq1GAZ2YWx1ZXOKtRgFcmFuZ2USgwEKD0luZGV4R2V0QWxsS2V5cxImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZSIlirUYBXN0b3JlirUYBWluZGV4irUYBnZhbHVlc4q1GAVyYW5nZRJ/CgpJbmRleENvdW50EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBoiLmdlc3RhbHQucHJvdmlkZXIudjEuQ291bnRSZXNwb25zZSIlirUYBXN0b3JlirUYBWluZGV4irUYBnZhbHVlc4q1GAVyYW5nZRKBAQoLSW5kZXhEZWxldGUSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZSIlirUYBXN0b3JlirUYBWluZGV4irUYBnZhbHVlc4q1GAVyYW5nZRJfCgpPcGVuQ3Vyc29yEiguZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JDbGllbnRNZXNzYWdlGiMuZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JSZXNwb25zZSgBMAESbwoLVHJhbnNhY3Rpb24SLS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ2xpZW50TWVzc2FnZRotLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25TZXJ2ZXJNZXNzYWdlKAEwARoNirUYCWluZGV4ZWRkYmIGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp, file_google_rpc_status, file_v1_annotations]);
+  fileDesc("ChJ2MS9pbmRleGVkZGIucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEilwIKClR5cGVkVmFsdWUSMAoKbnVsbF92YWx1ZRgBIAEoDjIaLmdvb2dsZS5wcm90b2J1Zi5OdWxsVmFsdWVIABIWCgxzdHJpbmdfdmFsdWUYAiABKAlIABITCglpbnRfdmFsdWUYAyABKANIABIVCgtmbG9hdF92YWx1ZRgEIAEoAUgAEhQKCmJvb2xfdmFsdWUYBSABKAhIABIwCgp0aW1lX3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgAEhUKC2J5dGVzX3ZhbHVlGAcgASgMSAASLAoKanNvbl92YWx1ZRgIIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZUgAQgYKBGtpbmQikQEKBlJlY29yZBI3CgZmaWVsZHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZC5GaWVsZHNFbnRyeRpOCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWU6AjgBIncKEU9iamVjdFN0b3JlU2NoZW1hEjEKB2luZGV4ZXMYASADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4U2NoZW1hEi8KB2NvbHVtbnMYAiADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbHVtbkRlZiI9CgtJbmRleFNjaGVtYRIMCgRuYW1lGAEgASgJEhAKCGtleV9wYXRoGAIgAygJEg4KBnVuaXF1ZRgDIAEoCCJeCglDb2x1bW5EZWYSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgFEhMKC3ByaW1hcnlfa2V5GAMgASgIEhAKCG5vdF9udWxsGAQgASgIEg4KBnVuaXF1ZRgFIAEoCCJ6CghLZXlWYWx1ZRIxCgZzY2FsYXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWVIABIzCgVhcnJheRgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWVBcnJheUgAQgYKBGtpbmQiQAoNS2V5VmFsdWVBcnJheRIvCghlbGVtZW50cxgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUijgEKCEtleVJhbmdlEiwKBWxvd2VyGAEgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlWYWx1ZRIsCgV1cHBlchgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUSEgoKbG93ZXJfb3BlbhgDIAEoCBISCgp1cHBlcl9vcGVuGAQgASgIIncKDkluZGV4ZWREQlF1ZXJ5EiwKA2tleRgBIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWVIABIuCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAEIHCgVxdWVyeSJLCg1SZWNvcmRSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEisKBnJlY29yZBgCIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIj0KDlJlY29yZFJlc3BvbnNlEisKBnJlY29yZBgBIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIj8KD1JlY29yZHNSZXNwb25zZRIsCgdyZWNvcmRzGAEgAygLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiHAoMS2V5c1Jlc3BvbnNlEgwKBGtleXMYASADKAkiLwoST2JqZWN0U3RvcmVSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEgoKAmlkGAIgASgJIicKFk9iamVjdFN0b3JlTmFtZVJlcXVlc3QSDQoFc3RvcmUYASABKAkiegoXT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3QSDQoFc3RvcmUYASABKAkSMgoFcXVlcnkYAiABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4ZWREQlF1ZXJ5EhIKBWNvdW50GAMgASgNSACIAQFCCAoGX2NvdW50ImAKGENyZWF0ZU9iamVjdFN0b3JlUmVxdWVzdBIMCgRuYW1lGAEgASgJEjYKBnNjaGVtYRgCIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVTY2hlbWEiKAoYRGVsZXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkigwEKEUluZGV4UXVlcnlSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEg0KBWluZGV4GAIgASgJEjIKBXF1ZXJ5GAMgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleGVkREJRdWVyeRISCgVjb3VudBgEIAEoDUgAiAEBQggKBl9jb3VudCIpCg1Db3VudFJlc3BvbnNlEg0KBWNvdW50GAEgASgDOgmatRgFY291bnQisQEKEU9wZW5DdXJzb3JSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEg0KBWluZGV4GAIgASgJEjIKBXF1ZXJ5GAMgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleGVkREJRdWVyeRI3CglkaXJlY3Rpb24YBCABKA4yJC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckRpcmVjdGlvbhIRCglrZXlzX29ubHkYBSABKAgiPQoPQ3Vyc29yS2V5VGFyZ2V0EioKA2tleRgBIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUi0AEKDUN1cnNvckNvbW1hbmQSDgoEbmV4dBgBIAEoCEgAEj8KD2NvbnRpbnVlX3RvX2tleRgCIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yS2V5VGFyZ2V0SAASEQoHYWR2YW5jZRgDIAEoBUgAEi0KBnVwZGF0ZRgEIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkSAASEAoGZGVsZXRlGAUgASgISAASDwoFY2xvc2UYBiABKAhIAEIJCgdjb21tYW5kIosBChNDdXJzb3JDbGllbnRNZXNzYWdlEjYKBG9wZW4YASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZW5DdXJzb3JSZXF1ZXN0SAASNQoHY29tbWFuZBgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yQ29tbWFuZEgAQgUKA21zZyJ7CgtDdXJzb3JFbnRyeRIqCgNrZXkYASABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVZhbHVlEhMKC3ByaW1hcnlfa2V5GAIgASgJEisKBnJlY29yZBgDIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIl0KDkN1cnNvclJlc3BvbnNlEjEKBWVudHJ5GAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JFbnRyeUgAEg4KBGRvbmUYAiABKAhIAEIICgZyZXN1bHQiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAkipgEKF0JlZ2luVHJhbnNhY3Rpb25SZXF1ZXN0Eg4KBnN0b3JlcxgBIAMoCRIyCgRtb2RlGAIgASgOMiQuZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbk1vZGUSRwoPZHVyYWJpbGl0eV9oaW50GAMgASgOMi4uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkR1cmFiaWxpdHlIaW50IhoKGFRyYW5zYWN0aW9uQmVnaW5SZXNwb25zZSIaChhUcmFuc2FjdGlvbkNvbW1pdFJlcXVlc3QiPgoZVHJhbnNhY3Rpb25Db21taXRSZXNwb25zZRIhCgVlcnJvchgBIAEoCzISLmdvb2dsZS5ycGMuU3RhdHVzIikKF1RyYW5zYWN0aW9uQWJvcnRSZXF1ZXN0Eg4KBnJlYXNvbhgBIAEoCSI9ChhUcmFuc2FjdGlvbkFib3J0UmVzcG9uc2USIQoFZXJyb3IYASABKAsyEi5nb29nbGUucnBjLlN0YXR1cyKaCAoUVHJhbnNhY3Rpb25PcGVyYXRpb24SEgoKcmVxdWVzdF9pZBgBIAEoBBI2CgNnZXQYCiABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdEgAEjoKB2dldF9rZXkYCyABKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdEgAEjEKA2FkZBgMIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdEgAEjEKA3B1dBgNIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdEgAEjkKBmRlbGV0ZRgOIAEoCzInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0SAASPAoFY2xlYXIYDyABKAsyKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3RIABI/CgdnZXRfYWxsGBAgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdEgAEkQKDGdldF9hbGxfa2V5cxgRIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3RIABI9CgVjb3VudBgSIAEoCzIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3RIABJECgxkZWxldGVfcmFuZ2UYEyABKAsyLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0SAASOwoJaW5kZXhfZ2V0GBQgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdEgAEj8KDWluZGV4X2dldF9rZXkYFSABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPwoNaW5kZXhfZ2V0X2FsbBgWIAEoCzImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3RIABJEChJpbmRleF9nZXRfYWxsX2tleXMYFyABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPQoLaW5kZXhfY291bnQYGCABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0SAASPgoMaW5kZXhfZGVsZXRlGBkgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdEgAQgsKCW9wZXJhdGlvbiLIAwocVHJhbnNhY3Rpb25PcGVyYXRpb25SZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgEEiEKBWVycm9yGAIgASgLMhIuZ29vZ2xlLnJwYy5TdGF0dXMSJwoFZW1wdHkYCiABKAsyFi5nb29nbGUucHJvdG9idWYuRW1wdHlIABI1CgZyZWNvcmQYCyABKAsyIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlc3BvbnNlSAASNwoHcmVjb3JkcxgMIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlSAASLwoDa2V5GA0gASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSZXNwb25zZUgAEjEKBGtleXMYDiABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZUgAEjMKBWNvdW50GA8gASgLMiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlSAASNQoGZGVsZXRlGBAgASgLMiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZUgAQggKBnJlc3VsdCKgAgoYVHJhbnNhY3Rpb25DbGllbnRNZXNzYWdlEj0KBWJlZ2luGAEgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5CZWdpblRyYW5zYWN0aW9uUmVxdWVzdEgAEj4KCW9wZXJhdGlvbhgCIAEoCzIpLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25PcGVyYXRpb25IABI/CgZjb21taXQYAyABKAsyLS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ29tbWl0UmVxdWVzdEgAEj0KBWFib3J0GAQgASgLMiwuZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkFib3J0UmVxdWVzdEgAQgUKA21zZyKrAgoYVHJhbnNhY3Rpb25TZXJ2ZXJNZXNzYWdlEj4KBWJlZ2luGAEgASgLMi0uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvbkJlZ2luUmVzcG9uc2VIABJGCglvcGVyYXRpb24YAiABKAsyMS5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uT3BlcmF0aW9uUmVzcG9uc2VIABJACgZjb21taXQYAyABKAsyLi5nZXN0YWx0LnByb3ZpZGVyLnYxLlRyYW5zYWN0aW9uQ29tbWl0UmVzcG9uc2VIABI+CgVhYm9ydBgEIAEoCzItLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25BYm9ydFJlc3BvbnNlSABCBQoDbXNnKmMKD0N1cnNvckRpcmVjdGlvbhIPCgtDVVJTT1JfTkVYVBAAEhYKEkNVUlNPUl9ORVhUX1VOSVFVRRABEg8KC0NVUlNPUl9QUkVWEAISFgoSQ1VSU09SX1BSRVZfVU5JUVVFEAMqRgoPVHJhbnNhY3Rpb25Nb2RlEhgKFFRSQU5TQUNUSU9OX1JFQURPTkxZEAASGQoVVFJBTlNBQ1RJT05fUkVBRFdSSVRFEAEqhgEKGVRyYW5zYWN0aW9uRHVyYWJpbGl0eUhpbnQSIgoeVFJBTlNBQ1RJT05fRFVSQUJJTElUWV9ERUZBVUxUEAASIQodVFJBTlNBQ1RJT05fRFVSQUJJTElUWV9TVFJJQ1QQARIiCh5UUkFOU0FDVElPTl9EVVJBQklMSVRZX1JFTEFYRUQQAjK0EQoJSW5kZXhlZERCEm4KEUNyZWF0ZU9iamVjdFN0b3JlEi0uZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVPYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiEoq1GARuYW1lirUYBnNjaGVtYRJkChFEZWxldGVPYmplY3RTdG9yZRItLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5IgiKtRgEbmFtZRJkCgNHZXQSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2UiD4q1GAVzdG9yZYq1GAJpZBJkCgZHZXRLZXkSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBogLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmVzcG9uc2UiD4q1GAVzdG9yZYq1GAJpZBJWCgNBZGQSIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiE4q1GAVzdG9yZYq1GAZyZWNvcmQSVgoDUHV0EiIuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5IhOKtRgFc3RvcmWKtRgGcmVjb3JkEloKBkRlbGV0ZRInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ig+KtRgFc3RvcmWKtRgCaWQSVwoFQ2xlYXISKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkiCYq1GAVzdG9yZRJ5CgZHZXRBbGwSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRzUmVzcG9uc2UiG4q1GAVzdG9yZYq1GAVxdWVyeaK1GAVjb3VudBJ6CgpHZXRBbGxLZXlzEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBohLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5c1Jlc3BvbnNlIhuKtRgFc3RvcmWKtRgFcXVlcnmitRgFY291bnQSbQoFQ291bnQSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlIhKKtRgFc3RvcmWKtRgFcXVlcnkSdAoLRGVsZXRlUmFuZ2USLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZSISirUYBXN0b3JlirUYBXF1ZXJ5EnQKCEluZGV4R2V0EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2UiG4q1GAVzdG9yZYq1GAVpbmRleIq1GAVxdWVyeRJ0CgtJbmRleEdldEtleRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlIhuKtRgFc3RvcmWKtRgFaW5kZXiKtRgFcXVlcnkSgQEKC0luZGV4R2V0QWxsEiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlIiSKtRgFc3RvcmWKtRgFaW5kZXiKtRgFcXVlcnmitRgFY291bnQSggEKD0luZGV4R2V0QWxsS2V5cxImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZSIkirUYBXN0b3JlirUYBWluZGV4irUYBXF1ZXJ5orUYBWNvdW50EnUKCkluZGV4Q291bnQSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlIhuKtRgFc3RvcmWKtRgFaW5kZXiKtRgFcXVlcnkSdwoLSW5kZXhEZWxldGUSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZSIbirUYBXN0b3JlirUYBWluZGV4irUYBXF1ZXJ5El8KCk9wZW5DdXJzb3ISKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckNsaWVudE1lc3NhZ2UaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvclJlc3BvbnNlKAEwARJvCgtUcmFuc2FjdGlvbhItLmdlc3RhbHQucHJvdmlkZXIudjEuVHJhbnNhY3Rpb25DbGllbnRNZXNzYWdlGi0uZ2VzdGFsdC5wcm92aWRlci52MS5UcmFuc2FjdGlvblNlcnZlck1lc3NhZ2UoATABGg2KtRgJaW5kZXhlZGRiYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp, file_google_rpc_status, file_v1_annotations]);
 
 /**
  * TypedValue stores one scalar or structured value in an IndexedDB record.
@@ -197,337 +197,9 @@ export const ColumnDefSchema: GenMessage<ColumnDef> = /*@__PURE__*/
   messageDesc(file_v1_indexeddb, 4);
 
 /**
- * KeyRange constrains a query or cursor by lower and upper bounds.
- *
- * @generated from message gestalt.provider.v1.KeyRange
- */
-export type KeyRange = Message<"gestalt.provider.v1.KeyRange"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.TypedValue lower = 1;
-   */
-  lower?: TypedValue | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.TypedValue upper = 2;
-   */
-  upper?: TypedValue | undefined;
-
-  /**
-   * @generated from field: bool lower_open = 3;
-   */
-  lowerOpen: boolean;
-
-  /**
-   * @generated from field: bool upper_open = 4;
-   */
-  upperOpen: boolean;
-};
-
-/**
- * Describes the message gestalt.provider.v1.KeyRange.
- * Use `create(KeyRangeSchema)` to create a new message.
- */
-export const KeyRangeSchema: GenMessage<KeyRange> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 5);
-
-/**
- * RecordRequest addresses one object store and carries one row payload.
- *
- * @generated from message gestalt.provider.v1.RecordRequest
- */
-export type RecordRequest = Message<"gestalt.provider.v1.RecordRequest"> & {
-  /**
-   * @generated from field: string store = 1;
-   */
-  store: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.Record record = 2;
-   */
-  record?: Record | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.RecordRequest.
- * Use `create(RecordRequestSchema)` to create a new message.
- */
-export const RecordRequestSchema: GenMessage<RecordRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 6);
-
-/**
- * RecordResponse wraps one row payload.
- *
- * @generated from message gestalt.provider.v1.RecordResponse
- */
-export type RecordResponse = Message<"gestalt.provider.v1.RecordResponse"> & {
-  /**
-   * @generated from field: gestalt.provider.v1.Record record = 1;
-   */
-  record?: Record | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.RecordResponse.
- * Use `create(RecordResponseSchema)` to create a new message.
- */
-export const RecordResponseSchema: GenMessage<RecordResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 7);
-
-/**
- * RecordsResponse wraps repeated row payloads.
- *
- * @generated from message gestalt.provider.v1.RecordsResponse
- */
-export type RecordsResponse = Message<"gestalt.provider.v1.RecordsResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.provider.v1.Record records = 1;
-   */
-  records: Record[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.RecordsResponse.
- * Use `create(RecordsResponseSchema)` to create a new message.
- */
-export const RecordsResponseSchema: GenMessage<RecordsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 8);
-
-/**
- * KeysResponse wraps repeated primary keys.
- *
- * @generated from message gestalt.provider.v1.KeysResponse
- */
-export type KeysResponse = Message<"gestalt.provider.v1.KeysResponse"> & {
-  /**
-   * @generated from field: repeated string keys = 1;
-   */
-  keys: string[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.KeysResponse.
- * Use `create(KeysResponseSchema)` to create a new message.
- */
-export const KeysResponseSchema: GenMessage<KeysResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 9);
-
-/**
- * ObjectStoreRequest addresses one object store row by primary key.
- *
- * @generated from message gestalt.provider.v1.ObjectStoreRequest
- */
-export type ObjectStoreRequest = Message<"gestalt.provider.v1.ObjectStoreRequest"> & {
-  /**
-   * @generated from field: string store = 1;
-   */
-  store: string;
-
-  /**
-   * @generated from field: string id = 2;
-   */
-  id: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ObjectStoreRequest.
- * Use `create(ObjectStoreRequestSchema)` to create a new message.
- */
-export const ObjectStoreRequestSchema: GenMessage<ObjectStoreRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 10);
-
-/**
- * ObjectStoreNameRequest addresses an object store without a specific row key.
- *
- * @generated from message gestalt.provider.v1.ObjectStoreNameRequest
- */
-export type ObjectStoreNameRequest = Message<"gestalt.provider.v1.ObjectStoreNameRequest"> & {
-  /**
-   * @generated from field: string store = 1;
-   */
-  store: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ObjectStoreNameRequest.
- * Use `create(ObjectStoreNameRequestSchema)` to create a new message.
- */
-export const ObjectStoreNameRequestSchema: GenMessage<ObjectStoreNameRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 11);
-
-/**
- * ObjectStoreRangeRequest addresses an object store plus an optional key range.
- *
- * @generated from message gestalt.provider.v1.ObjectStoreRangeRequest
- */
-export type ObjectStoreRangeRequest = Message<"gestalt.provider.v1.ObjectStoreRangeRequest"> & {
-  /**
-   * @generated from field: string store = 1;
-   */
-  store: string;
-
-  /**
-   * @generated from field: optional gestalt.provider.v1.KeyRange range = 2;
-   */
-  range?: KeyRange | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.ObjectStoreRangeRequest.
- * Use `create(ObjectStoreRangeRequestSchema)` to create a new message.
- */
-export const ObjectStoreRangeRequestSchema: GenMessage<ObjectStoreRangeRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 12);
-
-/**
- * CreateObjectStoreRequest creates a new object store.
- *
- * @generated from message gestalt.provider.v1.CreateObjectStoreRequest
- */
-export type CreateObjectStoreRequest = Message<"gestalt.provider.v1.CreateObjectStoreRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-
-  /**
-   * @generated from field: gestalt.provider.v1.ObjectStoreSchema schema = 2;
-   */
-  schema?: ObjectStoreSchema | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.CreateObjectStoreRequest.
- * Use `create(CreateObjectStoreRequestSchema)` to create a new message.
- */
-export const CreateObjectStoreRequestSchema: GenMessage<CreateObjectStoreRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 13);
-
-/**
- * DeleteObjectStoreRequest removes an object store.
- *
- * @generated from message gestalt.provider.v1.DeleteObjectStoreRequest
- */
-export type DeleteObjectStoreRequest = Message<"gestalt.provider.v1.DeleteObjectStoreRequest"> & {
-  /**
-   * @generated from field: string name = 1;
-   */
-  name: string;
-};
-
-/**
- * Describes the message gestalt.provider.v1.DeleteObjectStoreRequest.
- * Use `create(DeleteObjectStoreRequestSchema)` to create a new message.
- */
-export const DeleteObjectStoreRequestSchema: GenMessage<DeleteObjectStoreRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 14);
-
-/**
- * IndexQueryRequest addresses a secondary index plus optional key values and
- * range constraints.
- *
- * @generated from message gestalt.provider.v1.IndexQueryRequest
- */
-export type IndexQueryRequest = Message<"gestalt.provider.v1.IndexQueryRequest"> & {
-  /**
-   * @generated from field: string store = 1;
-   */
-  store: string;
-
-  /**
-   * @generated from field: string index = 2;
-   */
-  index: string;
-
-  /**
-   * @generated from field: repeated gestalt.provider.v1.TypedValue values = 3;
-   */
-  values: TypedValue[];
-
-  /**
-   * @generated from field: optional gestalt.provider.v1.KeyRange range = 4;
-   */
-  range?: KeyRange | undefined;
-};
-
-/**
- * Describes the message gestalt.provider.v1.IndexQueryRequest.
- * Use `create(IndexQueryRequestSchema)` to create a new message.
- */
-export const IndexQueryRequestSchema: GenMessage<IndexQueryRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 15);
-
-/**
- * CountResponse reports how many rows matched a query.
- *
- * @generated from message gestalt.provider.v1.CountResponse
- */
-export type CountResponse = Message<"gestalt.provider.v1.CountResponse"> & {
-  /**
-   * @generated from field: int64 count = 1;
-   */
-  count: bigint;
-};
-
-/**
- * Describes the message gestalt.provider.v1.CountResponse.
- * Use `create(CountResponseSchema)` to create a new message.
- */
-export const CountResponseSchema: GenMessage<CountResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 16);
-
-/**
- * OpenCursorRequest starts a streaming cursor over an object store or index.
- *
- * @generated from message gestalt.provider.v1.OpenCursorRequest
- */
-export type OpenCursorRequest = Message<"gestalt.provider.v1.OpenCursorRequest"> & {
-  /**
-   * @generated from field: string store = 1;
-   */
-  store: string;
-
-  /**
-   * @generated from field: optional gestalt.provider.v1.KeyRange range = 2;
-   */
-  range?: KeyRange | undefined;
-
-  /**
-   * @generated from field: gestalt.provider.v1.CursorDirection direction = 3;
-   */
-  direction: CursorDirection;
-
-  /**
-   * keys_only suppresses row payloads and returns only keys.
-   *
-   * @generated from field: bool keys_only = 4;
-   */
-  keysOnly: boolean;
-
-  /**
-   * index selects a secondary index when non-empty.
-   *
-   * @generated from field: string index = 5;
-   */
-  index: string;
-
-  /**
-   * values selects a compound index key prefix when index is set.
-   *
-   * @generated from field: repeated gestalt.provider.v1.TypedValue values = 6;
-   */
-  values: TypedValue[];
-};
-
-/**
- * Describes the message gestalt.provider.v1.OpenCursorRequest.
- * Use `create(OpenCursorRequestSchema)` to create a new message.
- */
-export const OpenCursorRequestSchema: GenMessage<OpenCursorRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 17);
-
-/**
- * KeyValue represents a single IndexedDB key, which can be a scalar
- * (string, number, date, binary) or a nested array of keys per the W3C spec.
+ * KeyValue represents one IndexedDB key: a scalar (string, number, date,
+ * binary) or a nested array of keys, per the W3C spec.
+ * https://www.w3.org/TR/IndexedDB/#key-construct
  *
  * @generated from message gestalt.provider.v1.KeyValue
  */
@@ -555,7 +227,7 @@ export type KeyValue = Message<"gestalt.provider.v1.KeyValue"> & {
  * Use `create(KeyValueSchema)` to create a new message.
  */
 export const KeyValueSchema: GenMessage<KeyValue> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 18);
+  messageDesc(file_v1_indexeddb, 5);
 
 /**
  * @generated from message gestalt.provider.v1.KeyValueArray
@@ -572,7 +244,367 @@ export type KeyValueArray = Message<"gestalt.provider.v1.KeyValueArray"> & {
  * Use `create(KeyValueArraySchema)` to create a new message.
  */
 export const KeyValueArraySchema: GenMessage<KeyValueArray> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 6);
+
+/**
+ * KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+ * full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+ * lower/upper means unbounded on that side.
+ * https://www.w3.org/TR/IndexedDB/#keyrange
+ *
+ * @generated from message gestalt.provider.v1.KeyRange
+ */
+export type KeyRange = Message<"gestalt.provider.v1.KeyRange"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.KeyValue lower = 1;
+   */
+  lower?: KeyValue | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.KeyValue upper = 2;
+   */
+  upper?: KeyValue | undefined;
+
+  /**
+   * @generated from field: bool lower_open = 3;
+   */
+  lowerOpen: boolean;
+
+  /**
+   * @generated from field: bool upper_open = 4;
+   */
+  upperOpen: boolean;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.KeyRange.
+ * Use `create(KeyRangeSchema)` to create a new message.
+ */
+export const KeyRangeSchema: GenMessage<KeyRange> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 7);
+
+/**
+ * IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+ * range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+ * matching a W3C query argument of undefined/null.
+ *
+ * @generated from message gestalt.provider.v1.IndexedDBQuery
+ */
+export type IndexedDBQuery = Message<"gestalt.provider.v1.IndexedDBQuery"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.IndexedDBQuery.query
+   */
+  query: {
+    /**
+     * @generated from field: gestalt.provider.v1.KeyValue key = 1;
+     */
+    value: KeyValue;
+    case: "key";
+  } | {
+    /**
+     * @generated from field: gestalt.provider.v1.KeyRange range = 2;
+     */
+    value: KeyRange;
+    case: "range";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.IndexedDBQuery.
+ * Use `create(IndexedDBQuerySchema)` to create a new message.
+ */
+export const IndexedDBQuerySchema: GenMessage<IndexedDBQuery> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 8);
+
+/**
+ * RecordRequest addresses one object store and carries one row payload.
+ *
+ * @generated from message gestalt.provider.v1.RecordRequest
+ */
+export type RecordRequest = Message<"gestalt.provider.v1.RecordRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.Record record = 2;
+   */
+  record?: Record | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RecordRequest.
+ * Use `create(RecordRequestSchema)` to create a new message.
+ */
+export const RecordRequestSchema: GenMessage<RecordRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 9);
+
+/**
+ * RecordResponse wraps one row payload.
+ *
+ * @generated from message gestalt.provider.v1.RecordResponse
+ */
+export type RecordResponse = Message<"gestalt.provider.v1.RecordResponse"> & {
+  /**
+   * @generated from field: gestalt.provider.v1.Record record = 1;
+   */
+  record?: Record | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RecordResponse.
+ * Use `create(RecordResponseSchema)` to create a new message.
+ */
+export const RecordResponseSchema: GenMessage<RecordResponse> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 10);
+
+/**
+ * RecordsResponse wraps repeated row payloads.
+ *
+ * @generated from message gestalt.provider.v1.RecordsResponse
+ */
+export type RecordsResponse = Message<"gestalt.provider.v1.RecordsResponse"> & {
+  /**
+   * @generated from field: repeated gestalt.provider.v1.Record records = 1;
+   */
+  records: Record[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.RecordsResponse.
+ * Use `create(RecordsResponseSchema)` to create a new message.
+ */
+export const RecordsResponseSchema: GenMessage<RecordsResponse> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 11);
+
+/**
+ * KeysResponse wraps repeated primary keys.
+ *
+ * @generated from message gestalt.provider.v1.KeysResponse
+ */
+export type KeysResponse = Message<"gestalt.provider.v1.KeysResponse"> & {
+  /**
+   * @generated from field: repeated string keys = 1;
+   */
+  keys: string[];
+};
+
+/**
+ * Describes the message gestalt.provider.v1.KeysResponse.
+ * Use `create(KeysResponseSchema)` to create a new message.
+ */
+export const KeysResponseSchema: GenMessage<KeysResponse> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 12);
+
+/**
+ * ObjectStoreRequest addresses one object store row by primary key.
+ *
+ * @generated from message gestalt.provider.v1.ObjectStoreRequest
+ */
+export type ObjectStoreRequest = Message<"gestalt.provider.v1.ObjectStoreRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: string id = 2;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ObjectStoreRequest.
+ * Use `create(ObjectStoreRequestSchema)` to create a new message.
+ */
+export const ObjectStoreRequestSchema: GenMessage<ObjectStoreRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 13);
+
+/**
+ * ObjectStoreNameRequest addresses an object store without a specific row key.
+ *
+ * @generated from message gestalt.provider.v1.ObjectStoreNameRequest
+ */
+export type ObjectStoreNameRequest = Message<"gestalt.provider.v1.ObjectStoreNameRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ObjectStoreNameRequest.
+ * Use `create(ObjectStoreNameRequestSchema)` to create a new message.
+ */
+export const ObjectStoreNameRequestSchema: GenMessage<ObjectStoreNameRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 14);
+
+/**
+ * ObjectStoreRangeRequest addresses an object store plus an optional query.
+ *
+ * @generated from message gestalt.provider.v1.ObjectStoreRangeRequest
+ */
+export type ObjectStoreRangeRequest = Message<"gestalt.provider.v1.ObjectStoreRangeRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.IndexedDBQuery query = 2;
+   */
+  query?: IndexedDBQuery | undefined;
+
+  /**
+   * @generated from field: optional uint32 count = 3;
+   */
+  count?: number | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.ObjectStoreRangeRequest.
+ * Use `create(ObjectStoreRangeRequestSchema)` to create a new message.
+ */
+export const ObjectStoreRangeRequestSchema: GenMessage<ObjectStoreRangeRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 15);
+
+/**
+ * CreateObjectStoreRequest creates a new object store.
+ *
+ * @generated from message gestalt.provider.v1.CreateObjectStoreRequest
+ */
+export type CreateObjectStoreRequest = Message<"gestalt.provider.v1.CreateObjectStoreRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.ObjectStoreSchema schema = 2;
+   */
+  schema?: ObjectStoreSchema | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CreateObjectStoreRequest.
+ * Use `create(CreateObjectStoreRequestSchema)` to create a new message.
+ */
+export const CreateObjectStoreRequestSchema: GenMessage<CreateObjectStoreRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 16);
+
+/**
+ * DeleteObjectStoreRequest removes an object store.
+ *
+ * @generated from message gestalt.provider.v1.DeleteObjectStoreRequest
+ */
+export type DeleteObjectStoreRequest = Message<"gestalt.provider.v1.DeleteObjectStoreRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.DeleteObjectStoreRequest.
+ * Use `create(DeleteObjectStoreRequestSchema)` to create a new message.
+ */
+export const DeleteObjectStoreRequestSchema: GenMessage<DeleteObjectStoreRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 17);
+
+/**
+ * IndexQueryRequest addresses a secondary index plus an optional query.
+ *
+ * @generated from message gestalt.provider.v1.IndexQueryRequest
+ */
+export type IndexQueryRequest = Message<"gestalt.provider.v1.IndexQueryRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: string index = 2;
+   */
+  index: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.IndexedDBQuery query = 3;
+   */
+  query?: IndexedDBQuery | undefined;
+
+  /**
+   * @generated from field: optional uint32 count = 4;
+   */
+  count?: number | undefined;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.IndexQueryRequest.
+ * Use `create(IndexQueryRequestSchema)` to create a new message.
+ */
+export const IndexQueryRequestSchema: GenMessage<IndexQueryRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 18);
+
+/**
+ * CountResponse reports how many rows matched a query.
+ *
+ * @generated from message gestalt.provider.v1.CountResponse
+ */
+export type CountResponse = Message<"gestalt.provider.v1.CountResponse"> & {
+  /**
+   * @generated from field: int64 count = 1;
+   */
+  count: bigint;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.CountResponse.
+ * Use `create(CountResponseSchema)` to create a new message.
+ */
+export const CountResponseSchema: GenMessage<CountResponse> = /*@__PURE__*/
   messageDesc(file_v1_indexeddb, 19);
+
+/**
+ * OpenCursorRequest starts a streaming cursor over an object store or index.
+ *
+ * @generated from message gestalt.provider.v1.OpenCursorRequest
+ */
+export type OpenCursorRequest = Message<"gestalt.provider.v1.OpenCursorRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: string index = 2;
+   */
+  index: string;
+
+  /**
+   * @generated from field: gestalt.provider.v1.IndexedDBQuery query = 3;
+   */
+  query?: IndexedDBQuery | undefined;
+
+  /**
+   * @generated from field: gestalt.provider.v1.CursorDirection direction = 4;
+   */
+  direction: CursorDirection;
+
+  /**
+   * keys_only suppresses row payloads and returns only keys.
+   *
+   * @generated from field: bool keys_only = 5;
+   */
+  keysOnly: boolean;
+};
+
+/**
+ * Describes the message gestalt.provider.v1.OpenCursorRequest.
+ * Use `create(OpenCursorRequestSchema)` to create a new message.
+ */
+export const OpenCursorRequestSchema: GenMessage<OpenCursorRequest> = /*@__PURE__*/
+  messageDesc(file_v1_indexeddb, 20);
 
 /**
  * CursorKeyTarget addresses a specific cursor position.
@@ -581,9 +613,9 @@ export const KeyValueArraySchema: GenMessage<KeyValueArray> = /*@__PURE__*/
  */
 export type CursorKeyTarget = Message<"gestalt.provider.v1.CursorKeyTarget"> & {
   /**
-   * @generated from field: repeated gestalt.provider.v1.KeyValue key = 1;
+   * @generated from field: gestalt.provider.v1.KeyValue key = 1;
    */
-  key: KeyValue[];
+  key?: KeyValue | undefined;
 };
 
 /**
@@ -591,7 +623,7 @@ export type CursorKeyTarget = Message<"gestalt.provider.v1.CursorKeyTarget"> & {
  * Use `create(CursorKeyTargetSchema)` to create a new message.
  */
 export const CursorKeyTargetSchema: GenMessage<CursorKeyTarget> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 20);
+  messageDesc(file_v1_indexeddb, 21);
 
 /**
  * CursorCommand advances, mutates, or closes an open cursor.
@@ -646,7 +678,7 @@ export type CursorCommand = Message<"gestalt.provider.v1.CursorCommand"> & {
  * Use `create(CursorCommandSchema)` to create a new message.
  */
 export const CursorCommandSchema: GenMessage<CursorCommand> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 21);
+  messageDesc(file_v1_indexeddb, 22);
 
 /**
  * CursorClientMessage is one frame in the bidirectional cursor stream.
@@ -677,7 +709,7 @@ export type CursorClientMessage = Message<"gestalt.provider.v1.CursorClientMessa
  * Use `create(CursorClientMessageSchema)` to create a new message.
  */
 export const CursorClientMessageSchema: GenMessage<CursorClientMessage> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 22);
+  messageDesc(file_v1_indexeddb, 23);
 
 /**
  * CursorEntry is one streamed cursor row.
@@ -686,13 +718,12 @@ export const CursorClientMessageSchema: GenMessage<CursorClientMessage> = /*@__P
  */
 export type CursorEntry = Message<"gestalt.provider.v1.CursorEntry"> & {
   /**
-   * Key components per index KeyPath field. Each component is a KeyValue
-   * that can be a scalar or a nested array, preserving the full W3C IndexedDB
-   * key structure including array-valued keys.
+   * One full IndexedDB key (scalar or array).
+   * https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key
    *
-   * @generated from field: repeated gestalt.provider.v1.KeyValue key = 1;
+   * @generated from field: gestalt.provider.v1.KeyValue key = 1;
    */
-  key: KeyValue[];
+  key?: KeyValue | undefined;
 
   /**
    * @generated from field: string primary_key = 2;
@@ -710,7 +741,7 @@ export type CursorEntry = Message<"gestalt.provider.v1.CursorEntry"> & {
  * Use `create(CursorEntrySchema)` to create a new message.
  */
 export const CursorEntrySchema: GenMessage<CursorEntry> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 23);
+  messageDesc(file_v1_indexeddb, 24);
 
 /**
  * CursorResponse is one streamed cursor frame.
@@ -741,7 +772,7 @@ export type CursorResponse = Message<"gestalt.provider.v1.CursorResponse"> & {
  * Use `create(CursorResponseSchema)` to create a new message.
  */
 export const CursorResponseSchema: GenMessage<CursorResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 24);
+  messageDesc(file_v1_indexeddb, 25);
 
 /**
  * DeleteResponse reports how many rows were deleted.
@@ -760,7 +791,7 @@ export type DeleteResponse = Message<"gestalt.provider.v1.DeleteResponse"> & {
  * Use `create(DeleteResponseSchema)` to create a new message.
  */
 export const DeleteResponseSchema: GenMessage<DeleteResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 25);
+  messageDesc(file_v1_indexeddb, 26);
 
 /**
  * KeyResponse wraps one primary key.
@@ -779,7 +810,7 @@ export type KeyResponse = Message<"gestalt.provider.v1.KeyResponse"> & {
  * Use `create(KeyResponseSchema)` to create a new message.
  */
 export const KeyResponseSchema: GenMessage<KeyResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 26);
+  messageDesc(file_v1_indexeddb, 27);
 
 /**
  * BeginTransactionRequest starts an IndexedDB transaction stream.
@@ -808,7 +839,7 @@ export type BeginTransactionRequest = Message<"gestalt.provider.v1.BeginTransact
  * Use `create(BeginTransactionRequestSchema)` to create a new message.
  */
 export const BeginTransactionRequestSchema: GenMessage<BeginTransactionRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 27);
+  messageDesc(file_v1_indexeddb, 28);
 
 /**
  * @generated from message gestalt.provider.v1.TransactionBeginResponse
@@ -821,7 +852,7 @@ export type TransactionBeginResponse = Message<"gestalt.provider.v1.TransactionB
  * Use `create(TransactionBeginResponseSchema)` to create a new message.
  */
 export const TransactionBeginResponseSchema: GenMessage<TransactionBeginResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 28);
+  messageDesc(file_v1_indexeddb, 29);
 
 /**
  * @generated from message gestalt.provider.v1.TransactionCommitRequest
@@ -834,7 +865,7 @@ export type TransactionCommitRequest = Message<"gestalt.provider.v1.TransactionC
  * Use `create(TransactionCommitRequestSchema)` to create a new message.
  */
 export const TransactionCommitRequestSchema: GenMessage<TransactionCommitRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 29);
+  messageDesc(file_v1_indexeddb, 30);
 
 /**
  * TransactionCommitResponse carries a non-OK status when commit failed after
@@ -854,7 +885,7 @@ export type TransactionCommitResponse = Message<"gestalt.provider.v1.Transaction
  * Use `create(TransactionCommitResponseSchema)` to create a new message.
  */
 export const TransactionCommitResponseSchema: GenMessage<TransactionCommitResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 30);
+  messageDesc(file_v1_indexeddb, 31);
 
 /**
  * @generated from message gestalt.provider.v1.TransactionAbortRequest
@@ -871,7 +902,7 @@ export type TransactionAbortRequest = Message<"gestalt.provider.v1.TransactionAb
  * Use `create(TransactionAbortRequestSchema)` to create a new message.
  */
 export const TransactionAbortRequestSchema: GenMessage<TransactionAbortRequest> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 31);
+  messageDesc(file_v1_indexeddb, 32);
 
 /**
  * TransactionAbortResponse acknowledges abort or reports an abort failure.
@@ -890,7 +921,7 @@ export type TransactionAbortResponse = Message<"gestalt.provider.v1.TransactionA
  * Use `create(TransactionAbortResponseSchema)` to create a new message.
  */
 export const TransactionAbortResponseSchema: GenMessage<TransactionAbortResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 32);
+  messageDesc(file_v1_indexeddb, 33);
 
 /**
  * TransactionOperation is one ordered transaction-scoped object store or index
@@ -1012,7 +1043,7 @@ export type TransactionOperation = Message<"gestalt.provider.v1.TransactionOpera
  * Use `create(TransactionOperationSchema)` to create a new message.
  */
 export const TransactionOperationSchema: GenMessage<TransactionOperation> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 33);
+  messageDesc(file_v1_indexeddb, 34);
 
 /**
  * TransactionOperationResponse is the ordered response to one operation.
@@ -1084,7 +1115,7 @@ export type TransactionOperationResponse = Message<"gestalt.provider.v1.Transact
  * Use `create(TransactionOperationResponseSchema)` to create a new message.
  */
 export const TransactionOperationResponseSchema: GenMessage<TransactionOperationResponse> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 34);
+  messageDesc(file_v1_indexeddb, 35);
 
 /**
  * TransactionClientMessage is one client frame in the transaction stream. The
@@ -1128,7 +1159,7 @@ export type TransactionClientMessage = Message<"gestalt.provider.v1.TransactionC
  * Use `create(TransactionClientMessageSchema)` to create a new message.
  */
 export const TransactionClientMessageSchema: GenMessage<TransactionClientMessage> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 35);
+  messageDesc(file_v1_indexeddb, 36);
 
 /**
  * @generated from message gestalt.provider.v1.TransactionServerMessage
@@ -1169,7 +1200,7 @@ export type TransactionServerMessage = Message<"gestalt.provider.v1.TransactionS
  * Use `create(TransactionServerMessageSchema)` to create a new message.
  */
 export const TransactionServerMessageSchema: GenMessage<TransactionServerMessage> = /*@__PURE__*/
-  messageDesc(file_v1_indexeddb, 36);
+  messageDesc(file_v1_indexeddb, 37);
 
 /**
  * CursorDirection controls IndexedDB cursor traversal order.
@@ -1323,7 +1354,7 @@ export const IndexedDB: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * Bulk operations (with optional key range)
+   * Bulk operations (with optional query)
    *
    * @generated from rpc gestalt.provider.v1.IndexedDB.Clear
    */

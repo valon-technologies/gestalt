@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAccessContext(value *AccessContext) *proto.AccessContext {
+func ToWireAccessContext(value *AccessContext) *proto.AccessContext {
 	if value == nil {
 		return nil
 	}
@@ -17,7 +17,7 @@ func toWireAccessContext(value *AccessContext) *proto.AccessContext {
 	return out
 }
 
-func fromWireAccessContext(value *proto.AccessContext) *AccessContext {
+func FromWireAccessContext(value *proto.AccessContext) *AccessContext {
 	if value == nil {
 		return nil
 	}
@@ -28,7 +28,7 @@ func fromWireAccessContext(value *proto.AccessContext) *AccessContext {
 	return out
 }
 
-func toWireAgentInvocationContext(value *AgentInvocationContext) *proto.AgentInvocationContext {
+func ToWireAgentInvocationContext(value *AgentInvocationContext) *proto.AgentInvocationContext {
 	if value == nil {
 		return nil
 	}
@@ -40,7 +40,7 @@ func toWireAgentInvocationContext(value *AgentInvocationContext) *proto.AgentInv
 	return out
 }
 
-func fromWireAgentInvocationContext(value *proto.AgentInvocationContext) *AgentInvocationContext {
+func FromWireAgentInvocationContext(value *proto.AgentInvocationContext) *AgentInvocationContext {
 	if value == nil {
 		return nil
 	}
@@ -52,7 +52,7 @@ func fromWireAgentInvocationContext(value *proto.AgentInvocationContext) *AgentI
 	return out
 }
 
-func toWireAgentToolRef(value *AgentToolRef) *proto.AgentToolRef {
+func ToWireAgentToolRef(value *AgentToolRef) *proto.AgentToolRef {
 	if value == nil {
 		return nil
 	}
@@ -65,12 +65,12 @@ func toWireAgentToolRef(value *AgentToolRef) *proto.AgentToolRef {
 		Description:    value.Description,
 		CredentialMode: value.CredentialMode,
 		System:         value.System,
-		RunAs:          toWireSubjectContext(value.RunAs),
+		RunAs:          ToWireSubjectContext(value.RunAs),
 	}
 	return out
 }
 
-func fromWireAgentToolRef(value *proto.AgentToolRef) *AgentToolRef {
+func FromWireAgentToolRef(value *proto.AgentToolRef) *AgentToolRef {
 	if value == nil {
 		return nil
 	}
@@ -83,12 +83,12 @@ func fromWireAgentToolRef(value *proto.AgentToolRef) *AgentToolRef {
 		Description:    value.Description,
 		CredentialMode: value.CredentialMode,
 		System:         value.System,
-		RunAs:          fromWireSubjectContext(value.RunAs),
+		RunAs:          FromWireSubjectContext(value.RunAs),
 	}
 	return out
 }
 
-func toWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
+func ToWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInvokeGraphQLRequest {
 	if value == nil {
 		return nil
 	}
@@ -99,12 +99,12 @@ func toWireAppInvokeGraphQLRequest(value *AppInvokeGraphQLRequest) *proto.AppInv
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
-		Context:        toWireRequestContext(value.Context),
+		Context:        ToWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func fromWireAppInvokeGraphQLRequest(value *proto.AppInvokeGraphQLRequest) *AppInvokeGraphQLRequest {
+func FromWireAppInvokeGraphQLRequest(value *proto.AppInvokeGraphQLRequest) *AppInvokeGraphQLRequest {
 	if value == nil {
 		return nil
 	}
@@ -115,12 +115,12 @@ func fromWireAppInvokeGraphQLRequest(value *proto.AppInvokeGraphQLRequest) *AppI
 		Connection:     value.Connection,
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
-		Context:        fromWireRequestContext(value.Context),
+		Context:        FromWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func toWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
+func ToWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
 	if value == nil {
 		return nil
 	}
@@ -132,12 +132,13 @@ func toWireAppInvokeRequest(value *AppInvokeRequest) *proto.AppInvokeRequest {
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
 		CredentialMode: value.CredentialMode,
-		Context:        toWireRequestContext(value.Context),
+		Context:        ToWireRequestContext(value.Context),
+		RunAs:          ToWireSubjectContext(value.RunAs),
 	}
 	return out
 }
 
-func fromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
+func FromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
 	if value == nil {
 		return nil
 	}
@@ -149,12 +150,13 @@ func fromWireAppInvokeRequest(value *proto.AppInvokeRequest) *AppInvokeRequest {
 		Instance:       value.Instance,
 		IdempotencyKey: value.IdempotencyKey,
 		CredentialMode: value.CredentialMode,
-		Context:        fromWireRequestContext(value.Context),
+		Context:        FromWireRequestContext(value.Context),
+		RunAs:          FromWireSubjectContext(value.RunAs),
 	}
 	return out
 }
 
-func toWireCatalog(value *Catalog) *proto.Catalog {
+func ToWireCatalog(value *Catalog) *proto.Catalog {
 	if value == nil {
 		return nil
 	}
@@ -165,12 +167,12 @@ func toWireCatalog(value *Catalog) *proto.Catalog {
 		IconSvg:     value.IconSvg,
 	}
 	for _, item := range value.Operations {
-		out.Operations = append(out.Operations, toWireCatalogOperation(item))
+		out.Operations = append(out.Operations, ToWireCatalogOperation(item))
 	}
 	return out
 }
 
-func fromWireCatalog(value *proto.Catalog) *Catalog {
+func FromWireCatalog(value *proto.Catalog) *Catalog {
 	if value == nil {
 		return nil
 	}
@@ -181,12 +183,12 @@ func fromWireCatalog(value *proto.Catalog) *Catalog {
 		IconSvg:     value.IconSvg,
 	}
 	for _, item := range value.Operations {
-		out.Operations = append(out.Operations, fromWireCatalogOperation(item))
+		out.Operations = append(out.Operations, FromWireCatalogOperation(item))
 	}
 	return out
 }
 
-func toWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
+func ToWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
 	if value == nil {
 		return nil
 	}
@@ -197,7 +199,7 @@ func toWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
 		Description:    value.Description,
 		InputSchema:    value.InputSchema,
 		OutputSchema:   value.OutputSchema,
-		Annotations:    toWireOperationAnnotations(value.Annotations),
+		Annotations:    ToWireOperationAnnotations(value.Annotations),
 		RequiredScopes: value.RequiredScopes,
 		Tags:           value.Tags,
 		ReadOnly:       value.ReadOnly,
@@ -206,12 +208,12 @@ func toWireCatalogOperation(value *CatalogOperation) *proto.CatalogOperation {
 		AllowedRoles:   value.AllowedRoles,
 	}
 	for _, item := range value.Parameters {
-		out.Parameters = append(out.Parameters, toWireCatalogParameter(item))
+		out.Parameters = append(out.Parameters, ToWireCatalogParameter(item))
 	}
 	return out
 }
 
-func fromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
+func FromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
 	if value == nil {
 		return nil
 	}
@@ -222,7 +224,7 @@ func fromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
 		Description:    value.Description,
 		InputSchema:    value.InputSchema,
 		OutputSchema:   value.OutputSchema,
-		Annotations:    fromWireOperationAnnotations(value.Annotations),
+		Annotations:    FromWireOperationAnnotations(value.Annotations),
 		RequiredScopes: value.RequiredScopes,
 		Tags:           value.Tags,
 		ReadOnly:       value.ReadOnly,
@@ -231,12 +233,12 @@ func fromWireCatalogOperation(value *proto.CatalogOperation) *CatalogOperation {
 		AllowedRoles:   value.AllowedRoles,
 	}
 	for _, item := range value.Parameters {
-		out.Parameters = append(out.Parameters, fromWireCatalogParameter(item))
+		out.Parameters = append(out.Parameters, FromWireCatalogParameter(item))
 	}
 	return out
 }
 
-func toWireCatalogParameter(value *CatalogParameter) *proto.CatalogParameter {
+func ToWireCatalogParameter(value *CatalogParameter) *proto.CatalogParameter {
 	if value == nil {
 		return nil
 	}
@@ -250,7 +252,7 @@ func toWireCatalogParameter(value *CatalogParameter) *proto.CatalogParameter {
 	return out
 }
 
-func fromWireCatalogParameter(value *proto.CatalogParameter) *CatalogParameter {
+func FromWireCatalogParameter(value *proto.CatalogParameter) *CatalogParameter {
 	if value == nil {
 		return nil
 	}
@@ -264,7 +266,7 @@ func fromWireCatalogParameter(value *proto.CatalogParameter) *CatalogParameter {
 	return out
 }
 
-func toWireConnectionParamDef(value *ConnectionParamDef) *proto.ConnectionParamDef {
+func ToWireConnectionParamDef(value *ConnectionParamDef) *proto.ConnectionParamDef {
 	if value == nil {
 		return nil
 	}
@@ -278,7 +280,7 @@ func toWireConnectionParamDef(value *ConnectionParamDef) *proto.ConnectionParamD
 	return out
 }
 
-func fromWireConnectionParamDef(value *proto.ConnectionParamDef) *ConnectionParamDef {
+func FromWireConnectionParamDef(value *proto.ConnectionParamDef) *ConnectionParamDef {
 	if value == nil {
 		return nil
 	}
@@ -292,7 +294,7 @@ func fromWireConnectionParamDef(value *proto.ConnectionParamDef) *ConnectionPara
 	return out
 }
 
-func toWireCredentialContext(value *CredentialContext) *proto.CredentialContext {
+func ToWireCredentialContext(value *CredentialContext) *proto.CredentialContext {
 	if value == nil {
 		return nil
 	}
@@ -305,7 +307,7 @@ func toWireCredentialContext(value *CredentialContext) *proto.CredentialContext 
 	return out
 }
 
-func fromWireCredentialContext(value *proto.CredentialContext) *CredentialContext {
+func FromWireCredentialContext(value *proto.CredentialContext) *CredentialContext {
 	if value == nil {
 		return nil
 	}
@@ -318,7 +320,7 @@ func fromWireCredentialContext(value *proto.CredentialContext) *CredentialContex
 	return out
 }
 
-func toWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
+func ToWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
 	if value == nil {
 		return nil
 	}
@@ -328,13 +330,13 @@ func toWireExecuteRequest(value *ExecuteRequest) *proto.ExecuteRequest {
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
 		InvocationId:     value.InvocationId,
-		Context:          toWireRequestContext(value.Context),
+		Context:          ToWireRequestContext(value.Context),
 		IdempotencyKey:   value.IdempotencyKey,
 	}
 	return out
 }
 
-func fromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
+func FromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
 	if value == nil {
 		return nil
 	}
@@ -344,13 +346,13 @@ func fromWireExecuteRequest(value *proto.ExecuteRequest) *ExecuteRequest {
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
 		InvocationId:     value.InvocationId,
-		Context:          fromWireRequestContext(value.Context),
+		Context:          FromWireRequestContext(value.Context),
 		IdempotencyKey:   value.IdempotencyKey,
 	}
 	return out
 }
 
-func toWireGetSessionCatalogRequest(value *GetSessionCatalogRequest) *proto.GetSessionCatalogRequest {
+func ToWireGetSessionCatalogRequest(value *GetSessionCatalogRequest) *proto.GetSessionCatalogRequest {
 	if value == nil {
 		return nil
 	}
@@ -358,12 +360,12 @@ func toWireGetSessionCatalogRequest(value *GetSessionCatalogRequest) *proto.GetS
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
 		InvocationId:     value.InvocationId,
-		Context:          toWireRequestContext(value.Context),
+		Context:          ToWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func fromWireGetSessionCatalogRequest(value *proto.GetSessionCatalogRequest) *GetSessionCatalogRequest {
+func FromWireGetSessionCatalogRequest(value *proto.GetSessionCatalogRequest) *GetSessionCatalogRequest {
 	if value == nil {
 		return nil
 	}
@@ -371,32 +373,32 @@ func fromWireGetSessionCatalogRequest(value *proto.GetSessionCatalogRequest) *Ge
 		Token:            value.Token,
 		ConnectionParams: value.ConnectionParams,
 		InvocationId:     value.InvocationId,
-		Context:          fromWireRequestContext(value.Context),
+		Context:          FromWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func toWireGetSessionCatalogResponse(value *GetSessionCatalogResponse) *proto.GetSessionCatalogResponse {
+func ToWireGetSessionCatalogResponse(value *GetSessionCatalogResponse) *proto.GetSessionCatalogResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.GetSessionCatalogResponse{
-		Catalog: toWireCatalog(value.Catalog),
+		Catalog: ToWireCatalog(value.Catalog),
 	}
 	return out
 }
 
-func fromWireGetSessionCatalogResponse(value *proto.GetSessionCatalogResponse) *GetSessionCatalogResponse {
+func FromWireGetSessionCatalogResponse(value *proto.GetSessionCatalogResponse) *GetSessionCatalogResponse {
 	if value == nil {
 		return nil
 	}
 	out := &GetSessionCatalogResponse{
-		Catalog: fromWireCatalog(value.Catalog),
+		Catalog: FromWireCatalog(value.Catalog),
 	}
 	return out
 }
 
-func toWireHTTPSubjectRequest(value *HTTPSubjectRequest) *proto.HTTPSubjectRequest {
+func ToWireHTTPSubjectRequest(value *HTTPSubjectRequest) *proto.HTTPSubjectRequest {
 	if value == nil {
 		return nil
 	}
@@ -414,19 +416,19 @@ func toWireHTTPSubjectRequest(value *HTTPSubjectRequest) *proto.HTTPSubjectReque
 	if value.Headers != nil {
 		out.Headers = make(map[string]*proto.StringList, len(value.Headers))
 		for key, item := range value.Headers {
-			out.Headers[key] = toWireStringList(item)
+			out.Headers[key] = ToWireStringList(item)
 		}
 	}
 	if value.Query != nil {
 		out.Query = make(map[string]*proto.StringList, len(value.Query))
 		for key, item := range value.Query {
-			out.Query[key] = toWireStringList(item)
+			out.Query[key] = ToWireStringList(item)
 		}
 	}
 	return out
 }
 
-func fromWireHTTPSubjectRequest(value *proto.HTTPSubjectRequest) *HTTPSubjectRequest {
+func FromWireHTTPSubjectRequest(value *proto.HTTPSubjectRequest) *HTTPSubjectRequest {
 	if value == nil {
 		return nil
 	}
@@ -444,19 +446,19 @@ func fromWireHTTPSubjectRequest(value *proto.HTTPSubjectRequest) *HTTPSubjectReq
 	if value.Headers != nil {
 		out.Headers = make(map[string]*StringList, len(value.Headers))
 		for key, item := range value.Headers {
-			out.Headers[key] = fromWireStringList(item)
+			out.Headers[key] = FromWireStringList(item)
 		}
 	}
 	if value.Query != nil {
 		out.Query = make(map[string]*StringList, len(value.Query))
 		for key, item := range value.Query {
-			out.Query[key] = fromWireStringList(item)
+			out.Query[key] = FromWireStringList(item)
 		}
 	}
 	return out
 }
 
-func toWireHostContext(value *HostContext) *proto.HostContext {
+func ToWireHostContext(value *HostContext) *proto.HostContext {
 	if value == nil {
 		return nil
 	}
@@ -466,7 +468,7 @@ func toWireHostContext(value *HostContext) *proto.HostContext {
 	return out
 }
 
-func fromWireHostContext(value *proto.HostContext) *HostContext {
+func FromWireHostContext(value *proto.HostContext) *HostContext {
 	if value == nil {
 		return nil
 	}
@@ -476,7 +478,7 @@ func fromWireHostContext(value *proto.HostContext) *HostContext {
 	return out
 }
 
-func toWireInvocationContext(value *InvocationContext) *proto.InvocationContext {
+func ToWireInvocationContext(value *InvocationContext) *proto.InvocationContext {
 	if value == nil {
 		return nil
 	}
@@ -491,7 +493,7 @@ func toWireInvocationContext(value *InvocationContext) *proto.InvocationContext 
 	return out
 }
 
-func fromWireInvocationContext(value *proto.InvocationContext) *InvocationContext {
+func FromWireInvocationContext(value *proto.InvocationContext) *InvocationContext {
 	if value == nil {
 		return nil
 	}
@@ -506,7 +508,7 @@ func fromWireInvocationContext(value *proto.InvocationContext) *InvocationContex
 	return out
 }
 
-func toWireOperationAnnotations(value *OperationAnnotations) *proto.OperationAnnotations {
+func ToWireOperationAnnotations(value *OperationAnnotations) *proto.OperationAnnotations {
 	if value == nil {
 		return nil
 	}
@@ -519,7 +521,7 @@ func toWireOperationAnnotations(value *OperationAnnotations) *proto.OperationAnn
 	return out
 }
 
-func fromWireOperationAnnotations(value *proto.OperationAnnotations) *OperationAnnotations {
+func FromWireOperationAnnotations(value *proto.OperationAnnotations) *OperationAnnotations {
 	if value == nil {
 		return nil
 	}
@@ -532,7 +534,7 @@ func fromWireOperationAnnotations(value *proto.OperationAnnotations) *OperationA
 	return out
 }
 
-func toWireOperationResult(value *OperationResult) *proto.OperationResult {
+func ToWireOperationResult(value *OperationResult) *proto.OperationResult {
 	if value == nil {
 		return nil
 	}
@@ -543,13 +545,13 @@ func toWireOperationResult(value *OperationResult) *proto.OperationResult {
 	if value.Headers != nil {
 		out.Headers = make(map[string]*proto.StringList, len(value.Headers))
 		for key, item := range value.Headers {
-			out.Headers[key] = toWireStringList(item)
+			out.Headers[key] = ToWireStringList(item)
 		}
 	}
 	return out
 }
 
-func fromWireOperationResult(value *proto.OperationResult) *OperationResult {
+func FromWireOperationResult(value *proto.OperationResult) *OperationResult {
 	if value == nil {
 		return nil
 	}
@@ -560,13 +562,13 @@ func fromWireOperationResult(value *proto.OperationResult) *OperationResult {
 	if value.Headers != nil {
 		out.Headers = make(map[string]*StringList, len(value.Headers))
 		for key, item := range value.Headers {
-			out.Headers[key] = fromWireStringList(item)
+			out.Headers[key] = FromWireStringList(item)
 		}
 	}
 	return out
 }
 
-func toWireProviderContext(value *ProviderContext) *proto.ProviderContext {
+func ToWireProviderContext(value *ProviderContext) *proto.ProviderContext {
 	if value == nil {
 		return nil
 	}
@@ -577,7 +579,7 @@ func toWireProviderContext(value *ProviderContext) *proto.ProviderContext {
 	return out
 }
 
-func fromWireProviderContext(value *proto.ProviderContext) *ProviderContext {
+func FromWireProviderContext(value *proto.ProviderContext) *ProviderContext {
 	if value == nil {
 		return nil
 	}
@@ -588,7 +590,7 @@ func fromWireProviderContext(value *proto.ProviderContext) *ProviderContext {
 	return out
 }
 
-func toWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
+func ToWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
 	if value == nil {
 		return nil
 	}
@@ -598,7 +600,7 @@ func toWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
 		Description:            value.Description,
 		ConnectionMode:         proto.ConnectionMode(value.ConnectionMode),
 		AuthTypes:              value.AuthTypes,
-		StaticCatalog:          toWireCatalog(value.StaticCatalog),
+		StaticCatalog:          ToWireCatalog(value.StaticCatalog),
 		SupportsSessionCatalog: value.SupportsSessionCatalog,
 		MinProtocolVersion:     value.MinProtocolVersion,
 		MaxProtocolVersion:     value.MaxProtocolVersion,
@@ -606,13 +608,13 @@ func toWireProviderMetadata(value *ProviderMetadata) *proto.ProviderMetadata {
 	if value.ConnectionParams != nil {
 		out.ConnectionParams = make(map[string]*proto.ConnectionParamDef, len(value.ConnectionParams))
 		for key, item := range value.ConnectionParams {
-			out.ConnectionParams[key] = toWireConnectionParamDef(item)
+			out.ConnectionParams[key] = ToWireConnectionParamDef(item)
 		}
 	}
 	return out
 }
 
-func fromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
+func FromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
 	if value == nil {
 		return nil
 	}
@@ -622,7 +624,7 @@ func fromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
 		Description:            value.Description,
 		ConnectionMode:         ConnectionMode(value.ConnectionMode),
 		AuthTypes:              value.AuthTypes,
-		StaticCatalog:          fromWireCatalog(value.StaticCatalog),
+		StaticCatalog:          FromWireCatalog(value.StaticCatalog),
 		SupportsSessionCatalog: value.SupportsSessionCatalog,
 		MinProtocolVersion:     value.MinProtocolVersion,
 		MaxProtocolVersion:     value.MaxProtocolVersion,
@@ -630,59 +632,59 @@ func fromWireProviderMetadata(value *proto.ProviderMetadata) *ProviderMetadata {
 	if value.ConnectionParams != nil {
 		out.ConnectionParams = make(map[string]*ConnectionParamDef, len(value.ConnectionParams))
 		for key, item := range value.ConnectionParams {
-			out.ConnectionParams[key] = fromWireConnectionParamDef(item)
+			out.ConnectionParams[key] = FromWireConnectionParamDef(item)
 		}
 	}
 	return out
 }
 
-func toWireRequestContext(value *RequestContext) *proto.RequestContext {
+func ToWireRequestContext(value *RequestContext) *proto.RequestContext {
 	if value == nil {
 		return nil
 	}
 	out := &proto.RequestContext{
-		Subject:      toWireSubjectContext(value.Subject),
-		Credential:   toWireCredentialContext(value.Credential),
-		Access:       toWireAccessContext(value.Access),
+		Subject:      ToWireSubjectContext(value.Subject),
+		Credential:   ToWireCredentialContext(value.Credential),
+		Access:       ToWireAccessContext(value.Access),
 		Workflow:     toWireStruct(value.Workflow),
-		Host:         toWireHostContext(value.Host),
-		AgentSubject: toWireSubjectContext(value.AgentSubject),
-		Caller:       toWireProviderContext(value.Caller),
-		Invocation:   toWireInvocationContext(value.Invocation),
+		Host:         ToWireHostContext(value.Host),
+		AgentSubject: ToWireSubjectContext(value.AgentSubject),
+		Caller:       ToWireProviderContext(value.Caller),
+		Invocation:   ToWireInvocationContext(value.Invocation),
 		ToolRefsSet:  value.ToolRefsSet,
-		RequestMeta:  toWireRequestMetaContext(value.RequestMeta),
-		Agent:        toWireAgentInvocationContext(value.Agent),
+		RequestMeta:  ToWireRequestMetaContext(value.RequestMeta),
+		Agent:        ToWireAgentInvocationContext(value.Agent),
 	}
 	for _, item := range value.ToolRefs {
-		out.ToolRefs = append(out.ToolRefs, toWireAgentToolRef(item))
+		out.ToolRefs = append(out.ToolRefs, ToWireAgentToolRef(item))
 	}
 	return out
 }
 
-func fromWireRequestContext(value *proto.RequestContext) *RequestContext {
+func FromWireRequestContext(value *proto.RequestContext) *RequestContext {
 	if value == nil {
 		return nil
 	}
 	out := &RequestContext{
-		Subject:      fromWireSubjectContext(value.Subject),
-		Credential:   fromWireCredentialContext(value.Credential),
-		Access:       fromWireAccessContext(value.Access),
+		Subject:      FromWireSubjectContext(value.Subject),
+		Credential:   FromWireCredentialContext(value.Credential),
+		Access:       FromWireAccessContext(value.Access),
 		Workflow:     fromWireStruct(value.Workflow),
-		Host:         fromWireHostContext(value.Host),
-		AgentSubject: fromWireSubjectContext(value.AgentSubject),
-		Caller:       fromWireProviderContext(value.Caller),
-		Invocation:   fromWireInvocationContext(value.Invocation),
+		Host:         FromWireHostContext(value.Host),
+		AgentSubject: FromWireSubjectContext(value.AgentSubject),
+		Caller:       FromWireProviderContext(value.Caller),
+		Invocation:   FromWireInvocationContext(value.Invocation),
 		ToolRefsSet:  value.ToolRefsSet,
-		RequestMeta:  fromWireRequestMetaContext(value.RequestMeta),
-		Agent:        fromWireAgentInvocationContext(value.Agent),
+		RequestMeta:  FromWireRequestMetaContext(value.RequestMeta),
+		Agent:        FromWireAgentInvocationContext(value.Agent),
 	}
 	for _, item := range value.ToolRefs {
-		out.ToolRefs = append(out.ToolRefs, fromWireAgentToolRef(item))
+		out.ToolRefs = append(out.ToolRefs, FromWireAgentToolRef(item))
 	}
 	return out
 }
 
-func toWireRequestMetaContext(value *RequestMetaContext) *proto.RequestMetaContext {
+func ToWireRequestMetaContext(value *RequestMetaContext) *proto.RequestMetaContext {
 	if value == nil {
 		return nil
 	}
@@ -694,7 +696,7 @@ func toWireRequestMetaContext(value *RequestMetaContext) *proto.RequestMetaConte
 	return out
 }
 
-func fromWireRequestMetaContext(value *proto.RequestMetaContext) *RequestMetaContext {
+func FromWireRequestMetaContext(value *proto.RequestMetaContext) *RequestMetaContext {
 	if value == nil {
 		return nil
 	}
@@ -706,53 +708,53 @@ func fromWireRequestMetaContext(value *proto.RequestMetaContext) *RequestMetaCon
 	return out
 }
 
-func toWireResolveHTTPSubjectRequest(value *ResolveHTTPSubjectRequest) *proto.ResolveHTTPSubjectRequest {
+func ToWireResolveHTTPSubjectRequest(value *ResolveHTTPSubjectRequest) *proto.ResolveHTTPSubjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ResolveHTTPSubjectRequest{
-		Request: toWireHTTPSubjectRequest(value.Request),
-		Context: toWireRequestContext(value.Context),
+		Request: ToWireHTTPSubjectRequest(value.Request),
+		Context: ToWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func fromWireResolveHTTPSubjectRequest(value *proto.ResolveHTTPSubjectRequest) *ResolveHTTPSubjectRequest {
+func FromWireResolveHTTPSubjectRequest(value *proto.ResolveHTTPSubjectRequest) *ResolveHTTPSubjectRequest {
 	if value == nil {
 		return nil
 	}
 	out := &ResolveHTTPSubjectRequest{
-		Request: fromWireHTTPSubjectRequest(value.Request),
-		Context: fromWireRequestContext(value.Context),
+		Request: FromWireHTTPSubjectRequest(value.Request),
+		Context: FromWireRequestContext(value.Context),
 	}
 	return out
 }
 
-func toWireResolveHTTPSubjectResponse(value *ResolveHTTPSubjectResponse) *proto.ResolveHTTPSubjectResponse {
+func ToWireResolveHTTPSubjectResponse(value *ResolveHTTPSubjectResponse) *proto.ResolveHTTPSubjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.ResolveHTTPSubjectResponse{
-		Subject:       toWireSubjectContext(value.Subject),
+		Subject:       ToWireSubjectContext(value.Subject),
 		RejectStatus:  value.RejectStatus,
 		RejectMessage: value.RejectMessage,
 	}
 	return out
 }
 
-func fromWireResolveHTTPSubjectResponse(value *proto.ResolveHTTPSubjectResponse) *ResolveHTTPSubjectResponse {
+func FromWireResolveHTTPSubjectResponse(value *proto.ResolveHTTPSubjectResponse) *ResolveHTTPSubjectResponse {
 	if value == nil {
 		return nil
 	}
 	out := &ResolveHTTPSubjectResponse{
-		Subject:       fromWireSubjectContext(value.Subject),
+		Subject:       FromWireSubjectContext(value.Subject),
 		RejectStatus:  value.RejectStatus,
 		RejectMessage: value.RejectMessage,
 	}
 	return out
 }
 
-func toWireStartProviderRequest(value *StartProviderRequest) *proto.StartProviderRequest {
+func ToWireStartProviderRequest(value *StartProviderRequest) *proto.StartProviderRequest {
 	if value == nil {
 		return nil
 	}
@@ -764,7 +766,7 @@ func toWireStartProviderRequest(value *StartProviderRequest) *proto.StartProvide
 	return out
 }
 
-func fromWireStartProviderRequest(value *proto.StartProviderRequest) *StartProviderRequest {
+func FromWireStartProviderRequest(value *proto.StartProviderRequest) *StartProviderRequest {
 	if value == nil {
 		return nil
 	}
@@ -776,7 +778,7 @@ func fromWireStartProviderRequest(value *proto.StartProviderRequest) *StartProvi
 	return out
 }
 
-func toWireStartProviderResponse(value *StartProviderResponse) *proto.StartProviderResponse {
+func ToWireStartProviderResponse(value *StartProviderResponse) *proto.StartProviderResponse {
 	if value == nil {
 		return nil
 	}
@@ -786,7 +788,7 @@ func toWireStartProviderResponse(value *StartProviderResponse) *proto.StartProvi
 	return out
 }
 
-func fromWireStartProviderResponse(value *proto.StartProviderResponse) *StartProviderResponse {
+func FromWireStartProviderResponse(value *proto.StartProviderResponse) *StartProviderResponse {
 	if value == nil {
 		return nil
 	}
@@ -796,7 +798,7 @@ func fromWireStartProviderResponse(value *proto.StartProviderResponse) *StartPro
 	return out
 }
 
-func toWireStringList(value *StringList) *proto.StringList {
+func ToWireStringList(value *StringList) *proto.StringList {
 	if value == nil {
 		return nil
 	}
@@ -806,7 +808,7 @@ func toWireStringList(value *StringList) *proto.StringList {
 	return out
 }
 
-func fromWireStringList(value *proto.StringList) *StringList {
+func FromWireStringList(value *proto.StringList) *StringList {
 	if value == nil {
 		return nil
 	}
@@ -816,7 +818,7 @@ func fromWireStringList(value *proto.StringList) *StringList {
 	return out
 }
 
-func toWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
+func ToWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
 	if value == nil {
 		return nil
 	}
@@ -828,12 +830,12 @@ func toWireSubjectContext(value *SubjectContext) *proto.SubjectContext {
 		Scopes:              value.Scopes,
 	}
 	for _, item := range value.Permissions {
-		out.Permissions = append(out.Permissions, toWireSubjectPermissionContext(item))
+		out.Permissions = append(out.Permissions, ToWireSubjectPermissionContext(item))
 	}
 	return out
 }
 
-func fromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
+func FromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
 	if value == nil {
 		return nil
 	}
@@ -845,12 +847,12 @@ func fromWireSubjectContext(value *proto.SubjectContext) *SubjectContext {
 		Scopes:              value.Scopes,
 	}
 	for _, item := range value.Permissions {
-		out.Permissions = append(out.Permissions, fromWireSubjectPermissionContext(item))
+		out.Permissions = append(out.Permissions, FromWireSubjectPermissionContext(item))
 	}
 	return out
 }
 
-func toWireSubjectPermissionContext(value *SubjectPermissionContext) *proto.SubjectPermissionContext {
+func ToWireSubjectPermissionContext(value *SubjectPermissionContext) *proto.SubjectPermissionContext {
 	if value == nil {
 		return nil
 	}
@@ -862,7 +864,7 @@ func toWireSubjectPermissionContext(value *SubjectPermissionContext) *proto.Subj
 	return out
 }
 
-func fromWireSubjectPermissionContext(value *proto.SubjectPermissionContext) *SubjectPermissionContext {
+func FromWireSubjectPermissionContext(value *proto.SubjectPermissionContext) *SubjectPermissionContext {
 	if value == nil {
 		return nil
 	}

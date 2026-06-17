@@ -187,60 +187,60 @@ func (c *Runtime) GetSupport(ctx context.Context) (*RuntimeSupport, error) {
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRuntimeSupport(response), nil
+	return FromWireRuntimeSupport(response), nil
 }
 
 // StartSession is the ergonomic form of [Runtime.StartSessionRaw].
 func (c *Runtime) StartSession(ctx context.Context, appName string, template string, image string, imagePullAuth *RuntimeImagePullAuth) (*RuntimeSession, error) {
 	request := &StartRuntimeSessionRequest{AppName: appName, Template: template, Image: image, ImagePullAuth: imagePullAuth}
-	response, err := c.client.StartSession(ctx, toWireStartRuntimeSessionRequest(request))
+	response, err := c.client.StartSession(ctx, ToWireStartRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRuntimeSession(response), nil
+	return FromWireRuntimeSession(response), nil
 }
 
 // StartSessionRaw is the faithful form of [Runtime.StartSession].
 func (c *Runtime) StartSessionRaw(ctx context.Context, request *StartRuntimeSessionRequest) (*RuntimeSession, error) {
-	response, err := c.client.StartSession(ctx, toWireStartRuntimeSessionRequest(request))
+	response, err := c.client.StartSession(ctx, ToWireStartRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRuntimeSession(response), nil
+	return FromWireRuntimeSession(response), nil
 }
 
 // GetSession is the ergonomic form of [Runtime.GetSessionRaw].
 func (c *Runtime) GetSession(ctx context.Context, sessionId string) (*RuntimeSession, error) {
 	request := &GetRuntimeSessionRequest{SessionId: sessionId}
-	response, err := c.client.GetSession(ctx, toWireGetRuntimeSessionRequest(request))
+	response, err := c.client.GetSession(ctx, ToWireGetRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRuntimeSession(response), nil
+	return FromWireRuntimeSession(response), nil
 }
 
 // GetSessionRaw is the faithful form of [Runtime.GetSession].
 func (c *Runtime) GetSessionRaw(ctx context.Context, request *GetRuntimeSessionRequest) (*RuntimeSession, error) {
-	response, err := c.client.GetSession(ctx, toWireGetRuntimeSessionRequest(request))
+	response, err := c.client.GetSession(ctx, ToWireGetRuntimeSessionRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRuntimeSession(response), nil
+	return FromWireRuntimeSession(response), nil
 }
 
 // ListSessions calls the ListSessions RPC of Runtime.
 func (c *Runtime) ListSessions(ctx context.Context, request *ListRuntimeSessionsRequest) (*ListRuntimeSessionsResponse, error) {
-	response, err := c.client.ListSessions(ctx, toWireListRuntimeSessionsRequest(request))
+	response, err := c.client.ListSessions(ctx, ToWireListRuntimeSessionsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListRuntimeSessionsResponse(response), nil
+	return FromWireListRuntimeSessionsResponse(response), nil
 }
 
 // StopSession is the ergonomic form of [Runtime.StopSessionRaw].
 func (c *Runtime) StopSession(ctx context.Context, sessionId string) error {
 	request := &StopRuntimeSessionRequest{SessionId: sessionId}
-	if _, err := c.client.StopSession(ctx, toWireStopRuntimeSessionRequest(request)); err != nil {
+	if _, err := c.client.StopSession(ctx, ToWireStopRuntimeSessionRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -248,7 +248,7 @@ func (c *Runtime) StopSession(ctx context.Context, sessionId string) error {
 
 // StopSessionRaw is the faithful form of [Runtime.StopSession].
 func (c *Runtime) StopSessionRaw(ctx context.Context, request *StopRuntimeSessionRequest) error {
-	if _, err := c.client.StopSession(ctx, toWireStopRuntimeSessionRequest(request)); err != nil {
+	if _, err := c.client.StopSession(ctx, ToWireStopRuntimeSessionRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -258,26 +258,26 @@ func (c *Runtime) StopSessionRaw(ctx context.Context, request *StopRuntimeSessio
 // The response collapses to its workspace field.
 func (c *Runtime) PrepareWorkspace(ctx context.Context, sessionId string, agentSessionId string, workspace *AgentWorkspace) (*PreparedAgentWorkspace, error) {
 	request := &PrepareRuntimeWorkspaceRequest{SessionId: sessionId, AgentSessionId: agentSessionId, Workspace: workspace}
-	response, err := c.client.PrepareWorkspace(ctx, toWirePrepareRuntimeWorkspaceRequest(request))
+	response, err := c.client.PrepareWorkspace(ctx, ToWirePrepareRuntimeWorkspaceRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWirePrepareRuntimeWorkspaceResponse(response).Workspace, nil
+	return FromWirePrepareRuntimeWorkspaceResponse(response).Workspace, nil
 }
 
 // PrepareWorkspaceRaw is the faithful form of [Runtime.PrepareWorkspace].
 func (c *Runtime) PrepareWorkspaceRaw(ctx context.Context, request *PrepareRuntimeWorkspaceRequest) (*PrepareRuntimeWorkspaceResponse, error) {
-	response, err := c.client.PrepareWorkspace(ctx, toWirePrepareRuntimeWorkspaceRequest(request))
+	response, err := c.client.PrepareWorkspace(ctx, ToWirePrepareRuntimeWorkspaceRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWirePrepareRuntimeWorkspaceResponse(response), nil
+	return FromWirePrepareRuntimeWorkspaceResponse(response), nil
 }
 
 // RemoveWorkspace is the ergonomic form of [Runtime.RemoveWorkspaceRaw].
 func (c *Runtime) RemoveWorkspace(ctx context.Context, sessionId string, agentSessionId string) error {
 	request := &RemoveRuntimeWorkspaceRequest{SessionId: sessionId, AgentSessionId: agentSessionId}
-	if _, err := c.client.RemoveWorkspace(ctx, toWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
+	if _, err := c.client.RemoveWorkspace(ctx, ToWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -285,7 +285,7 @@ func (c *Runtime) RemoveWorkspace(ctx context.Context, sessionId string, agentSe
 
 // RemoveWorkspaceRaw is the faithful form of [Runtime.RemoveWorkspace].
 func (c *Runtime) RemoveWorkspaceRaw(ctx context.Context, request *RemoveRuntimeWorkspaceRequest) error {
-	if _, err := c.client.RemoveWorkspace(ctx, toWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
+	if _, err := c.client.RemoveWorkspace(ctx, ToWireRemoveRuntimeWorkspaceRequest(request)); err != nil {
 		return toGestaltError(err)
 	}
 	return nil
@@ -294,20 +294,20 @@ func (c *Runtime) RemoveWorkspaceRaw(ctx context.Context, request *RemoveRuntime
 // StartApp is the ergonomic form of [Runtime.StartAppRaw].
 func (c *Runtime) StartApp(ctx context.Context, sessionId string, appName string, command string, args []string, allowedHosts []string, defaultAction string, hostBinary string, workdir string) (*HostedApp, error) {
 	request := &StartHostedAppRequest{SessionId: sessionId, AppName: appName, Command: command, Args: args, AllowedHosts: allowedHosts, DefaultAction: defaultAction, HostBinary: hostBinary, Workdir: workdir}
-	response, err := c.client.StartApp(ctx, toWireStartHostedAppRequest(request))
+	response, err := c.client.StartApp(ctx, ToWireStartHostedAppRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireHostedApp(response), nil
+	return FromWireHostedApp(response), nil
 }
 
 // StartAppRaw is the faithful form of [Runtime.StartApp].
 func (c *Runtime) StartAppRaw(ctx context.Context, request *StartHostedAppRequest) (*HostedApp, error) {
-	response, err := c.client.StartApp(ctx, toWireStartHostedAppRequest(request))
+	response, err := c.client.StartApp(ctx, ToWireStartHostedAppRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireHostedApp(response), nil
+	return FromWireHostedApp(response), nil
 }
 
 // RuntimeLogHost is the generated client for gestalt.provider.v1.RuntimeLogHost.
@@ -345,18 +345,18 @@ func ConnectRuntimeLogHost(ctx context.Context, name string) (*RuntimeLogHost, e
 // The response collapses to its lastSeq field.
 func (c *RuntimeLogHost) AppendLogs(ctx context.Context, sessionId string, logs []*RuntimeLogEntry) (int64, error) {
 	request := &AppendRuntimeLogsRequest{SessionId: sessionId, Logs: logs}
-	response, err := c.client.AppendLogs(ctx, toWireAppendRuntimeLogsRequest(request))
+	response, err := c.client.AppendLogs(ctx, ToWireAppendRuntimeLogsRequest(request))
 	if err != nil {
 		return 0, toGestaltError(err)
 	}
-	return fromWireAppendRuntimeLogsResponse(response).LastSeq, nil
+	return FromWireAppendRuntimeLogsResponse(response).LastSeq, nil
 }
 
 // AppendLogsRaw is the faithful form of [RuntimeLogHost.AppendLogs].
 func (c *RuntimeLogHost) AppendLogsRaw(ctx context.Context, request *AppendRuntimeLogsRequest) (*AppendRuntimeLogsResponse, error) {
-	response, err := c.client.AppendLogs(ctx, toWireAppendRuntimeLogsRequest(request))
+	response, err := c.client.AppendLogs(ctx, ToWireAppendRuntimeLogsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAppendRuntimeLogsResponse(response), nil
+	return FromWireAppendRuntimeLogsResponse(response), nil
 }

@@ -2,17 +2,19 @@ package bootstrap_test
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -39,11 +41,12 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	appaccessservice "github.com/valon-technologies/gestalt/server/services/appaccess"
-	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
+	"github.com/valon-technologies/gestalt/server/services/providergateway"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -55,10 +58,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
-
-func bootstrapGraphQLStringPtr(value string) *string {
-	return &value
-}
 
 func bootstrapTextAgentOutput() *proto.AgentOutput {
 	return &proto.AgentOutput{Kind: &proto.AgentOutput_Text{Text: &proto.AgentTextOutput{}}}
@@ -80,58 +79,6 @@ func bootstrapAgentRequestContext(t testing.TB, p *principal.Principal, callerNa
 		t.Fatalf("RequestContextProto: %v", err)
 	}
 	return reqCtx
-}
-
-func bootstrapGraphQLSchema() graphqlschema.Schema {
-	return graphqlschema.Schema{
-		QueryType: &graphqlschema.TypeName{Name: "Query"},
-		Types: []graphqlschema.FullType{
-			{
-				Kind: "OBJECT",
-				Name: "Query",
-				Fields: []graphqlschema.Field{
-					{
-						Name: "viewer",
-						Args: []graphqlschema.InputValue{
-							{Name: "team", Type: graphqlschema.TypeRef{Kind: "NON_NULL", OfType: &graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}}},
-						},
-						Type: graphqlschema.TypeRef{Kind: "OBJECT", Name: bootstrapGraphQLStringPtr("Viewer")},
-					},
-				},
-			},
-			{
-				Kind: "OBJECT",
-				Name: "Viewer",
-				Fields: []graphqlschema.Field{
-					{Name: "id", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("ID")}},
-					{Name: "name", Type: graphqlschema.TypeRef{Kind: "SCALAR", Name: bootstrapGraphQLStringPtr("String")}},
-				},
-			},
-		},
-	}
-}
-
-func startBootstrapGraphQLIntrospectionServer(t *testing.T) *httptest.Server {
-	t.Helper()
-
-	schema := bootstrapGraphQLSchema()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			Query string `json:"query"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"data": map[string]any{
-				"__schema": schema,
-			},
-		})
-	}))
-	t.Cleanup(srv.Close)
-	return srv
 }
 
 func stubAuthFactory(name string) bootstrap.AuthFactory {
@@ -1344,6 +1291,52 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
+type bootstrapTransportRecordingAuthorizationProvider struct {
+	transport             providergateway.Transport
+	setAuthorizationState *proto.SetAuthorizationStateRequest
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) CheckAccess(context.Context, *proto.CheckAccessRequest) (*proto.CheckAccessResponse, error) {
+	return &proto.CheckAccessResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) CheckAccessMany(context.Context, *proto.CheckAccessManyRequest) (*proto.CheckAccessManyResponse, error) {
+	return &proto.CheckAccessManyResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) ListRelationships(context.Context, *proto.ListRelationshipsRequest) (*proto.ListRelationshipsResponse, error) {
+	return &proto.ListRelationshipsResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) AddRelationship(context.Context, *proto.AddRelationshipRequest) (*proto.AddRelationshipResponse, error) {
+	return &proto.AddRelationshipResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) DeleteRelationship(context.Context, *proto.DeleteRelationshipRequest) (*proto.DeleteRelationshipResponse, error) {
+	return &proto.DeleteRelationshipResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) SetAuthorizationState(_ context.Context, req *proto.SetAuthorizationStateRequest) (*proto.SetAuthorizationStateResponse, error) {
+	p.setAuthorizationState = req
+	return &proto.SetAuthorizationStateResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) GetActiveModelRef(context.Context) (*proto.GetActiveModelRefResponse, error) {
+	return &proto.GetActiveModelRefResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) SetActiveModel(context.Context, *proto.SetActiveModelRequest) (*proto.SetActiveModelResponse, error) {
+	return &proto.SetActiveModelResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) ListActiveModelResourceTypes(context.Context, *proto.ListActiveModelResourceTypesRequest) (*proto.ListActiveModelResourceTypesResponse, error) {
+	return &proto.ListActiveModelResourceTypesResponse{}, nil
+}
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) Ping(context.Context) error { return nil }
+
+func (p *bootstrapTransportRecordingAuthorizationProvider) Close() error { return nil }
+
 func requireHostService(t *testing.T, hostServices []runtimehost.HostService, name string) runtimehost.HostService {
 	t.Helper()
 	for _, hostService := range hostServices {
@@ -1555,6 +1548,19 @@ func transportSecretRef(name string) string {
 		Provider: "default",
 		Name:     name,
 	})
+}
+
+func bootstrapCallerTokenPrivateKey(t testing.TB) string {
+	t.Helper()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("MarshalPKCS8PrivateKey: %v", err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKeyBytes}))
 }
 
 func TestBootstrapProviderBoundaryMetrics(t *testing.T) {
@@ -1874,6 +1880,68 @@ func TestBootstrap(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestBootstrapAuthorizationProviderStateUsesProviderGatewayTransport(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Server.Providers.Authorization = "authz"
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"authz": {Config: yaml.Node{Kind: yaml.MappingNode}},
+	}
+
+	var built []*bootstrapTransportRecordingAuthorizationProvider
+	factories := validFactories()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{
+				"gestaltd-caller-token-ed25519-private-key": bootstrapCallerTokenPrivateKey(t),
+			},
+		}, nil
+	}
+	factories.Authorization = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
+		raw := &bootstrapTransportRecordingAuthorizationProvider{transport: deps.ProviderTransport}
+		guardedTransport := providergateway.NewProviderGatewayTransport()
+		guardedTransport.SetAuthorizationProvider(raw)
+		guarded := &bootstrapTransportRecordingAuthorizationProvider{transport: guardedTransport}
+		built = append(built, raw, guarded)
+		return providerdrivers.AuthorizationBuildResult{Raw: raw, Guarded: guarded}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+
+	if len(built) != 2 {
+		t.Fatalf("authorization providers built = %d, want 2", len(built))
+	}
+	rawProvider := built[0]
+	guardedProvider := built[1]
+	if _, ok := rawProvider.transport.(providergateway.DirectTransport); !ok {
+		t.Fatalf("raw authorization provider transport = %T, want providergateway.DirectTransport", rawProvider.transport)
+	}
+	transportGateway, ok := guardedProvider.transport.(*providergateway.ProviderGatewayTransport)
+	if !ok {
+		t.Fatalf("guarded authorization provider transport = %T, want *providergateway.ProviderGatewayTransport", guardedProvider.transport)
+	}
+	if result.CallerTokenIssuer == nil {
+		t.Fatal("CallerTokenIssuer is nil")
+	}
+	if rawProvider.setAuthorizationState == nil {
+		t.Fatal("raw authorization provider did not receive SetAuthorizationState")
+	}
+	if guardedProvider.setAuthorizationState != nil {
+		t.Fatal("guarded authorization provider unexpectedly received SetAuthorizationState")
+	}
+	if result.Authorization["authz"] != guardedProvider {
+		t.Fatal("bootstrapped authorization provider is not the guarded runtime authorization provider")
+	}
+	if transportGateway != guardedProvider.transport {
+		t.Fatal("guarded authorization provider was not built with the runtime provider gateway")
+	}
 }
 
 func TestBootstrapResultClosesExtraCaches(t *testing.T) {
@@ -4852,113 +4920,6 @@ func TestValidate(t *testing.T) {
 
 		if _, err := bootstrap.Validate(context.Background(), validConfig(), validFactories()); err != nil {
 			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("rejects invalid app invokes dependency", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "missing", Operation: "ping"},
-				},
-			},
-		}
-
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references unknown app "missing"`) {
-			t.Fatalf("Validate error = %v, want unknown app invokes error", err)
-		}
-	})
-
-	t.Run("accepts graphql surface app invokes dependency", func(t *testing.T) {
-		t.Parallel()
-
-		srv := startBootstrapGraphQLIntrospectionServer(t)
-		root := t.TempDir()
-		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
-			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
-		}
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
-				ResolvedManifestPath: callerManifestPath,
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "linear", Surface: "graphql"},
-				},
-			},
-			"linear": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							GraphQL: &providermanifestv1.GraphQLSurface{
-								URL: srv.URL,
-							},
-						},
-					},
-				},
-			},
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("rejects graphql surface invoke when target app has no graphql surface", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		callerManifestPath := filepath.Join(root, "caller-manifest.yaml")
-		if err := os.WriteFile(callerManifestPath, []byte("kind: app\n"), 0o644); err != nil {
-			t.Fatalf("WriteFile(caller-manifest.yaml): %v", err)
-		}
-
-		cfg := validConfig()
-		cfg.Apps = map[string]*config.ProviderEntry{
-			"caller": {
-				Source:               config.NewMetadataSource("https://example.invalid/github-com-acme-caller/v1.0.0/provider-release.yaml"),
-				ResolvedManifestPath: callerManifestPath,
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
-					Spec:       &providermanifestv1.Spec{},
-				},
-				Invokes: []config.AppInvocationDependency{
-					{App: "linear", Surface: "graphql"},
-				},
-			},
-			"linear": {
-				ResolvedManifest: &providermanifestv1.Manifest{
-					Spec: &providermanifestv1.Spec{
-						Surfaces: &providermanifestv1.ProviderSurfaces{
-							REST: &providermanifestv1.RESTSurface{
-								BaseURL: "https://linear.example/api",
-								Operations: []providermanifestv1.ProviderOperation{
-									{Name: "status", Method: http.MethodGet, Path: "/status"},
-								},
-							},
-						},
-					},
-				},
-			},
-		}
-
-		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
-		if err == nil || !strings.Contains(err.Error(), `apps.caller.invokes[0] references app "linear" surface "graphql", but that surface is not configured`) {
-			t.Fatalf("Validate error = %v, want missing graphql surface error", err)
 		}
 	})
 

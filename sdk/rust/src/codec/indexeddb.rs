@@ -10,13 +10,13 @@ use crate::indexeddb::{
     BeginTransactionRequest, ColumnDef, CountResponse, CreateObjectStoreRequest,
     CursorClientMessage, CursorClientMessageMsg, CursorCommand, CursorCommandCommand, CursorEntry,
     CursorKeyTarget, CursorResponse, CursorResponseResult, DeleteObjectStoreRequest,
-    DeleteResponse, IndexQueryRequest, IndexSchema, KeyRange, KeyResponse, KeyValue, KeyValueArray,
-    KeyValueKind, KeysResponse, ObjectStoreNameRequest, ObjectStoreRangeRequest,
-    ObjectStoreRequest, ObjectStoreSchema, OpenCursorRequest, Record, RecordRequest,
-    RecordResponse, RecordsResponse, TransactionAbortRequest, TransactionAbortResponse,
-    TransactionBeginResponse, TransactionClientMessage, TransactionClientMessageMsg,
-    TransactionCommitRequest, TransactionCommitResponse, TransactionOperation,
-    TransactionOperationOperation, TransactionOperationResponse,
+    DeleteResponse, IndexQueryRequest, IndexSchema, IndexedDBQuery, IndexedDBQueryQuery, KeyRange,
+    KeyResponse, KeyValue, KeyValueArray, KeyValueKind, KeysResponse, ObjectStoreNameRequest,
+    ObjectStoreRangeRequest, ObjectStoreRequest, ObjectStoreSchema, OpenCursorRequest, Record,
+    RecordRequest, RecordResponse, RecordsResponse, TransactionAbortRequest,
+    TransactionAbortResponse, TransactionBeginResponse, TransactionClientMessage,
+    TransactionClientMessageMsg, TransactionCommitRequest, TransactionCommitResponse,
+    TransactionOperation, TransactionOperationOperation, TransactionOperationResponse,
     TransactionOperationResponseResult, TransactionServerMessage, TransactionServerMessageMsg,
     TypedValue, TypedValueKind,
 };
@@ -105,7 +105,7 @@ pub(crate) fn to_wire_cursor_command_command(
 /// Converts a wire `CursorEntry` to its native message.
 pub(crate) fn from_wire_cursor_entry(value: v1::CursorEntry) -> CursorEntry {
     CursorEntry {
-        key: value.key.into_iter().map(from_wire_key_value).collect(),
+        key: value.key.map(from_wire_key_value),
         primary_key: value.primary_key,
         record: value.record.map(from_wire_record),
     }
@@ -114,7 +114,7 @@ pub(crate) fn from_wire_cursor_entry(value: v1::CursorEntry) -> CursorEntry {
 /// Converts a native `CursorKeyTarget` to its wire message.
 pub(crate) fn to_wire_cursor_key_target(value: CursorKeyTarget) -> v1::CursorKeyTarget {
     v1::CursorKeyTarget {
-        key: value.key.into_iter().map(to_wire_key_value).collect(),
+        key: value.key.map(to_wire_key_value),
     }
 }
 
@@ -155,8 +155,8 @@ pub(crate) fn to_wire_index_query_request(value: IndexQueryRequest) -> v1::Index
     v1::IndexQueryRequest {
         store: value.store,
         index: value.index,
-        values: value.values.into_iter().map(to_wire_typed_value).collect(),
-        range: value.range.map(to_wire_key_range),
+        query: value.query.map(to_wire_indexed_db_query),
+        count: value.count,
     }
 }
 
@@ -169,11 +169,31 @@ pub(crate) fn to_wire_index_schema(value: IndexSchema) -> v1::IndexSchema {
     }
 }
 
+/// Converts a native `IndexedDBQuery` to its wire message.
+pub(crate) fn to_wire_indexed_db_query(value: IndexedDBQuery) -> v1::IndexedDbQuery {
+    v1::IndexedDbQuery {
+        query: value.query.map(to_wire_indexed_db_query_query),
+    }
+}
+
+pub(crate) fn to_wire_indexed_db_query_query(
+    value: IndexedDBQueryQuery,
+) -> v1::indexed_db_query::Query {
+    match value {
+        IndexedDBQueryQuery::Key(value) => {
+            v1::indexed_db_query::Query::Key(to_wire_key_value(value))
+        }
+        IndexedDBQueryQuery::Range(value) => {
+            v1::indexed_db_query::Query::Range(to_wire_key_range(value))
+        }
+    }
+}
+
 /// Converts a native `KeyRange` to its wire message.
 pub(crate) fn to_wire_key_range(value: KeyRange) -> v1::KeyRange {
     v1::KeyRange {
-        lower: value.lower.map(to_wire_typed_value),
-        upper: value.upper.map(to_wire_typed_value),
+        lower: value.lower.map(to_wire_key_value),
+        upper: value.upper.map(to_wire_key_value),
         lower_open: value.lower_open,
         upper_open: value.upper_open,
     }
@@ -248,7 +268,8 @@ pub(crate) fn to_wire_object_store_range_request(
 ) -> v1::ObjectStoreRangeRequest {
     v1::ObjectStoreRangeRequest {
         store: value.store,
-        range: value.range.map(to_wire_key_range),
+        query: value.query.map(to_wire_indexed_db_query),
+        count: value.count,
     }
 }
 
@@ -276,11 +297,10 @@ pub(crate) fn to_wire_object_store_schema(value: ObjectStoreSchema) -> v1::Objec
 pub(crate) fn to_wire_open_cursor_request(value: OpenCursorRequest) -> v1::OpenCursorRequest {
     v1::OpenCursorRequest {
         store: value.store,
-        range: value.range.map(to_wire_key_range),
+        index: value.index,
+        query: value.query.map(to_wire_indexed_db_query),
         direction: value.direction,
         keys_only: value.keys_only,
-        index: value.index,
-        values: value.values.into_iter().map(to_wire_typed_value).collect(),
     }
 }
 

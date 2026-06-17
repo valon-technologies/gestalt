@@ -119,6 +119,7 @@ def to_wire_app_invoke_request(value: native.AppInvokeRequest) -> Any:
         context=None
         if value.context is None
         else to_wire_request_context(value.context),
+        run_as=None if value.run_as is None else to_wire_subject_context(value.run_as),
     )
 
 
@@ -133,6 +134,9 @@ def from_wire_app_invoke_request(value: Any) -> native.AppInvokeRequest:
         credential_mode=value.credential_mode,
         context=from_wire_request_context(value.context)
         if value.HasField("context")
+        else None,
+        run_as=from_wire_subject_context(value.run_as)
+        if value.HasField("run_as")
         else None,
     )
 

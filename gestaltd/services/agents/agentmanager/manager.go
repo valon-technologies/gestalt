@@ -129,6 +129,7 @@ type Config struct {
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
+	MCPConnection     map[string]string
 	AgentConnections  map[string][]string
 	SessionStart      map[string]*coreagent.SessionStartConfig
 }
@@ -142,6 +143,7 @@ type Manager struct {
 	invoker           invocation.Invoker
 	defaultConnection map[string]string
 	catalogConnection map[string]string
+	mcpConnection     map[string]string
 	agentConnections  map[string][]string
 	sessionStart      map[string]*coreagent.SessionStartConfig
 }
@@ -156,6 +158,7 @@ func New(cfg Config) *Manager {
 		invoker:           cfg.Invoker,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
+		mcpConnection:     maps.Clone(cfg.MCPConnection),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 	}
@@ -2975,6 +2978,7 @@ func (m *Manager) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
 		Invoker:           m.invoker,
 		CatalogConnection: m.catalogConnection,
+		MCPConnection:     m.mcpConnection,
 		DefaultConnection: m.defaultConnection,
 	}
 }

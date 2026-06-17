@@ -509,9 +509,8 @@ func buildAppInvocationHostService(appName string, deps Deps) runtimehost.HostSe
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAppServer(srv, appaccessservice.NewServer(
 				invoker,
-				appaccessservice.WithAuthorizationProvider(deps.Authorization),
 				appaccessservice.WithAgentAppInvocationAuthorizer(deps.AgentManager),
-				appaccessservice.WithCallerApp(appName, deps.AppAccessProfiles[strings.TrimSpace(appName)]),
+				appaccessservice.WithCallerApp(appName),
 			))
 		},
 	}

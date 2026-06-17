@@ -23,12 +23,6 @@ const (
 	StaticCatalogFile = packageio.StaticCatalogFile
 )
 
-type InvocationDependency struct {
-	App       string
-	Operation string
-	Surface   SpecSurface
-}
-
 type StaticCatalogReader func(name string) (*catalog.Catalog, error)
 
 type APICatalogLoader func(ctx context.Context, name string, surface SpecSurface, specURL string, allowed map[string]*OperationOverride) (*catalog.Catalog, error)
@@ -41,7 +35,6 @@ type ValidationApp struct {
 	Manifest                    *providermanifestv1.Manifest
 	ManifestPath                string
 	AllowedOperations           map[string]*OperationOverride
-	Invokes                     []InvocationDependency
 	SurfaceURLOverrides         map[SpecSurface]string
 	EffectiveCatalog            *catalog.Catalog
 	EffectiveCatalogAvailable   bool

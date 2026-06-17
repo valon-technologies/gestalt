@@ -592,717 +592,9 @@ func (x *ColumnDef) GetUnique() bool {
 	return false
 }
 
-// KeyRange constrains a query or cursor by lower and upper bounds.
-type KeyRange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lower         *TypedValue            `protobuf:"bytes,1,opt,name=lower,proto3" json:"lower,omitempty"`
-	Upper         *TypedValue            `protobuf:"bytes,2,opt,name=upper,proto3" json:"upper,omitempty"`
-	LowerOpen     bool                   `protobuf:"varint,3,opt,name=lower_open,json=lowerOpen,proto3" json:"lower_open,omitempty"`
-	UpperOpen     bool                   `protobuf:"varint,4,opt,name=upper_open,json=upperOpen,proto3" json:"upper_open,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *KeyRange) Reset() {
-	*x = KeyRange{}
-	mi := &file_v1_indexeddb_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *KeyRange) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*KeyRange) ProtoMessage() {}
-
-func (x *KeyRange) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use KeyRange.ProtoReflect.Descriptor instead.
-func (*KeyRange) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *KeyRange) GetLower() *TypedValue {
-	if x != nil {
-		return x.Lower
-	}
-	return nil
-}
-
-func (x *KeyRange) GetUpper() *TypedValue {
-	if x != nil {
-		return x.Upper
-	}
-	return nil
-}
-
-func (x *KeyRange) GetLowerOpen() bool {
-	if x != nil {
-		return x.LowerOpen
-	}
-	return false
-}
-
-func (x *KeyRange) GetUpperOpen() bool {
-	if x != nil {
-		return x.UpperOpen
-	}
-	return false
-}
-
-// RecordRequest addresses one object store and carries one row payload.
-type RecordRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Record        *Record                `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RecordRequest) Reset() {
-	*x = RecordRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RecordRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RecordRequest) ProtoMessage() {}
-
-func (x *RecordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RecordRequest.ProtoReflect.Descriptor instead.
-func (*RecordRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *RecordRequest) GetStore() string {
-	if x != nil {
-		return x.Store
-	}
-	return ""
-}
-
-func (x *RecordRequest) GetRecord() *Record {
-	if x != nil {
-		return x.Record
-	}
-	return nil
-}
-
-// RecordResponse wraps one row payload.
-type RecordResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Record        *Record                `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RecordResponse) Reset() {
-	*x = RecordResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RecordResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RecordResponse) ProtoMessage() {}
-
-func (x *RecordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RecordResponse.ProtoReflect.Descriptor instead.
-func (*RecordResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *RecordResponse) GetRecord() *Record {
-	if x != nil {
-		return x.Record
-	}
-	return nil
-}
-
-// RecordsResponse wraps repeated row payloads.
-type RecordsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Records       []*Record              `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RecordsResponse) Reset() {
-	*x = RecordsResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RecordsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RecordsResponse) ProtoMessage() {}
-
-func (x *RecordsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RecordsResponse.ProtoReflect.Descriptor instead.
-func (*RecordsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *RecordsResponse) GetRecords() []*Record {
-	if x != nil {
-		return x.Records
-	}
-	return nil
-}
-
-// KeysResponse wraps repeated primary keys.
-type KeysResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *KeysResponse) Reset() {
-	*x = KeysResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *KeysResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*KeysResponse) ProtoMessage() {}
-
-func (x *KeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use KeysResponse.ProtoReflect.Descriptor instead.
-func (*KeysResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *KeysResponse) GetKeys() []string {
-	if x != nil {
-		return x.Keys
-	}
-	return nil
-}
-
-// ObjectStoreRequest addresses one object store row by primary key.
-type ObjectStoreRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ObjectStoreRequest) Reset() {
-	*x = ObjectStoreRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ObjectStoreRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ObjectStoreRequest) ProtoMessage() {}
-
-func (x *ObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ObjectStoreRequest.ProtoReflect.Descriptor instead.
-func (*ObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ObjectStoreRequest) GetStore() string {
-	if x != nil {
-		return x.Store
-	}
-	return ""
-}
-
-func (x *ObjectStoreRequest) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-// ObjectStoreNameRequest addresses an object store without a specific row key.
-type ObjectStoreNameRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ObjectStoreNameRequest) Reset() {
-	*x = ObjectStoreNameRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ObjectStoreNameRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ObjectStoreNameRequest) ProtoMessage() {}
-
-func (x *ObjectStoreNameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ObjectStoreNameRequest.ProtoReflect.Descriptor instead.
-func (*ObjectStoreNameRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ObjectStoreNameRequest) GetStore() string {
-	if x != nil {
-		return x.Store
-	}
-	return ""
-}
-
-// ObjectStoreRangeRequest addresses an object store plus an optional key range.
-type ObjectStoreRangeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Range         *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ObjectStoreRangeRequest) Reset() {
-	*x = ObjectStoreRangeRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ObjectStoreRangeRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ObjectStoreRangeRequest) ProtoMessage() {}
-
-func (x *ObjectStoreRangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ObjectStoreRangeRequest.ProtoReflect.Descriptor instead.
-func (*ObjectStoreRangeRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ObjectStoreRangeRequest) GetStore() string {
-	if x != nil {
-		return x.Store
-	}
-	return ""
-}
-
-func (x *ObjectStoreRangeRequest) GetRange() *KeyRange {
-	if x != nil {
-		return x.Range
-	}
-	return nil
-}
-
-// CreateObjectStoreRequest creates a new object store.
-type CreateObjectStoreRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Schema        *ObjectStoreSchema     `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateObjectStoreRequest) Reset() {
-	*x = CreateObjectStoreRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateObjectStoreRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateObjectStoreRequest) ProtoMessage() {}
-
-func (x *CreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateObjectStoreRequest.ProtoReflect.Descriptor instead.
-func (*CreateObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *CreateObjectStoreRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *CreateObjectStoreRequest) GetSchema() *ObjectStoreSchema {
-	if x != nil {
-		return x.Schema
-	}
-	return nil
-}
-
-// DeleteObjectStoreRequest removes an object store.
-type DeleteObjectStoreRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteObjectStoreRequest) Reset() {
-	*x = DeleteObjectStoreRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteObjectStoreRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteObjectStoreRequest) ProtoMessage() {}
-
-func (x *DeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteObjectStoreRequest.ProtoReflect.Descriptor instead.
-func (*DeleteObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *DeleteObjectStoreRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-// IndexQueryRequest addresses a secondary index plus optional key values and
-// range constraints.
-type IndexQueryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Index         string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
-	Values        []*TypedValue          `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
-	Range         *KeyRange              `protobuf:"bytes,4,opt,name=range,proto3,oneof" json:"range,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *IndexQueryRequest) Reset() {
-	*x = IndexQueryRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *IndexQueryRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*IndexQueryRequest) ProtoMessage() {}
-
-func (x *IndexQueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use IndexQueryRequest.ProtoReflect.Descriptor instead.
-func (*IndexQueryRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *IndexQueryRequest) GetStore() string {
-	if x != nil {
-		return x.Store
-	}
-	return ""
-}
-
-func (x *IndexQueryRequest) GetIndex() string {
-	if x != nil {
-		return x.Index
-	}
-	return ""
-}
-
-func (x *IndexQueryRequest) GetValues() []*TypedValue {
-	if x != nil {
-		return x.Values
-	}
-	return nil
-}
-
-func (x *IndexQueryRequest) GetRange() *KeyRange {
-	if x != nil {
-		return x.Range
-	}
-	return nil
-}
-
-// CountResponse reports how many rows matched a query.
-type CountResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CountResponse) Reset() {
-	*x = CountResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CountResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CountResponse) ProtoMessage() {}
-
-func (x *CountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CountResponse.ProtoReflect.Descriptor instead.
-func (*CountResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *CountResponse) GetCount() int64 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-// OpenCursorRequest starts a streaming cursor over an object store or index.
-type OpenCursorRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Store     string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Range     *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
-	Direction CursorDirection        `protobuf:"varint,3,opt,name=direction,proto3,enum=gestalt.provider.v1.CursorDirection" json:"direction,omitempty"`
-	// keys_only suppresses row payloads and returns only keys.
-	KeysOnly bool `protobuf:"varint,4,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`
-	// index selects a secondary index when non-empty.
-	Index string `protobuf:"bytes,5,opt,name=index,proto3" json:"index,omitempty"`
-	// values selects a compound index key prefix when index is set.
-	Values        []*TypedValue `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *OpenCursorRequest) Reset() {
-	*x = OpenCursorRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *OpenCursorRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*OpenCursorRequest) ProtoMessage() {}
-
-func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use OpenCursorRequest.ProtoReflect.Descriptor instead.
-func (*OpenCursorRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *OpenCursorRequest) GetStore() string {
-	if x != nil {
-		return x.Store
-	}
-	return ""
-}
-
-func (x *OpenCursorRequest) GetRange() *KeyRange {
-	if x != nil {
-		return x.Range
-	}
-	return nil
-}
-
-func (x *OpenCursorRequest) GetDirection() CursorDirection {
-	if x != nil {
-		return x.Direction
-	}
-	return CursorDirection_CURSOR_NEXT
-}
-
-func (x *OpenCursorRequest) GetKeysOnly() bool {
-	if x != nil {
-		return x.KeysOnly
-	}
-	return false
-}
-
-func (x *OpenCursorRequest) GetIndex() string {
-	if x != nil {
-		return x.Index
-	}
-	return ""
-}
-
-func (x *OpenCursorRequest) GetValues() []*TypedValue {
-	if x != nil {
-		return x.Values
-	}
-	return nil
-}
-
-// KeyValue represents a single IndexedDB key, which can be a scalar
-// (string, number, date, binary) or a nested array of keys per the W3C spec.
+// KeyValue represents one IndexedDB key: a scalar (string, number, date,
+// binary) or a nested array of keys, per the W3C spec.
+// https://www.w3.org/TR/IndexedDB/#key-construct
 type KeyValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
@@ -1316,7 +608,7 @@ type KeyValue struct {
 
 func (x *KeyValue) Reset() {
 	*x = KeyValue{}
-	mi := &file_v1_indexeddb_proto_msgTypes[18]
+	mi := &file_v1_indexeddb_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1328,7 +620,7 @@ func (x *KeyValue) String() string {
 func (*KeyValue) ProtoMessage() {}
 
 func (x *KeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[18]
+	mi := &file_v1_indexeddb_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1341,7 +633,7 @@ func (x *KeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{18}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *KeyValue) GetKind() isKeyValue_Kind {
@@ -1394,7 +686,7 @@ type KeyValueArray struct {
 
 func (x *KeyValueArray) Reset() {
 	*x = KeyValueArray{}
-	mi := &file_v1_indexeddb_proto_msgTypes[19]
+	mi := &file_v1_indexeddb_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1406,7 +698,7 @@ func (x *KeyValueArray) String() string {
 func (*KeyValueArray) ProtoMessage() {}
 
 func (x *KeyValueArray) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[19]
+	mi := &file_v1_indexeddb_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1419,7 +711,7 @@ func (x *KeyValueArray) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValueArray.ProtoReflect.Descriptor instead.
 func (*KeyValueArray) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{19}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *KeyValueArray) GetElements() []*KeyValue {
@@ -1429,17 +721,811 @@ func (x *KeyValueArray) GetElements() []*KeyValue {
 	return nil
 }
 
+// KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+// full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+// lower/upper means unbounded on that side.
+// https://www.w3.org/TR/IndexedDB/#keyrange
+type KeyRange struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lower         *KeyValue              `protobuf:"bytes,1,opt,name=lower,proto3" json:"lower,omitempty"`
+	Upper         *KeyValue              `protobuf:"bytes,2,opt,name=upper,proto3" json:"upper,omitempty"`
+	LowerOpen     bool                   `protobuf:"varint,3,opt,name=lower_open,json=lowerOpen,proto3" json:"lower_open,omitempty"`
+	UpperOpen     bool                   `protobuf:"varint,4,opt,name=upper_open,json=upperOpen,proto3" json:"upper_open,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeyRange) Reset() {
+	*x = KeyRange{}
+	mi := &file_v1_indexeddb_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyRange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyRange) ProtoMessage() {}
+
+func (x *KeyRange) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyRange.ProtoReflect.Descriptor instead.
+func (*KeyRange) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *KeyRange) GetLower() *KeyValue {
+	if x != nil {
+		return x.Lower
+	}
+	return nil
+}
+
+func (x *KeyRange) GetUpper() *KeyValue {
+	if x != nil {
+		return x.Upper
+	}
+	return nil
+}
+
+func (x *KeyRange) GetLowerOpen() bool {
+	if x != nil {
+		return x.LowerOpen
+	}
+	return false
+}
+
+func (x *KeyRange) GetUpperOpen() bool {
+	if x != nil {
+		return x.UpperOpen
+	}
+	return false
+}
+
+// IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+// range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+// matching a W3C query argument of undefined/null.
+type IndexedDBQuery struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Query:
+	//
+	//	*IndexedDBQuery_Key
+	//	*IndexedDBQuery_Range
+	Query         isIndexedDBQuery_Query `protobuf_oneof:"query"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexedDBQuery) Reset() {
+	*x = IndexedDBQuery{}
+	mi := &file_v1_indexeddb_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexedDBQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexedDBQuery) ProtoMessage() {}
+
+func (x *IndexedDBQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexedDBQuery.ProtoReflect.Descriptor instead.
+func (*IndexedDBQuery) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *IndexedDBQuery) GetQuery() isIndexedDBQuery_Query {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *IndexedDBQuery) GetKey() *KeyValue {
+	if x != nil {
+		if x, ok := x.Query.(*IndexedDBQuery_Key); ok {
+			return x.Key
+		}
+	}
+	return nil
+}
+
+func (x *IndexedDBQuery) GetRange() *KeyRange {
+	if x != nil {
+		if x, ok := x.Query.(*IndexedDBQuery_Range); ok {
+			return x.Range
+		}
+	}
+	return nil
+}
+
+type isIndexedDBQuery_Query interface {
+	isIndexedDBQuery_Query()
+}
+
+type IndexedDBQuery_Key struct {
+	Key *KeyValue `protobuf:"bytes,1,opt,name=key,proto3,oneof"`
+}
+
+type IndexedDBQuery_Range struct {
+	Range *KeyRange `protobuf:"bytes,2,opt,name=range,proto3,oneof"`
+}
+
+func (*IndexedDBQuery_Key) isIndexedDBQuery_Query() {}
+
+func (*IndexedDBQuery_Range) isIndexedDBQuery_Query() {}
+
+// RecordRequest addresses one object store and carries one row payload.
+type RecordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Record        *Record                `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordRequest) Reset() {
+	*x = RecordRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordRequest) ProtoMessage() {}
+
+func (x *RecordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordRequest.ProtoReflect.Descriptor instead.
+func (*RecordRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *RecordRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *RecordRequest) GetRecord() *Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+// RecordResponse wraps one row payload.
+type RecordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Record        *Record                `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordResponse) Reset() {
+	*x = RecordResponse{}
+	mi := &file_v1_indexeddb_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordResponse) ProtoMessage() {}
+
+func (x *RecordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordResponse.ProtoReflect.Descriptor instead.
+func (*RecordResponse) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RecordResponse) GetRecord() *Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+// RecordsResponse wraps repeated row payloads.
+type RecordsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Records       []*Record              `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordsResponse) Reset() {
+	*x = RecordsResponse{}
+	mi := &file_v1_indexeddb_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordsResponse) ProtoMessage() {}
+
+func (x *RecordsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordsResponse.ProtoReflect.Descriptor instead.
+func (*RecordsResponse) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RecordsResponse) GetRecords() []*Record {
+	if x != nil {
+		return x.Records
+	}
+	return nil
+}
+
+// KeysResponse wraps repeated primary keys.
+type KeysResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeysResponse) Reset() {
+	*x = KeysResponse{}
+	mi := &file_v1_indexeddb_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeysResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeysResponse) ProtoMessage() {}
+
+func (x *KeysResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeysResponse.ProtoReflect.Descriptor instead.
+func (*KeysResponse) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *KeysResponse) GetKeys() []string {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+// ObjectStoreRequest addresses one object store row by primary key.
+type ObjectStoreRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectStoreRequest) Reset() {
+	*x = ObjectStoreRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectStoreRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectStoreRequest) ProtoMessage() {}
+
+func (x *ObjectStoreRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectStoreRequest.ProtoReflect.Descriptor instead.
+func (*ObjectStoreRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ObjectStoreRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *ObjectStoreRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// ObjectStoreNameRequest addresses an object store without a specific row key.
+type ObjectStoreNameRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectStoreNameRequest) Reset() {
+	*x = ObjectStoreNameRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectStoreNameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectStoreNameRequest) ProtoMessage() {}
+
+func (x *ObjectStoreNameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectStoreNameRequest.ProtoReflect.Descriptor instead.
+func (*ObjectStoreNameRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ObjectStoreNameRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+// ObjectStoreRangeRequest addresses an object store plus an optional query.
+type ObjectStoreRangeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Query         *IndexedDBQuery        `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
+	Count         *uint32                `protobuf:"varint,3,opt,name=count,proto3,oneof" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ObjectStoreRangeRequest) Reset() {
+	*x = ObjectStoreRangeRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ObjectStoreRangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ObjectStoreRangeRequest) ProtoMessage() {}
+
+func (x *ObjectStoreRangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ObjectStoreRangeRequest.ProtoReflect.Descriptor instead.
+func (*ObjectStoreRangeRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ObjectStoreRangeRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *ObjectStoreRangeRequest) GetQuery() *IndexedDBQuery {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *ObjectStoreRangeRequest) GetCount() uint32 {
+	if x != nil && x.Count != nil {
+		return *x.Count
+	}
+	return 0
+}
+
+// CreateObjectStoreRequest creates a new object store.
+type CreateObjectStoreRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Schema        *ObjectStoreSchema     `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateObjectStoreRequest) Reset() {
+	*x = CreateObjectStoreRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateObjectStoreRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateObjectStoreRequest) ProtoMessage() {}
+
+func (x *CreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateObjectStoreRequest.ProtoReflect.Descriptor instead.
+func (*CreateObjectStoreRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CreateObjectStoreRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateObjectStoreRequest) GetSchema() *ObjectStoreSchema {
+	if x != nil {
+		return x.Schema
+	}
+	return nil
+}
+
+// DeleteObjectStoreRequest removes an object store.
+type DeleteObjectStoreRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteObjectStoreRequest) Reset() {
+	*x = DeleteObjectStoreRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteObjectStoreRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteObjectStoreRequest) ProtoMessage() {}
+
+func (x *DeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteObjectStoreRequest.ProtoReflect.Descriptor instead.
+func (*DeleteObjectStoreRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *DeleteObjectStoreRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// IndexQueryRequest addresses a secondary index plus an optional query.
+type IndexQueryRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Index         string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
+	Query         *IndexedDBQuery        `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	Count         *uint32                `protobuf:"varint,4,opt,name=count,proto3,oneof" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IndexQueryRequest) Reset() {
+	*x = IndexQueryRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexQueryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexQueryRequest) ProtoMessage() {}
+
+func (x *IndexQueryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexQueryRequest.ProtoReflect.Descriptor instead.
+func (*IndexQueryRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *IndexQueryRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *IndexQueryRequest) GetIndex() string {
+	if x != nil {
+		return x.Index
+	}
+	return ""
+}
+
+func (x *IndexQueryRequest) GetQuery() *IndexedDBQuery {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *IndexQueryRequest) GetCount() uint32 {
+	if x != nil && x.Count != nil {
+		return *x.Count
+	}
+	return 0
+}
+
+// CountResponse reports how many rows matched a query.
+type CountResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CountResponse) Reset() {
+	*x = CountResponse{}
+	mi := &file_v1_indexeddb_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CountResponse) ProtoMessage() {}
+
+func (x *CountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CountResponse.ProtoReflect.Descriptor instead.
+func (*CountResponse) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *CountResponse) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+// OpenCursorRequest starts a streaming cursor over an object store or index.
+type OpenCursorRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Store     string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Index     string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
+	Query     *IndexedDBQuery        `protobuf:"bytes,3,opt,name=query,proto3" json:"query,omitempty"`
+	Direction CursorDirection        `protobuf:"varint,4,opt,name=direction,proto3,enum=gestalt.provider.v1.CursorDirection" json:"direction,omitempty"`
+	// keys_only suppresses row payloads and returns only keys.
+	KeysOnly      bool `protobuf:"varint,5,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenCursorRequest) Reset() {
+	*x = OpenCursorRequest{}
+	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenCursorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenCursorRequest) ProtoMessage() {}
+
+func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenCursorRequest.ProtoReflect.Descriptor instead.
+func (*OpenCursorRequest) Descriptor() ([]byte, []int) {
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *OpenCursorRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *OpenCursorRequest) GetIndex() string {
+	if x != nil {
+		return x.Index
+	}
+	return ""
+}
+
+func (x *OpenCursorRequest) GetQuery() *IndexedDBQuery {
+	if x != nil {
+		return x.Query
+	}
+	return nil
+}
+
+func (x *OpenCursorRequest) GetDirection() CursorDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return CursorDirection_CURSOR_NEXT
+}
+
+func (x *OpenCursorRequest) GetKeysOnly() bool {
+	if x != nil {
+		return x.KeysOnly
+	}
+	return false
+}
+
 // CursorKeyTarget addresses a specific cursor position.
 type CursorKeyTarget struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           []*KeyValue            `protobuf:"bytes,1,rep,name=key,proto3" json:"key,omitempty"`
+	Key           *KeyValue              `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CursorKeyTarget) Reset() {
 	*x = CursorKeyTarget{}
-	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	mi := &file_v1_indexeddb_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1451,7 +1537,7 @@ func (x *CursorKeyTarget) String() string {
 func (*CursorKeyTarget) ProtoMessage() {}
 
 func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[20]
+	mi := &file_v1_indexeddb_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1464,10 +1550,10 @@ func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorKeyTarget.ProtoReflect.Descriptor instead.
 func (*CursorKeyTarget) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{20}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{21}
 }
 
-func (x *CursorKeyTarget) GetKey() []*KeyValue {
+func (x *CursorKeyTarget) GetKey() *KeyValue {
 	if x != nil {
 		return x.Key
 	}
@@ -1492,7 +1578,7 @@ type CursorCommand struct {
 
 func (x *CursorCommand) Reset() {
 	*x = CursorCommand{}
-	mi := &file_v1_indexeddb_proto_msgTypes[21]
+	mi := &file_v1_indexeddb_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1504,7 +1590,7 @@ func (x *CursorCommand) String() string {
 func (*CursorCommand) ProtoMessage() {}
 
 func (x *CursorCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[21]
+	mi := &file_v1_indexeddb_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1517,7 +1603,7 @@ func (x *CursorCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorCommand.ProtoReflect.Descriptor instead.
 func (*CursorCommand) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{21}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CursorCommand) GetCommand() isCursorCommand_Command {
@@ -1635,7 +1721,7 @@ type CursorClientMessage struct {
 
 func (x *CursorClientMessage) Reset() {
 	*x = CursorClientMessage{}
-	mi := &file_v1_indexeddb_proto_msgTypes[22]
+	mi := &file_v1_indexeddb_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1647,7 +1733,7 @@ func (x *CursorClientMessage) String() string {
 func (*CursorClientMessage) ProtoMessage() {}
 
 func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[22]
+	mi := &file_v1_indexeddb_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1660,7 +1746,7 @@ func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorClientMessage.ProtoReflect.Descriptor instead.
 func (*CursorClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{22}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CursorClientMessage) GetMsg() isCursorClientMessage_Msg {
@@ -1707,19 +1793,18 @@ func (*CursorClientMessage_Command) isCursorClientMessage_Msg() {}
 // CursorEntry is one streamed cursor row.
 type CursorEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Key components per index KeyPath field. Each component is a KeyValue
-	// that can be a scalar or a nested array, preserving the full W3C IndexedDB
-	// key structure including array-valued keys.
-	Key           []*KeyValue `protobuf:"bytes,1,rep,name=key,proto3" json:"key,omitempty"`
-	PrimaryKey    string      `protobuf:"bytes,2,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
-	Record        *Record     `protobuf:"bytes,3,opt,name=record,proto3" json:"record,omitempty"`
+	// One full IndexedDB key (scalar or array).
+	// https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key
+	Key           *KeyValue `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	PrimaryKey    string    `protobuf:"bytes,2,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
+	Record        *Record   `protobuf:"bytes,3,opt,name=record,proto3" json:"record,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CursorEntry) Reset() {
 	*x = CursorEntry{}
-	mi := &file_v1_indexeddb_proto_msgTypes[23]
+	mi := &file_v1_indexeddb_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1816,7 @@ func (x *CursorEntry) String() string {
 func (*CursorEntry) ProtoMessage() {}
 
 func (x *CursorEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[23]
+	mi := &file_v1_indexeddb_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,10 +1829,10 @@ func (x *CursorEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorEntry.ProtoReflect.Descriptor instead.
 func (*CursorEntry) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{23}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *CursorEntry) GetKey() []*KeyValue {
+func (x *CursorEntry) GetKey() *KeyValue {
 	if x != nil {
 		return x.Key
 	}
@@ -1782,7 +1867,7 @@ type CursorResponse struct {
 
 func (x *CursorResponse) Reset() {
 	*x = CursorResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[24]
+	mi := &file_v1_indexeddb_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1794,7 +1879,7 @@ func (x *CursorResponse) String() string {
 func (*CursorResponse) ProtoMessage() {}
 
 func (x *CursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[24]
+	mi := &file_v1_indexeddb_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1807,7 +1892,7 @@ func (x *CursorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CursorResponse.ProtoReflect.Descriptor instead.
 func (*CursorResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{24}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CursorResponse) GetResult() isCursorResponse_Result {
@@ -1861,7 +1946,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[25]
+	mi := &file_v1_indexeddb_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1873,7 +1958,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[25]
+	mi := &file_v1_indexeddb_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1886,7 +1971,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{25}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeleteResponse) GetDeleted() int64 {
@@ -1906,7 +1991,7 @@ type KeyResponse struct {
 
 func (x *KeyResponse) Reset() {
 	*x = KeyResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[26]
+	mi := &file_v1_indexeddb_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1918,7 +2003,7 @@ func (x *KeyResponse) String() string {
 func (*KeyResponse) ProtoMessage() {}
 
 func (x *KeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[26]
+	mi := &file_v1_indexeddb_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1931,7 +2016,7 @@ func (x *KeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyResponse.ProtoReflect.Descriptor instead.
 func (*KeyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{26}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *KeyResponse) GetKey() string {
@@ -1953,7 +2038,7 @@ type BeginTransactionRequest struct {
 
 func (x *BeginTransactionRequest) Reset() {
 	*x = BeginTransactionRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[27]
+	mi := &file_v1_indexeddb_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +2050,7 @@ func (x *BeginTransactionRequest) String() string {
 func (*BeginTransactionRequest) ProtoMessage() {}
 
 func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[27]
+	mi := &file_v1_indexeddb_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +2063,7 @@ func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginTransactionRequest.ProtoReflect.Descriptor instead.
 func (*BeginTransactionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{27}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *BeginTransactionRequest) GetStores() []string {
@@ -2010,7 +2095,7 @@ type TransactionBeginResponse struct {
 
 func (x *TransactionBeginResponse) Reset() {
 	*x = TransactionBeginResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[28]
+	mi := &file_v1_indexeddb_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2022,7 +2107,7 @@ func (x *TransactionBeginResponse) String() string {
 func (*TransactionBeginResponse) ProtoMessage() {}
 
 func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[28]
+	mi := &file_v1_indexeddb_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2035,7 +2120,7 @@ func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionBeginResponse.ProtoReflect.Descriptor instead.
 func (*TransactionBeginResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{28}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{29}
 }
 
 type TransactionCommitRequest struct {
@@ -2046,7 +2131,7 @@ type TransactionCommitRequest struct {
 
 func (x *TransactionCommitRequest) Reset() {
 	*x = TransactionCommitRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[29]
+	mi := &file_v1_indexeddb_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2058,7 +2143,7 @@ func (x *TransactionCommitRequest) String() string {
 func (*TransactionCommitRequest) ProtoMessage() {}
 
 func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[29]
+	mi := &file_v1_indexeddb_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2071,7 +2156,7 @@ func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitRequest.ProtoReflect.Descriptor instead.
 func (*TransactionCommitRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{29}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{30}
 }
 
 // TransactionCommitResponse carries a non-OK status when commit failed after
@@ -2085,7 +2170,7 @@ type TransactionCommitResponse struct {
 
 func (x *TransactionCommitResponse) Reset() {
 	*x = TransactionCommitResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[30]
+	mi := &file_v1_indexeddb_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2097,7 +2182,7 @@ func (x *TransactionCommitResponse) String() string {
 func (*TransactionCommitResponse) ProtoMessage() {}
 
 func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[30]
+	mi := &file_v1_indexeddb_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2110,7 +2195,7 @@ func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitResponse.ProtoReflect.Descriptor instead.
 func (*TransactionCommitResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{30}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *TransactionCommitResponse) GetError() *status.Status {
@@ -2129,7 +2214,7 @@ type TransactionAbortRequest struct {
 
 func (x *TransactionAbortRequest) Reset() {
 	*x = TransactionAbortRequest{}
-	mi := &file_v1_indexeddb_proto_msgTypes[31]
+	mi := &file_v1_indexeddb_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2141,7 +2226,7 @@ func (x *TransactionAbortRequest) String() string {
 func (*TransactionAbortRequest) ProtoMessage() {}
 
 func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[31]
+	mi := &file_v1_indexeddb_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2154,7 +2239,7 @@ func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortRequest.ProtoReflect.Descriptor instead.
 func (*TransactionAbortRequest) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{31}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *TransactionAbortRequest) GetReason() string {
@@ -2174,7 +2259,7 @@ type TransactionAbortResponse struct {
 
 func (x *TransactionAbortResponse) Reset() {
 	*x = TransactionAbortResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[32]
+	mi := &file_v1_indexeddb_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2186,7 +2271,7 @@ func (x *TransactionAbortResponse) String() string {
 func (*TransactionAbortResponse) ProtoMessage() {}
 
 func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[32]
+	mi := &file_v1_indexeddb_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2199,7 +2284,7 @@ func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortResponse.ProtoReflect.Descriptor instead.
 func (*TransactionAbortResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{32}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *TransactionAbortResponse) GetError() *status.Status {
@@ -2240,7 +2325,7 @@ type TransactionOperation struct {
 
 func (x *TransactionOperation) Reset() {
 	*x = TransactionOperation{}
-	mi := &file_v1_indexeddb_proto_msgTypes[33]
+	mi := &file_v1_indexeddb_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2252,7 +2337,7 @@ func (x *TransactionOperation) String() string {
 func (*TransactionOperation) ProtoMessage() {}
 
 func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[33]
+	mi := &file_v1_indexeddb_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2265,7 +2350,7 @@ func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperation.ProtoReflect.Descriptor instead.
 func (*TransactionOperation) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{33}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *TransactionOperation) GetRequestId() uint64 {
@@ -2548,7 +2633,7 @@ type TransactionOperationResponse struct {
 
 func (x *TransactionOperationResponse) Reset() {
 	*x = TransactionOperationResponse{}
-	mi := &file_v1_indexeddb_proto_msgTypes[34]
+	mi := &file_v1_indexeddb_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2560,7 +2645,7 @@ func (x *TransactionOperationResponse) String() string {
 func (*TransactionOperationResponse) ProtoMessage() {}
 
 func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[34]
+	mi := &file_v1_indexeddb_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2573,7 +2658,7 @@ func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperationResponse.ProtoReflect.Descriptor instead.
 func (*TransactionOperationResponse) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{34}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *TransactionOperationResponse) GetRequestId() uint64 {
@@ -2723,7 +2808,7 @@ type TransactionClientMessage struct {
 
 func (x *TransactionClientMessage) Reset() {
 	*x = TransactionClientMessage{}
-	mi := &file_v1_indexeddb_proto_msgTypes[35]
+	mi := &file_v1_indexeddb_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2735,7 +2820,7 @@ func (x *TransactionClientMessage) String() string {
 func (*TransactionClientMessage) ProtoMessage() {}
 
 func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[35]
+	mi := &file_v1_indexeddb_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2748,7 +2833,7 @@ func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionClientMessage.ProtoReflect.Descriptor instead.
 func (*TransactionClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{35}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *TransactionClientMessage) GetMsg() isTransactionClientMessage_Msg {
@@ -2837,7 +2922,7 @@ type TransactionServerMessage struct {
 
 func (x *TransactionServerMessage) Reset() {
 	*x = TransactionServerMessage{}
-	mi := &file_v1_indexeddb_proto_msgTypes[36]
+	mi := &file_v1_indexeddb_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2849,7 +2934,7 @@ func (x *TransactionServerMessage) String() string {
 func (*TransactionServerMessage) ProtoMessage() {}
 
 func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_indexeddb_proto_msgTypes[36]
+	mi := &file_v1_indexeddb_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2862,7 +2947,7 @@ func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionServerMessage.ProtoReflect.Descriptor instead.
 func (*TransactionServerMessage) Descriptor() ([]byte, []int) {
-	return file_v1_indexeddb_proto_rawDescGZIP(), []int{36}
+	return file_v1_indexeddb_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *TransactionServerMessage) GetMsg() isTransactionServerMessage_Msg {
@@ -2976,14 +3061,24 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\vprimary_key\x18\x03 \x01(\bR\n" +
 	"primaryKey\x12\x19\n" +
 	"\bnot_null\x18\x04 \x01(\bR\anotNull\x12\x16\n" +
-	"\x06unique\x18\x05 \x01(\bR\x06unique\"\xb6\x01\n" +
-	"\bKeyRange\x125\n" +
-	"\x05lower\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.TypedValueR\x05lower\x125\n" +
-	"\x05upper\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.TypedValueR\x05upper\x12\x1d\n" +
+	"\x06unique\x18\x05 \x01(\bR\x06unique\"\x89\x01\n" +
+	"\bKeyValue\x129\n" +
+	"\x06scalar\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.TypedValueH\x00R\x06scalar\x12:\n" +
+	"\x05array\x18\x02 \x01(\v2\".gestalt.provider.v1.KeyValueArrayH\x00R\x05arrayB\x06\n" +
+	"\x04kind\"J\n" +
+	"\rKeyValueArray\x129\n" +
+	"\belements\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\belements\"\xb2\x01\n" +
+	"\bKeyRange\x123\n" +
+	"\x05lower\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.KeyValueR\x05lower\x123\n" +
+	"\x05upper\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyValueR\x05upper\x12\x1d\n" +
 	"\n" +
 	"lower_open\x18\x03 \x01(\bR\tlowerOpen\x12\x1d\n" +
 	"\n" +
-	"upper_open\x18\x04 \x01(\bR\tupperOpen\"Z\n" +
+	"upper_open\x18\x04 \x01(\bR\tupperOpen\"\x83\x01\n" +
+	"\x0eIndexedDBQuery\x121\n" +
+	"\x03key\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.KeyValueH\x00R\x03key\x125\n" +
+	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05rangeB\a\n" +
+	"\x05query\"Z\n" +
 	"\rRecordRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x123\n" +
 	"\x06record\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"E\n" +
@@ -2997,40 +3092,33 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\".\n" +
 	"\x16ObjectStoreNameRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\"s\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\"\x8f\x01\n" +
 	"\x17ObjectStoreRangeRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\x128\n" +
-	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
-	"\x06_range\"n\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x129\n" +
+	"\x05query\x18\x02 \x01(\v2#.gestalt.provider.v1.IndexedDBQueryR\x05query\x12\x19\n" +
+	"\x05count\x18\x03 \x01(\rH\x00R\x05count\x88\x01\x01B\b\n" +
+	"\x06_count\"n\n" +
 	"\x18CreateObjectStoreRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
 	"\x06schema\x18\x02 \x01(\v2&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n" +
 	"\x18DeleteObjectStoreRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xbc\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x9f\x01\n" +
 	"\x11IndexQueryRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
-	"\x05index\x18\x02 \x01(\tR\x05index\x127\n" +
-	"\x06values\x18\x03 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06values\x128\n" +
-	"\x05range\x18\x04 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
-	"\x06_range\"%\n" +
+	"\x05index\x18\x02 \x01(\tR\x05index\x129\n" +
+	"\x05query\x18\x03 \x01(\v2#.gestalt.provider.v1.IndexedDBQueryR\x05query\x12\x19\n" +
+	"\x05count\x18\x04 \x01(\rH\x00R\x05count\x88\x01\x01B\b\n" +
+	"\x06_count\"0\n" +
 	"\rCountResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"\x9d\x02\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count:\t\x9a\xb5\x18\x05count\"\xdb\x01\n" +
 	"\x11OpenCursorRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\x128\n" +
-	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x12B\n" +
-	"\tdirection\x18\x03 \x01(\x0e2$.gestalt.provider.v1.CursorDirectionR\tdirection\x12\x1b\n" +
-	"\tkeys_only\x18\x04 \x01(\bR\bkeysOnly\x12\x14\n" +
-	"\x05index\x18\x05 \x01(\tR\x05index\x127\n" +
-	"\x06values\x18\x06 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06valuesB\b\n" +
-	"\x06_range\"\x89\x01\n" +
-	"\bKeyValue\x129\n" +
-	"\x06scalar\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.TypedValueH\x00R\x06scalar\x12:\n" +
-	"\x05array\x18\x02 \x01(\v2\".gestalt.provider.v1.KeyValueArrayH\x00R\x05arrayB\x06\n" +
-	"\x04kind\"J\n" +
-	"\rKeyValueArray\x129\n" +
-	"\belements\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\belements\"B\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
+	"\x05index\x18\x02 \x01(\tR\x05index\x129\n" +
+	"\x05query\x18\x03 \x01(\v2#.gestalt.provider.v1.IndexedDBQueryR\x05query\x12B\n" +
+	"\tdirection\x18\x04 \x01(\x0e2$.gestalt.provider.v1.CursorDirectionR\tdirection\x12\x1b\n" +
+	"\tkeys_only\x18\x05 \x01(\bR\bkeysOnly\"B\n" +
 	"\x0fCursorKeyTarget\x12/\n" +
-	"\x03key\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\x03key\"\x85\x02\n" +
+	"\x03key\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.KeyValueR\x03key\"\x85\x02\n" +
 	"\rCursorCommand\x12\x14\n" +
 	"\x04next\x18\x01 \x01(\bH\x00R\x04next\x12N\n" +
 	"\x0fcontinue_to_key\x18\x02 \x01(\v2$.gestalt.provider.v1.CursorKeyTargetH\x00R\rcontinueToKey\x12\x1a\n" +
@@ -3044,7 +3132,7 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\acommand\x18\x02 \x01(\v2\".gestalt.provider.v1.CursorCommandH\x00R\acommandB\x05\n" +
 	"\x03msg\"\x94\x01\n" +
 	"\vCursorEntry\x12/\n" +
-	"\x03key\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\x03key\x12\x1f\n" +
+	"\x03key\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.KeyValueR\x03key\x12\x1f\n" +
 	"\vprimary_key\x18\x02 \x01(\tR\n" +
 	"primaryKey\x123\n" +
 	"\x06record\x18\x03 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"j\n" +
@@ -3127,7 +3215,7 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x19TransactionDurabilityHint\x12\"\n" +
 	"\x1eTRANSACTION_DURABILITY_DEFAULT\x10\x00\x12!\n" +
 	"\x1dTRANSACTION_DURABILITY_STRICT\x10\x01\x12\"\n" +
-	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xcd\x11\n" +
+	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xb4\x11\n" +
 	"\tIndexedDB\x12n\n" +
 	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\x12\x8a\xb5\x18\x04name\x8a\xb5\x18\x06schema\x12d\n" +
 	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\b\x8a\xb5\x18\x04name\x12d\n" +
@@ -3136,19 +3224,19 @@ const file_v1_indexeddb_proto_rawDesc = "" +
 	"\x03Add\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\"\x13\x8a\xb5\x18\x05store\x8a\xb5\x18\x06record\x12V\n" +
 	"\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\"\x13\x8a\xb5\x18\x05store\x8a\xb5\x18\x06record\x12Z\n" +
 	"\x06Delete\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\"\x0f\x8a\xb5\x18\x05store\x8a\xb5\x18\x02id\x12W\n" +
-	"\x05Clear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\"\t\x8a\xb5\x18\x05store\x12p\n" +
-	"\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12q\n" +
+	"\x05Clear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\"\t\x8a\xb5\x18\x05store\x12y\n" +
+	"\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05query\xa2\xb5\x18\x05count\x12z\n" +
 	"\n" +
-	"GetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12m\n" +
-	"\x05Count\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12t\n" +
-	"\vDeleteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05range\x12~\n" +
-	"\bIndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12~\n" +
-	"\vIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x82\x01\n" +
-	"\vIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x83\x01\n" +
-	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x7f\n" +
+	"GetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05query\xa2\xb5\x18\x05count\x12m\n" +
+	"\x05Count\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05query\x12t\n" +
+	"\vDeleteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\"\x12\x8a\xb5\x18\x05store\x8a\xb5\x18\x05query\x12t\n" +
+	"\bIndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12t\n" +
+	"\vIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12\x81\x01\n" +
+	"\vIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\"$\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\xa2\xb5\x18\x05count\x12\x82\x01\n" +
+	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\"$\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\xa2\xb5\x18\x05count\x12u\n" +
 	"\n" +
-	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12\x81\x01\n" +
-	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\"%\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x06values\x8a\xb5\x18\x05range\x12_\n" +
+	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12w\n" +
+	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\"\x1b\x8a\xb5\x18\x05store\x8a\xb5\x18\x05index\x8a\xb5\x18\x05query\x12_\n" +
 	"\n" +
 	"OpenCursor\x12(.gestalt.provider.v1.CursorClientMessage\x1a#.gestalt.provider.v1.CursorResponse(\x010\x01\x12o\n" +
 	"\vTransaction\x12-.gestalt.provider.v1.TransactionClientMessage\x1a-.gestalt.provider.v1.TransactionServerMessage(\x010\x01\x1a\r\x8a\xb5\x18\tindexeddbB\xda\x01\n" +
@@ -3167,7 +3255,7 @@ func file_v1_indexeddb_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_indexeddb_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_indexeddb_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_v1_indexeddb_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_v1_indexeddb_proto_goTypes = []any{
 	(CursorDirection)(0),                 // 0: gestalt.provider.v1.CursorDirection
 	(TransactionMode)(0),                 // 1: gestalt.provider.v1.TransactionMode
@@ -3177,152 +3265,153 @@ var file_v1_indexeddb_proto_goTypes = []any{
 	(*ObjectStoreSchema)(nil),            // 5: gestalt.provider.v1.ObjectStoreSchema
 	(*IndexSchema)(nil),                  // 6: gestalt.provider.v1.IndexSchema
 	(*ColumnDef)(nil),                    // 7: gestalt.provider.v1.ColumnDef
-	(*KeyRange)(nil),                     // 8: gestalt.provider.v1.KeyRange
-	(*RecordRequest)(nil),                // 9: gestalt.provider.v1.RecordRequest
-	(*RecordResponse)(nil),               // 10: gestalt.provider.v1.RecordResponse
-	(*RecordsResponse)(nil),              // 11: gestalt.provider.v1.RecordsResponse
-	(*KeysResponse)(nil),                 // 12: gestalt.provider.v1.KeysResponse
-	(*ObjectStoreRequest)(nil),           // 13: gestalt.provider.v1.ObjectStoreRequest
-	(*ObjectStoreNameRequest)(nil),       // 14: gestalt.provider.v1.ObjectStoreNameRequest
-	(*ObjectStoreRangeRequest)(nil),      // 15: gestalt.provider.v1.ObjectStoreRangeRequest
-	(*CreateObjectStoreRequest)(nil),     // 16: gestalt.provider.v1.CreateObjectStoreRequest
-	(*DeleteObjectStoreRequest)(nil),     // 17: gestalt.provider.v1.DeleteObjectStoreRequest
-	(*IndexQueryRequest)(nil),            // 18: gestalt.provider.v1.IndexQueryRequest
-	(*CountResponse)(nil),                // 19: gestalt.provider.v1.CountResponse
-	(*OpenCursorRequest)(nil),            // 20: gestalt.provider.v1.OpenCursorRequest
-	(*KeyValue)(nil),                     // 21: gestalt.provider.v1.KeyValue
-	(*KeyValueArray)(nil),                // 22: gestalt.provider.v1.KeyValueArray
-	(*CursorKeyTarget)(nil),              // 23: gestalt.provider.v1.CursorKeyTarget
-	(*CursorCommand)(nil),                // 24: gestalt.provider.v1.CursorCommand
-	(*CursorClientMessage)(nil),          // 25: gestalt.provider.v1.CursorClientMessage
-	(*CursorEntry)(nil),                  // 26: gestalt.provider.v1.CursorEntry
-	(*CursorResponse)(nil),               // 27: gestalt.provider.v1.CursorResponse
-	(*DeleteResponse)(nil),               // 28: gestalt.provider.v1.DeleteResponse
-	(*KeyResponse)(nil),                  // 29: gestalt.provider.v1.KeyResponse
-	(*BeginTransactionRequest)(nil),      // 30: gestalt.provider.v1.BeginTransactionRequest
-	(*TransactionBeginResponse)(nil),     // 31: gestalt.provider.v1.TransactionBeginResponse
-	(*TransactionCommitRequest)(nil),     // 32: gestalt.provider.v1.TransactionCommitRequest
-	(*TransactionCommitResponse)(nil),    // 33: gestalt.provider.v1.TransactionCommitResponse
-	(*TransactionAbortRequest)(nil),      // 34: gestalt.provider.v1.TransactionAbortRequest
-	(*TransactionAbortResponse)(nil),     // 35: gestalt.provider.v1.TransactionAbortResponse
-	(*TransactionOperation)(nil),         // 36: gestalt.provider.v1.TransactionOperation
-	(*TransactionOperationResponse)(nil), // 37: gestalt.provider.v1.TransactionOperationResponse
-	(*TransactionClientMessage)(nil),     // 38: gestalt.provider.v1.TransactionClientMessage
-	(*TransactionServerMessage)(nil),     // 39: gestalt.provider.v1.TransactionServerMessage
-	nil,                                  // 40: gestalt.provider.v1.Record.FieldsEntry
-	(structpb.NullValue)(0),              // 41: google.protobuf.NullValue
-	(*timestamppb.Timestamp)(nil),        // 42: google.protobuf.Timestamp
-	(*structpb.Value)(nil),               // 43: google.protobuf.Value
-	(*status.Status)(nil),                // 44: google.rpc.Status
-	(*emptypb.Empty)(nil),                // 45: google.protobuf.Empty
+	(*KeyValue)(nil),                     // 8: gestalt.provider.v1.KeyValue
+	(*KeyValueArray)(nil),                // 9: gestalt.provider.v1.KeyValueArray
+	(*KeyRange)(nil),                     // 10: gestalt.provider.v1.KeyRange
+	(*IndexedDBQuery)(nil),               // 11: gestalt.provider.v1.IndexedDBQuery
+	(*RecordRequest)(nil),                // 12: gestalt.provider.v1.RecordRequest
+	(*RecordResponse)(nil),               // 13: gestalt.provider.v1.RecordResponse
+	(*RecordsResponse)(nil),              // 14: gestalt.provider.v1.RecordsResponse
+	(*KeysResponse)(nil),                 // 15: gestalt.provider.v1.KeysResponse
+	(*ObjectStoreRequest)(nil),           // 16: gestalt.provider.v1.ObjectStoreRequest
+	(*ObjectStoreNameRequest)(nil),       // 17: gestalt.provider.v1.ObjectStoreNameRequest
+	(*ObjectStoreRangeRequest)(nil),      // 18: gestalt.provider.v1.ObjectStoreRangeRequest
+	(*CreateObjectStoreRequest)(nil),     // 19: gestalt.provider.v1.CreateObjectStoreRequest
+	(*DeleteObjectStoreRequest)(nil),     // 20: gestalt.provider.v1.DeleteObjectStoreRequest
+	(*IndexQueryRequest)(nil),            // 21: gestalt.provider.v1.IndexQueryRequest
+	(*CountResponse)(nil),                // 22: gestalt.provider.v1.CountResponse
+	(*OpenCursorRequest)(nil),            // 23: gestalt.provider.v1.OpenCursorRequest
+	(*CursorKeyTarget)(nil),              // 24: gestalt.provider.v1.CursorKeyTarget
+	(*CursorCommand)(nil),                // 25: gestalt.provider.v1.CursorCommand
+	(*CursorClientMessage)(nil),          // 26: gestalt.provider.v1.CursorClientMessage
+	(*CursorEntry)(nil),                  // 27: gestalt.provider.v1.CursorEntry
+	(*CursorResponse)(nil),               // 28: gestalt.provider.v1.CursorResponse
+	(*DeleteResponse)(nil),               // 29: gestalt.provider.v1.DeleteResponse
+	(*KeyResponse)(nil),                  // 30: gestalt.provider.v1.KeyResponse
+	(*BeginTransactionRequest)(nil),      // 31: gestalt.provider.v1.BeginTransactionRequest
+	(*TransactionBeginResponse)(nil),     // 32: gestalt.provider.v1.TransactionBeginResponse
+	(*TransactionCommitRequest)(nil),     // 33: gestalt.provider.v1.TransactionCommitRequest
+	(*TransactionCommitResponse)(nil),    // 34: gestalt.provider.v1.TransactionCommitResponse
+	(*TransactionAbortRequest)(nil),      // 35: gestalt.provider.v1.TransactionAbortRequest
+	(*TransactionAbortResponse)(nil),     // 36: gestalt.provider.v1.TransactionAbortResponse
+	(*TransactionOperation)(nil),         // 37: gestalt.provider.v1.TransactionOperation
+	(*TransactionOperationResponse)(nil), // 38: gestalt.provider.v1.TransactionOperationResponse
+	(*TransactionClientMessage)(nil),     // 39: gestalt.provider.v1.TransactionClientMessage
+	(*TransactionServerMessage)(nil),     // 40: gestalt.provider.v1.TransactionServerMessage
+	nil,                                  // 41: gestalt.provider.v1.Record.FieldsEntry
+	(structpb.NullValue)(0),              // 42: google.protobuf.NullValue
+	(*timestamppb.Timestamp)(nil),        // 43: google.protobuf.Timestamp
+	(*structpb.Value)(nil),               // 44: google.protobuf.Value
+	(*status.Status)(nil),                // 45: google.rpc.Status
+	(*emptypb.Empty)(nil),                // 46: google.protobuf.Empty
 }
 var file_v1_indexeddb_proto_depIdxs = []int32{
-	41, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
-	42, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
-	43, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
-	40, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
+	42, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
+	43, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
+	44, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
+	41, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
 	6,  // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
 	7,  // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
-	3,  // 6: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.TypedValue
-	3,  // 7: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.TypedValue
-	4,  // 8: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
-	4,  // 9: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
-	4,  // 10: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
-	8,  // 11: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	5,  // 12: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
-	3,  // 13: gestalt.provider.v1.IndexQueryRequest.values:type_name -> gestalt.provider.v1.TypedValue
-	8,  // 14: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	8,  // 15: gestalt.provider.v1.OpenCursorRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	0,  // 16: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
-	3,  // 17: gestalt.provider.v1.OpenCursorRequest.values:type_name -> gestalt.provider.v1.TypedValue
-	3,  // 18: gestalt.provider.v1.KeyValue.scalar:type_name -> gestalt.provider.v1.TypedValue
-	22, // 19: gestalt.provider.v1.KeyValue.array:type_name -> gestalt.provider.v1.KeyValueArray
-	21, // 20: gestalt.provider.v1.KeyValueArray.elements:type_name -> gestalt.provider.v1.KeyValue
-	21, // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
-	23, // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
+	3,  // 6: gestalt.provider.v1.KeyValue.scalar:type_name -> gestalt.provider.v1.TypedValue
+	9,  // 7: gestalt.provider.v1.KeyValue.array:type_name -> gestalt.provider.v1.KeyValueArray
+	8,  // 8: gestalt.provider.v1.KeyValueArray.elements:type_name -> gestalt.provider.v1.KeyValue
+	8,  // 9: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.KeyValue
+	8,  // 10: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.KeyValue
+	8,  // 11: gestalt.provider.v1.IndexedDBQuery.key:type_name -> gestalt.provider.v1.KeyValue
+	10, // 12: gestalt.provider.v1.IndexedDBQuery.range:type_name -> gestalt.provider.v1.KeyRange
+	4,  // 13: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
+	4,  // 14: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
+	4,  // 15: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
+	11, // 16: gestalt.provider.v1.ObjectStoreRangeRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
+	5,  // 17: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
+	11, // 18: gestalt.provider.v1.IndexQueryRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
+	11, // 19: gestalt.provider.v1.OpenCursorRequest.query:type_name -> gestalt.provider.v1.IndexedDBQuery
+	0,  // 20: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
+	8,  // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
+	24, // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
 	4,  // 23: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
-	20, // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
-	24, // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
-	21, // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
+	23, // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
+	25, // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
+	8,  // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
 	4,  // 27: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
-	26, // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
+	27, // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
 	1,  // 29: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
 	2,  // 30: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
-	44, // 31: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
-	44, // 32: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
-	13, // 33: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	13, // 34: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	9,  // 35: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
-	9,  // 36: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
-	13, // 37: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	14, // 38: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
-	15, // 39: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 40: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 41: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 42: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 43: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 44: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 45: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 46: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 47: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 48: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
-	44, // 49: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
-	45, // 50: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
-	10, // 51: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
-	11, // 52: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
-	29, // 53: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
-	12, // 54: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
-	19, // 55: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
-	28, // 56: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
-	30, // 57: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
-	36, // 58: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
-	32, // 59: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
-	34, // 60: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
-	31, // 61: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
-	37, // 62: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
-	33, // 63: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
-	35, // 64: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
+	45, // 31: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
+	45, // 32: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
+	16, // 33: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	16, // 34: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 35: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
+	12, // 36: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
+	16, // 37: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	17, // 38: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
+	18, // 39: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 40: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 41: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 42: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	21, // 43: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 44: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 45: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 46: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 47: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
+	21, // 48: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
+	45, // 49: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
+	46, // 50: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
+	13, // 51: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
+	14, // 52: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
+	30, // 53: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
+	15, // 54: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
+	22, // 55: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
+	29, // 56: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
+	31, // 57: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
+	37, // 58: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
+	33, // 59: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
+	35, // 60: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
+	32, // 61: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
+	38, // 62: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
+	34, // 63: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
+	36, // 64: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
 	3,  // 65: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
-	16, // 66: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
-	17, // 67: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
-	13, // 68: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	13, // 69: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	9,  // 70: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
-	9,  // 71: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
-	13, // 72: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	14, // 73: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
-	15, // 74: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 75: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 76: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 77: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 78: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 79: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 80: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 81: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 82: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 83: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
-	25, // 84: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
-	38, // 85: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
-	45, // 86: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	45, // 87: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	10, // 88: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
-	29, // 89: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
-	45, // 90: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	45, // 91: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	45, // 92: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	45, // 93: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	11, // 94: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	12, // 95: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	19, // 96: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
-	28, // 97: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
-	10, // 98: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
-	29, // 99: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
-	11, // 100: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	12, // 101: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	19, // 102: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
-	28, // 103: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
-	27, // 104: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
-	39, // 105: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
+	19, // 66: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	20, // 67: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	16, // 68: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	16, // 69: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 70: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	12, // 71: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	16, // 72: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	17, // 73: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	18, // 74: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 75: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 76: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	18, // 77: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	21, // 78: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 79: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 80: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 81: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 82: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	21, // 83: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	26, // 84: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
+	39, // 85: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
+	46, // 86: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	46, // 87: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	13, // 88: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	30, // 89: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	46, // 90: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	46, // 91: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	46, // 92: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	46, // 93: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	14, // 94: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	15, // 95: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	22, // 96: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	29, // 97: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	13, // 98: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	30, // 99: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	14, // 100: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	15, // 101: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	22, // 102: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	29, // 103: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
+	28, // 104: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
+	40, // 105: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
 	86, // [86:106] is the sub-list for method output_type
 	66, // [66:86] is the sub-list for method input_type
 	66, // [66:66] is the sub-list for extension type_name
@@ -3346,14 +3435,17 @@ func file_v1_indexeddb_proto_init() {
 		(*TypedValue_BytesValue)(nil),
 		(*TypedValue_JsonValue)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[12].OneofWrappers = []any{}
-	file_v1_indexeddb_proto_msgTypes[15].OneofWrappers = []any{}
-	file_v1_indexeddb_proto_msgTypes[17].OneofWrappers = []any{}
-	file_v1_indexeddb_proto_msgTypes[18].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[5].OneofWrappers = []any{
 		(*KeyValue_Scalar)(nil),
 		(*KeyValue_Array)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[21].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[8].OneofWrappers = []any{
+		(*IndexedDBQuery_Key)(nil),
+		(*IndexedDBQuery_Range)(nil),
+	}
+	file_v1_indexeddb_proto_msgTypes[15].OneofWrappers = []any{}
+	file_v1_indexeddb_proto_msgTypes[18].OneofWrappers = []any{}
+	file_v1_indexeddb_proto_msgTypes[22].OneofWrappers = []any{
 		(*CursorCommand_Next)(nil),
 		(*CursorCommand_ContinueToKey)(nil),
 		(*CursorCommand_Advance)(nil),
@@ -3361,15 +3453,15 @@ func file_v1_indexeddb_proto_init() {
 		(*CursorCommand_Delete)(nil),
 		(*CursorCommand_Close)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[22].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[23].OneofWrappers = []any{
 		(*CursorClientMessage_Open)(nil),
 		(*CursorClientMessage_Command)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[24].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[25].OneofWrappers = []any{
 		(*CursorResponse_Entry)(nil),
 		(*CursorResponse_Done)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[33].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[34].OneofWrappers = []any{
 		(*TransactionOperation_Get)(nil),
 		(*TransactionOperation_GetKey)(nil),
 		(*TransactionOperation_Add)(nil),
@@ -3387,7 +3479,7 @@ func file_v1_indexeddb_proto_init() {
 		(*TransactionOperation_IndexCount)(nil),
 		(*TransactionOperation_IndexDelete)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[34].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[35].OneofWrappers = []any{
 		(*TransactionOperationResponse_Empty)(nil),
 		(*TransactionOperationResponse_Record)(nil),
 		(*TransactionOperationResponse_Records)(nil),
@@ -3396,13 +3488,13 @@ func file_v1_indexeddb_proto_init() {
 		(*TransactionOperationResponse_Count)(nil),
 		(*TransactionOperationResponse_Delete)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[35].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[36].OneofWrappers = []any{
 		(*TransactionClientMessage_Begin)(nil),
 		(*TransactionClientMessage_Operation)(nil),
 		(*TransactionClientMessage_Commit)(nil),
 		(*TransactionClientMessage_Abort)(nil),
 	}
-	file_v1_indexeddb_proto_msgTypes[36].OneofWrappers = []any{
+	file_v1_indexeddb_proto_msgTypes[37].OneofWrappers = []any{
 		(*TransactionServerMessage_Begin)(nil),
 		(*TransactionServerMessage_Operation)(nil),
 		(*TransactionServerMessage_Commit)(nil),
@@ -3414,7 +3506,7 @@ func file_v1_indexeddb_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_indexeddb_proto_rawDesc), len(file_v1_indexeddb_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   38,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

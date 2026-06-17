@@ -766,11 +766,6 @@ workflows:
             input:
               literal:
                 mode: incremental
-      invokes:
-        - app: slack
-          operation: conversations.list
-        - app: slack
-          operation: conversations.history
       runAs:
         subject:
           id: service_account:roadmap-events

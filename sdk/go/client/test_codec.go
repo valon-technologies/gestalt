@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireHelloWorldRequest(value *HelloWorldRequest) *proto.HelloWorldRequest {
+func ToWireHelloWorldRequest(value *HelloWorldRequest) *proto.HelloWorldRequest {
 	if value == nil {
 		return nil
 	}
@@ -14,7 +14,7 @@ func toWireHelloWorldRequest(value *HelloWorldRequest) *proto.HelloWorldRequest 
 	return out
 }
 
-func fromWireHelloWorldRequest(value *proto.HelloWorldRequest) *HelloWorldRequest {
+func FromWireHelloWorldRequest(value *proto.HelloWorldRequest) *HelloWorldRequest {
 	if value == nil {
 		return nil
 	}
@@ -22,7 +22,7 @@ func fromWireHelloWorldRequest(value *proto.HelloWorldRequest) *HelloWorldReques
 	return out
 }
 
-func toWireHelloWorldResponse(value *HelloWorldResponse) *proto.HelloWorldResponse {
+func ToWireHelloWorldResponse(value *HelloWorldResponse) *proto.HelloWorldResponse {
 	if value == nil {
 		return nil
 	}
@@ -32,7 +32,7 @@ func toWireHelloWorldResponse(value *HelloWorldResponse) *proto.HelloWorldRespon
 	return out
 }
 
-func fromWireHelloWorldResponse(value *proto.HelloWorldResponse) *HelloWorldResponse {
+func FromWireHelloWorldResponse(value *proto.HelloWorldResponse) *HelloWorldResponse {
 	if value == nil {
 		return nil
 	}

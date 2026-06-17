@@ -81,6 +81,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Invoker:           sharedInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		MCPConnection:     connMaps.MCPConnection,
 	}))
 	prepared.AgentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
@@ -91,6 +92,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Invoker:           sharedInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		MCPConnection:     connMaps.MCPConnection,
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))
@@ -136,10 +138,6 @@ func validateCatalogs(providers *registry.ProviderMap[core.Provider]) error {
 }
 
 func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], map[string]map[string]OAuthHandler, error) {
-	if deps.AppAccessProfiles == nil {
-		deps.AppAccessProfiles = appAccessProfiles(cfg.Apps)
-	}
-
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 

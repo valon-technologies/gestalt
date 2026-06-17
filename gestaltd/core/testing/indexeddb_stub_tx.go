@@ -181,44 +181,44 @@ func (s *stubTransactionObjectStore) Clear(ctx context.Context) error {
 	return s.tx.abortWithError(s.store.Clear(ctx))
 }
 
-func (s *stubTransactionObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
+func (s *stubTransactionObjectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
-	records, err := s.store.GetAll(ctx, r)
+	records, err := s.store.GetAll(ctx, query, count...)
 	if err != nil {
 		return nil, s.tx.abortWithError(err)
 	}
 	return records, nil
 }
 
-func (s *stubTransactionObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
+func (s *stubTransactionObjectStore) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
-	keys, err := s.store.GetAllKeys(ctx, r)
+	keys, err := s.store.GetAllKeys(ctx, query, count...)
 	if err != nil {
 		return nil, s.tx.abortWithError(err)
 	}
 	return keys, nil
 }
 
-func (s *stubTransactionObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
+func (s *stubTransactionObjectStore) Count(ctx context.Context, query any) (int64, error) {
 	if err := s.tx.ensureActive(false); err != nil {
 		return 0, err
 	}
-	count, err := s.store.Count(ctx, r)
+	count, err := s.store.Count(ctx, query)
 	if err != nil {
 		return 0, s.tx.abortWithError(err)
 	}
 	return count, nil
 }
 
-func (s *stubTransactionObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
+func (s *stubTransactionObjectStore) DeleteRange(ctx context.Context, query any) (int64, error) {
 	if err := s.tx.ensureActive(true); err != nil {
 		return 0, err
 	}
-	deleted, err := s.store.DeleteRange(ctx, r)
+	deleted, err := s.store.DeleteRange(ctx, query)
 	if err != nil {
 		return 0, s.tx.abortWithError(err)
 	}
@@ -234,70 +234,66 @@ type stubTransactionIndex struct {
 	index idb.Index
 }
 
-func (i *stubTransactionIndex) Get(ctx context.Context, values ...any) (idb.Record, error) {
+func (i *stubTransactionIndex) Get(ctx context.Context, query any) (idb.Record, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
-	record, err := i.index.Get(ctx, values...)
+	record, err := i.index.Get(ctx, query)
 	if err != nil {
 		return nil, i.tx.abortWithError(err)
 	}
 	return record, nil
 }
 
-func (i *stubTransactionIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+func (i *stubTransactionIndex) GetKey(ctx context.Context, query any) (string, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return "", err
 	}
-	key, err := i.index.GetKey(ctx, values...)
+	key, err := i.index.GetKey(ctx, query)
 	if err != nil {
 		return "", i.tx.abortWithError(err)
 	}
 	return key, nil
 }
 
-func (i *stubTransactionIndex) GetAll(ctx context.Context, r *idb.KeyRange, values ...any) ([]idb.Record, error) {
+func (i *stubTransactionIndex) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
-	records, err := i.index.GetAll(ctx, r, values...)
+	records, err := i.index.GetAll(ctx, query, count...)
 	if err != nil {
 		return nil, i.tx.abortWithError(err)
 	}
 	return records, nil
 }
 
-func (i *stubTransactionIndex) GetAllKeys(ctx context.Context, r *idb.KeyRange, values ...any) ([]string, error) {
+func (i *stubTransactionIndex) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return nil, err
 	}
-	keys, err := i.index.GetAllKeys(ctx, r, values...)
+	keys, err := i.index.GetAllKeys(ctx, query, count...)
 	if err != nil {
 		return nil, i.tx.abortWithError(err)
 	}
 	return keys, nil
 }
 
-func (i *stubTransactionIndex) Count(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+func (i *stubTransactionIndex) Count(ctx context.Context, query any) (int64, error) {
 	if err := i.tx.ensureActive(false); err != nil {
 		return 0, err
 	}
-	count, err := i.index.Count(ctx, r, values...)
+	count, err := i.index.Count(ctx, query)
 	if err != nil {
 		return 0, i.tx.abortWithError(err)
 	}
 	return count, nil
 }
 
-func (i *stubTransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
-	return i.DeleteRange(ctx, nil, values...)
-}
-
-func (i *stubTransactionIndex) DeleteRange(ctx context.Context, r *idb.KeyRange, values ...any) (int64, error) {
+func (i *stubTransactionIndex) Delete(ctx context.Context, query any) (int64, error) {
 	if err := i.tx.ensureActive(true); err != nil {
 		return 0, err
 	}
-	deleted, err := i.index.DeleteRange(ctx, r, values...)
+	deleted, err := i.index.Delete(ctx, query)
 	if err != nil {
 		return 0, i.tx.abortWithError(err)
 	}
@@ -332,19 +328,19 @@ func (s transactionMissingObjectStore) Clear(context.Context) error {
 	return s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) GetAll(context.Context, *idb.KeyRange) ([]idb.Record, error) {
+func (s transactionMissingObjectStore) GetAll(context.Context, any, ...uint32) ([]idb.Record, error) {
 	return nil, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) GetAllKeys(context.Context, *idb.KeyRange) ([]string, error) {
+func (s transactionMissingObjectStore) GetAllKeys(context.Context, any, ...uint32) ([]string, error) {
 	return nil, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) Count(context.Context, *idb.KeyRange) (int64, error) {
+func (s transactionMissingObjectStore) Count(context.Context, any) (int64, error) {
 	return 0, s.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (s transactionMissingObjectStore) DeleteRange(context.Context, idb.KeyRange) (int64, error) {
+func (s transactionMissingObjectStore) DeleteRange(context.Context, any) (int64, error) {
 	return 0, s.tx.abortWithError(idb.ErrNotFound)
 }
 
@@ -356,30 +352,26 @@ type transactionMissingIndex struct {
 	tx *stubTransaction
 }
 
-func (i transactionMissingIndex) Get(context.Context, ...any) (idb.Record, error) {
+func (i transactionMissingIndex) Get(context.Context, any) (idb.Record, error) {
 	return nil, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) GetKey(context.Context, ...any) (string, error) {
+func (i transactionMissingIndex) GetKey(context.Context, any) (string, error) {
 	return "", i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) GetAll(context.Context, *idb.KeyRange, ...any) ([]idb.Record, error) {
+func (i transactionMissingIndex) GetAll(context.Context, any, ...uint32) ([]idb.Record, error) {
 	return nil, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) GetAllKeys(context.Context, *idb.KeyRange, ...any) ([]string, error) {
+func (i transactionMissingIndex) GetAllKeys(context.Context, any, ...uint32) ([]string, error) {
 	return nil, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) Count(context.Context, *idb.KeyRange, ...any) (int64, error) {
+func (i transactionMissingIndex) Count(context.Context, any) (int64, error) {
 	return 0, i.tx.abortWithError(idb.ErrNotFound)
 }
 
-func (i transactionMissingIndex) Delete(context.Context, ...any) (int64, error) {
-	return 0, i.tx.abortWithError(idb.ErrNotFound)
-}
-
-func (i transactionMissingIndex) DeleteRange(context.Context, *idb.KeyRange, ...any) (int64, error) {
+func (i transactionMissingIndex) Delete(context.Context, any) (int64, error) {
 	return 0, i.tx.abortWithError(idb.ErrNotFound)
 }

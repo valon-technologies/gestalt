@@ -37,8 +37,12 @@ func syncConfigWithStatePathsOptions(configFlags []string, state operator.StateP
 	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 }
 
-func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {
-	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
+func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool, forcedDevUIKeys ...string) (*config.Config, error) {
+	lc := operatorLifecycle().WithDevServeEligible(!locked)
+	if len(forcedDevUIKeys) > 0 {
+		lc = lc.WithForcedDevUIKeys(forcedDevUIKeys)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
 	if err != nil {
 		return nil, err
 	}

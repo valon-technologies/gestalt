@@ -561,6 +561,88 @@ func TestResolveCatalogStrict_SessionCatalogUnavailableReturnsTypedError(t *test
 	}
 }
 
+func TestResolveCatalogStrict_ClassifiesSessionAuthFailureAsReconnectRequired(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "strict-api",
+				connMode: core.ConnectionModeSubject,
+			},
+			cat: &catalog.Catalog{
+				Name: "strict-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet},
+				},
+			},
+		},
+		sessionErr: fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401)"),
+	}
+
+	resolver := &stubTokenResolver{token: "tok_789"}
+	p := &principal.Principal{UserID: "u1"}
+
+	cat, metadata, err := invocation.ResolveCatalogStrictWithMetadata(context.Background(), prov, "strict-api", resolver, p, "default", "")
+	if err == nil {
+		t.Fatalf("expected strict resolution error, got catalog %+v", cat)
+	}
+	if !errors.Is(err, invocation.ErrReconnectRequired) {
+		t.Fatalf("expected ErrReconnectRequired, got %v", err)
+	}
+	if !metadata.SessionAttempted {
+		t.Fatal("expected session resolution attempt to be reported")
+	}
+	if !metadata.SessionFailed {
+		t.Fatal("expected session resolution failure to be reported")
+	}
+}
+
+func TestResolveCatalogForTargetsWithMetadata_ClassifiesSessionAuthFailure(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "strict-api",
+				connMode: core.ConnectionModeSubject,
+			},
+			cat: &catalog.Catalog{
+				Name: "strict-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet},
+				},
+			},
+		},
+		sessionErr: fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401)"),
+	}
+
+	resolver := &stubTokenResolver{token: "tok_789"}
+	p := &principal.Principal{UserID: "u1"}
+
+	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
+		context.Background(),
+		prov,
+		"strict-api",
+		resolver,
+		p,
+		[]invocation.CatalogResolutionTarget{{Connection: "OAuth"}},
+		true,
+	)
+	if err == nil {
+		t.Fatalf("expected strict catalog resolution error, got catalog %+v", cat)
+	}
+	if !errors.Is(err, invocation.ErrReconnectRequired) {
+		t.Fatalf("expected ErrReconnectRequired, got %v", err)
+	}
+	if !metadata.SessionAttempted {
+		t.Fatal("expected session resolution attempt to be reported")
+	}
+	if !metadata.SessionFailed {
+		t.Fatal("expected session resolution failure to be reported")
+	}
+}
+
 func TestResolveCatalogForTargetsWithMetadata_PrefersLaterSuccessfulTarget(t *testing.T) {
 	t.Parallel()
 

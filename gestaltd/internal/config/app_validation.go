@@ -23,7 +23,6 @@ func AppValidationEntry(entry *ProviderEntry) *appservice.ValidationApp {
 		Manifest:                    entry.ResolvedManifest,
 		ManifestPath:                entry.ResolvedManifestPath,
 		AllowedOperations:           entry.AllowedOperations,
-		Invokes:                     pluginInvocationDependencies(entry.Invokes),
 		SurfaceURLOverrides:         pluginSurfaceURLOverrides(entry),
 		EffectiveCatalog:            entry.ResolvedCatalog,
 		EffectiveCatalogAvailable:   entry.ResolvedCatalogAvailable,
@@ -32,21 +31,6 @@ func AppValidationEntry(entry *ProviderEntry) *appservice.ValidationApp {
 		ReadStaticCatalog:           appservice.StaticCatalogReaderForManifest(entry.ResolvedManifestPath),
 		LoadAPICatalog:              appservice.DefaultAPICatalogLoader,
 	}
-}
-
-func pluginInvocationDependencies(dependencies []AppInvocationDependency) []appservice.InvocationDependency {
-	if len(dependencies) == 0 {
-		return nil
-	}
-	result := make([]appservice.InvocationDependency, 0, len(dependencies))
-	for _, dependency := range dependencies {
-		result = append(result, appservice.InvocationDependency{
-			App:       dependency.App,
-			Operation: dependency.Operation,
-			Surface:   appservice.SpecSurface(dependency.Surface),
-		})
-	}
-	return result
 }
 
 func pluginSurfaceURLOverrides(entry *ProviderEntry) map[appservice.SpecSurface]string {

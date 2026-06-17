@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAuthorizeRequest(value *AuthorizeRequest) *proto.AuthorizeRequest {
+func ToWireAuthorizeRequest(value *AuthorizeRequest) *proto.AuthorizeRequest {
 	if value == nil {
 		return nil
 	}
@@ -20,7 +20,7 @@ func toWireAuthorizeRequest(value *AuthorizeRequest) *proto.AuthorizeRequest {
 	return out
 }
 
-func fromWireAuthorizeRequest(value *proto.AuthorizeRequest) *AuthorizeRequest {
+func FromWireAuthorizeRequest(value *proto.AuthorizeRequest) *AuthorizeRequest {
 	if value == nil {
 		return nil
 	}
@@ -34,7 +34,7 @@ func fromWireAuthorizeRequest(value *proto.AuthorizeRequest) *AuthorizeRequest {
 	return out
 }
 
-func toWireAuthorizeResponse(value *AuthorizeResponse) *proto.AuthorizeResponse {
+func ToWireAuthorizeResponse(value *AuthorizeResponse) *proto.AuthorizeResponse {
 	if value == nil {
 		return nil
 	}
@@ -44,7 +44,7 @@ func toWireAuthorizeResponse(value *AuthorizeResponse) *proto.AuthorizeResponse 
 	return out
 }
 
-func fromWireAuthorizeResponse(value *proto.AuthorizeResponse) *AuthorizeResponse {
+func FromWireAuthorizeResponse(value *proto.AuthorizeResponse) *AuthorizeResponse {
 	if value == nil {
 		return nil
 	}
@@ -54,7 +54,7 @@ func fromWireAuthorizeResponse(value *proto.AuthorizeResponse) *AuthorizeRespons
 	return out
 }
 
-func toWireGetGrantRequest(value *GetGrantRequest) *proto.GetGrantRequest {
+func ToWireGetGrantRequest(value *GetGrantRequest) *proto.GetGrantRequest {
 	if value == nil {
 		return nil
 	}
@@ -64,7 +64,7 @@ func toWireGetGrantRequest(value *GetGrantRequest) *proto.GetGrantRequest {
 	return out
 }
 
-func fromWireGetGrantRequest(value *proto.GetGrantRequest) *GetGrantRequest {
+func FromWireGetGrantRequest(value *proto.GetGrantRequest) *GetGrantRequest {
 	if value == nil {
 		return nil
 	}
@@ -74,7 +74,7 @@ func fromWireGetGrantRequest(value *proto.GetGrantRequest) *GetGrantRequest {
 	return out
 }
 
-func toWireGetGrantResponse(value *GetGrantResponse) *proto.GetGrantResponse {
+func ToWireGetGrantResponse(value *GetGrantResponse) *proto.GetGrantResponse {
 	if value == nil {
 		return nil
 	}
@@ -83,12 +83,12 @@ func toWireGetGrantResponse(value *GetGrantResponse) *proto.GetGrantResponse {
 		ExpiresAt: value.ExpiresAt,
 	}
 	for _, item := range value.Scopes {
-		out.Scopes = append(out.Scopes, toWireGrantScope(item))
+		out.Scopes = append(out.Scopes, ToWireGrantScope(item))
 	}
 	return out
 }
 
-func fromWireGetGrantResponse(value *proto.GetGrantResponse) *GetGrantResponse {
+func FromWireGetGrantResponse(value *proto.GetGrantResponse) *GetGrantResponse {
 	if value == nil {
 		return nil
 	}
@@ -97,12 +97,12 @@ func fromWireGetGrantResponse(value *proto.GetGrantResponse) *GetGrantResponse {
 		ExpiresAt: value.ExpiresAt,
 	}
 	for _, item := range value.Scopes {
-		out.Scopes = append(out.Scopes, fromWireGrantScope(item))
+		out.Scopes = append(out.Scopes, FromWireGrantScope(item))
 	}
 	return out
 }
 
-func toWireGrantScope(value *GrantScope) *proto.GrantScope {
+func ToWireGrantScope(value *GrantScope) *proto.GrantScope {
 	if value == nil {
 		return nil
 	}
@@ -113,7 +113,7 @@ func toWireGrantScope(value *GrantScope) *proto.GrantScope {
 	return out
 }
 
-func fromWireGrantScope(value *proto.GrantScope) *GrantScope {
+func FromWireGrantScope(value *proto.GrantScope) *GrantScope {
 	if value == nil {
 		return nil
 	}
@@ -124,7 +124,7 @@ func fromWireGrantScope(value *proto.GrantScope) *GrantScope {
 	return out
 }
 
-func toWireIntrospectRequest(value *IntrospectRequest) *proto.IntrospectRequest {
+func ToWireIntrospectRequest(value *IntrospectRequest) *proto.IntrospectRequest {
 	if value == nil {
 		return nil
 	}
@@ -135,7 +135,7 @@ func toWireIntrospectRequest(value *IntrospectRequest) *proto.IntrospectRequest 
 	return out
 }
 
-func fromWireIntrospectRequest(value *proto.IntrospectRequest) *IntrospectRequest {
+func FromWireIntrospectRequest(value *proto.IntrospectRequest) *IntrospectRequest {
 	if value == nil {
 		return nil
 	}
@@ -146,7 +146,7 @@ func fromWireIntrospectRequest(value *proto.IntrospectRequest) *IntrospectReques
 	return out
 }
 
-func toWireIntrospectResponse(value *IntrospectResponse) *proto.IntrospectResponse {
+func ToWireIntrospectResponse(value *IntrospectResponse) *proto.IntrospectResponse {
 	if value == nil {
 		return nil
 	}
@@ -160,7 +160,7 @@ func toWireIntrospectResponse(value *IntrospectResponse) *proto.IntrospectRespon
 	return out
 }
 
-func fromWireIntrospectResponse(value *proto.IntrospectResponse) *IntrospectResponse {
+func FromWireIntrospectResponse(value *proto.IntrospectResponse) *IntrospectResponse {
 	if value == nil {
 		return nil
 	}
@@ -174,7 +174,7 @@ func fromWireIntrospectResponse(value *proto.IntrospectResponse) *IntrospectResp
 	return out
 }
 
-func toWireListGrantsRequest(value *ListGrantsRequest) *proto.ListGrantsRequest {
+func ToWireListGrantsRequest(value *ListGrantsRequest) *proto.ListGrantsRequest {
 	if value == nil {
 		return nil
 	}
@@ -182,7 +182,7 @@ func toWireListGrantsRequest(value *ListGrantsRequest) *proto.ListGrantsRequest 
 	return out
 }
 
-func fromWireListGrantsRequest(value *proto.ListGrantsRequest) *ListGrantsRequest {
+func FromWireListGrantsRequest(value *proto.ListGrantsRequest) *ListGrantsRequest {
 	if value == nil {
 		return nil
 	}
@@ -190,7 +190,7 @@ func fromWireListGrantsRequest(value *proto.ListGrantsRequest) *ListGrantsReques
 	return out
 }
 
-func toWireListGrantsResponse(value *ListGrantsResponse) *proto.ListGrantsResponse {
+func ToWireListGrantsResponse(value *ListGrantsResponse) *proto.ListGrantsResponse {
 	if value == nil {
 		return nil
 	}
@@ -200,7 +200,7 @@ func toWireListGrantsResponse(value *ListGrantsResponse) *proto.ListGrantsRespon
 	return out
 }
 
-func fromWireListGrantsResponse(value *proto.ListGrantsResponse) *ListGrantsResponse {
+func FromWireListGrantsResponse(value *proto.ListGrantsResponse) *ListGrantsResponse {
 	if value == nil {
 		return nil
 	}
@@ -210,7 +210,7 @@ func fromWireListGrantsResponse(value *proto.ListGrantsResponse) *ListGrantsResp
 	return out
 }
 
-func toWireRevokeGrantRequest(value *RevokeGrantRequest) *proto.RevokeGrantRequest {
+func ToWireRevokeGrantRequest(value *RevokeGrantRequest) *proto.RevokeGrantRequest {
 	if value == nil {
 		return nil
 	}
@@ -220,7 +220,7 @@ func toWireRevokeGrantRequest(value *RevokeGrantRequest) *proto.RevokeGrantReque
 	return out
 }
 
-func fromWireRevokeGrantRequest(value *proto.RevokeGrantRequest) *RevokeGrantRequest {
+func FromWireRevokeGrantRequest(value *proto.RevokeGrantRequest) *RevokeGrantRequest {
 	if value == nil {
 		return nil
 	}
@@ -230,7 +230,7 @@ func fromWireRevokeGrantRequest(value *proto.RevokeGrantRequest) *RevokeGrantReq
 	return out
 }
 
-func toWireRevokeGrantResponse(value *RevokeGrantResponse) *proto.RevokeGrantResponse {
+func ToWireRevokeGrantResponse(value *RevokeGrantResponse) *proto.RevokeGrantResponse {
 	if value == nil {
 		return nil
 	}
@@ -238,7 +238,7 @@ func toWireRevokeGrantResponse(value *RevokeGrantResponse) *proto.RevokeGrantRes
 	return out
 }
 
-func fromWireRevokeGrantResponse(value *proto.RevokeGrantResponse) *RevokeGrantResponse {
+func FromWireRevokeGrantResponse(value *proto.RevokeGrantResponse) *RevokeGrantResponse {
 	if value == nil {
 		return nil
 	}
@@ -246,7 +246,7 @@ func fromWireRevokeGrantResponse(value *proto.RevokeGrantResponse) *RevokeGrantR
 	return out
 }
 
-func toWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
+func ToWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
 	if value == nil {
 		return nil
 	}
@@ -263,7 +263,7 @@ func toWireTokenRequest(value *TokenRequest) *proto.TokenRequest {
 	return out
 }
 
-func fromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
+func FromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
 	if value == nil {
 		return nil
 	}
@@ -280,7 +280,7 @@ func fromWireTokenRequest(value *proto.TokenRequest) *TokenRequest {
 	return out
 }
 
-func toWireTokenResponse(value *TokenResponse) *proto.TokenResponse {
+func ToWireTokenResponse(value *TokenResponse) *proto.TokenResponse {
 	if value == nil {
 		return nil
 	}
@@ -295,7 +295,7 @@ func toWireTokenResponse(value *TokenResponse) *proto.TokenResponse {
 	return out
 }
 
-func fromWireTokenResponse(value *proto.TokenResponse) *TokenResponse {
+func FromWireTokenResponse(value *proto.TokenResponse) *TokenResponse {
 	if value == nil {
 		return nil
 	}

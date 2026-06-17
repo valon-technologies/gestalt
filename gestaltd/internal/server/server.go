@@ -53,7 +53,13 @@ type MountedUI struct {
 	AuthorizationPolicy string
 	Routes              []MountedUIRoute
 	Handler             http.Handler
-	builtInAdmin        bool
+	// ThemeStylesheet and ThemeAssetsDir are resolved absolute paths to a
+	// deployment-configured theme, served at <mount>/theme.css and under
+	// <mount>/theme/ respectively. Both are optional.
+	ThemeStylesheet string
+	ThemeAssetsDir  string
+	IsDev           bool
+	builtInAdmin    bool
 }
 
 type MountedHTTPBinding struct {
@@ -93,7 +99,7 @@ type Server struct {
 	workflowSchedules      *workflowmanager.Manager
 	agentRuns              agentmanager.Service
 	providers              *registry.ProviderMap[core.Provider]
-	providerGateway        *providergateway.Gateway
+	callerTokenIssuer      *providergateway.CallerTokenIssuer
 	workflow               bootstrap.WorkflowControl
 	pluginRuntimes         bootstrap.RuntimeInspector
 	resolver               *principal.Resolver
@@ -104,6 +110,7 @@ type Server struct {
 	agentStreamHeartbeat   time.Duration
 	defaultConnection      map[string]string
 	catalogConnection      map[string]string
+	mcpConnection          map[string]string
 	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
 	manualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
 	pluginDefs             map[string]*config.ProviderEntry
@@ -139,6 +146,7 @@ func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
 	return invocation.CatalogSelectorConfig{
 		Invoker:           s.invoker,
 		CatalogConnection: s.catalogConnection,
+		MCPConnection:     s.mcpConnection,
 		DefaultConnection: s.defaultConnection,
 	}
 }
@@ -151,7 +159,7 @@ type Config struct {
 	AuditSink            core.AuditSink
 	Services             *coredata.Services
 	Providers            *registry.ProviderMap[core.Provider]
-	ProviderGateway      *providergateway.Gateway
+	CallerTokenIssuer    *providergateway.CallerTokenIssuer
 	Agent                bootstrap.AgentControl
 	AgentManager         agentmanager.Service
 	Workflow             bootstrap.WorkflowControl
@@ -160,6 +168,7 @@ type Config struct {
 	AppInvocation        invocation.Invoker
 	DefaultConnection    map[string]string
 	CatalogConnection    map[string]string
+	MCPConnection        map[string]string
 	ConnectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
 	ManualConnectionAuth func() map[string]map[string]bootstrap.ManualTokenExchanger
 	AppDefs              map[string]*config.ProviderEntry
@@ -178,6 +187,7 @@ type Config struct {
 	PublicHostServices   *runtimehost.PublicHostServiceRegistry
 	S3                   map[string]s3sdk.S3
 	MountedUIs           []MountedUI
+	DevHandlers          map[string]http.Handler
 	Admin                AdminRouteConfig
 	AdminUIProvider      string
 	AdminUI              http.Handler
@@ -245,7 +255,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	mountedUIs := cfg.MountedUIs
 	if len(mountedUIs) == 0 && len(cfg.ProviderUIs) != 0 {
-		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs)
+		mountedUIs, err = mountedUIsFromEntries(cfg.ProviderUIs, cfg.DevHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
 		}
@@ -345,7 +355,7 @@ func New(cfg Config) (*Server, error) {
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		providers:              cfg.Providers,
-		providerGateway:        cfg.ProviderGateway,
+		callerTokenIssuer:      cfg.CallerTokenIssuer,
 		workflow:               cfg.Workflow,
 		pluginRuntimes:         cfg.Runtimes,
 		resolver:               resolver,
@@ -356,6 +366,7 @@ func New(cfg Config) (*Server, error) {
 		agentStreamHeartbeat:   agentStreamHeartbeat,
 		defaultConnection:      cfg.DefaultConnection,
 		catalogConnection:      cfg.CatalogConnection,
+		mcpConnection:          cfg.MCPConnection,
 		connectionAuth:         cfg.ConnectionAuth,
 		manualConnectionAuth:   cfg.ManualConnectionAuth,
 		pluginDefs:             cfg.AppDefs,
@@ -392,6 +403,7 @@ func New(cfg Config) (*Server, error) {
 		Audit:             cfg.AuditSink,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
+		MCPConnection:     cfg.MCPConnection,
 		Now:               now,
 	})
 	if noAuth || serverAuthProvider == "none" {

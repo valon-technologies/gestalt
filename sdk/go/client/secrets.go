@@ -40,18 +40,18 @@ func NewSecrets(conn grpc.ClientConnInterface) *Secrets {
 // The response collapses to its value field.
 func (c *Secrets) GetSecret(ctx context.Context, name string) (string, error) {
 	request := &GetSecretRequest{Name: name}
-	response, err := c.client.GetSecret(ctx, toWireGetSecretRequest(request))
+	response, err := c.client.GetSecret(ctx, ToWireGetSecretRequest(request))
 	if err != nil {
 		return "", toGestaltError(err)
 	}
-	return fromWireGetSecretResponse(response).Value, nil
+	return FromWireGetSecretResponse(response).Value, nil
 }
 
 // GetSecretRaw is the faithful form of [Secrets.GetSecret].
 func (c *Secrets) GetSecretRaw(ctx context.Context, request *GetSecretRequest) (*GetSecretResponse, error) {
-	response, err := c.client.GetSecret(ctx, toWireGetSecretRequest(request))
+	response, err := c.client.GetSecret(ctx, ToWireGetSecretRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireGetSecretResponse(response), nil
+	return FromWireGetSecretResponse(response), nil
 }

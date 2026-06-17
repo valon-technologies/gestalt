@@ -94,15 +94,13 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
-	var pathFlag *string
+	var pathFlags repeatedStringFlag
 	var nameFlag *string
 	var portFlag *int
-	var watchFlag *bool
 	if opts.allowProviderLocal {
-		pathFlag = fs.String("path", "", "provider manifest path or directory for local source serve")
+		fs.Var(&pathFlags, "path", "provider manifest path or directory for local source serve (repeatable)")
 		nameFlag = fs.String("name", "", "provider key override for --path")
-		portFlag = fs.Int("port", 0, "public port for --path (defaults to a free localhost port)")
-		watchFlag = fs.Bool("watch", false, "watch local source files and restart/rebuild after changes")
+		portFlag = fs.Int("port", 0, "public port for --path isolated serve (defaults to a free localhost port)")
 	}
 	var lockedFlag *bool
 	if opts.allowLocked {
@@ -130,34 +128,22 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if lockedFlag != nil {
 		locked = *lockedFlag
 	}
-	watch := flagBoolValue(watchFlag)
-	if watch && locked {
-		return fmt.Errorf("--watch cannot be combined with --locked")
-	}
 
 	if opts.allowProviderLocal {
 		ranProviderLocal, err := maybeRunServeProviderLocal(serveProviderLocalOptions{
 			ConfigPaths:   []string(configPaths),
-			Path:          flagStringValue(pathFlag),
+			Paths:         []string(pathFlags),
 			Name:          flagStringValue(nameFlag),
 			Port:          flagIntValue(portFlag),
 			ArtifactsDir:  *artifactsDir,
 			LockfilePath:  *lockfilePath,
 			Locked:        locked,
 			LockedAllowed: lockedFlag != nil,
-			Watch:         watch,
 		})
 		if ranProviderLocal || err != nil {
 			return err
 		}
 	}
-	if watch {
-		return runServeWatch(resolvedConfigPaths, operator.StatePaths{
-			ArtifactsDir: *artifactsDir,
-			LockfilePath: *lockfilePath,
-		})
-	}
-
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
@@ -170,48 +156,51 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 
 type serveProviderLocalOptions struct {
 	ConfigPaths   []string
-	Path          string
+	Paths         []string
 	Name          string
 	Port          int
 	ArtifactsDir  string
 	LockfilePath  string
 	Locked        bool
 	LockedAllowed bool
-	Watch         bool
 }
 
 func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
-	path := strings.TrimSpace(opts.Path)
+	paths := make([]string, 0, len(opts.Paths))
+	for _, path := range opts.Paths {
+		if trimmed := strings.TrimSpace(path); trimmed != "" {
+			paths = append(paths, trimmed)
+		}
+	}
 	name := strings.TrimSpace(opts.Name)
 
-	if path != "" {
-		if opts.Watch {
-			return true, fmt.Errorf("--watch cannot be combined with --path")
+	if len(paths) == 0 {
+		if name != "" {
+			return false, fmt.Errorf("--name requires --path")
 		}
-		if opts.ArtifactsDir != "" {
-			return true, fmt.Errorf("--artifacts-dir cannot be combined with --path")
+		if opts.Port != 0 {
+			return false, fmt.Errorf("--port requires --path")
 		}
-		if opts.LockfilePath != "" {
-			return true, fmt.Errorf("--lockfile cannot be combined with --path")
-		}
-		if opts.LockedAllowed && opts.Locked {
-			return true, fmt.Errorf("--locked cannot be combined with --path")
-		}
-		return true, runServeProviderLocal(providerLocalCommandOptions{
-			Path:        opts.Path,
-			ConfigPaths: opts.ConfigPaths,
-			Name:        opts.Name,
-			Port:        opts.Port,
-		})
+		return false, nil
 	}
-
-	if name != "" {
-		return false, fmt.Errorf("--name requires --path")
+	if len(paths) > 1 && name != "" {
+		return true, fmt.Errorf("--name cannot be used with multiple --path flags")
 	}
-	if opts.Port != 0 {
-		return false, fmt.Errorf("--port requires --path")
+	if opts.LockedAllowed && opts.Locked && len(opts.ConfigPaths) == 0 {
+		return true, fmt.Errorf("--locked requires --config when using --path")
 	}
-	return false, nil
+	if len(opts.ConfigPaths) == 0 && (opts.ArtifactsDir != "" || opts.LockfilePath != "") {
+		return true, fmt.Errorf("--artifacts-dir and --lockfile require --config when using --path")
+	}
+	return true, runServeProviderLocal(providerLocalCommandOptions{
+		Paths:        paths,
+		ConfigPaths:  opts.ConfigPaths,
+		Name:         name,
+		Port:         opts.Port,
+		Locked:       opts.Locked,
+		ArtifactsDir: opts.ArtifactsDir,
+		LockfilePath: opts.LockfilePath,
+	})
 }
 
 func flagStringValue(flag *string) string {
@@ -224,13 +213,6 @@ func flagStringValue(flag *string) string {
 func flagIntValue(flag *int) int {
 	if flag == nil {
 		return 0
-	}
-	return *flag
-}
-
-func flagBoolValue(flag *bool) bool {
-	if flag == nil {
-		return false
 	}
 	return *flag
 }
@@ -457,8 +439,8 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--cache-dir PATH] [--output-format text|json] [-v|--verbose] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
-	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH] [--platform os/arch] [--runtime]")
@@ -480,12 +462,14 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
-	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve --path PATH [--path PATH]... [--config PATH]... [--locked] [--artifacts-dir PATH] [--lockfile PATH] [--name NAME] [--port PORT]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
-	writeUsageLine(w, "Use --path to serve one local source app or UI bundle inside a synthesized Gestalt config.")
-	writeUsageLine(w, "Use --watch to rebuild/restart after debounced local file changes.")
+	writeUsageLine(w, "Use --path (repeatable) to override selected UIs to local source trees; with --config and --locked,")
+	writeUsageLine(w, "the fleet loads pinned artifacts while --path UIs with a manifest dev: block hot-reload.")
+	writeUsageLine(w, "Without --config, --path runs an isolated synthesized baseline (unlocked).")
+	writeUsageLine(w, "Local UIs with a manifest dev: block are proxied to a hot-reload dev server automatically.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
 	writeUsageLine(w, "lockfile and prepared artifacts instead of resolving or mutating state.")
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")

@@ -70,9 +70,9 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 		t.Fatalf("TypedValueFromAny: %v", err)
 	}
 	if _, err := srv.(*indexedDBServer).IndexGet(ctx, &proto.IndexQueryRequest{
-		Store:  "snapshots",
-		Index:  "by_type",
-		Values: []*proto.TypedValue{value},
+		Store: "snapshots",
+		Index: "by_type",
+		Query: &proto.IndexedDBQuery{Query: &proto.IndexedDBQuery_Key{Key: &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: value}}}},
 	}); err != nil {
 		t.Fatalf("IndexGet: %v", err)
 	}
@@ -131,10 +131,12 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TypedValueFromAny: %v", err)
 	}
-	eventsRange, err := keyRangeToProto(idb.Only("evt-1"))
+	eventsQuery := &proto.IndexedDBQuery{Query: &proto.IndexedDBQuery_Key{Key: &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: indexValue}}}}
+	evtKey, err := indexeddbcodec.AnyToKeyValue("evt-1")
 	if err != nil {
-		t.Fatalf("keyRangeToProto: %v", err)
+		t.Fatalf("AnyToKeyValue: %v", err)
 	}
+	eventsDeleteQuery := &proto.IndexedDBQuery{Query: &proto.IndexedDBQuery_Key{Key: evtKey}}
 
 	if _, err := srv.(*indexedDBServer).Put(ctx, &proto.RecordRequest{
 		Store:  "events",
@@ -160,14 +162,14 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	}
 	if _, err := srv.(*indexedDBServer).DeleteRange(ctx, &proto.ObjectStoreRangeRequest{
 		Store: "events",
-		Range: eventsRange,
+		Query: eventsDeleteQuery,
 	}); err == nil {
 		t.Fatal("DeleteRange should reject stores outside the configured allowlist")
 	}
 	if _, err := srv.(*indexedDBServer).IndexGet(ctx, &proto.IndexQueryRequest{
-		Store:  "events",
-		Index:  "by_type",
-		Values: []*proto.TypedValue{indexValue},
+		Store: "events",
+		Index: "by_type",
+		Query: eventsQuery,
 	}); err == nil {
 		t.Fatal("IndexGet should reject stores outside the configured allowlist")
 	}
@@ -183,10 +185,10 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	if _, err := remote.Transaction(ctx, []string{"events"}, idb.TransactionReadwrite, idb.TransactionOptions{}); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("remote Transaction error = %v, want idb.ErrNotFound", err)
 	}
-	if _, err := remote.ObjectStore("events").DeleteRange(ctx, *idb.Only("evt-1")); !errors.Is(err, idb.ErrNotFound) {
+	if _, err := remote.ObjectStore("events").DeleteRange(ctx, eventsDeleteQuery); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("remote DeleteRange error = %v, want idb.ErrNotFound", err)
 	}
-	if _, err := remote.ObjectStore("events").Index("by_type").Get(ctx, "daily"); !errors.Is(err, idb.ErrNotFound) {
+	if _, err := remote.ObjectStore("events").Index("by_type").Get(ctx, eventsQuery); !errors.Is(err, idb.ErrNotFound) {
 		t.Fatalf("remote IndexGet error = %v, want idb.ErrNotFound", err)
 	}
 	if cursor, err := remote.ObjectStore("events").OpenCursor(ctx, nil, idb.CursorNext); !errors.Is(err, idb.ErrNotFound) {

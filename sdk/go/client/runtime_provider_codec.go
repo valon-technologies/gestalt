@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireAppendRuntimeLogsRequest(value *AppendRuntimeLogsRequest) *proto.AppendRuntimeLogsRequest {
+func ToWireAppendRuntimeLogsRequest(value *AppendRuntimeLogsRequest) *proto.AppendRuntimeLogsRequest {
 	if value == nil {
 		return nil
 	}
@@ -14,12 +14,12 @@ func toWireAppendRuntimeLogsRequest(value *AppendRuntimeLogsRequest) *proto.Appe
 		SessionId: value.SessionId,
 	}
 	for _, item := range value.Logs {
-		out.Logs = append(out.Logs, toWireRuntimeLogEntry(item))
+		out.Logs = append(out.Logs, ToWireRuntimeLogEntry(item))
 	}
 	return out
 }
 
-func fromWireAppendRuntimeLogsRequest(value *proto.AppendRuntimeLogsRequest) *AppendRuntimeLogsRequest {
+func FromWireAppendRuntimeLogsRequest(value *proto.AppendRuntimeLogsRequest) *AppendRuntimeLogsRequest {
 	if value == nil {
 		return nil
 	}
@@ -27,12 +27,12 @@ func fromWireAppendRuntimeLogsRequest(value *proto.AppendRuntimeLogsRequest) *Ap
 		SessionId: value.SessionId,
 	}
 	for _, item := range value.Logs {
-		out.Logs = append(out.Logs, fromWireRuntimeLogEntry(item))
+		out.Logs = append(out.Logs, FromWireRuntimeLogEntry(item))
 	}
 	return out
 }
 
-func toWireAppendRuntimeLogsResponse(value *AppendRuntimeLogsResponse) *proto.AppendRuntimeLogsResponse {
+func ToWireAppendRuntimeLogsResponse(value *AppendRuntimeLogsResponse) *proto.AppendRuntimeLogsResponse {
 	if value == nil {
 		return nil
 	}
@@ -42,7 +42,7 @@ func toWireAppendRuntimeLogsResponse(value *AppendRuntimeLogsResponse) *proto.Ap
 	return out
 }
 
-func fromWireAppendRuntimeLogsResponse(value *proto.AppendRuntimeLogsResponse) *AppendRuntimeLogsResponse {
+func FromWireAppendRuntimeLogsResponse(value *proto.AppendRuntimeLogsResponse) *AppendRuntimeLogsResponse {
 	if value == nil {
 		return nil
 	}
@@ -52,7 +52,7 @@ func fromWireAppendRuntimeLogsResponse(value *proto.AppendRuntimeLogsResponse) *
 	return out
 }
 
-func toWireGetRuntimeSessionRequest(value *GetRuntimeSessionRequest) *proto.GetRuntimeSessionRequest {
+func ToWireGetRuntimeSessionRequest(value *GetRuntimeSessionRequest) *proto.GetRuntimeSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -62,7 +62,7 @@ func toWireGetRuntimeSessionRequest(value *GetRuntimeSessionRequest) *proto.GetR
 	return out
 }
 
-func fromWireGetRuntimeSessionRequest(value *proto.GetRuntimeSessionRequest) *GetRuntimeSessionRequest {
+func FromWireGetRuntimeSessionRequest(value *proto.GetRuntimeSessionRequest) *GetRuntimeSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -72,7 +72,7 @@ func fromWireGetRuntimeSessionRequest(value *proto.GetRuntimeSessionRequest) *Ge
 	return out
 }
 
-func toWireHostedApp(value *HostedApp) *proto.HostedApp {
+func ToWireHostedApp(value *HostedApp) *proto.HostedApp {
 	if value == nil {
 		return nil
 	}
@@ -85,7 +85,7 @@ func toWireHostedApp(value *HostedApp) *proto.HostedApp {
 	return out
 }
 
-func fromWireHostedApp(value *proto.HostedApp) *HostedApp {
+func FromWireHostedApp(value *proto.HostedApp) *HostedApp {
 	if value == nil {
 		return nil
 	}
@@ -98,7 +98,7 @@ func fromWireHostedApp(value *proto.HostedApp) *HostedApp {
 	return out
 }
 
-func toWireListRuntimeSessionsRequest(value *ListRuntimeSessionsRequest) *proto.ListRuntimeSessionsRequest {
+func ToWireListRuntimeSessionsRequest(value *ListRuntimeSessionsRequest) *proto.ListRuntimeSessionsRequest {
 	if value == nil {
 		return nil
 	}
@@ -109,7 +109,7 @@ func toWireListRuntimeSessionsRequest(value *ListRuntimeSessionsRequest) *proto.
 	return out
 }
 
-func fromWireListRuntimeSessionsRequest(value *proto.ListRuntimeSessionsRequest) *ListRuntimeSessionsRequest {
+func FromWireListRuntimeSessionsRequest(value *proto.ListRuntimeSessionsRequest) *ListRuntimeSessionsRequest {
 	if value == nil {
 		return nil
 	}
@@ -120,7 +120,7 @@ func fromWireListRuntimeSessionsRequest(value *proto.ListRuntimeSessionsRequest)
 	return out
 }
 
-func toWireListRuntimeSessionsResponse(value *ListRuntimeSessionsResponse) *proto.ListRuntimeSessionsResponse {
+func ToWireListRuntimeSessionsResponse(value *ListRuntimeSessionsResponse) *proto.ListRuntimeSessionsResponse {
 	if value == nil {
 		return nil
 	}
@@ -128,12 +128,12 @@ func toWireListRuntimeSessionsResponse(value *ListRuntimeSessionsResponse) *prot
 		NextPageToken: value.NextPageToken,
 	}
 	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, toWireRuntimeSession(item))
+		out.Sessions = append(out.Sessions, ToWireRuntimeSession(item))
 	}
 	return out
 }
 
-func fromWireListRuntimeSessionsResponse(value *proto.ListRuntimeSessionsResponse) *ListRuntimeSessionsResponse {
+func FromWireListRuntimeSessionsResponse(value *proto.ListRuntimeSessionsResponse) *ListRuntimeSessionsResponse {
 	if value == nil {
 		return nil
 	}
@@ -141,56 +141,56 @@ func fromWireListRuntimeSessionsResponse(value *proto.ListRuntimeSessionsRespons
 		NextPageToken: value.NextPageToken,
 	}
 	for _, item := range value.Sessions {
-		out.Sessions = append(out.Sessions, fromWireRuntimeSession(item))
+		out.Sessions = append(out.Sessions, FromWireRuntimeSession(item))
 	}
 	return out
 }
 
-func toWirePrepareRuntimeWorkspaceRequest(value *PrepareRuntimeWorkspaceRequest) *proto.PrepareRuntimeWorkspaceRequest {
+func ToWirePrepareRuntimeWorkspaceRequest(value *PrepareRuntimeWorkspaceRequest) *proto.PrepareRuntimeWorkspaceRequest {
 	if value == nil {
 		return nil
 	}
 	out := &proto.PrepareRuntimeWorkspaceRequest{
 		SessionId:      value.SessionId,
 		AgentSessionId: value.AgentSessionId,
-		Workspace:      toWireAgentWorkspace(value.Workspace),
+		Workspace:      ToWireAgentWorkspace(value.Workspace),
 	}
 	return out
 }
 
-func fromWirePrepareRuntimeWorkspaceRequest(value *proto.PrepareRuntimeWorkspaceRequest) *PrepareRuntimeWorkspaceRequest {
+func FromWirePrepareRuntimeWorkspaceRequest(value *proto.PrepareRuntimeWorkspaceRequest) *PrepareRuntimeWorkspaceRequest {
 	if value == nil {
 		return nil
 	}
 	out := &PrepareRuntimeWorkspaceRequest{
 		SessionId:      value.SessionId,
 		AgentSessionId: value.AgentSessionId,
-		Workspace:      fromWireAgentWorkspace(value.Workspace),
+		Workspace:      FromWireAgentWorkspace(value.Workspace),
 	}
 	return out
 }
 
-func toWirePrepareRuntimeWorkspaceResponse(value *PrepareRuntimeWorkspaceResponse) *proto.PrepareRuntimeWorkspaceResponse {
+func ToWirePrepareRuntimeWorkspaceResponse(value *PrepareRuntimeWorkspaceResponse) *proto.PrepareRuntimeWorkspaceResponse {
 	if value == nil {
 		return nil
 	}
 	out := &proto.PrepareRuntimeWorkspaceResponse{
-		Workspace: toWirePreparedAgentWorkspace(value.Workspace),
+		Workspace: ToWirePreparedAgentWorkspace(value.Workspace),
 	}
 	return out
 }
 
-func fromWirePrepareRuntimeWorkspaceResponse(value *proto.PrepareRuntimeWorkspaceResponse) *PrepareRuntimeWorkspaceResponse {
+func FromWirePrepareRuntimeWorkspaceResponse(value *proto.PrepareRuntimeWorkspaceResponse) *PrepareRuntimeWorkspaceResponse {
 	if value == nil {
 		return nil
 	}
 	out := &PrepareRuntimeWorkspaceResponse{
-		Workspace: fromWirePreparedAgentWorkspace(value.Workspace),
+		Workspace: FromWirePreparedAgentWorkspace(value.Workspace),
 	}
 	return out
 }
 
-func toWireRemoveRuntimeWorkspaceRequest(value *RemoveRuntimeWorkspaceRequest) *proto.RemoveRuntimeWorkspaceRequest {
+func ToWireRemoveRuntimeWorkspaceRequest(value *RemoveRuntimeWorkspaceRequest) *proto.RemoveRuntimeWorkspaceRequest {
 	if value == nil {
 		return nil
 	}
@@ -201,7 +201,7 @@ func toWireRemoveRuntimeWorkspaceRequest(value *RemoveRuntimeWorkspaceRequest) *
 	return out
 }
 
-func fromWireRemoveRuntimeWorkspaceRequest(value *proto.RemoveRuntimeWorkspaceRequest) *RemoveRuntimeWorkspaceRequest {
+func FromWireRemoveRuntimeWorkspaceRequest(value *proto.RemoveRuntimeWorkspaceRequest) *RemoveRuntimeWorkspaceRequest {
 	if value == nil {
 		return nil
 	}
@@ -212,7 +212,7 @@ func fromWireRemoveRuntimeWorkspaceRequest(value *proto.RemoveRuntimeWorkspaceRe
 	return out
 }
 
-func toWireRuntimeImagePullAuth(value *RuntimeImagePullAuth) *proto.RuntimeImagePullAuth {
+func ToWireRuntimeImagePullAuth(value *RuntimeImagePullAuth) *proto.RuntimeImagePullAuth {
 	if value == nil {
 		return nil
 	}
@@ -222,7 +222,7 @@ func toWireRuntimeImagePullAuth(value *RuntimeImagePullAuth) *proto.RuntimeImage
 	return out
 }
 
-func fromWireRuntimeImagePullAuth(value *proto.RuntimeImagePullAuth) *RuntimeImagePullAuth {
+func FromWireRuntimeImagePullAuth(value *proto.RuntimeImagePullAuth) *RuntimeImagePullAuth {
 	if value == nil {
 		return nil
 	}
@@ -232,7 +232,7 @@ func fromWireRuntimeImagePullAuth(value *proto.RuntimeImagePullAuth) *RuntimeIma
 	return out
 }
 
-func toWireRuntimeLogEntry(value *RuntimeLogEntry) *proto.RuntimeLogEntry {
+func ToWireRuntimeLogEntry(value *RuntimeLogEntry) *proto.RuntimeLogEntry {
 	if value == nil {
 		return nil
 	}
@@ -245,7 +245,7 @@ func toWireRuntimeLogEntry(value *RuntimeLogEntry) *proto.RuntimeLogEntry {
 	return out
 }
 
-func fromWireRuntimeLogEntry(value *proto.RuntimeLogEntry) *RuntimeLogEntry {
+func FromWireRuntimeLogEntry(value *proto.RuntimeLogEntry) *RuntimeLogEntry {
 	if value == nil {
 		return nil
 	}
@@ -258,7 +258,7 @@ func fromWireRuntimeLogEntry(value *proto.RuntimeLogEntry) *RuntimeLogEntry {
 	return out
 }
 
-func toWireRuntimeSession(value *RuntimeSession) *proto.RuntimeSession {
+func ToWireRuntimeSession(value *RuntimeSession) *proto.RuntimeSession {
 	if value == nil {
 		return nil
 	}
@@ -266,14 +266,14 @@ func toWireRuntimeSession(value *RuntimeSession) *proto.RuntimeSession {
 		Id:           value.Id,
 		State:        value.State,
 		Metadata:     value.Metadata,
-		Lifecycle:    toWireRuntimeSessionLifecycle(value.Lifecycle),
+		Lifecycle:    ToWireRuntimeSessionLifecycle(value.Lifecycle),
 		StateReason:  value.StateReason,
 		StateMessage: value.StateMessage,
 	}
 	return out
 }
 
-func fromWireRuntimeSession(value *proto.RuntimeSession) *RuntimeSession {
+func FromWireRuntimeSession(value *proto.RuntimeSession) *RuntimeSession {
 	if value == nil {
 		return nil
 	}
@@ -281,14 +281,14 @@ func fromWireRuntimeSession(value *proto.RuntimeSession) *RuntimeSession {
 		Id:           value.Id,
 		State:        value.State,
 		Metadata:     value.Metadata,
-		Lifecycle:    fromWireRuntimeSessionLifecycle(value.Lifecycle),
+		Lifecycle:    FromWireRuntimeSessionLifecycle(value.Lifecycle),
 		StateReason:  value.StateReason,
 		StateMessage: value.StateMessage,
 	}
 	return out
 }
 
-func toWireRuntimeSessionLifecycle(value *RuntimeSessionLifecycle) *proto.RuntimeSessionLifecycle {
+func ToWireRuntimeSessionLifecycle(value *RuntimeSessionLifecycle) *proto.RuntimeSessionLifecycle {
 	if value == nil {
 		return nil
 	}
@@ -300,7 +300,7 @@ func toWireRuntimeSessionLifecycle(value *RuntimeSessionLifecycle) *proto.Runtim
 	return out
 }
 
-func fromWireRuntimeSessionLifecycle(value *proto.RuntimeSessionLifecycle) *RuntimeSessionLifecycle {
+func FromWireRuntimeSessionLifecycle(value *proto.RuntimeSessionLifecycle) *RuntimeSessionLifecycle {
 	if value == nil {
 		return nil
 	}
@@ -312,7 +312,7 @@ func fromWireRuntimeSessionLifecycle(value *proto.RuntimeSessionLifecycle) *Runt
 	return out
 }
 
-func toWireRuntimeSupport(value *RuntimeSupport) *proto.RuntimeSupport {
+func ToWireRuntimeSupport(value *RuntimeSupport) *proto.RuntimeSupport {
 	if value == nil {
 		return nil
 	}
@@ -324,7 +324,7 @@ func toWireRuntimeSupport(value *RuntimeSupport) *proto.RuntimeSupport {
 	return out
 }
 
-func fromWireRuntimeSupport(value *proto.RuntimeSupport) *RuntimeSupport {
+func FromWireRuntimeSupport(value *proto.RuntimeSupport) *RuntimeSupport {
 	if value == nil {
 		return nil
 	}
@@ -336,7 +336,7 @@ func fromWireRuntimeSupport(value *proto.RuntimeSupport) *RuntimeSupport {
 	return out
 }
 
-func toWireStartHostedAppRequest(value *StartHostedAppRequest) *proto.StartHostedAppRequest {
+func ToWireStartHostedAppRequest(value *StartHostedAppRequest) *proto.StartHostedAppRequest {
 	if value == nil {
 		return nil
 	}
@@ -354,7 +354,7 @@ func toWireStartHostedAppRequest(value *StartHostedAppRequest) *proto.StartHoste
 	return out
 }
 
-func fromWireStartHostedAppRequest(value *proto.StartHostedAppRequest) *StartHostedAppRequest {
+func FromWireStartHostedAppRequest(value *proto.StartHostedAppRequest) *StartHostedAppRequest {
 	if value == nil {
 		return nil
 	}
@@ -372,7 +372,7 @@ func fromWireStartHostedAppRequest(value *proto.StartHostedAppRequest) *StartHos
 	return out
 }
 
-func toWireStartRuntimeSessionRequest(value *StartRuntimeSessionRequest) *proto.StartRuntimeSessionRequest {
+func ToWireStartRuntimeSessionRequest(value *StartRuntimeSessionRequest) *proto.StartRuntimeSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -381,12 +381,12 @@ func toWireStartRuntimeSessionRequest(value *StartRuntimeSessionRequest) *proto.
 		Template:      value.Template,
 		Image:         value.Image,
 		Metadata:      value.Metadata,
-		ImagePullAuth: toWireRuntimeImagePullAuth(value.ImagePullAuth),
+		ImagePullAuth: ToWireRuntimeImagePullAuth(value.ImagePullAuth),
 	}
 	return out
 }
 
-func fromWireStartRuntimeSessionRequest(value *proto.StartRuntimeSessionRequest) *StartRuntimeSessionRequest {
+func FromWireStartRuntimeSessionRequest(value *proto.StartRuntimeSessionRequest) *StartRuntimeSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -395,12 +395,12 @@ func fromWireStartRuntimeSessionRequest(value *proto.StartRuntimeSessionRequest)
 		Template:      value.Template,
 		Image:         value.Image,
 		Metadata:      value.Metadata,
-		ImagePullAuth: fromWireRuntimeImagePullAuth(value.ImagePullAuth),
+		ImagePullAuth: FromWireRuntimeImagePullAuth(value.ImagePullAuth),
 	}
 	return out
 }
 
-func toWireStopRuntimeSessionRequest(value *StopRuntimeSessionRequest) *proto.StopRuntimeSessionRequest {
+func ToWireStopRuntimeSessionRequest(value *StopRuntimeSessionRequest) *proto.StopRuntimeSessionRequest {
 	if value == nil {
 		return nil
 	}
@@ -410,7 +410,7 @@ func toWireStopRuntimeSessionRequest(value *StopRuntimeSessionRequest) *proto.St
 	return out
 }
 
-func fromWireStopRuntimeSessionRequest(value *proto.StopRuntimeSessionRequest) *StopRuntimeSessionRequest {
+func FromWireStopRuntimeSessionRequest(value *proto.StopRuntimeSessionRequest) *StopRuntimeSessionRequest {
 	if value == nil {
 		return nil
 	}

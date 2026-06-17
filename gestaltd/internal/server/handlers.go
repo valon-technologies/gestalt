@@ -653,7 +653,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		name,
 		resolver,
 		p,
-		s.catalogSelectorConfig().SessionCatalogTargets(name, requestedConnection, requestedInstance),
+		s.catalogSelectorConfig().APICatalogTargets(name, requestedConnection, requestedInstance),
 		strictCatalog,
 	)
 	discoveryFailed = metadata.SessionFailed
@@ -856,15 +856,16 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) withProviderGatewayCallerToken(ctx context.Context, p *principal.Principal) (context.Context, error) {
 	subjectID := invokingPrincipalSubjectID(p)
-	if subjectID == "" || s.providerGateway == nil {
+	if subjectID == "" || s.callerTokenIssuer == nil {
 		return ctx, nil
 	}
-	token, ok, err := s.providerGateway.IssueCallerToken(subjectID, s.now())
+	claims, err := providergateway.GenerateCallerTokenClaims(subjectID, s.now())
 	if err != nil {
 		return ctx, fmt.Errorf("provider gateway caller token: %w", err)
 	}
-	if !ok {
-		return ctx, nil
+	token, err := s.callerTokenIssuer.Issue(claims)
+	if err != nil {
+		return ctx, fmt.Errorf("provider gateway caller token: %w", err)
 	}
 	return providergateway.WithCallerToken(ctx, token), nil
 }

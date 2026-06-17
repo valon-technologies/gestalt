@@ -185,33 +185,33 @@ func (o *countingObjectStore) Clear(ctx context.Context) error {
 	return o.inner.Clear(ctx)
 }
 
-func (o *countingObjectStore) GetAll(ctx context.Context, r *idb.KeyRange) ([]idb.Record, error) {
+func (o *countingObjectStore) GetAll(ctx context.Context, query any, count ...uint32) ([]idb.Record, error) {
 	o.db.recordGetAll(o.name)
-	return o.inner.GetAll(ctx, r)
+	return o.inner.GetAll(ctx, query, count...)
 }
 
-func (o *countingObjectStore) GetAllKeys(ctx context.Context, r *idb.KeyRange) ([]string, error) {
-	return o.inner.GetAllKeys(ctx, r)
+func (o *countingObjectStore) GetAllKeys(ctx context.Context, query any, count ...uint32) ([]string, error) {
+	return o.inner.GetAllKeys(ctx, query, count...)
 }
 
-func (o *countingObjectStore) Count(ctx context.Context, r *idb.KeyRange) (int64, error) {
-	return o.inner.Count(ctx, r)
+func (o *countingObjectStore) Count(ctx context.Context, query any) (int64, error) {
+	return o.inner.Count(ctx, query)
 }
 
-func (o *countingObjectStore) DeleteRange(ctx context.Context, r idb.KeyRange) (int64, error) {
-	return o.inner.DeleteRange(ctx, r)
+func (o *countingObjectStore) DeleteRange(ctx context.Context, query any) (int64, error) {
+	return o.inner.DeleteRange(ctx, query)
 }
 
 func (o *countingObjectStore) Index(name string) idb.Index {
 	return o.inner.Index(name)
 }
 
-func (o *countingObjectStore) OpenCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
-	return o.inner.OpenCursor(ctx, r, dir)
+func (o *countingObjectStore) OpenCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
+	return o.inner.OpenCursor(ctx, query, dir)
 }
 
-func (o *countingObjectStore) OpenKeyCursor(ctx context.Context, r *idb.KeyRange, dir idb.CursorDirection) (idb.Cursor, error) {
-	return o.inner.OpenKeyCursor(ctx, r, dir)
+func (o *countingObjectStore) OpenKeyCursor(ctx context.Context, query any, dir idb.CursorDirection) (idb.Cursor, error) {
+	return o.inner.OpenKeyCursor(ctx, query, dir)
 }
 
 func TestNew(t *testing.T) {

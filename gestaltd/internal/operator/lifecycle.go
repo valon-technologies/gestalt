@@ -99,6 +99,13 @@ type Lifecycle struct {
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
+	// devServeEligible enables manifest dev: activation. Set true only for an
+	// unlocked `gestaltd serve`; false for lock/sync/validate and serve --locked,
+	// so committed lockfiles build and pin dev UIs normally.
+	devServeEligible bool
+	// forcedDevUIKeys marks specific UI keys dev-active even when devServeEligible
+	// is false (serve --locked --config … --path … overlay mode).
+	forcedDevUIKeys map[string]bool
 }
 
 type StatePaths struct {
@@ -176,6 +183,35 @@ func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
 func (l *Lifecycle) WithProviderResolver(resolver *providerregistry.Resolver) *Lifecycle {
 	l.providerResolver = resolver
 	return l
+}
+
+func (l *Lifecycle) WithDevServeEligible(v bool) *Lifecycle {
+	l.devServeEligible = v
+	return l
+}
+
+func (l *Lifecycle) WithForcedDevUIKeys(keys []string) *Lifecycle {
+	if len(keys) == 0 {
+		l.forcedDevUIKeys = nil
+		return l
+	}
+	l.forcedDevUIKeys = make(map[string]bool, len(keys))
+	for _, key := range keys {
+		if key = strings.TrimSpace(key); key != "" {
+			l.forcedDevUIKeys[key] = true
+		}
+	}
+	return l
+}
+
+func (l *Lifecycle) shouldMarkUIForDev(name string) bool {
+	if l == nil {
+		return false
+	}
+	if l.forcedDevUIKeys[name] {
+		return true
+	}
+	return l.devServeEligible
 }
 
 func (l *Lifecycle) metadataHTTPClient() *http.Client {
@@ -320,7 +356,7 @@ func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, s
 }
 
 func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
@@ -357,7 +393,7 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 }
 
 func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
@@ -535,6 +571,9 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 		if entry == nil {
 			continue
 		}
+		if entry.DevActive {
+			continue
+		}
 		if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() && pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
 			if _, err := l.applyConfiguredUIProvider(paths, nil, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
 				return nil, err
@@ -699,6 +738,9 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && sourceBacked(&entry.ProviderEntry) {
+			if entry.DevActive {
+				continue
+			}
 			if _, existed := existingUIEntries[name]; !existed && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 				if app := cfg.Apps[name]; app != nil && strings.TrimSpace(app.UI) == "" && strings.TrimSpace(app.MountPath) != "" {
 					continue
@@ -895,11 +937,75 @@ func defaultLockfilePath(configPath string) string {
 	return filepath.Join(dir, LockfileName)
 }
 
-func loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
+func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
+	var cfg *config.Config
+	var err error
 	if allowMissingEnv {
-		return config.LoadAllowMissingEnvPaths(configPaths)
+		cfg, err = config.LoadAllowMissingEnvPaths(configPaths)
+	} else {
+		cfg, err = config.LoadPaths(configPaths)
 	}
-	return config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, err
+	}
+	if l != nil && (l.devServeEligible || len(l.forcedDevUIKeys) > 0) {
+		if err := l.markDevActiveUIProviders(cfg); err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
+}
+
+func (l *Lifecycle) markDevActiveUIProviders(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+		entry := cfg.Providers.UI[name]
+		if entry == nil || !l.shouldMarkUIForDev(name) {
+			continue
+		}
+		if !entry.HasLocalSource() {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q is not configured with a local source.path override", name)
+			}
+			continue
+		}
+		normalized, err := normalizeLocalSource(entry.SourcePath())
+		if err != nil {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q: resolve local source: %w", name, err)
+			}
+			continue
+		}
+		_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
+		if err != nil {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q: read source manifest: %w", name, err)
+			}
+			continue
+		}
+		if providerpkg.EffectiveDev(manifest) == nil {
+			if l.forcedDevUIKeys[name] {
+				return fmt.Errorf("--path target %q has no dev: block; cannot dev-serve under --locked", name)
+			}
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("ui %q: decode config: %w", name, err)
+		}
+		if err := bindResolvedUIManifest(&entry.ProviderEntry, normalized.manifestPath, manifest, configMap); err != nil {
+			return fmt.Errorf("ui %q: %w", name, err)
+		}
+		workdir := normalized.sourceDir
+		if w := strings.TrimSpace(manifest.Dev.Workdir); w != "" && w != "." {
+			workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(w))
+		}
+		entry.DevActive = true
+		entry.ResolvedDevWorkdir = workdir
+	}
+	return nil
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
@@ -911,11 +1017,21 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (
 }
 
 func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked bool) (*config.Config, map[string]string, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, false)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	if l.devServeEligible || len(l.forcedDevUIKeys) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+			entry := cfg.Providers.UI[name]
+			if entry != nil && entry.DevActive {
+				if err := resolveUIThemeConfig(paths, name, entry); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+	}
 	mode := artifactModeMaterialize
 	if locked {
 		mode = artifactModeReadOnly
@@ -950,7 +1066,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 }
 
 func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string, state StatePaths) (*config.Config, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, false)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -975,7 +1091,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 }
 
 func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []string, state StatePaths, opts StaticValidationOptions) (*config.Config, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -1043,7 +1159,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if recorder != nil {
 		recorder.Begin(syncActionForArtifactMode(mode), configPaths, mode == artifactModeCheck, opts.Parallelism)
 	}
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
@@ -1709,7 +1825,7 @@ func configHasLocalProviderSources(cfg *config.Config) bool {
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
+		if entry != nil && !entry.DevActive && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
 			return true
 		}
 	}
@@ -2286,6 +2402,9 @@ func lockFreshForConfig(cfg *config.Config, paths lifecyclePaths, lock *Lockfile
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || !providerRequiresCommittedLock(&entry.ProviderEntry) {
+			continue
+		}
+		if entry.DevActive {
 			continue
 		}
 		lockEntry, found := lock.Providers.UI[name]
@@ -3426,6 +3545,9 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 		if entry == nil {
 			continue
 		}
+		if entry.DevActive {
+			continue
+		}
 		configMap, err := config.NodeToMap(entry.Config)
 		if err != nil {
 			return fmt.Errorf("decode ui %q config: %w", name, err)
@@ -3455,6 +3577,9 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 	}
 
 	for _, work := range ordered {
+		if err := resolveUIThemeConfig(paths, work.name, work.entry); err != nil {
+			return err
+		}
 		if work.install != nil {
 			resolvedAssetRoot, err := bindPreparedUIInstall(&work.entry.ProviderEntry, work.subject, work.destDir, work.configMap, work.install)
 			if err != nil {
@@ -3473,7 +3598,7 @@ func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfil
 }
 
 func localUIParallelPrepareCandidate(paths lifecyclePaths, entry *config.UIEntry, mode artifactMode) bool {
-	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
+	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() || entry.DevActive {
 		return false
 	}
 	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
@@ -5240,6 +5365,57 @@ func validateLockedInstalledManifest(kind, name, subject string, manifest *provi
 		return fmt.Errorf("locked source manifest version mismatch for %s: got %q, want %q", subject, manifest.Version, entry.Version)
 	}
 	return validateLockedArchivePolicy(subject, archivePolicyKind(kind), manifest, entry, platform, resolvedKey)
+}
+
+// resolveUIThemeConfig decodes the optional theme block of a mounted ui's
+// config and resolves its paths against the deployment config directory at
+// sync time. Unlike resolveProviderIcon, a configured-but-missing path is an
+// error: theme content is served verbatim and a typo would otherwise degrade
+// silently to the empty stylesheet.
+func resolveUIThemeConfig(paths lifecyclePaths, name string, entry *config.UIEntry) error {
+	entry.ResolvedThemeStylesheet = ""
+	entry.ResolvedThemeAssetsDir = ""
+	theme, err := config.UIThemeConfigFromProviderConfig(entry.Config)
+	if err != nil {
+		return fmt.Errorf("decode ui %q theme config: %w", name, err)
+	}
+	if theme == nil {
+		return nil
+	}
+	if stylesheet := strings.TrimSpace(theme.Stylesheet); stylesheet != "" {
+		resolved := resolveUIThemePath(paths.configDir, stylesheet)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return fmt.Errorf("ui %q theme stylesheet not found at %s: %w", name, resolved, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("ui %q theme stylesheet at %s is a directory", name, resolved)
+		}
+		entry.ResolvedThemeStylesheet = resolved
+	}
+	if assetsDir := strings.TrimSpace(theme.AssetsDir); assetsDir != "" {
+		resolved := resolveUIThemePath(paths.configDir, assetsDir)
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return fmt.Errorf("ui %q theme assetsDir not found at %s: %w", name, resolved, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("ui %q theme assetsDir at %s is not a directory", name, resolved)
+		}
+		entry.ResolvedThemeAssetsDir = resolved
+	}
+	return nil
+}
+
+func resolveUIThemePath(configDir, value string) string {
+	resolved := filepath.FromSlash(value)
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(configDir, resolved)
+	}
+	if abs, err := filepath.Abs(resolved); err == nil {
+		return abs
+	}
+	return filepath.Clean(resolved)
 }
 
 func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath string, app *config.ProviderEntry) {

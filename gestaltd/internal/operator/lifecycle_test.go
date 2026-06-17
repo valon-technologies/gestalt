@@ -17,7 +17,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"unicode"
 
@@ -399,81 +398,6 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 	return manifestPath
 }
 
-func writeLocalMCPSpecPlugin(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	root := filepath.Join(dir, name)
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", root, err)
-	}
-	manifestPath := filepath.Join(root, "manifest.yaml")
-	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/" + name,
-		Version:     "0.0.1-alpha.1",
-		DisplayName: testDisplayName(name),
-		Spec: &providermanifestv1.Spec{
-			Surfaces: &providermanifestv1.ProviderSurfaces{
-				MCP: &providermanifestv1.MCPSurface{URL: "https://mcp.example.test"},
-			},
-		},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
-	}
-	return manifestPath
-}
-
-func writeLocalOpenAPIAndMCPSpecPlugin(t *testing.T, dir, name string) string {
-	t.Helper()
-
-	root := filepath.Join(dir, name)
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", root, err)
-	}
-
-	openAPIPath := filepath.Join(root, "openapi.yaml")
-	openAPIDoc := `openapi: "3.1.0"
-info:
-  title: Hybrid
-  version: "1.0.0"
-paths:
-  /status:
-    get:
-      operationId: status
-      responses:
-        "200":
-          description: OK
-`
-	if err := os.WriteFile(openAPIPath, []byte(openAPIDoc), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", openAPIPath, err)
-	}
-
-	manifestPath := filepath.Join(root, "manifest.yaml")
-	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/" + name,
-		Version:     "0.0.1-alpha.1",
-		DisplayName: testDisplayName(name),
-		Spec: &providermanifestv1.Spec{
-			Surfaces: &providermanifestv1.ProviderSurfaces{
-				OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
-				MCP:     &providermanifestv1.MCPSurface{URL: "https://mcp.example.test"},
-			},
-		},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
-	}
-	return manifestPath
-}
-
 func writeLocalExecutableOpenAPIPlugin(t *testing.T, dir, name string, staticOperations, openAPIOperations []string) string {
 	t.Helper()
 
@@ -792,83 +716,30 @@ spec:
 	}
 }
 
-func TestPrepareAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
+func TestPrepareAtPath_RejectsAppInvokesField(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name string
-		body string
-		want string
-	}{
-		{
-			name: "missing plugin",
-			body: `apps:
+	dir := t.TempDir()
+	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source:
-        path: ./caller/manifest.yaml
-      invokes:
-        - operation: ping
-`,
-			want: `apps.caller.invokes[0].app is required`,
-		},
-		{
-			name: "missing operation",
-			body: `apps:
-    caller:
-      source:
-        path: ./caller/manifest.yaml
-      invokes:
-        - app: target
-`,
-			want: `apps.caller.invokes[0].operation or .surface is required`,
-		},
-		{
-			name: "duplicate dependency",
-			body: `apps:
-    caller:
-      source:
-        path: ./caller/manifest.yaml
+        path: %q
       invokes:
         - app: target
           operation: ping
-        - app: target
-          operation: ping
-`,
-			want: `apps.caller.invokes[1] duplicates invokes[0]`,
-		},
-		{
-			name: "non app provider",
-			body: `  cache:
-    shared:
-      source:
-        path: ./cache-manifest.yaml
-      invokes:
-        - app: target
-          operation: ping
-`,
-			want: `providers.cache.shared.invokes is only supported on apps.*`,
-		},
+server:
+`, callerManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			caseDir := t.TempDir()
-			cfgPath := filepath.Join(caseDir, "config.yaml")
-			cfg := requiredComponentConfigWithAPIVersionYAML(t, caseDir, filepath.Join(caseDir, "gestalt.db")) + tc.body + `server:
-` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			_, err := NewLifecycle().PrepareAtPath(cfgPath)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("PrepareAtPath error = %v, want substring %q", err, tc.want)
-			}
-		})
+	_, err := NewLifecycle().PrepareAtPath(cfgPath)
+	if err == nil || !strings.Contains(err.Error(), `field invokes not found`) {
+		t.Fatalf("PrepareAtPath error = %v, want field invokes not found", err)
 	}
 }
 
@@ -955,21 +826,14 @@ func TestPrepareAtPath_RejectsInvalidAppWorkflowCapabilitiesShape(t *testing.T) 
 	}
 }
 
-func TestPrepareAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
+func TestPrepareAtPath_AllowsEffectiveOperationAlias(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
 	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    caller:
-      source:
-        path: %q
-      invokes:
-        - app: target
-          operation: renamed_ping
     target:
       source:
         path: %q
@@ -977,7 +841,7 @@ func TestPrepareAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
         ping:
           alias: renamed_ping
 server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -985,42 +849,6 @@ server:
 
 	if _, err := NewLifecycle().PrepareAtPath(cfgPath); err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
-	}
-}
-
-func TestPrepareAtPath_RejectsHybridExecutableStaticOperationByOriginalNameAfterAlias(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    caller:
-      source:
-        path: %q
-      invokes:
-        - app: target
-          operation: ping
-    target:
-      source:
-        path: %q
-      allowedOperations:
-        ping:
-          alias: renamed_ping
-        status:
-          alias: renamed_status
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "ping" on app "target"`) {
-		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
 	}
 }
 
@@ -1051,7 +879,7 @@ server:
 	}
 }
 
-func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
+func TestPrepareAtPath_AllowsManagedPluginsOnFirstPrepare(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1109,9 +937,6 @@ func TestPrepareAtPath_AllowsManagedPluginInvokesOnFirstPrepare(t *testing.T) {
 	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
     caller:
       source: %s/providers/caller/v%s/provider-release.yaml
-      invokes:
-        - app: target
-          operation: ping
     target:
       source: %s/providers/target/v%s/provider-release.yaml
 server:
@@ -1131,46 +956,11 @@ server:
 	}
 }
 
-func TestPrepareAtPath_AllowsSessionCatalogOnlyInvokesTarget(t *testing.T) {
+func TestLoadForExecutionAtPath_RejectsAppInvokesField(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalMCPSpecPlugin(t, dir, "target")
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    caller:
-      source:
-        path: %q
-      invokes:
-        - app: target
-          operation: private_search
-          runAs:
-            subject:
-              id: service_account:agent
-            applyByDefault: false
-    target:
-      source:
-        path: %q
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	if _, err := NewLifecycle().PrepareAtPath(cfgPath); err != nil {
-		t.Fatalf("PrepareAtPath: %v", err)
-	}
-}
-
-func TestPrepareAtPath_DoesNotWriteLockfileWhenInvokesValidationFails(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
@@ -1180,169 +970,16 @@ func TestPrepareAtPath_DoesNotWriteLockfileWhenInvokesValidationFails(t *testing
       invokes:
         - app: target
           operation: missing
-    target:
-      source:
-        path: %q
 server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on app "target"`) {
-		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
-	}
-	if _, statErr := os.Stat(filepath.Join(dir, LockfileName)); !os.IsNotExist(statErr) {
-		t.Fatalf("lockfile should not be written on invokes validation failure, got stat error %v", statErr)
-	}
-}
-
-func TestPrepareAtPath_RejectsHybridMCPTypoAsUnknownOperation(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalOpenAPIAndMCPSpecPlugin(t, dir, "target")
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    caller:
-      source:
-        path: %q
-      invokes:
-        - app: target
-          operation: private_search
-    target:
-      source:
-        path: %q
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "private_search" on app "target"`) {
-		t.Fatalf("PrepareAtPath error = %v, want unknown operation error", err)
-	}
-	if strings.Contains(err.Error(), "session-catalog-only operation") {
-		t.Fatalf("PrepareAtPath error = %v, want unknown operation classification", err)
-	}
-}
-
-func TestLoadForExecutionAtPath_RejectsInvalidPluginInvokesDependency(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    caller:
-      source:
-        path: %q
-      invokes:
-        - app: target
-          operation: missing
-    target:
-      source:
-        path: %q
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, callerManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
 	_, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "missing" on app "target"`) {
-		t.Fatalf("LoadForExecutionAtPath error = %v, want unknown operation error", err)
-	}
-}
-
-func TestLoadForExecutionAtPath_CachesInvokesTargetCatalogResolution(t *testing.T) {
-	t.Parallel()
-
-	var docHits atomic.Int32
-	docSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		docHits.Add(1)
-		w.Header().Set("Content-Type", "application/yaml")
-		_, _ = w.Write([]byte(`openapi: "3.1.0"
-info:
-  title: Remote Target
-  version: "1.0.0"
-paths:
-  /status:
-    get:
-      operationId: status
-      responses:
-        "200":
-          description: OK
-  /ping:
-    get:
-      operationId: ping
-      responses:
-        "200":
-          description: OK
-`))
-	}))
-	t.Cleanup(docSrv.Close)
-
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-
-	targetRoot := filepath.Join(dir, "target")
-	if err := os.MkdirAll(targetRoot, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", targetRoot, err)
-	}
-	targetManifestPath := filepath.Join(targetRoot, "manifest.yaml")
-	targetManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindApp,
-		Source:      "github.com/test/apps/target",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Target",
-		Spec: &providermanifestv1.Spec{
-			Surfaces: &providermanifestv1.ProviderSurfaces{
-				OpenAPI: &providermanifestv1.OpenAPISurface{Document: docSrv.URL},
-			},
-		},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat(target): %v", err)
-	}
-	if err := os.WriteFile(targetManifestPath, targetManifest, 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", targetManifestPath, err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`apps:
-    caller:
-      source:
-        path: %q
-      invokes:
-        - app: target
-          operation: status
-        - app: target
-          operation: ping
-    target:
-      source:
-        path: %q
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	if _, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false); err != nil {
-		t.Fatalf("LoadForExecutionAtPath: %v", err)
-	}
-	if got := docHits.Load(); got != 1 {
-		t.Fatalf("OpenAPI document hits = %d, want 1", got)
+	if err == nil || !strings.Contains(err.Error(), `field invokes not found`) {
+		t.Fatalf("LoadForExecutionAtPath error = %v, want field invokes not found", err)
 	}
 }
 
@@ -1703,6 +1340,145 @@ server:
 	}
 	if cfgLoaded.Providers.UI["roadmap"].ResolvedManifest == nil {
 		t.Fatal(`Providers.UI["roadmap"].ResolvedManifest = nil`)
+	}
+}
+
+func TestLoadForExecutionAtPath_ResolvesMountedUIThemeConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		themeYAML      string
+		wantStylesheet string
+		wantAssetsDir  string
+		wantErr        string
+	}{
+		{
+			name: "stylesheet and assetsDir resolved against the config dir",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+          assetsDir: ./theme/assets
+`,
+			wantStylesheet: filepath.Join("theme", "tenant.css"),
+			wantAssetsDir:  filepath.Join("theme", "assets"),
+		},
+		{
+			name: "no theme block leaves theme paths empty",
+		},
+		{
+			name: "missing stylesheet fails sync",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/missing.css
+`,
+			wantErr: "theme stylesheet not found",
+		},
+		{
+			name: "assetsDir pointing at a file fails sync",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+          assetsDir: ./theme/tenant.css
+`,
+			wantErr: "is not a directory",
+		},
+		{
+			name: "unknown theme key fails decode",
+			themeYAML: `      config:
+        theme:
+          stylesheet: ./theme/tenant.css
+          asetsDir: ./theme/assets
+`,
+			wantErr: "theme config",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			uiDir := filepath.Join(dir, "ui")
+			if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
+				t.Fatalf("MkdirAll ui dist: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+				t.Fatalf("WriteFile index.html: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+				t.Fatalf("WriteFile build.sh: %v", err)
+			}
+			manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+				Kind:        providermanifestv1.KindUI,
+				Source:      "github.com/testowner/web/roadmap",
+				Version:     "0.0.1-alpha.1",
+				DisplayName: "Roadmap UI",
+				Build: &providermanifestv1.SourceBuild{
+					Command: []string{"sh", "./build.sh"},
+				},
+				Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
+			}, providerpkg.ManifestFormatYAML)
+			if err != nil {
+				t.Fatalf("EncodeManifest: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(uiDir, "manifest.yaml"), manifest, 0o644); err != nil {
+				t.Fatalf("WriteFile manifest: %v", err)
+			}
+			if err := os.MkdirAll(filepath.Join(dir, "theme", "assets"), 0o755); err != nil {
+				t.Fatalf("MkdirAll theme assets: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "theme", "tenant.css"), []byte(":root{--brand:#123456;}"), 0o644); err != nil {
+				t.Fatalf("WriteFile tenant.css: %v", err)
+			}
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      source:
+        path: ./ui/manifest.yaml
+      path: /roadmap
+` + tc.themeYAML + `server:
+` + requiredServerIndexedDBYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			loaded, _, err := NewLifecycle().LoadForExecutionAtPath(cfgPath, false)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("LoadForExecutionAtPath error = %q, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadForExecutionAtPath: %v", err)
+			}
+
+			entry := loaded.Providers.UI["roadmap"]
+			if entry == nil {
+				t.Fatal(`Providers.UI["roadmap"] = nil`)
+			}
+			wantStylesheet := ""
+			if tc.wantStylesheet != "" {
+				wantStylesheet = filepath.Join(dir, tc.wantStylesheet)
+			}
+			if got := entry.ResolvedThemeStylesheet; got != wantStylesheet {
+				t.Fatalf("ResolvedThemeStylesheet = %q, want %q", got, wantStylesheet)
+			}
+			wantAssetsDir := ""
+			if tc.wantAssetsDir != "" {
+				wantAssetsDir = filepath.Join(dir, tc.wantAssetsDir)
+			}
+			if got := entry.ResolvedThemeAssetsDir; got != wantAssetsDir {
+				t.Fatalf("ResolvedThemeAssetsDir = %q, want %q", got, wantAssetsDir)
+			}
+		})
 	}
 }
 

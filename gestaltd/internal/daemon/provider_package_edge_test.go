@@ -236,35 +236,6 @@ func TestRun_ProviderPackageAndReleaseBuildsSourceUIAssetsBeforePackaging(t *tes
 	}
 }
 
-func TestSourceUIHandlerBuildsSourceUIOutput(t *testing.T) {
-	t.Parallel()
-
-	if runtime.GOOS == "windows" {
-		t.Skip("source build fixture uses POSIX shell")
-	}
-
-	uiDir := newSourceBuiltUIReleaseFixture(t, t.TempDir())
-	manifestPath := filepath.Join(uiDir, providerpkg.ManifestFile)
-
-	handler, err := sourceUIHandler(manifestPath)
-	if err != nil {
-		t.Fatalf("sourceUIHandler: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(uiDir, "ui", "out", "index.html")); err != nil {
-		t.Fatalf("expected built index.html: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET / status = %d, want 200; body=%q", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "<html>") {
-		t.Fatalf("GET / body = %q, want built html", rec.Body.String())
-	}
-}
-
 func TestRun_ProviderPackageAndReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	t.Parallel()
 

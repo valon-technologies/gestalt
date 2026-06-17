@@ -152,103 +152,103 @@ func NewAuthentication(conn grpc.ClientConnInterface) *Authentication {
 // Authorize is the ergonomic form of [Authentication.AuthorizeRaw].
 func (c *Authentication) Authorize(ctx context.Context, responseType string, clientId string, redirectUri string, scope string, state string) (*AuthorizeResponse, error) {
 	request := &AuthorizeRequest{ResponseType: responseType, ClientId: clientId, RedirectUri: redirectUri, Scope: scope, State: state}
-	response, err := c.client.Authorize(ctx, toWireAuthorizeRequest(request))
+	response, err := c.client.Authorize(ctx, ToWireAuthorizeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthorizeResponse(response), nil
+	return FromWireAuthorizeResponse(response), nil
 }
 
 // AuthorizeRaw is the faithful form of [Authentication.Authorize].
 func (c *Authentication) AuthorizeRaw(ctx context.Context, request *AuthorizeRequest) (*AuthorizeResponse, error) {
-	response, err := c.client.Authorize(ctx, toWireAuthorizeRequest(request))
+	response, err := c.client.Authorize(ctx, ToWireAuthorizeRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireAuthorizeResponse(response), nil
+	return FromWireAuthorizeResponse(response), nil
 }
 
 // Token is the ergonomic form of [Authentication.TokenRaw].
 func (c *Authentication) Token(ctx context.Context, grantType string, code string, redirectUri string, clientId string, state string, scope string, subjectToken string, subjectTokenType string) (*TokenResponse, error) {
 	request := &TokenRequest{GrantType: grantType, Code: code, RedirectUri: redirectUri, ClientId: clientId, State: state, Scope: scope, SubjectToken: subjectToken, SubjectTokenType: subjectTokenType}
-	response, err := c.client.Token(ctx, toWireTokenRequest(request))
+	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireTokenResponse(response), nil
+	return FromWireTokenResponse(response), nil
 }
 
 // TokenRaw is the faithful form of [Authentication.Token].
 func (c *Authentication) TokenRaw(ctx context.Context, request *TokenRequest) (*TokenResponse, error) {
-	response, err := c.client.Token(ctx, toWireTokenRequest(request))
+	response, err := c.client.Token(ctx, ToWireTokenRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireTokenResponse(response), nil
+	return FromWireTokenResponse(response), nil
 }
 
 // Introspect is the ergonomic form of [Authentication.IntrospectRaw].
 func (c *Authentication) Introspect(ctx context.Context, token string, tokenTypeHint string) (*IntrospectResponse, error) {
 	request := &IntrospectRequest{Token: token, TokenTypeHint: tokenTypeHint}
-	response, err := c.client.Introspect(ctx, toWireIntrospectRequest(request))
+	response, err := c.client.Introspect(ctx, ToWireIntrospectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireIntrospectResponse(response), nil
+	return FromWireIntrospectResponse(response), nil
 }
 
 // IntrospectRaw is the faithful form of [Authentication.Introspect].
 func (c *Authentication) IntrospectRaw(ctx context.Context, request *IntrospectRequest) (*IntrospectResponse, error) {
-	response, err := c.client.Introspect(ctx, toWireIntrospectRequest(request))
+	response, err := c.client.Introspect(ctx, ToWireIntrospectRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireIntrospectResponse(response), nil
+	return FromWireIntrospectResponse(response), nil
 }
 
 // ListGrants calls the ListGrants RPC of Authentication.
 func (c *Authentication) ListGrants(ctx context.Context, request *ListGrantsRequest) (*ListGrantsResponse, error) {
-	response, err := c.client.ListGrants(ctx, toWireListGrantsRequest(request))
+	response, err := c.client.ListGrants(ctx, ToWireListGrantsRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireListGrantsResponse(response), nil
+	return FromWireListGrantsResponse(response), nil
 }
 
 // GetGrant is the ergonomic form of [Authentication.GetGrantRaw].
 func (c *Authentication) GetGrant(ctx context.Context, grantId string) (*GetGrantResponse, error) {
 	request := &GetGrantRequest{GrantId: grantId}
-	response, err := c.client.GetGrant(ctx, toWireGetGrantRequest(request))
+	response, err := c.client.GetGrant(ctx, ToWireGetGrantRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireGetGrantResponse(response), nil
+	return FromWireGetGrantResponse(response), nil
 }
 
 // GetGrantRaw is the faithful form of [Authentication.GetGrant].
 func (c *Authentication) GetGrantRaw(ctx context.Context, request *GetGrantRequest) (*GetGrantResponse, error) {
-	response, err := c.client.GetGrant(ctx, toWireGetGrantRequest(request))
+	response, err := c.client.GetGrant(ctx, ToWireGetGrantRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireGetGrantResponse(response), nil
+	return FromWireGetGrantResponse(response), nil
 }
 
 // RevokeGrant is the ergonomic form of [Authentication.RevokeGrantRaw].
 func (c *Authentication) RevokeGrant(ctx context.Context, grantId string) (*RevokeGrantResponse, error) {
 	request := &RevokeGrantRequest{GrantId: grantId}
-	response, err := c.client.RevokeGrant(ctx, toWireRevokeGrantRequest(request))
+	response, err := c.client.RevokeGrant(ctx, ToWireRevokeGrantRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRevokeGrantResponse(response), nil
+	return FromWireRevokeGrantResponse(response), nil
 }
 
 // RevokeGrantRaw is the faithful form of [Authentication.RevokeGrant].
 func (c *Authentication) RevokeGrantRaw(ctx context.Context, request *RevokeGrantRequest) (*RevokeGrantResponse, error) {
-	response, err := c.client.RevokeGrant(ctx, toWireRevokeGrantRequest(request))
+	response, err := c.client.RevokeGrant(ctx, ToWireRevokeGrantRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireRevokeGrantResponse(response), nil
+	return FromWireRevokeGrantResponse(response), nil
 }

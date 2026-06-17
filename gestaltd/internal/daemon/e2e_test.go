@@ -950,9 +950,6 @@ apps:
   caller:
     source:
       path: %s
-    invokes:
-      - app: target
-        operation: echo
   target:
     source: %s
     allowedOperations:
@@ -1018,12 +1015,11 @@ apps:
 	}
 }
 
-func TestE2EValidateRejectsInvalidAppInvokesDependency(t *testing.T) {
+func TestE2EValidateRejectsAppInvokesField(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	callerDir := setupAppDirWithVersion(t, filepath.Join(dir, "caller"), "0.0.1-alpha.1")
-	targetDir := setupAppDirWithVersion(t, filepath.Join(dir, "target"), "0.0.1-alpha.1")
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 
 	cfgPath := filepath.Join(dir, "config.yaml")
@@ -1047,10 +1043,7 @@ apps:
     invokes:
       - app: target
         operation: missing
-  target:
-    source:
-      path: %s
-`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, callerDir), componentProviderManifestPath(t, targetDir))
+`, e2eLoopbackBaseURL(8080), indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, callerDir))
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -1059,8 +1052,8 @@ apps:
 	if err == nil {
 		t.Fatalf("expected validate to fail, got success:\n%s", out)
 	}
-	if !strings.Contains(string(out), `unknown effective operation`) {
-		t.Fatalf("expected validate output to mention missing invokes operation, got: %s", out)
+	if !strings.Contains(string(out), `field invokes not found`) {
+		t.Fatalf("expected validate output to reject invokes field, got: %s", out)
 	}
 }
 

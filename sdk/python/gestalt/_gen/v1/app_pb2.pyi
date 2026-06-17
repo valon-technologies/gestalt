@@ -162,6 +162,7 @@ class AppInvokeRequest(_message.Message):
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_FIELD_NUMBER: _ClassVar[int]
     app: str
     operation: str
     params: _struct_pb2.Struct
@@ -170,7 +171,8 @@ class AppInvokeRequest(_message.Message):
     idempotency_key: str
     credential_mode: str
     context: RequestContext
-    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ...) -> None: ...
+    run_as: SubjectContext
+    def __init__(self, app: _Optional[str] = ..., operation: _Optional[str] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., credential_mode: _Optional[str] = ..., context: _Optional[_Union[RequestContext, _Mapping]] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ...) -> None: ...
 
 class AppInvokeGraphQLRequest(_message.Message):
     __slots__ = ()

@@ -39,18 +39,18 @@ func NewTest(conn grpc.ClientConnInterface) *Test {
 // HelloWorld is the ergonomic form of [Test.HelloWorldRaw].
 // The response collapses to its message field.
 func (c *Test) HelloWorld(ctx context.Context, request *HelloWorldRequest) (string, error) {
-	response, err := c.client.HelloWorld(ctx, toWireHelloWorldRequest(request))
+	response, err := c.client.HelloWorld(ctx, ToWireHelloWorldRequest(request))
 	if err != nil {
 		return "", toGestaltError(err)
 	}
-	return fromWireHelloWorldResponse(response).Message, nil
+	return FromWireHelloWorldResponse(response).Message, nil
 }
 
 // HelloWorldRaw is the faithful form of [Test.HelloWorld].
 func (c *Test) HelloWorldRaw(ctx context.Context, request *HelloWorldRequest) (*HelloWorldResponse, error) {
-	response, err := c.client.HelloWorld(ctx, toWireHelloWorldRequest(request))
+	response, err := c.client.HelloWorld(ctx, ToWireHelloWorldRequest(request))
 	if err != nil {
 		return nil, toGestaltError(err)
 	}
-	return fromWireHelloWorldResponse(response), nil
+	return FromWireHelloWorldResponse(response), nil
 }

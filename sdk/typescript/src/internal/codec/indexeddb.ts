@@ -21,6 +21,8 @@ import type {
   DeleteResponse,
   IndexQueryRequest,
   IndexSchema,
+  IndexedDBQuery,
+  IndexedDBQueryQuery,
   KeyRange,
   KeyResponse,
   KeyValue,
@@ -249,7 +251,7 @@ export function fromWireCursorCommandCommand(
 
 export function toWireCursorEntry(value: Init<CursorEntry>): wire.CursorEntry {
   return create(wire.CursorEntrySchema, {
-    key: (value.key ?? []).map(toWireKeyValue),
+    ...(value.key !== undefined ? { key: toWireKeyValue(value.key) } : {}),
     primaryKey: value.primaryKey ?? "",
     ...(value.record !== undefined
       ? { record: toWireRecord(value.record) }
@@ -259,7 +261,7 @@ export function toWireCursorEntry(value: Init<CursorEntry>): wire.CursorEntry {
 
 export function fromWireCursorEntry(value: wire.CursorEntry): CursorEntry {
   return {
-    key: value.key.map(fromWireKeyValue),
+    ...(value.key !== undefined ? { key: fromWireKeyValue(value.key) } : {}),
     primaryKey: value.primaryKey,
     ...(value.record !== undefined
       ? { record: fromWireRecord(value.record) }
@@ -271,7 +273,7 @@ export function toWireCursorKeyTarget(
   value: Init<CursorKeyTarget>,
 ): wire.CursorKeyTarget {
   return create(wire.CursorKeyTargetSchema, {
-    key: (value.key ?? []).map(toWireKeyValue),
+    ...(value.key !== undefined ? { key: toWireKeyValue(value.key) } : {}),
   });
 }
 
@@ -279,7 +281,7 @@ export function fromWireCursorKeyTarget(
   value: wire.CursorKeyTarget,
 ): CursorKeyTarget {
   return {
-    key: value.key.map(fromWireKeyValue),
+    ...(value.key !== undefined ? { key: fromWireKeyValue(value.key) } : {}),
   };
 }
 
@@ -363,10 +365,10 @@ export function toWireIndexQueryRequest(
   return create(wire.IndexQueryRequestSchema, {
     store: value.store ?? "",
     index: value.index ?? "",
-    values: (value.values ?? []).map(toWireTypedValue),
-    ...(value.range !== undefined
-      ? { range: toWireKeyRange(value.range) }
+    ...(value.query !== undefined
+      ? { query: toWireIndexedDBQuery(value.query) }
       : {}),
+    ...(value.count !== undefined ? { count: value.count } : {}),
   });
 }
 
@@ -376,10 +378,10 @@ export function fromWireIndexQueryRequest(
   return {
     store: value.store,
     index: value.index,
-    values: value.values.map(fromWireTypedValue),
-    ...(value.range !== undefined
-      ? { range: fromWireKeyRange(value.range) }
+    ...(value.query !== undefined
+      ? { query: fromWireIndexedDBQuery(value.query) }
       : {}),
+    ...(value.count !== undefined ? { count: value.count } : {}),
   };
 }
 
@@ -399,13 +401,55 @@ export function fromWireIndexSchema(value: wire.IndexSchema): IndexSchema {
   };
 }
 
+export function toWireIndexedDBQuery(
+  value: Init<IndexedDBQuery>,
+): wire.IndexedDBQuery {
+  return create(wire.IndexedDBQuerySchema, {
+    query: toWireIndexedDBQueryQuery(value.query ?? { case: undefined }),
+  });
+}
+
+export function fromWireIndexedDBQuery(
+  value: wire.IndexedDBQuery,
+): IndexedDBQuery {
+  return {
+    query: fromWireIndexedDBQueryQuery(value.query),
+  };
+}
+
+export function toWireIndexedDBQueryQuery(
+  value: Init<IndexedDBQueryQuery>,
+): wire.IndexedDBQuery["query"] {
+  switch (value.case) {
+    case "key":
+      return { case: "key", value: toWireKeyValue(value.value) };
+    case "range":
+      return { case: "range", value: toWireKeyRange(value.value) };
+    default:
+      return { case: undefined };
+  }
+}
+
+export function fromWireIndexedDBQueryQuery(
+  value: wire.IndexedDBQuery["query"],
+): IndexedDBQueryQuery {
+  switch (value.case) {
+    case "key":
+      return { case: "key", value: fromWireKeyValue(value.value) };
+    case "range":
+      return { case: "range", value: fromWireKeyRange(value.value) };
+    default:
+      return { case: undefined };
+  }
+}
+
 export function toWireKeyRange(value: Init<KeyRange>): wire.KeyRange {
   return create(wire.KeyRangeSchema, {
     ...(value.lower !== undefined
-      ? { lower: toWireTypedValue(value.lower) }
+      ? { lower: toWireKeyValue(value.lower) }
       : {}),
     ...(value.upper !== undefined
-      ? { upper: toWireTypedValue(value.upper) }
+      ? { upper: toWireKeyValue(value.upper) }
       : {}),
     lowerOpen: value.lowerOpen ?? false,
     upperOpen: value.upperOpen ?? false,
@@ -415,10 +459,10 @@ export function toWireKeyRange(value: Init<KeyRange>): wire.KeyRange {
 export function fromWireKeyRange(value: wire.KeyRange): KeyRange {
   return {
     ...(value.lower !== undefined
-      ? { lower: fromWireTypedValue(value.lower) }
+      ? { lower: fromWireKeyValue(value.lower) }
       : {}),
     ...(value.upper !== undefined
-      ? { upper: fromWireTypedValue(value.upper) }
+      ? { upper: fromWireKeyValue(value.upper) }
       : {}),
     lowerOpen: value.lowerOpen,
     upperOpen: value.upperOpen,
@@ -526,9 +570,10 @@ export function toWireObjectStoreRangeRequest(
 ): wire.ObjectStoreRangeRequest {
   return create(wire.ObjectStoreRangeRequestSchema, {
     store: value.store ?? "",
-    ...(value.range !== undefined
-      ? { range: toWireKeyRange(value.range) }
+    ...(value.query !== undefined
+      ? { query: toWireIndexedDBQuery(value.query) }
       : {}),
+    ...(value.count !== undefined ? { count: value.count } : {}),
   });
 }
 
@@ -537,9 +582,10 @@ export function fromWireObjectStoreRangeRequest(
 ): ObjectStoreRangeRequest {
   return {
     store: value.store,
-    ...(value.range !== undefined
-      ? { range: fromWireKeyRange(value.range) }
+    ...(value.query !== undefined
+      ? { query: fromWireIndexedDBQuery(value.query) }
       : {}),
+    ...(value.count !== undefined ? { count: value.count } : {}),
   };
 }
 
@@ -584,13 +630,12 @@ export function toWireOpenCursorRequest(
 ): wire.OpenCursorRequest {
   return create(wire.OpenCursorRequestSchema, {
     store: value.store ?? "",
-    ...(value.range !== undefined
-      ? { range: toWireKeyRange(value.range) }
+    index: value.index ?? "",
+    ...(value.query !== undefined
+      ? { query: toWireIndexedDBQuery(value.query) }
       : {}),
     direction: (value.direction ?? 0) as wire.CursorDirection,
     keysOnly: value.keysOnly ?? false,
-    index: value.index ?? "",
-    values: (value.values ?? []).map(toWireTypedValue),
   });
 }
 
@@ -599,13 +644,12 @@ export function fromWireOpenCursorRequest(
 ): OpenCursorRequest {
   return {
     store: value.store,
-    ...(value.range !== undefined
-      ? { range: fromWireKeyRange(value.range) }
+    index: value.index,
+    ...(value.query !== undefined
+      ? { query: fromWireIndexedDBQuery(value.query) }
       : {}),
     direction: value.direction,
     keysOnly: value.keysOnly,
-    index: value.index,
-    values: value.values.map(fromWireTypedValue),
   };
 }
 

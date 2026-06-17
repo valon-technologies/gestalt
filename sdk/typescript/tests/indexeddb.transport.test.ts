@@ -14,6 +14,8 @@ import {
   AlreadyExistsError,
   TransactionError,
   ColumnType,
+  bound,
+  only,
 } from "../src/index.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
@@ -271,16 +273,16 @@ describe("IndexedDB transport", () => {
 
     const tx = await db.transaction([store], "readwrite");
     const txos = tx.objectStore(store);
-    expect(await txos.index("by_status").count(undefined, "active")).toBe(3);
-    expect(await txos.index("by_status").getAllKeys(undefined, "active")).toHaveLength(3);
-    expect(await txos.deleteRange({ lower: "b", upper: "c" })).toBe(2);
+    expect(await txos.index("by_status").count("active")).toBe(3);
+    expect(await txos.index("by_status").getAllKeys("active")).toHaveLength(3);
+    expect(await txos.deleteRange(bound("b", "c"))).toBe(2);
     expect(await txos.index("by_status").delete("active")).toBe(2);
     await txos.clear();
     expect(await txos.count()).toBe(0);
     await tx.abort();
 
     expect(await os.count()).toBe(4);
-    expect(await os.index("by_status").count(undefined, "inactive")).toBe(1);
+    expect(await os.index("by_status").count("inactive")).toBe(1);
   });
 
   test("named target env selects the requested binding", async () => {
@@ -497,7 +499,7 @@ describe("IndexedDB transport", () => {
     await os.put({ id: "r5", status: "inactive", label: "five" });
 
     const idx = os.index("by_status");
-    const cursor = await idx.openCursor(undefined, "active");
+    const cursor = await idx.openCursor({ query: "active" });
     expect(cursor).not.toBeNull();
 
     const keys: string[] = [];
@@ -525,8 +527,8 @@ describe("IndexedDB transport", () => {
     expect(cursor).not.toBeNull();
 
     expect(await cursor!.continue()).toBe(true);
-    expect(cursor!.key).toEqual([1]);
-    expect(await cursor!.continueToKey(cursor!.key)).toBe(true);
+    expect(cursor!.key).toEqual(1);
+    expect(await cursor!.continueToKey(1)).toBe(true);
     expect(cursor!.primaryKey).toBe("b");
   });
 
@@ -574,6 +576,53 @@ describe("IndexedDB transport", () => {
     };
 
     await expect(local.createObjectStore("dupe")).rejects.toThrow(AlreadyExistsError);
+  });
+
+  test("query parity: scalar key and bound range on object store", async () => {
+    const store = "query_parity_scalar";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    await os.put({ id: "a", val: 1 });
+    await os.put({ id: "b", val: 2 });
+    await os.put({ id: "c", val: 3 });
+    await os.put({ id: "d", val: 4 });
+
+    expect(await os.count(only("b"))).toBe(1);
+    expect(await os.getAllKeys(bound("b", "c"))).toEqual(["b", "c"]);
+    expect(await os.deleteRange(bound("b", "c"))).toBe(2);
+    expect(await os.count()).toBe(2);
+  });
+
+  test("query parity: compound array key and range on composite index", async () => {
+    const store = "query_parity_compound";
+    await db.createObjectStore(store, {
+      indexes: [{ name: "by_status_priority", keyPath: ["status", "priority"] }],
+    });
+    const os = db.objectStore(store);
+    const idx = os.index("by_status_priority");
+
+    await os.put({ id: "r1", status: "active", priority: 1 });
+    await os.put({ id: "r2", status: "active", priority: 2 });
+    await os.put({ id: "r3", status: "active", priority: 3 });
+    await os.put({ id: "r4", status: "inactive", priority: 1 });
+
+    expect(await idx.count(["active", 2])).toBe(1);
+    expect(await idx.getAllKeys(["active", 2])).toEqual(["r2"]);
+
+    const range = bound(["active", 1], ["active", 2]);
+    expect(await idx.getAllKeys(range)).toEqual(["r1", "r2"]);
+    expect(await idx.count(range)).toBe(2);
+
+    const cursor = await idx.openCursor({ query: range });
+    expect(cursor).not.toBeNull();
+    const keys: string[] = [];
+    let ok = await cursor!.continue();
+    while (ok) {
+      keys.push(cursor!.primaryKey);
+      ok = await cursor!.continue();
+    }
+    expect(keys).toEqual(["r1", "r2"]);
   });
 
   test("error mapping: deleting missing object store throws NotFoundError", async () => {

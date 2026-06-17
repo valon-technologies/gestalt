@@ -510,7 +510,6 @@ type ProviderEntry struct {
 	UI                string                        `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	Invokes           []AppInvocationDependency     `yaml:"invokes,omitempty"`
 	Capabilities      *AppCapabilitiesConfig        `yaml:"capabilities,omitempty"`
 	IndexedDB         *IndexedDBBindingConfig       `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
@@ -1186,6 +1185,48 @@ type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
 	OwnerApp      string `yaml:"-"`
+
+	// Runtime-resolved theme paths (populated during sync from the entry's
+	// config.theme block, not from YAML).
+	ResolvedThemeStylesheet string `yaml:"-"`
+	ResolvedThemeAssetsDir  string `yaml:"-"`
+
+	// DevActive is set when the provider has a local source and its manifest
+	// declares dev:. ResolvedDevWorkdir is the absolute cwd for the dev command.
+	DevActive          bool   `yaml:"-"`
+	ResolvedDevWorkdir string `yaml:"-"`
+}
+
+// UIThemeConfig is the typed `theme` block of a ui mount's provider config.
+// It points at a deployment-supplied stylesheet served at <mount>/theme.css
+// and an optional asset directory served under <mount>/theme/. Paths are
+// relative to the deployment config file.
+type UIThemeConfig struct {
+	Stylesheet string `yaml:"stylesheet,omitempty"`
+	AssetsDir  string `yaml:"assetsDir,omitempty"`
+}
+
+// UIThemeConfigFromProviderConfig decodes the optional theme block of a ui
+// mount's provider config node. Keys other than theme belong to the mounted
+// provider's own config and are ignored here; keys inside theme are strict.
+func UIThemeConfigFromProviderConfig(node yaml.Node) (*UIThemeConfig, error) {
+	if node.Kind == 0 {
+		return nil, nil
+	}
+	var raw struct {
+		Theme yaml.Node `yaml:"theme"`
+	}
+	if err := node.Decode(&raw); err != nil {
+		return nil, err
+	}
+	if raw.Theme.Kind == 0 || raw.Theme.Tag == "!!null" {
+		return nil, nil
+	}
+	theme := &UIThemeConfig{}
+	if err := decodeYAMLNodeKnownFields(&raw.Theme, theme); err != nil {
+		return nil, fmt.Errorf("theme: %w", err)
+	}
+	return theme, nil
 }
 
 func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
@@ -2330,50 +2371,12 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 // OperationOverride holds optional alias and description for an allowed operation.
 type OperationOverride = providermanifestv1.ManifestOperationOverride
 
-type AppInvocationDependency struct {
-	App            string                            `yaml:"app,omitempty"`
-	Operation      string                            `yaml:"operation,omitempty"`
-	Surface        string                            `yaml:"surface,omitempty"`
-	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
-	RunAs          *AppInvocationRunAsConfig         `yaml:"runAs,omitempty"`
-}
-
 type AppCapabilitiesConfig struct {
 	Workflow *AppWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`
 }
 
 type AppWorkflowCapabilitiesConfig struct {
 	Operations []string `yaml:"operations,omitempty"`
-}
-
-type AppInvocationRunAsConfig struct {
-	Subject        *AppInvocationRunAsSubjectConfig `yaml:"subject,omitempty"`
-	ApplyByDefault *bool                            `yaml:"applyByDefault,omitempty"`
-}
-
-type AppInvocationRunAsSubjectConfig struct {
-	ID                  string `yaml:"id,omitempty"`
-	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
-}
-
-func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
-	if d.RunAs == nil {
-		return nil
-	}
-	if subject := d.RunAs.Subject; subject != nil {
-		return core.NormalizeRunAsSubject(&core.RunAsSubject{
-			SubjectID:           subject.ID,
-			CredentialSubjectID: subject.CredentialSubjectID,
-		})
-	}
-	return nil
-}
-
-func (d AppInvocationDependency) RunAsAppliesByDefault() bool {
-	if d.RunAs == nil || d.RunAs.ApplyByDefault == nil {
-		return true
-	}
-	return *d.RunAs.ApplyByDefault
 }
 
 func Load(path string) (*Config, error) {

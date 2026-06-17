@@ -34,13 +34,13 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithConfigPaths(configPaths []string, state operator.StatePaths, locked bool) (*bootstrapEnv, error) {
+func setupBootstrapWithConfigPaths(configPaths []string, state operator.StatePaths, locked bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, state, locked)
+	return setupBootstrapWithConfigPathsContext(ctx, stop, configPaths, state, locked, forcedDevUIKeys...)
 }
 
-func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, state operator.StatePaths, locked bool) (*bootstrapEnv, error) {
-	cfg, err := loadConfigForExecutionAtPathsWithStatePaths(configPaths, state, locked)
+func setupBootstrapWithConfigPathsContext(ctx context.Context, stop context.CancelFunc, configPaths []string, state operator.StatePaths, locked bool, forcedDevUIKeys ...string) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPathsWithStatePaths(configPaths, state, locked, forcedDevUIKeys...)
 	if err != nil {
 		stop()
 		return nil, err
@@ -129,11 +129,15 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			SessionKey:         deps.EncryptionKey,
 		})
 	}
-	factories.Authorization = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (core.AuthorizationProvider, error) {
-		return providerdrivers.AuthorizationFactory(ctx, name, node, hostServices, providerdrivers.AuthorizationDeps{
-			Gateway:              deps.ProviderGateway,
+	factories.Authorization = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (providerdrivers.AuthorizationBuildResult, error) {
+		result, err := providerdrivers.AuthorizationFactory(ctx, name, node, hostServices, providerdrivers.AuthorizationDeps{
+			Transport:            deps.ProviderTransport,
 			CallerTokenPublicKey: deps.CallerTokenPublicKey,
 		})
+		if err != nil {
+			return providerdrivers.AuthorizationBuildResult{}, err
+		}
+		return result, nil
 	}
 	factories.ExternalCredentials = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, _ bootstrap.Deps) (core.ExternalCredentialProvider, error) {
 		return providerdrivers.ExternalCredentialsFactory(ctx, name, node, hostServices)

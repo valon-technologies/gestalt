@@ -1,78 +1,76 @@
 package gestalt
 
 import (
+	"github.com/valon-technologies/gestalt/sdk/go/client"
 	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
 func recordFromProto(record *proto.Record) (Record, error) {
-	return indexeddb.RecordFromProto(record)
+	return indexeddb.RecordFromProto(client.FromWireRecord(record))
 }
 
 func recordsFromProto(records []*proto.Record) ([]Record, error) {
-	return indexeddb.RecordsFromProto(records)
+	out := make([]*client.Record, len(records))
+	for i, r := range records {
+		out[i] = client.FromWireRecord(r)
+	}
+	return indexeddb.RecordsFromProto(out)
 }
 
 func recordToProto(record Record) (*proto.Record, error) {
-	return indexeddb.RecordToProto(record)
+	native, err := indexeddb.RecordToProto(record)
+	if err != nil {
+		return nil, err
+	}
+	return client.ToWireRecord(native), nil
 }
 
 func recordsToProto(records []Record) ([]*proto.Record, error) {
-	return indexeddb.RecordsToProto(records)
+	native, err := indexeddb.RecordsToProto(records)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*proto.Record, len(native))
+	for i, r := range native {
+		out[i] = client.ToWireRecord(r)
+	}
+	return out, nil
 }
 
 func anyFromTypedValue(v *proto.TypedValue) (any, error) {
-	return indexeddb.AnyFromTypedValue(v)
+	return indexeddb.AnyFromTypedValue(client.FromWireTypedValue(v))
 }
 
 func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
-	return indexeddb.AnyFromTypedValues(values)
+	native := make([]*client.TypedValue, len(values))
+	for i, v := range values {
+		native[i] = client.FromWireTypedValue(v)
+	}
+	return indexeddb.AnyFromTypedValues(native)
 }
 
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
-	return indexeddb.KeyValuesToAny(kvs)
+	native := make([]*client.KeyValue, len(kvs))
+	for i, kv := range kvs {
+		native[i] = client.FromWireKeyValue(kv)
+	}
+	return indexeddb.KeyValuesToAny(native)
 }
 
-func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	return indexeddb.CursorKeyToProto(key, indexCursor)
+func keyValueToAny(kv *proto.KeyValue) (any, error) {
+	return indexeddb.KeyValueToAny(client.FromWireKeyValue(kv))
 }
 
-// EncodeIndexedDBKey serializes an IndexedDB key (re-export).
-func EncodeIndexedDBKey(value any) ([]byte, error) {
-	return indexeddb.EncodeIndexedDBKey(value)
+func cursorKeyToProto(key any) (*proto.KeyValue, error) {
+	native, err := indexeddb.CursorKeyToProto(key)
+	if err != nil {
+		return nil, err
+	}
+	return client.ToWireKeyValue(native), nil
 }
 
-// DecodeIndexedDBKey decodes an IndexedDB key (re-export).
-func DecodeIndexedDBKey(data []byte) (any, error) {
-	return indexeddb.DecodeIndexedDBKey(data)
-}
-
-// EncodeIndexedDBRecord serializes a record (re-export).
-func EncodeIndexedDBRecord(record Record) ([]byte, error) {
-	return indexeddb.EncodeIndexedDBRecord(record)
-}
-
-// DecodeIndexedDBRecord decodes a record (re-export).
-func DecodeIndexedDBRecord(data []byte) (Record, error) {
-	return indexeddb.DecodeIndexedDBRecord(data)
-}
-
-// EncodeIndexedDBIndexValues serializes index values (re-export).
-func EncodeIndexedDBIndexValues(values []any) ([]byte, error) {
-	return indexeddb.EncodeIndexedDBIndexValues(values)
-}
-
-// DecodeIndexedDBIndexValues decodes index values (re-export).
-func DecodeIndexedDBIndexValues(data []byte, keyParts int) ([]any, error) {
-	return indexeddb.DecodeIndexedDBIndexValues(data, keyParts)
-}
-
-// CloneIndexedDBRecordWithField clones a record with one field replaced (re-export).
-func CloneIndexedDBRecordWithField(record Record, field string, value any) (Record, error) {
-	return indexeddb.CloneIndexedDBRecordWithField(record, field, value)
-}
-
-// IndexedDBRecordField returns one field from a record (re-export).
-func IndexedDBRecordField(record Record, field string) (any, error) {
-	return indexeddb.IndexedDBRecordField(record, field)
+// CursorKeyToProto encodes a native key for cursor commands (re-export).
+func CursorKeyToProto(key any) (*KeyValue, error) {
+	return indexeddb.CursorKeyToProto(key)
 }

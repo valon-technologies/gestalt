@@ -6,7 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 )
 
-func toWireConfigureProviderRequest(value *ConfigureProviderRequest) *proto.ConfigureProviderRequest {
+func ToWireConfigureProviderRequest(value *ConfigureProviderRequest) *proto.ConfigureProviderRequest {
 	if value == nil {
 		return nil
 	}
@@ -18,7 +18,7 @@ func toWireConfigureProviderRequest(value *ConfigureProviderRequest) *proto.Conf
 	return out
 }
 
-func fromWireConfigureProviderRequest(value *proto.ConfigureProviderRequest) *ConfigureProviderRequest {
+func FromWireConfigureProviderRequest(value *proto.ConfigureProviderRequest) *ConfigureProviderRequest {
 	if value == nil {
 		return nil
 	}
@@ -30,7 +30,7 @@ func fromWireConfigureProviderRequest(value *proto.ConfigureProviderRequest) *Co
 	return out
 }
 
-func toWireConfigureProviderResponse(value *ConfigureProviderResponse) *proto.ConfigureProviderResponse {
+func ToWireConfigureProviderResponse(value *ConfigureProviderResponse) *proto.ConfigureProviderResponse {
 	if value == nil {
 		return nil
 	}
@@ -40,7 +40,7 @@ func toWireConfigureProviderResponse(value *ConfigureProviderResponse) *proto.Co
 	return out
 }
 
-func fromWireConfigureProviderResponse(value *proto.ConfigureProviderResponse) *ConfigureProviderResponse {
+func FromWireConfigureProviderResponse(value *proto.ConfigureProviderResponse) *ConfigureProviderResponse {
 	if value == nil {
 		return nil
 	}
@@ -50,7 +50,7 @@ func fromWireConfigureProviderResponse(value *proto.ConfigureProviderResponse) *
 	return out
 }
 
-func toWireHealthCheckResponse(value *HealthCheckResponse) *proto.HealthCheckResponse {
+func ToWireHealthCheckResponse(value *HealthCheckResponse) *proto.HealthCheckResponse {
 	if value == nil {
 		return nil
 	}
@@ -61,7 +61,7 @@ func toWireHealthCheckResponse(value *HealthCheckResponse) *proto.HealthCheckRes
 	return out
 }
 
-func fromWireHealthCheckResponse(value *proto.HealthCheckResponse) *HealthCheckResponse {
+func FromWireHealthCheckResponse(value *proto.HealthCheckResponse) *HealthCheckResponse {
 	if value == nil {
 		return nil
 	}
@@ -72,7 +72,7 @@ func fromWireHealthCheckResponse(value *proto.HealthCheckResponse) *HealthCheckR
 	return out
 }
 
-func toWireProviderIdentity(value *ProviderIdentity) *proto.ProviderIdentity {
+func ToWireProviderIdentity(value *ProviderIdentity) *proto.ProviderIdentity {
 	if value == nil {
 		return nil
 	}
@@ -89,7 +89,7 @@ func toWireProviderIdentity(value *ProviderIdentity) *proto.ProviderIdentity {
 	return out
 }
 
-func fromWireProviderIdentity(value *proto.ProviderIdentity) *ProviderIdentity {
+func FromWireProviderIdentity(value *proto.ProviderIdentity) *ProviderIdentity {
 	if value == nil {
 		return nil
 	}
@@ -106,7 +106,7 @@ func fromWireProviderIdentity(value *proto.ProviderIdentity) *ProviderIdentity {
 	return out
 }
 
-func toWireStartRuntimeProviderResponse(value *StartRuntimeProviderResponse) *proto.StartRuntimeProviderResponse {
+func ToWireStartRuntimeProviderResponse(value *StartRuntimeProviderResponse) *proto.StartRuntimeProviderResponse {
 	if value == nil {
 		return nil
 	}
@@ -116,7 +116,7 @@ func toWireStartRuntimeProviderResponse(value *StartRuntimeProviderResponse) *pr
 	return out
 }
 
-func fromWireStartRuntimeProviderResponse(value *proto.StartRuntimeProviderResponse) *StartRuntimeProviderResponse {
+func FromWireStartRuntimeProviderResponse(value *proto.StartRuntimeProviderResponse) *StartRuntimeProviderResponse {
 	if value == nil {
 		return nil
 	}

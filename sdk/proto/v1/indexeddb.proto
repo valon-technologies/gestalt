@@ -50,12 +50,39 @@ message ColumnDef {
   bool unique = 5;
 }
 
-// KeyRange constrains a query or cursor by lower and upper bounds.
+// KeyValue represents one IndexedDB key: a scalar (string, number, date,
+// binary) or a nested array of keys, per the W3C spec.
+// https://www.w3.org/TR/IndexedDB/#key-construct
+message KeyValue {
+  oneof kind {
+    TypedValue scalar = 1;
+    KeyValueArray array = 2;
+  }
+}
+
+message KeyValueArray {
+  repeated KeyValue elements = 1;
+}
+
+// KeyRange constrains a query or cursor by lower and upper bounds. Bounds are
+// full IndexedDB keys (scalar or array), matching W3C IDBKeyRange. An absent
+// lower/upper means unbounded on that side.
+// https://www.w3.org/TR/IndexedDB/#keyrange
 message KeyRange {
-  TypedValue lower = 1;
-  TypedValue upper = 2;
+  KeyValue lower = 1;
+  KeyValue upper = 2;
   bool lower_open = 3;
   bool upper_open = 4;
+}
+
+// IndexedDBQuery is a single IndexedDB query argument: an exact key or a key
+// range. An absent IndexedDBQuery (or an unset oneof) means "all records",
+// matching a W3C query argument of undefined/null.
+message IndexedDBQuery {
+  oneof query {
+    KeyValue key = 1;
+    KeyRange range = 2;
+  }
 }
 
 // RecordRequest addresses one object store and carries one row payload.
@@ -90,10 +117,11 @@ message ObjectStoreNameRequest {
   string store = 1;
 }
 
-// ObjectStoreRangeRequest addresses an object store plus an optional key range.
+// ObjectStoreRangeRequest addresses an object store plus an optional query.
 message ObjectStoreRangeRequest {
   string store = 1;
-  optional KeyRange range = 2;
+  IndexedDBQuery query = 2;
+  optional uint32 count = 3;
 }
 
 // CreateObjectStoreRequest creates a new object store.
@@ -107,17 +135,17 @@ message DeleteObjectStoreRequest {
   string name = 1;
 }
 
-// IndexQueryRequest addresses a secondary index plus optional key values and
-// range constraints.
+// IndexQueryRequest addresses a secondary index plus an optional query.
 message IndexQueryRequest {
   string store = 1;
   string index = 2;
-  repeated TypedValue values = 3;
-  optional KeyRange range = 4;
+  IndexedDBQuery query = 3;
+  optional uint32 count = 4;
 }
 
 // CountResponse reports how many rows matched a query.
 message CountResponse {
+  option (unwrap) = "count";
   int64 count = 1;
 }
 
@@ -132,32 +160,16 @@ enum CursorDirection {
 // OpenCursorRequest starts a streaming cursor over an object store or index.
 message OpenCursorRequest {
   string store = 1;
-  optional KeyRange range = 2;
-  CursorDirection direction = 3;
+  string index = 2;
+  IndexedDBQuery query = 3;
+  CursorDirection direction = 4;
   // keys_only suppresses row payloads and returns only keys.
-  bool keys_only = 4;
-  // index selects a secondary index when non-empty.
-  string index = 5;
-  // values selects a compound index key prefix when index is set.
-  repeated TypedValue values = 6;
-}
-
-// KeyValue represents a single IndexedDB key, which can be a scalar
-// (string, number, date, binary) or a nested array of keys per the W3C spec.
-message KeyValue {
-  oneof kind {
-    TypedValue scalar = 1;
-    KeyValueArray array = 2;
-  }
-}
-
-message KeyValueArray {
-  repeated KeyValue elements = 1;
+  bool keys_only = 5;
 }
 
 // CursorKeyTarget addresses a specific cursor position.
 message CursorKeyTarget {
-  repeated KeyValue key = 1;
+  KeyValue key = 1;
 }
 
 // CursorCommand advances, mutates, or closes an open cursor.
@@ -182,10 +194,9 @@ message CursorClientMessage {
 
 // CursorEntry is one streamed cursor row.
 message CursorEntry {
-  // Key components per index KeyPath field. Each component is a KeyValue
-  // that can be a scalar or a nested array, preserving the full W3C IndexedDB
-  // key structure including array-valued keys.
-  repeated KeyValue key = 1;
+  // One full IndexedDB key (scalar or array).
+  // https://www.w3.org/TR/IndexedDB/#dom-idbcursor-key
+  KeyValue key = 1;
   string primary_key = 2;
   Record record = 3;
 }
@@ -344,63 +355,61 @@ service IndexedDB {
     option (signature) = "id";
   }
 
-  // Bulk operations (with optional key range)
+  // Bulk operations (with optional query)
   rpc Clear(ObjectStoreNameRequest) returns (google.protobuf.Empty) {
     option (signature) = "store";
   }
   rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse) {
     option (signature) = "store";
-    option (signature) = "range";
+    option (signature) = "query";
+    option (optional_signature) = "count";
   }
   rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse) {
     option (signature) = "store";
-    option (signature) = "range";
+    option (signature) = "query";
+    option (optional_signature) = "count";
   }
   rpc Count(ObjectStoreRangeRequest) returns (CountResponse) {
     option (signature) = "store";
-    option (signature) = "range";
+    option (signature) = "query";
   }
   rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse) {
     option (signature) = "store";
-    option (signature) = "range";
+    option (signature) = "query";
   }
 
   // Index queries
   rpc IndexGet(IndexQueryRequest) returns (RecordResponse) {
     option (signature) = "store";
     option (signature) = "index";
-    option (signature) = "values";
-    option (signature) = "range";
+    option (signature) = "query";
   }
   rpc IndexGetKey(IndexQueryRequest) returns (KeyResponse) {
     option (signature) = "store";
     option (signature) = "index";
-    option (signature) = "values";
-    option (signature) = "range";
+    option (signature) = "query";
   }
   rpc IndexGetAll(IndexQueryRequest) returns (RecordsResponse) {
     option (signature) = "store";
     option (signature) = "index";
-    option (signature) = "values";
-    option (signature) = "range";
+    option (signature) = "query";
+    option (optional_signature) = "count";
   }
   rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse) {
     option (signature) = "store";
     option (signature) = "index";
-    option (signature) = "values";
-    option (signature) = "range";
+    option (signature) = "query";
+    option (optional_signature) = "count";
   }
   rpc IndexCount(IndexQueryRequest) returns (CountResponse) {
     option (signature) = "store";
     option (signature) = "index";
-    option (signature) = "values";
-    option (signature) = "range";
+    option (signature) = "query";
   }
   rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse) {
     option (signature) = "store";
     option (signature) = "index";
-    option (signature) = "values";
-    option (signature) = "range";
+    option (signature) = "query";
   }
 
   // Cursor iteration (bidirectional stream)

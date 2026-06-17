@@ -1,12 +1,10 @@
 package gestalt
 
 import (
-	"bytes"
-	"fmt"
-	"math/big"
-	"reflect"
 	"sort"
-	"time"
+
+	"github.com/valon-technologies/gestalt/sdk/go/client"
+	"github.com/valon-technologies/gestalt/sdk/go/indexeddb"
 )
 
 // IndexedDBCursorSnapshotEntry is one provider-side cursor row.
@@ -53,13 +51,13 @@ func NewIndexedDBCursorSnapshot(req IndexedDBOpenCursorRequest) IndexedDBCursorS
 	}
 }
 
-// Load sorts entries, applies the supplied key range, and stores the resulting
+// Load sorts entries, applies the supplied query, and stores the resulting
 // cursor snapshot.
-func (s *IndexedDBCursorSnapshot) Load(entries []IndexedDBCursorSnapshotEntry, r *KeyRange) error {
+func (s *IndexedDBCursorSnapshot) Load(entries []IndexedDBCursorSnapshotEntry, query *client.IndexedDBQuery) error {
 	sort.Slice(entries, func(i, j int) bool {
-		cmp := CompareIndexedDBValues(entries[i].Key, entries[j].Key)
+		cmp := indexeddb.CompareKeys(entries[i].Key, entries[j].Key)
 		if cmp == 0 {
-			cmp = CompareIndexedDBValues(entries[i].PrimaryKeyValue, entries[j].PrimaryKeyValue)
+			cmp = indexeddb.CompareKeys(entries[i].PrimaryKeyValue, entries[j].PrimaryKeyValue)
 		}
 		if s.Reverse {
 			return cmp > 0
@@ -67,7 +65,7 @@ func (s *IndexedDBCursorSnapshot) Load(entries []IndexedDBCursorSnapshotEntry, r
 		return cmp < 0
 	})
 
-	filtered, err := s.ApplyRange(entries, r)
+	filtered, err := ApplyIndexedDBQuery(entries, query)
 	if err != nil {
 		return err
 	}
@@ -76,38 +74,20 @@ func (s *IndexedDBCursorSnapshot) Load(entries []IndexedDBCursorSnapshotEntry, r
 	return nil
 }
 
-// ApplyRange returns entries that satisfy the supplied key range without
-// mutating the snapshot.
-func (s *IndexedDBCursorSnapshot) ApplyRange(entries []IndexedDBCursorSnapshotEntry, r *KeyRange) ([]IndexedDBCursorSnapshotEntry, error) {
-	if r == nil {
+// ApplyIndexedDBQuery returns entries that satisfy query without mutating the snapshot.
+func ApplyIndexedDBQuery(entries []IndexedDBCursorSnapshotEntry, query *client.IndexedDBQuery) ([]IndexedDBCursorSnapshotEntry, error) {
+	if query == nil {
 		return entries, nil
-	}
-	lower, upper, err := IndexedDBRangeBounds(r, s.IndexCursor)
-	if err != nil {
-		return nil, err
 	}
 	filtered := make([]IndexedDBCursorSnapshotEntry, 0, len(entries))
 	for _, entry := range entries {
-		key := normalizeIndexedDBBound(entry.Key, s.IndexCursor)
-		if lower != nil {
-			cmp := CompareIndexedDBValues(key, lower)
-			if r.LowerOpen && cmp <= 0 {
-				continue
-			}
-			if !r.LowerOpen && cmp < 0 {
-				continue
-			}
+		ok, err := indexeddb.MatchQuery(entry.Key, query)
+		if err != nil {
+			return nil, err
 		}
-		if upper != nil {
-			cmp := CompareIndexedDBValues(key, upper)
-			if r.UpperOpen && cmp >= 0 {
-				continue
-			}
-			if !r.UpperOpen && cmp > 0 {
-				continue
-			}
+		if ok {
+			filtered = append(filtered, entry)
 		}
-		filtered = append(filtered, entry)
 	}
 	return filtered, nil
 }
@@ -118,7 +98,7 @@ func (s *IndexedDBCursorSnapshot) Next() (*IndexedDBCursorSnapshotEntry, error) 
 	if s.Unique && s.IndexCursor && s.Pos >= 0 && s.Pos < len(s.Entries) {
 		prev := s.Entries[s.Pos].Key
 		for s.Pos++; s.Pos < len(s.Entries); s.Pos++ {
-			if CompareIndexedDBValues(s.Entries[s.Pos].Key, prev) != 0 {
+			if indexeddb.CompareKeys(s.Entries[s.Pos].Key, prev) != 0 {
 				return s.Current()
 			}
 		}
@@ -141,10 +121,10 @@ func (s *IndexedDBCursorSnapshot) ContinueToKey(target any) (*IndexedDBCursorSna
 	}
 	for s.Pos++; s.Pos < len(s.Entries); s.Pos++ {
 		cur := s.Entries[s.Pos].Key
-		if prev != nil && s.Unique && s.IndexCursor && CompareIndexedDBValues(cur, prev) == 0 {
+		if prev != nil && s.Unique && s.IndexCursor && indexeddb.CompareKeys(cur, prev) == 0 {
 			continue
 		}
-		cmp := CompareIndexedDBValues(cur, target)
+		cmp := indexeddb.CompareKeys(cur, target)
 		if s.Reverse {
 			if cmp <= 0 {
 				return s.Current()
@@ -183,171 +163,7 @@ func (s *IndexedDBCursorSnapshot) Current() (*IndexedDBCursorSnapshotEntry, erro
 	return &s.Entries[s.Pos], nil
 }
 
-// IndexedDBRangeBounds normalizes range bounds for object-store and index
-// cursor comparisons. Index cursor scalar bounds are compared as single-part
-// composite keys.
-func IndexedDBRangeBounds(r *KeyRange, indexCursor bool) (any, any, error) {
-	if r == nil {
-		return nil, nil, nil
-	}
-	var lower any
-	if r.Lower != nil {
-		lower = normalizeIndexedDBBound(r.Lower, indexCursor)
-	}
-	var upper any
-	if r.Upper != nil {
-		upper = normalizeIndexedDBBound(r.Upper, indexCursor)
-	}
-	return lower, upper, nil
-}
-
-func normalizeIndexedDBBound(value any, indexCursor bool) any {
-	if !indexCursor {
-		return value
-	}
-	if parts, ok := indexedDBArrayParts(value); ok {
-		return parts
-	}
-	return []any{value}
-}
-
-func indexedDBArrayParts(v any) ([]any, bool) {
-	if arr, ok := v.([]any); ok {
-		return append([]any(nil), arr...), true
-	}
-	if _, ok := v.([]byte); ok {
-		return nil, false
-	}
-	rv := reflect.ValueOf(v)
-	if !rv.IsValid() {
-		return nil, false
-	}
-	switch rv.Kind() {
-	case reflect.Slice, reflect.Array:
-	default:
-		return nil, false
-	}
-	if rv.Type().Elem().Kind() == reflect.Uint8 {
-		return nil, false
-	}
-	parts := make([]any, rv.Len())
-	for i := range parts {
-		parts[i] = rv.Index(i).Interface()
-	}
-	return parts, true
-}
-
-// CompareIndexedDBValues compares native IndexedDB key values using the ordering
-// shared by the SDK cursor snapshot helpers.
+// CompareIndexedDBValues compares native IndexedDB key values using W3C ordering.
 func CompareIndexedDBValues(a, b any) int {
-	switch av := a.(type) {
-	case []any:
-		if bv, ok := b.([]any); ok {
-			for i := range av {
-				if i >= len(bv) {
-					return 1
-				}
-				if cmp := CompareIndexedDBValues(av[i], bv[i]); cmp != 0 {
-					return cmp
-				}
-			}
-			if len(av) < len(bv) {
-				return -1
-			}
-			return 0
-		}
-	case string:
-		if bv, ok := b.(string); ok {
-			switch {
-			case av < bv:
-				return -1
-			case av > bv:
-				return 1
-			default:
-				return 0
-			}
-		}
-	case time.Time:
-		if bv, ok := b.(time.Time); ok {
-			switch {
-			case av.Before(bv):
-				return -1
-			case av.After(bv):
-				return 1
-			default:
-				return 0
-			}
-		}
-	case []byte:
-		if bv, ok := b.([]byte); ok {
-			return bytes.Compare(av, bv)
-		}
-	case bool:
-		if bv, ok := b.(bool); ok {
-			switch {
-			case !av && bv:
-				return -1
-			case av && !bv:
-				return 1
-			default:
-				return 0
-			}
-		}
-	}
-
-	if af, ok := indexedDBNumber(a); ok {
-		if bf, ok := indexedDBNumber(b); ok {
-			return af.Cmp(bf)
-		}
-	}
-
-	as := fmt.Sprint(a)
-	bs := fmt.Sprint(b)
-	switch {
-	case as < bs:
-		return -1
-	case as > bs:
-		return 1
-	default:
-		return 0
-	}
-}
-
-func indexedDBNumber(v any) (*big.Rat, bool) {
-	switch n := v.(type) {
-	case int:
-		return big.NewRat(int64(n), 1), true
-	case int8:
-		return big.NewRat(int64(n), 1), true
-	case int16:
-		return big.NewRat(int64(n), 1), true
-	case int32:
-		return big.NewRat(int64(n), 1), true
-	case int64:
-		return big.NewRat(n, 1), true
-	case uint:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint8:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint16:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint32:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(uint64(n))), true
-	case uint64:
-		return new(big.Rat).SetInt(new(big.Int).SetUint64(n)), true
-	case float32:
-		return indexedDBFloatRat(float64(n))
-	case float64:
-		return indexedDBFloatRat(n)
-	default:
-		return nil, false
-	}
-}
-
-func indexedDBFloatRat(v float64) (*big.Rat, bool) {
-	r := new(big.Rat).SetFloat64(v)
-	if r == nil {
-		return nil, false
-	}
-	return r, true
+	return indexeddb.CompareKeys(a, b)
 }
