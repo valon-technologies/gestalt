@@ -172,48 +172,12 @@ When a UI manifest declares a `dev:` block and your layered config points the
 UI provider at a local working tree (`source.path`), `gestaltd serve` spawns the
 declared dev command and reverse-proxies the mount path to it. Framework hot
 reload (for example Next.js Fast Refresh) works through the proxy, including
-websocket traffic.
+websocket traffic. In-browser hot reload requires the dev-relaxed CSP gestaltd
+serves for dev-active mounts (`gestaltd` >= v0.0.2-alpha.20).
 
-```yaml
-dev:
-  command: [npm, run, dev:gestalt]
-```
-
-gestaltd injects:
-
-| Variable | Purpose |
-| --- | --- |
-| `GESTALT_DEV` | Set to `1` |
-| `GESTALT_DEV_PORT` | Port the dev server must bind on `127.0.0.1` |
-| `GESTALT_DEV_BASE_PATH` | Mount path the dev server must serve under (for example `/g-issues`) |
-
-Map these in your framework dev script, for example
-`NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT`.
-
-Production and `gestaltd serve --locked` ignore `dev:` and continue to serve the
-static `build` output, except for UIs selected with `--path` that declare a
-`dev:` block — those are dev-proxied even under `--locked`. Config or provider
-changes require restarting gestaltd.
-
-For faster iteration on local UIs while the rest of the fleet runs from pinned
-artifacts, repeat `--path` together with `--config` and `--locked`:
-
-```sh
-gestaltd serve --locked \
-  --config ./deploy/config.yaml \
-  --config ./deploy/local/config.yaml \
-  --path ./apps/g-issues/ui \
-  --path ./apps/delta/ui
-```
-
-For a standalone local provider without the full fleet config, use `gestaltd serve --path`
-for a source tree or layer a small local config that includes only the app under test:
-
-```sh
-gestaltd serve \
-  --config ./config.yaml \
-  --config ./support-local.yaml
-```
+See [Local Development](/local-development) for layered `--config` overlays,
+`--path` dev-active mounts, lockfile separation, the `GESTALT_DEV_*` contract,
+and framework-specific dev commands.
 
 ## Examples
 

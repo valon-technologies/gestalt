@@ -150,11 +150,14 @@ build and release behavior, see
 
 ## Local development
 
-For local iteration with framework hot reload, add a `dev:` block next to
-`build:` in the UI manifest. When your deployment config points `source.path`
-at the working tree, `gestaltd serve` (unlocked) spawns the dev command and
-reverse-proxies the configured mount path to it. Production and
-`gestaltd serve --locked` ignore `dev:` and serve the static `build` artifact.
+Add a `dev:` block next to `build:` when you want framework hot reload during
+local serve. gestaltd spawns the declared command and reverse-proxies the mount
+path to it when the UI source is a local working tree.
+
+See [Local Development](/local-development) for the full workflow: layered
+`--config` overlays, `--path` dev-active mounts, lockfile separation, the
+`GESTALT_DEV_*` contract, framework examples, and the dev-relaxed CSP required
+for in-browser hot reload (`gestaltd` >= v0.0.2-alpha.20).
 
 ```yaml
 kind: ui
@@ -169,39 +172,6 @@ spec:
     - path: /
       allowedRoles: [viewer, editor, admin]
 ```
-
-gestaltd sets these environment variables for the dev command:
-
-| Variable | Value |
-| --- | --- |
-| `GESTALT_DEV` | `1` |
-| `GESTALT_DEV_PORT` | Ephemeral localhost port |
-| `GESTALT_DEV_BASE_PATH` | The configured mount path (for example `/roadmap`) |
-
-The dev script must listen on `127.0.0.1:$GESTALT_DEV_PORT` and serve the app
-and its HMR websocket under `$GESTALT_DEV_BASE_PATH`. Example `package.json`
-script for Next.js:
-
-```json
-{
-  "scripts": {
-    "dev:gestalt": "NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT"
-  }
-}
-```
-
-Point a local config overlay at your working tree:
-
-```yaml
-providers:
-  ui:
-    roadmap:
-      source:
-        path: ../customer-roadmap-review/ui
-```
-
-Then run layered serve as usual. Git-snapshot UIs in the base config stay
-static; only local-source UIs with `dev:` activate the proxy.
 
 ## What to read next
 

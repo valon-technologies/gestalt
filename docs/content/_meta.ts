@@ -4,6 +4,7 @@ export default {
   index: "Overview",
   install: "Install",
   "getting-started": "Getting Started",
+  "local-development": "Local Development",
   "-- server": { type: "separator", title: "Server" },
   providers: "Providers",
   applications: "Applications",

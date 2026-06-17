@@ -1,0 +1,185 @@
+---
+title: Local Development
+description: Run gestaltd locally with layered config overlays, lockfile separation, and in-browser UI hot reload through the dev-server proxy.
+---
+
+# Local Development
+
+Use layered `gestaltd serve` with local config overlays to boot the full fleet
+while hot-reloading selected UIs from your working tree. The dev-server feature
+reverse-proxies a framework dev server (Next.js Fast Refresh, Vite HMR) or a
+hand-rolled live-reload static server at the configured mount path.
+
+## Canonical serve command
+
+Repeat `--config` left-to-right; later overlays replace or delete inherited
+entries (`null` deletes). Point `--path` at a local app or UI directory to mark
+it dev-active:
+
+```sh
+gestaltd serve \
+  --config ./deploy/config.yaml \
+  --config ./deploy/local/config.yaml \
+  --lockfile ./deploy/local/gestalt.lock.json \
+  --path ./apps/my-app/ui
+```
+
+Unlocked `gestaltd serve` auto-prepares lock state and artifacts when they are
+missing or stale, so a separate `gestaltd lock` or `gestaltd sync` step is not
+required for everyday local iteration.
+
+Open `http://localhost:8080/<mount>/` and sign in through your local auth
+overlay. Edit a UI source file and confirm it live-reloads without a manual
+refresh.
+
+## Lockfile separation
+
+The default lockfile path is next to the primary config. If your production
+lockfile lives at `./deploy/gestalt.lock.json`, always pass a separate local
+lockfile for development:
+
+```sh
+--lockfile ./deploy/local/gestalt.lock.json
+```
+
+Omitting `--lockfile` during local serve rewrites the committed production
+lockfile. Keep the local lockfile gitignored.
+
+## Dev-active mounts (`--path`)
+
+`--path` accepts a local app or UI source tree. gestaltd:
+
+- skips that target from lock/build for the session
+- reverse-proxies the mount to the manifest `dev:` command when present
+- serves every other UI and provider from the prepared lockfile artifacts
+
+Repeat `--path` for multiple UIs. Provider/backend changes (`provider.ts`,
+deploy config, lockfile inputs) still require restarting gestaltd; only the
+proxied UI hot-reloads.
+
+## UI manifest `dev:` block
+
+Declare `dev:` beside `build:` in the UI manifest. gestaltd honors it only for
+unlocked local serve when the UI source is a local working tree; production and
+`gestaltd serve --locked` serve the static `build` output unless the UI is
+selected with `--path` and declares `dev:`.
+
+```yaml
+kind: ui
+build:
+  command: [sh, ./build.sh]
+  inputs: [package.json, src]
+dev:
+  command: [sh, -c, 'exec ./node_modules/.bin/next dev --port "$GESTALT_DEV_PORT"']
+  workdir: .
+  readyTimeout: 180s
+  env:
+  # optional extra env; GESTALT_DEV* are reserved
+spec:
+  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer, editor, admin]
+```
+
+| Field | Purpose |
+| --- | --- |
+| `command` | argv array for the long-running dev process |
+| `workdir` | optional working directory relative to the manifest |
+| `readyTimeout` | optional wait for the dev server to accept traffic (for example `180s`) |
+| `env` | optional extra environment variables copied before the reserved contract |
+
+## `GESTALT_DEV_*` contract
+
+gestaltd injects these variables into the child dev process:
+
+| Variable | Value |
+| --- | --- |
+| `GESTALT_DEV` | `1` |
+| `GESTALT_DEV_PORT` | Ephemeral localhost port the dev server must bind on `127.0.0.1` |
+| `GESTALT_DEV_BASE_PATH` | Mount path the dev server must serve under (for example `/g-issues`) |
+
+The reverse proxy does **not** strip the mount prefix. Your dev server must
+listen on `127.0.0.1:$GESTALT_DEV_PORT` and serve both static assets and dev
+websocket endpoints under `$GESTALT_DEV_BASE_PATH`.
+
+### Next.js
+
+```json
+{
+  "scripts": {
+    "dev:gestalt": "NEXT_BASE_PATH=$GESTALT_DEV_BASE_PATH next dev --port $GESTALT_DEV_PORT"
+  }
+}
+```
+
+Manifest example:
+
+```yaml
+dev:
+  command:
+    - sh
+    - -c
+    - 'NEXT_BASE_PATH="$GESTALT_DEV_BASE_PATH" exec ./node_modules/.bin/next dev --port "$GESTALT_DEV_PORT"'
+```
+
+### Vite
+
+```json
+{
+  "scripts": {
+    "dev:gestalt": "vite --port $GESTALT_DEV_PORT --base \"$GESTALT_DEV_BASE_PATH/\""
+  }
+}
+```
+
+### Bun.build SPAs (watch + live reload)
+
+Frameworks bundled with `Bun.build` do not get component-level HMR out of the
+box. The appropriate local pattern is:
+
+1. watch `src/`
+2. rebuild into `out/` on change
+3. serve `out/` under `$GESTALT_DEV_BASE_PATH`
+4. inject a tiny live-reload script that opens a websocket to the dev server
+   and calls `location.reload()` after each rebuild
+
+```yaml
+dev:
+  command: [sh, -c, 'exec bun dev-server.ts']
+  readyTimeout: 180s
+```
+
+Bun's native full-stack HMR remains a future option for hand-rolled SPAs that
+want component-level updates without a full page reload.
+
+## In-browser hot reload and CSP
+
+In-browser hot reload (Next.js Fast Refresh, Vite HMR, eval-based live reload)
+requires the dev-relaxed Content-Security-Policy that gestaltd serves for
+dev-active mounts. That policy allows the HMR websocket and eval-based updates
+the browser dev tooling expects.
+
+This behavior shipped in `gestaltd` **v0.0.2-alpha.20**. Production mounts and
+non-dev-active UIs keep the strict CSP.
+
+## Faster iteration on a locked fleet
+
+When most of the fleet should run from pinned artifacts but one or more local
+UIs need hot reload, combine `--locked`, local overlays, and `--path`:
+
+```sh
+gestaltd serve --locked \
+  --config ./deploy/config.yaml \
+  --config ./deploy/local/config.yaml \
+  --lockfile ./deploy/local/gestalt.lock.json \
+  --path ./apps/g-issues/ui \
+  --path ./apps/delta/ui
+```
+
+## What to read next
+
+- [UI providers](/providers/ui): route roles, `build`, and manifest schema
+- [CLI reference](/reference/cli): full `gestaltd serve` flags
+- [Applications](/applications): recommended app + sibling UI layout
+- [App manifests](/reference/app-manifests#ui-metadata): UI metadata fields

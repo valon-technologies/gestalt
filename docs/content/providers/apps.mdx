@@ -1044,16 +1044,7 @@ suppressing others for a local session.
 
 When your config already points at local provider source paths, use config-based
 serve with a manifest `dev:` block on the UI to get hot reload through the
-gestaltd reverse proxy:
-
-```sh
-gestaltd serve \
-  --config ./base.yaml \
-  --config ./dev/slack-local.yaml
-```
-
-See [UI > Local development](/providers/ui#local-development) for the
-`GESTALT_DEV_*` contract.
+gestaltd reverse proxy. See [Local Development](/local-development).
 
 Once the local server is running, invoke an operation:
 
