@@ -319,6 +319,7 @@ export {
   type IndexSchema,
   type ObjectStoreSchema,
   type OpenCursorOptions,
+  type GetAllOptions,
 } from "./providers/indexeddb.ts";
 export type { IndexedDBQuery as WireIndexedDBQuery, KeyValue } from "./indexeddb.ts";
 export {

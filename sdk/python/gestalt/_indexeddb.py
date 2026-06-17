@@ -135,10 +135,10 @@ class ObjectStoreProtocol(Protocol):
     def clear(self) -> None:
         """Delete every record in the store."""
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         """Return all records that match ``query``."""
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         """Return all primary keys that match ``query``."""
 
     def count(self, query: Query = None) -> int:
@@ -174,10 +174,10 @@ class IndexProtocol(Protocol):
     def get_key(self, query: Query = None) -> str:
         """Fetch the first matching primary key for ``query``."""
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         """Return all records matching ``query``."""
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         """Return all primary keys matching ``query``."""
 
     def count(self, query: Query = None) -> int:
@@ -238,10 +238,10 @@ class TransactionObjectStoreProtocol(Protocol):
     def clear(self) -> None:
         """Delete every record in the store."""
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         """Return all records that match ``query``."""
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         """Return all primary keys that match ``query``."""
 
     def count(self, query: Query = None) -> int:
@@ -263,10 +263,10 @@ class TransactionIndexProtocol(Protocol):
     def get_key(self, query: Query = None) -> str:
         """Fetch the first matching primary key for ``query``."""
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         """Return all records matching ``query``."""
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         """Return all primary keys matching ``query``."""
 
     def count(self, query: Query = None) -> int:
@@ -753,25 +753,21 @@ class ObjectStore:
 
         _grpc_call(self._stub.Clear, pb.ObjectStoreNameRequest(store=self._store))
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         """Return all records that match ``query``."""
 
         resp = _grpc_call(
             self._stub.GetAll,
-            pb.ObjectStoreRangeRequest(
-                store=self._store, query=_query_to_proto(query)
-            ),
+            _object_store_range_request(self._store, query, count=count),
         )
         return [_record_to_dict(r) for r in resp.records]
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         """Return all primary keys that match ``query``."""
 
         resp = _grpc_call(
             self._stub.GetAllKeys,
-            pb.ObjectStoreRangeRequest(
-                store=self._store, query=_query_to_proto(query)
-            ),
+            _object_store_range_request(self._store, query, count=count),
         )
         return list(resp.keys)
 
@@ -847,16 +843,16 @@ class Index:
         resp = _grpc_call(self._stub.IndexGetKey, self._req(query))
         return resp.key
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         """Return all records matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexGetAll, self._req(query))
+        resp = _grpc_call(self._stub.IndexGetAll, self._req(query, count=count))
         return [_record_to_dict(r) for r in resp.records]
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         """Return all primary keys matching ``query``."""
 
-        resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(query))
+        resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(query, count=count))
         return list(resp.keys)
 
     def count(self, query: Query = None) -> int:
@@ -908,12 +904,8 @@ class Index:
             index=self._index,
         )
 
-    def _req(self, query: Query = None) -> Any:
-        return pb.IndexQueryRequest(
-            store=self._store,
-            index=self._index,
-            query=_query_to_proto(query),
-        )
+    def _req(self, query: Query = None, *, count: int | None = None) -> Any:
+        return _index_query_request(self._store, self._index, query, count=count)
 
 
 class Transaction:
@@ -1099,22 +1091,18 @@ class TransactionObjectStore:
             pb.TransactionOperation(clear=pb.ObjectStoreNameRequest(store=self._store))
         )
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         resp = self._tx._send_operation(
             pb.TransactionOperation(
-                get_all=pb.ObjectStoreRangeRequest(
-                    store=self._store, query=_query_to_proto(query)
-                )
+                get_all=_object_store_range_request(self._store, query, count=count)
             )
         )
         return [_record_to_dict(r) for r in resp.records.records]
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         resp = self._tx._send_operation(
             pb.TransactionOperation(
-                get_all_keys=pb.ObjectStoreRangeRequest(
-                    store=self._store, query=_query_to_proto(query)
-                )
+                get_all_keys=_object_store_range_request(self._store, query, count=count)
             )
         )
         return list(resp.keys.keys)
@@ -1163,15 +1151,15 @@ class TransactionIndex:
         )
         return resp.key.key
 
-    def get_all(self, query: Query = None) -> list[dict[str, Any]]:
+    def get_all(self, query: Query = None, *, count: int | None = None) -> list[dict[str, Any]]:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_get_all=self._req(query))
+            pb.TransactionOperation(index_get_all=self._req(query, count=count))
         )
         return [_record_to_dict(r) for r in resp.records.records]
 
-    def get_all_keys(self, query: Query = None) -> list[str]:
+    def get_all_keys(self, query: Query = None, *, count: int | None = None) -> list[str]:
         resp = self._tx._send_operation(
-            pb.TransactionOperation(index_get_all_keys=self._req(query))
+            pb.TransactionOperation(index_get_all_keys=self._req(query, count=count))
         )
         return list(resp.keys.keys)
 
@@ -1193,12 +1181,8 @@ class TransactionIndex:
         )
         return int(resp.delete.deleted)
 
-    def _req(self, query: Query = None) -> Any:
-        return pb.IndexQueryRequest(
-            store=self._store,
-            index=self._index,
-            query=_query_to_proto(query),
-        )
+    def _req(self, query: Query = None, *, count: int | None = None) -> Any:
+        return _index_query_request(self._store, self._index, query, count=count)
 
 
 class _RequestIterator:
@@ -1614,6 +1598,26 @@ def _query_to_proto(query: Query) -> Any:
     if isinstance(query, KeyRange):
         return pb.IndexedDBQuery(range=_kr_to_proto(query))
     return pb.IndexedDBQuery(key=_python_to_key_value(query))
+
+
+def _object_store_range_request(
+    store: str, query: Query = None, *, count: int | None = None
+) -> Any:
+    req = pb.ObjectStoreRangeRequest(store=store, query=_query_to_proto(query))
+    if count is not None:
+        req.count = count
+    return req
+
+
+def _index_query_request(
+    store: str, index: str, query: Query = None, *, count: int | None = None
+) -> Any:
+    req = pb.IndexQueryRequest(
+        store=store, index=index, query=_query_to_proto(query)
+    )
+    if count is not None:
+        req.count = count
+    return req
 
 
 def _query_from_proto(q: pb.IndexedDBQuery) -> Query:

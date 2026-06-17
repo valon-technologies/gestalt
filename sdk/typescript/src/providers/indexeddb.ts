@@ -113,6 +113,13 @@ export interface OpenCursorOptions {
 }
 
 /**
+ * Optional parameters for W3C-aligned ranged getAll / getAllKeys reads.
+ */
+export type GetAllOptions = {
+  count?: number;
+};
+
+/**
  * Fakeable client contract for IndexedDB-compatible storage.
  */
 export interface IndexedDB {
@@ -140,8 +147,8 @@ export interface ObjectStore {
   put(record: Record): Promise<void>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
-  getAll(query?: Key | KeyRange): Promise<Record[]>;
-  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]>;
   count(query?: Key | KeyRange): Promise<number>;
   deleteRange(query: Key | KeyRange): Promise<number>;
   openCursor(options?: OpenCursorOptions): Promise<Cursor | null>;
@@ -155,8 +162,8 @@ export interface ObjectStore {
 export interface Index {
   get(query?: Key | KeyRange): Promise<Record>;
   getKey(query?: Key | KeyRange): Promise<string>;
-  getAll(query?: Key | KeyRange): Promise<Record[]>;
-  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]>;
   count(query?: Key | KeyRange): Promise<number>;
   delete(query?: Key | KeyRange): Promise<number>;
   deleteRange(query: Key | KeyRange): Promise<number>;
@@ -183,8 +190,8 @@ export interface TransactionObjectStore {
   put(record: Record): Promise<void>;
   delete(id: string): Promise<void>;
   clear(): Promise<void>;
-  getAll(query?: Key | KeyRange): Promise<Record[]>;
-  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]>;
   count(query?: Key | KeyRange): Promise<number>;
   deleteRange(query: Key | KeyRange): Promise<number>;
   index(name: string): TransactionIndex;
@@ -196,8 +203,8 @@ export interface TransactionObjectStore {
 export interface TransactionIndex {
   get(query?: Key | KeyRange): Promise<Record>;
   getKey(query?: Key | KeyRange): Promise<string>;
-  getAll(query?: Key | KeyRange): Promise<Record[]>;
-  getAllKeys(query?: Key | KeyRange): Promise<string[]>;
+  getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]>;
+  getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]>;
   count(query?: Key | KeyRange): Promise<number>;
   delete(query?: Key | KeyRange): Promise<number>;
   deleteRange(query: Key | KeyRange): Promise<number>;
@@ -1402,12 +1409,13 @@ class TransactionObjectStoreImpl implements TransactionObjectStore {
   /**
    * Reads all records inside the transaction.
    */
-  async getAll(query?: Key | KeyRange): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]> {
     const resp = await this.tx.sendOperation({
       case: "getAll" as const,
       value: {
         store: this.store,
         query: queryToWire(query),
+        ...(options?.count !== undefined ? { count: options.count } : {}),
       },
     });
     return resp.result.value.records.map((r: any) => fromProtoRecord(r));
@@ -1416,12 +1424,13 @@ class TransactionObjectStoreImpl implements TransactionObjectStore {
   /**
    * Reads all primary keys inside the transaction.
    */
-  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]> {
     const resp = await this.tx.sendOperation({
       case: "getAllKeys" as const,
       value: {
         store: this.store,
         query: queryToWire(query),
+        ...(options?.count !== undefined ? { count: options.count } : {}),
       },
     });
     return resp.result.value.keys;
@@ -1498,10 +1507,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Reads all indexed records inside the transaction.
    */
-  async getAll(query?: Key | KeyRange): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]> {
     const resp = await this.tx.sendOperation({
       case: "indexGetAll" as const,
-      value: this.indexRequest(query),
+      value: this.indexRequest(query, options),
     });
     return resp.result.value.records.map((r: any) => fromProtoRecord(r));
   }
@@ -1509,10 +1518,10 @@ class TransactionIndexImpl implements TransactionIndex {
   /**
    * Reads all indexed primary keys inside the transaction.
    */
-  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]> {
     const resp = await this.tx.sendOperation({
       case: "indexGetAllKeys" as const,
-      value: this.indexRequest(query),
+      value: this.indexRequest(query, options),
     });
     return resp.result.value.keys;
   }
@@ -1550,11 +1559,12 @@ class TransactionIndexImpl implements TransactionIndex {
     return Number(resp.result.value.deleted);
   }
 
-  private indexRequest(query?: Key | KeyRange): any {
+  private indexRequest(query?: Key | KeyRange, options?: GetAllOptions): any {
     return {
       store: this.store,
       index: this.indexName,
       query: queryToWire(query),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     };
   }
 }
@@ -1622,10 +1632,11 @@ class ObjectStoreImpl implements ObjectStore {
   /**
    * Reads all records in the object store or within a key range.
    */
-  async getAll(query?: Key | KeyRange): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]> {
     const resp = await this.client.getAll({
       store: this.store,
       query: queryToWire(query),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     });
     return resp.records.map((r) => fromProtoRecord(r));
   }
@@ -1633,10 +1644,11 @@ class ObjectStoreImpl implements ObjectStore {
   /**
    * Reads all primary keys in the object store or within a query.
    */
-  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]> {
     const resp = await this.client.getAllKeys({
       store: this.store,
       query: queryToWire(query),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     });
     return resp.keys;
   }
@@ -1732,11 +1744,12 @@ class IndexImpl implements Index {
   /**
    * Reads all records matching the supplied query.
    */
-  async getAll(query?: Key | KeyRange): Promise<Record[]> {
+  async getAll(query?: Key | KeyRange, options?: GetAllOptions): Promise<Record[]> {
     const resp = await this.client.indexGetAll({
       store: this.store,
       index: this.indexName,
       query: queryToWire(query),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     });
     return resp.records.map((r) => fromProtoRecord(r));
   }
@@ -1744,11 +1757,12 @@ class IndexImpl implements Index {
   /**
    * Reads all primary keys matching the supplied query.
    */
-  async getAllKeys(query?: Key | KeyRange): Promise<string[]> {
+  async getAllKeys(query?: Key | KeyRange, options?: GetAllOptions): Promise<string[]> {
     const resp = await this.client.indexGetAllKeys({
       store: this.store,
       index: this.indexName,
       query: queryToWire(query),
+      ...(options?.count !== undefined ? { count: options.count } : {}),
     });
     return resp.keys;
   }
