@@ -119,9 +119,9 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	if cfg.DefaultConnection != nil {
 		brokerOpts = append(brokerOpts, invocation.WithConnectionMapper(invocation.ConnectionMap(cfg.DefaultConnection)))
 	}
-	if cfg.CatalogConnection != nil {
+	if cfg.MCPConnection != nil {
 		brokerOpts = append(brokerOpts,
-			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.CatalogConnection)),
+			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.MCPConnection)),
 		)
 	}
 	if cfg.TracerProvider != nil {
@@ -6453,7 +6453,8 @@ func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *test
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.CatalogConnection = map[string]string{"notion": "MCP"}
+		cfg.CatalogConnection = map[string]string{"notion": "OAuth"}
+		cfg.MCPConnection = map[string]string{"notion": "MCP"}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -6547,6 +6548,7 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 		cfg.Services = svc
 		cfg.Invoker = broker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -7744,7 +7746,7 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 
 	ts = newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
-		cfg.CatalogConnection = map[string]string{"sample-int": testCatalogConnection}
+		cfg.MCPConnection = map[string]string{"sample-int": testCatalogConnection}
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -7797,7 +7799,7 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 
 	ts = newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
-		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
+		cfg.MCPConnection = map[string]string{"test-int": testCatalogConnection}
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -7864,14 +7866,14 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 		t.Fatalf("request: %v", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusPreconditionFailed {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 412 when MCP session catalog credential is missing, got %d: %s", resp.StatusCode, body)
 	}
-	if gotToken != "rest-token" {
+	if gotToken != "" {
 		_ = resp.Body.Close()
-		t.Fatalf("execute token = %q, want %q", gotToken, "rest-token")
+		t.Fatalf("execute token = %q, want no provider execution", gotToken)
 	}
 	_ = resp.Body.Close()
 
@@ -8043,6 +8045,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 		cfg.Invoker = wrappedInvoker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
 		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8062,7 +8065,7 @@ func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t 
 	}
 }
 
-func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *testing.T) {
+func TestExecuteOperation_UsesServerMCPConnectionBeforeBrokerFallback(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
@@ -8124,7 +8127,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 		cfg.Services = svc
 		cfg.Invoker = broker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
-		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8144,7 +8147,7 @@ func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *tes
 	}
 }
 
-func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *testing.T) {
+func TestExecuteOperation_DoesNotFallbackPastConfiguredMCPConnection(t *testing.T) {
 	t.Parallel()
 
 	var gotToken string
@@ -8206,7 +8209,7 @@ func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *test
 		cfg.Services = svc
 		cfg.Invoker = broker
 		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
-		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "catalog-conn"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 

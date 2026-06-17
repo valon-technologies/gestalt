@@ -81,6 +81,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Invoker:           sharedInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		MCPConnection:     connMaps.MCPConnection,
 	}))
 	prepared.AgentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:         providers,
@@ -91,6 +92,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		Invoker:           sharedInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
+		MCPConnection:     connMaps.MCPConnection,
 		AgentConnections:  agentConnectionBindings(cfg),
 		SessionStart:      agentSessionStartConfigs(cfg),
 	}))

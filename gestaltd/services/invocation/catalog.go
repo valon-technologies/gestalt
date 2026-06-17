@@ -141,6 +141,7 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 
 	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
 	if err != nil {
+		err = ClassifySessionCatalogError(err)
 		if staticOK && sessionCatalogUnsupported(err) {
 			catalogSource = "static"
 			return staticOp, OperationTransport(staticOp), "", nil
@@ -267,7 +268,7 @@ func resolveSessionOperation(ctx context.Context, prov core.Provider, provName s
 		cat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
 		if err != nil {
 			if firstErr == nil {
-				firstErr = err
+				firstErr = ClassifySessionCatalogError(err)
 			}
 			continue
 		}

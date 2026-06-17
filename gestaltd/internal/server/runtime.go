@@ -92,10 +92,10 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Invoker:              httpInvoker,
 		AppInvocation:        result.AppInvocation,
 		DefaultConnection:    connMaps.DefaultConnection,
-		// HTTP routes expose REST-visible operations, so unqualified session-catalog
-		// resolution should follow the API surface by default. The MCP server keeps
-		// its own MCP-specific routing below.
+		// HTTP routes expose REST-visible operations via the API surface catalog map.
+		// Dynamic session/MCP operation resolution uses MCPConnection below.
 		CatalogConnection:    httpCatalogConnectionMap(connMaps),
+		MCPConnection:        connMaps.MCPConnection,
 		ConnectionAuth:       result.ConnectionAuth,
 		ManualConnectionAuth: result.ManualConnectionAuth,
 		AppDefs:              cfg.Apps,
