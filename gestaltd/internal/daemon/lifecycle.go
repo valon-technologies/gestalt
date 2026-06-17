@@ -38,7 +38,7 @@ func syncConfigWithStatePathsOptions(configFlags []string, state operator.StateP
 }
 
 func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {
-	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
+	cfg, _, err := operatorLifecycle().WithDevServeEligible(!locked).LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
 	if err != nil {
 		return nil, err
 	}

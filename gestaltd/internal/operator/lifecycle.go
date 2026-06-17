@@ -99,6 +99,10 @@ type Lifecycle struct {
 	sourceAuthSecretResolver func(context.Context, *config.Config) error
 	httpClient               *http.Client
 	providerResolver         *providerregistry.Resolver
+	// devServeEligible enables manifest dev: activation. Set true only for an
+	// unlocked `gestaltd serve`; false for lock/sync/validate and serve --locked,
+	// so committed lockfiles build and pin dev UIs normally.
+	devServeEligible bool
 }
 
 type StatePaths struct {
@@ -175,6 +179,11 @@ func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
 
 func (l *Lifecycle) WithProviderResolver(resolver *providerregistry.Resolver) *Lifecycle {
 	l.providerResolver = resolver
+	return l
+}
+
+func (l *Lifecycle) WithDevServeEligible(v bool) *Lifecycle {
+	l.devServeEligible = v
 	return l
 }
 
@@ -320,7 +329,7 @@ func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, s
 }
 
 func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
@@ -357,7 +366,7 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 }
 
 func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
@@ -901,7 +910,7 @@ func defaultLockfilePath(configPath string) string {
 	return filepath.Join(dir, LockfileName)
 }
 
-func loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
+func (l *Lifecycle) loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv bool) (*config.Config, error) {
 	var cfg *config.Config
 	var err error
 	if allowMissingEnv {
@@ -912,8 +921,10 @@ func loadConfigForLifecycle(configPaths []string, _ StatePaths, allowMissingEnv 
 	if err != nil {
 		return nil, err
 	}
-	if err := markDevActiveUIProviders(cfg); err != nil {
-		return nil, err
+	if l != nil && l.devServeEligible {
+		if err := markDevActiveUIProviders(cfg); err != nil {
+			return nil, err
+		}
 	}
 	return cfg, nil
 }
@@ -955,19 +966,6 @@ func markDevActiveUIProviders(cfg *config.Config) error {
 	return nil
 }
 
-func clearUIDevActive(cfg *config.Config) {
-	if cfg == nil {
-		return
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry == nil {
-			continue
-		}
-		entry.DevActive = false
-		entry.ResolvedDevWorkdir = ""
-	}
-}
-
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
 	return l.LoadForExecutionAtPaths([]string{configPath}, locked)
 }
@@ -977,7 +975,7 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (
 }
 
 func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked bool) (*config.Config, map[string]string, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, false)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -985,7 +983,6 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	mode := artifactModeMaterialize
 	if locked {
 		mode = artifactModeReadOnly
-		clearUIDevActive(cfg)
 	}
 	secretsLock, secretsValidated, err := l.lockForSecretsBootstrap(configPaths, state, paths, cfg, locked)
 	if err != nil {
@@ -1017,7 +1014,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 }
 
 func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string, state StatePaths) (*config.Config, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, false)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -1042,7 +1039,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 }
 
 func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []string, state StatePaths, opts StaticValidationOptions) (*config.Config, error) {
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
@@ -1110,7 +1107,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if recorder != nil {
 		recorder.Begin(syncActionForArtifactMode(mode), configPaths, mode == artifactModeCheck, opts.Parallelism)
 	}
-	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	cfg, err := l.loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
