@@ -37,15 +37,16 @@ func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.Authen
 		callbackURL = deps.DefaultCallbackURL
 	}
 	return authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
-		Command:     cfg.Command,
-		Args:        cfg.Args,
-		Workdir:     cfg.Workdir,
-		Env:         cfg.Env,
-		Config:      cfg.Config,
-		Egress:      cfg.EgressPolicy(""),
-		HostBinary:  cfg.HostBinary,
-		Cleanup:     prepared.Cleanup,
-		Name:        cfg.Name,
-		CallbackURL: callbackURL,
+		Command:      cfg.Command,
+		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
+		Env:          cfg.Env,
+		Config:       cfg.Config,
+		Egress:       cfg.EgressPolicy(""),
+		HostBinary:   cfg.HostBinary,
+		Cleanup:      prepared.Cleanup,
+		HostServices: deps.HostServices,
+		Name:         cfg.Name,
+		CallbackURL:  callbackURL,
 	})
 }

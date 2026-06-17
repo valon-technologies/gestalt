@@ -25,16 +25,17 @@ type authenticationRPCClient interface {
 }
 
 type ExecConfig struct {
-	Command     string
-	Args        []string
-	Workdir     string
-	Env         map[string]string
-	Config      map[string]any
-	Egress      egress.Policy
-	HostBinary  string
-	Cleanup     func()
-	Name        string
-	CallbackURL string
+	Command      string
+	Args         []string
+	Workdir      string
+	Env          map[string]string
+	Config       map[string]any
+	Egress       egress.Policy
+	HostBinary   string
+	Cleanup      func()
+	HostServices []runtimehost.HostService
+	Name         string
+	CallbackURL  string
 }
 
 type remoteAuthenticationProvider struct {
@@ -56,6 +57,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.AuthenticationProv
 		Egress:       cfg.Egress,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
+		HostServices: cfg.HostServices,
 		ProviderName: cfg.Name,
 	})
 	if err != nil {

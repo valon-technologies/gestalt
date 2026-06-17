@@ -13,6 +13,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +27,11 @@ func TestAuthenticationFactoryForwardsRuntimeDepsToExecutableProvider(t *testing
 	authManifest := componentProviderManifestPath(t, setupGoContractProviderDir(t, dir, providermanifestv1.KindAuthentication, "local", authContractProviderSource(callbackURL)))
 	auth, err := AuthenticationFactory(contractRuntimeNode(t, "local", authManifest), AuthenticationDeps{
 		DefaultCallbackURL: callbackURL,
+		HostServices: []runtimehost.HostService{{
+			Name: "test",
+			Register: func(*grpc.Server) {
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("AuthenticationFactory: %v", err)
@@ -158,6 +165,10 @@ func closeProviderIfSupported(t *testing.T, provider any) {
 
 func authContractProviderSource(wantCallbackURL string) string {
 	source := testutil.GeneratedAuthPackageSource()
+	source = strings.Replace(source, `"net/url"
+	"strings"`, `"net/url"
+	"os"
+	"strings"`, 1)
 	source = strings.Replace(source, `func (p *Provider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("authorize request is required")
@@ -172,6 +183,9 @@ func authContractProviderSource(wantCallbackURL string) string {
 	redirectURI := strings.TrimSpace(req.RedirectURI)
 	if redirectURI == "" {
 		return nil, fmt.Errorf("redirect_uri is required")
+	}
+	if os.Getenv("GESTALT_HOST_SERVICE_SOCKET") == "" {
+		return nil, fmt.Errorf("GESTALT_HOST_SERVICE_SOCKET is not set")
 	}
 	if redirectURI != %q {
 		return nil, fmt.Errorf("redirect_uri = %%q, want %%q", redirectURI, %q)
