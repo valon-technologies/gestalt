@@ -3,10 +3,15 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<()> {
+pub fn create(
+    client: &ApiClient,
+    name: Option<&str>,
+    scopes: &str,
+    format: Format,
+) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
     let resp = client
-        .create_api_token(token_name)
+        .create_api_token(token_name, scopes)
         .context("failed to create token")?;
 
     match format {
@@ -38,14 +43,13 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
                 .map(|item| {
                     vec![
                         item["id"].as_str().unwrap_or("-").to_string(),
-                        item["name"].as_str().unwrap_or("-").to_string(),
                         item["scopes"].as_str().unwrap_or("-").to_string(),
                         item["created_at"].as_str().unwrap_or("-").to_string(),
                         item["expires_at"].as_str().unwrap_or("never").to_string(),
                     ]
                 })
                 .collect();
-            output::print_table(&["ID", "Name", "Scopes", "Created", "Expires"], &rows);
+            output::print_table(&["ID", "Scopes", "Created", "Expires"], &rows);
         }
     }
 

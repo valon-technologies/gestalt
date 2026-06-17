@@ -51,8 +51,8 @@ fn dispatch_token_command(
 ) -> anyhow::Result<()> {
     let client = ApiClient::from_env(url)?;
     match command {
-        TokenCommands::Create { name } => {
-            commands::tokens::create(&client, name.as_deref(), format)
+        TokenCommands::Create { name, scopes } => {
+            commands::tokens::create(&client, name.as_deref(), &scopes, format)
         }
         TokenCommands::List => commands::tokens::list(&client, format),
         TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),

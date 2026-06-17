@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 )
 
@@ -58,10 +58,10 @@ func TestMCPOAuthAccessTokenComesFromProviderTokenExchange(t *testing.T) {
 	}
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	srv := &Server{
-		auth:        auth,
-		encryptor:   enc,
+		auth:          auth,
+		encryptor:     enc,
 		publicBaseURL: "http://example.test",
-		now:         func() time.Time { return now },
+		now:           func() time.Time { return now },
 	}
 
 	clientID, err := encodeMCPOAuthClientRegistration(enc, mcpOAuthClientRegistrationState{

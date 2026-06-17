@@ -25,13 +25,14 @@ fn test_create_token() {
     let mut server = Server::new();
     let mock = authed_json_mock!(server, Method::POST, "/api/v1/tokens", StatusCode::CREATED)
         .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-        .match_body(Matcher::JsonString(r#"{"name":"cli-token"}"#.to_string()))
+        .match_body(Matcher::JsonString(
+            r#"{"name":"cli-token","scopes":"slack"}"#.to_string(),
+        ))
         .with_body(r#"{"id":"2","name":"cli-token","token":"plaintext-secret"}"#)
         .create();
 
     let client = create_client(&server);
-    let body = serde_json::json!({"name": "cli-token"});
-    let resp = client.post("/api/v1/tokens", &body).unwrap();
+    let resp = client.create_api_token("cli-token", "slack").unwrap();
 
     mock.assert();
     assert_eq!(resp["token"], "plaintext-secret");
