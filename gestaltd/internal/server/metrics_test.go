@@ -13,7 +13,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/server"
@@ -47,36 +46,6 @@ func (p *manualMetricsProvider) Catalog() *catalog.Catalog {
 }
 func (p *manualMetricsProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return &core.OperationResult{Status: http.StatusOK, Body: []byte(`{}`)}, nil
-}
-
-type metricsHostIssuedSessionAuth struct {
-	secret []byte
-	name   string
-}
-
-func (s *metricsHostIssuedSessionAuth) Name() string { return s.name }
-
-func (s *metricsHostIssuedSessionAuth) LoginURL(state string) (string, error) {
-	return "https://idp.example.test/login?state=" + url.QueryEscape(state), nil
-}
-
-func (s *metricsHostIssuedSessionAuth) HandleCallback(context.Context, string) (*core.UserIdentity, error) {
-	return nil, context.DeadlineExceeded
-}
-
-func (s *metricsHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
-	if code != "good-code" {
-		return nil, "", context.DeadlineExceeded
-	}
-	return &core.UserIdentity{Email: "host@example.com", DisplayName: "Host Issued"}, state, nil
-}
-
-func (s *metricsHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
-	return session.ValidateToken(token, s.secret)
-}
-
-func (s *metricsHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
-	return time.Hour
 }
 
 func hasMetricWithPrefix(rm metricdata.ResourceMetrics, prefix string) bool {
@@ -137,9 +106,9 @@ func TestConnectionAuthMetrics(t *testing.T) {
 
 	handler := &testOAuthHandler{
 		authorizationBaseURLVal: "https://idp.example.test/authorize",
-		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+		exchangeCodeFn: func(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
 			if code == "good-code" {
-				return &core.TokenResponse{AccessToken: "oauth-token"}, nil
+				return &core.OAuthTokenResponse{AccessToken: "oauth-token"}, nil
 			}
 			return nil, context.DeadlineExceeded
 		},
@@ -252,11 +221,11 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
-		refreshTokenFn: func(_ context.Context, refreshToken string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(_ context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 			if refreshToken != "old-refresh-token" {
 				t.Fatalf("unexpected refresh token %q", refreshToken)
 			}
-			return &core.TokenResponse{AccessToken: "fresh-access-token", ExpiresIn: 3600}, nil
+			return &core.OAuthTokenResponse{AccessToken: "fresh-access-token", ExpiresIn: 3600}, nil
 		},
 	}
 
@@ -295,7 +264,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 			StubIntegration: coretesting.StubIntegration{N: providerName},
 			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
-		refreshTokenFn: func(_ context.Context, refreshToken string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(_ context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 			if refreshToken != "expired-refresh-token" {
 				t.Fatalf("unexpected refresh token %q", refreshToken)
 			}
@@ -608,7 +577,8 @@ func TestPlatformAuthMetrics(t *testing.T) {
 
 	srv := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
-		cfg.Auth = &metricsHostIssuedSessionAuth{secret: secret, name: "metrics-host-issued"}
+		cfg.Auth = newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "metrics-host-issued"})
+		cfg.SelectedAuthProvider = "metrics-host-issued"
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.StateSecret = secret
 		cfg.Services = testutil.NewStubServices(t)
@@ -664,8 +634,8 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	if err := json.Unmarshal(lines[0], &auditRecord); err != nil {
 		t.Fatalf("parse audit record: %v\nraw: %s", err, auditBuf.String())
 	}
-	if auditRecord["operation"] != "api_token.list" {
-		t.Fatalf("expected audit operation api_token.list, got %v", auditRecord["operation"])
+	if auditRecord["operation"] != "grant.list" {
+		t.Fatalf("expected audit operation grant.list, got %v", auditRecord["operation"])
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
@@ -678,15 +648,15 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
-		"gestalt.action":   "complete_login",
+		"gestalt.action":   "token",
 	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 2, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
-		"gestalt.action":   "validate_token",
+		"gestalt.action":   "introspect",
 	})
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.auth.duration", map[string]string{
 		"gestalt.provider": "metrics-host-issued",
-		"gestalt.action":   "complete_login",
+		"gestalt.action":   "token",
 	})
 }
 

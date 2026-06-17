@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -12,7 +11,6 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
 type workflowEventDeliveryResponse struct {
@@ -27,20 +25,11 @@ func TestWorkflowEventDeliveryUsesAuthorizedSourceAsCallerApp(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	seedAPITokenWithPermissions(t, services, plaintext, hashed, "event-user", []core.AccessPermission{{App: "roadmap"}})
+	plaintext := scopedTestBearerToken("event-user", "roadmap")
 	provider := newMemoryWorkflowProvider()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
-				return nil, core.ErrNotFound
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -89,20 +78,11 @@ func TestWorkflowEventDeliveryRejectsUnauthorizedSource(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	seedAPITokenWithPermissions(t, services, plaintext, hashed, "event-user", []core.AccessPermission{{App: "roadmap"}})
+	plaintext := scopedTestBearerToken("event-user", "roadmap")
 	provider := newMemoryWorkflowProvider()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
-				return nil, core.ErrNotFound
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",

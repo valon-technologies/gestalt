@@ -1,120 +1,30 @@
-use std::time::Duration;
-
 use tonic::codegen::async_trait;
 
-use crate::api::RuntimeMetadata;
-use crate::error::{Error, Result};
+use crate::authentication::{
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
+    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
+    RevokeGrantResponse, TokenRequest, TokenResponse,
+};
+use crate::error::Result;
 
-/// Normalized user identity returned by an authentication provider.
+pub const CALLER_BEARER_TOKEN_METADATA_KEY: &str = "x-gestalt-caller-bearer-token";
+
+/// OAuth 2.0 authorization code grant type.
+pub const GRANT_TYPE_AUTHORIZATION_CODE: &str = "authorization_code";
+/// OAuth 2.0 token exchange grant type (RFC 8693).
+pub const GRANT_TYPE_TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
+/// OAuth 2.0 access token subject token type (RFC 8693).
+pub const SUBJECT_TOKEN_TYPE_ACCESS_TOKEN: &str = "urn:ietf:params:oauth:token-type:access_token";
+
+/// Caller-scoped authentication metadata for grant-management RPCs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AuthenticatedUser {
-    /// The `subject` field.
-    pub subject: String,
-    /// The `email` field.
-    pub email: String,
-    /// The `email_verified` field.
-    pub email_verified: bool,
-    /// The `display_name` field.
-    pub display_name: String,
-    /// The `avatar_url` field.
-    pub avatar_url: String,
-    /// The `claims` field.
-    pub claims: std::collections::BTreeMap<String, String>,
-}
-
-/// Starts an interactive login flow.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct BeginLoginRequest {
-    /// The `callback_url` field.
-    pub callback_url: String,
-    /// The `host_state` field.
-    pub host_state: String,
-    /// The `scopes` field.
-    pub scopes: Vec<String>,
-    /// The `options` field.
-    pub options: std::collections::BTreeMap<String, String>,
-}
-
-/// Provider-managed authorization URL and opaque state for login completion.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct BeginLoginResponse {
-    /// The `authorization_url` field.
-    pub authorization_url: String,
-    /// The `provider_state` field.
-    pub provider_state: Vec<u8>,
-}
-
-/// Finishes an interactive login flow.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct CompleteLoginRequest {
-    /// The `query` field.
-    pub query: std::collections::BTreeMap<String, String>,
-    /// The `provider_state` field.
-    pub provider_state: Vec<u8>,
-    /// The `callback_url` field.
-    pub callback_url: String,
-}
-
-/// Host persistence settings for authenticated sessions.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub struct AuthSessionSettings {
-    /// The `session_ttl` field.
-    pub session_ttl: Duration,
-}
-
-pub(crate) fn begin_login_request_from_proto(
-    value: crate::generated::v1::BeginLoginRequest,
-) -> BeginLoginRequest {
-    BeginLoginRequest {
-        callback_url: value.callback_url,
-        host_state: value.host_state,
-        scopes: value.scopes,
-        options: value.options,
-    }
-}
-
-pub(crate) fn begin_login_response_to_proto(
-    value: BeginLoginResponse,
-) -> crate::generated::v1::BeginLoginResponse {
-    crate::generated::v1::BeginLoginResponse {
-        authorization_url: value.authorization_url,
-        provider_state: value.provider_state,
-    }
-}
-
-pub(crate) fn complete_login_request_from_proto(
-    value: crate::generated::v1::CompleteLoginRequest,
-) -> CompleteLoginRequest {
-    CompleteLoginRequest {
-        query: value.query,
-        provider_state: value.provider_state,
-        callback_url: value.callback_url,
-    }
-}
-
-pub(crate) fn authenticated_user_to_proto(
-    value: AuthenticatedUser,
-) -> crate::generated::v1::AuthenticatedUser {
-    crate::generated::v1::AuthenticatedUser {
-        subject: value.subject,
-        email: value.email,
-        email_verified: value.email_verified,
-        display_name: value.display_name,
-        avatar_url: value.avatar_url,
-        claims: value.claims,
-    }
-}
-
-pub(crate) fn auth_session_settings_to_proto(
-    value: AuthSessionSettings,
-) -> crate::generated::v1::AuthSessionSettings {
-    crate::generated::v1::AuthSessionSettings {
-        session_ttl_seconds: i64::try_from(value.session_ttl.as_secs()).unwrap_or(i64::MAX),
-    }
+pub struct AuthCallContext {
+    /// The caller bearer token from gRPC metadata.
+    pub caller_bearer_token: String,
 }
 
 #[async_trait]
-/// Lifecycle and login contract for Gestalt authentication providers.
+/// Lifecycle and authentication contract for Gestalt authentication providers.
 pub trait AuthenticationProvider: Send + Sync + 'static {
     /// Configures the provider before it starts serving requests.
     async fn configure(
@@ -126,7 +36,7 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
     }
 
     /// Returns runtime metadata that should augment the static manifest.
-    fn metadata(&self) -> Option<RuntimeMetadata> {
+    fn metadata(&self) -> Option<crate::api::RuntimeMetadata> {
         None
     }
 
@@ -150,28 +60,43 @@ pub trait AuthenticationProvider: Send + Sync + 'static {
         Ok(())
     }
 
-    /// Starts an interactive login flow.
-    async fn begin_login(&self, req: BeginLoginRequest) -> Result<BeginLoginResponse>;
+    /// Starts an RFC 6749 authorization flow.
+    async fn authorize(&self, req: AuthorizeRequest) -> Result<AuthorizeResponse>;
 
-    /// Finishes an interactive login flow.
-    async fn complete_login(&self, req: CompleteLoginRequest) -> Result<AuthenticatedUser>;
+    /// Issues or exchanges tokens via the RFC 6749 token endpoint.
+    async fn token(&self, req: TokenRequest) -> Result<TokenResponse>;
 
-    /// Validates an externally minted token when supported.
-    async fn validate_external_token(&self, _token: &str) -> Result<Option<AuthenticatedUser>> {
-        Err(Error::unimplemented(
-            "authentication provider does not support external token validation",
-        ))
-    }
+    /// Introspects a bearer token via RFC 7662.
+    async fn introspect(&self, req: IntrospectRequest) -> Result<IntrospectResponse>;
 
-    /// Returns host persistence settings for authenticated sessions.
-    fn session_settings(&self) -> Option<AuthSessionSettings> {
-        None
-    }
+    /// Lists grant IDs visible to the caller.
+    async fn list_grants(
+        &self,
+        call: AuthCallContext,
+        req: ListGrantsRequest,
+    ) -> Result<ListGrantsResponse>;
 
-    /// Returns the TTL the host should use for persisted sessions.
-    ///
-    /// Prefer overriding [`AuthenticationProvider::session_settings`] for new providers.
-    fn session_ttl(&self) -> Option<Duration> {
-        None
-    }
+    /// Returns one grant owned by the caller.
+    async fn get_grant(
+        &self,
+        call: AuthCallContext,
+        req: GetGrantRequest,
+    ) -> Result<GetGrantResponse>;
+
+    /// Revokes one grant owned by the caller.
+    async fn revoke_grant(
+        &self,
+        call: AuthCallContext,
+        req: RevokeGrantRequest,
+    ) -> Result<RevokeGrantResponse>;
+}
+
+pub(crate) fn caller_bearer_token_from_metadata(metadata: &tonic::metadata::MetadataMap) -> String {
+    metadata
+        .get(CALLER_BEARER_TOKEN_METADATA_KEY)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_default()
 }

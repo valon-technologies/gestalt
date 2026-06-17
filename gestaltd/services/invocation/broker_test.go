@@ -32,7 +32,7 @@ func TestBrokerResolveToken_ConnectionModeNoneResolvesSessionUserSubject(t *test
 			Email: "user@example.com",
 		},
 		Kind:   principal.KindUser,
-		Source: principal.SourceSession,
+		Source: principal.SourceBearer,
 	}
 
 	ctx, token, err := broker.ResolveToken(context.Background(), p, "weather", "", "")
@@ -86,7 +86,7 @@ func TestBrokerResolveToken_NonUserSubjectUsesOwnExternalCredential(t *testing.T
 	subject := &principal.Principal{
 		SubjectID: subjectID,
 		Kind:      principal.Kind("service_account"),
-		Source:    principal.SourceAPIToken,
+		Source:    principal.SourceBearer,
 	}
 	ctx := WithWorkflowContext(context.Background(), map[string]any{
 		"runId": "run-123",

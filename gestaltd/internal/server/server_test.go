@@ -40,7 +40,6 @@ import (
 	s3sdk "github.com/valon-technologies/gestalt/sdk/go/s3"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -103,7 +102,6 @@ func newTestHTTPServer(t *testing.T, start func(http.Handler) *httptest.Server, 
 func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	t.Helper()
 	cfg := server.Config{
-		Auth:     &coretesting.StubAuthProvider{N: "none"},
 		Services: testutil.NewStubServices(t),
 		Providers: func() *registry.ProviderMap[core.Provider] {
 			reg := registry.New()
@@ -261,7 +259,7 @@ func resolveStoredTestCredential(ctx context.Context, stub *coretesting.StubExte
 	}
 }
 
-func refreshTestCredential(ctx context.Context, cfg *server.Config, req *core.ResolveExternalCredentialRequest, credential *core.ExternalCredential) (*core.TokenResponse, bool, error) {
+func refreshTestCredential(ctx context.Context, cfg *server.Config, req *core.ResolveExternalCredentialRequest, credential *core.ExternalCredential) (*core.OAuthTokenResponse, bool, error) {
 	if cfg == nil || req == nil || credential == nil || credential.Grant == nil {
 		return nil, false, nil
 	}
@@ -1904,10 +1902,10 @@ type testOAuthHandler struct {
 	authorizationURLFn       func(state string, scopes []string) string
 	startOAuthFn             func(state string, scopes []string) (string, string)
 	startOAuthWithOverrideFn func(authBaseURL, state string, scopes []string) (string, string)
-	exchangeCodeFn           func(ctx context.Context, code string) (*core.TokenResponse, error)
-	exchangeCodeWithVerFn    func(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-	refreshTokenFn           func(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
-	refreshTokenWithURLFn    func(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	exchangeCodeFn           func(ctx context.Context, code string) (*core.OAuthTokenResponse, error)
+	exchangeCodeWithVerFn    func(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error)
+	refreshTokenFn           func(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error)
+	refreshTokenWithURLFn    func(ctx context.Context, refreshToken, tokenURL string) (*core.OAuthTokenResponse, error)
 	authorizationBaseURLVal  string
 	tokenURLVal              string
 }
@@ -1933,28 +1931,28 @@ func (h *testOAuthHandler) StartOAuthWithOverride(authBaseURL, state string, sco
 	return authBaseURL + "?state=" + state, ""
 }
 
-func (h *testOAuthHandler) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (h *testOAuthHandler) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	if h.exchangeCodeFn != nil {
 		return h.exchangeCodeFn(ctx, code)
 	}
 	return nil, fmt.Errorf("ExchangeCode not implemented")
 }
 
-func (h *testOAuthHandler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+func (h *testOAuthHandler) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, opts ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error) {
 	if h.exchangeCodeWithVerFn != nil {
 		return h.exchangeCodeWithVerFn(ctx, code, verifier, opts...)
 	}
 	return h.ExchangeCode(ctx, code)
 }
 
-func (h *testOAuthHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (h *testOAuthHandler) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	if h.refreshTokenFn != nil {
 		return h.refreshTokenFn(ctx, refreshToken)
 	}
 	return nil, fmt.Errorf("RefreshToken not implemented")
 }
 
-func (h *testOAuthHandler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error) {
+func (h *testOAuthHandler) RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.OAuthTokenResponse, error) {
 	if h.refreshTokenWithURLFn != nil {
 		return h.refreshTokenWithURLFn(ctx, refreshToken, tokenURL)
 	}
@@ -1989,58 +1987,8 @@ func oauthConnectionDef(params map[string]config.ConnectionParamDef) *config.Con
 	}
 }
 
-func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Context, string) (*core.TokenResponse, error)) func() map[string]map[string]bootstrap.OAuthHandler {
+func oauthRefreshConnectionAuth(integration string, refreshFn func(context.Context, string) (*core.OAuthTokenResponse, error)) func() map[string]map[string]bootstrap.OAuthHandler {
 	return testConnectionAuth(integration, &testOAuthHandler{refreshTokenFn: refreshFn})
-}
-
-func seedAPIToken(t *testing.T, svc *coredata.Services, plaintext, hashed, userID string) {
-	t.Helper()
-	seedAPITokenWithPermissions(t, svc, plaintext, hashed, userID, nil)
-}
-
-func seedAPITokenWithPermissions(t *testing.T, svc *coredata.Services, plaintext, hashed, userID string, permissions []core.AccessPermission) *core.User {
-	t.Helper()
-	ctx := context.Background()
-	user, err := svc.Users.FindOrCreateUser(ctx, userID+"@test.local")
-	if err != nil {
-		t.Fatalf("seedAPIToken: FindOrCreateUser: %v", err)
-	}
-	exp := time.Now().Add(24 * time.Hour)
-	if err := svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-		ID:                  "api-tok-" + userID,
-		OwnerKind:           core.APITokenOwnerKindUser,
-		OwnerID:             user.ID,
-		CredentialSubjectID: principal.UserSubjectID(user.ID),
-		Name:                "test-token",
-		HashedToken:         hashed,
-		ExpiresAt:           &exp,
-		Permissions:         cloneAccessPermissionsForTest(permissions),
-	}); err != nil {
-		t.Fatalf("seedAPIToken: StoreAPIToken: %v", err)
-	}
-	return user
-}
-
-func seedSubjectAPIToken(t *testing.T, svc *coredata.Services, hashed, subjectID, name string) {
-	t.Helper()
-	seedSubjectAPITokenWithPermissions(t, svc, hashed, subjectID, name, nil)
-}
-
-func seedSubjectAPITokenWithPermissions(t *testing.T, svc *coredata.Services, hashed, subjectID, name string, permissions []core.AccessPermission) {
-	t.Helper()
-	exp := time.Now().Add(24 * time.Hour)
-	if err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
-		ID:                  "api-tok-" + strings.ReplaceAll(subjectID, ":", "-"),
-		OwnerKind:           core.APITokenOwnerKindSubject,
-		OwnerID:             subjectID,
-		CredentialSubjectID: subjectID,
-		Name:                name,
-		HashedToken:         hashed,
-		ExpiresAt:           &exp,
-		Permissions:         cloneAccessPermissionsForTest(permissions),
-	}); err != nil {
-		t.Fatalf("seedSubjectAPIToken: StoreAPIToken: %v", err)
-	}
 }
 
 func cloneAccessPermissionsForTest(src []core.AccessPermission) []core.AccessPermission {
@@ -3840,74 +3788,52 @@ func TestAuthMiddleware_ValidSession(t *testing.T) {
 func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	t.Parallel()
 
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-
-	svc := testutil.NewStubServices(t)
-	seedAPIToken(t, svc, plaintext, hashed, "api-user")
+	plaintext := scopedTestBearerToken("api-user", "")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
-		cfg.Services = svc
+		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
-	req.Header.Set("Authorization", "Bearer "+plaintext)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	for _, tc := range []struct {
+		name   string
+		scheme string
+	}{
+		{name: "Bearer", scheme: "Bearer"},
+		{name: "bearer", scheme: "bearer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
+			req.Header.Set("Authorization", tc.scheme+" "+plaintext)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+		})
 	}
 }
 
-func TestAuthMiddleware_SubjectOwnedAPITokenRejectsBorrowedCredentialSubject(t *testing.T) {
+func TestAuthMiddleware_InactiveBearerRejected(t *testing.T) {
 	t.Parallel()
 
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	svc := testutil.NewStubServices(t)
-	now := time.Now()
-	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), idb.Record{
-		"id":                    "api-tok-borrowed-credential",
-		"owner_kind":            core.APITokenOwnerKindSubject,
-		"owner_id":              "service_account:triage-bot",
-		"credential_subject_id": principal.UserSubjectID("other-user"),
-		"name":                  "triage-bot",
-		"hashed_token":          hashed,
-		"created_at":            now,
-		"updated_at":            now,
-	}); err != nil {
-		t.Fatalf("seed malformed api token: %v", err)
-	}
-
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				t.Fatal("OAuth ValidateToken must not be called for prefixed API tokens")
-				return nil, nil
-			},
-		}
-		cfg.Services = svc
+		cfg.Auth = testAuthStubWithIntrospect(func(_ context.Context, _ string) (*core.IntrospectResponse, error) {
+			return &core.IntrospectResponse{Active: false}, nil
+		})
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps", nil)
-	req.Header.Set("Authorization", "Bearer "+plaintext)
+	req.Header.Set("Authorization", "Bearer inactive-token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -3916,7 +3842,7 @@ func TestAuthMiddleware_SubjectOwnedAPITokenRejectsBorrowedCredentialSubject(t *
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 401 for borrowed credential subject, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 401 for inactive bearer, got %d: %s", resp.StatusCode, body)
 	}
 }
 
@@ -3950,13 +3876,7 @@ func TestAuthMiddleware_NoAuth(t *testing.T) {
 func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 	t.Parallel()
 
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-
 	svc := testutil.NewStubServices(t)
-	seedAPIToken(t, svc, plaintext, hashed, "api-user")
 	openProvider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{
 			N:        "open",
@@ -4062,7 +3982,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 		}
 	})
 
-	t.Run("named auth provider and api tokens both pass through route auth", func(t *testing.T) {
+	t.Run("named auth provider bearer passes through route auth", func(t *testing.T) {
 		t.Parallel()
 
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/locked/ping", nil)
@@ -4081,7 +4001,7 @@ func TestPluginRouteAuth_HTTPRoutesUseNamedAuthProvider(t *testing.T) {
 		}
 
 		req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/locked/operations", nil)
-		req.Header.Set("Authorization", "Bearer "+plaintext)
+		req.Header.Set("Authorization", "Bearer alt-session")
 		resp, err = http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatalf("GET locked operations with api token: %v", err)
@@ -4132,23 +4052,11 @@ func TestAuthMiddleware_UnprefixedTokenRejected(t *testing.T) {
 func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
 	t.Parallel()
 
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-
-	svc := testutil.NewStubServices(t)
-	seedAPIToken(t, svc, plaintext, hashed, "api-user")
+	plaintext := scopedTestBearerToken("api-user", "")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				t.Fatal("OAuth ValidateToken must not be called for prefixed API tokens")
-				return nil, nil
-			},
-		}
-		cfg.Services = svc
+		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -4168,22 +4076,11 @@ func TestAuthMiddleware_PrefixedAPITokenSkipsOAuth(t *testing.T) {
 func TestMetricsEndpointsRequireAuth(t *testing.T) {
 	t.Parallel()
 
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-
-	svc := testutil.NewStubServices(t)
-	seedAPIToken(t, svc, plaintext, hashed, "api-user")
+	plaintext := scopedTestBearerToken("api-user", "")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
-		cfg.Services = svc
+		cfg.Auth = testAuthStubForScopedBearer()
+		cfg.Services = testutil.NewStubServices(t)
 		cfg.PrometheusMetrics = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 			_, _ = w.Write([]byte("gestaltd_operation_count_total 1\n"))
@@ -5759,7 +5656,7 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	}
 }
 
-func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailClosed(t *testing.T) {
+func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicates(t *testing.T) {
 	t.Parallel()
 
 	for _, email := range []string{"user@example.com", "USER@example.com"} {
@@ -5795,8 +5692,9 @@ func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailC
 			}
 			defer func() { _ = resp.Body.Close() }()
 
-			if resp.StatusCode != http.StatusInternalServerError {
-				t.Fatalf("expected 500, got %d", resp.StatusCode)
+			if resp.StatusCode != http.StatusOK {
+				body, _ := io.ReadAll(resp.Body)
+				t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 			}
 		})
 	}
@@ -8360,8 +8258,9 @@ func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider
 
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	secret := []byte("0123456789abcdef0123456789abcdef")
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
+		cfg.Auth = newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "server"})
 		cfg.SelectedAuthProvider = "server"
 		cfg.AuditSink = auditSink
 		cfg.MountedUIs = []server.MountedUI{{
@@ -8411,15 +8310,13 @@ func TestLoginCallback(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{
-				N: "test",
-				HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
-					if code == "good-code" {
-						return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
-					}
-					return nil, fmt.Errorf("bad code")
-				},
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+				if code == "good-code" {
+					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
 			},
 		}
 		cfg.Services = svc
@@ -8451,8 +8348,18 @@ func TestLoginCallback(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["email"] != "user@example.com" {
-		t.Fatalf("unexpected email: %v", result["email"])
+	if result["status"] != "ok" {
+		t.Fatalf("unexpected status: %v", result["status"])
+	}
+	var sessionCookie *http.Cookie
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == "session_token" && cookie.Value != "" {
+			sessionCookie = cookie
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("expected session_token cookie after login")
 	}
 	stored, err := svc.Users.GetUser(context.Background(), existing.ID)
 	if err != nil {
@@ -8497,11 +8404,11 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 	}
 
 	startServer := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
+		cfg.Auth = newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "server"})
 		cfg.SelectedAuthProvider = "server"
 		cfg.StateSecret = secret
 		cfg.AuthProviders = map[string]core.AuthenticationProvider{
-			"alt": &stubHostIssuedSessionAuth{name: "alt"},
+			"alt": newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "alt"}),
 		}
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:    "sample_portal",
@@ -8538,7 +8445,7 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 
 	var auditBuf bytes.Buffer
 	callbackServer := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubHostIssuedSessionAuth{name: "server"}
+		cfg.Auth = newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{name: "server"})
 		cfg.SelectedAuthProvider = "server"
 		cfg.StateSecret = secret
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
@@ -8622,20 +8529,6 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if result["token"] == "" {
 		t.Fatal("expected token in CLI login response")
 	}
-	if result["name"] != "cli-token" {
-		t.Fatalf("expected cli-token name in CLI login response, got %v", result["name"])
-	}
-
-	tokens, err := svc.APITokens.ListAPITokens(context.Background(), u.ID)
-	if err != nil {
-		t.Fatalf("list api tokens: %v", err)
-	}
-	if len(tokens) == 0 {
-		t.Fatal("expected API token to be stored")
-	}
-	if tokens[0].Name != "cli-token" {
-		t.Fatalf("expected cli token name, got %q", tokens[0].Name)
-	}
 
 	for _, cookie := range resp.Cookies() {
 		if cookie.Name == "session_token" {
@@ -8644,28 +8537,8 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	}
 
 	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) < 2 {
-		t.Fatalf("expected CLI login callback to emit token and login audit records, got %d", len(lines))
-	}
-
-	var tokenAudit map[string]any
-	if err := json.Unmarshal(lines[len(lines)-2], &tokenAudit); err != nil {
-		t.Fatalf("parsing token audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if tokenAudit["operation"] != "api_token.create" {
-		t.Fatalf("expected api_token.create audit operation, got %v", tokenAudit["operation"])
-	}
-	if tokenAudit["source"] != "http" {
-		t.Fatalf("expected token audit source http, got %v", tokenAudit["source"])
-	}
-	if subjectID, ok := tokenAudit["subject_id"].(string); !ok || subjectID != principal.UserSubjectID(u.ID) {
-		t.Fatalf("expected token audit subject_id %q, got %v", principal.UserSubjectID(u.ID), tokenAudit["subject_id"])
-	}
-	if _, ok := tokenAudit["user_id"]; ok {
-		t.Fatalf("expected emitted token audit record to omit user_id, got %v", tokenAudit["user_id"])
-	}
-	if tokenAudit["allowed"] != true {
-		t.Fatalf("expected token audit allowed=true, got %v", tokenAudit["allowed"])
+	if len(lines) == 0 {
+		t.Fatalf("expected CLI login callback to emit audit records, got %d", len(lines))
 	}
 
 	var loginAudit map[string]any
@@ -8687,9 +8560,9 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
-	u := seedUser(t, svc, "host@example.com")
+	_ = seedUser(t, svc, "host@example.com")
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubHostIssuedSessionAuth{secret: []byte("host-issued-secret")}
+		cfg.Auth = newHostIssuedSessionAuthStub([]byte("host-issued-secret"), hostIssuedSessionAuthOpts{})
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -8724,22 +8597,19 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	if result["token"] == "" {
 		t.Fatal("expected token in CLI login response")
 	}
-
-	tokens, err := svc.APITokens.ListAPITokens(context.Background(), u.ID)
-	if err != nil {
-		t.Fatalf("list api tokens: %v", err)
-	}
-	if len(tokens) == 0 {
-		t.Fatal("expected API token to be stored")
-	}
 }
 
 func TestLoginCallbackStateMismatch(t *testing.T) {
 	t.Parallel()
 
+	var tokenCalled bool
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			TokenFn: func(context.Context, *core.TokenRequest) (*core.TokenResponse, error) {
+				tokenCalled = true
+				return nil, fmt.Errorf("Token should not be called on state mismatch")
+			},
 		}
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -8763,15 +8633,16 @@ func TestLoginCallbackStateMismatch(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d", resp.StatusCode)
 	}
+	if tokenCalled {
+		t.Fatal("expected provider Token not to be called on state mismatch")
+	}
 }
 
 func TestLoginCallbackMissingStateCookie(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
-		}
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8828,9 +8699,7 @@ func TestLoginCallbackExpiredState(t *testing.T) {
 	nowVal := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Now = func() time.Time { return nowVal }
-		cfg.Auth = &stubAuthWithToken{
-			StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
-		}
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -8864,10 +8733,29 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 		StubAuthProvider: coretesting.StubAuthProvider{N: "test"},
 		handleWithState: func(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
 			if code == "good-code" && state == "encrypted-state" {
-				return &core.UserIdentity{Email: "pkce@example.com"}, "original-state", nil
+				return &core.UserIdentity{Email: "pkce@example.com"}, "encrypted-state", nil
 			}
 			return nil, "", fmt.Errorf("bad code or state")
 		},
+	}
+	stub.TokenFn = func(ctx context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+		if req == nil || req.Code != "good-code" {
+			return nil, fmt.Errorf("invalid code")
+		}
+		identity, _, err := stub.handleWithState(ctx, req.Code, "encrypted-state")
+		if err != nil {
+			return nil, err
+		}
+		token := "dev-token"
+		if identity != nil && identity.Email != "" {
+			token = "dev-token-" + identity.Email
+		}
+		return &core.TokenResponse{
+			AccessToken: token,
+			TokenType:   "Bearer",
+			ExpiresIn:   3600,
+			GrantID:     "grant-encrypted-state",
+		}, nil
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -8878,7 +8766,7 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
 
-	body := bytes.NewBufferString(`{"state":"original-state"}`)
+	body := bytes.NewBufferString(`{"state":"encrypted-state"}`)
 	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
 	if err != nil {
 		t.Fatalf("start login: %v", err)
@@ -8899,8 +8787,8 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["email"] != "pkce@example.com" {
-		t.Fatalf("unexpected email: %v", result["email"])
+	if result["status"] != "ok" {
+		t.Fatalf("unexpected status: %v", result["status"])
 	}
 }
 
@@ -9029,11 +8917,11 @@ func TestStartIntegrationOAuth_ServiceAccountIDStoresCredentialForServiceAccount
 
 	handler := &testOAuthHandler{
 		authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
-		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+		exchangeCodeFn: func(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
 			if code != "good-code" {
 				return nil, fmt.Errorf("bad code")
 			}
-			return &core.TokenResponse{AccessToken: "service-account-oauth-token"}, nil
+			return &core.OAuthTokenResponse{AccessToken: "service-account-oauth-token"}, nil
 		},
 	}
 	stub := &stubIntegrationWithAuthURL{
@@ -9129,9 +9017,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
-			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			exchangeCodeFn: func(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
 				if code == "good-code" {
-					return &core.TokenResponse{
+					return &core.OAuthTokenResponse{
 						AccessToken: "oauth-token",
 						Extra: map[string]any{
 							"tenant":  map[string]any{"id": "tenant-123"},
@@ -9292,9 +9180,9 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		svc := testutil.NewStubServices(t)
 		handler := &testOAuthHandler{
 			authorizationBaseURLVal: "https://auth.example.com/oauth/authorize",
-			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			exchangeCodeFn: func(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
 				if code == "good-code" {
-					return &core.TokenResponse{
+					return &core.OAuthTokenResponse{
 						AccessToken: "oauth-token",
 						Extra: map[string]any{
 							"tenant":  map[string]any{"id": "tenant-123"},
@@ -9536,13 +9424,16 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuth(cfg)
+		cfg.Providers = grantTestProviders(t)
 		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"my-token"}`)
+	body := bytes.NewBufferString(`{"name":"my-token","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9553,15 +9444,277 @@ func TestCreateAndListAPITokens(t *testing.T) {
 		t.Fatalf("expected 201, got %d", resp.StatusCode)
 	}
 
-	var result map[string]string
+	var result struct {
+		ID     string   `json:"id"`
+		Token  string   `json:"token"`
+		Name   string   `json:"name"`
+		Scopes []string `json:"scopes"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if result["token"] == "" {
+	if result.Token == "" {
 		t.Fatal("expected non-empty token in response")
 	}
-	if result["name"] != "my-token" {
-		t.Fatalf("expected name my-token, got %q", result["name"])
+	if result.ID == "" {
+		t.Fatal("expected non-empty grant id in response")
+	}
+	if result.Name != result.ID {
+		t.Fatalf("expected name to equal grant id %q, got %q", result.ID, result.Name)
+	}
+	if len(result.Scopes) != 1 || result.Scopes[0] != "testapp" {
+		t.Fatalf("expected scopes [testapp], got %v", result.Scopes)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(listReq)
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("list status = %d, want 200: %s", listResp.StatusCode, respBody)
+	}
+
+	var listed []struct {
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		CreatedAt string   `json:"createdAt"`
+		ExpiresAt string   `json:"expiresAt"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 {
+		t.Fatalf("expected 1 listed token, got %d", len(listed))
+	}
+	if listed[0].ID != result.ID {
+		t.Fatalf("listed id = %q, want %q", listed[0].ID, result.ID)
+	}
+	if listed[0].Name != result.ID {
+		t.Fatalf("listed name = %q, want grant id %q", listed[0].Name, result.ID)
+	}
+	if len(listed[0].Scopes) != 1 || listed[0].Scopes[0] != "testapp" {
+		t.Fatalf("listed scopes = %v, want [testapp]", listed[0].Scopes)
+	}
+	if _, err := time.Parse(time.RFC3339, listed[0].CreatedAt); err != nil {
+		t.Fatalf("listed createdAt = %q, want RFC3339: %v", listed[0].CreatedAt, err)
+	}
+	if _, err := time.Parse(time.RFC3339, listed[0].ExpiresAt); err != nil {
+		t.Fatalf("listed expiresAt = %q, want RFC3339: %v", listed[0].ExpiresAt, err)
+	}
+}
+
+func TestCreateAPITokenRejectsEmptyScopes(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuth(cfg)
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"empty-scope-token"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create status = %d, want 400: %s", resp.StatusCode, respBody)
+	}
+	if !strings.Contains(string(respBody), "scopes are required") {
+		t.Fatalf("create response = %s, want scopes are required error", respBody)
+	}
+}
+
+func TestCreateAPITokenRejectsMissingGrantID(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	stub.TokenFn = func(_ context.Context, req *core.TokenRequest) (*core.TokenResponse, error) {
+		if req != nil {
+			copied := *req
+			stub.lastTokenExchangeReq = &copied
+		}
+		return &core.TokenResponse{
+			AccessToken: "grant-access-no-id",
+			TokenType:   "Bearer",
+			ExpiresIn:   3600,
+		}, nil
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Providers = grantTestProviders(t)
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"missing-grant-id","scopes":"testapp"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read create response: %v", err)
+	}
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("create status = %d, want 500: %s", resp.StatusCode, respBody)
+	}
+}
+
+func TestCreateAPITokenDoesNotUseStateForName(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Providers = grantTestProviders(t)
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"named-token","scopes":"testapp"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create status = %d, want 201: %s", resp.StatusCode, respBody)
+	}
+
+	if stub.lastTokenExchangeReq == nil {
+		t.Fatal("expected token exchange request to be recorded")
+	}
+	if stub.lastTokenExchangeReq.State != "" {
+		t.Fatalf("token exchange state = %q, want empty", stub.lastTokenExchangeReq.State)
+	}
+}
+
+func TestListAPITokensSkipsNotFoundGrant(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	now := time.Now().UTC()
+	stub.grants["grant-live"] = &core.GetGrantResponse{
+		CreatedAt: now.Unix(),
+		ExpiresAt: now.Add(time.Hour).Unix(),
+		Scopes:    []core.GrantScope{{Scope: "testapp"}},
+	}
+	stub.ListGrantsFn = func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+		return &core.ListGrantsResponse{GrantIDs: []string{"grant-live", "grant-stale"}}, nil
+	}
+	stub.GetGrantFn = func(_ context.Context, req *core.GetGrantRequest) (*core.GetGrantResponse, error) {
+		if req == nil {
+			return nil, fmt.Errorf("missing grant request")
+		}
+		switch req.GrantID {
+		case "grant-live":
+			return stub.grants["grant-live"], nil
+		case "grant-stale":
+			return nil, core.ErrNotFound
+		default:
+			return nil, core.ErrNotFound
+		}
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	var tokens []struct {
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		CreatedAt string   `json:"createdAt"`
+		ExpiresAt string   `json:"expiresAt"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(tokens) != 1 || tokens[0].ID != "grant-live" {
+		t.Fatalf("tokens = %+v, want only grant-live", tokens)
+	}
+	if tokens[0].Name != "grant-live" {
+		t.Fatalf("listed token name = %q, want grant id", tokens[0].Name)
+	}
+	if len(tokens[0].Scopes) != 1 || tokens[0].Scopes[0] != "testapp" {
+		t.Fatalf("listed scopes = %v, want [testapp]", tokens[0].Scopes)
+	}
+	expectedCreatedAt := time.Unix(now.Unix(), 0).UTC().Format(time.RFC3339)
+	if tokens[0].CreatedAt != expectedCreatedAt {
+		t.Fatalf("listed createdAt = %q, want %q", tokens[0].CreatedAt, expectedCreatedAt)
+	}
+	expectedExpiresAt := time.Unix(now.Add(time.Hour).Unix(), 0).UTC().Format(time.RFC3339)
+	if tokens[0].ExpiresAt != expectedExpiresAt {
+		t.Fatalf("listed expiresAt = %q, want %q", tokens[0].ExpiresAt, expectedExpiresAt)
+	}
+}
+
+func TestListAPITokensGetGrantFailureReturns500(t *testing.T) {
+	t.Parallel()
+
+	stub := newGrantTrackingAuthStub()
+	stub.ListGrantsFn = func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+		return &core.ListGrantsResponse{GrantIDs: []string{"grant-live"}}, nil
+	}
+	stub.GetGrantFn = func(context.Context, *core.GetGrantRequest) (*core.GetGrantResponse, error) {
+		return nil, fmt.Errorf("storage unavailable")
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = stub
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list status = %d, want 500: %s", resp.StatusCode, respBody)
 	}
 }
 
@@ -9569,6 +9722,7 @@ func TestCreateAPITokenRejectsUnknownPermissionFields(t *testing.T) {
 	t.Parallel()
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuth(cfg)
 		cfg.Services = testutil.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -9580,6 +9734,7 @@ func TestCreateAPITokenRejectsUnknownPermissionFields(t *testing.T) {
 	body := bytes.NewBufferString(`{"name":"action-token","permissions":[{"app":"roadmap","actions":["legacy.action"]}]}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("create request: %v", err)
@@ -9604,13 +9759,16 @@ func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuth(cfg)
+		cfg.Providers = grantTestProviders(t)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"owned-token"}`)
+	body := bytes.NewBufferString(`{"name":"owned-token","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("create request: %v", err)
@@ -9629,6 +9787,7 @@ func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("list request: %v", err)
@@ -9640,13 +9799,26 @@ func TestListAPITokensListsOwnedUserRecords(t *testing.T) {
 	}
 
 	var tokens []struct {
-		ID string `json:"id"`
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		CreatedAt string   `json:"createdAt"`
+		ExpiresAt string   `json:"expiresAt"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
 	if len(tokens) != 1 || tokens[0].ID != createResp.ID {
 		t.Fatalf("tokens = %+v, want only %q", tokens, createResp.ID)
+	}
+	if len(tokens[0].Scopes) != 1 || tokens[0].Scopes[0] != "testapp" {
+		t.Fatalf("listed scopes = %v, want [testapp]", tokens[0].Scopes)
+	}
+	if _, err := time.Parse(time.RFC3339, tokens[0].CreatedAt); err != nil {
+		t.Fatalf("listed createdAt = %q, want RFC3339: %v", tokens[0].CreatedAt, err)
+	}
+	if _, err := time.Parse(time.RFC3339, tokens[0].ExpiresAt); err != nil {
+		t.Fatalf("listed expiresAt = %q, want RFC3339: %v", tokens[0].ExpiresAt, err)
 	}
 }
 
@@ -9656,19 +9828,20 @@ func TestRevokeAPIToken(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	var auditBuf bytes.Buffer
-	ctx := context.Background()
-	exp := time.Now().Add(24 * time.Hour)
-	_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-		ID: "tok-123", OwnerKind: core.APITokenOwnerKindUser, OwnerID: u.ID, CredentialSubjectID: principal.UserSubjectID(u.ID), Name: "test", HashedToken: "h1", ExpiresAt: &exp,
-	})
-
+	now := time.Now().UTC()
 	ts := newTestServer(t, func(cfg *server.Config) {
+		stub := configureGrantTestAuthForUser(cfg, u.ID)
+		stub.grants["tok-123"] = &core.GetGrantResponse{
+			CreatedAt: now.Unix(),
+			ExpiresAt: now.Add(24 * time.Hour).Unix(),
+		}
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens/tok-123", nil)
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9729,25 +9902,18 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "User@Example.com"}, nil
-			},
-		}
+		configureGrantTestAuthForUser(cfg, existing.ID)
+		cfg.Providers = grantTestProviders(t)
 		cfg.Now = func() time.Time { return fixedNow }
 		cfg.AuditSink = auditSink
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"name":"expiry-test"}`)
+	body := bytes.NewBufferString(`{"name":"expiry-test","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9784,22 +9950,39 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 		t.Fatalf("expected expiresAt %v, got %v", expected, expiresAt)
 	}
 
-	tokens, err := svc.APITokens.ListAPITokens(context.Background(), existing.ID)
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(listReq)
+	listResp, err := http.DefaultClient.Do(listReq)
 	if err != nil {
-		t.Fatalf("list api tokens: %v", err)
+		t.Fatalf("list grants: %v", err)
 	}
-	if len(tokens) != 1 {
-		t.Fatalf("expected 1 API token for canonical user, got %d", len(tokens))
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("list status = %d, want 200: %s", listResp.StatusCode, respBody)
 	}
-	if tokens[0].ID != tokenID {
-		t.Fatalf("expected stored token ID %q, got %q", tokenID, tokens[0].ID)
+	var grants []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&grants); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(grants) != 1 {
+		t.Fatalf("expected 1 grant for canonical user, got %d", len(grants))
+	}
+	if grants[0].ID != tokenID {
+		t.Fatalf("expected stored grant ID %q, got %q", tokenID, grants[0].ID)
 	}
 
 	var auditRecord map[string]any
-	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+	auditLines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(auditLines) == 0 {
+		t.Fatal("expected grant.create audit record")
+	}
+	if err := json.Unmarshal(auditLines[0], &auditRecord); err != nil {
 		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
 	}
-	if auditRecord["operation"] != "api_token.create" {
+	if auditRecord["operation"] != "grant.create" {
 		t.Fatalf("expected audit operation api_token.create, got %v", auditRecord["operation"])
 	}
 	if auditRecord["source"] != "http" {
@@ -9833,15 +10016,8 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "session-token" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
-			},
-		}
+		cfg.Auth = authStubWithSessionEmail("user@example.com")
+		cfg.Providers = grantTestProviders(t)
 		cfg.AuditSink = auditSink
 		cfg.Services = svc
 	})
@@ -9849,10 +10025,10 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 
 	stubDB.Err = fmt.Errorf("database unavailable")
 
-	body := bytes.NewBufferString(`{"name":"failure-test"}`)
+	body := bytes.NewBufferString(`{"name":"failure-test","scopes":"testapp"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9869,8 +10045,8 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
 		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
 	}
-	if auditRecord["operation"] != "api_token.create" {
-		t.Fatalf("expected audit operation api_token.create, got %v", auditRecord["operation"])
+	if auditRecord["operation"] != "grant.create" {
+		t.Fatalf("expected audit operation grant.create, got %v", auditRecord["operation"])
 	}
 	if auditRecord["allowed"] != false {
 		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
@@ -9880,73 +10056,28 @@ func TestCreateAPIToken_AuditResolveUserFailure(t *testing.T) {
 	}
 }
 
-func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
-	t.Parallel()
-
-	fixedNow := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-	customTTL := 7 * 24 * time.Hour
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Now = func() time.Time { return fixedNow }
-		cfg.APITokenTTL = customTTL
-		cfg.Services = testutil.NewStubServices(t)
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	body := bytes.NewBufferString(`{"name":"ttl-test"}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, respBody)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	expiresAtStr, ok := result["expiresAt"].(string)
-	if !ok {
-		t.Fatal("expected expiresAt string in response")
-	}
-	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
-	if err != nil {
-		t.Fatalf("parsing expiresAt: %v", err)
-	}
-	expected := fixedNow.Add(customTTL).UTC().Truncate(time.Second)
-	if !expiresAt.Equal(expected) {
-		t.Fatalf("expected expiresAt %v, got %v", expected, expiresAt)
-	}
-}
-
 func TestRevokeAllAPITokens(t *testing.T) {
 	t.Parallel()
 
 	svc := testutil.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
 	var auditBuf bytes.Buffer
-	ctx := context.Background()
-	exp := time.Now().Add(24 * time.Hour)
-	for i, name := range []string{"tok-a", "tok-b", "tok-c"} {
-		_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-			ID: name, OwnerKind: core.APITokenOwnerKindUser, OwnerID: u.ID, CredentialSubjectID: principal.UserSubjectID(u.ID), Name: fmt.Sprintf("token-%d", i),
-			HashedToken: fmt.Sprintf("h%d", i), ExpiresAt: &exp,
-		})
-	}
-
+	now := time.Now().UTC()
 	ts := newTestServer(t, func(cfg *server.Config) {
+		stub := configureGrantTestAuthForUser(cfg, u.ID)
+		for _, name := range []string{"tok-a", "tok-b", "tok-c"} {
+			stub.grants[name] = &core.GetGrantResponse{
+				CreatedAt: now.Unix(),
+				ExpiresAt: now.Add(24 * time.Hour).Unix(),
+			}
+		}
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -9980,12 +10111,16 @@ func TestRevokeAllAPITokens(t *testing.T) {
 func TestRevokeAllAPITokens_NoneExist(t *testing.T) {
 	t.Parallel()
 
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Services = testutil.NewStubServices(t)
+		configureGrantTestAuthForUser(cfg, u.ID)
+		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -10002,6 +10137,153 @@ func TestRevokeAllAPITokens_NoneExist(t *testing.T) {
 	}
 	if count, ok := result["count"].(float64); !ok || count != 0 {
 		t.Fatalf("expected count 0, got %v", result["count"])
+	}
+}
+
+func TestRevokeAllAPITokens_ListGrantsNil(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		stub := configureGrantTestAuthForUser(cfg, u.ID)
+		stub.ListGrantsFn = func(context.Context, *core.ListGrantsRequest) (*core.ListGrantsResponse, error) {
+			return nil, nil
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+}
+
+func TestRevokeAllAPITokens_PartialFailure(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	now := time.Now().UTC()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		stub := configureGrantTestAuthForUser(cfg, u.ID)
+		for _, name := range []string{"tok-a", "tok-b"} {
+			stub.grants[name] = &core.GetGrantResponse{
+				CreatedAt: now.Unix(),
+				ExpiresAt: now.Add(24 * time.Hour).Unix(),
+			}
+		}
+		stub.RevokeGrantFn = func(_ context.Context, req *core.RevokeGrantRequest) (*core.RevokeGrantResponse, error) {
+			if req == nil || req.GrantID == "" {
+				return nil, core.ErrNotFound
+			}
+			if req.GrantID == "tok-b" {
+				return nil, fmt.Errorf("failed to revoke grant")
+			}
+			stub.mu.Lock()
+			defer stub.mu.Unlock()
+			if _, ok := stub.grants[req.GrantID]; !ok {
+				return nil, core.ErrNotFound
+			}
+			stub.revoked[req.GrantID] = struct{}{}
+			return &core.RevokeGrantResponse{}, nil
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "partial" {
+		t.Fatalf("expected status partial, got %q", result["status"])
+	}
+	if count, ok := result["count"].(float64); !ok || count != 1 {
+		t.Fatalf("expected count 1, got %v", result["count"])
+	}
+	failed, ok := result["failed"].([]any)
+	if !ok || len(failed) != 1 {
+		t.Fatalf("expected one failed entry, got %v", result["failed"])
+	}
+	entry, ok := failed[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected failed entry object, got %T", failed[0])
+	}
+	if entry["id"] != "tok-b" {
+		t.Fatalf("expected failed id tok-b, got %v", entry["id"])
+	}
+}
+
+func TestRevokeAllAPITokens_ExcludesSessionGrants(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	now := time.Now().UTC()
+	var stub *grantTrackingAuthStub
+	ts := newTestServer(t, func(cfg *server.Config) {
+		stub = configureGrantTestAuthForUser(cfg, u.ID)
+		stub.grants["grant-stub"] = &core.GetGrantResponse{
+			CreatedAt: now.Unix(),
+			ExpiresAt: now.Add(24 * time.Hour).Unix(),
+		}
+		stub.grants["tok-a"] = &core.GetGrantResponse{
+			CreatedAt: now.Unix(),
+			ExpiresAt: now.Add(24 * time.Hour).Unix(),
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/tokens", nil)
+	addGrantTestSessionCookie(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if count, ok := result["count"].(float64); !ok || count != 1 {
+		t.Fatalf("expected count 1, got %v", result["count"])
+	}
+	stub.mu.Lock()
+	_, sessionRevoked := stub.revoked["grant-stub"]
+	_, apiRevoked := stub.revoked["tok-a"]
+	stub.mu.Unlock()
+	if sessionRevoked {
+		t.Fatal("expected session grant-stub to remain active")
+	}
+	if !apiRevoked {
+		t.Fatal("expected API token tok-a to be revoked")
 	}
 }
 
@@ -10065,12 +10347,8 @@ func TestExecuteOperation_POST(t *testing.T) {
 func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *testing.T) {
 	t.Parallel()
 
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
+	plaintext := scopedTestBearerToken("viewer-user", "")
 	svc := testutil.NewStubServices(t)
-	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
 	seedUser(t, svc, "viewer-user@test.local")
 
 	hidden := false
@@ -10092,7 +10370,7 @@ func TestVisibleFalseGenericRouteSkipsSessionCatalogCredentialResolution(t *test
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
 		cfg.Services = svc
 	})
@@ -10369,6 +10647,7 @@ func TestAuthInfo(t *testing.T) {
 	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = stub
+		cfg.SelectedAuthProvider = "google"
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -10403,6 +10682,7 @@ func TestAuthInfoFallback(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "custom"}
+		cfg.SelectedAuthProvider = "custom"
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -10591,25 +10871,6 @@ func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name s
 	return mcpgo.NewToolResultText("passthrough:" + name), nil
 }
 
-type stubAuthWithLoginURL struct {
-	coretesting.StubAuthProvider
-	loginURL      string
-	capturedState string
-	loginURLCtxFn func(context.Context, string) (string, error)
-}
-
-func (s *stubAuthWithLoginURL) LoginURL(state string) (string, error) {
-	s.capturedState = state
-	return s.loginURL, nil
-}
-
-func (s *stubAuthWithLoginURL) LoginURLContext(ctx context.Context, state string) (string, error) {
-	if s.loginURLCtxFn != nil {
-		return s.loginURLCtxFn(ctx, state)
-	}
-	return s.LoginURL(state)
-}
-
 type stubIntegrationWithAuthURL struct {
 	coretesting.StubIntegration
 	authURL          string
@@ -10631,12 +10892,12 @@ func (s *stubPKCEIntegration) StartOAuth(state string, _ []string) (string, stri
 	return s.AuthorizationURL(state, nil), s.wantVerifier
 }
 
-func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+func (s *stubPKCEIntegration) ExchangeCodeWithVerifier(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error) {
 	s.gotVerifier = verifier
 	if code != "good-code" {
 		return nil, fmt.Errorf("bad code")
 	}
-	return &core.TokenResponse{AccessToken: "pkce-token"}, nil
+	return &core.OAuthTokenResponse{AccessToken: "pkce-token"}, nil
 }
 
 func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
@@ -10653,12 +10914,12 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 		startOAuthFn: func(state string, _ []string) (string, string) {
 			return "https://gitlab.com/oauth/authorize?state=" + state, "verifier-123"
 		},
-		exchangeCodeWithVerFn: func(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+		exchangeCodeWithVerFn: func(_ context.Context, code, verifier string, _ ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error) {
 			stub.gotVerifier = verifier
 			if code != "good-code" {
 				return nil, fmt.Errorf("bad code")
 			}
-			return &core.TokenResponse{AccessToken: "pkce-token"}, nil
+			return &core.OAuthTokenResponse{AccessToken: "pkce-token"}, nil
 		},
 	}
 
@@ -10717,10 +10978,10 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 
 type stubOAuthIntegration struct {
 	stubIntegrationWithOps
-	refreshTokenFn func(context.Context, string) (*core.TokenResponse, error)
+	refreshTokenFn func(context.Context, string) (*core.OAuthTokenResponse, error)
 }
 
-func (s *stubOAuthIntegration) RefreshToken(ctx context.Context, token string) (*core.TokenResponse, error) {
+func (s *stubOAuthIntegration) RefreshToken(ctx context.Context, token string) (*core.OAuthTokenResponse, error) {
 	if s.refreshTokenFn != nil {
 		return s.refreshTokenFn(ctx, token)
 	}
@@ -10907,9 +11168,9 @@ func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
-		refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(_ context.Context, rt string) (*core.OAuthTokenResponse, error) {
 			if rt == "old-refresh-token" {
-				return &core.TokenResponse{AccessToken: "fresh-access-token", ExpiresIn: 3600}, nil
+				return &core.OAuthTokenResponse{AccessToken: "fresh-access-token", ExpiresIn: 3600}, nil
 			}
 			return nil, fmt.Errorf("unexpected refresh token")
 		},
@@ -10970,7 +11231,7 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
-		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(context.Context, string) (*core.OAuthTokenResponse, error) {
 			return nil, fmt.Errorf("upstream error")
 		},
 	}
@@ -11076,7 +11337,7 @@ func TestExecuteOperation_RefreshPassesThroughStoredTokenWhenRefreshDoesNotApply
 			var connectionAuth func() map[string]map[string]bootstrap.OAuthHandler
 			if tc.configureConnectionAuth {
 				connectionAuth = testConnectionAuth("fake", &testOAuthHandler{
-					refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+					refreshTokenFn: func(context.Context, string) (*core.OAuthTokenResponse, error) {
 						refreshCalled = true
 						return nil, fmt.Errorf("unexpected refresh")
 					},
@@ -11116,14 +11377,14 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 
 	cases := []struct {
 		name              string
-		response          *core.TokenResponse
+		response          *core.OAuthTokenResponse
 		wantAccessToken   string
 		wantRefreshToken  string
 		wantHasExpiration bool
 	}{
 		{
 			name: "rotates refresh token and expiry",
-			response: &core.TokenResponse{
+			response: &core.OAuthTokenResponse{
 				AccessToken:  "new-access",
 				RefreshToken: "rotated-refresh",
 				ExpiresIn:    7200,
@@ -11134,7 +11395,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 		},
 		{
 			name: "clears expiry when omitted",
-			response: &core.TokenResponse{
+			response: &core.OAuthTokenResponse{
 				AccessToken: "new-access",
 				ExpiresIn:   0,
 			},
@@ -11170,7 +11431,7 @@ func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
 					},
 					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 				},
-				refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+				refreshTokenFn: func(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
 					return tc.response, nil
 				},
 			}
@@ -11268,7 +11529,7 @@ func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 					},
 					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 				},
-				refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+				refreshTokenFn: func(context.Context, string) (*core.OAuthTokenResponse, error) {
 					if tc.beforeRefresh != nil {
 						tc.beforeRefresh(svc)
 					}
@@ -11327,7 +11588,7 @@ func TestExecuteOperation_RefreshErrorSkipsStoreOnConcurrentRefresh(t *testing.T
 			},
 			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
-		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
 			ctx := context.Background()
 			_ = svc.ExternalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
 				ID:        "tok1",
@@ -11383,9 +11644,9 @@ func TestExecuteOperation_UpsertCredentialFailureReturnsError(t *testing.T) {
 			StubIntegration: coretesting.StubIntegration{N: "fake"},
 			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 		},
-		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(_ context.Context, _ string) (*core.OAuthTokenResponse, error) {
 			provider.PutErr = fmt.Errorf("store unavailable")
-			return &core.TokenResponse{
+			return &core.OAuthTokenResponse{
 				AccessToken:  "new-access",
 				RefreshToken: "rotated-refresh",
 				ExpiresIn:    3600,
@@ -11564,7 +11825,7 @@ func TestExecuteOperation_HTTPAndMCPEquivalent(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		Identity: &core.UserIdentity{Email: "dev@example.com"},
 		UserID:   "u1",
-		Source:   principal.SourceSession,
+		Source:   principal.SourceBearer,
 	})
 	payload, _ := json.Marshal(map[string]any{
 		"jsonrpc": "2.0",
@@ -11920,9 +12181,9 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	var exchangedConnection string
 	handler := &testOAuthHandler{
 		authorizationBaseURLVal: "https://provider.example/oauth",
-		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+		exchangeCodeFn: func(_ context.Context, code string) (*core.OAuthTokenResponse, error) {
 			exchangedConnection = "conn-b"
-			return &core.TokenResponse{AccessToken: "token-for-b"}, nil
+			return &core.OAuthTokenResponse{AccessToken: "token-for-b"}, nil
 		},
 	}
 
@@ -12045,20 +12306,20 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 			}
 			handler := &testOAuthHandler{
 				tokenURLVal: tc.tokenURL,
-				refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
+				refreshTokenFn: func(_ context.Context, rt string) (*core.OAuthTokenResponse, error) {
 					if tc.wantRefreshedURL != "" {
 						t.Fatalf("expected refresh to use resolved token URL override")
 					}
 					refreshedToken = rt
-					return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+					return &core.OAuthTokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
 				},
-				refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.TokenResponse, error) {
+				refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.OAuthTokenResponse, error) {
 					if tc.wantRefreshedURL == "" {
 						t.Fatalf("expected direct refresh without token URL override")
 					}
 					refreshedToken = rt
 					refreshedURL = tokenURL
-					return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+					return &core.OAuthTokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
 				},
 			}
 
@@ -12126,14 +12387,14 @@ func TestRefresh_UsesResolvedConnectionTokenURL(t *testing.T) {
 	}
 	handler := &testOAuthHandler{
 		tokenURLVal: "https://{tenant}.example.com/oauth/token",
-		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+		refreshTokenFn: func(context.Context, string) (*core.OAuthTokenResponse, error) {
 			t.Fatal("expected refresh to use resolved token URL override")
 			return nil, nil
 		},
-		refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.TokenResponse, error) {
+		refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.OAuthTokenResponse, error) {
 			refreshedToken = rt
 			refreshedURL = tokenURL
-			return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+			return &core.OAuthTokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
 		},
 	}
 
@@ -13623,68 +13884,6 @@ func TestExecuteOperation_RuntimeUnavailableMessage(t *testing.T) {
 	}
 }
 
-type stubAuthWithToken struct {
-	coretesting.StubAuthProvider
-}
-
-func (s *stubAuthWithToken) IssueSessionToken(identity *core.UserIdentity) (string, error) {
-	return "dev-token-" + identity.Email, nil
-}
-
-func (s *stubAuthWithToken) SessionTokenTTL() time.Duration {
-	return time.Hour
-}
-
-type stubHostIssuedSessionAuth struct {
-	secret      []byte
-	name        string
-	loginHost   string
-	email       string
-	displayName string
-}
-
-func (s *stubHostIssuedSessionAuth) Name() string {
-	if s.name != "" {
-		return s.name
-	}
-	return "host-issued"
-}
-
-func (s *stubHostIssuedSessionAuth) LoginURL(state string) (string, error) {
-	host := s.loginHost
-	if host == "" {
-		host = "idp.example.test"
-	}
-	return "https://" + host + "/login?state=" + url.QueryEscape(state), nil
-}
-
-func (s *stubHostIssuedSessionAuth) HandleCallback(_ context.Context, _ string) (*core.UserIdentity, error) {
-	return nil, fmt.Errorf("use HandleCallbackWithState")
-}
-
-func (s *stubHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
-	if code != "good-code" {
-		return nil, "", fmt.Errorf("unexpected code %q", code)
-	}
-	email := s.email
-	if email == "" {
-		email = "host@example.com"
-	}
-	displayName := s.displayName
-	if displayName == "" {
-		displayName = "Host Issued"
-	}
-	return &core.UserIdentity{Email: email, DisplayName: displayName}, state, nil
-}
-
-func (s *stubHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
-	return session.ValidateToken(token, s.secret)
-}
-
-func (s *stubHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
-	return time.Hour
-}
-
 func TestCookieAuth(t *testing.T) {
 	t.Parallel()
 
@@ -13750,7 +13949,7 @@ func TestLoginCallback_HostIssuesSessionWhenProviderDoesNot(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	auth := &stubHostIssuedSessionAuth{secret: secret}
+	auth := newHostIssuedSessionAuthStub(secret, hostIssuedSessionAuthOpts{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("cookiejar.New: %v", err)
@@ -13927,12 +14126,8 @@ func TestExecuteOperation_ConnectionModeSubjectUsesSubjectCredential(t *testing.
 		t.Parallel()
 
 		svc := testutil.NewStubServices(t)
-		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-		if err != nil {
-			t.Fatalf("GenerateToken: %v", err)
-		}
-		seedAPIToken(t, svc, apiToken, hashed, "api-user")
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "api-user@test.local")
+		apiToken := scopedTestBearerToken(u.ID, "")
 		seedToken(t, svc, &core.ExternalCredential{
 			ID:        "tok-user",
 			Subject:   principal.UserSubjectID(u.ID),
@@ -13942,7 +14137,7 @@ func TestExecuteOperation_ConnectionModeSubjectUsesSubjectCredential(t *testing.
 		})
 
 		ts := newTestServer(t, func(cfg *server.Config) {
-			cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+			cfg.Auth = testAuthStubForScopedBearer()
 			cfg.Providers = testutil.NewProviderRegistry(t, stub)
 			cfg.Services = svc
 		})
@@ -14168,7 +14363,6 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 
 	const (
 		serviceAccountSubjectID = "service_account:manual-bot"
-		credentialSubjectID     = "service_account:reports"
 	)
 
 	svc := testutil.NewStubServices(t)
@@ -14176,31 +14370,11 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	exp := time.Now().Add(24 * time.Hour)
-	if err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
-		ID:                  "api-tok-service-account-credential-subject",
-		OwnerKind:           core.APITokenOwnerKindUser,
-		OwnerID:             user.ID,
-		CredentialSubjectID: credentialSubjectID,
-		Name:                "service account credential subject",
-		HashedToken:         hashed,
-		ExpiresAt:           &exp,
-	}); err != nil {
-		t.Fatalf("StoreAPIToken: %v", err)
-	}
+	apiToken := scopedTestBearerToken(user.ID, "")
 	authz := &serviceAccountCredentialAuthorizationProvider{allowed: true}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 			StubIntegration: coretesting.StubIntegration{N: "manual-service-account-invoker"},
 		})
@@ -14234,8 +14408,8 @@ func TestConnectManual_ServiceAccountIDAuthorizesInvokingSubjectNotCredentialSub
 	if got, want := authReq.GetSubject().GetId(), principal.UserSubjectID(user.ID); got != want {
 		t.Fatalf("authorization subject id = %q, want invoking subject %q", got, want)
 	}
-	if got := authReq.GetSubject().GetId(); got == credentialSubjectID {
-		t.Fatalf("authorization subject id = %q, must not use credential subject", got)
+	if got := authReq.GetSubject().GetId(); strings.HasPrefix(got, "service_account:") {
+		t.Fatalf("authorization subject id = %q, must not use service account credential subject", got)
 	}
 	if resource := authReq.GetResource(); resource.GetType() != "service_account" || resource.GetId() != serviceAccountSubjectID {
 		t.Fatalf("authorization resource = %+v, want service_account/%s", resource, serviceAccountSubjectID)
@@ -14847,25 +15021,10 @@ func TestAPITokenScopes_EnforcedDuringInvocation(t *testing.T) {
 	}
 
 	svc := testutil.NewStubServices(t)
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	ctx := context.Background()
-	u, _ := svc.Users.FindOrCreateUser(ctx, "scoped@test.local")
-	exp := time.Now().Add(24 * time.Hour)
-	_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
-		ID: "api-tok-scoped", OwnerKind: core.APITokenOwnerKindUser, OwnerID: u.ID, CredentialSubjectID: principal.UserSubjectID(u.ID), Name: "scoped-token",
-		HashedToken: hashed, Scopes: "alpha", ExpiresAt: &exp,
-	})
+	plaintext := scopedTestBearerToken("scoped", "alpha")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Providers = testutil.NewProviderRegistry(t, alphaStub, betaStub)
 		cfg.Services = svc
 	})
@@ -14914,22 +15073,12 @@ func TestAPITokenScopes_EmptyScopesAllowAll(t *testing.T) {
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
 	}
 
-	svc := testutil.NewStubServices(t)
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	seedAPIToken(t, svc, plaintext, hashed, "unscoped")
+	plaintext := scopedTestBearerToken("unscoped", "")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = svc
+		cfg.Services = testutil.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -14954,11 +15103,8 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	}
 
 	svc := testutil.NewStubServices(t)
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	user := seedAPITokenWithPermissions(t, svc, plaintext, hashed, "cli-user", nil)
+	user := seedUser(t, svc, "cli-user@test.local")
+	plaintext := scopedTestBearerToken(user.ID, "")
 	invoker := &callerTokenRecordingInvoker{}
 	now := time.Now().UTC()
 	privateKeyPEM, publicKeyPEM := testProviderGatewayCallerTokenKeyPair(t)
@@ -14968,12 +15114,7 @@ func TestExecuteOperationIssuesProviderGatewayCallerToken(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, fmt.Errorf("not a session token")
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Invoker = invoker
 		cfg.Now = func() time.Time { return now }
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
@@ -15040,6 +15181,7 @@ func TestCreateAPIToken_InvalidScope(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		configureGrantTestAuth(cfg)
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Services = testutil.NewStubServices(t)
 	})
@@ -15048,6 +15190,7 @@ func TestCreateAPIToken_InvalidScope(t *testing.T) {
 	body := bytes.NewBufferString(`{"name":"test-token","scopes":"nonexistent"}`)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
 	req.Header.Set("Content-Type", "application/json")
+	addGrantTestSessionCookie(req)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)

@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -90,15 +89,7 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = authStubWithSessionTokenIntrospect("ada-session", principal.UserSubjectID(user.ID), "")
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -164,23 +155,7 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 
 	services := testutil.NewStubServices(t)
 	user := seedUser(t, services, "ada@example.test")
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	expiresAt := time.Now().Add(24 * time.Hour)
-	if err := services.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
-		ID:                  "workflow-runs-token",
-		OwnerKind:           core.APITokenOwnerKindUser,
-		OwnerID:             user.ID,
-		CredentialSubjectID: principal.UserSubjectID(user.ID),
-		Name:                "workflow-runs-token",
-		HashedToken:         hashed,
-		ExpiresAt:           &expiresAt,
-		Permissions:         []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}},
-	}); err != nil {
-		t.Fatalf("StoreAPIToken: %v", err)
-	}
+	plaintext := scopedTestBearerToken(user.ID, "roadmap:sync")
 
 	provider := newMemoryWorkflowProvider()
 	now := time.Now().UTC().Truncate(time.Second)
@@ -200,12 +175,7 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
-				return nil, core.ErrNotFound
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -296,15 +266,7 @@ func TestGlobalWorkflowRunInspectionIncludesDurableStepState(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = authStubWithSessionTokenIntrospect("ada-session", principal.UserSubjectID(user.ID), "")
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",
@@ -368,15 +330,7 @@ func TestGlobalWorkflowRunCancelUpdatesOwnedRun(t *testing.T) {
 	provider.runs[run.ID] = run
 
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
-			},
-		}
+		cfg.Auth = authStubWithSessionTokenIntrospect("ada-session", principal.UserSubjectID(user.ID), "")
 		cfg.Services = services
 		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
 			N:        "roadmap",

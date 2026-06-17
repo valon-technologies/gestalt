@@ -148,12 +148,12 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.ExternalCredentials, invocation.WithTracerProvider(tp))
 
 	srv, err := server.New(server.Config{
-		Auth:           &coretesting.StubAuthProvider{N: "none"},
-		Services:       ds,
-		Providers:      providers,
-		Invoker:        broker,
-		StateSecret:    []byte("0123456789abcdef0123456789abcdef"),
-		TracerProvider: tp,
+		SelectedAuthProvider: "none",
+		Services:             ds,
+		Providers:            providers,
+		Invoker:              broker,
+		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
+		TracerProvider:       tp,
 	})
 	if err != nil {
 		t.Fatalf("creating server: %v", err)

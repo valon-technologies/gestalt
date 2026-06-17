@@ -22,47 +22,52 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from . import annotations_pb2 as v1_dot_annotations__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x14v1/annotations.proto\"\xb3\x02\n\x11\x41uthenticatedUser\x12\x18\n\x07subject\x18\x01 \x01(\tR\x07subject\x12\x14\n\x05\x65mail\x18\x02 \x01(\tR\x05\x65mail\x12%\n\x0e\x65mail_verified\x18\x03 \x01(\x08R\remailVerified\x12!\n\x0c\x64isplay_name\x18\x04 \x01(\tR\x0b\x64isplayName\x12\x1d\n\navatar_url\x18\x05 \x01(\tR\tavatarUrl\x12J\n\x06\x63laims\x18\x06 \x03(\x0b\x32\x32.gestalt.provider.v1.AuthenticatedUser.ClaimsEntryR\x06\x63laims\x1a\x39\n\x0b\x43laimsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\xf8\x01\n\x11\x42\x65ginLoginRequest\x12!\n\x0c\x63\x61llback_url\x18\x01 \x01(\tR\x0b\x63\x61llbackUrl\x12\x1d\n\nhost_state\x18\x02 \x01(\tR\thostState\x12\x16\n\x06scopes\x18\x03 \x03(\tR\x06scopes\x12M\n\x07options\x18\x04 \x03(\x0b\x32\x33.gestalt.provider.v1.BeginLoginRequest.OptionsEntryR\x07options\x1a:\n\x0cOptionsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"h\n\x12\x42\x65ginLoginResponse\x12+\n\x11\x61uthorization_url\x18\x01 \x01(\tR\x10\x61uthorizationUrl\x12%\n\x0eprovider_state\x18\x02 \x01(\x0cR\rproviderState\"\xe6\x01\n\x14\x43ompleteLoginRequest\x12J\n\x05query\x18\x01 \x03(\x0b\x32\x34.gestalt.provider.v1.CompleteLoginRequest.QueryEntryR\x05query\x12%\n\x0eprovider_state\x18\x02 \x01(\x0cR\rproviderState\x12!\n\x0c\x63\x61llback_url\x18\x03 \x01(\tR\x0b\x63\x61llbackUrl\x1a\x38\n\nQueryEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"4\n\x1cValidateExternalTokenRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\"E\n\x13\x41uthSessionSettings\x12.\n\x13session_ttl_seconds\x18\x01 \x01(\x03R\x11sessionTtlSeconds2\x83\x04\n\x0e\x41uthentication\x12\x87\x01\n\nBeginLogin\x12&.gestalt.provider.v1.BeginLoginRequest\x1a\'.gestalt.provider.v1.BeginLoginResponse\"(\x8a\xb5\x18\x0c\x63\x61llback_url\x8a\xb5\x18\nhost_state\x8a\xb5\x18\x06scopes\x12\x8f\x01\n\rCompleteLogin\x12).gestalt.provider.v1.CompleteLoginRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\"+\x8a\xb5\x18\x0eprovider_state\x8a\xb5\x18\x0c\x63\x61llback_url\x8a\xb5\x18\x05query\x12}\n\x15ValidateExternalToken\x12\x31.gestalt.provider.v1.ValidateExternalTokenRequest\x1a&.gestalt.provider.v1.AuthenticatedUser\"\t\x8a\xb5\x18\x05token\x12V\n\x12GetSessionSettings\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.AuthSessionSettingsb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x17v1/authentication.proto\x12\x13gestalt.provider.v1\x1a\x14v1/annotations.proto\"\xa3\x01\n\x10\x41uthorizeRequest\x12#\n\rresponse_type\x18\x01 \x01(\tR\x0cresponseType\x12\x1b\n\tclient_id\x18\x02 \x01(\tR\x08\x63lientId\x12!\n\x0credirect_uri\x18\x03 \x01(\tR\x0bredirectUri\x12\x14\n\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n\x05state\x18\x05 \x01(\tR\x05state\"6\n\x11\x41uthorizeResponse\x12!\n\x0credirect_uri\x18\x01 \x01(\tR\x0bredirectUri\"\x95\x02\n\x0cTokenRequest\x12\x1d\n\ngrant_type\x18\x01 \x01(\tR\tgrantType\x12\x12\n\x04\x63ode\x18\x02 \x01(\tR\x04\x63ode\x12!\n\x0credirect_uri\x18\x03 \x01(\tR\x0bredirectUri\x12\x1b\n\tclient_id\x18\x05 \x01(\tR\x08\x63lientId\x12\x14\n\x05state\x18\x06 \x01(\tR\x05state\x12\x14\n\x05scope\x18\x07 \x01(\tR\x05scope\x12#\n\rsubject_token\x18\x08 \x01(\tR\x0csubjectToken\x12,\n\x12subject_token_type\x18\t \x01(\tR\x10subjectTokenTypeJ\x04\x08\x04\x10\x05R\rrefresh_token\"\xc6\x01\n\rTokenResponse\x12!\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\tR\x0b\x61\x63\x63\x65ssToken\x12\x1d\n\ntoken_type\x18\x02 \x01(\tR\ttokenType\x12\x1d\n\nexpires_in\x18\x03 \x01(\x03R\texpiresIn\x12#\n\rrefresh_token\x18\x04 \x01(\tR\x0crefreshToken\x12\x14\n\x05scope\x18\x05 \x01(\tR\x05scope\x12\x19\n\x08grant_id\x18\x06 \x01(\tR\x07grantId\"Q\n\x11IntrospectRequest\x12\x14\n\x05token\x18\x01 \x01(\tR\x05token\x12&\n\x0ftoken_type_hint\x18\x02 \x01(\tR\rtokenTypeHint\"\x95\x01\n\x12IntrospectResponse\x12\x16\n\x06\x61\x63tive\x18\x01 \x01(\x08R\x06\x61\x63tive\x12\x18\n\x07subject\x18\x02 \x01(\tR\x07subject\x12\x14\n\x05scope\x18\x03 \x01(\tR\x05scope\x12\x1b\n\tclient_id\x18\x04 \x01(\tR\x08\x63lientId\x12\x1a\n\x08\x61udience\x18\x05 \x03(\tR\x08\x61udience\"\x13\n\x11ListGrantsRequest\"1\n\x12ListGrantsResponse\x12\x1b\n\tgrant_ids\x18\x01 \x03(\tR\x08grantIds\",\n\x0fGetGrantRequest\x12\x19\n\x08grant_id\x18\x01 \x01(\tR\x07grantId\">\n\nGrantScope\x12\x14\n\x05scope\x18\x01 \x01(\tR\x05scope\x12\x1a\n\x08resource\x18\x02 \x03(\tR\x08resource\"\x89\x01\n\x10GetGrantResponse\x12\x37\n\x06scopes\x18\x01 \x03(\x0b\x32\x1f.gestalt.provider.v1.GrantScopeR\x06scopes\x12\x1d\n\ncreated_at\x18\x02 \x01(\x03R\tcreatedAt\x12\x1d\n\nexpires_at\x18\x03 \x01(\x03R\texpiresAt\"/\n\x12RevokeGrantRequest\x12\x19\n\x08grant_id\x18\x01 \x01(\tR\x07grantId\"\x15\n\x13RevokeGrantResponse2\xa1\x06\n\x0e\x41uthentication\x12\x9c\x01\n\tAuthorize\x12%.gestalt.provider.v1.AuthorizeRequest\x1a&.gestalt.provider.v1.AuthorizeResponse\"@\x8a\xb5\x18\rresponse_type\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x0credirect_uri\x8a\xb5\x18\x05scope\x8a\xb5\x18\x05state\x12\xbc\x01\n\x05Token\x12!.gestalt.provider.v1.TokenRequest\x1a\".gestalt.provider.v1.TokenResponse\"l\x8a\xb5\x18\ngrant_type\x8a\xb5\x18\x04\x63ode\x8a\xb5\x18\x0credirect_uri\x8a\xb5\x18\tclient_id\x8a\xb5\x18\x05state\x8a\xb5\x18\x05scope\x8a\xb5\x18\rsubject_token\x8a\xb5\x18\x12subject_token_type\x12{\n\nIntrospect\x12&.gestalt.provider.v1.IntrospectRequest\x1a\'.gestalt.provider.v1.IntrospectResponse\"\x1c\x8a\xb5\x18\x05token\x8a\xb5\x18\x0ftoken_type_hint\x12]\n\nListGrants\x12&.gestalt.provider.v1.ListGrantsRequest\x1a\'.gestalt.provider.v1.ListGrantsResponse\x12\x65\n\x08GetGrant\x12$.gestalt.provider.v1.GetGrantRequest\x1a%.gestalt.provider.v1.GetGrantResponse\"\x0c\x8a\xb5\x18\x08grant_id\x12n\n\x0bRevokeGrant\x12\'.gestalt.provider.v1.RevokeGrantRequest\x1a(.gestalt.provider.v1.RevokeGrantResponse\"\x0c\x8a\xb5\x18\x08grant_idb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.authentication_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._loaded_options = None
-  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._serialized_options = b'8\001'
-  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._loaded_options = None
-  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._serialized_options = b'8\001'
-  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._loaded_options = None
-  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._serialized_options = b'8\001'
-  _globals['_AUTHENTICATION'].methods_by_name['BeginLogin']._loaded_options = None
-  _globals['_AUTHENTICATION'].methods_by_name['BeginLogin']._serialized_options = b'\212\265\030\014callback_url\212\265\030\nhost_state\212\265\030\006scopes'
-  _globals['_AUTHENTICATION'].methods_by_name['CompleteLogin']._loaded_options = None
-  _globals['_AUTHENTICATION'].methods_by_name['CompleteLogin']._serialized_options = b'\212\265\030\016provider_state\212\265\030\014callback_url\212\265\030\005query'
-  _globals['_AUTHENTICATION'].methods_by_name['ValidateExternalToken']._loaded_options = None
-  _globals['_AUTHENTICATION'].methods_by_name['ValidateExternalToken']._serialized_options = b'\212\265\030\005token'
-  _globals['_AUTHENTICATEDUSER']._serialized_start=100
-  _globals['_AUTHENTICATEDUSER']._serialized_end=407
-  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._serialized_start=350
-  _globals['_AUTHENTICATEDUSER_CLAIMSENTRY']._serialized_end=407
-  _globals['_BEGINLOGINREQUEST']._serialized_start=410
-  _globals['_BEGINLOGINREQUEST']._serialized_end=658
-  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._serialized_start=600
-  _globals['_BEGINLOGINREQUEST_OPTIONSENTRY']._serialized_end=658
-  _globals['_BEGINLOGINRESPONSE']._serialized_start=660
-  _globals['_BEGINLOGINRESPONSE']._serialized_end=764
-  _globals['_COMPLETELOGINREQUEST']._serialized_start=767
-  _globals['_COMPLETELOGINREQUEST']._serialized_end=997
-  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._serialized_start=941
-  _globals['_COMPLETELOGINREQUEST_QUERYENTRY']._serialized_end=997
-  _globals['_VALIDATEEXTERNALTOKENREQUEST']._serialized_start=999
-  _globals['_VALIDATEEXTERNALTOKENREQUEST']._serialized_end=1051
-  _globals['_AUTHSESSIONSETTINGS']._serialized_start=1053
-  _globals['_AUTHSESSIONSETTINGS']._serialized_end=1122
-  _globals['_AUTHENTICATION']._serialized_start=1125
-  _globals['_AUTHENTICATION']._serialized_end=1640
+  _globals['_AUTHENTICATION'].methods_by_name['Authorize']._loaded_options = None
+  _globals['_AUTHENTICATION'].methods_by_name['Authorize']._serialized_options = b'\212\265\030\rresponse_type\212\265\030\tclient_id\212\265\030\014redirect_uri\212\265\030\005scope\212\265\030\005state'
+  _globals['_AUTHENTICATION'].methods_by_name['Token']._loaded_options = None
+  _globals['_AUTHENTICATION'].methods_by_name['Token']._serialized_options = b'\212\265\030\ngrant_type\212\265\030\004code\212\265\030\014redirect_uri\212\265\030\tclient_id\212\265\030\005state\212\265\030\005scope\212\265\030\rsubject_token\212\265\030\022subject_token_type'
+  _globals['_AUTHENTICATION'].methods_by_name['Introspect']._loaded_options = None
+  _globals['_AUTHENTICATION'].methods_by_name['Introspect']._serialized_options = b'\212\265\030\005token\212\265\030\017token_type_hint'
+  _globals['_AUTHENTICATION'].methods_by_name['GetGrant']._loaded_options = None
+  _globals['_AUTHENTICATION'].methods_by_name['GetGrant']._serialized_options = b'\212\265\030\010grant_id'
+  _globals['_AUTHENTICATION'].methods_by_name['RevokeGrant']._loaded_options = None
+  _globals['_AUTHENTICATION'].methods_by_name['RevokeGrant']._serialized_options = b'\212\265\030\010grant_id'
+  _globals['_AUTHORIZEREQUEST']._serialized_start=71
+  _globals['_AUTHORIZEREQUEST']._serialized_end=234
+  _globals['_AUTHORIZERESPONSE']._serialized_start=236
+  _globals['_AUTHORIZERESPONSE']._serialized_end=290
+  _globals['_TOKENREQUEST']._serialized_start=293
+  _globals['_TOKENREQUEST']._serialized_end=570
+  _globals['_TOKENRESPONSE']._serialized_start=573
+  _globals['_TOKENRESPONSE']._serialized_end=771
+  _globals['_INTROSPECTREQUEST']._serialized_start=773
+  _globals['_INTROSPECTREQUEST']._serialized_end=854
+  _globals['_INTROSPECTRESPONSE']._serialized_start=857
+  _globals['_INTROSPECTRESPONSE']._serialized_end=1006
+  _globals['_LISTGRANTSREQUEST']._serialized_start=1008
+  _globals['_LISTGRANTSREQUEST']._serialized_end=1027
+  _globals['_LISTGRANTSRESPONSE']._serialized_start=1029
+  _globals['_LISTGRANTSRESPONSE']._serialized_end=1078
+  _globals['_GETGRANTREQUEST']._serialized_start=1080
+  _globals['_GETGRANTREQUEST']._serialized_end=1124
+  _globals['_GRANTSCOPE']._serialized_start=1126
+  _globals['_GRANTSCOPE']._serialized_end=1188
+  _globals['_GETGRANTRESPONSE']._serialized_start=1191
+  _globals['_GETGRANTRESPONSE']._serialized_end=1328
+  _globals['_REVOKEGRANTREQUEST']._serialized_start=1330
+  _globals['_REVOKEGRANTREQUEST']._serialized_end=1377
+  _globals['_REVOKEGRANTRESPONSE']._serialized_start=1379
+  _globals['_REVOKEGRANTRESPONSE']._serialized_end=1400
+  _globals['_AUTHENTICATION']._serialized_start=1403
+  _globals['_AUTHENTICATION']._serialized_end=2204
 # @@protoc_insertion_point(module_scope)

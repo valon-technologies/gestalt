@@ -456,12 +456,13 @@ func agentWorkflowPrincipalForTarget(p *principal.Principal, scope agentturnscop
 		return p
 	}
 	next := *p
-	next.TokenPermissions = principal.ClonePermissionSet(p.TokenPermissions)
-	if next.TokenPermissions == nil {
-		next.TokenPermissions = principal.PermissionSet{}
+	perms := p.EffectivePermissions()
+	if perms == nil {
+		perms = principal.PermissionSet{}
 	}
-	next.TokenPermissions[strings.TrimSpace(scope.ProviderName)] = nil
-	next.Scopes = principal.PermissionApps(next.TokenPermissions)
+	perms = principal.ClonePermissionSet(perms)
+	perms[strings.TrimSpace(scope.ProviderName)] = nil
+	next.Scopes = principal.ScopeStringsFromPermissionSet(perms)
 	return principal.Canonicalize(&next)
 }
 
@@ -489,8 +490,7 @@ func agentScopePrincipal(scope agentturnscope.Scope) *principal.Principal {
 	value := &principal.Principal{
 		SubjectID:           strings.TrimSpace(scope.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(scope.CredentialSubjectID),
-		Scopes:              principal.PermissionApps(compiled),
-		TokenPermissions:    compiled,
+		Scopes:              principal.ScopeStringsFromPermissionSet(compiled),
 	}
 	if kind, _, ok := core.ParseSubjectID(value.SubjectID); ok {
 		value.Kind = principal.Kind(kind)

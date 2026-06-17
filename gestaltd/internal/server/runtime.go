@@ -49,14 +49,6 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		)
 	}
 
-	apiTokenTTL := time.Duration(0)
-	if cfg.Server.APITokenTTL != "" {
-		apiTokenTTL, err = config.ParseDuration(cfg.Server.APITokenTTL)
-		if err != nil {
-			return fmt.Errorf("parsing server.api_token_ttl: %w", err)
-		}
-	}
-
 	publicBrandHref := "/admin/"
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil && entry.Path == "/" {
@@ -105,7 +97,6 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		SecureCookies:        strings.HasPrefix(cfg.Server.BaseURL, "https://"),
 		StateSecret:          crypto.DeriveKey(cfg.Server.EncryptionKey),
 		S3:                   result.S3,
-		APITokenTTL:          apiTokenTTL,
 		Readiness:            runtimeReadinessStatus(result.ProvidersReady, workflowProvidersReady, result.Services),
 		PrometheusMetrics:    result.Telemetry.PrometheusHandler(),
 		PublicHostServices:   result.PublicHostServices,

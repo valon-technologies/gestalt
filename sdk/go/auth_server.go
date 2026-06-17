@@ -2,12 +2,10 @@ package gestalt
 
 import (
 	"context"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type authServer struct {
@@ -19,62 +17,91 @@ func newAuthenticationProviderServer(auth AuthenticationProvider) *authServer {
 	return &authServer{auth: auth}
 }
 
-func (s *authServer) BeginLogin(ctx context.Context, req *proto.BeginLoginRequest) (*proto.BeginLoginResponse, error) {
+func (s *authServer) Authorize(ctx context.Context, req *proto.AuthorizeRequest) (*proto.AuthorizeResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.auth.BeginLogin(ctx, beginLoginRequestFromProto(req))
+	resp, err := s.auth.Authorize(ctx, authorizeRequestFromProto(req))
 	if err != nil {
-		return nil, providerRPCError("begin login", err)
+		return nil, providerRPCError("authorize", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
-	return beginLoginResponseToProto(resp), nil
+	return authorizeResponseToProto(resp), nil
 }
 
-func (s *authServer) CompleteLogin(ctx context.Context, req *proto.CompleteLoginRequest) (*proto.AuthenticatedUser, error) {
+func (s *authServer) Token(ctx context.Context, req *proto.TokenRequest) (*proto.TokenResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	user, err := s.auth.CompleteLogin(ctx, completeLoginRequestFromProto(req))
+	resp, err := s.auth.Token(ctx, tokenRequestFromProto(req))
 	if err != nil {
-		return nil, providerRPCError("complete login", err)
+		return nil, providerRPCError("token", err)
 	}
-	if user == nil {
-		return nil, status.Error(codes.Internal, "authentication provider returned nil user")
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
-	return authenticatedUserToProto(user), nil
+	return tokenResponseToProto(resp), nil
 }
 
-func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.ValidateExternalTokenRequest) (*proto.AuthenticatedUser, error) {
-	validator, ok := s.auth.(ExternalTokenValidator)
-	if !ok {
-		return nil, providerRPCError("validate external token", ErrExternalTokenValidationUnsupported)
-	}
+func (s *authServer) Introspect(ctx context.Context, req *proto.IntrospectRequest) (*proto.IntrospectResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	user, err := validator.ValidateExternalToken(ctx, req.GetToken())
+	resp, err := s.auth.Introspect(ctx, introspectRequestFromProto(req))
 	if err != nil {
-		return nil, providerRPCError("validate external token", err)
+		return nil, providerRPCError("introspect", err)
 	}
-	if user == nil {
-		return nil, status.Error(codes.NotFound, "token not recognized")
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
-	return authenticatedUserToProto(user), nil
+	return introspectResponseToProto(resp), nil
 }
 
-func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
-	provider, ok := s.auth.(SessionTTLProvider)
-	if !ok {
-		return nil, status.Error(codes.Unimplemented, "authentication provider does not expose session settings")
+func (s *authServer) ListGrants(ctx context.Context, _ *proto.ListGrantsRequest) (*proto.ListGrantsResponse, error) {
+	ctx = s.authCallContext(ctx)
+	resp, err := s.auth.ListGrants(ctx, &ListGrantsRequest{})
+	if err != nil {
+		return nil, providerRPCError("list grants", err)
 	}
-	ttl := provider.SessionTTL()
-	if ttl < 0 {
-		ttl = 0
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
-	return &proto.AuthSessionSettings{
-		SessionTtlSeconds: int64(ttl / time.Second),
-	}, nil
+	return listGrantsResponseToProto(resp), nil
+}
+
+func (s *authServer) GetGrant(ctx context.Context, req *proto.GetGrantRequest) (*proto.GetGrantResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ctx = s.authCallContext(ctx)
+	resp, err := s.auth.GetGrant(ctx, getGrantRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("get grant", err)
+	}
+	if resp == nil {
+		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
+	}
+	return getGrantResponseToProto(resp), nil
+}
+
+func (s *authServer) RevokeGrant(ctx context.Context, req *proto.RevokeGrantRequest) (*proto.RevokeGrantResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	ctx = s.authCallContext(ctx)
+	_, err := s.auth.RevokeGrant(ctx, revokeGrantRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("revoke grant", err)
+	}
+	return &proto.RevokeGrantResponse{}, nil
+}
+
+func (s *authServer) authCallContext(ctx context.Context) context.Context {
+	token := CallerBearerTokenFromIncomingContext(ctx)
+	if token == "" {
+		return ctx
+	}
+	return WithAuthCallContext(ctx, AuthCallContext{CallerBearerToken: token})
 }

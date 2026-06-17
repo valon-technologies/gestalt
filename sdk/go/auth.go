@@ -2,239 +2,283 @@ package gestalt
 
 import (
 	"context"
-	"time"
+	"strings"
 
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
+	"google.golang.org/grpc/metadata"
 )
 
-// AuthenticatedUser is the authenticated principal returned by an
-// authentication provider.
-type AuthenticatedUser struct {
-	Subject       string
-	Email         string
-	EmailVerified bool
-	DisplayName   string
-	AvatarUrl     string
-	Claims        map[string]string
+const (
+	// CallerBearerTokenMetadataKey carries the original caller bearer token on
+	// authentication provider RPCs that require caller scoping.
+	CallerBearerTokenMetadataKey = "x-gestalt-caller-bearer-token"
+)
+
+// AuthorizeRequest models RFC 6749 authorization endpoint parameters.
+type AuthorizeRequest struct {
+	ResponseType string
+	ClientID     string
+	RedirectURI  string
+	Scope        string
+	State        string
 }
 
-// GetSubject returns the subject field; it is safe to call on a nil receiver.
-func (u *AuthenticatedUser) GetSubject() string {
-	if u == nil {
-		return ""
-	}
-	return u.Subject
+// AuthorizeResponse contains the redirect URI with RFC 6749 response parameters.
+type AuthorizeResponse struct {
+	RedirectURI string
 }
 
-// GetEmail returns the email field; it is safe to call on a nil receiver.
-func (u *AuthenticatedUser) GetEmail() string {
-	if u == nil {
-		return ""
-	}
-	return u.Email
+// TokenRequest models RFC 6749 token endpoint parameters and RFC 8693 token
+// exchange inputs.
+type TokenRequest struct {
+	GrantType        string
+	Code             string
+	RedirectURI      string
+	ClientID         string
+	State            string
+	Scope            string
+	SubjectToken     string
+	SubjectTokenType string
 }
 
-// GetEmailVerified returns the email verified field; it is safe to call on a nil receiver.
-func (u *AuthenticatedUser) GetEmailVerified() bool {
-	if u == nil {
-		return false
-	}
-	return u.EmailVerified
+// TokenResponse models RFC 6749 token endpoint response fields.
+type TokenResponse struct {
+	AccessToken  string
+	TokenType    string
+	ExpiresIn    int64
+	RefreshToken string
+	Scope        string
+	GrantID      string
 }
 
-// GetDisplayName returns the display name field; it is safe to call on a nil receiver.
-func (u *AuthenticatedUser) GetDisplayName() string {
-	if u == nil {
-		return ""
-	}
-	return u.DisplayName
+// IntrospectRequest models RFC 7662 token introspection parameters.
+type IntrospectRequest struct {
+	Token         string
+	TokenTypeHint string
 }
 
-// GetAvatarUrl returns the avatar url field; it is safe to call on a nil receiver.
-func (u *AuthenticatedUser) GetAvatarUrl() string {
-	if u == nil {
-		return ""
-	}
-	return u.AvatarUrl
+// IntrospectResponse models RFC 7662 token introspection response fields.
+//
+// Subject must be a canonical Gestalt subject ID, for example a user: subject
+// using a stable user identifier or verified email. It must not be a raw
+// upstream OIDC sub.
+//
+// Scope uses space-delimited OAuth scope values. An empty Scope means full
+// first-party/Gestalt access for that grant.
+type IntrospectResponse struct {
+	Active   bool
+	Subject  string
+	Scope    string
+	ClientID string
+	Audience []string
 }
 
-// GetClaims returns the claims field; it is safe to call on a nil receiver.
-func (u *AuthenticatedUser) GetClaims() map[string]string {
-	if u == nil {
-		return nil
-	}
-	return u.Claims
+// ListGrantsRequest lists API-token grant IDs visible to the caller.
+type ListGrantsRequest struct{}
+
+// ListGrantsResponse returns caller-visible API-token grant IDs created via
+// token exchange. It must not include transient login or session grants.
+type ListGrantsResponse struct {
+	GrantIDs []string
 }
 
-// BeginLoginRequest starts an interactive provider login flow.
-type BeginLoginRequest struct {
-	CallbackUrl string
-	HostState   string
-	Scopes      []string
-	Options     map[string]string
+// GetGrantRequest retrieves one API-token grant by ID.
+type GetGrantRequest struct {
+	GrantID string
 }
 
-// GetCallbackUrl returns the callback url field; it is safe to call on a nil receiver.
-func (r *BeginLoginRequest) GetCallbackUrl() string {
-	if r == nil {
-		return ""
-	}
-	return r.CallbackUrl
+// GrantScope describes one authorized scope and optional resources.
+type GrantScope struct {
+	Scope    string
+	Resource []string
 }
 
-// GetHostState returns the host state field; it is safe to call on a nil receiver.
-func (r *BeginLoginRequest) GetHostState() string {
-	if r == nil {
-		return ""
-	}
-	return r.HostState
+// GetGrantResponse returns OIDF-shaped grant details.
+type GetGrantResponse struct {
+	Scopes    []GrantScope
+	CreatedAt int64
+	ExpiresAt int64
 }
 
-// GetScopes returns the scopes field; it is safe to call on a nil receiver.
-func (r *BeginLoginRequest) GetScopes() []string {
-	if r == nil {
-		return nil
-	}
-	return r.Scopes
+// RevokeGrantRequest revokes one caller-visible API-token grant by ID.
+type RevokeGrantRequest struct {
+	GrantID string
 }
 
-// GetOptions returns the options field; it is safe to call on a nil receiver.
-func (r *BeginLoginRequest) GetOptions() map[string]string {
-	if r == nil {
-		return nil
-	}
-	return r.Options
-}
-
-// BeginLoginResponse contains the provider-managed authorization URL and
-// opaque state.
-type BeginLoginResponse struct {
-	AuthorizationUrl string
-	ProviderState    []byte
-}
-
-// GetAuthorizationUrl returns the authorization url field; it is safe to call on a nil receiver.
-func (r *BeginLoginResponse) GetAuthorizationUrl() string {
-	if r == nil {
-		return ""
-	}
-	return r.AuthorizationUrl
-}
-
-// GetProviderState returns the provider state field; it is safe to call on a nil receiver.
-func (r *BeginLoginResponse) GetProviderState() []byte {
-	if r == nil {
-		return nil
-	}
-	return r.ProviderState
-}
-
-// CompleteLoginRequest finishes an interactive login flow.
-type CompleteLoginRequest struct {
-	Query         map[string]string
-	ProviderState []byte
-	CallbackUrl   string
-}
-
-// GetQuery returns the query field; it is safe to call on a nil receiver.
-func (r *CompleteLoginRequest) GetQuery() map[string]string {
-	if r == nil {
-		return nil
-	}
-	return r.Query
-}
-
-// GetProviderState returns the provider state field; it is safe to call on a nil receiver.
-func (r *CompleteLoginRequest) GetProviderState() []byte {
-	if r == nil {
-		return nil
-	}
-	return r.ProviderState
-}
-
-// GetCallbackUrl returns the callback url field; it is safe to call on a nil receiver.
-func (r *CompleteLoginRequest) GetCallbackUrl() string {
-	if r == nil {
-		return ""
-	}
-	return r.CallbackUrl
-}
-
-// AuthSessionSettings contains provider-owned authentication session hints.
-type AuthSessionSettings struct {
-	SessionTtlSeconds int64
-}
-
-// GetSessionTtlSeconds returns the session ttl seconds field; it is safe to call on a nil receiver.
-func (s *AuthSessionSettings) GetSessionTtlSeconds() int64 {
-	if s == nil {
-		return 0
-	}
-	return s.SessionTtlSeconds
-}
+// RevokeGrantResponse acknowledges API-token grant revocation.
+type RevokeGrantResponse struct{}
 
 // AuthenticationProvider serves the Gestalt authentication protocol.
+//
+// ListGrants, GetGrant, and RevokeGrant are the grant-management surface used
+// by Gestalt API-token management. ListGrants must return only caller-visible,
+// user-managed API-token/token-exchange grants, not transient login/session
+// grants. GetGrant and RevokeGrant must treat non-visible session/login grants
+// as not found.
 type AuthenticationProvider interface {
 	Provider
-	BeginLogin(ctx context.Context, req *BeginLoginRequest) (*BeginLoginResponse, error)
-	CompleteLogin(ctx context.Context, req *CompleteLoginRequest) (*AuthenticatedUser, error)
+	Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error)
+	Token(ctx context.Context, req *TokenRequest) (*TokenResponse, error)
+	Introspect(ctx context.Context, req *IntrospectRequest) (*IntrospectResponse, error)
+	ListGrants(ctx context.Context, req *ListGrantsRequest) (*ListGrantsResponse, error)
+	GetGrant(ctx context.Context, req *GetGrantRequest) (*GetGrantResponse, error)
+	RevokeGrant(ctx context.Context, req *RevokeGrantRequest) (*RevokeGrantResponse, error)
 }
 
-// ExternalTokenValidator is implemented by authentication providers that can
-// validate tokens minted outside the interactive login flow.
-type ExternalTokenValidator interface {
-	ValidateExternalToken(ctx context.Context, token string) (*AuthenticatedUser, error)
+type authCallContextKey struct{}
+
+// AuthCallContext carries caller-scoped authentication metadata for grant RPCs
+// without widening the RFC-shaped request structs.
+type AuthCallContext struct {
+	CallerBearerToken string
+	Introspection     *IntrospectResponse
 }
 
-// SessionTTLProvider is implemented by authentication providers that want the
-// host to persist sessions for a fixed amount of time.
-type SessionTTLProvider interface {
-	SessionTTL() time.Duration
-}
-
-func authenticatedUserToProto(user *AuthenticatedUser) *proto.AuthenticatedUser {
-	if user == nil {
-		return nil
+// WithAuthCallContext returns a child context carrying caller auth metadata.
+func WithAuthCallContext(ctx context.Context, call AuthCallContext) context.Context {
+	if strings.TrimSpace(call.CallerBearerToken) == "" && call.Introspection == nil {
+		return ctx
 	}
-	return &proto.AuthenticatedUser{
-		Subject:       user.Subject,
-		Email:         user.Email,
-		EmailVerified: user.EmailVerified,
-		DisplayName:   user.DisplayName,
-		AvatarUrl:     user.AvatarUrl,
-		Claims:        cloneStringMap(user.Claims),
-	}
+	return context.WithValue(ctx, authCallContextKey{}, call)
 }
 
-func beginLoginRequestFromProto(req *proto.BeginLoginRequest) *BeginLoginRequest {
+// AuthCallContextFromContext extracts caller auth metadata from ctx.
+func AuthCallContextFromContext(ctx context.Context) AuthCallContext {
+	call, _ := ctx.Value(authCallContextKey{}).(AuthCallContext)
+	return call
+}
+
+// AppendAuthCallMetadata attaches caller auth metadata to outgoing gRPC metadata.
+func AppendAuthCallMetadata(ctx context.Context) context.Context {
+	call := AuthCallContextFromContext(ctx)
+	token := strings.TrimSpace(call.CallerBearerToken)
+	if token == "" {
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, CallerBearerTokenMetadataKey, token)
+}
+
+// CallerBearerTokenFromIncomingContext reads the caller bearer token from gRPC metadata.
+func CallerBearerTokenFromIncomingContext(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, value := range md.Get(CallerBearerTokenMetadataKey) {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func authorizeRequestFromProto(req *proto.AuthorizeRequest) *AuthorizeRequest {
 	if req == nil {
 		return nil
 	}
-	return &BeginLoginRequest{
-		CallbackUrl: req.GetCallbackUrl(),
-		HostState:   req.GetHostState(),
-		Scopes:      append([]string(nil), req.GetScopes()...),
-		Options:     cloneStringMap(req.GetOptions()),
+	return &AuthorizeRequest{
+		ResponseType: req.GetResponseType(),
+		ClientID:     req.GetClientId(),
+		RedirectURI:  req.GetRedirectUri(),
+		Scope:        req.GetScope(),
+		State:        req.GetState(),
 	}
 }
 
-func beginLoginResponseToProto(resp *BeginLoginResponse) *proto.BeginLoginResponse {
+func authorizeResponseToProto(resp *AuthorizeResponse) *proto.AuthorizeResponse {
 	if resp == nil {
 		return nil
 	}
-	return &proto.BeginLoginResponse{
-		AuthorizationUrl: resp.AuthorizationUrl,
-		ProviderState:    append([]byte(nil), resp.ProviderState...),
-	}
+	return &proto.AuthorizeResponse{RedirectUri: resp.RedirectURI}
 }
 
-func completeLoginRequestFromProto(req *proto.CompleteLoginRequest) *CompleteLoginRequest {
+func tokenRequestFromProto(req *proto.TokenRequest) *TokenRequest {
 	if req == nil {
 		return nil
 	}
-	return &CompleteLoginRequest{
-		Query:         cloneStringMap(req.GetQuery()),
-		ProviderState: append([]byte(nil), req.GetProviderState()...),
-		CallbackUrl:   req.GetCallbackUrl(),
+	return &TokenRequest{
+		GrantType:        req.GetGrantType(),
+		Code:             req.GetCode(),
+		RedirectURI:      req.GetRedirectUri(),
+		ClientID:         req.GetClientId(),
+		State:            req.GetState(),
+		Scope:            req.GetScope(),
+		SubjectToken:     req.GetSubjectToken(),
+		SubjectTokenType: req.GetSubjectTokenType(),
 	}
+}
+
+func tokenResponseToProto(resp *TokenResponse) *proto.TokenResponse {
+	if resp == nil {
+		return nil
+	}
+	return &proto.TokenResponse{
+		AccessToken:  resp.AccessToken,
+		TokenType:    resp.TokenType,
+		ExpiresIn:    resp.ExpiresIn,
+		RefreshToken: resp.RefreshToken,
+		Scope:        resp.Scope,
+		GrantId:      resp.GrantID,
+	}
+}
+
+func introspectRequestFromProto(req *proto.IntrospectRequest) *IntrospectRequest {
+	if req == nil {
+		return nil
+	}
+	return &IntrospectRequest{
+		Token:         req.GetToken(),
+		TokenTypeHint: req.GetTokenTypeHint(),
+	}
+}
+
+func introspectResponseToProto(resp *IntrospectResponse) *proto.IntrospectResponse {
+	if resp == nil {
+		return nil
+	}
+	return &proto.IntrospectResponse{
+		Active:   resp.Active,
+		Subject:  resp.Subject,
+		Scope:    resp.Scope,
+		ClientId: resp.ClientID,
+		Audience: append([]string(nil), resp.Audience...),
+	}
+}
+
+func listGrantsResponseToProto(resp *ListGrantsResponse) *proto.ListGrantsResponse {
+	if resp == nil {
+		return nil
+	}
+	return &proto.ListGrantsResponse{GrantIds: append([]string(nil), resp.GrantIDs...)}
+}
+
+func getGrantRequestFromProto(req *proto.GetGrantRequest) *GetGrantRequest {
+	if req == nil {
+		return nil
+	}
+	return &GetGrantRequest{GrantID: req.GetGrantId()}
+}
+
+func getGrantResponseToProto(resp *GetGrantResponse) *proto.GetGrantResponse {
+	if resp == nil {
+		return nil
+	}
+	out := &proto.GetGrantResponse{
+		CreatedAt: resp.CreatedAt,
+		ExpiresAt: resp.ExpiresAt,
+	}
+	for _, scope := range resp.Scopes {
+		out.Scopes = append(out.Scopes, &proto.GrantScope{
+			Scope:    scope.Scope,
+			Resource: append([]string(nil), scope.Resource...),
+		})
+	}
+	return out
+}
+
+func revokeGrantRequestFromProto(req *proto.RevokeGrantRequest) *RevokeGrantRequest {
+	if req == nil {
+		return nil
+	}
+	return &RevokeGrantRequest{GrantID: req.GetGrantId()}
 }

@@ -392,8 +392,11 @@ impl ApiClient {
         self.send_json(Method::DELETE, path, body)
     }
 
-    pub fn create_api_token(&self, name: &str) -> Result<serde_json::Value> {
-        self.post("/api/v1/tokens", &serde_json::json!({ "name": name }))
+    pub fn create_api_token(&self, name: &str, scopes: &str) -> Result<serde_json::Value> {
+        self.post(
+            "/api/v1/tokens",
+            &serde_json::json!({ "name": name, "scopes": scopes }),
+        )
     }
 
     pub fn revoke_api_token(&self, id: &str) -> Result<serde_json::Value> {

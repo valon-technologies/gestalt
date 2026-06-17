@@ -46,7 +46,7 @@ func RequestContextProto(ctx context.Context, publicBaseURL string, caller invoc
 			Email:               subjectEmail(p),
 			DisplayName:         subjectDisplayName(p),
 			Scopes:              cloneStrings(p.Scopes),
-			Permissions:         permissionSetToSubjectPermissionContext(p.TokenPermissions),
+			Permissions:         permissionSetToSubjectPermissionContext(p.EffectivePermissions()),
 		}
 	}
 
@@ -341,8 +341,7 @@ func PrincipalFromSubjectContext(subject *proto.SubjectContext) *principal.Princ
 		SubjectID:           strings.TrimSpace(subject.GetId()),
 		CredentialSubjectID: strings.TrimSpace(subject.GetCredentialSubjectId()),
 		DisplayName:         strings.TrimSpace(subject.GetDisplayName()),
-		Scopes:              cloneStrings(subject.GetScopes()),
-		TokenPermissions:    subjectPermissionContextToPermissionSet(subject.GetPermissions()),
+		Scopes:              mergeSubjectScopes(subject),
 	}
 	if kind, _, ok := core.ParseSubjectID(p.SubjectID); ok {
 		p.Kind = principal.Kind(kind)
@@ -374,7 +373,7 @@ func subjectContextFromPrincipal(p *principal.Principal) *proto.SubjectContext {
 		Email:               subjectEmail(p),
 		DisplayName:         subjectDisplayName(p),
 		Scopes:              cloneStrings(p.Scopes),
-		Permissions:         permissionSetToSubjectPermissionContext(p.TokenPermissions),
+		Permissions:         permissionSetToSubjectPermissionContext(p.EffectivePermissions()),
 	}
 }
 
@@ -433,6 +432,17 @@ func agentFromProviderRequestContext(agent *proto.AgentInvocationContext) invoca
 		SessionID:    strings.TrimSpace(agent.GetSessionId()),
 		TurnID:       strings.TrimSpace(agent.GetTurnId()),
 	}
+}
+
+func mergeSubjectScopes(subject *proto.SubjectContext) []string {
+	if subject == nil {
+		return nil
+	}
+	scopes := cloneStrings(subject.GetScopes())
+	if len(scopes) > 0 {
+		return scopes
+	}
+	return principal.ScopeStringsFromPermissionSet(subjectPermissionContextToPermissionSet(subject.GetPermissions()))
 }
 
 func permissionSetToSubjectPermissionContext(set principal.PermissionSet) []*proto.SubjectPermissionContext {

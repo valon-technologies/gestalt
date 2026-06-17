@@ -133,11 +133,11 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
-		Auth:        &coretesting.StubAuthProvider{N: "none"},
-		Services:    svc,
-		Providers:   providers,
-		Invoker:     guarded,
-		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+		SelectedAuthProvider: "none",
+		Services:             svc,
+		Providers:            providers,
+		Invoker:              guarded,
+		StateSecret:          []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
 		t.Fatalf("creating server: %v", err)

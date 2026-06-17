@@ -31,7 +31,8 @@ func RunAsPrincipal(base *principal.Principal, runAs *core.RunAsSubject) *princi
 		SubjectID:           strings.TrimSpace(runAs.SubjectID),
 		CredentialSubjectID: strings.TrimSpace(runAs.CredentialSubjectID),
 		Scopes:              append([]string(nil), base.Scopes...),
-		TokenPermissions:    principal.ClonePermissionSet(base.TokenPermissions),
+		ClientID:            strings.TrimSpace(base.ClientID),
+		Audience:            append([]string(nil), base.Audience...),
 	}
 	if kind, _, ok := core.ParseSubjectID(value.SubjectID); ok {
 		value.Kind = principal.Kind(kind)

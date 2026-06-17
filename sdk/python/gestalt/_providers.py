@@ -87,10 +87,18 @@ if TYPE_CHECKING:
         WorkflowRun,
     )
     from .authentication import (
-        AuthenticatedUser,
-        BeginLoginRequest,
-        BeginLoginResponse,
-        CompleteLoginRequest,
+        AuthorizeRequest,
+        AuthorizeResponse,
+        GetGrantRequest,
+        GetGrantResponse,
+        IntrospectRequest,
+        IntrospectResponse,
+        ListGrantsRequest,
+        ListGrantsResponse,
+        RevokeGrantRequest,
+        RevokeGrantResponse,
+        TokenRequest,
+        TokenResponse,
     )
     from .authorization import (
         AddRelationshipRequest,
@@ -260,6 +268,15 @@ class Closer:
 
 RegisterServices = Callable[[Any, AppProvider], None]
 
+CALLER_BEARER_TOKEN_METADATA_KEY = "x-gestalt-caller-bearer-token"
+
+
+@dataclass(frozen=True)
+class AuthCallContext:
+    """Caller-scoped authentication metadata for grant-management RPCs."""
+
+    caller_bearer_token: str = ""
+
 
 class AppProviderAdapter:
     """Wrap a provider and registration callback for integration runtimes."""
@@ -287,13 +304,39 @@ class AppProviderAdapter:
 class AuthenticationProvider(AppProvider):
     """Base class for authentication providers."""
 
-    def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
-        """Begin an interactive login flow."""
+    def authorize(self, request: AuthorizeRequest) -> AuthorizeResponse:
+        """Start an RFC 6749 authorization flow."""
 
         raise NotImplementedError
 
-    def complete_login(self, request: CompleteLoginRequest) -> AuthenticatedUser:
-        """Complete an interactive login flow."""
+    def token(self, request: TokenRequest) -> TokenResponse:
+        """Issue or exchange tokens via the RFC 6749 token endpoint."""
+
+        raise NotImplementedError
+
+    def introspect(self, request: IntrospectRequest) -> IntrospectResponse:
+        """Introspect a bearer token via RFC 7662."""
+
+        raise NotImplementedError
+
+    def list_grants(
+        self, request: ListGrantsRequest, call: AuthCallContext
+    ) -> ListGrantsResponse:
+        """List grant IDs visible to the caller."""
+
+        raise NotImplementedError
+
+    def get_grant(
+        self, request: GetGrantRequest, call: AuthCallContext
+    ) -> GetGrantResponse:
+        """Return one grant owned by the caller."""
+
+        raise NotImplementedError
+
+    def revoke_grant(
+        self, request: RevokeGrantRequest, call: AuthCallContext
+    ) -> RevokeGrantResponse:
+        """Revoke one grant owned by the caller."""
 
         raise NotImplementedError
 
@@ -376,7 +419,7 @@ class AuthorizationProvider(AppProvider):
 class ExternalTokenValidator:
     """Optional mixin for providers that validate external bearer tokens."""
 
-    def validate_external_token(self, token: str) -> AuthenticatedUser | None:
+    def validate_external_token(self, token: str) -> Any | None:
         """Validate a bearer token and return the authenticated subject."""
 
         raise NotImplementedError

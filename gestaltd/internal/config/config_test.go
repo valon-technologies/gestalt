@@ -6655,37 +6655,6 @@ server:
 	}
 }
 
-func TestLoadConfig_APITokenTTL(t *testing.T) {
-	t.Parallel()
-
-	t.Run("valid day duration", func(t *testing.T) {
-		t.Parallel()
-		path := mustWriteConfigFile(t, `
-server:
-  apiTokenTtl: "14d"
-`)
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.Server.APITokenTTL != "14d" {
-			t.Fatalf("APITokenTTL = %q, want %q", cfg.Server.APITokenTTL, "14d")
-		}
-	})
-
-	t.Run("invalid duration rejected", func(t *testing.T) {
-		t.Parallel()
-		path := mustWriteConfigFile(t, `
-server:
-  apiTokenTtl: "not-a-duration"
-`)
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("expected error for invalid api_token_ttl")
-		}
-	})
-}
-
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
 

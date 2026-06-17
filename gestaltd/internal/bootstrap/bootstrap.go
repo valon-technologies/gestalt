@@ -48,19 +48,19 @@ type OAuthHandler interface {
 	AuthorizationURL(state string, scopes []string) string
 	StartOAuth(state string, scopes []string) (authURL string, verifier string)
 	StartOAuthWithOverride(authBaseURL, state string, scopes []string) (string, string)
-	ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error)
-	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
-	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error)
+	ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error)
+	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.OAuthTokenResponse, error)
 	AuthorizationBaseURL() string
 	TokenURL() string
 }
 
 type ManualTokenExchanger interface {
-	ExchangeCredentials(ctx context.Context, credentialJSON string) (*core.TokenResponse, error)
-	ExchangeCredentialsWithURL(ctx context.Context, credentialJSON, tokenURL string) (*core.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
-	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.TokenResponse, error)
+	ExchangeCredentials(ctx context.Context, credentialJSON string) (*core.OAuthTokenResponse, error)
+	ExchangeCredentialsWithURL(ctx context.Context, credentialJSON, tokenURL string) (*core.OAuthTokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error)
+	RefreshTokenWithURL(ctx context.Context, refreshToken, tokenURL string) (*core.OAuthTokenResponse, error)
 	TokenURL() string
 }
 
@@ -89,11 +89,11 @@ func (a *upstreamHandlerAdapter) StartOAuthWithOverride(authBaseURL, state strin
 	return a.AuthorizationURLWithOverride(authBaseURL, state, scopes)
 }
 
-func (a *upstreamHandlerAdapter) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (a *upstreamHandlerAdapter) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return a.UpstreamHandler.ExchangeCode(ctx, code)
 }
 
-func (a *upstreamHandlerAdapter) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.TokenResponse, error) {
+func (a *upstreamHandlerAdapter) ExchangeCodeWithVerifier(ctx context.Context, code, verifier string, extraOpts ...oauth.ExchangeOption) (*core.OAuthTokenResponse, error) {
 	var opts []oauth.ExchangeOption
 	if verifier != "" {
 		opts = append(opts, oauth.WithPKCEVerifier(verifier))

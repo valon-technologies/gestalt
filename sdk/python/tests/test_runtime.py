@@ -17,18 +17,18 @@ from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 
 from gestalt import (
+    CALLER_BEARER_TOKEN_METADATA_KEY,
     App,
     ApplyWorkflowProviderDefinitionRequest,
     AppProviderAdapter,
+    AuthCallContext,
     AuthenticationProvider,
-    BeginLoginRequest,
+    AuthorizeRequest,
     CacheProvider,
     CacheSetEntry,
     Catalog,
     CatalogOperation,
-    CompleteLoginRequest,
     DeliverWorkflowProviderEventRequest,
-    ExternalTokenValidator,
     GetRuntimeSupportRequest,
     GetWorkflowProviderDefinitionRequest,
     GetWorkflowProviderRunEventsRequest,
@@ -47,10 +47,10 @@ from gestalt import (
     RuntimeProvider,
     RuntimeSupport,
     S3Provider,
-    SessionTTLProvider,
     SetWorkflowProviderActivationPausedRequest,
     SetWorkflowProviderDefinitionPausedRequest,
     StartWorkflowProviderRunRequest,
+    TokenRequest,
     WarningsProvider,
     WorkflowDefinition,
     WorkflowEvent,
@@ -654,8 +654,6 @@ class MainEntrypointTests(unittest.TestCase):
 class AuthenticationRuntimeTests(unittest.TestCase):
     class StubAuthenticationProvider(
         AuthenticationProvider,
-        ExternalTokenValidator,
-        SessionTTLProvider,
         MetadataProvider,
         WarningsProvider,
         HealthChecker,
@@ -681,27 +679,52 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         def health_check(self) -> None:
             return None
 
-        def begin_login(self, request: Any) -> Any:
-            self.begin_login_request = request
-            return authentication_pb2.BeginLoginResponse(
-                authorization_url=f"https://auth.example.test/login?state={request.host_state}",
-                provider_state=b"provider-state",
+        def authorize(self, request: AuthorizeRequest) -> Any:
+            self.authorize_request = request
+            return authentication_pb2.AuthorizeResponse(
+                redirect_uri=f"https://auth.example.test/login?state={request.state}",
             )
 
-        def complete_login(self, request: Any) -> Any:
-            self.complete_login_request = request
-            return authentication_pb2.AuthenticatedUser(
-                email=request.query.get("email", ""),
-                display_name="Runtime User",
+        def token(self, request: TokenRequest) -> Any:
+            self.token_request = request
+            return authentication_pb2.TokenResponse(
+                access_token="fixture-access-token",
+                token_type="Bearer",
+                expires_in=5400,
+                scope="openid email",
+                grant_id="grant-fixture-1",
             )
 
-        def validate_external_token(self, token: str) -> Any:
-            if token == "known-token":
-                return authentication_pb2.AuthenticatedUser(email="token@example.com")
-            return None
+        def introspect(self, request: Any) -> Any:
+            if request.token == "fixture-access-token":
+                return authentication_pb2.IntrospectResponse(
+                    active=True,
+                    subject="user:fixture@example.com",
+                    scope="openid email",
+                    client_id="gestaltd",
+                )
+            return authentication_pb2.IntrospectResponse(active=False)
 
-        def session_ttl(self) -> dt.timedelta:
-            return dt.timedelta(minutes=45)
+        def list_grants(self, request: Any, call: AuthCallContext) -> Any:
+            self.list_grants_request = request
+            self.list_grants_call = call
+            return authentication_pb2.ListGrantsResponse(
+                grant_ids=["grant-fixture-1"],
+            )
+
+        def get_grant(self, request: Any, call: AuthCallContext) -> Any:
+            self.get_grant_request = request
+            self.get_grant_call = call
+            return authentication_pb2.GetGrantResponse(
+                scopes=[authentication_pb2.GrantScope(scope="openid")],
+                created_at=1_700_000_000,
+                expires_at=1_800_000_000,
+            )
+
+        def revoke_grant(self, request: Any, call: AuthCallContext) -> Any:
+            self.revoke_grant_request = request
+            self.revoke_grant_call = call
+            return authentication_pb2.RevokeGrantResponse()
 
     class StartableAuthenticationProvider(StubAuthenticationProvider):
         def __init__(self) -> None:
@@ -774,47 +797,91 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
 
         auth_servicer = _runtime._authentication_servicer(provider=provider)
-        login = auth_servicer.BeginLogin(
-            authentication_pb2.BeginLoginRequest(
-                callback_url="https://cb.example.test",
-                host_state="host-state",
-                scopes=["profile"],
-                options={"prompt": "consent"},
+        authorize = auth_servicer.Authorize(
+            authentication_pb2.AuthorizeRequest(
+                response_type="code",
+                client_id="gestaltd",
+                redirect_uri="https://cb.example.test",
+                scope="profile",
+                state="host-state",
             ),
             mock.Mock(),
         )
         self.assertEqual(
-            login.authorization_url, "https://auth.example.test/login?state=host-state"
+            authorize.redirect_uri,
+            "https://auth.example.test/login?state=host-state",
         )
-        self.assertEqual(bytes(login.provider_state), b"provider-state")
-        self.assertIsInstance(provider.begin_login_request, BeginLoginRequest)
-        self.assertEqual(provider.begin_login_request.scopes, ["profile"])
-        self.assertEqual(provider.begin_login_request.options, {"prompt": "consent"})
+        self.assertIsInstance(provider.authorize_request, AuthorizeRequest)
+        self.assertEqual(provider.authorize_request.scope, "profile")
+        self.assertEqual(provider.authorize_request.state, "host-state")
 
-        user = auth_servicer.CompleteLogin(
-            authentication_pb2.CompleteLoginRequest(
-                query={"email": "user@example.com"},
-                provider_state=b"provider-state",
-                callback_url="https://cb.example.test",
+        token = auth_servicer.Token(
+            authentication_pb2.TokenRequest(
+                grant_type="authorization_code",
+                code="auth-code",
+                redirect_uri="https://cb.example.test",
+                client_id="gestaltd",
+                state="host-state",
             ),
             mock.Mock(),
         )
-        self.assertEqual(user.email, "user@example.com")
-        self.assertEqual(user.display_name, "Runtime User")
-        self.assertIsInstance(provider.complete_login_request, CompleteLoginRequest)
-        self.assertEqual(
-            bytes(provider.complete_login_request.provider_state),
-            b"provider-state",
-        )
+        self.assertEqual(token.access_token, "fixture-access-token")
+        self.assertEqual(token.grant_id, "grant-fixture-1")
+        self.assertIsInstance(provider.token_request, TokenRequest)
+        self.assertEqual(provider.token_request.code, "auth-code")
 
-        validated = auth_servicer.ValidateExternalToken(
-            authentication_pb2.ValidateExternalTokenRequest(token="known-token"),
+        introspection = auth_servicer.Introspect(
+            authentication_pb2.IntrospectRequest(token="fixture-access-token"),
             mock.Mock(),
         )
-        self.assertEqual(validated.email, "token@example.com")
+        self.assertTrue(introspection.active)
+        self.assertEqual(introspection.subject, "user:fixture@example.com")
 
-        session_settings = auth_servicer.GetSessionSettings(mock.Mock(), mock.Mock())
-        self.assertEqual(session_settings.session_ttl_seconds, 45 * 60)
+        grants = auth_servicer.ListGrants(
+            authentication_pb2.ListGrantsRequest(),
+            mock.Mock(
+                invocation_metadata=mock.Mock(
+                    return_value=(
+                        (CALLER_BEARER_TOKEN_METADATA_KEY, b"caller-bearer-token"),
+                    )
+                )
+            ),
+        )
+        self.assertEqual(list(grants.grant_ids), ["grant-fixture-1"])
+        self.assertIsInstance(provider.list_grants_call, AuthCallContext)
+        self.assertEqual(
+            provider.list_grants_call.caller_bearer_token,
+            "caller-bearer-token",
+        )
+
+        grant = auth_servicer.GetGrant(
+            authentication_pb2.GetGrantRequest(grant_id="grant-fixture-1"),
+            mock.Mock(
+                invocation_metadata=mock.Mock(
+                    return_value=(
+                        (CALLER_BEARER_TOKEN_METADATA_KEY, "caller-bearer-token"),
+                    )
+                )
+            ),
+        )
+        self.assertEqual(grant.scopes[0].scope, "openid")
+        self.assertEqual(provider.get_grant_call.caller_bearer_token, "caller-bearer-token")
+
+        revoked = auth_servicer.RevokeGrant(
+            authentication_pb2.RevokeGrantRequest(grant_id="grant-fixture-1"),
+            mock.Mock(
+                invocation_metadata=mock.Mock(
+                    return_value=(
+                        (CALLER_BEARER_TOKEN_METADATA_KEY, "caller-bearer-token"),
+                    )
+                )
+            ),
+        )
+        self.assertIsNotNone(revoked)
+        self.assertEqual(
+            provider.revoke_grant_call.caller_bearer_token,
+            "caller-bearer-token",
+        )
 
     def test_runtime_start_provider_is_separate_from_configure(self) -> None:
         provider = self.StartableAuthenticationProvider()
@@ -856,41 +923,15 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             _runtime.CURRENT_PROTOCOL_VERSION,
         )
 
-    def test_auth_validator_missing_or_unknown_token(self) -> None:
-        class NoValidator(AuthenticationProvider):
-            def begin_login(self, request: Any) -> Any:
-                return authentication_pb2.BeginLoginResponse(
-                    authorization_url="https://example.test"
-                )
-
-            def complete_login(self, request: Any) -> Any:
-                return authentication_pb2.AuthenticatedUser(email="user@example.com")
-
-        no_validator_servicer = _runtime._authentication_servicer(
-            provider=NoValidator(),
-        )
-        context = mock.Mock()
-        no_validator_servicer.ValidateExternalToken(
-            authentication_pb2.ValidateExternalTokenRequest(token="missing"),
-            context,
-        )
-        context.abort.assert_called_once_with(
-            grpc.StatusCode.UNIMPLEMENTED,
-            "authentication provider does not support external token validation",
-        )
-
-        unknown_context = mock.Mock()
+    def test_auth_introspect_inactive_token(self) -> None:
         servicer = _runtime._authentication_servicer(
             provider=self.StubAuthenticationProvider()
         )
-        servicer.ValidateExternalToken(
-            authentication_pb2.ValidateExternalTokenRequest(token="unknown"),
-            unknown_context,
+        introspection = servicer.Introspect(
+            authentication_pb2.IntrospectRequest(token="unknown"),
+            mock.Mock(),
         )
-        unknown_context.abort.assert_called_once_with(
-            grpc.StatusCode.NOT_FOUND,
-            "token not recognized",
-        )
+        self.assertFalse(introspection.active)
 
 
 class CacheRuntimeTests(unittest.TestCase):

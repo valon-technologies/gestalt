@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 const (
@@ -69,11 +71,20 @@ func (s *Server) mcpAuthorizationScopes(r *http.Request) []string {
 		return nil
 	}
 
-	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, mcpMetadataProbeState)
+	redirectURI, err := s.authCallbackURL(r)
 	if err != nil {
 		return nil
 	}
-	loginURLResolved, err := s.resolvePublicURL(r, loginURLRaw)
+	resp, err := auth.provider.Authorize(r.Context(), &core.AuthorizeRequest{
+		ResponseType: "code",
+		ClientID:     core.DefaultOAuthClientID,
+		RedirectURI:  redirectURI,
+		State:        mcpMetadataProbeState,
+	})
+	if err != nil || resp == nil || strings.TrimSpace(resp.RedirectURI) == "" {
+		return nil
+	}
+	loginURLResolved, err := s.resolvePublicURL(r, resp.RedirectURI)
 	if err != nil {
 		return nil
 	}

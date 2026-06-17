@@ -100,8 +100,8 @@ pub use api::{
 };
 pub use app::App;
 pub use auth::{
-    AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
-    BeginLoginResponse, CompleteLoginRequest,
+    AuthCallContext, AuthenticationProvider, GRANT_TYPE_AUTHORIZATION_CODE,
+    GRANT_TYPE_TOKEN_EXCHANGE, SUBJECT_TOKEN_TYPE_ACCESS_TOKEN,
 };
 pub use cache::Cache;
 pub use cache_provider::{CacheEntry, CacheProvider, CacheSetOptions};

@@ -287,19 +287,19 @@ func TestClientAuthHeader(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		call      func(*UpstreamHandler) (*core.TokenResponse, error)
+		call      func(*UpstreamHandler) (*core.OAuthTokenResponse, error)
 		wantToken string
 	}{
 		{
 			name: "authorization code",
-			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+			call: func(h *UpstreamHandler) (*core.OAuthTokenResponse, error) {
 				return h.ExchangeCode(context.Background(), "code")
 			},
 			wantToken: "header-token",
 		},
 		{
 			name: "refresh token",
-			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+			call: func(h *UpstreamHandler) (*core.OAuthTokenResponse, error) {
 				return h.RefreshToken(context.Background(), "rt")
 			},
 			wantToken: "refreshed",
@@ -358,7 +358,7 @@ func TestTokenExchangeJSON(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		call       func(*UpstreamHandler) (*core.TokenResponse, error)
+		call       func(*UpstreamHandler) (*core.OAuthTokenResponse, error)
 		wantToken  string
 		wantGrant  string
 		wantField  string
@@ -368,7 +368,7 @@ func TestTokenExchangeJSON(t *testing.T) {
 	}{
 		{
 			name: "authorization code",
-			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+			call: func(h *UpstreamHandler) (*core.OAuthTokenResponse, error) {
 				return h.ExchangeCode(context.Background(), "code-123")
 			},
 			wantToken:  "json-token",
@@ -380,7 +380,7 @@ func TestTokenExchangeJSON(t *testing.T) {
 		},
 		{
 			name: "refresh token",
-			call: func(h *UpstreamHandler) (*core.TokenResponse, error) {
+			call: func(h *UpstreamHandler) (*core.OAuthTokenResponse, error) {
 				return h.RefreshToken(context.Background(), "rt-123")
 			},
 			wantToken: "json-refreshed",

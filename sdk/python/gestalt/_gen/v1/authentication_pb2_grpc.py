@@ -3,7 +3,6 @@
 import grpc
 import warnings
 
-from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from . import authentication_pb2 as v1_dot_authentication__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
@@ -36,25 +35,35 @@ class AuthenticationStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.BeginLogin = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/BeginLogin',
-                request_serializer=v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.BeginLoginResponse.FromString,
+        self.Authorize = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/Authorize',
+                request_serializer=v1_dot_authentication__pb2.AuthorizeRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.AuthorizeResponse.FromString,
                 _registered_method=True)
-        self.CompleteLogin = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/CompleteLogin',
-                request_serializer=v1_dot_authentication__pb2.CompleteLoginRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+        self.Token = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/Token',
+                request_serializer=v1_dot_authentication__pb2.TokenRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.TokenResponse.FromString,
                 _registered_method=True)
-        self.ValidateExternalToken = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/ValidateExternalToken',
-                request_serializer=v1_dot_authentication__pb2.ValidateExternalTokenRequest.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+        self.Introspect = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/Introspect',
+                request_serializer=v1_dot_authentication__pb2.IntrospectRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.IntrospectResponse.FromString,
                 _registered_method=True)
-        self.GetSessionSettings = channel.unary_unary(
-                '/gestalt.provider.v1.Authentication/GetSessionSettings',
-                request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-                response_deserializer=v1_dot_authentication__pb2.AuthSessionSettings.FromString,
+        self.ListGrants = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/ListGrants',
+                request_serializer=v1_dot_authentication__pb2.ListGrantsRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.ListGrantsResponse.FromString,
+                _registered_method=True)
+        self.GetGrant = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/GetGrant',
+                request_serializer=v1_dot_authentication__pb2.GetGrantRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.GetGrantResponse.FromString,
+                _registered_method=True)
+        self.RevokeGrant = channel.unary_unary(
+                '/gestalt.provider.v1.Authentication/RevokeGrant',
+                request_serializer=v1_dot_authentication__pb2.RevokeGrantRequest.SerializeToString,
+                response_deserializer=v1_dot_authentication__pb2.RevokeGrantResponse.FromString,
                 _registered_method=True)
 
 
@@ -62,25 +71,37 @@ class AuthenticationServicer(object):
     """Authentication models the shared Gestalt authentication protocol.
     """
 
-    def BeginLogin(self, request, context):
+    def Authorize(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def CompleteLogin(self, request, context):
+    def Token(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ValidateExternalToken(self, request, context):
+    def Introspect(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetSessionSettings(self, request, context):
+    def ListGrants(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetGrant(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RevokeGrant(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -89,25 +110,35 @@ class AuthenticationServicer(object):
 
 def add_AuthenticationServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'BeginLogin': grpc.unary_unary_rpc_method_handler(
-                    servicer.BeginLogin,
-                    request_deserializer=v1_dot_authentication__pb2.BeginLoginRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.BeginLoginResponse.SerializeToString,
+            'Authorize': grpc.unary_unary_rpc_method_handler(
+                    servicer.Authorize,
+                    request_deserializer=v1_dot_authentication__pb2.AuthorizeRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.AuthorizeResponse.SerializeToString,
             ),
-            'CompleteLogin': grpc.unary_unary_rpc_method_handler(
-                    servicer.CompleteLogin,
-                    request_deserializer=v1_dot_authentication__pb2.CompleteLoginRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.AuthenticatedUser.SerializeToString,
+            'Token': grpc.unary_unary_rpc_method_handler(
+                    servicer.Token,
+                    request_deserializer=v1_dot_authentication__pb2.TokenRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.TokenResponse.SerializeToString,
             ),
-            'ValidateExternalToken': grpc.unary_unary_rpc_method_handler(
-                    servicer.ValidateExternalToken,
-                    request_deserializer=v1_dot_authentication__pb2.ValidateExternalTokenRequest.FromString,
-                    response_serializer=v1_dot_authentication__pb2.AuthenticatedUser.SerializeToString,
+            'Introspect': grpc.unary_unary_rpc_method_handler(
+                    servicer.Introspect,
+                    request_deserializer=v1_dot_authentication__pb2.IntrospectRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.IntrospectResponse.SerializeToString,
             ),
-            'GetSessionSettings': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetSessionSettings,
-                    request_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                    response_serializer=v1_dot_authentication__pb2.AuthSessionSettings.SerializeToString,
+            'ListGrants': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListGrants,
+                    request_deserializer=v1_dot_authentication__pb2.ListGrantsRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.ListGrantsResponse.SerializeToString,
+            ),
+            'GetGrant': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetGrant,
+                    request_deserializer=v1_dot_authentication__pb2.GetGrantRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.GetGrantResponse.SerializeToString,
+            ),
+            'RevokeGrant': grpc.unary_unary_rpc_method_handler(
+                    servicer.RevokeGrant,
+                    request_deserializer=v1_dot_authentication__pb2.RevokeGrantRequest.FromString,
+                    response_serializer=v1_dot_authentication__pb2.RevokeGrantResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -122,7 +153,7 @@ class Authentication(object):
     """
 
     @staticmethod
-    def BeginLogin(request,
+    def Authorize(request,
             target,
             options=(),
             channel_credentials=None,
@@ -135,9 +166,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/BeginLogin',
-            v1_dot_authentication__pb2.BeginLoginRequest.SerializeToString,
-            v1_dot_authentication__pb2.BeginLoginResponse.FromString,
+            '/gestalt.provider.v1.Authentication/Authorize',
+            v1_dot_authentication__pb2.AuthorizeRequest.SerializeToString,
+            v1_dot_authentication__pb2.AuthorizeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -149,7 +180,7 @@ class Authentication(object):
             _registered_method=True)
 
     @staticmethod
-    def CompleteLogin(request,
+    def Token(request,
             target,
             options=(),
             channel_credentials=None,
@@ -162,9 +193,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/CompleteLogin',
-            v1_dot_authentication__pb2.CompleteLoginRequest.SerializeToString,
-            v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+            '/gestalt.provider.v1.Authentication/Token',
+            v1_dot_authentication__pb2.TokenRequest.SerializeToString,
+            v1_dot_authentication__pb2.TokenResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -176,7 +207,7 @@ class Authentication(object):
             _registered_method=True)
 
     @staticmethod
-    def ValidateExternalToken(request,
+    def Introspect(request,
             target,
             options=(),
             channel_credentials=None,
@@ -189,9 +220,9 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/ValidateExternalToken',
-            v1_dot_authentication__pb2.ValidateExternalTokenRequest.SerializeToString,
-            v1_dot_authentication__pb2.AuthenticatedUser.FromString,
+            '/gestalt.provider.v1.Authentication/Introspect',
+            v1_dot_authentication__pb2.IntrospectRequest.SerializeToString,
+            v1_dot_authentication__pb2.IntrospectResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -203,7 +234,7 @@ class Authentication(object):
             _registered_method=True)
 
     @staticmethod
-    def GetSessionSettings(request,
+    def ListGrants(request,
             target,
             options=(),
             channel_credentials=None,
@@ -216,9 +247,63 @@ class Authentication(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.Authentication/GetSessionSettings',
-            google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            v1_dot_authentication__pb2.AuthSessionSettings.FromString,
+            '/gestalt.provider.v1.Authentication/ListGrants',
+            v1_dot_authentication__pb2.ListGrantsRequest.SerializeToString,
+            v1_dot_authentication__pb2.ListGrantsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetGrant(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.Authentication/GetGrant',
+            v1_dot_authentication__pb2.GetGrantRequest.SerializeToString,
+            v1_dot_authentication__pb2.GetGrantResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RevokeGrant(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.Authentication/RevokeGrant',
+            v1_dot_authentication__pb2.RevokeGrantRequest.SerializeToString,
+            v1_dot_authentication__pb2.RevokeGrantResponse.FromString,
             options,
             channel_credentials,
             insecure,

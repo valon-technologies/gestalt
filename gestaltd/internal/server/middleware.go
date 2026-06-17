@@ -132,30 +132,28 @@ func requestBearerToken(r *http.Request) (string, error) {
 	if header == "" {
 		return "", nil
 	}
-	bearer := strings.TrimPrefix(header, core.BearerScheme)
-	if bearer == header {
+	fields := strings.Fields(header)
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
 		return "", errInvalidAuthorizationHeader
 	}
-	return bearer, nil
+	return fields[1], nil
+}
+
+func requestSessionOrBearerToken(r *http.Request) (string, error) {
+	if c, err := r.Cookie(sessionCookieName); err == nil {
+		if token := strings.TrimSpace(c.Value); token != "" {
+			return token, nil
+		}
+	}
+	return requestBearerToken(r)
 }
 
 func requestedAuthSource(r *http.Request) string {
-	header := r.Header.Get("Authorization")
-	if header != "" {
-		bearer := strings.TrimPrefix(header, core.BearerScheme)
-		if bearer == header {
-			return ""
-		}
-		if typ, ok := principal.ParseTokenType(bearer); ok {
-			if typ == principal.TokenTypeAPI {
-				return principal.SourceAPIToken.String()
-			}
-		}
-		return principal.SourceSession.String()
+	if token, err := requestBearerToken(r); err == nil && token != "" {
+		return principal.SourceBearer.String()
 	}
-
 	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
-		return principal.SourceSession.String()
+		return principal.SourceBearer.String()
 	}
 	return ""
 }

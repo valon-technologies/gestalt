@@ -50,7 +50,7 @@ func (s *Server) authRuntimeForProvider(providerName string) (authRuntime, error
 		provider:     provider,
 		resolver:     resolver,
 	}
-	if provider.Name() == "none" {
+	if providerName == "none" {
 		runtime.noAuth = true
 		runtime.anonymous = s.anonymousPrincipal
 		if runtime.anonymous == nil {

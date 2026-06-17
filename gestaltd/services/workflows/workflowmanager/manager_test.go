@@ -45,11 +45,10 @@ func testWorkflowManagerPrincipal() *principal.Principal {
 		Operations: []string{"issues.triage"},
 	}})
 	return principal.Canonicalize(&principal.Principal{
-		SubjectID:        principal.UserSubjectID("ada"),
-		UserID:           "ada",
-		Kind:             principal.KindUser,
-		TokenPermissions: permissions,
-		Scopes:           principal.PermissionApps(permissions),
+		SubjectID: principal.UserSubjectID("ada"),
+		UserID:    "ada",
+		Kind:      principal.KindUser,
+		Scopes:    principal.ScopeStringsFromPermissionSet(permissions),
 	})
 }
 

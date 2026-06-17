@@ -233,22 +233,22 @@ func TestRestrictedWithAliases(t *testing.T) {
 func TestDelegationMethods(t *testing.T) {
 	t.Parallel()
 
-	exchangeResp := &core.TokenResponse{AccessToken: "abc"}
-	refreshResp := &core.TokenResponse{AccessToken: "refresh-abc"}
+	exchangeResp := &core.OAuthTokenResponse{AccessToken: "abc"}
+	refreshResp := &core.OAuthTokenResponse{AccessToken: "refresh-abc"}
 	inner := &stubOAuth{
 		stubWithOps: stubWithOps{
 			StubIntegration: coretesting.StubIntegration{
 				N:    "my-integration",
 				DN:   "My Integration",
 				Desc: "A test integration",
-				ExchangeCodeFn: func(context.Context, string) (*core.TokenResponse, error) {
+				ExchangeCodeFn: func(context.Context, string) (*core.OAuthTokenResponse, error) {
 					return exchangeResp, nil
 				},
 			},
 			ops: sampleOps(),
 		},
 	}
-	inner.refreshTokenFn = func(context.Context, string) (*core.TokenResponse, error) {
+	inner.refreshTokenFn = func(context.Context, string) (*core.OAuthTokenResponse, error) {
 		return refreshResp, nil
 	}
 
@@ -299,14 +299,14 @@ func (s *stubCatalogProvider) Catalog() *catalog.Catalog { return s.cat }
 
 type stubOAuth struct {
 	stubWithOps
-	refreshTokenFn func(context.Context, string) (*core.TokenResponse, error)
+	refreshTokenFn func(context.Context, string) (*core.OAuthTokenResponse, error)
 }
 
 func (s *stubOAuth) AuthorizationURL(state string, _ []string) string {
 	return "https://example.com/start?state=" + state
 }
 
-func (s *stubOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (s *stubOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	if s.refreshTokenFn != nil {
 		return s.refreshTokenFn(ctx, refreshToken)
 	}

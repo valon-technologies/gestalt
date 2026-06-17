@@ -19,10 +19,9 @@ func (s *Server) httpBindingPrincipal(binding MountedHTTPBinding, verified *veri
 		displayName = strings.TrimSpace(verified.Subject)
 	}
 	return principal.Canonicalize(&principal.Principal{
-		SubjectID:        "system:http_binding:" + binding.AppName + ":" + binding.Name,
-		DisplayName:      displayName,
-		Scopes:           principal.PermissionApps(permissions),
-		TokenPermissions: permissions,
+		SubjectID:   "system:http_binding:" + binding.AppName + ":" + binding.Name,
+		DisplayName: displayName,
+		Scopes:      principal.ScopeStringsFromPermissionSet(permissions),
 	})
 }
 

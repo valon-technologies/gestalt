@@ -3,15 +3,13 @@ package providerdrivers
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
@@ -22,38 +20,55 @@ func TestAuthenticationFactoryForwardsRuntimeDepsToExecutableProvider(t *testing
 	t.Parallel()
 
 	dir := t.TempDir()
-	const (
-		callbackURL   = "http://127.0.0.1:18088/auth/callback"
-		encryptionKey = "factory-adapter-contract-key"
-	)
+	const callbackURL = "http://127.0.0.1:18088/auth/callback"
 
 	authManifest := componentProviderManifestPath(t, setupGoContractProviderDir(t, dir, providermanifestv1.KindAuthentication, "local", authContractProviderSource(callbackURL)))
 	auth, err := AuthenticationFactory(contractRuntimeNode(t, "local", authManifest), AuthenticationDeps{
 		DefaultCallbackURL: callbackURL,
-		SessionKey:         corecrypto.DeriveKey(encryptionKey),
 	})
 	if err != nil {
 		t.Fatalf("AuthenticationFactory: %v", err)
 	}
 	defer closeProviderIfSupported(t, auth)
 
-	if _, err := auth.LoginURL("host-state"); err != nil {
-		t.Fatalf("LoginURL: %v", err)
+	ctx := context.Background()
+	authorizeResp, err := auth.Authorize(ctx, &core.AuthorizeRequest{
+		ResponseType: "code",
+		ClientID:     core.DefaultOAuthClientID,
+		RedirectURI:  callbackURL,
+		State:        "host-state",
+	})
+	if err != nil {
+		t.Fatalf("Authorize: %v", err)
+	}
+	parsed, err := url.Parse(authorizeResp.RedirectURI)
+	if err != nil {
+		t.Fatalf("url.Parse(redirect): %v", err)
+	}
+	code := parsed.Query().Get("code")
+	if code == "" {
+		t.Fatal("authorize redirect did not include code")
 	}
 
-	token, err := session.IssueToken(&core.UserIdentity{
-		Email:       "session@example.com",
-		DisplayName: "Session User",
-	}, corecrypto.DeriveKey(encryptionKey), time.Minute)
+	tokenResp, err := auth.Token(ctx, &core.TokenRequest{
+		GrantType:   "authorization_code",
+		Code:        code,
+		RedirectURI: callbackURL,
+		ClientID:    core.DefaultOAuthClientID,
+	})
 	if err != nil {
-		t.Fatalf("IssueToken: %v", err)
+		t.Fatalf("Token: %v", err)
 	}
-	identity, err := auth.ValidateToken(context.Background(), token)
+	if tokenResp.AccessToken == "" {
+		t.Fatal("Token returned empty access token")
+	}
+
+	introspectResp, err := auth.Introspect(ctx, &core.IntrospectRequest{Token: tokenResp.AccessToken})
 	if err != nil {
-		t.Fatalf("ValidateToken: %v", err)
+		t.Fatalf("Introspect: %v", err)
 	}
-	if identity == nil || identity.Email != "session@example.com" {
-		t.Fatalf("ValidateToken identity = %+v, want session@example.com", identity)
+	if introspectResp == nil || !introspectResp.Active || introspectResp.Subject != "user:generated-auth@example.com" {
+		t.Fatalf("Introspect = %+v, want active subject user:generated-auth@example.com", introspectResp)
 	}
 }
 
@@ -143,37 +158,33 @@ func closeProviderIfSupported(t *testing.T, provider any) {
 
 func authContractProviderSource(wantCallbackURL string) string {
 	source := testutil.GeneratedAuthPackageSource()
-	source = strings.Replace(source, `func (p *Provider) BeginLogin(_ context.Context, req *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{
-		AuthorizationUrl: "https://auth.example.test/login?state=idp-state&prompt=consent",
-	}, nil
-}`, fmt.Sprintf(`func (p *Provider) BeginLogin(_ context.Context, req *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	if req.GetCallbackUrl() != %q {
-		return nil, fmt.Errorf("callback URL = %%q, want %%q", req.GetCallbackUrl(), %q)
+	source = strings.Replace(source, `func (p *Provider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("authorize request is required")
 	}
-	return &gestalt.BeginLoginResponse{
-		AuthorizationUrl: "https://auth.example.test/login?state=idp-state&prompt=consent",
-	}, nil
-}`, wantCallbackURL, wantCallbackURL), 1)
-	source = strings.Replace(source, `func (p *Provider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
-	if token == "" {
-		return nil, fmt.Errorf("token is required")
+	redirectURI := strings.TrimSpace(req.RedirectURI)
+	if redirectURI == "" {
+		return nil, fmt.Errorf("redirect_uri is required")
+	}`, fmt.Sprintf(`func (p *Provider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("authorize request is required")
 	}
-	if strings.Count(token, ".") == 2 {
-		return &gestalt.AuthenticatedUser{
-			Email:       "jwt@example.com",
-			DisplayName: "Validated JWT User",
+	redirectURI := strings.TrimSpace(req.RedirectURI)
+	if redirectURI == "" {
+		return nil, fmt.Errorf("redirect_uri is required")
+	}
+	if redirectURI != %q {
+		return nil, fmt.Errorf("redirect_uri = %%q, want %%q", redirectURI, %q)
+	}`, wantCallbackURL, wantCallbackURL), 1)
+	source = strings.Replace(source, `	if strings.Count(req.Token, ".") == 2 {
+		return &gestalt.IntrospectResponse{
+			Active:   true,
+			Subject:  "user:jwt@example.com",
+			ClientID: "gestaltd",
 		}, nil
-	}
-	return &gestalt.AuthenticatedUser{
-		Email:       token + "@example.com",
-		DisplayName: "Validated User",
-	}, nil
-}`, `func (p *Provider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
-	return nil, fmt.Errorf("external token fallback should not be used for %q", token)
-}`, 1)
-	source = strings.Replace(source, `
-	"strings"`, ``, 1)
+	}`, `	if strings.Count(req.Token, ".") == 2 {
+		return &gestalt.IntrospectResponse{Active: false}, nil
+	}`, 1)
 	return source
 }
 

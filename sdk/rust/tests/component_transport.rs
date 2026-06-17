@@ -7,17 +7,21 @@ mod helpers;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use generated::v1::authentication_client::AuthenticationClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use generated::v1::s3_client::S3Client;
 use generated::v1::{
-    BeginLoginRequest as ProtoBeginLoginRequest, CompleteLoginRequest as ProtoCompleteLoginRequest,
-    ConfigureProviderRequest, HeadObjectRequest as ProtoHeadObjectRequest,
+    AuthorizeRequest as ProtoAuthorizeRequest, ConfigureProviderRequest,
+    HeadObjectRequest as ProtoHeadObjectRequest, IntrospectRequest as ProtoIntrospectRequest,
     ListObjectsRequest as ProtoListObjectsRequest, ProviderKind,
-    ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, ValidateExternalTokenRequest,
+    ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, TokenRequest as ProtoTokenRequest,
     WriteObjectRequest as ProtoWriteObjectRequest,
+};
+use gestalt::authentication::{
+    AuthorizeRequest, AuthorizeResponse, GetGrantRequest, GetGrantResponse, IntrospectRequest,
+    IntrospectResponse, ListGrantsRequest, ListGrantsResponse, RevokeGrantRequest,
+    RevokeGrantResponse, TokenRequest, TokenResponse,
 };
 use gestalt::s3_provider::{
     CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest,
@@ -25,11 +29,10 @@ use gestalt::s3_provider::{
     PresignObjectRequest, PresignObjectResponse, ReadObjectRequest, S3ReadObjectFrame,
     S3WriteObjectFrame, WriteObjectResponse,
 };
-use gestalt::{AuthenticationProvider, BeginLoginRequest, CompleteLoginRequest, RuntimeMetadata};
+use gestalt::{AuthenticationProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
-use tonic::Code;
 use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
 use tower::service_fn;
@@ -70,53 +73,82 @@ impl AuthenticationProvider for TestAuthProvider {
         vec!["set OIDC_BASE_URL".to_string()]
     }
 
-    async fn begin_login(
-        &self,
-        req: BeginLoginRequest,
-    ) -> gestalt::Result<gestalt::BeginLoginResponse> {
-        Ok(gestalt::BeginLoginResponse {
-            authorization_url: format!("https://example.com/login?state={}", req.host_state),
-            provider_state: b"provider-state".to_vec(),
+    async fn authorize(&self, req: AuthorizeRequest) -> gestalt::Result<AuthorizeResponse> {
+        Ok(AuthorizeResponse {
+            redirect_uri: format!(
+                "https://example.com/callback?code=fixture-code&state={}",
+                req.state
+            ),
         })
     }
 
-    async fn complete_login(
-        &self,
-        req: CompleteLoginRequest,
-    ) -> gestalt::Result<gestalt::AuthenticatedUser> {
-        Ok(gestalt::AuthenticatedUser {
-            subject: "sub_123".to_string(),
-            email: req
-                .query
-                .get("email")
-                .cloned()
-                .unwrap_or_else(|| "sdk@example.com".to_string()),
-            email_verified: true,
-            display_name: "SDK User".to_string(),
-            avatar_url: String::new(),
-            claims: BTreeMap::from([("source".to_string(), "complete_login".to_string())]),
-        })
-    }
-
-    async fn validate_external_token(
-        &self,
-        token: &str,
-    ) -> gestalt::Result<Option<gestalt::AuthenticatedUser>> {
-        if token == "external-token" {
-            return Ok(Some(gestalt::AuthenticatedUser {
-                subject: "sub_external".to_string(),
-                email: "external@example.com".to_string(),
-                email_verified: true,
-                display_name: "External User".to_string(),
-                avatar_url: String::new(),
-                claims: BTreeMap::new(),
-            }));
+    async fn token(&self, req: TokenRequest) -> gestalt::Result<TokenResponse> {
+        if req.code != "fixture-code" {
+            return Err(gestalt::Error::bad_request("invalid code"));
         }
-        Ok(None)
+        Ok(TokenResponse {
+            access_token: "fixture-access-token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 3600,
+            refresh_token: String::new(),
+            scope: "openid email".to_string(),
+            grant_id: "grant-fixture".to_string(),
+        })
     }
 
-    fn session_ttl(&self) -> Option<Duration> {
-        Some(Duration::from_secs(7200))
+    async fn introspect(&self, req: IntrospectRequest) -> gestalt::Result<IntrospectResponse> {
+        if req.token == "fixture-access-token" {
+            return Ok(IntrospectResponse {
+                active: true,
+                subject: "user:fixture".to_string(),
+                scope: "openid email".to_string(),
+                client_id: "gestaltd".to_string(),
+                audience: vec!["https://issuer".to_string()],
+            });
+        }
+        Ok(IntrospectResponse {
+            active: false,
+            subject: String::new(),
+            scope: String::new(),
+            client_id: String::new(),
+            audience: Vec::new(),
+        })
+    }
+
+    async fn list_grants(
+        &self,
+        _call: gestalt::AuthCallContext,
+        _req: ListGrantsRequest,
+    ) -> gestalt::Result<ListGrantsResponse> {
+        Ok(ListGrantsResponse {
+            grant_ids: vec!["grant-fixture".to_string()],
+        })
+    }
+
+    async fn get_grant(
+        &self,
+        _call: gestalt::AuthCallContext,
+        req: GetGrantRequest,
+    ) -> gestalt::Result<GetGrantResponse> {
+        if req.grant_id != "grant-fixture" {
+            return Err(gestalt::Error::not_found("grant not found"));
+        }
+        Ok(GetGrantResponse {
+            scopes: vec![gestalt::authentication::GrantScope {
+                scope: "openid".to_string(),
+                resource: Vec::new(),
+            }],
+            created_at: 1_700_000_000,
+            expires_at: 1_800_000_000,
+        })
+    }
+
+    async fn revoke_grant(
+        &self,
+        _call: gestalt::AuthCallContext,
+        _req: RevokeGrantRequest,
+    ) -> gestalt::Result<RevokeGrantResponse> {
+        Ok(RevokeGrantResponse {})
     }
 }
 
@@ -352,53 +384,55 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
         gestalt::CURRENT_PROTOCOL_VERSION
     );
 
-    let begin = auth
-        .begin_login(ProtoBeginLoginRequest {
-            callback_url: "https://host/callback".to_string(),
-            host_state: "host-state".to_string(),
-            scopes: vec!["openid".to_string()],
-            options: BTreeMap::new(),
+    let authorize = auth
+        .authorize(ProtoAuthorizeRequest {
+            response_type: "code".to_string(),
+            client_id: "gestaltd".to_string(),
+            redirect_uri: "https://host/callback".to_string(),
+            scope: "openid".to_string(),
+            state: "host-state".to_string(),
         })
         .await
-        .expect("begin login")
+        .expect("authorize")
         .into_inner();
-    assert!(begin.authorization_url.contains("host-state"));
-    assert_eq!(begin.provider_state, b"provider-state");
+    assert!(authorize.redirect_uri.contains("host-state"));
 
-    let completed = auth
-        .complete_login(ProtoCompleteLoginRequest {
-            query: BTreeMap::from([("email".to_string(), "complete@example.com".to_string())]),
-            provider_state: b"provider-state".to_vec(),
-            callback_url: "https://host/callback".to_string(),
+    let token = auth
+        .token(ProtoTokenRequest {
+            grant_type: "authorization_code".to_string(),
+            code: "fixture-code".to_string(),
+            redirect_uri: "https://host/callback".to_string(),
+            client_id: "gestaltd".to_string(),
+            state: "host-state".to_string(),
+            scope: String::new(),
+            subject_token: String::new(),
+            subject_token_type: String::new(),
         })
         .await
-        .expect("complete login")
+        .expect("token")
         .into_inner();
-    assert_eq!(completed.email, "complete@example.com");
+    assert_eq!(token.access_token, "fixture-access-token");
 
-    let validated = auth
-        .validate_external_token(ValidateExternalTokenRequest {
-            token: "external-token".to_string(),
+    let introspected = auth
+        .introspect(ProtoIntrospectRequest {
+            token: "fixture-access-token".to_string(),
+            token_type_hint: String::new(),
         })
         .await
-        .expect("validate external token")
+        .expect("introspect")
         .into_inner();
-    assert_eq!(validated.subject, "sub_external");
+    assert!(introspected.active);
+    assert_eq!(introspected.subject, "user:fixture");
 
-    let err = auth
-        .validate_external_token(ValidateExternalTokenRequest {
+    let inactive = auth
+        .introspect(ProtoIntrospectRequest {
             token: "missing-token".to_string(),
+            token_type_hint: String::new(),
         })
         .await
-        .expect_err("unknown token should return not found");
-    assert_eq!(err.code(), Code::NotFound);
-
-    let session_settings = auth
-        .get_session_settings(())
-        .await
-        .expect("get session settings")
+        .expect("introspect inactive")
         .into_inner();
-    assert_eq!(session_settings.session_ttl_seconds, 7200);
+    assert!(!inactive.active);
 
     serve_task.abort();
     let _ = serve_task.await;

@@ -121,14 +121,13 @@ func extractReleasedArchive(t *testing.T, outputDir, archiveName string) string 
 	return extractDir
 }
 
-func assertExecutableAuthProviderWorks(t *testing.T, command, providerName string, assertSessionTTL, assertExternalJWT bool) {
+func assertExecutableAuthProviderWorks(t *testing.T, command, providerName string, assertIntrospectJWT bool) {
 	t.Helper()
 
 	auth, err := authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
 		Command:     command,
 		Name:        providerName,
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
-		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
 		t.Fatalf("authenticationservice.NewExecutable: %v", err)
@@ -139,55 +138,56 @@ func assertExecutableAuthProviderWorks(t *testing.T, command, providerName strin
 		}
 	}()
 
-	loginURL, err := auth.LoginURL("host-state")
+	ctx := context.Background()
+	callbackURL := "https://gestalt.example.test/api/v1/auth/login/callback"
+	authorizeResp, err := auth.Authorize(ctx, &core.AuthorizeRequest{
+		ResponseType: "code",
+		ClientID:     core.DefaultOAuthClientID,
+		RedirectURI:  callbackURL,
+		State:        "host-state",
+	})
 	if err != nil {
-		t.Fatalf("LoginURL: %v", err)
+		t.Fatalf("Authorize: %v", err)
 	}
-	parsed, err := url.Parse(loginURL)
+	parsed, err := url.Parse(authorizeResp.RedirectURI)
 	if err != nil {
-		t.Fatalf("url.Parse(loginURL): %v", err)
+		t.Fatalf("url.Parse(redirect): %v", err)
 	}
-	state := parsed.Query().Get("state")
-	if state == "" {
-		t.Fatal("login URL did not include state")
+	if parsed.Query().Get("state") != "host-state" {
+		t.Fatalf("authorize state = %q, want host-state", parsed.Query().Get("state"))
+	}
+	code := parsed.Query().Get("code")
+	if code == "" {
+		t.Fatal("authorize redirect did not include code")
 	}
 
-	callbackHandler, ok := auth.(interface {
-		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
-	})
-	if !ok {
-		t.Fatal("auth provider did not expose HandleCallbackRequest")
-	}
-	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
-		"code":   {"callback-code"},
-		"state":  {state},
-		"prompt": {parsed.Query().Get("prompt")},
+	tokenResp, err := auth.Token(ctx, &core.TokenRequest{
+		GrantType:   "authorization_code",
+		Code:        code,
+		RedirectURI: callbackURL,
+		ClientID:    core.DefaultOAuthClientID,
 	})
 	if err != nil {
-		t.Fatalf("HandleCallbackRequest: %v", err)
+		t.Fatalf("Token: %v", err)
 	}
-	if originalState != "host-state" {
-		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+	introspectResp, err := auth.Introspect(ctx, &core.IntrospectRequest{Token: tokenResp.AccessToken})
+	if err != nil {
+		t.Fatalf("Introspect: %v", err)
 	}
-	if identity == nil || identity.Email != "generated-auth@example.com" {
-		t.Fatalf("identity = %+v", identity)
+	if introspectResp == nil || !introspectResp.Active || introspectResp.Subject != "user:generated-auth@example.com" {
+		t.Fatalf("introspect = %+v, want active generated-auth subject", introspectResp)
 	}
-	if assertSessionTTL {
-		if ttlProvider, ok := auth.(interface{ SessionTokenTTL() time.Duration }); !ok || ttlProvider.SessionTokenTTL() != 90*time.Minute {
-			t.Fatalf("SessionTokenTTL = %v", ttlProvider)
-		}
-	}
-	if assertExternalJWT {
+	if assertIntrospectJWT {
 		externalJWT, err := session.IssueToken(&core.UserIdentity{Email: "jwt@example.com"}, []byte("abcdef0123456789abcdef0123456789"), 24*time.Hour)
 		if err != nil {
 			t.Fatalf("IssueToken: %v", err)
 		}
-		validated, err := auth.ValidateToken(context.Background(), externalJWT)
+		jwtIntrospect, err := auth.Introspect(ctx, &core.IntrospectRequest{Token: externalJWT})
 		if err != nil {
-			t.Fatalf("ValidateToken(external jwt): %v", err)
+			t.Fatalf("Introspect(external jwt): %v", err)
 		}
-		if validated == nil || validated.Email != "jwt@example.com" {
-			t.Fatalf("validated = %+v", validated)
+		if jwtIntrospect == nil || !jwtIntrospect.Active || jwtIntrospect.Subject != "user:jwt@example.com" {
+			t.Fatalf("jwt introspect = %+v", jwtIntrospect)
 		}
 	}
 }

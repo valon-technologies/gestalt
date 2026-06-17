@@ -15,7 +15,9 @@ import {
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
   Authentication as AuthenticationProviderService,
-  BeginLoginRequestSchema,
+  AuthorizeRequestSchema,
+  IntrospectRequestSchema,
+  TokenRequestSchema,
 } from "../src/internal/gen/v1/authentication_pb.ts";
 import { Cache as CacheService } from "../src/internal/gen/v1/cache_pb.ts";
 import {
@@ -182,19 +184,33 @@ test("buildProviderBinary compiles a runnable authentication provider executable
       }),
     );
 
-    const begin = await auth.beginLogin(
-      create(BeginLoginRequestSchema, {
-        callbackUrl: "https://app.example.test/callback",
-        hostState: "binary-state",
-        scopes: ["openid"],
+    const authorize = await auth.authorize(
+      create(AuthorizeRequestSchema, {
+        responseType: "code",
+        clientId: "gestaltd",
+        redirectUri: "https://app.example.test/callback",
+        scope: "openid",
+        state: "binary-state",
       }),
     );
-    expect(begin.authorizationUrl).toContain(
-      "https://binary.example.test/authorize",
-    );
+    expect(authorize.redirectUri).toContain("code=fixture-auth-code");
 
-    const settings = await auth.getSessionSettings(create(EmptySchema, {}));
-    expect(settings.sessionTtlSeconds).toBe(5400n);
+    const token = await auth.token(
+      create(TokenRequestSchema, {
+        grantType: "authorization_code",
+        code: "fixture-auth-code",
+        redirectUri: "https://app.example.test/callback",
+        clientId: "gestaltd",
+      }),
+    );
+    expect(token.accessToken).toBe("fixture-access-token");
+
+    const introspected = await auth.introspect(
+      create(IntrospectRequestSchema, {
+        token: token.accessToken,
+      }),
+    );
+    expect(introspected.active).toBe(true);
   } finally {
     if (child) {
       await stopProcess(child);

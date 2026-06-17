@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
@@ -41,7 +41,7 @@ func (s *Server) authProviderName() string {
 	if s.auth == nil {
 		return "none"
 	}
-	return s.auth.Name()
+	return "authentication"
 }
 
 func (s *Server) authEnabled() bool {
@@ -153,11 +153,20 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, auth authRuntime, state, nextPath string) (string, error) {
-	loginURLRaw, err := loginURLForRequest(r.Context(), auth.provider, state)
+	redirectURI, err := s.authCallbackURL(r)
 	if err != nil {
+		return "", errors.New("failed to resolve callback URL")
+	}
+	resp, err := auth.provider.Authorize(r.Context(), &core.AuthorizeRequest{
+		ResponseType: "code",
+		ClientID:     core.DefaultOAuthClientID,
+		RedirectURI:  redirectURI,
+		State:        state,
+	})
+	if err != nil || resp == nil || strings.TrimSpace(resp.RedirectURI) == "" {
 		return "", errors.New("failed to generate login URL")
 	}
-	loginURL, err := s.resolvePublicURL(r, loginURLRaw)
+	loginURL, err := s.resolvePublicURL(r, resp.RedirectURI)
 	if err != nil {
 		return "", errors.New("failed to resolve login URL")
 	}
@@ -278,11 +287,20 @@ func browserLoginStateForNextPath(nextPath string) string {
 	return parsed.Path
 }
 
-func loginURLForRequest(ctx context.Context, provider core.AuthenticationProvider, state string) (string, error) {
-	if providerWithContext, ok := provider.(core.LoginURLContextProvider); ok {
-		return providerWithContext.LoginURLContext(ctx, state)
+func (s *Server) authCallbackURL(r *http.Request) (string, error) {
+	base := s.publicBaseURL
+	if base == "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		base = scheme + "://" + r.Host
 	}
-	return provider.LoginURL(state)
+	parsed, err := url.Parse(strings.TrimRight(base, "/") + config.AuthCallbackPath)
+	if err != nil {
+		return "", err
+	}
+	return parsed.String(), nil
 }
 
 func (s *Server) resolvePublicURL(r *http.Request, raw string) (string, error) {
@@ -320,26 +338,14 @@ type AuthProviderDisplayName interface {
 	DisplayName() string
 }
 
-// SessionTokenIssuer is an optional interface that authentication providers can implement
-// to issue session tokens after login.
-type SessionTokenIssuer interface {
-	IssueSessionToken(identity *core.UserIdentity) (string, error)
-}
-
-// SessionTokenTTLProvider is an optional interface that authentication providers can
-// implement to expose their configured session TTL for cookie MaxAge.
-type SessionTokenTTLProvider interface {
-	SessionTokenTTL() time.Duration
-}
-
-func (s *Server) setSessionCookie(provider core.AuthenticationProvider, w http.ResponseWriter, token string) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, accessToken string, expiresIn int) {
 	maxAge := int(defaultSessionCookieTTL.Seconds())
-	if p, ok := provider.(SessionTokenTTLProvider); ok {
-		maxAge = int(p.SessionTokenTTL().Seconds())
+	if expiresIn > 0 {
+		maxAge = expiresIn
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    token,
+		Value:    accessToken,
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
@@ -360,20 +366,6 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// StatefulCallbackHandler is an optional interface for authentication providers that need
-// the OAuth state parameter during callback (e.g., for PKCE where the
-// code_verifier is encrypted in the state).
-type StatefulCallbackHandler interface {
-	HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error)
-}
-
-// RequestCallbackHandler is an optional interface for authentication providers that need
-// the full callback query map. This is used by executable authentication apps so the
-// host can preserve callback state and provider-specific query parameters.
-type RequestCallbackHandler interface {
-	HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error)
-}
-
 func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
@@ -381,9 +373,9 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	auditSubjectID := ""
 	auth := s.serverAuthRuntime()
 	defer func() {
-		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "complete_login", auditErr != nil)
+		metricutil.RecordAuthMetrics(r.Context(), startedAt, auth.providerName, "token", auditErr != nil)
 		if auditSubjectID != "" {
-			s.auditHTTPEventWithSubjectID(r.Context(), auditSubjectID, principal.SourceSession.String(), auth.providerName, "auth.login.complete", auditAllowed, auditErr)
+			s.auditHTTPEventWithSubjectID(r.Context(), auditSubjectID, principal.SourceBearer.String(), auth.providerName, "auth.login.complete", auditAllowed, auditErr)
 			return
 		}
 		s.auditHTTPEvent(r.Context(), nil, auth.providerName, "auth.login.complete", auditAllowed, auditErr)
@@ -395,10 +387,18 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "missing code parameter")
 		return
 	}
+	originalState := r.URL.Query().Get("state")
 	loginState, err := s.loginStateForCallback(r)
 	if err != nil {
 		auditErr = errors.New("login state validation failed")
 		slog.ErrorContext(r.Context(), "login state validation failed", "error", err)
+		writeError(w, http.StatusForbidden, "login state validation failed")
+		return
+	}
+
+	if !loginStatesMatch(loginState.State, originalState) {
+		auditErr = errors.New("login state validation failed")
+		slog.ErrorContext(r.Context(), "login state validation failed", "error", errors.New("login state mismatch"))
 		writeError(w, http.StatusForbidden, "login state validation failed")
 		return
 	}
@@ -416,85 +416,60 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var identity *core.UserIdentity
-	var originalState string
-
-	if handler, ok := auth.provider.(RequestCallbackHandler); ok {
-		identity, originalState, err = handler.HandleCallbackRequest(r.Context(), r.URL.Query())
-	} else if stateful, ok := auth.provider.(StatefulCallbackHandler); ok {
-		state := r.URL.Query().Get("state")
-		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, state)
-	} else {
-		originalState = r.URL.Query().Get("state")
-		identity, err = auth.provider.HandleCallback(r.Context(), code)
-	}
+	redirectURI, err := s.authCallbackURL(r)
 	if err != nil {
+		auditErr = errors.New("failed to resolve callback URL")
+		writeError(w, http.StatusInternalServerError, "failed to resolve callback URL")
+		return
+	}
+	tokenResp, err := auth.provider.Token(r.Context(), &core.TokenRequest{
+		GrantType:   core.GrantTypeAuthorizationCode,
+		Code:        code,
+		RedirectURI: redirectURI,
+		ClientID:    core.DefaultOAuthClientID,
+		State:       originalState,
+	})
+	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" {
 		auditErr = errors.New("login failed")
 		slog.ErrorContext(r.Context(), "login callback failed", "error", err)
 		writeError(w, http.StatusUnauthorized, "login failed")
 		return
 	}
 
-	if !loginStatesMatch(loginState.State, originalState) {
-		auditErr = errors.New("login state validation failed")
-		slog.ErrorContext(r.Context(), "login state validation failed", "error", errors.New("login state mismatch"))
-		writeError(w, http.StatusForbidden, "login state validation failed")
-		return
-	}
 	if s.encryptor != nil {
 		s.clearLoginStateCookie(w)
 	}
 
+	if p, err := s.resolver.ResolveToken(r.Context(), tokenResp.AccessToken); err == nil && p != nil {
+		if enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p); enrichErr == nil && enriched != nil && strings.TrimSpace(enriched.SubjectID) != "" {
+			auditSubjectID = enriched.SubjectID
+		} else if strings.TrimSpace(p.SubjectID) != "" {
+			auditSubjectID = p.SubjectID
+		}
+	}
+
 	if r.URL.Query().Get("cli") == "1" {
-		dbUser, dbErr := s.users.FindOrCreateUser(r.Context(), identity.Email)
-		if dbErr != nil || dbUser == nil || dbUser.ID == "" {
-			auditErr = errors.New("failed to resolve user")
-			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		apiGrant, exchangeErr := auth.provider.Token(r.Context(), &core.TokenRequest{
+			GrantType:        core.GrantTypeTokenExchange,
+			SubjectToken:     tokenResp.AccessToken,
+			SubjectTokenType: core.SubjectTokenTypeAccessToken,
+			ClientID:         core.DefaultOAuthClientID,
+		})
+		if exchangeErr != nil || apiGrant == nil || strings.TrimSpace(apiGrant.AccessToken) == "" || strings.TrimSpace(apiGrant.GrantID) == "" {
+			auditErr = errors.New("failed to issue CLI grant")
+			writeError(w, http.StatusInternalServerError, "failed to issue CLI grant")
 			return
 		}
-		auditSubjectID = principal.UserSubjectID(dbUser.ID)
-		apiToken, plaintext, issueErr := s.issueAPIToken(r.Context(), dbUser.ID, cliLoginTokenName, "", true)
-		if issueErr != nil {
-			auditErr = errors.New("failed to issue CLI API token")
-			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
-			return
-		}
-		s.auditHTTPEventWithSubjectID(r.Context(), principal.UserSubjectID(dbUser.ID), principal.SourceSession.String(), "", "api_token.create", true, nil)
 		auditAllowed = true
 		auditErr = nil
-		writeJSON(w, http.StatusOK, createTokenResponse{
-			ID:        apiToken.ID,
-			Name:      apiToken.Name,
-			Token:     plaintext,
-			ExpiresAt: apiToken.ExpiresAt,
+		writeJSON(w, http.StatusOK, createGrantResponse{
+			ID:    strings.TrimSpace(apiGrant.GrantID),
+			Token: apiGrant.AccessToken,
 		})
 		return
 	}
 
-	if identity != nil && identity.Email != "" {
-		dbUser, auditPrincipalErr := s.users.FindOrCreateUser(r.Context(), identity.Email)
-		switch {
-		case auditPrincipalErr != nil:
-			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", auditPrincipalErr)
-		case dbUser != nil && dbUser.ID != "":
-			auditSubjectID = principal.UserSubjectID(dbUser.ID)
-		default:
-			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", "authenticated principal missing user ID")
-		}
-	}
-
-	resp := map[string]any{
-		"email":       identity.Email,
-		"displayName": identity.DisplayName,
-	}
-
-	token, err := s.issueSessionToken(auth.provider, identity)
-	if err != nil {
-		auditErr = errors.New("failed to issue session token")
-		writeError(w, http.StatusInternalServerError, "failed to issue session token")
-		return
-	}
-	s.setSessionCookie(auth.provider, w, token)
+	s.setSessionCookie(w, tokenResp.AccessToken, tokenResp.ExpiresIn)
 
 	auditAllowed = true
 	auditErr = nil
@@ -502,7 +477,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, loginState.NextPath, http.StatusFound)
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) loginStateForCallback(r *http.Request) (*loginState, error) {

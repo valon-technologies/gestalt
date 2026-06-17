@@ -222,7 +222,7 @@ func testWorkflowPrincipal() *principal.Principal {
 		SubjectID: "user:user-123",
 		UserID:    "user-123",
 		Kind:      principal.KindUser,
-		Source:    principal.SourceSession,
+		Source:    principal.SourceBearer,
 	}
 }
 

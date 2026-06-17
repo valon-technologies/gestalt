@@ -110,22 +110,11 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 
 	provider := newMemoryAgentProvider()
 	services := testutil.NewStubServices(t)
-	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
-	}
-	user := seedAPITokenWithPermissions(t, services, plaintext, hashed, "agent-user", []core.AccessPermission{{
-		App:        "roadmap",
-		Operations: []string{"sync"},
-	}})
+	user := seedUser(t, services, "agent-user@test.local")
+	plaintext := scopedTestBearerToken(user.ID, "roadmap:sync")
 	ts := newTestServer(t, func(cfg *server.Config) {
 		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(context.Context, string) (*core.UserIdentity, error) {
-				return nil, core.ErrNotFound
-			},
-		}
+		cfg.Auth = testAuthStubForScopedBearer()
 		cfg.Services = services
 		cfg.Agent = agentControl
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{

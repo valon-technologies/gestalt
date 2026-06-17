@@ -210,7 +210,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				DisplayName: "Ada",
 				Kind:        principal.KindUser,
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
-				Source:      principal.SourceAPIToken,
+				Source:      principal.SourceBearer,
 			},
 			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true||subject|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
 			wantSessionCatalog: "token-123|user:user-123|user|Ada|true||subject|roadmap|admin|https://gestalt.example.test",
@@ -221,7 +221,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				SubjectID:   "service_account:triage-bot",
 				DisplayName: "Triage Bot",
 				Kind:        principal.Kind("service_account"),
-				Source:      principal.SourceAPIToken,
+				Source:      principal.SourceBearer,
 			},
 			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false||subject|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
 			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false||subject|roadmap|admin|https://gestalt.example.test",
@@ -328,7 +328,7 @@ func TestRequestContextProto_PreservesServiceAccountDisplayName(t *testing.T) {
 		SubjectID:   "service_account:triage-bot",
 		DisplayName: "Triage Bot",
 		Kind:        principal.Kind("service_account"),
-		Source:      principal.SourceAPIToken,
+		Source:      principal.SourceBearer,
 	})
 	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
 		Policy: "roadmap",
@@ -364,7 +364,7 @@ func TestRequestContextProto_IncludesUserEmail(t *testing.T) {
 			Email:       "ada@example.com",
 			DisplayName: "Ada Lovelace",
 		},
-		Source: principal.SourceAPIToken,
+		Source: principal.SourceBearer,
 	})
 
 	reqCtx, err := requestContextProto(ctx, "", invocation.CallerProvider{})
@@ -393,7 +393,7 @@ func TestRequestContextProto_RunAsServiceAccountDoesNotInheritUserEmail(t *testi
 			Email:       "ada@example.com",
 			DisplayName: "Ada Lovelace",
 		},
-		Source: principal.SourceSession,
+		Source: principal.SourceBearer,
 	})
 	ctx, _ = invocation.ApplyDelegation(ctx, principal.FromContext(ctx), &core.RunAsSubject{
 		SubjectID:           "service_account:review-bot",
@@ -421,7 +421,7 @@ func TestRequestContextProto_IncludesRunAsAgentSubject(t *testing.T) {
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID: "service_account:event-handler",
 		Kind:      principal.Kind("service_account"),
-		Source:    principal.SourceAPIToken,
+		Source:    principal.SourceBearer,
 	})
 	ctx = invocation.WithRunAsAudit(ctx, &core.RunAsSubject{
 		SubjectID:           "user:user-123",

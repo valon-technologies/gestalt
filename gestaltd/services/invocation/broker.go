@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -545,10 +546,16 @@ func authorizationAccessRequest(p *principal.Principal, providerName, operationI
 	p = principal.Canonicalized(p)
 	subjectID := principal.EffectiveCredentialSubjectID(p)
 	providerName = strings.TrimSpace(providerName)
+	properties, _ := structpb.NewStruct(map[string]any{
+		"scope":     strings.Join(p.Scopes, " "),
+		"client_id": strings.TrimSpace(p.ClientID),
+		"audience":  append([]string(nil), p.Audience...),
+	})
 	return &proto.CheckAccessRequest{
 		Subject: &proto.Subject{
-			Type: "subject",
-			Id:   subjectID,
+			Type:       "subject",
+			Id:         subjectID,
+			Properties: properties,
 		},
 		Action: &proto.Action{Name: strings.TrimSpace(operationID)},
 		Resource: &proto.Resource{

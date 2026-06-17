@@ -2044,7 +2044,6 @@ type ServerConfig struct {
 	Management    ManagementListenerConfig `yaml:"management"`
 	BaseURL       string                   `yaml:"baseUrl"`
 	EncryptionKey string                   `yaml:"encryptionKey"`
-	APITokenTTL   string                   `yaml:"apiTokenTtl"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Agent         ServerAgentConfig        `yaml:"agent,omitempty"`

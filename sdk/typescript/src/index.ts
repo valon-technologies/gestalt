@@ -169,14 +169,19 @@ export {
 } from "./providers/authorization.ts";
 export {
   AuthenticationProvider,
+  CALLER_BEARER_TOKEN_METADATA_KEY,
   defineAuthenticationProvider,
   isAuthenticationProvider,
-  type AuthenticatedUser,
+  type AuthCallContext,
   type AuthenticationProviderOptions,
-  type AuthenticationSessionSettings,
-  type BeginLoginRequest,
-  type BeginLoginResponse,
-  type CompleteLoginRequest,
+  type AuthorizeRequest,
+  type AuthorizeResponse,
+  type GrantDetails,
+  type GrantScope,
+  type IntrospectRequest,
+  type IntrospectResponse,
+  type TokenRequest,
+  type TokenResponse,
 } from "./auth.ts";
 export {
   Cache,

@@ -1,7 +1,6 @@
 package gestalt_test
 
 import (
-	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -10,6 +9,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -24,6 +24,7 @@ type fullAuthenticationProvider struct {
 	closeTracker
 	configured []configCall
 	started    int
+	revoked    []string
 }
 
 func (p *fullAuthenticationProvider) Configure(_ context.Context, name string, config map[string]any) error {
@@ -53,37 +54,69 @@ func (p *fullAuthenticationProvider) Start(context.Context) error {
 	return nil
 }
 
-func (p *fullAuthenticationProvider) SessionTTL() time.Duration {
-	return 30 * time.Minute
-}
-
-func (p *fullAuthenticationProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{
-		AuthorizationUrl: "https://auth.example.test/login",
-		ProviderState:    []byte("state-data"),
+func (p *fullAuthenticationProvider) Authorize(_ context.Context, req *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	return &gestalt.AuthorizeResponse{
+		RedirectURI: "https://auth.example.test/login?state=" + req.State,
 	}, nil
 }
 
-func (p *fullAuthenticationProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
-	return testAuthUser(), nil
+func (p *fullAuthenticationProvider) Token(_ context.Context, req *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	if req == nil || req.Code != "auth-code" {
+		return nil, status.Error(codes.InvalidArgument, "invalid authorization code")
+	}
+	return &gestalt.TokenResponse{
+		AccessToken: "issued-access-token",
+		TokenType:   "Bearer",
+		ExpiresIn:   1800,
+		GrantID:     "grant-1",
+		Scope:       "read write",
+	}, nil
 }
 
-func (p *fullAuthenticationProvider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
-	if token == "valid-token" {
-		return testAuthUser(), nil
+func (p *fullAuthenticationProvider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+	if req == nil {
+		return &gestalt.IntrospectResponse{Active: false}, nil
 	}
-	return nil, nil
+	switch req.Token {
+	case "issued-access-token", "valid-token":
+		return &gestalt.IntrospectResponse{
+			Active:   true,
+			Subject:  "user:user@example.test",
+			Scope:    "read write",
+			ClientID: "gestaltd",
+		}, nil
+	default:
+		return &gestalt.IntrospectResponse{Active: false}, nil
+	}
 }
 
-func testAuthUser() *gestalt.AuthenticatedUser {
-	return &gestalt.AuthenticatedUser{
-		Subject:       "user-123",
-		Email:         "user@example.test",
-		EmailVerified: true,
-		DisplayName:   "Test User",
-		AvatarUrl:     "https://example.test/avatar.png",
-		Claims:        map[string]string{"role": "admin"},
+func (p *fullAuthenticationProvider) ListGrants(_ context.Context, _ *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+	return &gestalt.ListGrantsResponse{GrantIDs: []string{"grant-1", "grant-2"}}, nil
+}
+
+func (p *fullAuthenticationProvider) GetGrant(_ context.Context, req *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+	if req == nil || req.GrantID != "grant-1" {
+		return nil, status.Error(codes.NotFound, "grant not found")
 	}
+	return &gestalt.GetGrantResponse{
+		Scopes: []gestalt.GrantScope{
+			{Scope: "read"},
+			{Scope: "write"},
+		},
+		CreatedAt: 1_700_000_000,
+		ExpiresAt: 1_800_000_000,
+	}, nil
+}
+
+func (p *fullAuthenticationProvider) RevokeGrant(_ context.Context, req *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+	if req == nil || req.GrantID == "" {
+		return nil, status.Error(codes.InvalidArgument, "grant_id is required")
+	}
+	p.revoked = append(p.revoked, req.GrantID)
+	return &gestalt.RevokeGrantResponse{}, nil
 }
 
 func TestAuthenticationProviderRoundTrip(t *testing.T) {
@@ -200,74 +233,88 @@ func TestAuthenticationProviderRoundTrip(t *testing.T) {
 		t.Fatalf("ready = false, want true")
 	}
 
-	beginResp, err := authClient.BeginLogin(rpcCtx, &proto.BeginLoginRequest{
-		CallbackUrl: "https://app.example.test/callback",
-		HostState:   "xyz",
-		Scopes:      []string{"read", "write"},
-		Options:     map[string]string{"prompt": "consent"},
+	authorizeResp, err := authClient.Authorize(rpcCtx, &proto.AuthorizeRequest{
+		ResponseType: "code",
+		ClientId:     "gestaltd",
+		RedirectUri:  "https://app.example.test/callback",
+		Scope:        "read write",
+		State:        "xyz",
 	})
 	if err != nil {
-		t.Fatalf("BeginLogin: %v", err)
+		t.Fatalf("Authorize: %v", err)
 	}
-	if beginResp.GetAuthorizationUrl() != "https://auth.example.test/login" {
-		t.Fatalf("authorization_url = %q, want %q", beginResp.GetAuthorizationUrl(), "https://auth.example.test/login")
-	}
-	if !bytes.Equal(beginResp.GetProviderState(), []byte("state-data")) {
-		t.Fatalf("provider_state = %q, want %q", beginResp.GetProviderState(), "state-data")
+	if authorizeResp.GetRedirectUri() != "https://auth.example.test/login?state=xyz" {
+		t.Fatalf("redirect_uri = %q, want %q", authorizeResp.GetRedirectUri(), "https://auth.example.test/login?state=xyz")
 	}
 
-	completeResp, err := authClient.CompleteLogin(rpcCtx, &proto.CompleteLoginRequest{
-		Query:         map[string]string{"code": "auth-code"},
-		ProviderState: []byte("state-data"),
-		CallbackUrl:   "https://app.example.test/callback",
+	tokenResp, err := authClient.Token(rpcCtx, &proto.TokenRequest{
+		GrantType:   "authorization_code",
+		Code:        "auth-code",
+		RedirectUri: "https://app.example.test/callback",
+		ClientId:    "gestaltd",
 	})
 	if err != nil {
-		t.Fatalf("CompleteLogin: %v", err)
+		t.Fatalf("Token: %v", err)
 	}
-	assertAuthenticatedUser(t, completeResp)
+	if tokenResp.GetAccessToken() != "issued-access-token" {
+		t.Fatalf("access_token = %q, want %q", tokenResp.GetAccessToken(), "issued-access-token")
+	}
+	if tokenResp.GetGrantId() != "grant-1" {
+		t.Fatalf("grant_id = %q, want %q", tokenResp.GetGrantId(), "grant-1")
+	}
 
-	validUser, err := authClient.ValidateExternalToken(rpcCtx, &proto.ValidateExternalTokenRequest{Token: "valid-token"})
+	introspectResp, err := authClient.Introspect(rpcCtx, &proto.IntrospectRequest{Token: "valid-token"})
 	if err != nil {
-		t.Fatalf("ValidateExternalToken(valid): %v", err)
+		t.Fatalf("Introspect(valid): %v", err)
 	}
-	assertAuthenticatedUser(t, validUser)
+	assertIntrospection(t, introspectResp)
 
-	_, err = authClient.ValidateExternalToken(rpcCtx, &proto.ValidateExternalTokenRequest{Token: "unknown"})
-	if err == nil {
-		t.Fatal("ValidateExternalToken(unknown) should return error")
-	}
-	if s, ok := status.FromError(err); !ok || s.Code() != codes.NotFound {
-		t.Fatalf("ValidateExternalToken(unknown) code = %v, want NOT_FOUND", err)
-	}
-
-	sessionResp, err := authClient.GetSessionSettings(rpcCtx, &emptypb.Empty{})
+	inactiveResp, err := authClient.Introspect(rpcCtx, &proto.IntrospectRequest{Token: "unknown"})
 	if err != nil {
-		t.Fatalf("GetSessionSettings: %v", err)
+		t.Fatalf("Introspect(unknown): %v", err)
 	}
-	const expectedTTL int64 = 1800
-	if sessionResp.GetSessionTtlSeconds() != expectedTTL {
-		t.Fatalf("session_ttl_seconds = %d, want %d", sessionResp.GetSessionTtlSeconds(), expectedTTL)
+	if inactiveResp.GetActive() {
+		t.Fatal("introspect(unknown).active = true, want false")
+	}
+
+	grantCtx := metadata.AppendToOutgoingContext(rpcCtx, gestalt.CallerBearerTokenMetadataKey, "valid-token")
+	listResp, err := authClient.ListGrants(grantCtx, &proto.ListGrantsRequest{})
+	if err != nil {
+		t.Fatalf("ListGrants: %v", err)
+	}
+	if len(listResp.GetGrantIds()) != 2 {
+		t.Fatalf("grant_ids = %v, want 2 entries", listResp.GetGrantIds())
+	}
+
+	getResp, err := authClient.GetGrant(grantCtx, &proto.GetGrantRequest{GrantId: "grant-1"})
+	if err != nil {
+		t.Fatalf("GetGrant: %v", err)
+	}
+	if len(getResp.GetScopes()) != 2 {
+		t.Fatalf("scopes = %d, want 2", len(getResp.GetScopes()))
+	}
+
+	_, err = authClient.RevokeGrant(grantCtx, &proto.RevokeGrantRequest{GrantId: "grant-1"})
+	if err != nil {
+		t.Fatalf("RevokeGrant: %v", err)
+	}
+	if len(provider.revoked) != 1 || provider.revoked[0] != "grant-1" {
+		t.Fatalf("revoked = %v, want [grant-1]", provider.revoked)
 	}
 }
 
-func assertAuthenticatedUser(t *testing.T, user *proto.AuthenticatedUser) {
+func assertIntrospection(t *testing.T, resp *proto.IntrospectResponse) {
 	t.Helper()
-	if user.GetSubject() != "user-123" {
-		t.Fatalf("subject = %q, want %q", user.GetSubject(), "user-123")
+	if !resp.GetActive() {
+		t.Fatal("active = false, want true")
 	}
-	if user.GetEmail() != "user@example.test" {
-		t.Fatalf("email = %q, want %q", user.GetEmail(), "user@example.test")
+	if resp.GetSubject() != "user:user@example.test" {
+		t.Fatalf("subject = %q, want %q", resp.GetSubject(), "user:user@example.test")
 	}
-	if !user.GetEmailVerified() {
-		t.Fatal("email_verified = false, want true")
+	if resp.GetScope() != "read write" {
+		t.Fatalf("scope = %q, want %q", resp.GetScope(), "read write")
 	}
-	if user.GetDisplayName() != "Test User" {
-		t.Fatalf("display_name = %q, want %q", user.GetDisplayName(), "Test User")
-	}
-	if user.GetAvatarUrl() != "https://example.test/avatar.png" {
-		t.Fatalf("avatar_url = %q, want %q", user.GetAvatarUrl(), "https://example.test/avatar.png")
-	}
-	if user.GetClaims()["role"] != "admin" {
-		t.Fatalf("claims[role] = %q, want %q", user.GetClaims()["role"], "admin")
+	if resp.GetClientId() != "gestaltd" {
+		t.Fatalf("client_id = %q, want %q", resp.GetClientId(), "gestaltd")
 	}
 }

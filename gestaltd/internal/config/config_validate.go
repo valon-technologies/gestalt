@@ -67,11 +67,6 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateAdminConfig(cfg); err != nil {
 		return err
 	}
-	if cfg.Server.APITokenTTL != "" {
-		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
-			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
-		}
-	}
 	if err := validateEgress(&cfg.Server.Egress); err != nil {
 		return err
 	}

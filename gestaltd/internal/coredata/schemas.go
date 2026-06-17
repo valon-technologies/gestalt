@@ -6,7 +6,6 @@ import (
 
 const (
 	StoreUsers                         = "users"
-	StoreAPITokens                     = "api_tokens"
 	StoreManagedSubjects               = "managed_subjects"
 	StoreAuthorizationDynamicFragments = "authz_dynamic_fragments"
 )
@@ -21,27 +20,6 @@ var UsersSchema = idb.ObjectStoreOptions{
 		{Name: "email", Type: idb.TypeString, NotNull: true, Unique: true},
 		{Name: "normalized_email", Type: idb.TypeString},
 		{Name: "display_name", Type: idb.TypeString},
-		{Name: "created_at", Type: idb.TypeTime},
-		{Name: "updated_at", Type: idb.TypeTime},
-	},
-}
-
-var APITokensSchema = idb.ObjectStoreOptions{
-	Indexes: []idb.IndexSchema{
-		{Name: "by_hash", KeyPath: []string{"hashed_token"}, Unique: true},
-		{Name: "by_owner", KeyPath: []string{"owner_kind", "owner_id"}},
-		{Name: "by_owner_id", KeyPath: []string{"id", "owner_kind", "owner_id"}, Unique: true},
-	},
-	Columns: []idb.ColumnDef{
-		{Name: "id", Type: idb.TypeString, PrimaryKey: true},
-		{Name: "owner_kind", Type: idb.TypeString},
-		{Name: "owner_id", Type: idb.TypeString},
-		{Name: "credential_subject_id", Type: idb.TypeString},
-		{Name: "name", Type: idb.TypeString},
-		{Name: "hashed_token", Type: idb.TypeString, NotNull: true, Unique: true},
-		{Name: "scopes", Type: idb.TypeString},
-		{Name: "permissions_json", Type: idb.TypeString},
-		{Name: "expires_at", Type: idb.TypeTime},
 		{Name: "created_at", Type: idb.TypeTime},
 		{Name: "updated_at", Type: idb.TypeTime},
 	},

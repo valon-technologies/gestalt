@@ -25,8 +25,8 @@ type manualChecker interface{ IsManual() bool }
 
 type AuthHandler interface {
 	AuthorizationURL(state string, scopes []string) string
-	ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error)
+	ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error)
 }
 
 // UpstreamAuth trims oauth.UpstreamHandler down to the provider auth surface.
@@ -34,7 +34,7 @@ type UpstreamAuth struct {
 	*oauth.UpstreamHandler
 }
 
-func (u UpstreamAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (u UpstreamAuth) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return u.UpstreamHandler.ExchangeCode(ctx, code)
 }
 
@@ -121,11 +121,11 @@ func (b *Base) AuthorizationURL(state string, scopes []string) string {
 	return b.Auth.AuthorizationURL(state, scopes)
 }
 
-func (b *Base) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (b *Base) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return b.Auth.ExchangeCode(ctx, code)
 }
 
-func (b *Base) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (b *Base) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return b.Auth.RefreshToken(ctx, refreshToken)
 }
 

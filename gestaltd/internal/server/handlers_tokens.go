@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -16,31 +15,54 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 )
 
-type createTokenRequest struct {
-	Name        string                  `json:"name"`
-	Scopes      string                  `json:"scopes"`
-	Permissions []core.AccessPermission `json:"permissions,omitempty"`
+func (s *Server) validateCreateGrantRequest(req createTokenRequest) (string, error) {
+	if strings.TrimSpace(req.Name) == "" {
+		return "", errors.New("name is required")
+	}
+	scope := strings.TrimSpace(req.Scopes)
+	if scope == "" {
+		return "", errors.New("scopes are required")
+	}
+	for _, part := range strings.Fields(scope) {
+		appName, _, _ := strings.Cut(part, ":")
+		if _, err := s.providers.Get(appName); err != nil {
+			return "", fmt.Errorf("unknown scope %q", part)
+		}
+	}
+	return scope, nil
 }
 
-type createTokenResponse struct {
-	ID          string                  `json:"id"`
-	Name        string                  `json:"name"`
-	Token       string                  `json:"token"`
-	Permissions []core.AccessPermission `json:"permissions,omitempty"`
-	ExpiresAt   *time.Time              `json:"expiresAt,omitempty"`
+type createTokenRequest struct {
+	Name   string `json:"name"`
+	Scopes string `json:"scopes"`
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
-	auditErr := errors.New("api token creation failed")
+	auditErr := errors.New("grant creation failed")
 	auditTarget := auditTarget{}
 	defer func() {
-		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.create", auditAllowed, auditErr, auditTarget)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "grant.create", auditAllowed, auditErr, auditTarget)
 	}()
 
-	userID, err := s.resolveUserID(w, r)
-	if err != nil {
+	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
 		auditErr = err
+		return
+	}
+	if p := PrincipalFromContext(r.Context()); p != nil {
+		enriched, enrichErr := s.resolvePrincipalUserID(r.Context(), p)
+		if enrichErr != nil {
+			auditErr = errResolveUser
+			writeError(w, http.StatusInternalServerError, "failed to resolve user")
+			return
+		}
+		if enriched != nil {
+			r = r.WithContext(principal.WithPrincipal(r.Context(), enriched))
+		}
+	}
+	if s.auth == nil {
+		auditErr = errors.New("auth is disabled")
+		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
 
@@ -50,75 +72,49 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-
 	auditTarget = apiTokenAuditTarget("", req.Name)
 
-	permissions, err := s.validateCreateAPITokenRequest(req)
+	scope, err := s.validateCreateGrantRequest(req)
 	if err != nil {
 		auditErr = err
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	apiToken, plaintext, err := s.issueAPITokenWithPermissions(r.Context(), userID, req.Name, req.Scopes, permissions, false)
+	ctx := s.callerAuthContext(r.Context(), r)
+	callerToken, err := s.callerBearerToken(r)
 	if err != nil {
-		auditErr = errors.New("failed to generate token")
-		writeError(w, http.StatusInternalServerError, "failed to generate token")
+		auditErr = err
+		writeError(w, http.StatusUnauthorized, "caller bearer token required")
 		return
 	}
-	auditTarget = apiTokenAuditTarget(apiToken.ID, apiToken.Name)
+	tokenResp, err := s.auth.Token(ctx, &core.TokenRequest{
+		GrantType:        core.GrantTypeTokenExchange,
+		SubjectToken:     callerToken,
+		SubjectTokenType: core.SubjectTokenTypeAccessToken,
+		Scope:            scope,
+		ClientID:         core.DefaultOAuthClientID,
+	})
+	grantID := ""
+	if tokenResp != nil {
+		grantID = strings.TrimSpace(tokenResp.GrantID)
+	}
+	if err != nil || tokenResp == nil || strings.TrimSpace(tokenResp.AccessToken) == "" || grantID == "" {
+		auditErr = errors.New("failed to issue grant token")
+		writeError(w, http.StatusInternalServerError, "failed to issue grant token")
+		return
+	}
+	auditTarget = apiTokenAuditTarget(grantID, req.Name)
 
 	auditAllowed = true
 	auditErr = nil
-	writeJSON(w, http.StatusCreated, createTokenResponse{
-		ID:          apiToken.ID,
-		Name:        apiToken.Name,
-		Token:       plaintext,
-		Permissions: cloneAccessPermissions(apiToken.Permissions),
-		ExpiresAt:   apiToken.ExpiresAt,
+	writeJSON(w, http.StatusCreated, createGrantResponse{
+		ID:        grantID,
+		Name:      grantID,
+		Token:     tokenResp.AccessToken,
+		Scopes:    principal.ParseScopeString(tokenResp.Scope),
+		ExpiresAt: tokenExpiresAt(s.now, tokenResp.ExpiresIn),
 	})
-}
-
-func (s *Server) validateCreateAPITokenRequest(req createTokenRequest) ([]core.AccessPermission, error) {
-	if strings.TrimSpace(req.Name) == "" {
-		return nil, errors.New("name is required")
-	}
-	if req.Scopes != "" && len(req.Permissions) > 0 {
-		return nil, errors.New("scopes and permissions are mutually exclusive")
-	}
-	if req.Scopes != "" {
-		for _, scope := range strings.Fields(req.Scopes) {
-			if _, err := s.providers.Get(scope); err != nil {
-				return nil, fmt.Errorf("unknown scope %q", scope)
-			}
-		}
-	}
-	return s.normalizeAPITokenPermissions(req.Permissions)
-}
-
-func (s *Server) normalizeAPITokenPermissions(values []core.AccessPermission) ([]core.AccessPermission, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]core.AccessPermission, 0, len(values))
-	for i, value := range values {
-		app := strings.TrimSpace(value.App)
-		if app == "" {
-			return nil, fmt.Errorf("permissions[%d].app is required", i)
-		}
-		if _, err := s.providers.Get(app); err != nil {
-			return nil, fmt.Errorf("unknown permission app %q", app)
-		}
-		operations, err := normalizeAPITokenPermissionNames(fmt.Sprintf("permissions[%d].operations", i), value.Operations)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, core.AccessPermission{
-			App:        app,
-			Operations: operations,
-		})
-	}
-	return out, nil
 }
 
 func decodeCreateTokenRequest(r io.Reader, req *createTokenRequest) error {
@@ -127,58 +123,43 @@ func decodeCreateTokenRequest(r io.Reader, req *createTokenRequest) error {
 	return decoder.Decode(req)
 }
 
-func normalizeAPITokenPermissionNames(label string, values []string) ([]string, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := values[:0]
-	seen := make(map[string]struct{}, len(values))
-	for i, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return nil, fmt.Errorf("%s[%d] is required", label, i)
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out, nil
-}
-
-type apiTokenInfo struct {
-	ID          string                  `json:"id"`
-	Name        string                  `json:"name"`
-	Scopes      string                  `json:"scopes"`
-	Permissions []core.AccessPermission `json:"permissions,omitempty"`
-	CreatedAt   time.Time               `json:"createdAt"`
-	ExpiresAt   *time.Time              `json:"expiresAt,omitempty"`
-}
-
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
-	auditErr := errors.New("api token list failed")
+	auditErr := errors.New("grant list failed")
 	defer func() {
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.list", auditAllowed, auditErr)
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "grant.list", auditAllowed, auditErr)
 	}()
 
-	userID, err := s.resolveUserID(w, r)
-	if err != nil {
+	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
 		auditErr = err
 		return
 	}
-
-	tokens, err := s.apiTokens.ListAPITokens(r.Context(), userID)
-	if err != nil {
-		auditErr = errors.New("failed to list tokens")
-		writeError(w, http.StatusInternalServerError, "failed to list tokens")
+	if s.auth == nil {
+		auditErr = errors.New("auth is disabled")
+		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
 
-	out := make([]apiTokenInfo, 0, len(tokens))
-	for _, t := range tokens {
-		out = append(out, apiTokenInfoFromCore(t))
+	ctx := s.callerAuthContext(r.Context(), r)
+	resp, err := s.auth.ListGrants(ctx, &core.ListGrantsRequest{})
+	if err != nil || resp == nil {
+		auditErr = errors.New("failed to list grants")
+		writeError(w, http.StatusInternalServerError, "failed to list grants")
+		return
+	}
+
+	out := make([]grantInfo, 0, len(resp.GrantIDs))
+	for _, grantID := range resp.GrantIDs {
+		detail, detailErr := s.auth.GetGrant(ctx, &core.GetGrantRequest{GrantID: grantID})
+		if detailErr != nil {
+			if errors.Is(detailErr, core.ErrNotFound) {
+				continue
+			}
+			auditErr = errors.New("failed to list grants")
+			writeError(w, http.StatusInternalServerError, "failed to list grants")
+			return
+		}
+		out = append(out, grantInfoFromResponse(grantID, detail))
 	}
 	auditAllowed = true
 	auditErr = nil
@@ -187,27 +168,32 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
-	auditErr := errors.New("api token revoke failed")
+	auditErr := errors.New("grant revoke failed")
 	id := chi.URLParam(r, "id")
 	auditTarget := apiTokenAuditTarget(id, "")
 	defer func() {
-		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke", auditAllowed, auditErr, auditTarget)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "grant.revoke", auditAllowed, auditErr, auditTarget)
 	}()
 
-	userID, err := s.resolveUserID(w, r)
-	if err != nil {
+	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
 		auditErr = err
 		return
 	}
+	if s.auth == nil {
+		auditErr = errors.New("auth is disabled")
+		writeError(w, http.StatusNotFound, "auth is disabled")
+		return
+	}
 
-	if err := s.apiTokens.RevokeAPIToken(r.Context(), userID, id); err != nil {
+	ctx := s.callerAuthContext(r.Context(), r)
+	if _, err := s.auth.RevokeGrant(ctx, &core.RevokeGrantRequest{GrantID: id}); err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			auditErr = errors.New("token not found")
-			writeError(w, http.StatusNotFound, "token not found")
+			auditErr = errors.New("grant not found")
+			writeError(w, http.StatusNotFound, "grant not found")
 			return
 		}
-		auditErr = errors.New("failed to revoke token")
-		writeError(w, http.StatusInternalServerError, "failed to revoke token")
+		auditErr = errors.New("failed to revoke grant")
+		writeError(w, http.StatusInternalServerError, "failed to revoke grant")
 		return
 	}
 	auditAllowed = true
@@ -217,22 +203,48 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
-	auditErr := errors.New("api token revoke all failed")
+	auditErr := errors.New("grant revoke all failed")
 	auditTarget := apiTokenCollectionAuditTarget()
 	defer func() {
-		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke_all", auditAllowed, auditErr, auditTarget)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "grant.revoke_all", auditAllowed, auditErr, auditTarget)
 	}()
 
-	userID, err := s.resolveUserID(w, r)
-	if err != nil {
+	if err := requireUserCaller(w, PrincipalFromContext(r.Context())); err != nil {
 		auditErr = err
 		return
 	}
+	if s.auth == nil {
+		auditErr = errors.New("auth is disabled")
+		writeError(w, http.StatusNotFound, "auth is disabled")
+		return
+	}
 
-	count, err := s.apiTokens.RevokeAllAPITokens(r.Context(), userID)
-	if err != nil {
-		auditErr = errors.New("failed to revoke tokens")
-		writeError(w, http.StatusInternalServerError, "failed to revoke tokens")
+	ctx := s.callerAuthContext(r.Context(), r)
+	resp, err := s.auth.ListGrants(ctx, &core.ListGrantsRequest{})
+	if err != nil || resp == nil {
+		auditErr = errors.New("failed to list grants")
+		writeError(w, http.StatusInternalServerError, "failed to list grants")
+		return
+	}
+	count := 0
+	var failed []map[string]string
+	for _, grantID := range resp.GrantIDs {
+		if _, revokeErr := s.auth.RevokeGrant(ctx, &core.RevokeGrantRequest{GrantID: grantID}); revokeErr != nil {
+			failed = append(failed, map[string]string{
+				"id":    grantID,
+				"error": "failed to revoke grant",
+			})
+			continue
+		}
+		count++
+	}
+	if len(failed) > 0 {
+		auditErr = errors.New("failed to revoke one or more grants")
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"status": "partial",
+			"count":  count,
+			"failed": failed,
+		})
 		return
 	}
 	auditAllowed = true

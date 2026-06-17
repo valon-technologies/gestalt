@@ -12,6 +12,8 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/server/rpc/protov1/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -81,12 +83,17 @@ func TestServeAuthenticationProviderClosesProviderOnShutdown(t *testing.T) {
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
 
-	resp, err := client.BeginLogin(rpcCtx, &proto.BeginLoginRequest{CallbackUrl: "https://gestalt.example.test/callback"}, grpc.WaitForReady(true))
+	resp, err := client.Authorize(rpcCtx, &proto.AuthorizeRequest{
+		ResponseType: "code",
+		ClientId:     "gestaltd",
+		RedirectUri:  "https://gestalt.example.test/callback",
+		State:        "host-state",
+	}, grpc.WaitForReady(true))
 	if err != nil {
-		t.Fatalf("BeginLogin: %v", err)
+		t.Fatalf("Authorize: %v", err)
 	}
-	if resp.GetAuthorizationUrl() == "" {
-		t.Fatal("BeginLogin returned empty authorization URL")
+	if resp.GetRedirectUri() == "" {
+		t.Fatal("Authorize returned empty redirect URI")
 	}
 }
 
@@ -139,12 +146,40 @@ func (p *closeableStubAuthenticationProvider) Configure(context.Context, string,
 	return nil
 }
 
-func (p *closeableStubAuthenticationProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{AuthorizationUrl: "https://auth.example.test/login"}, nil
+func (p *closeableStubAuthenticationProvider) Authorize(_ context.Context, _ *gestalt.AuthorizeRequest) (*gestalt.AuthorizeResponse, error) {
+	return &gestalt.AuthorizeResponse{RedirectURI: "https://auth.example.test/login"}, nil
 }
 
-func (p *closeableStubAuthenticationProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
-	return &gestalt.AuthenticatedUser{Email: "user@example.com"}, nil
+func (p *closeableStubAuthenticationProvider) Token(_ context.Context, _ *gestalt.TokenRequest) (*gestalt.TokenResponse, error) {
+	return &gestalt.TokenResponse{
+		AccessToken: "stub-access-token",
+		TokenType:   "Bearer",
+		ExpiresIn:   3600,
+		GrantID:     "grant-stub",
+	}, nil
+}
+
+func (p *closeableStubAuthenticationProvider) Introspect(_ context.Context, req *gestalt.IntrospectRequest) (*gestalt.IntrospectResponse, error) {
+	if req != nil && req.Token == "stub-access-token" {
+		return &gestalt.IntrospectResponse{
+			Active:   true,
+			Subject:  "user:user@example.com",
+			ClientID: "gestaltd",
+		}, nil
+	}
+	return &gestalt.IntrospectResponse{Active: false}, nil
+}
+
+func (p *closeableStubAuthenticationProvider) ListGrants(context.Context, *gestalt.ListGrantsRequest) (*gestalt.ListGrantsResponse, error) {
+	return &gestalt.ListGrantsResponse{}, nil
+}
+
+func (p *closeableStubAuthenticationProvider) GetGrant(context.Context, *gestalt.GetGrantRequest) (*gestalt.GetGrantResponse, error) {
+	return nil, status.Error(codes.NotFound, "grant not found")
+}
+
+func (p *closeableStubAuthenticationProvider) RevokeGrant(context.Context, *gestalt.RevokeGrantRequest) (*gestalt.RevokeGrantResponse, error) {
+	return &gestalt.RevokeGrantResponse{}, nil
 }
 
 func newSocketPath(t *testing.T, name string) string {

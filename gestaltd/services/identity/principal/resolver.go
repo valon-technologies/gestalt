@@ -2,11 +2,6 @@ package principal
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -14,187 +9,53 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
-type TokenType int
-
-const (
-	TokenTypeAPI TokenType = iota
-)
-
-const (
-	prefixAPI = "gst_api_"
-)
-
-func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", "", fmt.Errorf("generating random bytes: %w", err)
-	}
-	raw := hex.EncodeToString(b)
-
-	var prefix string
-	switch typ {
-	case TokenTypeAPI:
-		prefix = prefixAPI
-	default:
-		return "", "", fmt.Errorf("unknown token type %d", typ)
-	}
-
-	plaintext = prefix + raw
-	hashed = HashToken(plaintext)
-	return plaintext, hashed, nil
-}
-
-func ParseTokenType(token string) (TokenType, bool) {
-	switch {
-	case strings.HasPrefix(token, prefixAPI):
-		return TokenTypeAPI, true
-	default:
-		return 0, false
-	}
-}
-
 type Resolver struct {
-	auth      core.AuthenticationProvider
-	users     UserStore
-	apiTokens APITokenStore
+	auth         core.AuthenticationProvider
+	providerName string
 }
 
-// UserStore is the identity user lookup surface required for API-token
-// principal resolution.
-type UserStore interface {
-	GetUser(ctx context.Context, id string) (*core.User, error)
+func NewResolver(auth core.AuthenticationProvider) *Resolver {
+	return NewResolverNamed("", auth)
 }
 
-// APITokenStore is the token validation surface required for API-token
-// principal resolution.
-type APITokenStore interface {
-	ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error)
-}
-
-func NewResolver(auth core.AuthenticationProvider, users UserStore, apiTokens APITokenStore) *Resolver {
-	return &Resolver{
-		auth:      auth,
-		users:     users,
-		apiTokens: apiTokens,
+func NewResolverNamed(providerName string, auth core.AuthenticationProvider) *Resolver {
+	name := strings.TrimSpace(providerName)
+	switch {
+	case auth == nil && name == "":
+		name = "none"
+	case name == "":
+		name = "authentication"
 	}
+	return &Resolver{auth: auth, providerName: name}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
-	if typ, ok := ParseTokenType(token); ok {
-		if typ == TokenTypeAPI {
-			return r.resolveAPIToken(ctx, token)
-		}
+	token = strings.TrimSpace(token)
+	if token == "" {
 		return nil, ErrInvalidToken
 	}
 
 	startedAt := time.Now()
-	provider := "none"
-	if r.auth != nil {
-		provider = r.auth.Name()
-	}
+	provider := r.providerName
 	if r.auth == nil {
-		metricutil.RecordAuthMetrics(ctx, startedAt, provider, "validate_token", true)
+		metricutil.RecordAuthMetrics(ctx, startedAt, provider, "introspect", true)
 		return nil, ErrInvalidToken
 	}
 
-	identity, err := r.auth.ValidateToken(ctx, token)
-	metricutil.RecordAuthMetrics(ctx, startedAt, provider, "validate_token", err != nil || identity == nil)
-	if err == nil && identity != nil {
-		return &Principal{Identity: identity, Source: SourceSession}, nil
+	resp, err := r.auth.Introspect(ctx, &core.IntrospectRequest{Token: token})
+	metricutil.RecordAuthMetrics(ctx, startedAt, provider, "introspect", err != nil || resp == nil || !resp.Active)
+	if err != nil {
+		return nil, err
 	}
-
+	if resp != nil && resp.Active {
+		subject := strings.TrimSpace(resp.Subject)
+		if _, _, ok := core.ParseSubjectID(subject); !ok {
+			return nil, ErrInvalidToken
+		}
+		resp.Subject = subject
+		return principalFromIntrospection(resp), nil
+	}
 	return nil, ErrInvalidToken
-}
-
-func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principal, error) {
-	if r.apiTokens == nil {
-		return nil, ErrInvalidToken
-	}
-	hashed := HashToken(token)
-	apiToken, err := r.apiTokens.ValidateAPIToken(ctx, hashed)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return nil, ErrInvalidToken
-		}
-		return nil, err
-	}
-	if apiToken == nil {
-		return nil, ErrInvalidToken
-	}
-
-	switch ownerKind := r.apiTokenOwnerKind(apiToken); ownerKind {
-	case core.APITokenOwnerKindUser:
-		return r.resolveUserAPIToken(ctx, apiToken)
-	case core.APITokenOwnerKindSubject:
-		return resolveSubjectAPIToken(apiToken)
-	default:
-		return nil, ErrInvalidToken
-	}
-}
-
-func (r *Resolver) resolveUserAPIToken(ctx context.Context, apiToken *core.APIToken) (*Principal, error) {
-	ownerID := strings.TrimSpace(apiToken.OwnerID)
-	if ownerID == "" {
-		return nil, ErrInvalidToken
-	}
-	if r.users == nil {
-		return nil, ErrInvalidToken
-	}
-
-	user, err := r.users.GetUser(ctx, ownerID)
-	if err != nil {
-		if errors.Is(err, core.ErrNotFound) {
-			return nil, ErrInvalidToken
-		}
-		return nil, err
-	}
-
-	p := &Principal{
-		Identity: &core.UserIdentity{
-			Email:       user.Email,
-			DisplayName: user.DisplayName,
-		},
-		UserID:              user.ID,
-		SubjectID:           UserSubjectID(user.ID),
-		CredentialSubjectID: apiToken.CredentialSubjectID,
-		Kind:                KindUser,
-		Source:              SourceAPIToken,
-	}
-	if perms, ok := permissionsForAPIToken(apiToken); ok {
-		p.TokenPermissions = perms
-		p.Scopes = PermissionApps(perms)
-	}
-	return p, nil
-}
-
-func resolveSubjectAPIToken(apiToken *core.APIToken) (*Principal, error) {
-	subjectID := strings.TrimSpace(apiToken.OwnerID)
-	if subjectID == "" || UserIDFromSubjectID(subjectID) != "" || IsSystemSubjectID(subjectID) {
-		return nil, ErrInvalidToken
-	}
-	kind := KindFromSubjectID(subjectID)
-	if kind == "" {
-		return nil, ErrInvalidToken
-	}
-	credentialSubjectID := strings.TrimSpace(apiToken.CredentialSubjectID)
-	if credentialSubjectID == "" {
-		credentialSubjectID = subjectID
-	}
-	if credentialSubjectID != subjectID {
-		return nil, ErrInvalidToken
-	}
-	p := &Principal{
-		Kind:                kind,
-		SubjectID:           subjectID,
-		CredentialSubjectID: credentialSubjectID,
-		DisplayName:         strings.TrimSpace(apiToken.Name),
-		Source:              SourceAPIToken,
-	}
-	if perms, ok := permissionsForAPIToken(apiToken); ok {
-		p.TokenPermissions = perms
-		p.Scopes = PermissionApps(perms)
-	}
-	return Canonicalize(p), nil
 }
 
 func (r *Resolver) ResolveEmail(email string) *Principal {
@@ -205,31 +66,40 @@ func (r *Resolver) ResolveEmail(email string) *Principal {
 	}
 }
 
-func HashToken(token string) string {
-	h := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(h[:])
-}
-
-func permissionsForAPIToken(apiToken *core.APIToken) (PermissionSet, bool) {
-	if apiToken == nil {
-		return nil, false
+func principalFromIntrospection(resp *core.IntrospectResponse) *Principal {
+	if resp == nil || !resp.Active {
+		return nil
 	}
-	if apiToken.Permissions != nil {
-		perms := CompilePermissions(apiToken.Permissions)
-		if perms == nil {
-			perms = PermissionSet{}
+	p := &Principal{
+		SubjectID: strings.TrimSpace(resp.Subject),
+		Scopes:    ParseScopeString(resp.Scope),
+		ClientID:  strings.TrimSpace(resp.ClientID),
+		Audience:  append([]string(nil), resp.Audience...),
+		Source:    SourceBearer,
+	}
+	if suffix := UserIDFromSubjectID(p.SubjectID); suffix != "" {
+		if strings.Contains(suffix, "@") {
+			p.Identity = &core.UserIdentity{Email: suffix}
+			p.Kind = KindUser
+		} else {
+			p.UserID = suffix
+			p.Kind = KindUser
 		}
-		return perms, true
+	} else if kind := KindFromSubjectID(p.SubjectID); kind != "" {
+		p.Kind = kind
 	}
-	if perms := PermissionsFromScopeString(apiToken.Scopes); perms != nil {
-		return perms, true
-	}
-	return nil, false
+	p.CredentialSubjectID = p.SubjectID
+	return Canonicalize(p)
 }
 
-func (r *Resolver) apiTokenOwnerKind(apiToken *core.APIToken) string {
-	if apiToken == nil {
-		return ""
+func ParseScopeString(scope string) []string {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return nil
 	}
-	return strings.TrimSpace(apiToken.OwnerKind)
+	parts := strings.Fields(scope)
+	if len(parts) == 0 {
+		return nil
+	}
+	return parts
 }

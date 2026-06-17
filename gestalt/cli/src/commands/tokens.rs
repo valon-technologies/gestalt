@@ -3,10 +3,10 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<()> {
+pub fn create(client: &ApiClient, name: Option<&str>, scopes: &str, format: Format) -> Result<()> {
     let token_name = name.unwrap_or("cli-token");
     let resp = client
-        .create_api_token(token_name)
+        .create_api_token(token_name, scopes)
         .context("failed to create token")?;
 
     match format {
@@ -24,6 +24,28 @@ pub fn create(client: &ApiClient, name: Option<&str>, format: Format) -> Result<
     Ok(())
 }
 
+fn token_scopes_display(item: &serde_json::Value) -> String {
+    if let Some(scopes) = item.get("scopes").and_then(|v| v.as_array()) {
+        let parts: Vec<String> = scopes
+            .iter()
+            .filter_map(|scope| scope.as_str().map(str::to_string))
+            .collect();
+        if parts.is_empty() {
+            return "-".to_string();
+        }
+        return parts.join(" ");
+    }
+    "-".to_string()
+}
+
+fn token_timestamp_display(item: &serde_json::Value, field: &str, missing: &str) -> String {
+    item.get(field)
+        .and_then(|v| v.as_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or(missing)
+        .to_string()
+}
+
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
         .get("/api/v1/tokens")
@@ -38,14 +60,13 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
                 .map(|item| {
                     vec![
                         item["id"].as_str().unwrap_or("-").to_string(),
-                        item["name"].as_str().unwrap_or("-").to_string(),
-                        item["scopes"].as_str().unwrap_or("-").to_string(),
-                        item["created_at"].as_str().unwrap_or("-").to_string(),
-                        item["expires_at"].as_str().unwrap_or("never").to_string(),
+                        token_scopes_display(item),
+                        token_timestamp_display(item, "createdAt", "-"),
+                        token_timestamp_display(item, "expiresAt", "never"),
                     ]
                 })
                 .collect();
-            output::print_table(&["ID", "Name", "Scopes", "Created", "Expires"], &rows);
+            output::print_table(&["ID", "Scopes", "Created", "Expires"], &rows);
         }
     }
 

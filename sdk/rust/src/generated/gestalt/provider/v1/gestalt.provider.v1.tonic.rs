@@ -2022,80 +2022,118 @@ pub mod authentication_client {
             self
         }
         ///
-        pub async fn begin_login(
+        pub async fn authorize(
             &mut self,
-            request: impl tonic::IntoRequest<super::BeginLoginRequest>,
-        ) -> std::result::Result<tonic::Response<super::BeginLoginResponse>, tonic::Status>
+            request: impl tonic::IntoRequest<super::AuthorizeRequest>,
+        ) -> std::result::Result<tonic::Response<super::AuthorizeResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.Authentication/Authorize",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.Authentication",
+                "Authorize",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn token(
+            &mut self,
+            request: impl tonic::IntoRequest<super::TokenRequest>,
+        ) -> std::result::Result<tonic::Response<super::TokenResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.Authentication/Token");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.Authentication",
+                "Token",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn introspect(
+            &mut self,
+            request: impl tonic::IntoRequest<super::IntrospectRequest>,
+        ) -> std::result::Result<tonic::Response<super::IntrospectResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Authentication/BeginLogin",
+                "/gestalt.provider.v1.Authentication/Introspect",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.Authentication",
-                "BeginLogin",
+                "Introspect",
             ));
             self.inner.unary(req, path, codec).await
         }
         ///
-        pub async fn complete_login(
+        pub async fn list_grants(
             &mut self,
-            request: impl tonic::IntoRequest<super::CompleteLoginRequest>,
-        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Authentication/CompleteLogin",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.Authentication",
-                "CompleteLogin",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn validate_external_token(
-            &mut self,
-            request: impl tonic::IntoRequest<super::ValidateExternalTokenRequest>,
-        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = tonic_prost::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Authentication/ValidateExternalToken",
-            );
-            let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "gestalt.provider.v1.Authentication",
-                "ValidateExternalToken",
-            ));
-            self.inner.unary(req, path, codec).await
-        }
-        ///
-        pub async fn get_session_settings(
-            &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> std::result::Result<tonic::Response<super::AuthSessionSettings>, tonic::Status>
+            request: impl tonic::IntoRequest<super::ListGrantsRequest>,
+        ) -> std::result::Result<tonic::Response<super::ListGrantsResponse>, tonic::Status>
         {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/gestalt.provider.v1.Authentication/GetSessionSettings",
+                "/gestalt.provider.v1.Authentication/ListGrants",
             );
             let mut req = request.into_request();
             req.extensions_mut().insert(GrpcMethod::new(
                 "gestalt.provider.v1.Authentication",
-                "GetSessionSettings",
+                "ListGrants",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn get_grant(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetGrantRequest>,
+        ) -> std::result::Result<tonic::Response<super::GetGrantResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.Authentication/GetGrant",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.Authentication",
+                "GetGrant",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn revoke_grant(
+            &mut self,
+            request: impl tonic::IntoRequest<super::RevokeGrantRequest>,
+        ) -> std::result::Result<tonic::Response<super::RevokeGrantResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.Authentication/RevokeGrant",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.Authentication",
+                "RevokeGrant",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -2115,25 +2153,35 @@ pub mod authentication_server {
     #[async_trait]
     pub trait Authentication: std::marker::Send + std::marker::Sync + 'static {
         ///
-        async fn begin_login(
+        async fn authorize(
             &self,
-            request: tonic::Request<super::BeginLoginRequest>,
-        ) -> std::result::Result<tonic::Response<super::BeginLoginResponse>, tonic::Status>;
+            request: tonic::Request<super::AuthorizeRequest>,
+        ) -> std::result::Result<tonic::Response<super::AuthorizeResponse>, tonic::Status>;
         ///
-        async fn complete_login(
+        async fn token(
             &self,
-            request: tonic::Request<super::CompleteLoginRequest>,
-        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
+            request: tonic::Request<super::TokenRequest>,
+        ) -> std::result::Result<tonic::Response<super::TokenResponse>, tonic::Status>;
         ///
-        async fn validate_external_token(
+        async fn introspect(
             &self,
-            request: tonic::Request<super::ValidateExternalTokenRequest>,
-        ) -> std::result::Result<tonic::Response<super::AuthenticatedUser>, tonic::Status>;
+            request: tonic::Request<super::IntrospectRequest>,
+        ) -> std::result::Result<tonic::Response<super::IntrospectResponse>, tonic::Status>;
         ///
-        async fn get_session_settings(
+        async fn list_grants(
             &self,
-            request: tonic::Request<()>,
-        ) -> std::result::Result<tonic::Response<super::AuthSessionSettings>, tonic::Status>;
+            request: tonic::Request<super::ListGrantsRequest>,
+        ) -> std::result::Result<tonic::Response<super::ListGrantsResponse>, tonic::Status>;
+        ///
+        async fn get_grant(
+            &self,
+            request: tonic::Request<super::GetGrantRequest>,
+        ) -> std::result::Result<tonic::Response<super::GetGrantResponse>, tonic::Status>;
+        ///
+        async fn revoke_grant(
+            &self,
+            request: tonic::Request<super::RevokeGrantRequest>,
+        ) -> std::result::Result<tonic::Response<super::RevokeGrantResponse>, tonic::Status>;
     }
     /** Authentication models the shared Gestalt authentication protocol.
     */
@@ -2210,19 +2258,19 @@ pub mod authentication_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
-                "/gestalt.provider.v1.Authentication/BeginLogin" => {
+                "/gestalt.provider.v1.Authentication/Authorize" => {
                     #[allow(non_camel_case_types)]
-                    struct BeginLoginSvc<T: Authentication>(pub Arc<T>);
-                    impl<T: Authentication> tonic::server::UnaryService<super::BeginLoginRequest> for BeginLoginSvc<T> {
-                        type Response = super::BeginLoginResponse;
+                    struct AuthorizeSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::AuthorizeRequest> for AuthorizeSvc<T> {
+                        type Response = super::AuthorizeResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::BeginLoginRequest>,
+                            request: tonic::Request<super::AuthorizeRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as Authentication>::begin_login(&inner, request).await
+                                <T as Authentication>::authorize(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2233,7 +2281,7 @@ pub mod authentication_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = BeginLoginSvc(inner);
+                        let method = AuthorizeSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -2249,21 +2297,176 @@ pub mod authentication_server {
                     };
                     Box::pin(fut)
                 }
-                "/gestalt.provider.v1.Authentication/CompleteLogin" => {
+                "/gestalt.provider.v1.Authentication/Token" => {
                     #[allow(non_camel_case_types)]
-                    struct CompleteLoginSvc<T: Authentication>(pub Arc<T>);
-                    impl<T: Authentication> tonic::server::UnaryService<super::CompleteLoginRequest>
-                        for CompleteLoginSvc<T>
+                    struct TokenSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::TokenRequest> for TokenSvc<T> {
+                        type Response = super::TokenResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::TokenRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut =
+                                async move { <T as Authentication>::token(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = TokenSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.Authentication/Introspect" => {
+                    #[allow(non_camel_case_types)]
+                    struct IntrospectSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::IntrospectRequest> for IntrospectSvc<T> {
+                        type Response = super::IntrospectResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::IntrospectRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Authentication>::introspect(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = IntrospectSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.Authentication/ListGrants" => {
+                    #[allow(non_camel_case_types)]
+                    struct ListGrantsSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::ListGrantsRequest> for ListGrantsSvc<T> {
+                        type Response = super::ListGrantsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ListGrantsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Authentication>::list_grants(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = ListGrantsSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.Authentication/GetGrant" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetGrantSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::GetGrantRequest> for GetGrantSvc<T> {
+                        type Response = super::GetGrantResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetGrantRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as Authentication>::get_grant(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = GetGrantSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.Authentication/RevokeGrant" => {
+                    #[allow(non_camel_case_types)]
+                    struct RevokeGrantSvc<T: Authentication>(pub Arc<T>);
+                    impl<T: Authentication> tonic::server::UnaryService<super::RevokeGrantRequest>
+                        for RevokeGrantSvc<T>
                     {
-                        type Response = super::AuthenticatedUser;
+                        type Response = super::RevokeGrantResponse;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::CompleteLoginRequest>,
+                            request: tonic::Request<super::RevokeGrantRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as Authentication>::complete_login(&inner, request).await
+                                <T as Authentication>::revoke_grant(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -2274,86 +2477,7 @@ pub mod authentication_server {
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
-                        let method = CompleteLoginSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.Authentication/ValidateExternalToken" => {
-                    #[allow(non_camel_case_types)]
-                    struct ValidateExternalTokenSvc<T: Authentication>(pub Arc<T>);
-                    impl<T: Authentication>
-                        tonic::server::UnaryService<super::ValidateExternalTokenRequest>
-                        for ValidateExternalTokenSvc<T>
-                    {
-                        type Response = super::AuthenticatedUser;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::ValidateExternalTokenRequest>,
-                        ) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Authentication>::validate_external_token(&inner, request)
-                                    .await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = ValidateExternalTokenSvc(inner);
-                        let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
-                            .apply_compression_config(
-                                accept_compression_encodings,
-                                send_compression_encodings,
-                            )
-                            .apply_max_message_size_config(
-                                max_decoding_message_size,
-                                max_encoding_message_size,
-                            );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/gestalt.provider.v1.Authentication/GetSessionSettings" => {
-                    #[allow(non_camel_case_types)]
-                    struct GetSessionSettingsSvc<T: Authentication>(pub Arc<T>);
-                    impl<T: Authentication> tonic::server::UnaryService<()> for GetSessionSettingsSvc<T> {
-                        type Response = super::AuthSessionSettings;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
-                            let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Authentication>::get_session_settings(&inner, request).await
-                            };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let max_decoding_message_size = self.max_decoding_message_size;
-                    let max_encoding_message_size = self.max_encoding_message_size;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let method = GetSessionSettingsSvc(inner);
+                        let method = RevokeGrantSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

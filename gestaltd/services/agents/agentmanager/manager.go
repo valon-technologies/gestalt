@@ -3931,7 +3931,7 @@ func agentTurnPermissions(ctx context.Context, p *principal.Principal, callerKin
 	if shouldUseResolvedUserToolScope(ctx, p, callerKind, callerName, refs) {
 		return nil
 	}
-	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
+	return principal.PermissionsToAccessPermissions(p.EffectivePermissions())
 }
 
 func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.ToolRef) ([]core.AccessPermission, bool) {
@@ -3983,9 +3983,10 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 	sort.Strings(apps)
 	out := make([]core.AccessPermission, 0, len(apps))
 	for _, app := range apps {
+		perms := p.EffectivePermissions()
 		if _, ok := providerWide[app]; ok {
-			if p != nil && p.TokenPermissions != nil {
-				tokenOps, ok := p.TokenPermissions[app]
+			if p != nil && perms != nil {
+				tokenOps, ok := perms[app]
 				if !ok {
 					return nil, false
 				}
@@ -4024,7 +4025,14 @@ func shouldUseResolvedUserToolScope(ctx context.Context, p *principal.Principal,
 	if invocation.InvocationSurfaceFromContext(ctx) != invocation.InvocationSurfaceHTTP {
 		return false
 	}
-	if p == nil || p.Kind != principal.KindUser || p.Source == principal.SourceAPIToken {
+	if p == nil || p.Kind != principal.KindUser || len(p.Scopes) == 0 {
+		return false
+	}
+	perms := p.EffectivePermissions()
+	if perms == nil {
+		return false
+	}
+	if _, ok := perms[callerName]; !ok {
 		return false
 	}
 	for i := range refs {

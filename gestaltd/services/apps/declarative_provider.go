@@ -283,14 +283,14 @@ func (p *DeclarativeProvider) AuthorizationURL(state string, scopes []string) st
 	return p.authorizationURL
 }
 
-func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	if p.authType != providermanifestv1.AuthTypeOAuth2 {
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}
 	return nil, fmt.Errorf("declarative provider OAuth exchange not implemented")
 }
 
-func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	if p.authType != providermanifestv1.AuthTypeOAuth2 {
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}

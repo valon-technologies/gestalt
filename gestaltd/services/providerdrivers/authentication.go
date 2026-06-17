@@ -47,6 +47,5 @@ func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.Authen
 		Cleanup:     prepared.Cleanup,
 		Name:        cfg.Name,
 		CallbackURL: callbackURL,
-		SessionKey:  deps.SessionKey,
 	})
 }

@@ -87,8 +87,8 @@ type GraphQLRequest struct {
 type OAuthProvider interface {
 	Provider
 	AuthorizationURL(state string, scopes []string) string
-	ExchangeCode(ctx context.Context, code string) (*TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
+	ExchangeCode(ctx context.Context, code string) (*OAuthTokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*OAuthTokenResponse, error)
 }
 
 // SessionCatalogProvider is an optional interface for providers whose MCP tool

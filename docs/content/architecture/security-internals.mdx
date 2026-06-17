@@ -40,15 +40,15 @@ On refresh success: new tokens are encrypted and stored, and refresh failure sta
 
 Disconnecting deletes the token row. No soft-delete, no upstream revocation. If you need to revoke at the provider level (e.g., a GitHub OAuth token), do that separately through the provider's interface.
 
-## API token lifecycle
+## API grant lifecycle
 
-API tokens (`gst_api_*`) work differently: the plaintext is never stored.
+Long-lived API access is provider-owned. Gestalt mints grants through RFC 8693 token exchange against the caller's session, and the authentication provider persists grant metadata plus SHA-256 token hashes.
 
-**Creation.** Gestalt generates 32 random bytes, formats them as `gst_api_` + hex, computes the SHA-256 hash, and stores only the hash. The plaintext is returned once. Default TTL is 30 days (`server.apiTokenTtl`). CLI login tokens are non-expiring.
+**Creation.** `POST /api/v1/tokens` exchanges the caller's session for a new grant. The provider stores only the hash; the plaintext bearer is returned once.
 
-**Validation.** On each request, Gestalt hashes the bearer token and looks up the hash. Match + not expired = authenticated.
+**Validation.** On each request, Gestalt asks the authentication provider to introspect the bearer token.
 
-**Revocation.** `DELETE /api/v1/tokens/{id}` or `DELETE /api/v1/tokens` (all). Immediate, permanent.
+**Revocation.** `DELETE /api/v1/tokens/{id}` or `DELETE /api/v1/tokens` (all). The provider marks the grant revoked and deletes associated hash rows.
 
 ## Secret resolution
 

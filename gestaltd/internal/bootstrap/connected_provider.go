@@ -217,11 +217,11 @@ func (p *connectedOAuthProvider) AuthorizationURL(state string, scopes []string)
 	return p.auth.AuthorizationURL(state, scopes)
 }
 
-func (p *connectedOAuthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+func (p *connectedOAuthProvider) ExchangeCode(ctx context.Context, code string) (*core.OAuthTokenResponse, error) {
 	return p.auth.ExchangeCode(ctx, code)
 }
 
-func (p *connectedOAuthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+func (p *connectedOAuthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.OAuthTokenResponse, error) {
 	return p.auth.RefreshToken(ctx, refreshToken)
 }
 

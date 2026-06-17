@@ -10,99 +10,197 @@ from .. import authentication as native
 from .._gen.v1 import authentication_pb2 as _authentication_pb2
 
 
-def to_wire_auth_session_settings(value: native.AuthSessionSettings) -> Any:
-    return _authentication_pb2.AuthSessionSettings(
-        session_ttl_seconds=value.session_ttl_seconds,
+def to_wire_authorize_request(value: native.AuthorizeRequest) -> Any:
+    return _authentication_pb2.AuthorizeRequest(
+        response_type=value.response_type,
+        client_id=value.client_id,
+        redirect_uri=value.redirect_uri,
+        scope=value.scope,
+        state=value.state,
     )
 
 
-def from_wire_auth_session_settings(value: Any) -> native.AuthSessionSettings:
-    return native.AuthSessionSettings(
-        session_ttl_seconds=value.session_ttl_seconds,
+def from_wire_authorize_request(value: Any) -> native.AuthorizeRequest:
+    return native.AuthorizeRequest(
+        response_type=value.response_type,
+        client_id=value.client_id,
+        redirect_uri=value.redirect_uri,
+        scope=value.scope,
+        state=value.state,
     )
 
 
-def to_wire_authenticated_user(value: native.AuthenticatedUser) -> Any:
-    return _authentication_pb2.AuthenticatedUser(
-        subject=value.subject,
-        email=value.email,
-        email_verified=value.email_verified,
-        display_name=value.display_name,
-        avatar_url=value.avatar_url,
-        claims=value.claims,
+def to_wire_authorize_response(value: native.AuthorizeResponse) -> Any:
+    return _authentication_pb2.AuthorizeResponse(
+        redirect_uri=value.redirect_uri,
     )
 
 
-def from_wire_authenticated_user(value: Any) -> native.AuthenticatedUser:
-    return native.AuthenticatedUser(
-        subject=value.subject,
-        email=value.email,
-        email_verified=value.email_verified,
-        display_name=value.display_name,
-        avatar_url=value.avatar_url,
-        claims=dict(value.claims),
+def from_wire_authorize_response(value: Any) -> native.AuthorizeResponse:
+    return native.AuthorizeResponse(
+        redirect_uri=value.redirect_uri,
     )
 
 
-def to_wire_begin_login_request(value: native.BeginLoginRequest) -> Any:
-    return _authentication_pb2.BeginLoginRequest(
-        callback_url=value.callback_url,
-        host_state=value.host_state,
-        scopes=value.scopes,
-        options=value.options,
+def to_wire_get_grant_request(value: native.GetGrantRequest) -> Any:
+    return _authentication_pb2.GetGrantRequest(
+        grant_id=value.grant_id,
     )
 
 
-def from_wire_begin_login_request(value: Any) -> native.BeginLoginRequest:
-    return native.BeginLoginRequest(
-        callback_url=value.callback_url,
-        host_state=value.host_state,
-        scopes=list(value.scopes),
-        options=dict(value.options),
+def from_wire_get_grant_request(value: Any) -> native.GetGrantRequest:
+    return native.GetGrantRequest(
+        grant_id=value.grant_id,
     )
 
 
-def to_wire_begin_login_response(value: native.BeginLoginResponse) -> Any:
-    return _authentication_pb2.BeginLoginResponse(
-        authorization_url=value.authorization_url,
-        provider_state=value.provider_state,
+def to_wire_get_grant_response(value: native.GetGrantResponse) -> Any:
+    return _authentication_pb2.GetGrantResponse(
+        scopes=[to_wire_grant_scope(item) for item in value.scopes],
+        created_at=value.created_at,
+        expires_at=value.expires_at,
     )
 
 
-def from_wire_begin_login_response(value: Any) -> native.BeginLoginResponse:
-    return native.BeginLoginResponse(
-        authorization_url=value.authorization_url,
-        provider_state=value.provider_state,
+def from_wire_get_grant_response(value: Any) -> native.GetGrantResponse:
+    return native.GetGrantResponse(
+        scopes=[from_wire_grant_scope(item) for item in value.scopes],
+        created_at=value.created_at,
+        expires_at=value.expires_at,
     )
 
 
-def to_wire_complete_login_request(value: native.CompleteLoginRequest) -> Any:
-    return _authentication_pb2.CompleteLoginRequest(
-        query=value.query,
-        provider_state=value.provider_state,
-        callback_url=value.callback_url,
+def to_wire_grant_scope(value: native.GrantScope) -> Any:
+    return _authentication_pb2.GrantScope(
+        scope=value.scope,
+        resource=value.resource,
     )
 
 
-def from_wire_complete_login_request(value: Any) -> native.CompleteLoginRequest:
-    return native.CompleteLoginRequest(
-        query=dict(value.query),
-        provider_state=value.provider_state,
-        callback_url=value.callback_url,
+def from_wire_grant_scope(value: Any) -> native.GrantScope:
+    return native.GrantScope(
+        scope=value.scope,
+        resource=list(value.resource),
     )
 
 
-def to_wire_validate_external_token_request(
-    value: native.ValidateExternalTokenRequest,
-) -> Any:
-    return _authentication_pb2.ValidateExternalTokenRequest(
+def to_wire_introspect_request(value: native.IntrospectRequest) -> Any:
+    return _authentication_pb2.IntrospectRequest(
         token=value.token,
+        token_type_hint=value.token_type_hint,
     )
 
 
-def from_wire_validate_external_token_request(
-    value: Any,
-) -> native.ValidateExternalTokenRequest:
-    return native.ValidateExternalTokenRequest(
+def from_wire_introspect_request(value: Any) -> native.IntrospectRequest:
+    return native.IntrospectRequest(
         token=value.token,
+        token_type_hint=value.token_type_hint,
+    )
+
+
+def to_wire_introspect_response(value: native.IntrospectResponse) -> Any:
+    return _authentication_pb2.IntrospectResponse(
+        active=value.active,
+        subject=value.subject,
+        scope=value.scope,
+        client_id=value.client_id,
+        audience=value.audience,
+    )
+
+
+def from_wire_introspect_response(value: Any) -> native.IntrospectResponse:
+    return native.IntrospectResponse(
+        active=value.active,
+        subject=value.subject,
+        scope=value.scope,
+        client_id=value.client_id,
+        audience=list(value.audience),
+    )
+
+
+def to_wire_list_grants_request(_value: native.ListGrantsRequest) -> Any:
+    return _authentication_pb2.ListGrantsRequest()
+
+
+def from_wire_list_grants_request(_value: Any) -> native.ListGrantsRequest:
+    return native.ListGrantsRequest()
+
+
+def to_wire_list_grants_response(value: native.ListGrantsResponse) -> Any:
+    return _authentication_pb2.ListGrantsResponse(
+        grant_ids=value.grant_ids,
+    )
+
+
+def from_wire_list_grants_response(value: Any) -> native.ListGrantsResponse:
+    return native.ListGrantsResponse(
+        grant_ids=list(value.grant_ids),
+    )
+
+
+def to_wire_revoke_grant_request(value: native.RevokeGrantRequest) -> Any:
+    return _authentication_pb2.RevokeGrantRequest(
+        grant_id=value.grant_id,
+    )
+
+
+def from_wire_revoke_grant_request(value: Any) -> native.RevokeGrantRequest:
+    return native.RevokeGrantRequest(
+        grant_id=value.grant_id,
+    )
+
+
+def to_wire_revoke_grant_response(_value: native.RevokeGrantResponse) -> Any:
+    return _authentication_pb2.RevokeGrantResponse()
+
+
+def from_wire_revoke_grant_response(_value: Any) -> native.RevokeGrantResponse:
+    return native.RevokeGrantResponse()
+
+
+def to_wire_token_request(value: native.TokenRequest) -> Any:
+    return _authentication_pb2.TokenRequest(
+        grant_type=value.grant_type,
+        code=value.code,
+        redirect_uri=value.redirect_uri,
+        client_id=value.client_id,
+        state=value.state,
+        scope=value.scope,
+        subject_token=value.subject_token,
+        subject_token_type=value.subject_token_type,
+    )
+
+
+def from_wire_token_request(value: Any) -> native.TokenRequest:
+    return native.TokenRequest(
+        grant_type=value.grant_type,
+        code=value.code,
+        redirect_uri=value.redirect_uri,
+        client_id=value.client_id,
+        state=value.state,
+        scope=value.scope,
+        subject_token=value.subject_token,
+        subject_token_type=value.subject_token_type,
+    )
+
+
+def to_wire_token_response(value: native.TokenResponse) -> Any:
+    return _authentication_pb2.TokenResponse(
+        access_token=value.access_token,
+        token_type=value.token_type,
+        expires_in=value.expires_in,
+        refresh_token=value.refresh_token,
+        scope=value.scope,
+        grant_id=value.grant_id,
+    )
+
+
+def from_wire_token_response(value: Any) -> native.TokenResponse:
+    return native.TokenResponse(
+        access_token=value.access_token,
+        token_type=value.token_type,
+        expires_in=value.expires_in,
+        refresh_token=value.refresh_token,
+        scope=value.scope,
+        grant_id=value.grant_id,
     )

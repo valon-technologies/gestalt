@@ -6,7 +6,7 @@ App catalog and connection routes use `/api/v1/apps`. The CLI uses the `app` com
 
 ## Authentication model
 
-Authenticated routes accept a `session_token` cookie or an `Authorization: Bearer <token>` header. Valid bearer tokens include Gestalt API tokens (`gst_api_...`) and tokens issued by the configured platform authentication provider when it supports direct token validation.
+Authenticated routes accept a `session_token` cookie or an `Authorization: Bearer <token>` header. Valid bearer tokens are provider-issued session or API grants validated through the configured authentication provider.
 
 ## Unauthenticated Routes
 
@@ -242,7 +242,7 @@ curl -X POST http://localhost:8080/api/v1/slack/chat.postMessage \
 # Deliver a workflow event. source is the trusted app name; explicitly scoped
 # API tokens must include that app.
 curl -X POST http://localhost:8080/api/v1/workflow/events \
-  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Authorization: Bearer <api-grant>' \
   -H 'Content-Type: application/json' \
   -d '{
     "type": "roadmap.item.updated",
@@ -259,11 +259,11 @@ curl -X POST http://localhost:8080/api/v1/workflow/events \
 
 # List failed workflow runs for one app
 curl 'http://localhost:8080/api/v1/workflow/runs?app=github&status=failed' \
-  -H 'Authorization: Bearer gst_api_...'
+  -H 'Authorization: Bearer <api-grant>'
 
 # Create an agent session
 curl -X POST http://localhost:8080/api/v1/agent/sessions \
-  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Authorization: Bearer <api-grant>' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: agent-session-1' \
   -d '{
@@ -287,7 +287,7 @@ curl -X POST http://localhost:8080/api/v1/agent/sessions \
 
 # Create a turn in that session
 curl -X POST http://localhost:8080/api/v1/agent/sessions/session-123/turns \
-  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Authorization: Bearer <api-grant>' \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: agent-turn-1' \
   -d '{
@@ -337,40 +337,40 @@ curl -X POST http://localhost:8080/api/v1/agent/sessions/session-123/turns \
   }'
 
 # List active sessions for one provider
-curl -H 'Authorization: Bearer gst_api_...' \
+curl -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/sessions?provider=managed&state=active'
 
 # Inspect a session
-curl -H 'Authorization: Bearer gst_api_...' \
+curl -H 'Authorization: Bearer <api-grant>' \
   http://localhost:8080/api/v1/agent/sessions/session-123
 
 # Inspect a turn
-curl -H 'Authorization: Bearer gst_api_...' \
+curl -H 'Authorization: Bearer <api-grant>' \
   http://localhost:8080/api/v1/agent/turns/turn-123
 
 # List session turns
-curl -H 'Authorization: Bearer gst_api_...' \
+curl -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/sessions/session-123/turns?status=running'
 
 # List turn events after sequence 0
-curl -H 'Authorization: Bearer gst_api_...' \
+curl -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/events?after=0&limit=100'
 
 # Stream turn events until the turn reaches a terminal state
-curl -N -H 'Authorization: Bearer gst_api_...' \
+curl -N -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0'
 
 # Stream turn events until the turn is terminal or waiting on an interaction
-curl -N -H 'Authorization: Bearer gst_api_...' \
+curl -N -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/events/stream?after=0&until=blocked_or_terminal'
 
 # List pending turn interactions
-curl -H 'Authorization: Bearer gst_api_...' \
+curl -H 'Authorization: Bearer <api-grant>' \
   'http://localhost:8080/api/v1/agent/turns/turn-123/interactions'
 
 # Resolve a pending interaction
 curl -X POST http://localhost:8080/api/v1/agent/turns/turn-123/interactions/interaction-123/resolve \
-  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Authorization: Bearer <api-grant>' \
   -H 'Content-Type: application/json' \
   -d '{
     "resolution": {
@@ -380,7 +380,7 @@ curl -X POST http://localhost:8080/api/v1/agent/turns/turn-123/interactions/inte
 
 # Cancel an agent turn
 curl -X POST http://localhost:8080/api/v1/agent/turns/turn-123/cancel \
-  -H 'Authorization: Bearer gst_api_...' \
+  -H 'Authorization: Bearer <api-grant>' \
   -H 'Content-Type: application/json' \
   -d '{"reason":"operator requested"}'
 
