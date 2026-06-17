@@ -767,7 +767,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, providerName, operationName, invocation.ErrOperationNotFound)
 		return
 	}
-	sessionConnections := s.catalogSelectorConfig().SessionCatalogConnections(providerName, connection)
+	sessionConnections := s.sessionCatalogSelectorConfig().SessionCatalogConnections(providerName, connection)
 	opMeta, transport, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, sessionConnections, instance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)

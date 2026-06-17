@@ -119,7 +119,11 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	if cfg.DefaultConnection != nil {
 		brokerOpts = append(brokerOpts, invocation.WithConnectionMapper(invocation.ConnectionMap(cfg.DefaultConnection)))
 	}
-	if cfg.CatalogConnection != nil {
+	if cfg.MCPConnection != nil {
+		brokerOpts = append(brokerOpts,
+			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.MCPConnection)),
+		)
+	} else if cfg.CatalogConnection != nil {
 		brokerOpts = append(brokerOpts,
 			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(cfg.CatalogConnection)),
 		)
@@ -7970,6 +7974,95 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	}
 	if gotToken != "mcp-token" {
 		t.Fatalf("execute token = %q, want %q", gotToken, "mcp-token")
+	}
+}
+
+func TestExecuteOperation_UsesMCPConnectionWhenHTTPCatalogUsesAPIConnection(t *testing.T) {
+	t.Parallel()
+
+	var gotUpstreamToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeSubject,
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "mcp-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{{
+						ID:          "get_page_content",
+						Description: "Read page content",
+						Transport:   catalog.TransportMCPPassthrough,
+					}},
+				}, nil
+			case "rest-token":
+				return &catalog.Catalog{Name: "sample-int"}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			gotUpstreamToken = mcpupstream.UpstreamTokenFromContext(ctx)
+			if name != "get_page_content" {
+				t.Fatalf("tool name = %q, want get_page_content", name)
+			}
+			if args["page_id"] != "page-123" {
+				t.Fatalf("page_id arg = %#v, want page-123", args["page_id"])
+			}
+			return &mcpgo.CallToolResult{
+				Content:           []mcpgo.Content{mcpgo.NewTextContent("ok")},
+				StructuredContent: map[string]any{"ok": true},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "tok-mcp",
+		Subject:   principal.UserSubjectID(u.ID),
+		Audience:  "sample-int:mcp-conn",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "mcp-token"},
+	})
+	seedToken(t, svc, &core.ExternalCredential{
+		ID:        "tok-rest",
+		Subject:   principal.UserSubjectID(u.ID),
+		Audience:  "sample-int:rest-conn",
+		Qualifier: "default",
+		Grant:     &core.ExternalCredentialGrant{AccessToken: "rest-token"},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+		cfg.CatalogConnection = map[string]string{"sample-int": "rest-conn"}
+		cfg.MCPConnection = map[string]string{"sample-int": "mcp-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Post(
+		ts.URL+"/api/v1/sample-int/get_page_content",
+		"application/json",
+		strings.NewReader(`{"page_id":"page-123"}`),
+	)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotUpstreamToken != "mcp-token" {
+		t.Fatalf("upstream token = %q, want %q", gotUpstreamToken, "mcp-token")
 	}
 }
 
